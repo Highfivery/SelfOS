@@ -9973,6 +9973,89 @@ test('together (58) phase D: wrap-up writes a report + twins (aside ABSENT from 
   }
 });
 
+test('together (58) issue #206: "Wrap up & reflect" CLOSES OUT an active session — banner + collapsed composer + Reopen (§3.8)', async () => {
+  const { userData, vault } = await seedTogetherReady();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Ben starts a session and sends a shared opener.
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Planning our week');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+    await w.getByLabel('Message').fill('Let’s do screen-free dinners.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/I hear you/)).toBeVisible();
+
+    // Angel accepts the invitation → the session becomes genuinely ACTIVE for both (allAcked, §4.3), which is
+    // the state a real couple is in when they decide to wrap up.
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByText('Planning our week').click();
+    await w.getByRole('button', { name: 'Continue' }).click();
+    await expect(w.getByText('Let’s do screen-free dinners.')).toBeVisible();
+
+    // Back to Ben — the session is active with a live composer + the "Wrap up & reflect" affordance.
+    await switchTogetherPerson(w, 'Ben');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByText('Planning our week').click();
+    await expect(w.getByLabel('Message')).toBeVisible();
+
+    // The coach re-affirms the SAME "screen-free dinners" agreement (a repeated [[SELFOS:AGREEMENT]] marker) —
+    // this must NOT create a duplicate in the ledger (issue #206). The de-dup collapses it on capture.
+    await w.getByLabel('Message').fill('Still want screen-free dinners.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/I hear you/).first()).toBeVisible();
+
+    // Wrap up & reflect → the session closes out IN PLACE (issue #206): a "wrapped up" banner leads, the
+    // reflection (insights) + to-do list stay on screen, and the composer collapses behind "Reopen to keep
+    // talking" so it no longer reads as an ongoing conversation. The terminal wrap-up button is gone.
+    await w.getByRole('button', { name: /Wrap up & reflect/ }).click();
+    await expect(w.getByText(/This session is wrapped up/)).toBeVisible();
+    await expect(w.getByText(/showed up honestly/)).toBeVisible(); // the reflection leads the close-out
+    await expect(w.getByLabel('Message')).toHaveCount(0); // composer collapsed
+    await expect(w.getByRole('button', { name: /Wrap up & reflect/ })).toHaveCount(0);
+    await expect(w.getByRole('button', { name: /Reopen to keep talking/ })).toBeVisible();
+
+    // The ledger shows the "screen-free dinners" agreement EXACTLY ONCE despite the repeated marker — no
+    // duplicates (issue #206). (The message bubbles read "…screen-free dinners." so `exact` targets the chip.)
+    await expect(w.getByText('screen-free dinners', { exact: true })).toHaveCount(1);
+
+    // "Reflect again & note actions" REFRESHES the closing reflection WITHOUT un-wrapping the session: the
+    // session stays closed out (banner + collapsed composer remain) — only a shared message reopens it. A
+    // reflect pass must never silently drop `wrappedUp` (code-review of the #206 fix).
+    await w.getByRole('button', { name: /Reflect again & note actions/ }).click();
+    await expect(w.getByText(/This session is wrapped up/)).toBeVisible();
+    await expect(w.getByLabel('Message')).toHaveCount(0);
+
+    // The close-out surface — incl. the completion banner + the collapsed "Reopen" bar — has no inner
+    // horizontal scrollbar at 360px (§12). Checked BEFORE reopening so the new `.reopenBar` gets the guard.
+    await w.setViewportSize({ width: 360, height: 900 });
+    const overflow = await w.evaluate(() => {
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        const style = getComputedStyle(el);
+        if (
+          (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+          el.scrollWidth > el.clientWidth + 1
+        ) {
+          return el.className || el.tagName;
+        }
+      }
+      return null;
+    });
+    expect(overflow).toBeNull();
+    await w.setViewportSize({ width: 1100, height: 800 });
+
+    // One tap brings the composer back (a shared message would reopen the session).
+    await w.getByRole('button', { name: /Reopen to keep talking/ }).click();
+    await expect(w.getByLabel('Message')).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('together (58) phase E: start a structured guided couples session from the catalog; the stepper advances via a marker (§3.10)', async () => {
   const { userData, vault } = await seedTogetherReady();
   const app = await launch(userData);
@@ -10594,14 +10677,17 @@ test('together follow-through (61): agreements in Goals + needs-attention, inlin
     await expect(w.getByRole('button', { name: 'Saved' })).toBeVisible();
     await expect.poll(async () => (await listPulseCheckIns(fs, key, ben, pairKey)).length).toBe(1);
 
-    // Open a Together session → the TOP summary strip surfaces the agreement (no scrolling to the bottom).
+    // Open a NEW Together session → the top summary strip + ledger are PER-SESSION (issue #206): the pair's
+    // prior "weekly date night" agreement (made in another session) does NOT surface here. The pair-wide view
+    // lives on Home + Goals (asserted above/below). A fresh session with no agreements of its own invites a
+    // wrap-up instead of showing another session's count.
     await w.getByRole('link', { name: /Together/ }).click();
     await w.getByRole('button', { name: 'New session' }).first().click();
     await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Checking in');
     await w.getByRole('button', { name: 'Send invitation' }).click();
-    await expect(w.getByText('1 agreement')).toBeVisible();
-    // Agreements present but no report yet → the strip's jump reads "View" (spec 61 §3.3).
-    await expect(w.getByRole('button', { name: 'View', exact: true })).toBeVisible();
+    await expect(w.getByText('Ready to wrap up & reflect')).toBeVisible();
+    await expect(w.getByText('1 agreement')).toHaveCount(0);
+    await expect(w.getByText('weekly date night')).toHaveCount(0); // the other session's agreement is filtered out
 
     // Goals → "Together commitments" → mark done → decrypt asserts the SHARED ledger flips to done.
     await w.getByRole('link', { name: 'Goals' }).click();

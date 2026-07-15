@@ -111,6 +111,10 @@ the top-of-mind callout, the `GoalsCard` mini-section lets you see + act on the 
 `TogetherSession` renders a compact **summary strip** directly under the session header (`sessionTop`,
 above `TogetherThread`) whenever the loaded `reportView` has a report **or** ≥1 non-retired agreement:
 
+- **Per-session (amended, issue #206):** the strip counts only **this session's** agreements — the
+  `reportView.agreements` are scoped to `provenance.sessionId === session.id` at the bridge (58 §3.9), so
+  the strip never surfaces another session's commitments. The pair-wide view lives on Home (§3.1) + Goals
+  (§3.2).
 - Content: a pin icon + "`N` agreement`s`" (when any) + "reflection from `<relative date>`" (when a report
   exists) + a **"Jump to reflection"** text button.
 - "Jump to reflection" scrolls the existing `TogetherReflection` section into view (an anchor / ref +

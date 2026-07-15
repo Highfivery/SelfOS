@@ -1,5 +1,5 @@
 import { Fragment, useRef, useState } from 'react';
-import { ImagePlus, Lock, Users, X } from 'lucide-react';
+import { ImagePlus, Lock, MessageCirclePlus, Users, X } from 'lucide-react';
 import type { TogetherMessageView, TogetherSessionView } from '@shared/schemas';
 import {
   AttachmentThumb,
@@ -252,13 +252,20 @@ function TogetherComposer({
   );
 }
 
-/** The session thread (58 §3.6): author-attributed bubbles, a private-aside composer, turn state, crisis footer. */
+/**
+ * The session thread (58 §3.6): author-attributed bubbles, a private-aside composer, turn state, crisis footer.
+ * When `completed` (the session is wrapped up, §3.8), the composer collapses behind a "Reopen to keep talking"
+ * button so the session reads as ended — one tap reveals the composer, and the next shared message reopens the
+ * session (deriving it back to `active`, §4.3).
+ */
 export function TogetherThread({
   session,
   onPrep,
+  completed = false,
 }: {
   session: TogetherSessionView;
   onPrep: () => void;
+  completed?: boolean;
 }): JSX.Element {
   const me = useSessionStore((s) => s.activePerson?.id ?? null);
   const sending = useTogetherStore((s) => s.sending);
@@ -266,11 +273,15 @@ export function TogetherThread({
   const error = useTogetherStore((s) => s.error);
   const send = useTogetherStore((s) => s.sendMessage);
   const retry = useTogetherStore((s) => s.retry);
+  // On a wrapped-up session the composer stays hidden until the person deliberately reopens it (§3.8).
+  const [reopened, setReopened] = useState(false);
 
   const other = session.participants.find((p) => p.personId !== me);
-  const turnLabel = session.yourTurn
-    ? 'Your turn'
-    : `Waiting for ${other?.displayName ?? 'your partner'}`;
+  const turnLabel = completed
+    ? 'Wrapped up'
+    : session.yourTurn
+      ? 'Your turn'
+      : `Waiting for ${other?.displayName ?? 'your partner'}`;
 
   const steps = session.guide?.kind === 'structured' ? (session.guide.steps ?? []) : [];
   const currentStep = session.guideStep ?? 0;
@@ -282,7 +293,10 @@ export function TogetherThread({
           {session.guide?.title ?? session.topic ?? 'Together'}
         </Text>
         <Inline gap={2} align="center">
-          <span className={styles.turnPill} data-turn={session.yourTurn ? 'you' : 'them'}>
+          <span
+            className={styles.turnPill}
+            data-turn={completed ? 'done' : session.yourTurn ? 'you' : 'them'}
+          >
             {turnLabel}
           </span>
           <Button variant="secondary" onClick={onPrep}>
@@ -362,13 +376,24 @@ export function TogetherThread({
         </div>
       ) : null}
 
-      <TogetherComposer
-        disabled={sending}
-        partnerName={other?.displayName ?? 'your partner'}
-        onSend={async (text, aside, pending) => {
-          await send(text, aside, pending);
-        }}
-      />
+      {completed && !reopened ? (
+        <div className={styles.reopenBar}>
+          <Text size="sm" tone="secondary">
+            Sending a message reopens this session.
+          </Text>
+          <Button variant="secondary" onClick={() => setReopened(true)}>
+            <MessageCirclePlus size={14} aria-hidden="true" /> Reopen to keep talking
+          </Button>
+        </div>
+      ) : (
+        <TogetherComposer
+          disabled={sending}
+          partnerName={other?.displayName ?? 'your partner'}
+          onSend={async (text, aside, pending) => {
+            await send(text, aside, pending);
+          }}
+        />
+      )}
       <CrisisFooter />
     </div>
   );

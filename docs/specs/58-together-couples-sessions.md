@@ -254,7 +254,9 @@ the message thread, the composer, and the pinned crisis footer.
   a joint challenge). Artifact actions are one-tap and always confirmable before anything sends.
 - **Kebab**: pause for me (§8.3) · leave session (§8.3) · wrap up & reflect (either partner; §3.8).
 - **Turn state**: a session is "your turn" when the newest human message **in your projection**
-  isn't yours. It's a nudge, never a lock — both partners can write at any time, in any order.
+  isn't yours. It's a nudge, never a lock — both partners can write at any time, in any order. When the
+  session is **wrapped up** (`complete`, §3.8), the pill reads **"Wrapped up"** and the composer
+  collapses behind **"Reopen to keep talking"** — a shared message reopens it.
 - **Freshness**: the Together stores subscribe to the existing `vault:changed` watcher event
   (debounced re-fetch of the open session + the list) — the first data consumer of that event — so a
   partner's synced message appears without a manual reload ("live-ish": bounded by provider sync
@@ -321,16 +323,36 @@ reflection was generated — so a fresh reflect/refresh clears staleness). Conti
 session simply means writing a new message — the session derives back to `active` and the report
 derives stale; re-running overwrites idempotently (the 09 reuse-the-insightId pattern). Only an
 **explicit wrap-up** (`report.wrappedUp` → `report.wrappedUpAt`) makes the session derive `complete`;
-a mid-session reflect never does.
+a mid-session reflect never sets it — **and never clears it either**: a `reflect` pass **carries
+forward** an existing report's `wrappedUp`/`wrappedUpAt`, so "Reflect again" on a wrapped-up session
+refreshes the reflection **without** silently un-wrapping it. The invariant holds: **only a new shared
+message reopens a session** (issue #206).
+
+**A wrapped-up (`complete`) session closes out in place** (renderer, §5.3; issue #206): the session
+detail leads with a **"This session is wrapped up · <date>"** completion banner (`role="status"`,
+scrolled into view on the complete transition), the reflection report + action-items/agreements ledger
+**above** the thread, the thread's turn pill reading **"Wrapped up"**, and the message composer
+**collapsed behind a "Reopen to keep talking"** button. The terminal **"Wrap up & reflect"** button
+drops from the reflection panel once complete (**"Reflect again & note actions"** stays — it refreshes,
+never un-wraps, per above). Revealing the composer and sending a shared message reopens the session —
+the derive-back-to-`active` soft-complete model above, made visible.
 
 ### 3.9 Relationship memory & the grounding pack
 
 - **Agreements / action-items ledger**: agreements captured in any session — via
   `[[SELFOS:AGREEMENT:{json}]]` markers **or** extracted as **action items** by the reflect/wrap-up
-  pass (§3.8, deduped) — live at the **pair** level, visible to both, each with text, timeframe, status
-  (standing / done / retired), and provenance (which session). Either partner can edit/retire (the one
-  deliberate two-writer record — last-write-wins accepted, §7); the reflection panel surfaces them as
-  "Action items & agreements", and the Together home strip counts standing ones.
+  pass (§3.8, deduped) — live at the **pair** level, each with text, timeframe, status (standing / done
+  / retired), and provenance (which session). Either partner can edit/retire (the one deliberate
+  two-writer record — last-write-wins accepted, §7). **No duplicates (issue #206):** both capture paths
+  de-dup by normalized text — the marker path (`captureAgreementFromMarker`) returns an existing
+  non-retired twin instead of minting a copy (the coach can repeat the same marker across turns / on a
+  retry), and the wrap-up action-item path already de-dups against the ledger; a read-time
+  `dedupeAgreements` (preferring the most-actionable twin) collapses any legacy duplicates on display.
+- **Where the ledger surfaces (issue #206):** the **per-session** reflection panel + top strip show
+  **only that session's** agreements (`provenance.sessionId === session.id`) — never the pair's whole
+  history. The **pair-wide** view (every standing commitment across the pair) lives on **Home**
+  ("needs attention") and **Goals** ("Together commitments", `togetherMyAgreements` / spec 61), which
+  also de-dup.
 - **The grounding pack** (zero extra AI spend — all cached/deterministic reads): every couples
   prompt opens with the pair's standing agreements, the latest compatibility `AlignmentReport` (if
   any), open joint challenges, each partner's cached relationship synthesis (54), and recent pulse
@@ -689,7 +711,9 @@ the newest message timestamps — never stored, never global:
    surfaces to anyone else (§3.5).
 4. Any participant missing `rulesAckAt` → **`invited`** (older than 30 days → **`expired`**). The
    initiator's own state file is written with `rulesAckAt` at create — starting is consenting.
-5. A report exists and no human message is newer than `report.createdAt` → **`complete`**.
+5. The report is explicitly wrapped up (`report.wrappedUp`) and no shared human message is newer than
+   `report.wrappedUpAt` → **`complete`** (a mid-session `reflect` never sets `wrappedUp`, so it never
+   reaches `complete`; §3.8).
 6. `V.pausedAt` set → **`onHold` in V's own view only** (the partner's view is unaffected — §8.3).
 7. Else → **`active`**.
 

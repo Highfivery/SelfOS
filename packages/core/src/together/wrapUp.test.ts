@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient, ClaudeMessage, FileSystem } from '../host';
-import type { Person, TogetherSession } from '../schemas';
+import type { Agreement, Person, TogetherSession } from '../schemas';
 import { buildContext, savePerson, saveRelationship } from '../people';
 import { listInsightsForPerson } from '../insights';
 import { queryUsage } from '../usage';
@@ -12,9 +12,11 @@ import { appendMessage, createSession, pairKeyFor } from './togetherService';
 import { runTogetherTurn } from './togetherChatService';
 import {
   captureAgreementFromMarker,
+  dedupeAgreements,
   getReport,
   isReportStale,
   listAgreements,
+  normalizeAgreementText,
   saveAgreement,
   standingAgreements,
 } from './agreementService';
@@ -174,6 +176,68 @@ describe('agreementService ledger (§3.9)', () => {
     );
     expect(a?.status).toBe('standing');
     expect(a?.timeframe).toBe('daily');
+  });
+
+  it('DE-DUPES a repeated coach marker — never mints a duplicate agreement (issue #206)', async () => {
+    const fs = memFileSystem();
+    const first = await captureAgreementFromMarker(
+      fs,
+      key,
+      BEN,
+      ANGEL,
+      { text: 'Screen-free dinners.', timeframe: 'weekdays' },
+      's1',
+      NOW,
+    );
+    // The coach repeats the SAME agreement (different case/punctuation) on a later turn / retry.
+    const second = await captureAgreementFromMarker(
+      fs,
+      key,
+      BEN,
+      ANGEL,
+      { text: 'screen-free dinners' },
+      's1',
+      new Date(NOW.getTime() + 60_000),
+    );
+    // No duplicate file: the ledger holds exactly one, and the repeat returns the existing record.
+    const all = await listAgreements(fs, key, pairKeyFor(BEN, ANGEL));
+    expect(all).toHaveLength(1);
+    expect(second?.id).toBe(first?.id);
+  });
+
+  it('normalizeAgreementText + dedupeAgreements collapse identical text, preferring the most-actionable', () => {
+    expect(normalizeAgreementText('Screen-free dinners.')).toBe(
+      normalizeAgreementText('screen-free   dinners'),
+    );
+    const mk = (over: Partial<Agreement>): Agreement => ({
+      id: over.id ?? 'x',
+      schemaVersion: 1,
+      pairKey: pairKeyFor(BEN, ANGEL),
+      text: 'screen-free dinners',
+      status: 'standing',
+      provenance: { sessionId: 's1', at: 'now' },
+      createdAt: 'now',
+      updatedAt: 'now',
+      ...over,
+    });
+    // Two identical DONE twins collapse to one (the newer wins).
+    const twoDone = dedupeAgreements([
+      mk({ id: 'a', status: 'done', updatedAt: '2026-07-10T00:00:00.000Z' }),
+      mk({ id: 'b', status: 'done', updatedAt: '2026-07-11T00:00:00.000Z' }),
+    ]);
+    expect(twoDone).toHaveLength(1);
+    expect(twoDone[0]?.id).toBe('b');
+    // A live standing re-commit wins over an older done twin (never hidden behind a completed one).
+    const mixed = dedupeAgreements([
+      mk({ id: 'done', status: 'done', updatedAt: '2026-07-12T00:00:00.000Z' }),
+      mk({ id: 'standing', status: 'standing', updatedAt: '2026-07-10T00:00:00.000Z' }),
+    ]);
+    expect(mixed).toHaveLength(1);
+    expect(mixed[0]?.id).toBe('standing');
+    // Distinct texts are never merged.
+    expect(dedupeAgreements([mk({ id: 'a' }), mk({ id: 'b', text: 'weekly walk' })])).toHaveLength(
+      2,
+    );
   });
 
   it('derives report staleness from the newest shared human message', () => {
@@ -464,6 +528,30 @@ describe('runTogetherWrapUp (§3.8) — the safety-critical wrap-up', () => {
     report = await getReport(fs, key, session.id);
     expect(report?.wrappedUp).toBe(true);
     expect(report?.wrappedUpAt).toBe('2026-07-10T12:10:00.000Z');
+  });
+
+  it('a reflect on an ALREADY wrapped-up session preserves the wrapped-up state (never silently un-wraps, #206)', async () => {
+    const fs = memFileSystem();
+    const session = await seedWithTranscript(fs);
+    // Wrap up → the session is DONE.
+    await runTogetherWrapUp(
+      deps(fs, analyzeClient(WRAPUP_JSON).client, { session, mode: 'wrapUp' }),
+    );
+    const wrappedAt = (await getReport(fs, key, session.id))?.wrappedUpAt;
+    expect(wrappedAt).toBe('2026-07-10T12:10:00.000Z');
+    // A later "Reflect again" (mode reflect, a fresh timestamp) refreshes the report but must NOT drop
+    // `wrappedUp` — otherwise the session would derive back to `active` with no new message (the #206 fix).
+    await runTogetherWrapUp(
+      deps(fs, analyzeClient(WRAPUP_JSON).client, {
+        session,
+        mode: 'reflect',
+        now: new Date('2026-07-10T12:30:00.000Z'),
+      }),
+    );
+    const report = await getReport(fs, key, session.id);
+    expect(report?.wrappedUp).toBe(true);
+    expect(report?.wrappedUpAt).toBe(wrappedAt); // carried forward from the original wrap-up, not cleared
+    expect(report?.updatedAt).toBe('2026-07-10T12:30:00.000Z'); // the reflection itself did refresh
   });
 
   it('a partner name that doesn’t resolve writes NO twin (fail-safe against a wrong-subject reflection)', async () => {

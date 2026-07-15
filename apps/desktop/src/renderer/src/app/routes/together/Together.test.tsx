@@ -454,6 +454,25 @@ describe('TogetherThread (§3.6)', () => {
     await userEvent.click(prep);
     expect(opened).toBe(1);
   });
+
+  it('a wrapped-up session collapses the composer behind "Reopen to keep talking" (§3.8)', async () => {
+    installMockBridge();
+    setActivePerson();
+    render(
+      <MemoryRouter>
+        <TogetherThread session={view({ status: 'complete' })} onPrep={() => {}} completed />
+      </MemoryRouter>,
+    );
+    // The composer is hidden; a calm reopen affordance stands in, and the turn pill reads "Wrapped up".
+    expect(screen.queryByLabelText('Message')).toBeNull();
+    expect(screen.getByText(/Sending a message reopens this session/i)).toBeInTheDocument();
+    expect(screen.getByText('Wrapped up')).toBeInTheDocument();
+    expect(screen.queryByText('Your turn')).toBeNull();
+    // One tap reveals the composer (the next shared message reopens the session).
+    await userEvent.click(screen.getByRole('button', { name: /Reopen to keep talking/ }));
+    expect(screen.getByLabelText('Message')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Reopen to keep talking/ })).toBeNull();
+  });
 });
 
 describe('TogetherCatalog (§3.10)', () => {
@@ -1006,5 +1025,18 @@ describe('TogetherReflection (§3.8/§3.9)', () => {
     render(<TogetherReflection sessionId="s1" memoryEnabled aiReady={false} />);
     // Nothing to produce + AI off ⇒ the whole section hides (no dead control).
     expect(screen.queryByRole('button', { name: /Wrap up & reflect/ })).not.toBeInTheDocument();
+  });
+
+  it('once wrapped up, drops the terminal "Wrap up & reflect" but keeps "Reflect again" (§3.8)', () => {
+    installMockBridge();
+    useTogetherStore.setState({ reportView: { report, stale: false, agreements: [] } });
+    render(<TogetherReflection sessionId="s1" memoryEnabled aiReady completed />);
+    // The session is already done — no redundant terminal wrap-up button, but a refresh stays available.
+    expect(screen.queryByRole('button', { name: /Wrap up & reflect/ })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Reflect again & note actions/ }),
+    ).toBeInTheDocument();
+    // The saved reflection (insights + themes) still renders — the close-out summary.
+    expect(screen.getByText('You both showed up honestly.')).toBeInTheDocument();
   });
 });

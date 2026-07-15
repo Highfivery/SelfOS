@@ -783,6 +783,20 @@
   border-radius: var(--radius-lg);
   background: var(--color-surface);
 }
+/* A wrapped-up session (§3.8): the composer is replaced by a calm "Reopen to keep talking" affordance so the
+   session reads as closed out. Text + button stack on a narrow pane (never a horizontal scroll, §12). */
+.reopenBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-alt);
+  min-width: 0;
+}
 /* The audience toggle — a space-filling 2-option control (each half flexes to fit, never scrolls at 360px,
    §12). Shared vs private is a deliberate CHOICE, not a status label. */
 .audienceToggle {
@@ -952,6 +966,18 @@
 }
 
 /* ── Reflection + agreements ledger (58 §3.8/§3.9) ───────────────────────────── */
+/* A wrapped-up session's completion banner — leads the closed-out session so it unmistakably reads as done. */
+.completedBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-success) 45%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  color: var(--color-success);
+}
+
 /* The top-of-session summary strip (spec 61 §3.3) — a signpost to the reflection at the bottom. */
 .reflectionStrip {
   display: flex;

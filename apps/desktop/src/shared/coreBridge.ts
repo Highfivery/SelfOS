@@ -289,6 +289,7 @@ import {
   pairKeyFor,
   isReportStale,
   isTogetherAttachmentPath,
+  dedupeAgreements,
   getAgreement,
   listAgreements,
   listStandingAgreementsForViewer,
@@ -2682,7 +2683,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         (max, m) => (max === null || m.ts > max ? m.ts : max),
         null,
       );
-      const agreements = await listAgreements(c.fs, c.key, session.pairKey);
+      // The per-session ledger shows only agreements made in THIS session (issue #206) — the pair-wide view
+      // lives on Home/Goals (`togetherMyAgreements`). Collapse any duplicate captures so the same action item
+      // never renders twice.
+      const agreements = dedupeAgreements(
+        (await listAgreements(c.fs, c.key, session.pairKey)).filter(
+          (a) => a.provenance.sessionId === sessionId,
+        ),
+      );
       return { report, stale: isReportStale(report, newestHumanTs), agreements };
     },
     togetherSaveAgreement: async (input): Promise<Agreement | null> => {

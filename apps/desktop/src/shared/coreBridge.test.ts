@@ -5912,6 +5912,48 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect((await bridge.togetherGetReport({ sessionId })).report).toBeNull();
   });
 
+  it('the per-session ledger shows only THIS session’s agreements + collapses duplicates (issue #206)', async () => {
+    const { host, bridge, ben, angel } = await seedPair();
+    // Session A + two IDENTICAL agreements (a repeated capture) made in it.
+    const createdA = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionA = createdA.ok ? createdA.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionA);
+    await asPerson(host, ben);
+    await bridge.togetherSaveAgreement({
+      sessionId: sessionA,
+      text: 'screen-free dinners',
+      status: 'standing',
+    });
+    await bridge.togetherSaveAgreement({
+      sessionId: sessionA,
+      text: 'Screen-free dinners.', // same commitment, different case/punctuation
+      status: 'standing',
+    });
+
+    // A SECOND session between the SAME pair, with its own distinct agreement.
+    const createdB = await bridge.togetherCreate({ partnerPersonId: angel });
+    const sessionB = createdB.ok ? createdB.session.id : '';
+    await asPerson(host, angel);
+    await bridge.togetherAccept(sessionB);
+    await asPerson(host, ben);
+    await bridge.togetherSaveAgreement({
+      sessionId: sessionB,
+      text: 'plan a weekend trip',
+      status: 'standing',
+    });
+
+    // Session A's ledger: exactly one "screen-free dinners" (deduped), and NEVER B's trip.
+    const viewA = await bridge.togetherGetReport({ sessionId: sessionA });
+    expect(viewA.agreements).toHaveLength(1);
+    expect(viewA.agreements[0]?.text.toLowerCase()).toContain('screen-free dinners');
+    expect(viewA.agreements.some((a) => a.text.toLowerCase().includes('weekend trip'))).toBe(false);
+
+    // Session B's ledger: only B's agreement, never A's.
+    const viewB = await bridge.togetherGetReport({ sessionId: sessionB });
+    expect(viewB.agreements.map((a) => a.text)).toEqual(['plan a weekend trip']);
+  });
+
   it('cross-pair agreements (spec 61): each partner sees the shared record scoped to their pairs; mark-done writes back; a non-member is refused', async () => {
     const { host, bridge, ben, angel } = await seedPair();
     const created = await bridge.togetherCreate({ partnerPersonId: angel });

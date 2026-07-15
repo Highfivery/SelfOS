@@ -292,6 +292,7 @@ import {
   dedupeAgreements,
   getAgreement,
   listAgreements,
+  listDoneAgreementsForViewer,
   listStandingAgreementsForViewer,
   listMessages as listTogetherMessages,
   listSessionsForPerson as listTogetherSessionsForPerson,
@@ -2722,6 +2723,21 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const c = await togetherCtx();
       if (!c) return [];
       const rows = await listStandingAgreementsForViewer(c.fs, c.key, c.personId);
+      return Promise.all(
+        rows.map(async (r) => ({
+          agreement: r.agreement,
+          partnerPersonId: r.partnerPersonId,
+          partnerName:
+            (await getPerson(c.fs, c.key, r.partnerPersonId))?.displayName ?? 'your partner',
+        })),
+      );
+    },
+    // Every DONE (completed) commitment across the active person's pairs (spec 61) — the Goals "Completed &
+    // closed" record, so a followed-through commitment isn't lost when it drops out of the standing list.
+    togetherDoneCommitments: async (): Promise<AgreementSummary[]> => {
+      const c = await togetherCtx();
+      if (!c) return [];
+      const rows = await listDoneAgreementsForViewer(c.fs, c.key, c.personId);
       return Promise.all(
         rows.map(async (r) => ({
           agreement: r.agreement,

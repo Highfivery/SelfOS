@@ -404,6 +404,33 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-15 — **Build (Together: completed commitments now recorded in Goals "Completed & closed" — user-requested;
+  SPEC 61 §3.2/§6 amended; on `feat/together-completed-commitments-in-goals`, PR pending).** The user: a Together
+  commitment marked **done** just **vanished** from the standing-only "Together commitments" list — recorded
+  nowhere. **Decisions asked (AskUserQuestion):** (1) show **completed (done) only** in "Completed & closed" (not
+  retired — retire is a hard removal); (2) make them **reopenable** (consistent with how completed personal goals
+  reopen). Built: a new person-scoped **`listDoneAgreementsForViewer`** (refactored to share the pair-walk with
+  `listStandingAgreementsForViewer` via a `keep` predicate; de-duped) + **`together:doneCommitments`** IPC (full
+  seam) + a `myDoneAgreements` store slice (`setAgreementStatus` now refreshes **both** the standing + completed
+  lists so a mark-done / reopen moves the commitment between them). Renderer: a **`CompletedCommitments`**
+  component (done rows: text + a green "Completed" tag + partner + "Open in Together" + a **Reopen** that flips it
+  back to `standing` via the existing shared-ledger write-back) rendered as a **"Together commitments" subgroup
+  inside the collapsed "Completed & closed" `<details>`** on `/goals`; the closed-history count + show-condition
+  fold in the completed commitments (so the history shows even with no personal goals). No new schema — reuses the
+  `Agreement` `done` status + the shared pair ledger. Gate green: typecheck, lint, format, **1178 core + 1168
+  desktop** unit (+`listDoneAgreementsForViewer`, +bridge done-read + mark-done→record→reopen round-trip, +2
+  `CompletedCommitments` RTL, +2 Goals RTL), **19/19 Together+Goals E2E** (the spec-61 follow-through E2E extended:
+  mark done → leaves the active list → appears under "Completed & closed" with a Completed tag → Reopen → decrypt
+  asserts the shared record flips `done`→`standing` and it returns to the active list). Real-Electron visual QA
+  (the completed "weekly date night" commitment under "Completed & closed" with the partner chip + Reopen).
+  **Also fixed a pre-existing, date-fragile E2E** the run surfaced (verified it fails on clean `main` too): the
+  `goals: a tracked goal…` test seeds a goal at a fixed past date that is now >21 days stale, firing the
+  goal-followup **notification toast** whose text substring-collided with the goal card — scoped the assertion
+  with `{ exact: true }`. **Lesson: a "mark done" that removes an item from its only list loses the record of
+  follow-through — surface completed items in a "closed" history (reusing the existing status + ledger, no new
+  schema) with a reopen path; and a `getByText(<goal text>)` E2E assertion substring-collides with any
+  notification/recommendation that embeds that text (a stale-goal nudge fires as the calendar advances past the
+  seed date) — scope goal/commitment text assertions with `{ exact: true }`.**
 - 2026-07-15 — **Fix (Together home: "New session" + the catalog / Desire & intimacy practice cards read as
   "not doing anything" — the start bar opened OFF-SCREEN; GitHub issue #207; SPEC 58 §3.3 amended; on
   `fix/together-start-bar-scroll`, PR pending).** User screenshots: clicking "New session" (or a guided-catalog

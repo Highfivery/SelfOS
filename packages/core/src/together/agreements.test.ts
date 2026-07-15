@@ -3,6 +3,7 @@ import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import type { FileSystem } from '../host';
 import {
+  listDoneAgreementsForViewer,
   listStandingAgreementsForViewer,
   saveAgreement,
   standingAgreements,
@@ -62,6 +63,25 @@ describe('listStandingAgreementsForViewer (spec 61)', () => {
     );
     const rows = await listStandingAgreementsForViewer(fs, key, BEN);
     expect(rows.map((r) => r.agreement.text)).toEqual(['Real one']);
+  });
+
+  it('listDoneAgreementsForViewer returns only the viewer’s DONE commitments (not standing/retired) — Goals “Completed & closed” (spec 61)', async () => {
+    const fs = memFileSystem();
+    await seed(fs, BEN, ANGEL, 'Date night Fridays', 'standing');
+    await seed(fs, BEN, ANGEL, 'Screen-free dinners', 'done');
+    await seed(fs, ANGEL, BEN, 'A retired one', 'retired');
+    await seed(fs, BEN, CASS, 'Weekly walk', 'done'); // a different partner
+    await seed(fs, ANGEL, CASS, 'Not Ben’s pair', 'done'); // a pair Ben is NOT in
+
+    const rows = await listDoneAgreementsForViewer(fs, key, BEN);
+    const texts = rows.map((r) => r.agreement.text).sort();
+    expect(texts).toEqual(['Screen-free dinners', 'Weekly walk']);
+    // Not standing, not retired, not a pair Ben isn't in.
+    expect(texts).not.toContain('Date night Fridays');
+    expect(texts).not.toContain('A retired one');
+    expect(texts).not.toContain('Not Ben’s pair');
+    // The partner id resolves to the OTHER member.
+    expect(rows.find((r) => r.agreement.text === 'Weekly walk')?.partnerPersonId).toBe(CASS);
   });
 
   it('standingAgreements filters to standing only', () => {

@@ -6010,6 +6010,29 @@ describe('createCoreBridge — Together (58) foundation', () => {
       (await bridge.togetherGetReport({ sessionId })).agreements.find((x) => x.id === a?.id)
         ?.status,
     ).toBe('done');
+
+    // A completed commitment is RECORDED in the Goals "Completed & closed" read for BOTH partners (not lost when
+    // it leaves the standing list) — the partner display name resolved (user request 2026-07-15).
+    await asPerson(host, ben);
+    const benDone = await bridge.togetherDoneCommitments();
+    expect(benDone.map((r) => r.agreement.id)).toContain(a?.id);
+    expect(benDone.find((r) => r.agreement.id === a?.id)?.partnerName).toBe('Angel');
+    await asPerson(host, angel);
+    expect(
+      (await bridge.togetherDoneCommitments()).find((r) => r.agreement.id === a?.id),
+    ).toBeTruthy();
+
+    // Reopen from Goals → back to standing for BOTH; it leaves the completed list and returns to the standing one.
+    await asPerson(host, ben);
+    const reopened = await bridge.togetherSetAgreementStatus({
+      partnerPersonId: angel,
+      agreementId: a!.id,
+      status: 'standing',
+    });
+    expect(reopened?.status).toBe('standing');
+    expect(reopened?.text).toBe('weekly date night'); // text preserved across the round-trip
+    expect(await bridge.togetherDoneCommitments()).toEqual([]);
+    expect((await bridge.togetherMyAgreements()).map((r) => r.agreement.id)).toContain(a?.id);
   });
 
   // ── Phase E: guided couples catalog (§3.10) ────────────────────────────────────────────────────

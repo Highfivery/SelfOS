@@ -394,6 +394,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.togetherGetReport, bridge.togetherGetReport);
   handle(IpcChannels.togetherSaveAgreement, bridge.togetherSaveAgreement);
   handle(IpcChannels.togetherMyAgreements, bridge.togetherMyAgreements);
+  handle(IpcChannels.togetherDoneCommitments, bridge.togetherDoneCommitments);
   handle(IpcChannels.togetherSetAgreementStatus, bridge.togetherSetAgreementStatus);
   handle(IpcChannels.assignmentsCreate, bridge.assignmentsCreate);
   handle(IpcChannels.assignmentsInbox, bridge.assignmentsInbox);

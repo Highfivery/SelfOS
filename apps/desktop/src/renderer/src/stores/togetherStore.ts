@@ -64,6 +64,8 @@ interface TogetherState {
   wrappingUp: boolean;
   /** Standing agreements across ALL the active person's pairs (spec 61) — Goals + Home surfaces. */
   myAgreements: AgreementSummary[];
+  /** Completed (done) commitments across the active person's pairs — the Goals "Completed & closed" record. */
+  myDoneAgreements: AgreementSummary[];
 
   load: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -103,7 +105,10 @@ interface TogetherState {
   }) => Promise<Agreement | null>;
   /** Load standing agreements across the active person's pairs (spec 61). */
   loadMyAgreements: () => Promise<void>;
-  /** Mark a standing agreement done/retired from Goals/Home (spec 61); refreshes `myAgreements`. */
+  /** Load completed (done) commitments across the active person's pairs (spec 61). */
+  loadDoneAgreements: () => Promise<void>;
+  /** Set a commitment's status from Goals/Home (spec 61); refreshes BOTH the standing + completed lists so a
+   *  mark-done / reopen moves it between them. */
   setAgreementStatus: (
     partnerPersonId: string,
     agreementId: string,
@@ -156,6 +161,7 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
   reportView: EMPTY_REPORT,
   wrappingUp: false,
   myAgreements: [],
+  myDoneAgreements: [],
 
   load: async () => {
     const [{ hasPartner, partners }, sessions] = await Promise.all([
@@ -320,9 +326,14 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
     const myAgreements = (await window.selfos?.togetherMyAgreements()) ?? [];
     set({ myAgreements });
   },
+  loadDoneAgreements: async () => {
+    const myDoneAgreements = (await window.selfos?.togetherDoneCommitments()) ?? [];
+    set({ myDoneAgreements });
+  },
   setAgreementStatus: async (partnerPersonId, agreementId, status) => {
     await window.selfos?.togetherSetAgreementStatus({ partnerPersonId, agreementId, status });
-    await get().loadMyAgreements();
+    // Refresh BOTH lists so the commitment moves between standing ⇄ completed (mark-done / reopen).
+    await Promise.all([get().loadMyAgreements(), get().loadDoneAgreements()]);
   },
   reset: () =>
     set({
@@ -338,6 +349,7 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
       reportView: EMPTY_REPORT,
       wrappingUp: false,
       myAgreements: [],
+      myDoneAgreements: [],
     }),
 }));
 

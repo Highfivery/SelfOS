@@ -2,9 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import type { Goal } from '@shared/schemas';
+import type { AgreementSummary, Goal } from '@shared/schemas';
 import { Goals } from './Goals';
 import { useGoalStore } from '../../../stores/goalStore';
+import { useTogetherStore } from '../../../stores/togetherStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
 
 function goal(over: Partial<Goal> & { id: string; text: string }): Goal {
@@ -30,7 +31,25 @@ function renderGoals(): void {
 afterEach(() => {
   clearMockBridge();
   useGoalStore.setState({ goals: [], loaded: false });
+  useTogetherStore.getState().reset();
 });
+
+function doneCommitment(): AgreementSummary {
+  return {
+    partnerPersonId: 'angel',
+    partnerName: 'Angel',
+    agreement: {
+      id: 'ac1',
+      schemaVersion: 1,
+      pairKey: 'angel~ben',
+      text: 'Screen-free dinners',
+      status: 'done',
+      provenance: { sessionId: 'sess-1', at: '2026-07-01T00:00:00.000Z' },
+      createdAt: '2026-07-01T00:00:00.000Z',
+      updatedAt: '2026-07-10T00:00:00.000Z',
+    },
+  };
+}
 
 describe('Goals page', () => {
   it('renders active goals with status, and marks a goal done', async () => {
@@ -84,5 +103,31 @@ describe('Goals page', () => {
     renderGoals();
     expect(await screen.findByText('Ship the redesign')).toBeInTheDocument();
     expect(screen.getByText(/Completed & closed \(1\)/)).toBeInTheDocument();
+  });
+
+  it('includes completed Together commitments in the "Completed & closed" history (user request 2026-07-15)', async () => {
+    installMockBridge({
+      goalsList: () =>
+        Promise.resolve([goal({ id: 'g2', text: 'Old finished goal', status: 'done' })]),
+      togetherDoneCommitments: () => Promise.resolve([doneCommitment()]),
+    });
+    renderGoals();
+    // The count folds in the completed commitment alongside the closed goal (1 goal + 1 commitment = 2).
+    expect(await screen.findByText(/Completed & closed \(2\)/)).toBeInTheDocument();
+    expect(screen.getByText('Screen-free dinners')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Reopen/ })).toBeInTheDocument();
+  });
+
+  it('shows the closed history even with NO personal goals, when a commitment was completed', async () => {
+    installMockBridge({
+      goalsList: () => Promise.resolve([]),
+      togetherDoneCommitments: () => Promise.resolve([doneCommitment()]),
+    });
+    renderGoals();
+    // No goals + a completed commitment → the closed history shows it (not the "no goals" empty hint).
+    expect(await screen.findByText(/Completed & closed \(1\)/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Goals you mention in sessions show up here/),
+    ).not.toBeInTheDocument();
   });
 });

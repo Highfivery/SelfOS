@@ -3849,9 +3849,10 @@ test('goals: a tracked goal shows on the Goals page with status; marking it Done
     // Goals now live on their own top-level page (57 §3.7), not inside Memory.
     await w.getByRole('link', { name: 'Goals' }).click();
 
-    // The goal appears under "Goals & commitments" with an Open status.
+    // The goal appears under "Goals & commitments" with an Open status. `exact` scopes to the goal card — the
+    // seeded goal is now >21 days old (stale), so the goal-followup notification toast also embeds its text.
     await expect(w.getByRole('heading', { name: /Goals & commitments/ })).toBeVisible();
-    await expect(w.getByText('Finish the budget spreadsheet')).toBeVisible();
+    await expect(w.getByText('Finish the budget spreadsheet', { exact: true })).toBeVisible();
 
     // Mark it Done via the per-goal status control → it moves to the collapsed "Completed & closed".
     await w
@@ -10749,6 +10750,26 @@ test('together follow-through (61): agreements in Goals + needs-attention, inlin
             ?.status,
       )
       .toBe('done');
+
+    // The completed commitment leaves the active list and is RECORDED in the Goals "Completed & closed" history
+    // (user request 2026-07-15) — not lost. Expand it → the commitment + a "Completed" tag + a Reopen.
+    await expect(w.getByText(/Completed & closed \(1\)/)).toBeVisible();
+    await w.getByText(/Completed & closed \(1\)/).click();
+    await expect(w.getByText('weekly date night')).toBeVisible();
+    await expect(w.getByText('Completed', { exact: true })).toBeVisible();
+
+    // Reopen → it returns to the standing ledger and the completed record clears (both write back to the shared
+    // pair record — decrypt asserts the round-trip).
+    await w.getByRole('button', { name: /Reopen/ }).click();
+    await expect
+      .poll(
+        async () =>
+          (await listAgreements(fs, key, pairKey)).find((a) => a.text === 'weekly date night')
+            ?.status,
+      )
+      .toBe('standing');
+    await expect(w.getByText(/Completed & closed/)).toHaveCount(0);
+    await expect(w.getByRole('button', { name: 'Mark done' })).toBeVisible(); // back in the active list
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

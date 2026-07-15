@@ -223,6 +223,7 @@ const bridge: SelfosBridge = {
   togetherGetReport: (input) => ipcRenderer.invoke(IpcChannels.togetherGetReport, input),
   togetherSaveAgreement: (input) => ipcRenderer.invoke(IpcChannels.togetherSaveAgreement, input),
   togetherMyAgreements: () => ipcRenderer.invoke(IpcChannels.togetherMyAgreements),
+  togetherDoneCommitments: () => ipcRenderer.invoke(IpcChannels.togetherDoneCommitments),
   togetherSetAgreementStatus: (input) =>
     ipcRenderer.invoke(IpcChannels.togetherSetAgreementStatus, input),
   assignmentsCreate: (input) => ipcRenderer.invoke(IpcChannels.assignmentsCreate, input),

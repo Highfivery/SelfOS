@@ -302,6 +302,7 @@ export const IpcChannels = {
   togetherGetReport: 'together:getReport',
   togetherSaveAgreement: 'together:saveAgreement',
   togetherMyAgreements: 'together:myAgreements',
+  togetherDoneCommitments: 'together:doneCommitments',
   togetherSetAgreementStatus: 'together:setAgreementStatus',
   assignmentsCreate: 'assignments:create',
   assignmentsInbox: 'assignments:inbox',
@@ -1092,6 +1093,9 @@ export interface SelfosBridge {
   }): Promise<Agreement | null>;
   /** Every STANDING agreement across the active person's pairs (spec 61) — for Goals + Home. Person-scoped. */
   togetherMyAgreements(): Promise<AgreementSummary[]>;
+  /** Every DONE (completed) commitment across the active person's pairs — the Goals "Completed & closed"
+   *  record (spec 61). Person-scoped. */
+  togetherDoneCommitments(): Promise<AgreementSummary[]>;
   /** Mark a standing agreement done/retired from Goals/Home (spec 61); resolves the pair from the partner. */
   togetherSetAgreementStatus(input: {
     partnerPersonId: string;

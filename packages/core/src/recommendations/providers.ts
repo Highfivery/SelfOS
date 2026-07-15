@@ -180,6 +180,27 @@ const questionnaireGap: RecommendationProvider = {
       : null,
 };
 
+/** An auto-generated check-in is waiting in the inbox (63) — a gentle "a reflection is ready". */
+const autoCheckin: RecommendationProvider = {
+  id: 'auto-checkin',
+  domain: 'questionnaire',
+  capabilityGate: 'questionnaires.answer',
+  relevance: (s): RecommendationCandidate | null => {
+    const n = s.autoCheckinWaiting ?? 0;
+    return n > 0
+      ? {
+          id: 'auto-checkin',
+          label: n === 1 ? 'A reflection is ready' : `${n} reflections are ready`,
+          reason:
+            'SelfOS created a check-in for you from what it’s learned — answer it when you have a moment.',
+          route: '/inbox',
+          score: 42,
+          dismissKey: `auto-checkin:${n}`, // a NEW one arriving re-surfaces a dismissal
+        }
+      : null;
+  },
+};
+
 /** Memory has drifted — a tidy-up reconcile prompt (39). */
 const refreshMemory: RecommendationProvider = {
   id: 'refresh-memory',
@@ -394,6 +415,7 @@ export const BUILT_IN_RECOMMENDATION_PROVIDERS: readonly RecommendationProvider[
   synthesisObservation,
   guidedSuggestion,
   questionnaireGap,
+  autoCheckin,
   refreshMemory,
   challengeCheckin,
   suggestChallenge,

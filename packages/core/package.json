@@ -26,6 +26,7 @@
     "./goals": "./src/goals/index.ts",
     "./challenges": "./src/challenges/index.ts",
     "./coaching": "./src/coaching/index.ts",
+    "./auto-checkins": "./src/autoCheckins/index.ts",
     "./recommendations": "./src/recommendations/index.ts",
     "./home": "./src/home/index.ts",
     "./questionnaires": "./src/questionnaires/index.ts",

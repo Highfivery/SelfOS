@@ -19,6 +19,9 @@ export const CAPABILITIES = [
   'questionnaires.answer',
   'questionnaires.viewResults',
   'questionnaires.sendExternal',
+  // Auto check-ins (63-auto-checkins §5.3) — configure the autonomous questionnaire engine for oneself
+  // (Member default ON). Configuring an OTHER-person target is ADDITIONALLY owner-gated in the bridge (§3.6).
+  'questionnaires.autoCheckin',
   // `readRaw` (raw-answer access for a `senderSeesAll` compatibility send, §8.4/§13.5d) is an
   // EXPLICIT_GRANT_ONLY capability: it ships OFF for non-owner roles and is granted only by an explicit
   // toggle in the Roles matrix. The Owner (full-access) always has it.
@@ -73,6 +76,7 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   'questionnaires.answer': 'Answer questionnaires',
   'questionnaires.viewResults': 'View questionnaire results',
   'questionnaires.sendExternal': 'Send questionnaires to external people',
+  'questionnaires.autoCheckin': 'Auto-generate check-ins from their data',
   'questionnaires.readRaw': 'Reveal raw private answers (break-glass)',
   'dreams.own': 'Log & analyze their own dreams',
   'dreams.shareContext': 'Share a dream insight into a relationship',
@@ -130,6 +134,7 @@ export const DEFAULT_ROLES: Role[] = [
       'questionnaires.answer',
       'questionnaires.viewResults',
       'questionnaires.sendExternal',
+      'questionnaires.autoCheckin',
       'dreams.own',
       'dreams.shareContext',
       'dreams.generateImage',

@@ -21,6 +21,7 @@ import { receivedStatus } from '../inbox/inboxStatus';
 import { QuestionnaireBuilder, type BuilderSeed } from './QuestionnaireBuilder';
 import { NewQuestionnaireStart } from './NewQuestionnaireStart';
 import { SuggestedPanel } from './SuggestedPanel';
+import { AutoCheckinsPanel } from './AutoCheckinsPanel';
 import { SentCard } from './SentCard';
 import { ReceivedCard } from './ReceivedCard';
 import {
@@ -481,6 +482,7 @@ export function Questionnaires(): JSX.Element {
               ) : null}
             </section>
           ) : null}
+          <AutoCheckinsPanel />
         </>
       ) : (
         <div className={styles.detail}>

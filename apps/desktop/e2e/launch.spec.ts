@@ -10955,3 +10955,47 @@ test('memory redesign (62): sections collapsed (sensitive too), edit a fact inli
     await rm(vault, { recursive: true, force: true });
   }
 });
+
+test('auto check-ins (63): a completed onboarding seeds an on self stream that generates a questionnaire', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('auto check-ins e2e: master key missing');
+  // Onboarding complete → the self stream is eligible AND the cadence hook seeds it on by default (§5.1).
+  await seedCompletedIntake(fs, key, 'owner-1');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Home' }).waitFor();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+
+    // The launch cadence hook seeded the default-on self stream (onboarding complete) — the panel reflects it.
+    await expect(w.getByRole('heading', { name: 'Auto check-ins' })).toBeVisible();
+    await expect(w.getByText('Yourself')).toBeVisible();
+
+    // Force a run (bypasses the 24h throttle) — a calm success note appears.
+    await w.getByRole('button', { name: /Run now/ }).click();
+    await expect(w.getByText(/Added \d+ new check-in|Nothing new right now/)).toBeVisible();
+
+    // Decrypt the vault: a questionnaire the engine authored (provenance present) was delivered to the
+    // owner's own inbox — the whole plan → generate → deliver loop, never re-asking, works end to end.
+    await expect
+      .poll(async () => (await listQuestionnaires(fs, key)).filter((d) => d.autoCheckin).length)
+      .toBeGreaterThan(0);
+    const auto = (await listQuestionnaires(fs, key)).find((d) => d.autoCheckin);
+    expect(auto?.autoCheckin?.targetId).toBeTruthy();
+    expect(auto?.recipient).toEqual({ kind: 'person', personId: 'owner-1' });
+    const inbox = await listAssignments(fs, key, { recipientPersonId: 'owner-1' });
+    expect(inbox.length).toBeGreaterThan(0);
+
+    // The recipient's Inbox marks it as auto-generated (never covert, §8.3).
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    await expect(w.getByText(/Auto check-in/).first()).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});

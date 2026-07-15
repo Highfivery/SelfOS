@@ -35,6 +35,9 @@ import {
   AnswerSchema,
   AnswerTypeSchema,
   AttachmentRefSchema,
+  AutoCheckinTargetSchema,
+  type AutoCheckinConfig,
+  type AutoCheckinRunResult,
   BudgetSchema,
   ChallengeDomainSchema,
   ChallengeOutcomeSchema,
@@ -357,6 +360,12 @@ import {
   synthesizeRelationship,
   type GoalRaiseGoal,
 } from '@selfos/core/coaching';
+import {
+  getAutoCheckinConfig,
+  runAutoCheckins,
+  seedDefaultConfigIfAbsent,
+  setAutoCheckinConfig,
+} from '@selfos/core/auto-checkins';
 import {
   INTIMACY_ACTIVITIES,
   INTIMACY_FANTASIES,
@@ -869,6 +878,12 @@ const CoachingSetPrefsSchema = z.object({
 // `auto` (renderer cadence) applies the throttle/threshold gate; absent/false = a manual force (still
 // budget/key-gated, throttle bypassed).
 const CoachingSynthesizeSchema = z.object({ auto: z.boolean().optional() });
+// Auto check-ins (63 §6) — the config write + the run trigger.
+const AutoCheckinSetConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  targets: z.array(AutoCheckinTargetSchema).optional(),
+});
+const AutoCheckinRunSchema = z.object({ auto: z.boolean().optional() });
 const RelationshipSynthesizeSchema = z.object({ partnerPersonId: z.string().min(1) });
 const ResolveProposalSchema = z.object({
   proposalId: z.string().min(1),
@@ -4011,6 +4026,104 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       return result;
     },
+    // --- Auto check-ins (63-auto-checkins §6) — gated `questionnaires.autoCheckin`, active-person-scoped ---
+    autoCheckinsGetConfig: async (): Promise<AutoCheckinConfig | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.autoCheckin')))
+        return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      return getAutoCheckinConfig(ctx.fs, ctx.key, personId);
+    },
+    autoCheckinsSetConfig: async (input): Promise<AutoCheckinConfig | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.autoCheckin')))
+        return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const patch = AutoCheckinSetConfigSchema.parse(input);
+      // Owner-only to target ANOTHER person (§3.6 — the compensating control for the no-consent model). A
+      // non-owner may configure only their OWN self-stream; a person-target in the patch needs `people.manage`.
+      // The renderer gates the "Add a person" UI, but the trust boundary is HERE: reject the write (return the
+      // unchanged config) rather than persist a non-owner's other-target.
+      if (
+        patch.targets?.some((t) => t.target.kind === 'person') &&
+        !(await activePersonCan(ctx.fs, ctx.key, 'people.manage'))
+      ) {
+        return getAutoCheckinConfig(ctx.fs, ctx.key, personId);
+      }
+      return setAutoCheckinConfig(ctx.fs, ctx.key, personId, {
+        ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
+        ...(patch.targets !== undefined ? { targets: patch.targets } : {}),
+      });
+    },
+    autoCheckinsEnsureSeed: async (): Promise<{
+      seeded: boolean;
+      config: AutoCheckinConfig;
+    } | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.autoCheckin')))
+        return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      // Seed the default-on self stream once, iff onboarding is complete (§5.1) — write-once + idempotent.
+      const session = await getIntakeSession(ctx.fs, ctx.key, personId);
+      return seedDefaultConfigIfAbsent(ctx.fs, ctx.key, personId, {
+        onboardingComplete: session?.status === 'complete',
+      });
+    },
+    autoCheckinsRun: async (input): Promise<AutoCheckinRunResult> => {
+      const { auto = true } = AutoCheckinRunSchema.parse(input ?? {});
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (
+        !ctx ||
+        !personId ||
+        !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.autoCheckin'))
+      ) {
+        return { ok: false, reason: 'SKIPPED', message: 'SelfOS isn’t ready yet.' };
+      }
+      // AI off → skip silently (no dead affordance, the panel gates on `configured`). §7.
+      if ((await readVaultSettingsValues(ctx.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to use auto check-ins.',
+        };
+      }
+      const deps = await aiDeps('questionnaires.autoCheckin');
+      if (!deps) return { ok: false, reason: 'SKIPPED', message: 'Not available.' };
+      // Crisis suppression (§8.1) — the same aggregate the coaching pass uses, over the author's OWN approved
+      // insights. Never overridden by the toggle; computed here (like coachingSynthesize), passed into the engine.
+      const ownApproved = (await listInsightsForPerson(ctx.fs, ctx.key, personId)).filter(
+        (i) => i.approved && i.subjectPersonId === personId,
+      );
+      const crisis = aggregateCrisisSignal({
+        insights: ownApproved,
+        nightmareNudge: false,
+        now: deps.now,
+      }).recurring;
+      const device = await host.readDeviceState();
+      const lastCheckedAt = device.autoCheckinCheckedAt?.[personId];
+      const result = await runAutoCheckins({
+        ...deps,
+        crisis,
+        auto,
+        ...(lastCheckedAt ? { lastCheckedAt } : {}),
+      });
+      // Stamp the device throttle on any COMPLETED run (so the auto cadence won't re-fire within 24h). Not on
+      // AI_OFF/BUDGET/CRISIS/SKIPPED — those retry next launch (mirrors memoryRefresh/coachingSynthesize).
+      if (result.ok) {
+        const latest = await host.readDeviceState();
+        await host.updateDeviceState({
+          autoCheckinCheckedAt: {
+            ...(latest.autoCheckinCheckedAt ?? {}),
+            [personId]: new Date().toISOString(),
+          },
+        });
+      }
+      return result;
+    },
     // --- Relationship insights (54-memory-redesign §6) — gated `memory.own`, active-person-scoped ---
     relationshipsGetSynthesis: async (input): Promise<RelationshipSynthesis | null> => {
       const { partnerPersonId } = RelationshipSynthesizeSchema.parse(input);
@@ -4309,6 +4422,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           ...(snapshot.compatibility
             ? { compatibilityVisibility: snapshot.compatibility.visibility }
             : {}),
+          // Surface the auto-checkin provenance so the Inbox card shows it's auto-generated (§8.3, never covert).
+          ...(snapshot.autoCheckin ? { autoCheckin: snapshot.autoCheckin } : {}),
         });
       }
       return items;

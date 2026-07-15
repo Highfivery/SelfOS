@@ -40,6 +40,7 @@ import { useQuestionnaireStore } from '../stores/questionnaireStore';
 import { useGuidanceStore } from '../stores/guidanceStore';
 import { useIntakeStore } from '../stores/intakeStore';
 import { useSynthesisStore } from '../stores/synthesisStore';
+import { useAutoCheckinStore } from '../stores/autoCheckinStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useDiscoveryStore } from '../stores/discoveryStore';
 import { togetherWaitingCount, useTogetherStore } from '../stores/togetherStore';
@@ -47,6 +48,7 @@ import { useNotificationSources } from './notifications/useNotificationSources';
 import { useUpdateChecks } from './notifications/useUpdateChecks';
 import { useMemoryReconcile } from './notifications/useMemoryReconcile';
 import { useCoachingSynthesis } from './notifications/useCoachingSynthesis';
+import { useAutoCheckins } from './notifications/useAutoCheckins';
 import { ToastViewport } from './notifications/ToastViewport';
 import { Onboarding } from './routes/onboarding/Onboarding';
 import { attentionFromIntakeState } from './routes/onboarding/progress';
@@ -120,6 +122,7 @@ export function AppShell(): JSX.Element {
   useMemoryReconcile();
   // Drive the automatic cross-feature synthesis cadence (launch + focus, gated in the bridge); 40 §3.4.
   useCoachingSynthesis();
+  useAutoCheckins();
 
   // When the signed-in person changes, drop the previous account's per-person data and load this
   // person's — sessions/usage/budget are per-user, so nothing from the prior login may linger
@@ -141,6 +144,7 @@ export function AppShell(): JSX.Element {
     useChallengeStore.getState().reset(); // challenges + cached suggestion are per-person (52 §5.5)
     useTestStore.getState().reset(); // self-assessments are per-person (50 §5.6)
     useSynthesisStore.getState().reset(); // the cached cross-feature synthesis is per-person (40 §5.3)
+    useAutoCheckinStore.getState().reset(); // auto check-ins config + run state is per-person (63 §5.2)
     useNotificationStore.getState().reset(); // notifications are per-person, device-local (35 §4)
     useDiscoveryStore.getState().reset(); // orientation/tip dismissals are per-person, device-local (41 §4)
     useTogetherStore.getState().reset(); // Together sessions are per-person (58 §5.3)

@@ -272,6 +272,14 @@
   font-weight: 500;
 }
 
+/* The one-line "why" on an auto-generated check-in card (63 §3.2). */
+.autoRationale {
+  min-width: 0;
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+}
+
 /* Received cards lead with the sender chip (which owns the flex-grow), so its eyebrow slot isn't used. */
 .from {
   display: inline-flex;

@@ -174,6 +174,10 @@ const bridge: SelfosBridge = {
   coachingSetPrefs: (input) => ipcRenderer.invoke(IpcChannels.coachingSetPrefs, input),
   coachingGetSynthesis: () => ipcRenderer.invoke(IpcChannels.coachingGetSynthesis),
   coachingSynthesize: (input) => ipcRenderer.invoke(IpcChannels.coachingSynthesize, input),
+  autoCheckinsGetConfig: () => ipcRenderer.invoke(IpcChannels.autoCheckinsGetConfig),
+  autoCheckinsSetConfig: (input) => ipcRenderer.invoke(IpcChannels.autoCheckinsSetConfig, input),
+  autoCheckinsEnsureSeed: () => ipcRenderer.invoke(IpcChannels.autoCheckinsEnsureSeed),
+  autoCheckinsRun: (input) => ipcRenderer.invoke(IpcChannels.autoCheckinsRun, input),
   relationshipsGetSynthesis: (input) =>
     ipcRenderer.invoke(IpcChannels.relationshipsGetSynthesis, input),
   relationshipsSynthesize: (input) =>

@@ -102,6 +102,9 @@ export interface PersonRecommendationState {
   memoryStale: boolean;
   /** A stable signature of the queued merge proposals — NEW drift re-surfaces a dismissal. */
   memorySignature?: string;
+  /** How many auto-generated check-ins are waiting in the person's inbox (63) — drives the `auto-checkin`
+   *  For-you card. Additive-optional (absent ⇒ 0 ⇒ no card). */
+  autoCheckinWaiting?: number;
 
   // --- Slice-B signals (50/51/48; additive-optional — absent ⇒ the provider contributes nothing) ---
   /** The active person's taken self-assessments (50) — instrument + `group` + when. Drives `take-a-test`

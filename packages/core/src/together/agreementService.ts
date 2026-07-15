@@ -148,7 +148,13 @@ export async function saveAgreement(
   return agreement;
 }
 
-/** Capture an agreement from a coach `[[SELFOS:AGREEMENT]]` marker (§6.4) — a new standing agreement. */
+/**
+ * Capture an agreement from a coach `[[SELFOS:AGREEMENT]]` marker (§6.4) — a new standing agreement, UNLESS
+ * one with the same normalized text already exists in the pair ledger (non-retired). The coach can emit the
+ * same marker across turns or on a retry, so without this de-dup the ledger accrues identical duplicates
+ * (issue #206). When a live twin exists we return it instead of minting a copy — matching the wrap-up
+ * action-item de-dup, so the two capture paths never double each other.
+ */
 export async function captureAgreementFromMarker(
   fs: FileSystem,
   key: Uint8Array,
@@ -158,6 +164,13 @@ export async function captureAgreementFromMarker(
   sessionId: string,
   now: Date,
 ): Promise<Agreement | null> {
+  const norm = normalizeAgreementText(marker.text);
+  if (norm) {
+    const existing = (await listAgreements(fs, key, pairKeyFor(personA, personB))).find(
+      (a) => a.status !== 'retired' && normalizeAgreementText(a.text) === norm,
+    );
+    if (existing) return existing;
+  }
   return saveAgreement(
     fs,
     key,
@@ -176,6 +189,47 @@ export async function captureAgreementFromMarker(
 /** Standing agreements only (the Together home strip count + the grounding pack, §3.9). */
 export function standingAgreements(agreements: Agreement[]): Agreement[] {
   return agreements.filter((a) => a.status === 'standing');
+}
+
+/**
+ * Normalize an agreement / action-item text for deterministic de-dup (lowercase, collapse whitespace, strip
+ * trailing punctuation). The single source both the marker-capture de-dup and the wrap-up action-item de-dup
+ * key off, so "screen-free dinners." and "Screen-free dinners" collapse to the same key.
+ */
+export function normalizeAgreementText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[.,;:!?—–-]+$/g, '')
+    .trim();
+}
+
+/** De-dup winner rank: an active commitment beats a done one, which beats a retired one. */
+const STATUS_RANK: Record<Agreement['status'], number> = { standing: 0, done: 1, retired: 2 };
+
+/**
+ * Collapse agreements that share the same normalized text into ONE representative (§3.9) — a defense-in-depth
+ * against duplicate captures (the coach can emit the same `[[SELFOS:AGREEMENT]]` marker across turns / on a
+ * retry, and older data may already hold a twin). The winner is the most-actionable (standing > done >
+ * retired), tie-broken by newest `updatedAt`, so a live re-commit always wins over an older done/retired twin.
+ * Input order (newest-first) is preserved.
+ */
+export function dedupeAgreements(agreements: Agreement[]): Agreement[] {
+  const winnerByText = new Map<string, Agreement>();
+  for (const a of agreements) {
+    const norm = normalizeAgreementText(a.text);
+    const current = winnerByText.get(norm);
+    if (!current) {
+      winnerByText.set(norm, a);
+      continue;
+    }
+    const better =
+      STATUS_RANK[a.status] < STATUS_RANK[current.status] ||
+      (STATUS_RANK[a.status] === STATUS_RANK[current.status] && a.updatedAt > current.updatedAt);
+    if (better) winnerByText.set(norm, a);
+  }
+  const winners = new Set(winnerByText.values());
+  return agreements.filter((a) => winners.has(a));
 }
 
 /** A viewer's standing agreement surfaced outside its session (spec 61) — the partner id resolved. */
@@ -205,7 +259,10 @@ export async function listStandingAgreementsForViewer(
     if (first === undefined || second === undefined) continue;
     if (first !== viewerId && second !== viewerId) continue;
     const partnerPersonId = first === viewerId ? second : first;
-    for (const agreement of standingAgreements(await listAgreements(fs, key, pairKey))) {
+    // Collapse any duplicate captures so Home/Goals never show the same commitment twice (issue #206).
+    for (const agreement of dedupeAgreements(
+      standingAgreements(await listAgreements(fs, key, pairKey)),
+    )) {
       out.push({ agreement, partnerPersonId });
     }
   }

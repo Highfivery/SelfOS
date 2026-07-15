@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Pin } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Pin } from 'lucide-react';
 import { Button, Inline, Stack, Text } from '../../../design-system/components';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { appendTogetherChunk, useTogetherStore } from '../../../stores/togetherStore';
@@ -36,6 +36,8 @@ export function TogetherSession(): JSX.Element {
   const [hasKey, setHasKey] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reflectionRef = useRef<HTMLElement | null>(null);
+  const completedBannerRef = useRef<HTMLDivElement | null>(null);
+  const status = open?.status;
 
   const jumpToReflection = (): void => {
     const el = reflectionRef.current;
@@ -59,6 +61,18 @@ export function TogetherSession(): JSX.Element {
       useTogetherStore.getState().closeSession();
     };
   }, [id, openSession]);
+
+  // When a session becomes wrapped up (§3.8), bring the "wrapped up" banner into view so the close-out is
+  // unmistakable — "Wrap up & reflect" lives at the bottom of the active layout, so without this the page would
+  // stay scrolled down and the completion signal would sit above the fold (issue #206). Focus moves to the
+  // reflection (the actionable close-out content) so keyboard focus isn't lost to <body> when the clicked
+  // wrap-up button unmounts; `preventScroll` keeps the banner in view (the banner's role="status" announces).
+  useEffect(() => {
+    if (status === 'complete') {
+      completedBannerRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+      reflectionRef.current?.focus?.({ preventScroll: true });
+    }
+  }, [status]);
 
   // Stream the coach reply into the live bubble; refresh on a synced partner message (§3.6).
   useEffect(() => {
@@ -164,6 +178,41 @@ export function TogetherSession(): JSX.Element {
   const activeAgreements = reportView.agreements.filter((a) => a.status !== 'retired');
   const report = reportView.report;
   const hasReport = report !== null;
+
+  // A wrapped-up session (§3.8) reads as closed out: a completion banner, the reflection + to-do list front and
+  // center, and the thread with its composer collapsed behind "Reopen to keep talking". Sending a new message
+  // reopens it (deriving back to `active`, §4.3), which flips this view back to the live layout below.
+  if (open.status === 'complete') {
+    const wrappedAt = report?.wrappedUpAt ?? report?.updatedAt;
+    return (
+      <div className={styles.page}>
+        <div className={styles.sessionTop}>
+          {back}
+          <Text size="sm" tone="secondary">
+            You &amp; {other?.displayName ?? 'your partner'}
+          </Text>
+        </div>
+
+        <div className={styles.completedBanner} role="status" ref={completedBannerRef}>
+          <CheckCircle2 size={16} aria-hidden="true" />
+          <Text size="sm" weight={600}>
+            This session is wrapped up{wrappedAt ? ` · ${relativeDay(wrappedAt)}` : ''}
+          </Text>
+        </div>
+
+        {/* Reflection + action items lead — the saved insights and to-do list are what the session closed with. */}
+        <TogetherReflection
+          sessionId={open.id}
+          memoryEnabled={memReady}
+          aiReady={aiReady}
+          completed
+          sectionRef={reflectionRef}
+        />
+        <TogetherThread session={open} onPrep={() => setPrepOpen(true)} completed />
+      </div>
+    );
+  }
+
   // The top summary strip mirrors the reflection panel's visibility (spec 61 §3.3) so it never points at a
   // section that isn't there.
   const showStrip = hasReport || activeAgreements.length > 0 || (memReady && aiReady);

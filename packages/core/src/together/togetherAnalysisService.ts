@@ -20,7 +20,13 @@ import { checkBudget, costOf, recordUsage } from '../usage';
 import { deleteInsight, listInsightsForPerson, saveInsight } from '../insights';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { getSession, listMessages } from './togetherService';
-import { getReport, listAgreements, saveAgreement, saveReport } from './agreementService';
+import {
+  getReport,
+  listAgreements,
+  normalizeAgreementText,
+  saveAgreement,
+  saveReport,
+} from './agreementService';
 
 // ── Together wrap-up (58 §3.8) — a sibling of `endAndSummarize` (09 §5), never a change to it ────────
 // One metered `together.analyze` pass (initiator-billed, extendedThinking:false) over the MUTUALLY-VISIBLE
@@ -51,15 +57,6 @@ const ActionItemSchema = z.object({
   timeframe: z.string().optional().catch(undefined),
 });
 const actionItemList = tolerantArray(ActionItemSchema, { text: '' }, (a) => a.text.trim() !== '');
-
-/** Normalize an action-item / agreement text for deterministic de-dup (lowercase, collapse ws, strip edges). */
-function normalizeActionText(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[\s]+/g, ' ')
-    .replace(/[.,;:!?—–-]+$/g, '')
-    .trim();
-}
 
 /**
  * A per-partner block in the analysis reply. `name` matches one of the two participant names given in the
@@ -252,7 +249,7 @@ export async function runTogetherWrapUp(deps: TogetherWrapUpDeps): Promise<Toget
   // de-dup backstop. Retired ones are excluded (a fresh action item may legitimately revive that ground).
   const priorAgreements = await listAgreements(fs, key, session.pairKey);
   const existingActive = priorAgreements.filter((a) => a.status !== 'retired');
-  const existingTexts = new Set(existingActive.map((a) => normalizeActionText(a.text)));
+  const existingTexts = new Set(existingActive.map((a) => normalizeAgreementText(a.text)));
 
   const system = [PERSONA, SAFETY, TOGETHER_WRAPUP_GUIDANCE].filter(Boolean).join('\n\n');
   // Attribute each shared human line so the model can write per-partner reflections; coach lines pass through.
@@ -313,7 +310,7 @@ export async function runTogetherWrapUp(deps: TogetherWrapUpDeps): Promise<Toget
   // anything — the second pass sees the first pass's agreements and skips them (belt to the prompt's braces).
   const captured = new Set(existingTexts);
   for (const item of draft.actionItems) {
-    const norm = normalizeActionText(item.text);
+    const norm = normalizeAgreementText(item.text);
     if (!norm || captured.has(norm)) continue;
     captured.add(norm);
     await saveAgreement(
@@ -427,10 +424,18 @@ export async function runTogetherWrapUp(deps: TogetherWrapUpDeps): Promise<Toget
   }
 
   // The shared report (idempotent: reuse the id if one exists for this session). A 'wrapUp' marks the session
-  // DONE (`wrappedUp` → the `complete` status derives from `wrappedUpAt`); a mid-session 'reflect' leaves both
-  // unset so the session stays open. `updatedAt` is the last-generated time staleness compares against (§3.8).
-  const wrappedUp = (deps.mode ?? 'wrapUp') === 'wrapUp';
+  // DONE (`wrappedUp` → the `complete` status derives from `wrappedUpAt`, §4.3). A mid-session 'reflect' NEVER
+  // changes the wrapped-up state — it CARRIES FORWARD whatever the existing report had, so refreshing the
+  // reflection of an already-wrapped-up session can't silently un-wrap it (only a new shared message reopens a
+  // session, §4.3). `updatedAt` is the last-generated time staleness compares against (§3.8).
+  const isWrapUp = (deps.mode ?? 'wrapUp') === 'wrapUp';
   const existingReport = await getReport(fs, key, session.id);
+  const wrapFields: Pick<SharedReport, 'wrappedUp' | 'wrappedUpAt'> | Record<string, never> =
+    isWrapUp
+      ? { wrappedUp: true, wrappedUpAt: at }
+      : existingReport?.wrappedUp
+        ? { wrappedUp: true, wrappedUpAt: existingReport.wrappedUpAt ?? existingReport.updatedAt }
+        : {};
   const report: SharedReport = {
     id: existingReport?.id ?? uuid(),
     schemaVersion: 1,
@@ -440,7 +445,7 @@ export async function runTogetherWrapUp(deps: TogetherWrapUpDeps): Promise<Toget
     workedThrough: draft.workedThrough,
     agreementIds: sessionAgreementIds,
     metrics,
-    ...(wrappedUp ? { wrappedUp: true, wrappedUpAt: at } : {}),
+    ...wrapFields,
     createdAt: existingReport?.createdAt ?? at,
     updatedAt: at,
   };

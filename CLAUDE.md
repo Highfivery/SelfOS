@@ -404,6 +404,41 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-15 — **Fix (Together sessions: "Wrap up & reflect" now visibly CLOSES OUT the session + no duplicate
+  agreements + per-session ledger; GitHub issue #206; SPEC 58 §3.6/§3.8/§3.9/§4.3 + SPEC 61 §3.3 amended; on
+  `fix/together-wrap-up-closes-session`, PR pending).** Three user-reported bugs, all in the couples-session
+  wrap-up flow. **(1) Wrap-up didn't feel like it "ended" the session.** Diagnosed (not assumed): wrap-up already
+  set `report.wrappedUp` and the status correctly derived to `complete`, and the to-do list (agreements) + insight
+  report were already saved — but **`TogetherSession.tsx` had NO render branch for `complete`**, so a wrapped-up
+  session rendered identically to an active one (composer fully live, reflection panel still offering "Wrap up &
+  reflect"). Decisions asked (AskUserQuestion): stay on the session showing a clear "Wrapped up" state (reflection
+  - to-do list front and center) + collapse the composer behind "Reopen to keep talking." Built: a `complete`
+    branch — a green **"✓ This session is wrapped up · <date>"** banner (`role="status"`, scrolled into view + focus
+    moved to the reflection on the complete transition), reflection + agreements ledger **above** a read-only thread,
+    the turn pill reads **"Wrapped up"**, the composer collapses behind **"Reopen to keep talking"** (one tap reveals
+    it; a shared message reopens the session — the existing soft-complete model). **Coherence fix (code-review
+    blocker):** the retained "Reflect again & note actions" button silently **un-wrapped** the session (a `reflect`
+    pass overwrote the report WITHOUT `wrappedUp` → derived back to `active` with no message) — fixed at the CORE:
+    a `reflect` pass now **carries forward** an existing report's `wrappedUp`/`wrappedUpAt`, so the invariant holds
+    (**only a new shared message reopens a session**). **(2) Duplicate agreements.** Root cause: `captureAgreementFromMarker`
+    had NO de-dup, so the coach re-emitting the same `[[SELFOS:AGREEMENT]]` marker across turns / on a retry minted
+    identical copies. Fixed: the marker path now de-dups by normalized text against the non-retired ledger (returns
+    the existing twin), matching the wrap-up action-item de-dup; a shared `normalizeAgreementText` + a read-time
+    `dedupeAgreements` (preferring the most-actionable twin) collapses legacy dupes on display. **(3) Cross-session
+    pollution.** The per-session reflection panel + top strip showed the pair's WHOLE agreement history; now
+    `togetherGetReport` scopes to `provenance.sessionId === session.id` — the pair-wide view lives on Home + Goals
+    (`togetherMyAgreements`, spec 61). Gate green: typecheck, lint, format, **1177 core + 1164 desktop** unit
+    (+marker-de-dup, +`dedupeAgreements`/`normalizeAgreementText`, +reflect-preserves-wrapped-up, +2 RTL [composer
+    collapse, reflection button drop], +bridge per-session-filter+dedup), **16/16 Together E2E** (a new issue #206
+    E2E drives the real active→complete flow — partner accepts first — asserting the banner + collapsed composer +
+    Reopen + a repeated marker yields ONE agreement + "Reflect again" keeps it wrapped; the spec-61 strip test
+    updated to the per-session behavior). Real-Electron visual QA (the close-out reads clean; banner leads).
+    code-reviewer: fix-first (both blockers applied) → clean. **Lesson: a status that derives correctly under the
+    hood (`complete`) is invisible unless the detail VIEW branches on it — the fix was a render branch, not a data
+    change; and a "refresh" action on a terminal state must NEVER be able to silently reverse that state (carry the
+    `wrappedUp` flag forward on a reflect), or you re-create the exact "it won't stay closed" symptom. Duplicate
+    records from an LLM marker need de-dup at the CAPTURE path (the coach repeats itself), not just the analysis
+    path; and a pair-level ledger shown per-session must filter by `provenance.sessionId`.**
 - 2026-07-14 — **Fix (Together agreements weren't top-of-mind on the dashboard — user-reported after spec 61
   shipped; SPEC 61 §3.1/§3.2 amended; on `fix/together-agreements-prominence`, PR pending).** After 61 merged the
   user (screenshot): "I'm still not seeing the together reflections appear in the dashboard, besides a little

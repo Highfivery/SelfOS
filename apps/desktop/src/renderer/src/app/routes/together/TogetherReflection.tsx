@@ -129,12 +129,18 @@ export function TogetherReflection({
   memoryEnabled,
   aiReady,
   sectionRef,
+  completed = false,
 }: {
   sessionId: string;
   memoryEnabled: boolean;
   aiReady: boolean;
   /** Set by the session so the top summary strip can jump focus here (spec 61 §3.3). */
   sectionRef?: Ref<HTMLElement>;
+  /**
+   * The session is already wrapped up (§3.8). The terminal "Wrap up & reflect" button is dropped (it's done);
+   * "Reflect again & note actions" stays so the closing reflection can still be refreshed.
+   */
+  completed?: boolean;
 }): JSX.Element | null {
   const view = useTogetherStore((s) => s.reportView);
   const wrappingUp = useTogetherStore((s) => s.wrappingUp);
@@ -186,14 +192,17 @@ export function TogetherReflection({
                   ? 'Reflect again & note actions'
                   : 'Reflect & note action items'}
             </Button>
-            {/* Terminal action: the same analysis, and it marks the session done (§3.8). */}
-            <Button
-              onClick={() => void runAnalyze('wrapUp')}
-              disabled={wrappingUp}
-              title="Reflect one last time and mark this session done."
-            >
-              {wrappingUp && pendingMode === 'wrapUp' ? 'Wrapping up…' : 'Wrap up & reflect'}
-            </Button>
+            {/* Terminal action: the same analysis, and it marks the session done (§3.8). Dropped once the
+                session is already wrapped up — "Reflect again" above still refreshes the closing reflection. */}
+            {completed ? null : (
+              <Button
+                onClick={() => void runAnalyze('wrapUp')}
+                disabled={wrappingUp}
+                title="Reflect one last time and mark this session done."
+              >
+                {wrappingUp && pendingMode === 'wrapUp' ? 'Wrapping up…' : 'Wrap up & reflect'}
+              </Button>
+            )}
           </Inline>
         ) : null}
       </div>

@@ -236,19 +236,31 @@
   gap: var(--space-1);
 }
 
-/* ── Start bar (deliberate send) ─────────────────────────────────────────────── */
-.startBar {
+/* ── Start dialog (58 §3.3) — a centered modal, the app's hand-rolled overlay pattern (ChangeVaultDialog) ── */
+.startOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: color-mix(in srgb, var(--color-bg) 70%, transparent);
+  backdrop-filter: blur(2px);
+}
+.startDialog {
+  width: 100%;
+  max-width: 460px;
+}
+.startDialogHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-lg);
-  background: var(--color-accent-subtle-bg);
-  border: 1px solid var(--color-accent-solid);
   min-width: 0;
 }
-.startBarTop {
-  display: flex;
+.startDialogTitle {
+  display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   min-width: 0;

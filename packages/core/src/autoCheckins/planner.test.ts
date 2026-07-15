@@ -174,6 +174,21 @@ describe('planStreams', () => {
     expect(total).toBe(MAX_PER_AUTHOR_PER_RUN); // 2 + 2, third gets 0
     expect(plans.length).toBe(2);
   });
+  it('force (manual Run now) tops up a not-due stream, but never overruns the hard cap', () => {
+    const notDue = stream('t1', [a('submitted', 0.2)]); // ran 0.2 days ago → not due
+    expect(planStreams({ streams: [notDue], now })).toEqual([]); // unforced → nothing
+    expect(planStreams({ streams: [notDue], now, force: true })).toEqual([
+      { targetId: 't1', slots: 2 },
+    ]);
+    const full = stream('full', [
+      a('sent', 1),
+      a('sent', 1),
+      a('opened', 1),
+      a('sent', 1),
+      a('sent', 1),
+    ]);
+    expect(planStreams({ streams: [full], now, force: true })).toEqual([]); // cap holds even when forced
+  });
 });
 
 describe('allocateIntents', () => {

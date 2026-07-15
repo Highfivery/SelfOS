@@ -157,14 +157,20 @@ export function shouldRunAutoCheckins(input: ShouldRunInput): boolean {
  * per-author budget (MAX_PER_AUTHOR_PER_RUN across all streams). Pure — the intent allocation + generation
  * happen in the orchestrator.
  */
-export function planStreams(input: { streams: StreamState[]; now: Date }): StreamPlan[] {
+export function planStreams(input: {
+  streams: StreamState[];
+  now: Date;
+  /** A manual "Run now" (§6.3) tops up every eligible stream regardless of its cadence/back-off due-time —
+   *  the user asked for it now. The hard queue cap + per-run/per-author caps still apply (never over-generate). */
+  force?: boolean;
+}): StreamPlan[] {
   const plans: StreamPlan[] = [];
   let authorBudget = MAX_PER_AUTHOR_PER_RUN;
   for (const stream of input.streams) {
     if (authorBudget <= 0) break;
     const depth = queueDepth(stream.assignments, input.now);
     if (depth >= HARD_CAP) continue;
-    if (!isStreamDue(stream, input.now)) continue;
+    if (!input.force && !isStreamDue(stream, input.now)) continue;
     const topUp = Math.min(Math.max(TARGET_DEPTH - depth, 0), MAX_PER_RUN, authorBudget);
     if (topUp <= 0) continue;
     plans.push({ targetId: stream.targetId, slots: topUp });

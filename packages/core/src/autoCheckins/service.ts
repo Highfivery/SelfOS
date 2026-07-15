@@ -123,7 +123,9 @@ export async function runAutoCheckins(input: RunAutoCheckinsInput): Promise<Auto
     const assignments = await autoAssignmentsForStream(fs, key, authorId, recipientId, target.id);
     streamById.set(target.id, { targetId: target.id, cadence: target.cadence, assignments });
   }
-  const plans = planStreams({ streams: [...streamById.values()], now });
+  // A manual "Run now" (auto:false) tops up every stream regardless of its per-cadence due-time; the auto
+  // cadence respects it. Either way the hard queue cap + per-run caps still bound the volume.
+  const plans = planStreams({ streams: [...streamById.values()], now, force: !input.auto });
 
   const created: AutoCheckinCreated[] = [];
   const skipped: { targetId: string; reason: string }[] = [];

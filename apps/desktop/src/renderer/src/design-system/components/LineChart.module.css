@@ -3,6 +3,10 @@
   flex-direction: column;
   gap: var(--space-2);
   min-width: 0;
+  /* A time-series chart has a fixed viewBox aspect ratio (VIEW_W:VIEW_H), so `width: 100%` in a wide
+     container would scale it to an enormous height. Cap the width (§12 allows a fixed-aspect chart to cap)
+     so the height stays sane; below the cap it fills the container and reflows down to phone width. */
+  max-width: 440px;
 }
 
 .plot {

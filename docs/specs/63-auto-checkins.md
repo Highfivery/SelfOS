@@ -1,6 +1,6 @@
 # 63 — Auto check-ins (autonomous questionnaire generation)
 
-> **Status:** Draft · §11 resolved · _last updated 2026-07-15_
+> **Status:** Built (slices A–C) · §11 resolved · _last updated 2026-07-15_
 >
 > An opt-in, per-person engine that once a day looks at everything SelfOS has learned about a person
 > (sessions, memory/insights, goals, dreams, Together, questionnaire history, onboarding) and — if that
@@ -568,3 +568,20 @@ No open questions remain — ready for review/approval.
 - 2026-07-15 — §11 resolved (round 2): default **on after onboarding** (seeded + one-time notice), name
   **Auto check-ins**, **Run now** included, queued-peek cut, constants internal, intent-mix via the
   gap-finder. Updated §2/§3.1/§4.1/§5/§7/§10 accordingly.
+- 2026-07-15 — **BUILT, slices A–C** on `feat/auto-checkins` (PR pending). **A** — the core engine
+  (`@selfos/core/auto-checkins`: pure planner, prefs + write-once seed, `runAutoCheckins` orchestrator);
+  38 units + code-reviewed (2 fixes: unguarded `createAssignment` → pre-validate + wrap; de-dup reference
+  now mirrors the manual path's per-section caps). **B** — the IPC seam (`autoCheckins:getConfig/setConfig/
+ensureSeed/run`, owner-gated other-targets, crisis + throttle stamp), the per-person store + `useAutoCheckins`
+  cadence hook + the `AutoCheckinsPanel` config UI on the Questionnaires landing (master toggle, per-target
+  stream, exploration focus, cadence, intimacy sub-toggle, owner-only add-person, Run now — which forces a
+  top-up past the per-stream due-time); 3 bridge + 5 RTL + the crown-jewel self-loop E2E (decrypt-verified) +
+  panel visual QA. **C** — surfacing: an additive `InboxItem.autoCheckin` → the "Auto check-in" eyebrow +
+  rationale on the Received card / Inbox row, and an `auto-checkin` "For you" provider on Home (signal-aware
+  dismissKey); the Inbox badge counts them for free. Gate green throughout (typecheck all, lint, format,
+  1221 core + 1176 desktop unit, E2E). **Two documented fast-follows** remain: a standalone
+  `auto-checkin-ready` notification + the one-time "Auto check-ins is now on" seed notice (the badge +
+  For-you card cover discovery meanwhile). \*\*Lesson: a cross-feature orchestrator that consumes questionnaires
+  - intake + guidance (which already import questionnaires) must live in its OWN top-level core module, not
+    inside `questionnaires/`, or it forms an import cycle; and its de-dup assembly must MIRROR the manual path's
+    per-section caps (not a single global cap) or a heavy onboarding truncates away the later sources.\*\*

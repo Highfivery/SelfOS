@@ -375,6 +375,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     togetherGetReport: () => Promise.resolve({ report: null, stale: false, agreements: [] }),
     togetherSaveAgreement: () => Promise.resolve(null),
     togetherMyAgreements: () => Promise.resolve([]),
+    togetherDoneCommitments: () => Promise.resolve([]),
     togetherSetAgreementStatus: () => Promise.resolve(null),
     assignmentsCreate: (input) =>
       Promise.resolve({

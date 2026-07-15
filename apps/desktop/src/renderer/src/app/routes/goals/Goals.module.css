@@ -93,3 +93,19 @@
 .commitLink:hover {
   color: var(--color-accent-text);
 }
+
+/* A completed commitment in the "Completed & closed" history — muted, with a "Completed" tag (not colour-only). */
+.commitDone {
+  color: var(--color-text-secondary);
+}
+.commitDoneTag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 999px);
+  background: color-mix(in srgb, var(--color-success) 14%, transparent);
+  color: var(--color-success);
+}

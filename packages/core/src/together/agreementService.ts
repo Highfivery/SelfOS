@@ -232,23 +232,24 @@ export function dedupeAgreements(agreements: Agreement[]): Agreement[] {
   return agreements.filter((a) => winners.has(a));
 }
 
-/** A viewer's standing agreement surfaced outside its session (spec 61) — the partner id resolved. */
+/** A viewer's agreement surfaced outside its session (spec 61) — the partner id resolved. */
 export interface StandingAgreementForViewer {
   agreement: Agreement;
   partnerPersonId: string;
 }
 
 /**
- * Every STANDING agreement across the viewer's pairs (spec 61) — for surfacing outside a session (the Home
- * needs-attention queue + the Goals "Together commitments" section). Lists `together/pairs/`, keeps only
- * pairs the viewer is a member of, resolves the partner id (the other segment of the pairKey), and returns
- * their standing agreements newest-first. Display-name resolution is the bridge's job (it has people
- * access). The bridge scopes to the active person, so this only reaches pairs the viewer belongs to.
+ * Every agreement matching `keep` across the viewer's pairs (spec 61) — for surfacing outside a session. Lists
+ * `together/pairs/`, keeps only pairs the viewer is a member of, resolves the partner id (the other segment of
+ * the pairKey), de-dups duplicate captures (issue #206), and returns them newest-first. Display-name
+ * resolution is the bridge's job (it has people access); the bridge scopes to the active person, so this only
+ * reaches pairs the viewer belongs to.
  */
-export async function listStandingAgreementsForViewer(
+async function collectAgreementsForViewer(
   fs: FileSystem,
   key: Uint8Array,
   viewerId: string,
+  keep: (a: Agreement) => boolean,
 ): Promise<StandingAgreementForViewer[]> {
   if (!isSafeSegment(viewerId)) return [];
   const out: StandingAgreementForViewer[] = [];
@@ -259,12 +260,31 @@ export async function listStandingAgreementsForViewer(
     if (first === undefined || second === undefined) continue;
     if (first !== viewerId && second !== viewerId) continue;
     const partnerPersonId = first === viewerId ? second : first;
-    // Collapse any duplicate captures so Home/Goals never show the same commitment twice (issue #206).
     for (const agreement of dedupeAgreements(
-      standingAgreements(await listAgreements(fs, key, pairKey)),
+      (await listAgreements(fs, key, pairKey)).filter(keep),
     )) {
       out.push({ agreement, partnerPersonId });
     }
   }
   return out.sort((a, b) => b.agreement.createdAt.localeCompare(a.agreement.createdAt));
+}
+
+/** Every STANDING agreement across the viewer's pairs — the Home needs-attention queue + the Goals active
+ *  "Together commitments" section (spec 61). */
+export function listStandingAgreementsForViewer(
+  fs: FileSystem,
+  key: Uint8Array,
+  viewerId: string,
+): Promise<StandingAgreementForViewer[]> {
+  return collectAgreementsForViewer(fs, key, viewerId, (a) => a.status === 'standing');
+}
+
+/** Every DONE (completed) agreement across the viewer's pairs — the Goals "Completed & closed" section, so a
+ *  followed-through commitment is recorded, not lost when it drops out of the standing list (spec 61). */
+export function listDoneAgreementsForViewer(
+  fs: FileSystem,
+  key: Uint8Array,
+  viewerId: string,
+): Promise<StandingAgreementForViewer[]> {
+  return collectAgreementsForViewer(fs, key, viewerId, (a) => a.status === 'done');
 }

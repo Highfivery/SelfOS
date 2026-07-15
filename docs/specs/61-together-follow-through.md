@@ -93,7 +93,14 @@ rendered above/below the personal goals list, only when there are standing agree
 - One row per standing agreement: the text, an optional timeframe, the **partner's name**, and a
   **"Mark done"** button. A done row shows a quiet "Done" tag (mirrors `AgreementRow` in the session).
 - Marking done calls the new `together:setAgreementStatus` channel (§6) → writes `status: 'done'` to the
-  **shared** agreement, so both partners see it done. The row then leaves the standing set.
+  **shared** agreement, so both partners see it done. The row then leaves the standing set — and is
+  **recorded in the Goals "Completed & closed" history** (amended 2026-07-15 on user feedback: a
+  followed-through commitment must not vanish). A new **`together:doneCommitments`** read
+  (`listDoneAgreementsForViewer`, person-scoped, de-duped) drives a **"Together commitments" subgroup**
+  inside the collapsed "Completed & closed" `<details>` — each done commitment shows its text, a
+  **"Completed"** tag, the partner, an "Open in Together" link, and a **"Reopen"** action (flips it back to
+  `standing` via `together:setAgreementStatus`, returning it to the active list). Completed commitments fold
+  into the "Completed & closed (`N`)" count. **Done only** (not retired) — retire is still a hard removal.
 - A "retire" affordance (secondary) mirrors the session ledger.
 - Read-only for text/timeframe (edit stays in the session, §2). Each row carries a **quiet link into the
   originating Together session** ("from your session with `<partner>`") for full editing.
@@ -229,6 +236,10 @@ every write):
 - **`together:myAgreements`** — request `{}`; response `AgreementSummary[]`. The bridge lists the active
   person's pairs, returns their standing agreements, and attaches each partner's display name (bridge has
   `people` access). Never returns another household member's pairs.
+- **`together:doneCommitments`** (added 2026-07-15) — request `{}`; response `AgreementSummary[]`. Same
+  person-scoped, partner-name-resolved read as `myAgreements`, but returns the **DONE** (completed)
+  commitments — the Goals "Completed & closed" record. `listDoneAgreementsForViewer` shares the pair-walk
+  with `listStandingAgreementsForViewer` (a `keep` predicate).
 - **`together:setAgreementStatus`** — request `{ partnerPersonId: string; agreementId: string; status: 'standing' | 'done' | 'retired' }`;
   response `Agreement | null`. The bridge resolves the pair from `(activePerson, partnerPersonId)`, loads
   the existing agreement, and re-saves via the existing core `saveAgreement` (preserving text / timeframe /

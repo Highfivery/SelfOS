@@ -4,7 +4,12 @@ import userEvent from '@testing-library/user-event';
 import { PulseCheckInForm } from './PulseCheckInForm';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
 
-const emptyView = { series: [], hasCheckIns: false, alignment: { ready: false as const } };
+const emptyView = {
+  checkInSeries: [],
+  sessionSeries: [],
+  hasCheckIns: false,
+  alignment: { ready: false as const },
+};
 
 afterEach(() => clearMockBridge());
 

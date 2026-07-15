@@ -133,35 +133,43 @@ export async function buildPulseView(
     listInsightsForPerson(fs, key, viewer),
   ]);
 
-  const series: PulseSeries[] = [];
+  // The viewer's OWN self check-ins (Connection/Desire/Satisfaction) — up is good.
+  const checkInSeries: PulseSeries[] = [];
   for (const metric of PULSE_METRICS) {
     const s = metricSeries(PULSE_METRIC_LABELS[metric], own, metric);
-    if (s) series.push(s);
+    if (s) checkInSeries.push(s);
   }
 
   // The viewer's OWN wrap-up-twin Connection/Friction for THIS pair (Phase D) — the viewer's private
-  // reflection of the session, NOT the partner's data — normalized ±1 → 0..1, oldest-first.
+  // reflection of the session, NOT the partner's data — normalized ±1 → 0..1, oldest-first. Kept in its own
+  // group (a different signal from the daily check-in) and reframed so up is good: Friction → `Calm` (1 -
+  // friction), so it never sits on the same up-is-good axis with an opposite meaning.
+  const sessionSeries: PulseSeries[] = [];
   const pairTwins = twins
     .filter((i) => i.source === 'together' && i.provenance.pairKey === pairKey && i.metrics)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  for (const [metric, label] of [
-    ['connectionValence', 'Connection (sessions)'],
-    ['frictionLevel', 'Friction (sessions)'],
-  ] as const) {
+  const sessionMetric = (
+    label: string,
+    metric: 'connectionValence' | 'frictionLevel',
+    invert: boolean,
+  ): void => {
     const points = pairTwins
       .filter((i) => typeof i.metrics?.[metric] === 'number')
-      .map((i) => ({
-        x: Date.parse(i.createdAt) || 0,
-        y: clampUnitToUnitInterval(i.metrics![metric]!),
-      }));
-    if (points.length > 0) series.push({ label, points, direction: direction(points) });
-  }
+      .map((i) => {
+        const norm = clampUnitToUnitInterval(i.metrics![metric]!);
+        return { x: Date.parse(i.createdAt) || 0, y: invert ? clamp01(1 - norm) : norm };
+      });
+    if (points.length > 0) sessionSeries.push({ label, points, direction: direction(points) });
+  };
+  sessionMetric('Connection', 'connectionValence', false);
+  sessionMetric('Calm', 'frictionLevel', true); // high friction → low calm (up-is-good)
 
   const alignment = await desireAlignment(fs, key, partner, pairKey, own);
   // `own` is oldest-first (listPulseCheckIns sorts ascending), so the last entry is the most recent.
   const lastCheckInAt = own.at(-1)?.at;
   return {
-    series,
+    checkInSeries,
+    sessionSeries,
     hasCheckIns: own.length > 0,
     ...(lastCheckInAt ? { lastCheckInAt } : {}),
     alignment,

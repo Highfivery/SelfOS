@@ -3315,8 +3315,14 @@ export interface PulseAlignment {
 
 /** The Pulse view (§3.10a): the viewer's own metric trends + dyad trends + the dual-consent desire alignment. */
 export interface TogetherPulseView {
-  /** The viewer's own check-in metric trends + the dyad Connection/Friction from the wrap-up twins (0..1). */
-  series: PulseSeries[];
+  /** The viewer's own self check-in trends (Connection/Desire/Satisfaction), 0..1 — up is good. */
+  checkInSeries: PulseSeries[];
+  /**
+   * The dyad Connection + Calm derived from the viewer's own wrap-up twins for this pair (0..1). Kept
+   * SEPARATE from the self check-ins (they're a different signal) and reframed so up is good everywhere:
+   * `Calm = 1 - friction` (high friction → low calm), so the two never share an axis with opposite meaning.
+   */
+  sessionSeries: PulseSeries[];
   /** Whether the viewer has logged at least one check-in (drives the empty state). */
   hasCheckIns: boolean;
   /** The viewer's most-recent check-in timestamp (ISO), if any — drives the "log regularly" nudge. */

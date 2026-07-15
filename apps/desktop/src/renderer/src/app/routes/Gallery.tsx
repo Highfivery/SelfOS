@@ -417,6 +417,28 @@ export function Gallery(): JSX.Element {
               ]}
             />
           </div>
+          <div style={{ maxWidth: 360, marginTop: 16 }}>
+            <Text size="sm" weight={600} tone="secondary">
+              With optional Low/High y-axis labels
+            </Text>
+            <LineChart
+              ariaLabel="Example 0–1 trend with a Low/High axis"
+              yMin={0}
+              yMax={1}
+              yLowLabel="Low"
+              yHighLabel="High"
+              series={[
+                {
+                  label: 'Connection',
+                  points: [
+                    { x: 0, y: 0.4 },
+                    { x: 1, y: 0.5 },
+                    { x: 2, y: 0.75 },
+                  ],
+                },
+              ]}
+            />
+          </div>
         </Section>
 
         <Section title="Charts">

@@ -6131,7 +6131,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
       shareMetrics: ['desire'],
     });
     expect(view.hasCheckIns).toBe(true);
-    expect(view.series.find((s) => s.label === 'Connection')?.points).toHaveLength(1);
+    expect(view.checkInSeries.find((s) => s.label === 'Connection')?.points).toHaveLength(1);
     expect(view.alignment.ready).toBe(false);
 
     // Angel logs but does NOT share desire → still hidden for both.

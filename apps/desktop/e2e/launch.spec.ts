@@ -10166,8 +10166,10 @@ test('together (58) phase G: Pulse logs each partner’s own check-in; the desir
     await desireGroup.getByRole('button', { name: 'High' }).click();
     await w.getByRole('switch', { name: /Share my desire level/i }).click();
     await w.getByRole('button', { name: 'Save check-in' }).click();
-    // His own trend now renders, but the alignment is still hidden (Angel hasn't shared).
-    await expect(w.getByRole('img', { name: /Your Together pulse over time/i })).toBeVisible();
+    // With a single check-in his "Your check-ins" group shows a current-value read (not a lone floating dot),
+    // and the alignment is still hidden (Angel hasn't shared).
+    await expect(w.getByText('Your check-ins')).toBeVisible();
+    await expect(w.getByText(/Check in again to see how these trend/i)).toBeVisible();
     await expect(w.getByText(/desire levels/i)).toHaveCount(0);
 
     // Angel logs a check-in with Desire = High and shares too → dual consent met.

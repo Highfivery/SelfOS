@@ -80,7 +80,7 @@ export function TogetherHomeCard({
   const pill =
     session.status === 'invited' ? 'Invitation' : session.yourTurn ? 'Your turn' : `${name}’s turn`;
 
-  const connection = pulse?.series.find((s) => /connection/i.test(s.label));
+  const connection = pulse?.checkInSeries.find((s) => /connection/i.test(s.label));
   const connectionValue = connection?.points.at(-1)?.y;
   const alignment = pulse?.alignment;
   const showPulse =

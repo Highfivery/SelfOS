@@ -143,7 +143,7 @@ describe('Together home (§3.2)', () => {
     expect(within(card).getByText('Take turns learning each other’s world.')).toBeInTheDocument();
   });
 
-  it('the "New session" button opens the deliberate start bar (no auto-send)', async () => {
+  it('the "New session" button opens the deliberate start MODAL (no auto-send); Cancel closes it (58 §3.3)', async () => {
     installMockBridge();
     setActivePerson();
     useTogetherStore.setState({
@@ -161,10 +161,16 @@ describe('Together home (§3.2)', () => {
       </MemoryRouter>,
     );
     await userEvent.click(screen.getAllByRole('button', { name: /New session/ })[0]!);
+    // A centered modal opens (not an inline bar that needs scrolling) — the start form + the optional topic box.
+    const dialog = screen.getByRole('dialog');
     expect(
-      screen.getByRole('heading', { name: 'Start an open session with Angel' }),
+      within(dialog).getByRole('heading', { name: 'Start an open session with Angel' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Send invitation' })).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/What’s on your mind/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Send invitation' })).toBeInTheDocument();
+    // Cancel closes it (a pure no-op).
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
 

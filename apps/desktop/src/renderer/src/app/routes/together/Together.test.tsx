@@ -626,13 +626,23 @@ describe('TogetherPulse (§3.10a)', () => {
     let logged: { metrics: Record<string, number>; shareMetrics?: string[] } | null = null;
     installMockBridge({
       togetherPulse: () =>
-        Promise.resolve({ series: [], hasCheckIns: false, alignment: { ready: false } }),
+        Promise.resolve({
+          checkInSeries: [],
+          sessionSeries: [],
+          hasCheckIns: false,
+          alignment: { ready: false },
+        }),
       togetherPulseLog: (input) => {
         logged = {
           metrics: input.metrics,
           ...(input.shareMetrics ? { shareMetrics: input.shareMetrics } : {}),
         };
-        return Promise.resolve({ series: [], hasCheckIns: false, alignment: { ready: false } });
+        return Promise.resolve({
+          checkInSeries: [],
+          sessionSeries: [],
+          hasCheckIns: false,
+          alignment: { ready: false },
+        });
       },
     });
     render(
@@ -651,11 +661,11 @@ describe('TogetherPulse (§3.10a)', () => {
     expect(logged!.shareMetrics).toEqual(['desire']);
   });
 
-  it('renders the desire alignment read only when the view says it is ready', async () => {
+  it('renders the desire alignment as a you-vs-partner comparison only when ready', async () => {
     installMockBridge({
       togetherPulse: () =>
         Promise.resolve({
-          series: [
+          checkInSeries: [
             {
               label: 'Connection',
               points: [
@@ -665,6 +675,7 @@ describe('TogetherPulse (§3.10a)', () => {
               direction: 'rising',
             },
           ],
+          sessionSeries: [],
           hasCheckIns: true,
           alignment: { ready: true, yours: 0.8, theirs: 0.75, read: 'aligned' },
         }),
@@ -675,12 +686,80 @@ describe('TogetherPulse (§3.10a)', () => {
       </MemoryRouter>,
     );
     expect(await screen.findByText(/desire levels are closely aligned/i)).toBeInTheDocument();
+    // The comparison names both people (you + the partner), not a vague banner.
+    expect(screen.getByText(/You & Angel · desire/)).toBeInTheDocument();
+  });
+
+  it('splits the two data sources: a "Your check-ins" chart (≥2 points) + a separate "From your sessions" group', async () => {
+    installMockBridge({
+      togetherPulse: () =>
+        Promise.resolve({
+          checkInSeries: [
+            {
+              label: 'Connection',
+              points: [
+                { x: 1, y: 0.4 },
+                { x: 2, y: 0.6 },
+              ],
+              direction: 'rising',
+            },
+          ],
+          sessionSeries: [{ label: 'Calm', points: [{ x: 1, y: 0.7 }], direction: 'flat' }],
+          hasCheckIns: true,
+          alignment: { ready: false },
+        }),
+    });
+    render(
+      <MemoryRouter>
+        <TogetherPulse partnerId="partner" partnerName="Angel" />
+      </MemoryRouter>,
+    );
+    // The check-ins group has ≥2 points → a real trend chart (its own labelled image).
+    expect(
+      await screen.findByRole('img', { name: /Your check-in trends with Angel/i }),
+    ).toBeInTheDocument();
+    // The session group is separate + labelled (no "Connection (sessions)" collision).
+    expect(screen.getByText('From your sessions together')).toBeInTheDocument();
+    expect(screen.getByText('Your check-ins')).toBeInTheDocument();
+  });
+
+  it('shows a current-value read (not a lone floating dot) when a group has only one reading', async () => {
+    installMockBridge({
+      togetherPulse: () =>
+        Promise.resolve({
+          checkInSeries: [
+            { label: 'Connection', points: [{ x: 1, y: 0.9 }], direction: 'flat' },
+            { label: 'Satisfaction', points: [{ x: 1, y: 0.2 }], direction: 'flat' },
+          ],
+          sessionSeries: [],
+          hasCheckIns: true,
+          alignment: { ready: false },
+        }),
+    });
+    render(
+      <MemoryRouter>
+        <TogetherPulse partnerId="partner" partnerName="Angel" />
+      </MemoryRouter>,
+    );
+    // A single check-in → no chart image; the current values read as words instead (scoped to the readout
+    // so the check-in form's own Low/Steady/High buttons don't collide).
+    await screen.findByText('Your check-ins');
+    expect(screen.queryByRole('img', { name: /Your check-in trends/i })).not.toBeInTheDocument();
+    const readout = screen.getByRole('list', { name: 'Your check-ins right now' });
+    expect(within(readout).getByText('High')).toBeInTheDocument(); // Connection 0.9
+    expect(within(readout).getByText('Low')).toBeInTheDocument(); // Satisfaction 0.2
+    expect(screen.getByText(/Check in again to see how these trend/i)).toBeInTheDocument();
   });
 
   it('hides the desire alignment when not ready (dual consent unmet)', async () => {
     installMockBridge({
       togetherPulse: () =>
-        Promise.resolve({ series: [], hasCheckIns: false, alignment: { ready: false } }),
+        Promise.resolve({
+          checkInSeries: [],
+          sessionSeries: [],
+          hasCheckIns: false,
+          alignment: { ready: false },
+        }),
     });
     render(
       <MemoryRouter>
@@ -697,7 +776,8 @@ describe('TogetherPulse (§3.10a)', () => {
     installMockBridge({
       togetherPulse: () =>
         Promise.resolve({
-          series: [],
+          checkInSeries: [],
+          sessionSeries: [],
           hasCheckIns: true,
           lastCheckInAt: fiveDaysAgo,
           alignment: { ready: false },

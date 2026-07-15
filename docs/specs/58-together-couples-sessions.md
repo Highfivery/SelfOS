@@ -375,9 +375,20 @@ logged AND both consented to share that metric** — never inferred, hidden unti
 
 - **Metric set** (§11 Q4, confirmed): `connection` · `desire` · `satisfaction` from the 1–3-tap
   check-in (Low/Steady/High → 0 / 0.5 / 1, clamped 0..1), plus `connectionValence`/`frictionLevel`
-  from D's wrap-up twins (normalized ±1 → 0..1) surfaced as "Connection (sessions)"/"Friction
-  (sessions)" series. Each series carries a `direction` (`rising`/`steady`/`dipping`/`flat`) for the
-  text equivalent.
+  from D's wrap-up twins (normalized ±1 → 0..1). Each series carries a `direction`
+  (`rising`/`steady`/`dipping`/`flat`) for the text equivalent.
+- **Card redesign ("Two clean charts", user-chosen from mockups).** The original single chart
+  overlaid the self check-ins and the session-derived metrics on ONE up-is-good 0..1 axis — a name
+  collision ("Connection" vs "Connection (sessions)") and an inverted Friction (high friction is
+  _bad_ but read as good). The view now returns TWO groups — `checkInSeries` (self
+  Connection/Desire/Satisfaction) and `sessionSeries` (the dyad metrics) — rendered as **separate,
+  clearly-labelled cards** ("Your check-ins" / "From your sessions together"), so they never share one
+  axis or collide. **Friction is reframed as `Calm = 1 - friction`** so every metric reads up-is-good.
+  Each group draws a `LineChart` (with optional Low/High axis labels) only once there are **≥2
+  points**; with a single reading it shows a **current-value read** (Low/Steady/High rows) instead of
+  a lone floating dot. The desire alignment is a **you-vs-partner comparison** (two dots on a Low↔High
+  desire track + legend + plain-language read), not a bare banner. Renderer + view-shape only — no new
+  persisted schema, and the privacy/dual-consent boundaries below are unchanged.
 - **Storage:** `people/<logger>/together/pulse/<pairKey>/<checkInId>.enc` — one writer per file (the
   logger's own perception; a partner's raw metrics are **never** shown). `PulseCheckIn` is a fresh
   type (11's `CheckIn` was never built — no migration).

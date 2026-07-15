@@ -114,20 +114,25 @@ describe('pulse check-ins (§3.10a)', () => {
     );
     const view = await buildPulseView(fs, key, BEN, ANGEL);
     expect(view.hasCheckIns).toBe(true);
-    const connection = view.series.find((s) => s.label === 'Connection');
+    const connection = view.checkInSeries.find((s) => s.label === 'Connection');
     expect(connection?.points.map((p) => p.y)).toEqual([0.2, 0.8]); // Ben's only, rising
     expect(connection?.direction).toBe('rising');
   });
 
-  it('folds the pair wrap-up twins into dyad session series (normalized ±1 → 0..1)', async () => {
+  it('folds the pair wrap-up twins into a SEPARATE session group; Friction is reframed as Calm (1 - friction)', async () => {
     const fs = memFileSystem();
     await seedTwin(fs, BEN, { connectionValence: -1, frictionLevel: 1 }, '2026-07-01T00:00:00Z');
     await seedTwin(fs, BEN, { connectionValence: 1, frictionLevel: -1 }, '2026-07-05T00:00:00Z');
     const view = await buildPulseView(fs, key, BEN, ANGEL);
-    const conn = view.series.find((s) => s.label === 'Connection (sessions)');
+    // The session metrics live in their OWN group, labelled without the confusing "(sessions)" suffix.
+    const conn = view.sessionSeries.find((s) => s.label === 'Connection');
     expect(conn?.points.map((p) => p.y)).toEqual([0, 1]); // -1→0, 1→1
-    const friction = view.series.find((s) => s.label === 'Friction (sessions)');
-    expect(friction?.points.map((p) => p.y)).toEqual([1, 0]);
+    // Calm = 1 - normalizedFriction, so it reads up-is-good like every other metric: high friction → low calm.
+    const calm = view.sessionSeries.find((s) => s.label === 'Calm');
+    expect(calm?.points.map((p) => p.y)).toEqual([0, 1]); // friction 1→calm 0, friction -1→calm 1
+    expect(calm?.direction).toBe('rising');
+    // Session metrics never leak into the self check-in group.
+    expect(view.checkInSeries).toHaveLength(0);
   });
 });
 

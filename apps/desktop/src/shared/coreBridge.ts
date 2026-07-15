@@ -2577,7 +2577,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const { partnerPersonId } = TogetherYnmInputSchema.parse(input);
       const c = await togetherCtx();
       const empty: TogetherPulseView = {
-        series: [],
+        checkInSeries: [],
+        sessionSeries: [],
         hasCheckIns: false,
         alignment: { ready: false },
       };
@@ -2591,7 +2592,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const { partnerPersonId, metrics, shareMetrics } = TogetherPulseLogInputSchema.parse(input);
       const c = await togetherCtx();
       const empty: TogetherPulseView = {
-        series: [],
+        checkInSeries: [],
+        sessionSeries: [],
         hasCheckIns: false,
         alignment: { ready: false },
       };

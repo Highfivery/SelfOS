@@ -56,7 +56,8 @@ describe('TogetherHomeCard', () => {
     installMockBridge({
       togetherPulse: () =>
         Promise.resolve({
-          series: [{ label: 'Connection', points: [{ x: 0, y: 0.7 }], direction: 'steady' }],
+          checkInSeries: [{ label: 'Connection', points: [{ x: 0, y: 0.7 }], direction: 'steady' }],
+          sessionSeries: [],
           hasCheckIns: true,
           alignment: { ready: true, yours: 0.6, theirs: 0.65, read: 'aligned' },
         }),

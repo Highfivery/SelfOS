@@ -404,6 +404,28 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-15 — **Fix (Together home: "New session" + the catalog / Desire & intimacy practice cards read as
+  "not doing anything" — the start bar opened OFF-SCREEN; GitHub issue #207; SPEC 58 §3.3 amended; on
+  `fix/together-start-bar-scroll`, PR pending).** User screenshots: clicking "New session" (or a guided-catalog
+  card like "Desire Mapping") showed a focus ring but nothing happened. **Diagnosed (not assumed):** the buttons
+  DO fire — `openNew`/`pickGuide` set `pending` and the **deliberate start bar** renders between the Pulse and the
+  sessions board — but the intended `window.scrollTo({ top: 0 })` to bring it into view is a **NO-OP**: the app
+  content scrolls in the `.contentInner` container (`overflow:auto`), NOT the window. So opening the start bar
+  from a card lower down (the catalog / intimacy panel sit at the bottom) left it rendered off-screen at the top,
+  and the button read as dead. **The recurring window-vs-container scroll trap** (same class as #206's completion
+  scroll). Fix: dropped `window.scrollTo` from both openers; added a `startBarRef` + an effect that
+  `scrollIntoView`s the start bar (scrolling the real container) whenever `pending` opens — covering every entry
+  (both "New session" buttons + all catalog + Desire & intimacy cards, which share `pickGuide`). **Reproduce-first
+  (§6):** the new E2E asserts the start bar is `toBeInViewport()` after clicking a lower Repair-group card at a
+  constrained height, and I confirmed it **FAILS with the fix disabled** (the bar opens but `toBeVisible` passes
+  while `toBeInViewport` fails — exactly why a plain `toBeVisible` assertion never caught it) and passes with it.
+  Gate green: typecheck, lint, format, **41 Together unit** (no change), **17/17 Together E2E** (+the #207
+  in-viewport test). Real-Electron visual QA (clicking the lower "Four Horsemen" card scrolls "Start … with
+  Angel" + Send invitation into view). **Lesson: `window.scrollTo` / `scrollTo(0,0)` is a NO-OP in this app —
+  content scrolls in `.contentInner`, not the window — so any "scroll to reveal what I just opened" must use a
+  ref + `scrollIntoView` on the element (the #206 lesson, now bitten twice); and a `toBeVisible` E2E assertion
+  does NOT prove a just-opened element is on-screen — assert `toBeInViewport()` for open-and-reveal affordances,
+  or an off-screen "nothing happened" bug sails through green.**
 - 2026-07-15 — **Fix (Together sessions: "Wrap up & reflect" now visibly CLOSES OUT the session + no duplicate
   agreements + per-session ledger; GitHub issue #206; SPEC 58 §3.6/§3.8/§3.9/§4.3 + SPEC 61 §3.3 amended; on
   `fix/together-wrap-up-closes-session`, PR pending).** Three user-reported bugs, all in the couples-session

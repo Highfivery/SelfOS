@@ -169,7 +169,11 @@ Each phase's E2E asserts no unbuilt tile/row renders.
 ### 3.3 Starting a session
 
 1. **Start a session** → pick the partner (pre-selected when only one) → optional topic (free text
-   or, from Phase E, a guided catalog entry §3.10) → **Send invitation**.
+   or, from Phase E, a guided catalog entry §3.10) → **Send invitation**. "New session" and every
+   catalog / Desire & intimacy practice card open the same **deliberate start bar** (no auto-send); it
+   renders near the top of the home, so opening it from a card lower down **scrolls it into view** via
+   the content container (a `window.scrollTo` is a no-op here — the app scrolls in `.contentInner`, not
+   the window; issue #207).
 2. The session is created in `invited` status with the initiator as first participant (creating
    requires the initiator's own pre-screen — §8.2). The initiator can write opening messages
    immediately (the coach replies normally but observes the hold-space rule — it will not go deep

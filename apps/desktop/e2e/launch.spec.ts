@@ -10056,6 +10056,36 @@ test('together (58) issue #206: "Wrap up & reflect" CLOSES OUT an active session
   }
 });
 
+test('together (58) issue #207: opening the start bar from a card lower down scrolls it INTO VIEW (not a no-op)', async () => {
+  const { userData, vault } = await seedTogetherReady();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Together/ }).click();
+    // Constrain the height so the dashboard (Pulse + sessions + catalog) is TALLER than the viewport — the
+    // start bar renders near the top, so opening it from a card lower down must scroll it into view. The app
+    // content scrolls in `.contentInner` (not the window), so the old `window.scrollTo` was a no-op and the
+    // bar opened off-screen — the button read as "doing nothing" (issue #207).
+    await w.setViewportSize({ width: 1000, height: 520 });
+    await expect(w.getByRole('heading', { name: 'Start a guided practice' })).toBeVisible();
+
+    // Pick a Repair-group card (lower on the page than the top): clicking it auto-scrolls it into view (so the
+    // top, where the start bar renders, is out of view), then opening the start bar must bring it back.
+    const card = w.getByRole('button', { name: /Four Horsemen/ });
+    await card.scrollIntoViewIfNeeded();
+    await card.click();
+
+    // The start bar opened AND is actually in the viewport (the fix: `scrollIntoView` on the real container).
+    const startHeading = w.getByRole('heading', { name: /Start .*Four Horsemen/ });
+    await expect(startHeading).toBeVisible();
+    await expect(startHeading).toBeInViewport();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('together (58) phase E: start a structured guided couples session from the catalog; the stepper advances via a marker (§3.10)', async () => {
   const { userData, vault } = await seedTogetherReady();
   const app = await launch(userData);

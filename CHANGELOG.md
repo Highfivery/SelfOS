@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.27.0](https://github.com/Highfivery/SelfOS/compare/v0.26.0...v0.27.0) (2026-07-15)
+
+
+### Features
+
+* **together:** record completed commitments in Goals "Completed & closed" (reopenable) ([#211](https://github.com/Highfivery/SelfOS/issues/211)) ([eb3a820](https://github.com/Highfivery/SelfOS/commit/eb3a820df52d6fa6d3b1e3597dc17fe3dd275f63))
+* **together:** start a session in a centered modal, not an inline scroll-up bar ([#213](https://github.com/Highfivery/SelfOS/issues/213)) ([7363cd3](https://github.com/Highfivery/SelfOS/commit/7363cd304bfbd864aeb02ea98e3cb7f63a7f5838))
+
+
+### Bug Fixes
+
+* **together:** open the start bar into view so New session + catalog cards aren't dead ([#207](https://github.com/Highfivery/SelfOS/issues/207)) ([#210](https://github.com/Highfivery/SelfOS/issues/210)) ([1797b3f](https://github.com/Highfivery/SelfOS/commit/1797b3f70f495ea08a11b585d4cfbc9ca9fcbb38))
+* **together:** wrap-up closes out the session + no duplicate/cross-session agreements ([#206](https://github.com/Highfivery/SelfOS/issues/206)) ([#208](https://github.com/Highfivery/SelfOS/issues/208)) ([33756be](https://github.com/Highfivery/SelfOS/commit/33756be4060bc9adcafd6b957247b5a534bbcbf0))
+
 ## [0.26.0](https://github.com/Highfivery/SelfOS/compare/v0.25.0...v0.26.0) (2026-07-15)
 
 

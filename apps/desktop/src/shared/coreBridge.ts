@@ -168,13 +168,21 @@ import {
   StoryCreateInputSchema,
   StoryBookRefSchema,
   StoryChapterRefSchema,
+  StoryEditPassageInputSchema,
+  StoryMarkInputSchema,
   StoryOutlineInputSchema,
+  StoryPinInputSchema,
+  StoryRemoveMarkInputSchema,
   StoryUpdateInputSchema,
+  StoryUpdateMarkInputSchema,
   type BookManifest,
+  type ChapterMarkup,
   type StoryBookBundle,
   type StoryBookTypeView,
   type StoryChaptersResult,
   type StoryFoundationsResult,
+  type StoryRevisionResult,
+  type StoryTodoList,
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
 import { runConnectionTest } from './claudeProxy';
@@ -345,10 +353,13 @@ import {
   updateGoal,
 } from '@selfos/core/goals';
 import {
+  addMark,
   applyFoundations,
+  applyMarkup,
   approveOutline,
   createBook,
   deleteBook,
+  editPassage,
   generateBookChapters,
   generateChapter,
   generateFoundations,
@@ -356,12 +367,17 @@ import {
   getBookType,
   getChapter,
   getExclusions,
+  getMarkup,
+  getTodos,
   listBookTypes,
   listBooks,
+  pinPassage,
   readBookBundle,
+  removeMark,
   saveChapter,
   saveOutline,
   updateBook,
+  updateMark,
 } from '@selfos/core/story';
 import {
   clearSuggestion,
@@ -4335,6 +4351,111 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         lastReviewedAt: new Date().toISOString(),
       });
       return readBookBundle(ctx.fs, ctx.key, personId, bookId);
+    },
+    // --- Markup layer (§3.3) — non-AI ops gated `story.own` + active-person-scoped ---
+    storyGetMarkup: async (input): Promise<ChapterMarkup> => {
+      const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { schemaVersion: 1, chapterId, marks: [] };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { schemaVersion: 1, chapterId, marks: [] };
+      return getMarkup(ctx.fs, ctx.key, personId, bookId, chapterId);
+    },
+    storyMark: async (input): Promise<ChapterMarkup> => {
+      const { bookId, chapterId, mark } = StoryMarkInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { schemaVersion: 1, chapterId, marks: [] };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { schemaVersion: 1, chapterId, marks: [] };
+      return addMark(ctx.fs, ctx.key, personId, bookId, chapterId, mark);
+    },
+    storyUpdateMark: async (input): Promise<ChapterMarkup | null> => {
+      const { bookId, chapterId, markId, patch } = StoryUpdateMarkInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      return updateMark(ctx.fs, ctx.key, personId, bookId, chapterId, markId, patch);
+    },
+    storyRemoveMark: async (input): Promise<ChapterMarkup> => {
+      const { bookId, chapterId, markId } = StoryRemoveMarkInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { schemaVersion: 1, chapterId, marks: [] };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { schemaVersion: 1, chapterId, marks: [] };
+      return removeMark(ctx.fs, ctx.key, personId, bookId, chapterId, markId);
+    },
+    storyEditPassage: async (input): Promise<StoryBookBundle | null> => {
+      const { bookId, chapterId, anchor, newText } = StoryEditPassageInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const edited = await editPassage(
+        ctx.fs,
+        ctx.key,
+        personId,
+        bookId,
+        chapterId,
+        anchor,
+        newText,
+      );
+      if (!edited) return null; // orphaned anchor / chapter gone
+      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyPinQuote: async (input): Promise<StoryBookBundle | null> => {
+      const parsed = StoryPinInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const pinned = await pinPassage(
+        ctx.fs,
+        ctx.key,
+        personId,
+        parsed.bookId,
+        parsed.chapterId,
+        parsed.anchor,
+        parsed.text,
+        parsed.sourceRef,
+      );
+      if (!pinned) return null;
+      return readBookBundle(ctx.fs, ctx.key, personId, parsed.bookId);
+    },
+    storyTodos: async (input): Promise<StoryTodoList> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { schemaVersion: 1, todos: [] };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { schemaVersion: 1, todos: [] };
+      return getTodos(ctx.fs, ctx.key, personId, bookId);
+    },
+    // The batch markup revision — the one AI call in the markup layer (§3.3.1/§5.3).
+    storyApplyMarkup: async (input): Promise<StoryRevisionResult> => {
+      const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to apply your changes.',
+        };
+      }
+      const res = await applyMarkup(deps, { bookId, chapterId });
+      if (!res.ok) return { ok: false, reason: res.reason, message: res.message };
+      const bundle = await readBookBundle(deps.fs, deps.key, deps.personId, bookId);
+      if (!bundle) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+      const markup = await getMarkup(deps.fs, deps.key, deps.personId, bookId, chapterId);
+      return { ok: true, bundle, markup };
     },
     // --- Relationship insights (54-memory-redesign §6) — gated `memory.own`, active-person-scoped ---
     relationshipsGetSynthesis: async (input): Promise<RelationshipSynthesis | null> => {

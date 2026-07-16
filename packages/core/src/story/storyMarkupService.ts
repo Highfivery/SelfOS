@@ -5,6 +5,7 @@ import {
   type ChapterMarkup,
   type MarkupMark,
   type PinnedQuote,
+  type StoryMarkPatch,
   type StoryTodoEntry,
   type TextAnchor,
 } from '../schemas';
@@ -102,15 +103,6 @@ export async function removeMark(
   );
 }
 
-/** A narrow, serializable patch over one mark (a discriminated-union-friendly subset). `status` is validated
- *  against the mark's kind on save; `text` applies to comments/to-dos (a delete has none — stripped on parse);
- *  `assignmentId` applies to a `questions` to-do (§5.5). */
-export interface MarkPatch {
-  status?: string;
-  text?: string;
-  assignmentId?: string;
-}
-
 /** Update a mark in place (edit a comment's text, undo a delete, mark a to-do done, attach an assignment).
  *  Returns the updated markup, or null when the mark isn't found OR the patch is invalid for the mark's kind
  *  (e.g. a to-do status onto a delete) — the schema re-validates on write, and an invalid combination degrades
@@ -122,7 +114,7 @@ export async function updateMark(
   bookId: string,
   chapterId: string,
   markId: string,
-  patch: MarkPatch,
+  patch: StoryMarkPatch,
 ): Promise<ChapterMarkup | null> {
   const markup = await getMarkup(fs, key, personId, bookId, chapterId);
   if (!markup.marks.some((m) => m.id === markId)) return null;

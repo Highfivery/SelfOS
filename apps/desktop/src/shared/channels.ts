@@ -4,14 +4,22 @@ import type {
   AiProvider,
   AlignmentResult,
   BookManifest,
+  ChapterMarkup,
   StoryBookBundle,
   StoryBookTypeView,
   StoryChaptersResult,
   StoryChapterRef,
   StoryCreateInput,
+  StoryEditPassageInput,
   StoryFoundationsResult,
+  StoryMarkInput,
   StoryOutlineInput,
+  StoryPinInput,
+  StoryRemoveMarkInput,
+  StoryRevisionResult,
+  StoryTodoList,
   StoryUpdateInput,
+  StoryUpdateMarkInput,
   Goal,
   GoalStatus,
   GoalSuggestResult,
@@ -283,6 +291,14 @@ export const IpcChannels = {
   storyGenerateChapters: 'story:generateChapters',
   storyRegenerateChapter: 'story:regenerateChapter',
   storyReviewChapter: 'story:reviewChapter',
+  storyGetMarkup: 'story:getMarkup',
+  storyMark: 'story:mark',
+  storyUpdateMark: 'story:updateMark',
+  storyRemoveMark: 'story:removeMark',
+  storyApplyMarkup: 'story:applyMarkup',
+  storyEditPassage: 'story:editPassage',
+  storyPinQuote: 'story:pinQuote',
+  storyTodos: 'story:todos',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -1008,6 +1024,23 @@ export interface SelfosBridge {
   storyRegenerateChapter(input: StoryChapterRef): Promise<StoryChaptersResult>;
   /** Mark a chapter reviewed (§3.3.1) — only Reviewed content publishes. Returns the fresh bundle. */
   storyReviewChapter(input: StoryChapterRef): Promise<StoryBookBundle | null>;
+  /** The chapter's markup layer (the suggestion layer — comments, deletes, to-dos) for the draft view (§3.3). */
+  storyGetMarkup(input: StoryChapterRef): Promise<ChapterMarkup>;
+  /** Add a mark (comment · delete · to-do) to a chapter's suggestion layer. Returns the updated layer. */
+  storyMark(input: StoryMarkInput): Promise<ChapterMarkup>;
+  /** Patch a mark in place (edit a comment, undo a delete, mark a to-do done). Null if not found / invalid. */
+  storyUpdateMark(input: StoryUpdateMarkInput): Promise<ChapterMarkup | null>;
+  /** Remove a mark (undo before apply). Returns the updated layer. */
+  storyRemoveMark(input: StoryRemoveMarkInput): Promise<ChapterMarkup>;
+  /** Apply the chapter's pending marks as ONE metered revision (§3.3.1). Fresh bundle + markup, or a failure. */
+  storyApplyMarkup(input: StoryChapterRef): Promise<StoryRevisionResult>;
+  /** INSTANT inline edit (§3.3): replace an anchored span with the person's words (→ protected block). Null if
+   *  orphaned. Returns the fresh bundle. */
+  storyEditPassage(input: StoryEditPassageInput): Promise<StoryBookBundle | null>;
+  /** INSTANT pin (§3.3): mark a passage untouchable. Null if orphaned. Returns the fresh bundle. */
+  storyPinQuote(input: StoryPinInput): Promise<StoryBookBundle | null>;
+  /** The book-level to-do roll-up for the overview "To do" list (§3.3.2) — one read, not N. */
+  storyTodos(input: { bookId: string }): Promise<StoryTodoList>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

@@ -3946,3 +3946,52 @@ export type StoryChaptersResult =
       message?: string;
     }
   | { ok: false; reason: AiFailureReason | 'AI_OFF'; message: string };
+
+// --- Markup layer IPC (§3.3/§5.6) ------------------------------------------------------------------------
+
+/** A narrow, serializable patch over one mark (edit a comment's text, change a status, attach an assignment).
+ *  Validated against the mark's kind host-side (an invalid combination degrades to null, never throws). */
+export const StoryMarkPatchSchema = z.object({
+  status: z.string().optional(),
+  text: z.string().optional(),
+  assignmentId: z.string().optional(),
+});
+export type StoryMarkPatch = z.infer<typeof StoryMarkPatchSchema>;
+
+/** `story:mark` — add a mark (comment · delete · to-do) to a chapter's suggestion layer. */
+export const StoryMarkInputSchema = StoryChapterRefSchema.extend({ mark: MarkupMarkSchema });
+export type StoryMarkInput = z.infer<typeof StoryMarkInputSchema>;
+
+/** `story:updateMark` — patch a mark in place. */
+export const StoryUpdateMarkInputSchema = StoryChapterRefSchema.extend({
+  markId: z.string().min(1),
+  patch: StoryMarkPatchSchema,
+});
+export type StoryUpdateMarkInput = z.infer<typeof StoryUpdateMarkInputSchema>;
+
+/** `story:removeMark` — undo a mark before it's applied. */
+export const StoryRemoveMarkInputSchema = StoryChapterRefSchema.extend({
+  markId: z.string().min(1),
+});
+export type StoryRemoveMarkInput = z.infer<typeof StoryRemoveMarkInputSchema>;
+
+/** `story:editPassage` — the INSTANT inline edit (§3.3): replace an anchored span with the person's words. */
+export const StoryEditPassageInputSchema = StoryChapterRefSchema.extend({
+  anchor: TextAnchorSchema,
+  newText: z.string(),
+});
+export type StoryEditPassageInput = z.infer<typeof StoryEditPassageInputSchema>;
+
+/** `story:pinQuote` — the INSTANT pin (§3.3): mark a passage untouchable. */
+export const StoryPinInputSchema = StoryChapterRefSchema.extend({
+  anchor: TextAnchorSchema,
+  text: z.string(),
+  sourceRef: StorySourceRefSchema.optional(),
+});
+export type StoryPinInput = z.infer<typeof StoryPinInputSchema>;
+
+/** The renderer-facing result of the batch markup revision (§3.3.1): the fresh bundle + the chapter's updated
+ *  markup layer on success, or an honest failure (incl. an honest no-op when nothing's pending). */
+export type StoryRevisionResult =
+  | { ok: true; bundle: StoryBookBundle; markup: ChapterMarkup }
+  | { ok: false; reason: AiFailureReason | 'AI_OFF'; message: string };

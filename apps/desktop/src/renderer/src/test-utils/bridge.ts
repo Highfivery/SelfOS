@@ -313,6 +313,18 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     storyRegenerateChapter: () =>
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
     storyReviewChapter: () => Promise.resolve(null),
+    storyGetMarkup: (input) =>
+      Promise.resolve({ schemaVersion: 1, chapterId: input.chapterId, marks: [] }),
+    storyMark: (input) =>
+      Promise.resolve({ schemaVersion: 1, chapterId: input.chapterId, marks: [input.mark] }),
+    storyUpdateMark: () => Promise.resolve(null),
+    storyRemoveMark: (input) =>
+      Promise.resolve({ schemaVersion: 1, chapterId: input.chapterId, marks: [] }),
+    storyApplyMarkup: () =>
+      Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
+    storyEditPassage: () => Promise.resolve(null),
+    storyPinQuote: () => Promise.resolve(null),
+    storyTodos: () => Promise.resolve({ schemaVersion: 1, todos: [] }),
     relationshipsGetSynthesis: () => Promise.resolve(null),
     relationshipsSynthesize: () =>
       Promise.resolve({ ok: false, reason: 'EMPTY', message: 'Nothing yet.' }),

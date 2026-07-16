@@ -191,6 +191,14 @@ const bridge: SelfosBridge = {
   storyGenerateChapters: (input) => ipcRenderer.invoke(IpcChannels.storyGenerateChapters, input),
   storyRegenerateChapter: (input) => ipcRenderer.invoke(IpcChannels.storyRegenerateChapter, input),
   storyReviewChapter: (input) => ipcRenderer.invoke(IpcChannels.storyReviewChapter, input),
+  storyGetMarkup: (input) => ipcRenderer.invoke(IpcChannels.storyGetMarkup, input),
+  storyMark: (input) => ipcRenderer.invoke(IpcChannels.storyMark, input),
+  storyUpdateMark: (input) => ipcRenderer.invoke(IpcChannels.storyUpdateMark, input),
+  storyRemoveMark: (input) => ipcRenderer.invoke(IpcChannels.storyRemoveMark, input),
+  storyApplyMarkup: (input) => ipcRenderer.invoke(IpcChannels.storyApplyMarkup, input),
+  storyEditPassage: (input) => ipcRenderer.invoke(IpcChannels.storyEditPassage, input),
+  storyPinQuote: (input) => ipcRenderer.invoke(IpcChannels.storyPinQuote, input),
+  storyTodos: (input) => ipcRenderer.invoke(IpcChannels.storyTodos, input),
   relationshipsGetSynthesis: (input) =>
     ipcRenderer.invoke(IpcChannels.relationshipsGetSynthesis, input),
   relationshipsSynthesize: (input) =>

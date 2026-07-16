@@ -302,6 +302,14 @@ function makeHost(): {
           usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      // Your Story batch revision (64 §3.3.1): "REVISING one chapter" → the revised prose (a different line,
+      // so the test can tell the revision from the original).
+      if (userText.includes('REVISING one chapter')) {
+        return Promise.resolve({
+          text: 'The garage was quiet the day he finally spoke. [[SRC:s0]]',
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // Dream synthesis asks for a single JSON object — return a valid DreamAnalysis draft so the
       // synthesize path can parse it; every other turn just streams a short reply.
       const wantsJson = options.messages.some((m) =>
@@ -6539,5 +6547,85 @@ describe('createCoreBridge — Together (58) foundation', () => {
     // Mark it reviewed.
     const reviewed = await bridge.storyReviewChapter({ bookId, chapterId: chapter.id });
     expect(reviewed?.chapters[0]?.status).toBe('reviewed');
+  });
+
+  it('story: markup layer — mark, instant edit/pin, apply the batch revision', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+
+    // Add a comment mark → it appears in the chapter's markup layer.
+    const marked = await bridge.storyMark({
+      bookId,
+      chapterId,
+      mark: {
+        id: 'm1',
+        kind: 'comment',
+        anchor: { paragraphId: 'p0', quote: 'cut pine' },
+        intent: 'addContext',
+        text: 'the lathe was three generations old',
+        status: 'open',
+        createdAt: '2026-07-15',
+      },
+    });
+    expect(marked.marks.map((m) => m.id)).toEqual(['m1']);
+    expect((await bridge.storyGetMarkup({ bookId, chapterId })).marks).toHaveLength(1);
+
+    // Instant inline edit → the chapter's prose changes and a protected block is recorded.
+    const edited = await bridge.storyEditPassage({
+      bookId,
+      chapterId,
+      anchor: { paragraphId: 'p0', quote: 'warm oil' },
+      newText: 'cold steel',
+    });
+    const editedChapter = edited?.chapters.find((c) => c.id === chapterId);
+    expect(editedChapter?.markdown).toContain('cold steel');
+    expect(editedChapter?.protectedBlocks[0]?.text).toBe('cold steel');
+    // An orphaned edit is refused (null), not misapplied.
+    expect(
+      await bridge.storyEditPassage({
+        bookId,
+        chapterId,
+        anchor: { paragraphId: 'p0', quote: 'nonexistent span' },
+        newText: 'x',
+      }),
+    ).toBeNull();
+
+    // Apply the batch revision (the fake 'REVISING' branch) → fresh prose + the mark applied; protected words
+    // survive.
+    const applied = await bridge.storyApplyMarkup({ bookId, chapterId });
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+    const revised = applied.bundle.chapters.find((c) => c.id === chapterId);
+    expect(revised?.markdown).toContain('finally spoke'); // the revised line
+    expect(revised?.markdown).toContain('cold steel'); // the protected inline edit was preserved (enforced)
+    expect(revised?.status).toBe('updated');
+    expect(applied.markup.marks[0]?.status).toBe('applied');
+  });
+
+  it('story: markup ops are denied for a person without story.own', async () => {
+    const { bridge } = await freshOwner();
+    // A Guest role has no story.own.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+
+    // Reads degrade to empty; there's no book to target, but the gate is what we're asserting.
+    expect((await bridge.storyGetMarkup({ bookId: 'x', chapterId: 'c' })).marks).toEqual([]);
+    expect((await bridge.storyTodos({ bookId: 'x' })).todos).toEqual([]);
+    const applied = await bridge.storyApplyMarkup({ bookId: 'x', chapterId: 'c' });
+    expect(applied.ok).toBe(false);
   });
 });

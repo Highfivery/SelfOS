@@ -349,6 +349,14 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyGenerateChapters, bridge.storyGenerateChapters);
   handle(IpcChannels.storyRegenerateChapter, bridge.storyRegenerateChapter);
   handle(IpcChannels.storyReviewChapter, bridge.storyReviewChapter);
+  handle(IpcChannels.storyGetMarkup, bridge.storyGetMarkup);
+  handle(IpcChannels.storyMark, bridge.storyMark);
+  handle(IpcChannels.storyUpdateMark, bridge.storyUpdateMark);
+  handle(IpcChannels.storyRemoveMark, bridge.storyRemoveMark);
+  handle(IpcChannels.storyApplyMarkup, bridge.storyApplyMarkup);
+  handle(IpcChannels.storyEditPassage, bridge.storyEditPassage);
+  handle(IpcChannels.storyPinQuote, bridge.storyPinQuote);
+  handle(IpcChannels.storyTodos, bridge.storyTodos);
   handle(IpcChannels.relationshipsGetSynthesis, bridge.relationshipsGetSynthesis);
   handle(IpcChannels.relationshipsSynthesize, bridge.relationshipsSynthesize);
   handle(IpcChannels.challengesStart, bridge.challengesStart);

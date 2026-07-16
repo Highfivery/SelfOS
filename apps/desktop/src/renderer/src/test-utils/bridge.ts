@@ -308,6 +308,11 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     storyApproveOutline: () => Promise.resolve(null),
     storyUpdate: () => Promise.resolve(null),
     storyDelete: () => Promise.resolve(),
+    storyGenerateChapters: () =>
+      Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
+    storyRegenerateChapter: () =>
+      Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
+    storyReviewChapter: () => Promise.resolve(null),
     relationshipsGetSynthesis: () => Promise.resolve(null),
     relationshipsSynthesize: () =>
       Promise.resolve({ ok: false, reason: 'EMPTY', message: 'Nothing yet.' }),

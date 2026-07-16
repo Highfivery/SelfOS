@@ -6,6 +6,8 @@ import type {
   BookManifest,
   StoryBookBundle,
   StoryBookTypeView,
+  StoryChaptersResult,
+  StoryChapterRef,
   StoryCreateInput,
   StoryFoundationsResult,
   StoryOutlineInput,
@@ -278,6 +280,9 @@ export const IpcChannels = {
   storyApproveOutline: 'story:approveOutline',
   storyUpdate: 'story:update',
   storyDelete: 'story:delete',
+  storyGenerateChapters: 'story:generateChapters',
+  storyRegenerateChapter: 'story:regenerateChapter',
+  storyReviewChapter: 'story:reviewChapter',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -994,6 +999,15 @@ export interface SelfosBridge {
   storyUpdate(input: StoryUpdateInput): Promise<BookManifest | null>;
   /** Delete a book and all its files. */
   storyDelete(input: { bookId: string }): Promise<void>;
+  /**
+   * Write every not-yet-written (or stale) chapter of an approved book (§5.3) — a queue of metered
+   * `story.chapter` passes, budget-gated + resumable. Returns the fresh bundle + how many were written.
+   */
+  storyGenerateChapters(input: { bookId: string }): Promise<StoryChaptersResult>;
+  /** Regenerate ONE chapter from scratch (§5.3) — the draft view's "rewrite this chapter". */
+  storyRegenerateChapter(input: StoryChapterRef): Promise<StoryChaptersResult>;
+  /** Mark a chapter reviewed (§3.3.1) — only Reviewed content publishes. Returns the fresh bundle. */
+  storyReviewChapter(input: StoryChapterRef): Promise<StoryBookBundle | null>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

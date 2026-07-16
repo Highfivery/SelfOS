@@ -167,11 +167,13 @@ import {
   type AgreementSummary,
   StoryCreateInputSchema,
   StoryBookRefSchema,
+  StoryChapterRefSchema,
   StoryOutlineInputSchema,
   StoryUpdateInputSchema,
   type BookManifest,
   type StoryBookBundle,
   type StoryBookTypeView,
+  type StoryChaptersResult,
   type StoryFoundationsResult,
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
@@ -347,13 +349,17 @@ import {
   approveOutline,
   createBook,
   deleteBook,
+  generateBookChapters,
+  generateChapter,
   generateFoundations,
   getBook,
   getBookType,
+  getChapter,
   getExclusions,
   listBookTypes,
   listBooks,
   readBookBundle,
+  saveChapter,
   saveOutline,
   updateBook,
 } from '@selfos/core/story';
@@ -4267,6 +4273,68 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const { bookId } = StoryBookRefSchema.parse(input);
       if (!(await getBook(ctx.fs, ctx.key, personId, bookId))) return; // only the active person's own book
       await deleteBook(ctx.fs, personId, bookId);
+    },
+    storyGenerateChapters: async (input): Promise<StoryChaptersResult> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to write your story.',
+        };
+      }
+      const result = await generateBookChapters(deps, bookId);
+      if (!result.ok) {
+        return {
+          ok: false,
+          reason: result.reason ?? 'ERROR',
+          message: result.message ?? 'Couldn’t write the chapters.',
+        };
+      }
+      const bundle = await readBookBundle(deps.fs, deps.key, deps.personId, bookId);
+      if (!bundle) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+      return {
+        ok: true,
+        generated: result.generated,
+        bundle,
+        ...(result.reason === 'BUDGET' && result.message
+          ? { budgetReached: true, message: result.message }
+          : {}),
+      };
+    },
+    storyRegenerateChapter: async (input): Promise<StoryChaptersResult> => {
+      const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to write your story.',
+        };
+      }
+      const res = await generateChapter(deps, { bookId, chapterId });
+      if (!res.ok) return { ok: false, reason: res.reason, message: res.message };
+      const bundle = await readBookBundle(deps.fs, deps.key, deps.personId, bookId);
+      if (!bundle) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+      return { ok: true, generated: 1, bundle };
+    },
+    storyReviewChapter: async (input): Promise<StoryBookBundle | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
+      const chapter = await getChapter(ctx.fs, ctx.key, personId, bookId, chapterId);
+      if (!chapter) return null;
+      await saveChapter(ctx.fs, ctx.key, personId, bookId, {
+        ...chapter,
+        status: 'reviewed',
+        lastReviewedAt: new Date().toISOString(),
+      });
+      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
     },
     // --- Relationship insights (54-memory-redesign §6) — gated `memory.own`, active-person-scoped ---
     relationshipsGetSynthesis: async (input): Promise<RelationshipSynthesis | null> => {

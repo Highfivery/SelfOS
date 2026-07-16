@@ -295,6 +295,13 @@ function makeHost(): {
           usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      // Your Story chapter (64 §5.3): "WRITE THIS CHAPTER" → chapter prose with a source marker.
+      if (userText.includes('WRITE THIS CHAPTER')) {
+        return Promise.resolve({
+          text: 'The garage smelled of cut pine and warm oil. [[SRC:s0]]\n\nHe watched, and said nothing.',
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // Dream synthesis asks for a single JSON object — return a valid DreamAnalysis draft so the
       // synthesize path can parse it; every other turn just streams a short reply.
       const wantsJson = options.messages.some((m) =>
@@ -6497,5 +6504,40 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const aiOff = await bridge.storyGenerateFoundations({ bookId });
     expect(aiOff.ok).toBe(false);
     if (!aiOff.ok) expect(aiOff.reason).toBe('AI_OFF');
+  });
+
+  it('story: generate chapters → book ready → review a chapter', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    expect(gen.ok).toBe(true);
+    if (!gen.ok) return;
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+
+    // Write the chapters (one, per the fake foundations outline).
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    expect(chapters.ok).toBe(true);
+    if (!chapters.ok) return;
+    expect(chapters.generated).toBe(1);
+    const chapter = chapters.bundle.chapters[0]!;
+    expect(chapter.markdown).toContain('cut pine'); // the generated prose
+    expect(chapter.markdown).not.toContain('[[SRC'); // markers stripped
+    expect(chapter.status).toBe('new');
+    expect(chapters.bundle.manifest.status).toBe('ready'); // fully drafted
+
+    // Re-run writes nothing (idempotent).
+    const rerun = await bridge.storyGenerateChapters({ bookId });
+    expect(rerun.ok && rerun.generated).toBe(0);
+
+    // Mark it reviewed.
+    const reviewed = await bridge.storyReviewChapter({ bookId, chapterId: chapter.id });
+    expect(reviewed?.chapters[0]?.status).toBe('reviewed');
   });
 });

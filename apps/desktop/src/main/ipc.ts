@@ -346,6 +346,9 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyApproveOutline, bridge.storyApproveOutline);
   handle(IpcChannels.storyUpdate, bridge.storyUpdate);
   handle(IpcChannels.storyDelete, bridge.storyDelete);
+  handle(IpcChannels.storyGenerateChapters, bridge.storyGenerateChapters);
+  handle(IpcChannels.storyRegenerateChapter, bridge.storyRegenerateChapter);
+  handle(IpcChannels.storyReviewChapter, bridge.storyReviewChapter);
   handle(IpcChannels.relationshipsGetSynthesis, bridge.relationshipsGetSynthesis);
   handle(IpcChannels.relationshipsSynthesize, bridge.relationshipsSynthesize);
   handle(IpcChannels.challengesStart, bridge.challengesStart);

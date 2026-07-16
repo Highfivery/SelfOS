@@ -3926,3 +3926,23 @@ export const StoryUpdateInputSchema = z.object({
   config: BookConfigSchema.optional(),
 });
 export type StoryUpdateInput = z.infer<typeof StoryUpdateInputSchema>;
+
+/** A book + chapter reference (review / regenerate one chapter). */
+export const StoryChapterRefSchema = z.object({
+  bookId: z.string().min(1),
+  chapterId: z.string().min(1),
+});
+export type StoryChapterRef = z.infer<typeof StoryChapterRefSchema>;
+
+/** The renderer-facing result of a chapter-generation pass (§5.3): the fresh bundle + how many chapters were
+ *  written, or an honest failure. `budgetReached` marks a partial pass whose remaining chapters resume next
+ *  period. The usage events (recorded host-side) never cross the boundary. */
+export type StoryChaptersResult =
+  | {
+      ok: true;
+      generated: number;
+      bundle: StoryBookBundle;
+      budgetReached?: boolean;
+      message?: string;
+    }
+  | { ok: false; reason: AiFailureReason | 'AI_OFF'; message: string };

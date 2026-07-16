@@ -209,6 +209,13 @@ const bridge: SelfosBridge = {
   storyHomeSignal: () => ipcRenderer.invoke(IpcChannels.storyHomeSignal),
   storyCompleteness: (input) => ipcRenderer.invoke(IpcChannels.storyCompleteness, input),
   storyInterviewCheck: (input) => ipcRenderer.invoke(IpcChannels.storyInterviewCheck, input),
+  storyPublish: (input) => ipcRenderer.invoke(IpcChannels.storyPublish, input),
+  storyReaders: (input) => ipcRenderer.invoke(IpcChannels.storyReaders, input),
+  storyGrantReader: (input) => ipcRenderer.invoke(IpcChannels.storyGrantReader, input),
+  storyRevokeReader: (input) => ipcRenderer.invoke(IpcChannels.storyRevokeReader, input),
+  storyReaderFeatured: (input) => ipcRenderer.invoke(IpcChannels.storyReaderFeatured, input),
+  storySharedBooks: () => ipcRenderer.invoke(IpcChannels.storySharedBooks),
+  storyReadShared: (input) => ipcRenderer.invoke(IpcChannels.storyReadShared, input),
   relationshipsGetSynthesis: (input) =>
     ipcRenderer.invoke(IpcChannels.relationshipsGetSynthesis, input),
   relationshipsSynthesize: (input) =>

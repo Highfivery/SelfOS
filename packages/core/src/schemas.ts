@@ -3520,6 +3520,15 @@ export type BookConfig = z.infer<typeof BookConfigSchema>;
 export const BookStatusSchema = z.enum(['outlining', 'drafting', 'ready']);
 export type BookStatus = z.infer<typeof BookStatusSchema>;
 
+/** The book's front/back matter (§3.6) — the person's own words (never AI-invented). Editable in the draft;
+ *  snapshotted into the published head at publish. */
+export const BookMatterSchema = z.object({
+  dedication: z.string().optional(),
+  epigraph: z.string().optional(),
+  acknowledgments: z.string().optional(),
+});
+export type BookMatter = z.infer<typeof BookMatterSchema>;
+
 /** `book.enc` — the book's top-level record (64 §4). `sharedWith` = the household person ids granted read
  *  access (re-checked at every read, §3.5); `publishedAt` present once the person has published a head. */
 export const BookManifestSchema = z.object({
@@ -3532,6 +3541,7 @@ export const BookManifestSchema = z.object({
   essence: z.string().optional(),
   status: BookStatusSchema,
   coverImageId: z.string().optional(),
+  matter: BookMatterSchema.optional(),
   sharedWith: z.array(z.string()).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -3633,11 +3643,28 @@ export const BookChapterSchema = z.object({
 });
 export type BookChapter = z.infer<typeof BookChapterSchema>;
 
-/** `published/manifest.enc` — the self-contained published head readers see (§3.5). */
+/** One part of the published TOC — the part title + its published chapter ids, in order (§3.6). */
+export const PublishedPartSchema = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  chapterIds: z.array(z.string()).default([]),
+});
+export type PublishedPart = z.infer<typeof PublishedPartSchema>;
+
+/** `published/manifest.enc` — the self-contained published head readers see (§3.5/§3.6). Snapshots everything the
+ *  reader view needs (title, essence, matter, the auto "A Note on this book", TOC) so a draft edit after publish
+ *  never leaks; the published chapters live in `published/<chapterId>.enc`. */
 export const PublishedManifestSchema = z.object({
   schemaVersion: z.literal(1),
   publishedAt: z.string(),
+  title: z.string(),
+  essence: z.string().optional(),
   coverImageId: z.string().optional(),
+  matter: BookMatterSchema.optional(),
+  /** The auto-generated honesty page ("Drawn from N conversations, M reflections…"), computed at publish. */
+  noteOnBook: z.string().optional(),
+  parts: z.array(PublishedPartSchema).default([]),
+  /** A flat, ordered list of the published chapter ids (drives read-progress + "what's new"). */
   chapterOrder: z.array(z.string()).default([]),
 });
 export type PublishedManifest = z.infer<typeof PublishedManifestSchema>;
@@ -4165,6 +4192,52 @@ export const StoryInterviewCheckInputSchema = StoryBookRefSchema.extend({
   auto: z.boolean().optional(),
 });
 export type StoryInterviewCheckInput = z.infer<typeof StoryInterviewCheckInputSchema>;
+
+/** A book someone shared WITH the viewer (§3.5) — the "Shared with you" card. `newChapters` counts published
+ *  chapters the viewer hasn't read yet (device-local read progress). Published head only, read-time re-gated. */
+export interface SharedBookSummary {
+  authorPersonId: string;
+  authorName: string;
+  bookId: string;
+  title: string;
+  publishedAt: string;
+  chapterCount: number;
+  newChapters: number;
+}
+
+/** The published head a granted reader reads (§3.6) — the manifest snapshot + its published chapters, in order.
+ *  Never the draft. Read-time re-gated (viewer must still be in `sharedWith` + the book still published). */
+export interface StoryReaderView {
+  authorPersonId: string;
+  authorName: string;
+  bookId: string;
+  manifest: PublishedManifest;
+  chapters: BookChapter[];
+}
+
+/** `story:grantReader` / `story:revokeReader` — add/remove a household reader for a book (§3.5). */
+export const StoryReaderGrantInputSchema = StoryBookRefSchema.extend({
+  readerPersonId: z.string().min(1),
+});
+export type StoryReaderGrantInput = z.infer<typeof StoryReaderGrantInputSchema>;
+
+/** `story:readShared` — read a book shared with the viewer (published head, read-time re-gated). */
+export const StoryReadSharedInputSchema = z.object({
+  authorPersonId: z.string().min(1),
+  bookId: z.string().min(1),
+});
+export type StoryReadSharedInput = z.infer<typeof StoryReadSharedInputSchema>;
+
+/** The result of `story:publish` — how many Reviewed chapters were snapshotted, or an honest refusal (§3.5). */
+export type StoryPublishResult =
+  | { ok: true; publishedChapters: number }
+  | { ok: false; message: string };
+
+/** A book's current reader (§3.5), resolved to a name for the readers list. */
+export interface BookReader {
+  personId: string;
+  displayName: string;
+}
 
 // --- Exclusions IPC (§3.3/§5.1) --------------------------------------------------------------------------
 

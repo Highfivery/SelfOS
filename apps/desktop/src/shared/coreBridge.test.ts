@@ -7069,4 +7069,57 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const refreshed = await bridge.storyRefreshCheck({ bookId: 'x' });
     expect(refreshed).toEqual({ staled: 0, rewritten: 0, bundle: null });
   });
+
+  it('story: publish → grant → a reader reads the published head; revoke re-gates at the next read (§3.5)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    // A second household person who will be the reader.
+    const reader = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: reader.id, roleId: 'member', pin: null });
+
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+
+    // Can't publish until a chapter is Reviewed (the gate).
+    expect((await bridge.storyPublish({ bookId })).ok).toBe(false);
+    await bridge.storyReviewChapter({ bookId, chapterId });
+    expect(await bridge.storyPublish({ bookId })).toMatchObject({ ok: true, publishedChapters: 1 });
+
+    // Grant the reader (the picker's featured-note read works too — the prose mentions "warm oil", not "Angel").
+    expect(await bridge.storyReaderFeatured({ bookId, readerPersonId: reader.id })).toBe(false);
+    expect(await bridge.storyGrantReader({ bookId, readerPersonId: reader.id })).toEqual([
+      { personId: reader.id, displayName: 'Angel' },
+    ]);
+
+    // Switch to the reader → the book appears in "Shared with you" + reads the published head.
+    await bridge.sessionSetActive({ personId: reader.id });
+    const shared = await bridge.storySharedBooks();
+    expect(shared).toHaveLength(1);
+    expect(shared[0]).toMatchObject({
+      authorName: 'Ben',
+      title: 'The Story of Ben',
+      chapterCount: 1,
+    });
+    const view = await bridge.storyReadShared({ authorPersonId: ownerId, bookId });
+    expect(view?.chapters.map((c) => c.id)).toEqual([chapterId]);
+    expect(view?.manifest.noteOnBook).toContain('never invented');
+
+    // Author revokes → the reader loses access at the next read (no stale access).
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    await bridge.storyRevokeReader({ bookId, readerPersonId: reader.id });
+    await bridge.sessionSetActive({ personId: reader.id });
+    expect(await bridge.storySharedBooks()).toEqual([]);
+    expect(await bridge.storyReadShared({ authorPersonId: ownerId, bookId })).toBeNull();
+  });
 });

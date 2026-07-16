@@ -367,6 +367,13 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyHomeSignal, bridge.storyHomeSignal);
   handle(IpcChannels.storyCompleteness, bridge.storyCompleteness);
   handle(IpcChannels.storyInterviewCheck, bridge.storyInterviewCheck);
+  handle(IpcChannels.storyPublish, bridge.storyPublish);
+  handle(IpcChannels.storyReaders, bridge.storyReaders);
+  handle(IpcChannels.storyGrantReader, bridge.storyGrantReader);
+  handle(IpcChannels.storyRevokeReader, bridge.storyRevokeReader);
+  handle(IpcChannels.storyReaderFeatured, bridge.storyReaderFeatured);
+  handle(IpcChannels.storySharedBooks, bridge.storySharedBooks);
+  handle(IpcChannels.storyReadShared, bridge.storyReadShared);
   handle(IpcChannels.relationshipsGetSynthesis, bridge.relationshipsGetSynthesis);
   handle(IpcChannels.relationshipsSynthesize, bridge.relationshipsSynthesize);
   handle(IpcChannels.challengesStart, bridge.challengesStart);

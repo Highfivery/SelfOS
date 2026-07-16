@@ -7,6 +7,7 @@ import {
   ChapterMarkupSchema,
   ExclusionListSchema,
   LifeTimelineSchema,
+  PublishedManifestSchema,
   StoryInterviewStateSchema,
   StoryProposalListSchema,
   StoryTodoListSchema,
@@ -18,6 +19,7 @@ import {
   type ChapterMarkup,
   type ExclusionItem,
   type LifeTimeline,
+  type PublishedManifest,
   type StoryBookBundle,
   type StoryInterviewState,
   type StoryProposalList,
@@ -56,6 +58,15 @@ function chaptersDir(personId: string, bookId: string): string {
 }
 function chapterPath(personId: string, bookId: string, chapterId: string): string {
   return `${chaptersDir(personId, bookId)}/${chapterId}.enc`;
+}
+function publishedDir(personId: string, bookId: string): string {
+  return `${bookDir(personId, bookId)}/published`;
+}
+function publishedManifestPath(personId: string, bookId: string): string {
+  return `${publishedDir(personId, bookId)}/manifest.enc`;
+}
+function publishedChapterPath(personId: string, bookId: string, chapterId: string): string {
+  return `${publishedDir(personId, bookId)}/${chapterId}.enc`;
 }
 function markupPath(personId: string, bookId: string, chapterId: string): string {
   return `${bookDir(personId, bookId)}/markup/${chapterId}.enc`;
@@ -370,6 +381,64 @@ export async function listChapters(
   }
   out.sort((a, b) => (a.partId === b.partId ? a.order - b.order : a.partId < b.partId ? -1 : 1));
   return out;
+}
+
+// --- Published head (what readers see, §3.5) -------------------------------------------------------------
+
+export async function savePublishedManifest(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  manifest: PublishedManifest,
+): Promise<void> {
+  await writeEncryptedJson(fs, publishedManifestPath(personId, bookId), manifest, key);
+}
+
+export async function getPublishedManifest(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<PublishedManifest | null> {
+  const raw = await readEncryptedJson(fs, publishedManifestPath(personId, bookId), key);
+  return raw ? PublishedManifestSchema.parse(raw) : null;
+}
+
+export async function savePublishedChapter(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  chapter: BookChapter,
+): Promise<void> {
+  await writeEncryptedJson(fs, publishedChapterPath(personId, bookId, chapter.id), chapter, key);
+}
+
+export async function getPublishedChapter(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  chapterId: string,
+): Promise<BookChapter | null> {
+  const raw = await readEncryptedJson(fs, publishedChapterPath(personId, bookId, chapterId), key);
+  return raw ? BookChapterSchema.parse(raw) : null;
+}
+
+/** Remove any previously-published chapter no longer in the new published set (a chapter un-reviewed since the
+ *  last publish must not linger in the reader's head). */
+export async function prunePublishedChapters(
+  fs: FileSystem,
+  personId: string,
+  bookId: string,
+  keepIds: Set<string>,
+): Promise<void> {
+  for (const name of await fs.list(publishedDir(personId, bookId))) {
+    if (!name.endsWith('.enc') || name === 'manifest.enc') continue;
+    const id = name.slice(0, -'.enc'.length);
+    if (!keepIds.has(id)) await fs.remove(`${publishedDir(personId, bookId)}/${name}`);
+  }
 }
 
 // --- Foundations + outline approval ----------------------------------------------------------------------

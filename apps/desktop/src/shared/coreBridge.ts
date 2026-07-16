@@ -174,6 +174,8 @@ import {
   StoryOutlineInputSchema,
   StoryPinInputSchema,
   StoryInterviewCheckInputSchema,
+  StoryReadSharedInputSchema,
+  StoryReaderGrantInputSchema,
   StoryRefreshInputSchema,
   StoryRemoveMarkInputSchema,
   StoryResolveProposalInputSchema,
@@ -182,9 +184,11 @@ import {
   StoryUpdateInputSchema,
   StoryUpdateMarkInputSchema,
   type BookManifest,
+  type BookReader,
   type ChapterMarkup,
   type ExclusionItem,
   type MarkupMark,
+  type SharedBookSummary,
   type StoryBookBundle,
   type StoryBookTypeView,
   type StoryChaptersResult,
@@ -194,6 +198,8 @@ import {
   type StoryCompleteness,
   type StoryHomeSignal,
   type StoryInterviewCadenceResult,
+  type StoryPublishResult,
+  type StoryReaderView,
   type StoryRefreshViewResult,
   type StoryResolveProposalResult,
   type StoryRevisionResult,
@@ -390,14 +396,22 @@ import {
   listBooks,
   markStaleChapters,
   mintStoryCheckInFromTodo,
+  bookMentionsReader,
   computeStoryHomeSignal,
   getStoryCompleteness,
+  grantReader,
+  listChapters,
+  listReaders,
+  listSharedBooks,
   listStructuralProposals,
   pinPassage,
+  publishBook,
   readBookBundle,
+  readSharedBook,
   refreshBook,
   removeExclusion,
   resolveProposal,
+  revokeReader,
   runStoryInterviewCadence,
   removeMark,
   saveChapter,
@@ -4682,6 +4696,68 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         auto: auto ?? false,
         ...(crisis ? { crisis } : {}),
       });
+    },
+    // --- Publishing & readers (§3.5) — the publish gate is the ONE way a book reaches another person. ---
+    storyPublish: async (input): Promise<StoryPublishResult> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, message: 'Not permitted.' };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { ok: false, message: 'No active person.' };
+      return publishBook(ctx.fs, ctx.key, personId, bookId, new Date());
+    },
+    storyReaders: async (input): Promise<BookReader[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return listReaders(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyGrantReader: async (input): Promise<BookReader[]> => {
+      const { bookId, readerPersonId } = StoryReaderGrantInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return grantReader(ctx.fs, ctx.key, personId, bookId, readerPersonId, new Date());
+    },
+    storyRevokeReader: async (input): Promise<BookReader[]> => {
+      const { bookId, readerPersonId } = StoryReaderGrantInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return revokeReader(ctx.fs, ctx.key, personId, bookId, readerPersonId, new Date());
+    },
+    storyReaderFeatured: async (input): Promise<boolean> => {
+      const { bookId, readerPersonId } = StoryReaderGrantInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return false;
+      const personId = await activePersonId();
+      if (!personId) return false;
+      const reader = await getPerson(ctx.fs, ctx.key, readerPersonId);
+      if (!reader) return false;
+      const chapters = await listChapters(ctx.fs, ctx.key, personId, bookId);
+      return bookMentionsReader(chapters, reader.displayName);
+    },
+    storySharedBooks: async (): Promise<SharedBookSummary[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return listSharedBooks(ctx.fs, ctx.key, personId);
+    },
+    storyReadShared: async (input): Promise<StoryReaderView | null> => {
+      const { authorPersonId, bookId } = StoryReadSharedInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      // The core re-gates on every read (published + still granted) — the viewer is the active person.
+      return readSharedBook(ctx.fs, ctx.key, personId, authorPersonId, bookId);
     },
     // The batch markup revision — the one AI call in the markup layer (§3.3.1/§5.3).
     storyApplyMarkup: async (input): Promise<StoryRevisionResult> => {

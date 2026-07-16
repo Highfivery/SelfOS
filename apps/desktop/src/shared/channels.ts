@@ -20,10 +20,16 @@ import type {
   StoryPinInput,
   StoryRemoveMarkInput,
   StoryQuestionsResult,
+  BookReader,
+  SharedBookSummary,
   StoryCompleteness,
   StoryHomeSignal,
   StoryInterviewCadenceResult,
   StoryInterviewCheckInput,
+  StoryPublishResult,
+  StoryReadSharedInput,
+  StoryReaderGrantInput,
+  StoryReaderView,
   StoryRefreshInput,
   StoryRefreshViewResult,
   StoryResolveProposalInput,
@@ -324,6 +330,13 @@ export const IpcChannels = {
   storyHomeSignal: 'story:homeSignal',
   storyCompleteness: 'story:completeness',
   storyInterviewCheck: 'story:interviewCheck',
+  storyPublish: 'story:publish',
+  storyReaders: 'story:readers',
+  storyGrantReader: 'story:grantReader',
+  storyRevokeReader: 'story:revokeReader',
+  storyReaderFeatured: 'story:readerFeatured',
+  storySharedBooks: 'story:sharedBooks',
+  storyReadShared: 'story:readShared',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -1094,6 +1107,21 @@ export interface SelfosBridge {
    *  into the Inbox. `auto` throttles + host-side-crisis-gates; manual bypasses the interval (still weekly-capped).
    *  Gated `story.own`, active-person-scoped; the key stays host-side. */
   storyInterviewCheck(input: StoryInterviewCheckInput): Promise<StoryInterviewCadenceResult>;
+  /** Publish (or re-publish) the book (§3.5): snapshot every Reviewed chapter into the published head readers
+   *  see. Refuses when nothing is Reviewed. Gated `story.own`, author-scoped. */
+  storyPublish(input: { bookId: string }): Promise<StoryPublishResult>;
+  /** The book's current readers, resolved to names. Gated `story.own`, author-scoped. */
+  storyReaders(input: { bookId: string }): Promise<BookReader[]>;
+  /** Grant/revoke a household reader (§3.5) — revoke ends access at the next read. Returns the updated list. */
+  storyGrantReader(input: StoryReaderGrantInput): Promise<BookReader[]>;
+  storyRevokeReader(input: StoryReaderGrantInput): Promise<BookReader[]>;
+  /** Whether the book's Reviewed prose prominently mentions this person — the gentle "they appear in this book"
+   *  note in the grant picker (§3.5). Gated `story.own`, author-scoped. */
+  storyReaderFeatured(input: StoryReaderGrantInput): Promise<boolean>;
+  /** Books shared WITH the active person (§3.5) — published + still granted, read-time re-gated. Viewer-scoped. */
+  storySharedBooks(): Promise<SharedBookSummary[]>;
+  /** Read a book shared with the active person — the PUBLISHED head only (§3.6), re-gated; null if access is gone. */
+  storyReadShared(input: StoryReadSharedInput): Promise<StoryReaderView | null>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

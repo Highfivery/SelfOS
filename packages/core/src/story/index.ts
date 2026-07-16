@@ -7,4 +7,5 @@ export * from './storyGenerationService';
 export * from './storyInterviewService';
 export * from './storyMarkup';
 export * from './storyMarkupService';
+export * from './storyRefreshService';
 export * from './storyService';

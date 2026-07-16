@@ -4010,6 +4010,25 @@ export type StoryQuestionsResult =
   | { ok: true; markup: ChapterMarkup; assignmentId: string }
   | { ok: false; reason: AiFailureReason | 'AI_OFF'; message: string };
 
+/** `story:refreshCheck` — the living-book pass (§3.4): mark stale chapters (free) + auto-rewrite them (metered,
+ *  weekly-capped in the auto cadence). `auto` distinguishes the throttled launch/focus cadence from a manual
+ *  "Refresh now"; `crisis` suppresses the auto rewrite. */
+export const StoryRefreshInputSchema = StoryBookRefSchema.extend({
+  auto: z.boolean().optional(),
+  crisis: z.boolean().optional(),
+});
+export type StoryRefreshInput = z.infer<typeof StoryRefreshInputSchema>;
+
+/** The renderer-facing result of a refresh pass: how many chapters were staled + auto-rewritten, whether the
+ *  weekly cap or the budget stopped it, and the fresh bundle. Marking stale is free and always runs. */
+export interface StoryRefreshViewResult {
+  staled: number;
+  rewritten: number;
+  capped?: boolean;
+  budgetReached?: boolean;
+  bundle: StoryBookBundle | null;
+}
+
 // --- Exclusions IPC (§3.3/§5.1) --------------------------------------------------------------------------
 
 /** `story:exclude` — add a "never write about this again" exclusion, scoped (§3.3). `value` by kind: topic/

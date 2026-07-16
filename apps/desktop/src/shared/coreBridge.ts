@@ -173,6 +173,7 @@ import {
   StoryMarkInputSchema,
   StoryOutlineInputSchema,
   StoryPinInputSchema,
+  StoryRefreshInputSchema,
   StoryRemoveMarkInputSchema,
   StoryTodoToQuestionsInputSchema,
   StoryUnexcludeInputSchema,
@@ -188,6 +189,7 @@ import {
   type StoryExcludeResult,
   type StoryFoundationsResult,
   type StoryQuestionsResult,
+  type StoryRefreshViewResult,
   type StoryRevisionResult,
   type StoryTodoList,
 } from './schemas';
@@ -379,9 +381,11 @@ import {
   getTodos,
   listBookTypes,
   listBooks,
+  markStaleChapters,
   mintStoryCheckInFromTodo,
   pinPassage,
   readBookBundle,
+  refreshBook,
   removeExclusion,
   removeMark,
   saveChapter,
@@ -4510,6 +4514,47 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       };
       const markup = await addMark(deps.fs, deps.key, deps.personId, bookId, chapterId, mark);
       return { ok: true, markup, assignmentId: res.assignmentId };
+    },
+    storyRefreshCheck: async (input): Promise<StoryRefreshViewResult> => {
+      const { bookId, auto, crisis } = StoryRefreshInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { staled: 0, rewritten: 0, bundle: null };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { staled: 0, rewritten: 0, bundle: null };
+
+      // Marking stale is free + always runs; the auto-rewrite needs a real key + AI on + budget (refreshBook).
+      // With AI off OR no key, just mark stale so the badges still update — never run the rewrite loop (which
+      // would build the corpus then fail NO_KEY per chapter).
+      const deps = await aiDeps('story.own');
+      const aiReady =
+        deps && deps.apiKey && (await readVaultSettingsValues(deps.fs))['ai.enabled'] !== false;
+      let staled = 0;
+      let rewritten = 0;
+      let capped: boolean | undefined;
+      let budgetReached: boolean | undefined;
+      if (deps && aiReady) {
+        const res = await refreshBook(deps, {
+          bookId,
+          auto: auto ?? false,
+          ...(crisis ? { crisis } : {}),
+        });
+        staled = res.staled;
+        rewritten = res.rewritten;
+        capped = res.capped;
+        budgetReached = res.budgetReached;
+      } else {
+        staled = await markStaleChapters(ctx.fs, ctx.key, personId, bookId);
+      }
+      const bundle = await readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      return {
+        staled,
+        rewritten,
+        bundle,
+        ...(capped ? { capped: true } : {}),
+        ...(budgetReached ? { budgetReached: true } : {}),
+      };
     },
     // The batch markup revision — the one AI call in the markup layer (§3.3.1/§5.3).
     storyApplyMarkup: async (input): Promise<StoryRevisionResult> => {

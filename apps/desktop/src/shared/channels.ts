@@ -20,6 +20,8 @@ import type {
   StoryPinInput,
   StoryRemoveMarkInput,
   StoryQuestionsResult,
+  StoryRefreshInput,
+  StoryRefreshViewResult,
   StoryRevisionResult,
   StoryTodoList,
   StoryTodoToQuestionsInput,
@@ -309,6 +311,7 @@ export const IpcChannels = {
   storyExclude: 'story:exclude',
   storyUnexclude: 'story:unexclude',
   storyTodoToQuestions: 'story:todoToQuestions',
+  storyRefreshCheck: 'story:refreshCheck',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -1060,6 +1063,9 @@ export interface SelfosBridge {
   /** Turn a to-do into a story check-in (§3.3.2/§5.5): mint an in-app self-send from the focus + record a
    *  `questionsSent` to-do. The one AI call here — honest AI_OFF/NO_KEY/failure, nothing persisted on failure. */
   storyTodoToQuestions(input: StoryTodoToQuestionsInput): Promise<StoryQuestionsResult>;
+  /** The living-book refresh pass (§3.4): mark stale chapters (free) + auto-rewrite them (metered, weekly-
+   *  capped in the auto cadence). Marking stale runs even with AI off; the rewrite needs AI + budget. */
+  storyRefreshCheck(input: StoryRefreshInput): Promise<StoryRefreshViewResult>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

@@ -6748,7 +6748,29 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(await bridge.storyExclusions({ bookId })).toEqual([]);
   });
 
-  it('story: markup ops are denied for a person without story.own', async () => {
+  it('story: refreshCheck returns a fresh bundle and no-ops when nothing drifted', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.storyGenerateChapters({ bookId });
+
+    // Nothing has changed since the chapter was written → nothing stales, nothing rewrites; fresh bundle back.
+    const res = await bridge.storyRefreshCheck({ bookId, auto: false });
+    expect(res.staled).toBe(0);
+    expect(res.rewritten).toBe(0);
+    expect(res.bundle).not.toBeNull();
+  });
+
+  it('story: markup + refresh ops are denied for a person without story.own', async () => {
     const { bridge } = await freshOwner();
     // A Guest role has no story.own.
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
@@ -6760,5 +6782,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect((await bridge.storyTodos({ bookId: 'x' })).todos).toEqual([]);
     const applied = await bridge.storyApplyMarkup({ bookId: 'x', chapterId: 'c' });
     expect(applied.ok).toBe(false);
+    const refreshed = await bridge.storyRefreshCheck({ bookId: 'x' });
+    expect(refreshed).toEqual({ staled: 0, rewritten: 0, bundle: null });
   });
 });

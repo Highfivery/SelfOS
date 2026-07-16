@@ -20,6 +20,7 @@ import type {
   StoryPinInput,
   StoryRemoveMarkInput,
   StoryQuestionsResult,
+  StoryHomeSignal,
   StoryRefreshInput,
   StoryRefreshViewResult,
   StoryResolveProposalInput,
@@ -317,6 +318,7 @@ export const IpcChannels = {
   storyRefreshCheck: 'story:refreshCheck',
   storyProposals: 'story:proposals',
   storyResolveProposal: 'story:resolveProposal',
+  storyHomeSignal: 'story:homeSignal',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -1077,6 +1079,9 @@ export interface SelfosBridge {
   /** Approve (apply the restructure — new/split chapters land un-written, drafted next refresh) or dismiss a
    *  pending structural proposal. No AI spend. Returns the remaining pending proposals + the fresh bundle. */
   storyResolveProposal(input: StoryResolveProposalInput): Promise<StoryResolveProposalResult>;
+  /** The living-book Home signal (§5.6) for the active person's book — computed host-side, no AI. Feeds the
+   *  `story-living` "For you" card. Gated `story.own`; `hasBook:false` when denied or there's no book. */
+  storyHomeSignal(): Promise<StoryHomeSignal>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

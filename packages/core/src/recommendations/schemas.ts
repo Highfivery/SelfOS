@@ -20,6 +20,7 @@ export const RecommendationDomainSchema = z.enum([
   'memory',
   'questionnaire',
   'together',
+  'story',
 ]);
 export type RecommendationDomain = z.infer<typeof RecommendationDomainSchema>;
 
@@ -147,6 +148,20 @@ export interface PersonRecommendationState {
     partnerPersonId: string;
     partnerName: string;
     lastCheckInAt?: string;
+  } | null;
+
+  // --- Your Story (64 §5.6; additive-optional — absent ⇒ the provider contributes nothing) ---
+  /** The living-book Home signal for the person's book (64), computed host-side (no AI): chapters with new
+   *  material to weave in, pending structural proposals to review, and approved chapters awaiting a first
+   *  draft. Drives the ONE `story-living` For-you card. Requires the `story.own` gate. `signature` drives the
+   *  dismissal so a NEW signal (any count changed) re-surfaces while the same one won't re-nag. Absent/hasBook
+   *  false ⇒ no card (starting a book is the nav's job, not a push). */
+  story?: {
+    hasBook: boolean;
+    staleChapters: number;
+    pendingProposals: number;
+    unwrittenChapters: number;
+    signature: string;
   } | null;
 }
 

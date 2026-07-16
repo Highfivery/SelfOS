@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import {
+  BookOpen,
   Brain,
   ClipboardCheck,
   ClipboardList,
@@ -29,6 +30,7 @@ const DOMAIN_ICON: Record<RecommendationDomain, LucideIcon> = {
   memory: Brain,
   questionnaire: ClipboardList,
   together: HeartHandshake,
+  story: BookOpen,
 };
 
 /**

@@ -6929,6 +6929,54 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(await bridge.storyProposals({ bookId })).toEqual([]);
   });
 
+  it('story: the Home signal reports the book’s living state; false for no book or a Guest', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const ctx = (await host.host.vaultAndKey())!;
+
+    // No book yet → hasBook:false (starting one is the nav's job, not a Home push).
+    expect(await bridge.storyHomeSignal()).toMatchObject({ hasBook: false });
+
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    // Chapters aren't written → they're all unwritten. Seed one pending proposal.
+    const before = await bridge.storyGet({ bookId });
+    const firstChapterId = before!.outline!.parts[0]!.chapters[0]!.id;
+    await saveProposals(ctx.fs, ctx.key, ownerId, bookId, {
+      schemaVersion: 1,
+      proposals: [
+        {
+          id: 'pr1',
+          kind: 'prologueRewrite',
+          rationale: 'x',
+          createdAt: '2026-07-16T00:00:00.000Z',
+          status: 'pending',
+          chapterId: firstChapterId,
+        },
+      ],
+    });
+
+    const sig = await bridge.storyHomeSignal();
+    expect(sig.hasBook).toBe(true);
+    expect(sig.unwrittenChapters).toBeGreaterThan(0);
+    expect(sig.pendingProposals).toBe(1);
+    expect(sig.staleChapters).toBe(0); // nothing written yet, so nothing has drifted
+
+    // A Guest (no story.own) gets the empty signal — never another member's book state.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.storyHomeSignal()).toMatchObject({ hasBook: false });
+  });
+
   it('story: markup + refresh ops are denied for a person without story.own', async () => {
     const { bridge } = await freshOwner();
     // A Guest role has no story.own.

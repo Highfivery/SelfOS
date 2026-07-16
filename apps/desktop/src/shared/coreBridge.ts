@@ -190,6 +190,7 @@ import {
   type StoryExcludeResult,
   type StoryFoundationsResult,
   type StoryQuestionsResult,
+  type StoryHomeSignal,
   type StoryRefreshViewResult,
   type StoryResolveProposalResult,
   type StoryRevisionResult,
@@ -386,6 +387,7 @@ import {
   listBooks,
   markStaleChapters,
   mintStoryCheckInFromTodo,
+  computeStoryHomeSignal,
   listStructuralProposals,
   pinPassage,
   readBookBundle,
@@ -4620,6 +4622,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         bundle,
         ...(res.message ? { message: res.message } : {}),
       };
+    },
+    storyHomeSignal: async (): Promise<StoryHomeSignal> => {
+      const empty: StoryHomeSignal = {
+        hasBook: false,
+        staleChapters: 0,
+        pendingProposals: 0,
+        unwrittenChapters: 0,
+        signature: '',
+      };
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return empty;
+      const personId = await activePersonId();
+      if (!personId) return empty;
+      return computeStoryHomeSignal(ctx.fs, ctx.key, personId);
     },
     // The batch markup revision — the one AI call in the markup layer (§3.3.1/§5.3).
     storyApplyMarkup: async (input): Promise<StoryRevisionResult> => {

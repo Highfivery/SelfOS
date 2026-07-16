@@ -354,6 +354,14 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     storyRefreshCheck: () => Promise.resolve({ staled: 0, rewritten: 0, bundle: null }),
     storyProposals: () => Promise.resolve([]),
     storyResolveProposal: () => Promise.resolve({ ok: true, proposals: [], bundle: null }),
+    storyHomeSignal: () =>
+      Promise.resolve({
+        hasBook: false,
+        staleChapters: 0,
+        pendingProposals: 0,
+        unwrittenChapters: 0,
+        signature: '',
+      }),
     relationshipsGetSynthesis: () => Promise.resolve(null),
     relationshipsSynthesize: () =>
       Promise.resolve({ ok: false, reason: 'EMPTY', message: 'Nothing yet.' }),

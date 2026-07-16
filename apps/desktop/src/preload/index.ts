@@ -206,6 +206,7 @@ const bridge: SelfosBridge = {
   storyRefreshCheck: (input) => ipcRenderer.invoke(IpcChannels.storyRefreshCheck, input),
   storyProposals: (input) => ipcRenderer.invoke(IpcChannels.storyProposals, input),
   storyResolveProposal: (input) => ipcRenderer.invoke(IpcChannels.storyResolveProposal, input),
+  storyHomeSignal: () => ipcRenderer.invoke(IpcChannels.storyHomeSignal),
   relationshipsGetSynthesis: (input) =>
     ipcRenderer.invoke(IpcChannels.relationshipsGetSynthesis, input),
   relationshipsSynthesize: (input) =>

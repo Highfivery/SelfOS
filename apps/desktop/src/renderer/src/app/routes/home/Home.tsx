@@ -130,6 +130,7 @@ export function Home(): JSX.Element {
   const canTakeTests = useSessionStore((s) => s.can('tests.own'));
   const canTakeChallenges = useSessionStore((s) => s.can('challenges.own'));
   const canTogether = useSessionStore((s) => s.can('together.own'));
+  const canOwnStory = useSessionStore((s) => s.can('story.own'));
   // The reactive capability snapshot the engine + the quick-dock filter gated actions against.
   const capabilities = new Set<string>();
   if (hasSessions) capabilities.add('sessions.own');
@@ -140,6 +141,7 @@ export function Home(): JSX.Element {
   if (canTakeChallenges) capabilities.add('challenges.own');
   if (canTogether) capabilities.add('together.own');
   if (canOwnDreams) capabilities.add('dreams.own');
+  if (canOwnStory) capabilities.add('story.own');
 
   const conversations = useConversationStore((s) => s.conversations);
   const sessionCosts = useConversationStore((s) => s.sessionCosts);
@@ -172,6 +174,8 @@ export function Home(): JSX.Element {
   const [profileSuggestions, setProfileSuggestions] = useState<ProfileUpdateSuggestion[]>([]);
   const [pulseCheckinDue, setPulseCheckinDue] =
     useState<Exclude<PersonRecommendationState['pulseCheckinDue'], undefined>>(null);
+  const [storyHome, setStoryHome] =
+    useState<Exclude<PersonRecommendationState['story'], undefined>>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -182,6 +186,7 @@ export function Home(): JSX.Element {
   // account's overview never lingers into another's). Deterministic reads only; nothing spends budget.
   useEffect(() => {
     setReady(false);
+    setStoryHome(null); // clear the prior person's living-book signal until this person's resolves
     let cancelled = false;
     void Promise.all([
       useConversationStore.getState().load(),
@@ -206,6 +211,10 @@ export function Home(): JSX.Element {
       }),
       window.selfos?.profileSuggestions().then((s) => {
         if (!cancelled) setProfileSuggestions(s ?? []);
+      }),
+      // The living-book Home signal (64 §5.6) — host-side, no AI. `hasBook:false` for anyone without a book.
+      window.selfos?.storyHomeSignal().then((sig) => {
+        if (!cancelled) setStoryHome(sig ?? null);
       }),
     ]).then(async () => {
       if (cancelled) return;
@@ -353,6 +362,7 @@ export function Home(): JSX.Element {
       ? computeTogetherHomeNudge(togetherSessions, activePersonId, now)
       : null,
     pulseCheckinDue,
+    story: storyHome,
   };
 
   const dismissedSet = new Set(dismissed);

@@ -4098,6 +4098,19 @@ export interface StoryResolveProposalResult {
   message?: string;
 }
 
+/** `story:homeSignal` — the living-book Home presence (§5.6), computed host-side (no AI). Feeds the ONE
+ *  `story-living` "For you" card. `signature` drives the dismissal so a NEW signal re-surfaces. */
+export interface StoryHomeSignal {
+  hasBook: boolean;
+  /** Written chapters that drifted and have new material to weave in. */
+  staleChapters: number;
+  /** Pending structural proposals to review. */
+  pendingProposals: number;
+  /** Approved outline chapters awaiting a first draft (incl. approved new/split shells). */
+  unwrittenChapters: number;
+  signature: string;
+}
+
 // --- Exclusions IPC (§3.3/§5.1) --------------------------------------------------------------------------
 
 /** `story:exclude` — add a "never write about this again" exclusion, scoped (§3.3). `value` by kind: topic/

@@ -222,6 +222,10 @@ const bridge: SelfosBridge = {
   storyGenerateImage: (input) => ipcRenderer.invoke(IpcChannels.storyGenerateImage, input),
   storyGetImage: (input) => ipcRenderer.invoke(IpcChannels.storyGetImage, input),
   storyDeleteImage: (input) => ipcRenderer.invoke(IpcChannels.storyDeleteImage, input),
+  storyUploadPhoto: (input) => ipcRenderer.invoke(IpcChannels.storyUploadPhoto, input),
+  storyAnalyzePhoto: (input) => ipcRenderer.invoke(IpcChannels.storyAnalyzePhoto, input),
+  storyAnswerPhoto: (input) => ipcRenderer.invoke(IpcChannels.storyAnswerPhoto, input),
+  storyPhotoAnswers: (input) => ipcRenderer.invoke(IpcChannels.storyPhotoAnswers, input),
   relationshipsGetSynthesis: (input) =>
     ipcRenderer.invoke(IpcChannels.relationshipsGetSynthesis, input),
   relationshipsSynthesize: (input) =>

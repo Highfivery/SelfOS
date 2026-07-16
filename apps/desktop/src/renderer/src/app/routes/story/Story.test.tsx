@@ -1012,6 +1012,53 @@ describe('Story (64)', () => {
     expect(screen.queryByRole('button', { name: 'Create a cover' })).not.toBeInTheDocument();
   });
 
+  it('captions an uploaded photo via vision and saves an answer to the corpus (§3.7)', async () => {
+    // The mock stamps the caption onto the index entry when analyzed (mirroring the real bridge).
+    let caption: string | undefined;
+    const storyAnalyzePhoto = vi.fn(() => {
+      caption = 'A garage in winter';
+      return Promise.resolve({
+        ok: true as const,
+        analysis: { caption, questions: ['Who took this photo?'] },
+      });
+    });
+    const storyAnswerPhoto = vi.fn(() => Promise.resolve());
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () =>
+        Promise.resolve({ ...writtenBundle('new'), manifest: manifest({ status: 'ready' }) }),
+      storyImages: () =>
+        Promise.resolve([
+          {
+            id: 'ph1',
+            kind: 'uploaded' as const,
+            mime: 'image/png',
+            createdAt: 'now',
+            ...(caption ? { caption } : {}),
+          },
+        ]),
+      storyGetImage: () => Promise.resolve({ mime: 'image/png', dataBase64: 'AAAA' }),
+      storyPhotoAnswers: () => Promise.resolve([]),
+      storyAnalyzePhoto,
+      storyAnswerPhoto,
+    });
+    renderStory();
+    // The Photos panel shows the uploaded thumbnail; analyze → caption + a question to answer.
+    await userEvent.click(await screen.findByRole('button', { name: /Caption & ask about this/ }));
+    expect(storyAnalyzePhoto).toHaveBeenCalledWith({ bookId: 'b1', imageId: 'ph1' });
+    expect(await screen.findByText('A garage in winter')).toBeInTheDocument();
+    const answer = await screen.findByLabelText('Who took this photo?');
+    await userEvent.type(answer, 'My father did.');
+    await userEvent.click(screen.getByRole('button', { name: 'Save answer' }));
+    expect(storyAnswerPhoto).toHaveBeenCalledWith({
+      bookId: 'b1',
+      imageId: 'ph1',
+      question: 'Who took this photo?',
+      answer: 'My father did.',
+    });
+  });
+
   it('lists to-dos on the overview and marks a reminder done', async () => {
     const storyUpdateMark = vi.fn(
       (): Promise<ChapterMarkup> =>

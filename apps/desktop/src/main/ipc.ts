@@ -405,6 +405,10 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyGenerateImage, bridge.storyGenerateImage);
   handle(IpcChannels.storyGetImage, bridge.storyGetImage);
   handle(IpcChannels.storyDeleteImage, bridge.storyDeleteImage);
+  handle(IpcChannels.storyUploadPhoto, bridge.storyUploadPhoto);
+  handle(IpcChannels.storyAnalyzePhoto, bridge.storyAnalyzePhoto);
+  handle(IpcChannels.storyAnswerPhoto, bridge.storyAnswerPhoto);
+  handle(IpcChannels.storyPhotoAnswers, bridge.storyPhotoAnswers);
   handle(IpcChannels.relationshipsGetSynthesis, bridge.relationshipsGetSynthesis);
   handle(IpcChannels.relationshipsSynthesize, bridge.relationshipsSynthesize);
   handle(IpcChannels.challengesStart, bridge.challengesStart);

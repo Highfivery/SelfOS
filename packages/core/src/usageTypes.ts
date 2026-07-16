@@ -32,6 +32,7 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'story.interview': 'Your Story — interview questions',
   'story.imagePrompt': 'Your Story — image prompt',
   'story.image': 'Your Story — image',
+  'story.vision': 'Your Story — photo caption',
 };
 
 export function usageTypeLabel(type: string): string {

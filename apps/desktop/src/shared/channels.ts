@@ -26,6 +26,8 @@ import type {
   StoryHomeSignal,
   StoryImageEntry,
   StoryImageResult,
+  StoryPhotoAnalyzeResult,
+  StoryPhotoAnswer,
   StoryInterviewCadenceResult,
   StoryInterviewCheckInput,
   StoryPublishResult,
@@ -345,6 +347,10 @@ export const IpcChannels = {
   storyGenerateImage: 'story:generateImage',
   storyGetImage: 'story:getImage',
   storyDeleteImage: 'story:deleteImage',
+  storyUploadPhoto: 'story:uploadPhoto',
+  storyAnalyzePhoto: 'story:analyzePhoto',
+  storyAnswerPhoto: 'story:answerPhoto',
+  storyPhotoAnswers: 'story:photoAnswers',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -1153,6 +1159,26 @@ export interface SelfosBridge {
   }): Promise<{ mime: string; dataBase64: string } | null>;
   /** Delete an image (bytes + index; clears the cover pointer if it was the cover). Gated `story.own`. */
   storyDeleteImage(input: { bookId: string; imageId: string }): Promise<void>;
+  /** Upload a downscaled photo (EXIF-stripped in the renderer, spec 45) as base64; indexed `uploaded`.
+   *  Photos are only ever read by vision (§3.7) — never an image-generation input. Gated `story.own`. */
+  storyUploadPhoto(input: {
+    bookId: string;
+    mime: string;
+    dataBase64: string;
+    chapterId?: string;
+  }): Promise<StoryImageEntry | null>;
+  /** Claude-vision a photo → a caption (stamped on the entry) + 2–4 questions to answer (§3.7). Gated
+   *  `story.own`; needs the Claude key (no separate consent — vision reads the photo the author uploaded). */
+  storyAnalyzePhoto(input: { bookId: string; imageId: string }): Promise<StoryPhotoAnalyzeResult>;
+  /** Persist a photo-Q&A answer to the interview corpus (feeds the gap engine + generation). Gated `story.own`. */
+  storyAnswerPhoto(input: {
+    bookId: string;
+    imageId: string;
+    question: string;
+    answer: string;
+  }): Promise<void>;
+  /** The photo Q&A answered so far. Gated `story.own`. */
+  storyPhotoAnswers(input: { bookId: string }): Promise<StoryPhotoAnswer[]>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

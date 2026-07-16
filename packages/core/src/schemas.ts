@@ -3913,6 +3913,17 @@ export type StoryImageResult =
       message: string;
     };
 
+/** A vision analysis of an uploaded photo (§3.7) — a suggested caption + 2–4 questions to deepen the story. */
+export interface StoryPhotoAnalysis {
+  caption: string;
+  questions: string[];
+}
+
+/** The slim IPC result for `story:analyzePhoto` — the vision usage stays host-side (like image generation). */
+export type StoryPhotoAnalyzeResult =
+  | { ok: true; analysis: StoryPhotoAnalysis; costUsd?: number }
+  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };
+
 /** A structural change the freshness engine proposes but never applies silently (§3.4) — the spec-20
  *  merge-proposal pattern: a human-readable rationale that waits for one-tap approval. Each kind carries the
  *  structured change the apply step needs. `status: dismissed` is kept (not deleted) so a rejected idea isn't
@@ -4043,6 +4054,24 @@ export const StoryImageRefSchema = z.object({
   imageId: z.string().min(1),
 });
 export type StoryImageRef = z.infer<typeof StoryImageRefSchema>;
+
+/** `story:uploadPhoto` — a downscaled photo (EXIF stripped in the renderer, spec 45) as base64. */
+export const StoryUploadPhotoInputSchema = z.object({
+  bookId: z.string().min(1),
+  mime: z.string().min(1),
+  dataBase64: z.string().min(1),
+  chapterId: z.string().min(1).optional(),
+});
+export type StoryUploadPhotoInput = z.infer<typeof StoryUploadPhotoInputSchema>;
+
+/** `story:answerPhoto` — one vision-suggested question the person answered (persists to the corpus). */
+export const StoryPhotoAnswerInputSchema = z.object({
+  bookId: z.string().min(1),
+  imageId: z.string().min(1),
+  question: z.string().min(1),
+  answer: z.string().min(1),
+});
+export type StoryPhotoAnswerInput = z.infer<typeof StoryPhotoAnswerInputSchema>;
 
 /** `story:saveOutline` / `story:approveOutline` — the (possibly edited) outline during review. */
 export const StoryOutlineInputSchema = z.object({

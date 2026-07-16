@@ -7237,4 +7237,60 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(await bridge.storyImages({ bookId })).toEqual([]);
     expect((await bridge.storyGet({ bookId }))?.manifest.coverImageId).toBeUndefined();
   });
+
+  it('story: uploads a photo (encrypted), captions + asks via vision, and persists the answer (§3.7)', async () => {
+    const { bridge, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+
+    // Upload a tiny PNG (base64) → indexed `uploaded`, decrypts back.
+    const dataBase64 = Buffer.from([137, 80, 78, 71, 1, 2, 3]).toString('base64');
+    const entry = await bridge.storyUploadPhoto({ bookId, mime: 'image/png', dataBase64 });
+    expect(entry?.kind).toBe('uploaded');
+    const images = await bridge.storyImages({ bookId });
+    expect(images.map((i) => i.id)).toEqual([entry!.id]);
+    const served = await bridge.storyGetImage({ bookId, imageId: entry!.id });
+    expect(served?.mime).toBe('image/png');
+
+    // Vision analysis → caption stamped + questions returned.
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: () =>
+        Promise.resolve({
+          text: '{"caption":"A garage in winter","questions":["Who took this?","What were you building?"]}',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        }),
+    };
+    const analysis = await bridge.storyAnalyzePhoto({ bookId, imageId: entry!.id });
+    expect(analysis.ok).toBe(true);
+    if (!analysis.ok) throw new Error('analyze failed');
+    expect(analysis.analysis.caption).toBe('A garage in winter');
+    expect(analysis.analysis.questions).toHaveLength(2);
+    expect((await bridge.storyImages({ bookId }))[0]?.caption).toBe('A garage in winter');
+
+    // Answer a question → it persists to the interview corpus.
+    await bridge.storyAnswerPhoto({
+      bookId,
+      imageId: entry!.id,
+      question: 'Who took this?',
+      answer: 'My father did.',
+    });
+    const answers = await bridge.storyPhotoAnswers({ bookId });
+    expect(answers).toEqual([
+      expect.objectContaining({
+        imageId: entry!.id,
+        question: 'Who took this?',
+        answer: 'My father did.',
+      }),
+    ]);
+
+    // A crafted non-image mime is rejected at the trust boundary.
+    expect(await bridge.storyUploadPhoto({ bookId, mime: 'text/plain', dataBase64 })).toBeNull();
+  });
 });

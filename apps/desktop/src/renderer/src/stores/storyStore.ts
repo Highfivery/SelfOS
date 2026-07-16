@@ -21,6 +21,8 @@ import type {
   StoryImageEntry,
   StoryImageResult,
   StoryImageTarget,
+  StoryPhotoAnalyzeResult,
+  StoryPhotoAnswer,
   StoryInterviewCadenceResult,
   StoryPublishResult,
   StoryReaderView,
@@ -142,6 +144,17 @@ interface StoryState {
   ) => Promise<StoryImageResult>;
   getImageUrl: (bookId: string, imageId: string) => Promise<string | null>;
   deleteImage: (bookId: string, imageId: string) => Promise<void>;
+  /** Photos (§3.7) — uploads + vision Q&A. `photoAnswers` is the answered Q&A corpus. */
+  photoAnswers: StoryPhotoAnswer[];
+  loadPhotoAnswers: (bookId: string) => Promise<void>;
+  uploadPhoto: (
+    bookId: string,
+    mime: string,
+    dataBase64: string,
+    chapterId?: string,
+  ) => Promise<StoryImageEntry | null>;
+  analyzePhoto: (bookId: string, imageId: string) => Promise<StoryPhotoAnalyzeResult>;
+  answerPhoto: (bookId: string, imageId: string, question: string, answer: string) => Promise<void>;
   /** Books shared WITH the active person (§3.5) — the "Shared with you" surface + the reader view. */
   sharedBooks: SharedBookSummary[];
   loadSharedBooks: () => Promise<void>;
@@ -187,6 +200,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   readers: [],
   images: [],
   imageUrls: {},
+  photoAnswers: [],
   sharedBooks: [],
   readerView: null,
   loaded: false,
@@ -455,6 +469,34 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       return { imageUrls: next };
     });
   },
+  loadPhotoAnswers: async (bookId) => {
+    const photoAnswers = (await window.selfos?.storyPhotoAnswers({ bookId })) ?? [];
+    set({ photoAnswers });
+  },
+  uploadPhoto: async (bookId, mime, dataBase64, chapterId) => {
+    const entry =
+      (await window.selfos?.storyUploadPhoto({
+        bookId,
+        mime,
+        dataBase64,
+        ...(chapterId ? { chapterId } : {}),
+      })) ?? null;
+    if (entry) await get().loadImages(bookId);
+    return entry;
+  },
+  analyzePhoto: async (bookId, imageId) => {
+    const res = (await window.selfos?.storyAnalyzePhoto({ bookId, imageId })) ?? {
+      ok: false as const,
+      reason: 'ERROR' as const,
+      message: 'SelfOS isn’t ready yet.',
+    };
+    if (res.ok) await get().loadImages(bookId); // the caption was stamped onto the entry
+    return res;
+  },
+  answerPhoto: async (bookId, imageId, question, answer) => {
+    await window.selfos?.storyAnswerPhoto({ bookId, imageId, question, answer });
+    await get().loadPhotoAnswers(bookId);
+  },
   loadSharedBooks: async () => {
     const sharedBooks = (await window.selfos?.storySharedBooks()) ?? [];
     set({ sharedBooks });
@@ -483,6 +525,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       readers: [],
       images: [],
       imageUrls: {},
+      photoAnswers: [],
       sharedBooks: [],
       readerView: null,
       loaded: false,

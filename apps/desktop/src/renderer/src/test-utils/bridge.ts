@@ -378,6 +378,10 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     storyGenerateImage: () => Promise.resolve({ ok: false, reason: 'NO_CONSENT', message: 'off' }),
     storyGetImage: () => Promise.resolve(null),
     storyDeleteImage: () => Promise.resolve(),
+    storyUploadPhoto: () => Promise.resolve(null),
+    storyAnalyzePhoto: () => Promise.resolve({ ok: false, reason: 'NO_KEY', message: 'off' }),
+    storyAnswerPhoto: () => Promise.resolve(),
+    storyPhotoAnswers: () => Promise.resolve([]),
     relationshipsGetSynthesis: () => Promise.resolve(null),
     relationshipsSynthesize: () =>
       Promise.resolve({ ok: false, reason: 'EMPTY', message: 'Nothing yet.' }),

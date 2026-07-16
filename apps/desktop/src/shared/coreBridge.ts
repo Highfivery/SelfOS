@@ -170,6 +170,8 @@ import {
   StoryChapterRefSchema,
   StoryGenerateImageInputSchema,
   StoryImageRefSchema,
+  StoryUploadPhotoInputSchema,
+  StoryPhotoAnswerInputSchema,
   StoryEditPassageInputSchema,
   StoryExcludeInputSchema,
   StoryMarkInputSchema,
@@ -201,6 +203,8 @@ import {
   type StoryHomeSignal,
   type StoryImageEntry,
   type StoryImageResult,
+  type StoryPhotoAnalyzeResult,
+  type StoryPhotoAnswer,
   type StoryInterviewCadenceResult,
   type StoryPublishResult,
   type StoryReaderView,
@@ -403,10 +407,14 @@ import {
   bookMentionsReader,
   buildPublishedHtml,
   buildPublishedMarkdown,
+  addPhotoAnswer,
+  addUploadedPhoto,
+  analyzeStoryPhoto,
   computeStoryHomeSignal,
   deleteStoryImage,
   exportFileStem,
   generateStoryImage,
+  getPhotoAnswers,
   getStoryCompleteness,
   getStoryImage,
   getStoryImageIndex,
@@ -4867,6 +4875,69 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return;
       await deleteStoryImage(ctx.fs, ctx.key, personId, bookId, imageId, new Date());
+    },
+    // --- Photos (§3.7, Phase H2) — uploads + Claude vision Q&A; a photo is NEVER a generation input --------
+    storyUploadPhoto: async (input): Promise<StoryImageEntry | null> => {
+      const { bookId, mime, dataBase64, chapterId } = StoryUploadPhotoInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      // Defense in depth: the renderer already downscaled + stripped EXIF (spec 45), but re-validate the
+      // mime + size at the trust boundary (a crafted call can't stash arbitrary bytes).
+      const ALLOWED = ['image/png', 'image/webp', 'image/jpeg', 'image/gif'];
+      if (!ALLOWED.includes(mime)) return null;
+      const bytes = fromBase64(dataBase64);
+      if (bytes.length === 0 || bytes.length > 5 * 1024 * 1024) return null;
+      return addUploadedPhoto(
+        ctx.fs,
+        ctx.key,
+        personId,
+        bookId,
+        { bytes, mime, ...(chapterId ? { chapterId } : {}) },
+        new Date(),
+      );
+    },
+    storyAnalyzePhoto: async (input): Promise<StoryPhotoAnalyzeResult> => {
+      const { bookId, imageId } = StoryImageRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const showCost = await activePersonCan(ctx.fs, ctx.key, 'budgets.manage');
+      return analyzeStoryPhoto({
+        fs: ctx.fs,
+        key: ctx.key,
+        claude: host.claude,
+        anthropicApiKey: (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
+        claudeModel: await host.activeModel(),
+        personId,
+        bookId,
+        imageId,
+        now: new Date(),
+        showCost,
+      });
+    },
+    storyAnswerPhoto: async (input): Promise<void> => {
+      const { bookId, imageId, question, answer } = StoryPhotoAnswerInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return;
+      await addPhotoAnswer(
+        ctx.fs,
+        ctx.key,
+        personId,
+        bookId,
+        { imageId, question, answer },
+        new Date(),
+      );
+    },
+    storyPhotoAnswers: async (input): Promise<StoryPhotoAnswer[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      return getPhotoAnswers(ctx.fs, ctx.key, personId, bookId);
     },
     // The batch markup revision — the one AI call in the markup layer (§3.3.1/§5.3).
     storyApplyMarkup: async (input): Promise<StoryRevisionResult> => {

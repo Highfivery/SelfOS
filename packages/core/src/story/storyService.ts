@@ -23,6 +23,7 @@ import {
   type LifeTimeline,
   type PublishedManifest,
   type StoryBookBundle,
+  type StoryImageEntry,
   type StoryImageIndex,
   type StoryInterviewState,
   type StoryProposalList,
@@ -377,6 +378,32 @@ export async function saveInterviewState(
   await writeEncryptedJson(fs, interviewPath(personId, bookId), state, key);
 }
 
+/** Append a photo-elicited Q&A to the interview corpus (§3.7). The gap engine + generation read these. */
+export async function addPhotoAnswer(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  answer: { imageId: string; question: string; answer: string },
+  now: Date,
+): Promise<void> {
+  const state = await getInterviewState(fs, key, personId, bookId);
+  await saveInterviewState(fs, key, personId, bookId, {
+    ...state,
+    photoAnswers: [...state.photoAnswers, { ...answer, at: now.toISOString() }],
+  });
+}
+
+/** The photo Q&A answered so far (for the "Photos" panel). */
+export async function getPhotoAnswers(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<StoryInterviewState['photoAnswers']> {
+  return (await getInterviewState(fs, key, personId, bookId)).photoAnswers;
+}
+
 // --- Chapters (draft head) -------------------------------------------------------------------------------
 
 export async function saveChapter(
@@ -532,6 +559,56 @@ export async function getStoryImageBytes(
   } catch {
     return null;
   }
+}
+
+/** Store an uploaded photo (bytes already downscaled + EXIF-stripped in the renderer, spec 45): encrypt the
+ *  bytes + add an `uploaded` index entry (optionally chapter-anchored). Returns the new entry. */
+export async function addUploadedPhoto(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  photo: { bytes: Uint8Array; mime: string; chapterId?: string },
+  now: Date,
+): Promise<StoryImageEntry> {
+  const imageId = uuid();
+  await saveStoryImageBytes(fs, key, personId, bookId, imageId, photo.bytes);
+  const entry: StoryImageEntry = {
+    id: imageId,
+    kind: 'uploaded',
+    mime: photo.mime,
+    createdAt: now.toISOString(),
+    ...(photo.chapterId ? { chapterId: photo.chapterId } : {}),
+  };
+  const index = await getStoryImageIndex(fs, key, personId, bookId);
+  await saveStoryImageIndex(fs, key, personId, bookId, {
+    ...index,
+    images: [...index.images, entry],
+  });
+  return entry;
+}
+
+/** Stamp a caption + vision notes onto an existing image's index entry (the photo Q&A analysis result). */
+export async function setStoryImageAnalysis(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  imageId: string,
+  analysis: { caption?: string; visionNotes?: string },
+): Promise<void> {
+  const index = await getStoryImageIndex(fs, key, personId, bookId);
+  let changed = false;
+  const images = index.images.map((img) => {
+    if (img.id !== imageId) return img;
+    changed = true;
+    return {
+      ...img,
+      ...(analysis.caption !== undefined ? { caption: analysis.caption } : {}),
+      ...(analysis.visionNotes !== undefined ? { visionNotes: analysis.visionNotes } : {}),
+    };
+  });
+  if (changed) await saveStoryImageIndex(fs, key, personId, bookId, { ...index, images });
 }
 
 /** Remove an image's bytes AND its index entry (used by regenerate-cover cleanup + explicit delete). */

@@ -180,6 +180,7 @@ describe('Story (64)', () => {
           chaptersTotal: 8,
           currentTitle: 'The Garage',
           startedAt: Date.now() - 5000,
+          scope: 'create',
         },
       }),
     );
@@ -332,6 +333,33 @@ describe('Story (64)', () => {
     expect(await screen.findByText('Couldn’t write the chapters.')).toBeInTheDocument();
     // The action is still offered — not a dead-end.
     expect(screen.getByRole('button', { name: 'Write your chapters' })).toBeInTheDocument();
+  });
+
+  it('shows the rich chapter-writing progress INLINE on the overview (not a full-screen takeover)', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'drafting' })]),
+      storyGet: () => Promise.resolve(bundle(true)), // approved outline, no chapters → a pending write
+    });
+    renderStory();
+    await screen.findByRole('button', { name: 'Write your chapters' });
+    act(() =>
+      useStoryStore.setState({
+        progress: {
+          bookId: 'b1',
+          phase: 'writing',
+          chaptersDone: 0,
+          chaptersTotal: 1,
+          currentTitle: 'The Garage',
+          startedAt: Date.now(),
+          scope: 'chapters',
+        },
+      }),
+    );
+    // The rich progress replaces the button, in place — the overview stays visible (its title still shows).
+    expect(await screen.findByRole('heading', { name: 'Writing your story' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'The Story of Ben' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Write your chapters' })).not.toBeInTheDocument();
   });
 
   it('marks a chapter reviewed from the reader', async () => {

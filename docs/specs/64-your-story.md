@@ -117,6 +117,10 @@ projections), 20/44/62 (Memory, flag-inaccurate loop).
      N/M" sidebar indicator** shows progress from any page, and returning to `/story` shows the live screen.
      The store's `progress` (fed by the stream, subscribed at app level) survives navigation; a failed draft
      lands on the retry state, never a dead-end.
+   - The same real-time progress drives **writing remaining chapters** from the overview (after an approved
+     structural change or a budget stop) — shown **inline** in the overview (`progress.scope: 'chapters'`, a
+     renderer-only flag) rather than a full-screen takeover, so the book stays in view. Single-chapter ops
+     (rewrite one chapter, apply a markup revision) keep their inline button label.
 
 ### 3.3 The Draft view (the control room)
 
@@ -742,3 +746,10 @@ No open questions remain; the spec is Approved and ready for the Phase A slice (
   `onProgress` callback. Mockup approved first (the standard UI-redesign process). Gate green: core 1413 +
   desktop 1258, 5 story E2E ×3 no flake; real-Electron visual QA of the writing screen + sidebar indicator +
   the drafted overview.
+- 2026-07-16 — **Chapter-write progress (testing follow-up; on `feat/story-chapter-progress`).** The plain
+  "Writing your chapters…" button on the overview (the `generateChapters` path — reachable after an approved
+  structural change or a budget stop) now shows the **same rich real-time progress** as create-and-draft:
+  `storyGenerateChapters` streams per-chapter `story:progress` (its ipc handler binds `storySender`), the store
+  seeds/clears `progress` (counts from the current bundle so no "0 of 0" flicker), and it renders **inline** in
+  the overview (a renderer-only `progress.scope: 'create' | 'chapters'` — `create` = full-screen, `chapters` =
+  inline so the overview stays in view and its error handling survives). Real-Electron visual QA confirms it.

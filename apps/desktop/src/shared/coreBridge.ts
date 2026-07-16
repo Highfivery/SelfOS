@@ -4454,8 +4454,25 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           message: 'Turn on AI in Settings to write your story.',
         };
       }
-      const result = await generateBookChapters(deps, bookId);
+      // Stream per-chapter progress (§3.2) so the "Write your chapters" flow shows the same rich screen as
+      // create-and-draft (no reading phase — the outline already exists, so it goes straight to writing).
+      const result = await generateBookChapters(deps, bookId, (p) =>
+        host.emitStoryProgress({
+          bookId,
+          phase: 'writing',
+          chaptersDone: p.chaptersDone,
+          chaptersTotal: p.chaptersTotal,
+          currentTitle: p.title,
+        }),
+      );
       if (!result.ok) {
+        host.emitStoryProgress({
+          bookId,
+          phase: 'error',
+          chaptersDone: 0,
+          chaptersTotal: 0,
+          message: result.message ?? 'Couldn’t write the chapters.',
+        });
         return {
           ok: false,
           reason: result.reason ?? 'ERROR',
@@ -4464,6 +4481,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const bundle = await readBookBundle(deps.fs, deps.key, deps.personId, bookId);
       if (!bundle) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+      host.emitStoryProgress({
+        bookId,
+        phase: 'done',
+        chaptersDone: bundle.chapters.length,
+        chaptersTotal: bundle.chapters.length,
+      });
       return {
         ok: true,
         generated: result.generated,

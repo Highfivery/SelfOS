@@ -146,9 +146,10 @@ export function Story(): JSX.Element {
     );
   }
 
-  // A draft is in progress (§3.2) — the rich, real-time writing screen. It survives navigation (the draft
-  // runs in main; the progress stream keeps this current), so returning to /story shows live progress.
-  if (progress) {
+  // A create-and-draft is in progress (§3.2) — the rich, full-screen writing screen (no book to show yet).
+  // It survives navigation (the draft runs in main; the progress stream keeps this current). The
+  // chapter-write from the overview (`scope: 'chapters'`) shows the SAME progress inline instead (below).
+  if (progress && progress.scope === 'create') {
     return (
       <div className={styles.page}>
         <DraftProgress p={progress} />
@@ -816,6 +817,7 @@ function BookOverview({
   const loadCompleteness = useStoryStore((s) => s.loadCompleteness);
   const runInterviewCheck = useStoryStore((s) => s.runInterviewCheck);
   const update = useStoryStore((s) => s.update);
+  const progress = useStoryStore((s) => s.progress);
   const busy = useStoryStore((s) => s.chaptersGenerating);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -837,6 +839,9 @@ function BookOverview({
   const outlineChapters = outline ? outline.parts.flatMap((p) => p.chapters) : [];
   const writtenIds = new Set(chapters.map((c) => c.id));
   const pending = outlineChapters.filter((c) => !writtenIds.has(c.id)).length;
+  // A chapter-write in progress for THIS book → show the rich progress inline (narrowed non-null for the JSX).
+  const chapterProgress =
+    progress && progress.scope === 'chapters' && progress.bookId === bookId ? progress : null;
 
   return (
     <Stack gap={4}>
@@ -1006,11 +1011,14 @@ function BookOverview({
         </Card>
       ) : null}
 
-      {pending > 0 ? (
+      {chapterProgress ? (
+        // The same rich, real-time progress as create-and-draft, shown INLINE here (keeps the overview in
+        // view; §3.2). Driven by the store's `progress`, streamed from main, so it continues if you leave.
+        <DraftProgress p={chapterProgress} />
+      ) : pending > 0 ? (
         <Inline>
           <Button
             variant="primary"
-            disabled={busy}
             onClick={async () => {
               setError(null);
               const res = await generateChapters(manifest.id);
@@ -1018,11 +1026,9 @@ function BookOverview({
               else if (res.budgetReached && res.message) setError(res.message);
             }}
           >
-            {busy
-              ? 'Writing your chapters…'
-              : chapters.length > 0
-                ? `Write the remaining ${pending} chapter${pending === 1 ? '' : 's'}`
-                : 'Write your chapters'}
+            {chapters.length > 0
+              ? `Write the remaining ${pending} chapter${pending === 1 ? '' : 's'}`
+              : 'Write your chapters'}
           </Button>
         </Inline>
       ) : null}

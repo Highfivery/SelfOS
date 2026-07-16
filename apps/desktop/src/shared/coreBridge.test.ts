@@ -6770,6 +6770,88 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(res.bundle).not.toBeNull();
   });
 
+  it('story: the auto refresh cadence stamps a device-local daily throttle; a manual refresh does not', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.storyGenerateChapters({ bookId });
+
+    // Not stamped yet.
+    expect(host.device().storyRefreshCheckedAt?.[ownerId]).toBeUndefined();
+    // An auto refresh runs + stamps the per-person daily-throttle marker.
+    await bridge.storyRefreshCheck({ bookId, auto: true });
+    const stamp = host.device().storyRefreshCheckedAt?.[ownerId];
+    expect(stamp).toBeTruthy();
+    // A second auto refresh within the day is throttled (no-op) — the stamp is unchanged.
+    await bridge.storyRefreshCheck({ bookId, auto: true });
+    expect(host.device().storyRefreshCheckedAt?.[ownerId]).toBe(stamp);
+    // A manual "Refresh now" never touches the throttle stamp.
+    await bridge.storyRefreshCheck({ bookId, auto: false });
+    expect(host.device().storyRefreshCheckedAt?.[ownerId]).toBe(stamp);
+  });
+
+  it('story: recurring crisis suppresses the AUTO rewrite (host-side, §8) but a manual refresh still rewrites', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const ctx = (await host.host.vaultAndKey())!;
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+
+    // Induce a stale chapter (a rewrite candidate) via an exclusion.
+    const excluded = await bridge.storyExclude({ bookId, kind: 'topic', value: 'warm oil' });
+    expect(excluded.bundle.chapters.find((c) => c.id === chapterId)?.status).toBe('stale');
+
+    // Seed a recurring-crisis signal (≥2 approved crisis flags in 14 days) on the person's OWN insights.
+    const seedCrisis = (id: string): Promise<void> =>
+      saveInsight(ctx.fs, ctx.key, {
+        id,
+        schemaVersion: 1,
+        source: 'session',
+        subjectPersonId: ownerId,
+        summary: `hard week ${id}`,
+        facts: [],
+        confidence: 'medium',
+        categories: ['Emotions & patterns'],
+        approved: true,
+        crisisFlag: true,
+        provenance: { conversationId: id, at: new Date().toISOString() },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    await seedCrisis('x1');
+    await seedCrisis('x2');
+
+    // The AUTO cadence must NOT spend during recurring distress — the stale chapter stays stale, nothing rewrites.
+    const auto = await bridge.storyRefreshCheck({ bookId, auto: true });
+    expect(auto.rewritten).toBe(0);
+    expect(auto.bundle?.chapters.find((c) => c.id === chapterId)?.status).toBe('stale');
+
+    // A manual "Refresh now" is user-initiated (crisis is not computed) — it rewrites the stale chapter.
+    const manual = await bridge.storyRefreshCheck({ bookId, auto: false });
+    expect(manual.rewritten).toBeGreaterThan(0);
+    expect(manual.bundle?.chapters.find((c) => c.id === chapterId)?.status).not.toBe('stale');
+  });
+
   it('story: markup + refresh ops are denied for a person without story.own', async () => {
     const { bridge } = await freshOwner();
     // A Guest role has no story.own.

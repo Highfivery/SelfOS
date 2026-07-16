@@ -15,6 +15,7 @@ import {
 } from '../../../design-system/components';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryStore } from '../../../stores/storyStore';
+import { useStoryRefresh } from '../../notifications/useStoryRefresh';
 import type {
   BookConfig,
   BookOutline,
@@ -70,6 +71,10 @@ export function Story(): JSX.Element {
   const [mode, setMode] = useState<'idle' | 'setup'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [reading, setReading] = useState<string | null>(null); // the open chapter's id, or null
+
+  // The automatic living-book refresh cadence (§3.4) — nudges the bridge (daily-throttled + capped) for the
+  // open book if its autoRefresh is on. Silent: it just re-stamps stale badges / weaves in new material.
+  useStoryRefresh(bundle?.manifest.id ?? null, bundle?.manifest.config.autoRefresh ?? false);
 
   useEffect(() => {
     void load();

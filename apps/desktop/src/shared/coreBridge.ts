@@ -4516,13 +4516,27 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return { ok: true, markup, assignmentId: res.assignmentId };
     },
     storyRefreshCheck: async (input): Promise<StoryRefreshViewResult> => {
-      const { bookId, auto, crisis } = StoryRefreshInputSchema.parse(input);
+      const { bookId, auto } = StoryRefreshInputSchema.parse(input);
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
         return { staled: 0, rewritten: 0, bundle: null };
       }
       const personId = await activePersonId();
       if (!personId) return { staled: 0, rewritten: 0, bundle: null };
+
+      const now = new Date();
+      const DAY_MS = 24 * 60 * 60 * 1000;
+      // The AUTO cadence throttles to once per device-local day — a manual "Refresh now" is never throttled.
+      if (auto) {
+        const last = (await host.readDeviceState()).storyRefreshCheckedAt?.[personId];
+        if (last && now.getTime() - Date.parse(last) < DAY_MS) {
+          return {
+            staled: 0,
+            rewritten: 0,
+            bundle: await readBookBundle(ctx.fs, ctx.key, personId, bookId),
+          };
+        }
+      }
 
       // Marking stale is free + always runs; the auto-rewrite needs a real key + AI on + budget (refreshBook).
       // With AI off OR no key, just mark stale so the badges still update — never run the rewrite loop (which
@@ -4535,6 +4549,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       let capped: boolean | undefined;
       let budgetReached: boolean | undefined;
       if (deps && aiReady) {
+        // The auto cadence never spends during recurring distress (§8) — computed HOST-SIDE from the person's
+        // own approved insights, so it doesn't depend on the renderer having loaded anything.
+        let crisis = false;
+        if (auto) {
+          const own = (await listInsightsForPerson(ctx.fs, ctx.key, personId)).filter(
+            (i) => i.approved,
+          );
+          crisis = aggregateCrisisSignal({ insights: own, nightmareNudge: false, now }).recurring;
+        }
         const res = await refreshBook(deps, {
           bookId,
           auto: auto ?? false,
@@ -4546,6 +4569,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         budgetReached = res.budgetReached;
       } else {
         staled = await markStaleChapters(ctx.fs, ctx.key, personId, bookId);
+      }
+
+      // Stamp the auto-cadence throttle after a run (a manual refresh never touches it).
+      if (auto) {
+        const device = await host.readDeviceState();
+        await host.updateDeviceState({
+          storyRefreshCheckedAt: { ...device.storyRefreshCheckedAt, [personId]: now.toISOString() },
+        });
       }
       const bundle = await readBookBundle(ctx.fs, ctx.key, personId, bookId);
       return {

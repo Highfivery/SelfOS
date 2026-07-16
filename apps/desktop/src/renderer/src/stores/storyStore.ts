@@ -42,12 +42,10 @@ interface StoryState {
   generateChapters: (bookId: string) => Promise<StoryChaptersResult>;
   regenerateChapter: (bookId: string, chapterId: string) => Promise<StoryChaptersResult>;
   reviewChapter: (bookId: string, chapterId: string) => Promise<boolean>;
-  /** The living-book refresh pass (§3.4): mark stale + auto-rewrite. `auto` = the throttled cadence; omit for
-   *  a manual "Refresh now" (uncapped). Sets the fresh bundle. */
-  refreshBook: (
-    bookId: string,
-    opts?: { auto?: boolean; crisis?: boolean },
-  ) => Promise<StoryRefreshViewResult>;
+  /** The living-book refresh pass (§3.4): mark stale + auto-rewrite. `auto` = the throttled launch/focus cadence
+   *  (silent: never shows the busy state, only re-sets the bundle when something actually changed); omit for a
+   *  manual "Refresh now" (uncapped, shows the busy state). */
+  refreshBook: (bookId: string, opts?: { auto?: boolean }) => Promise<StoryRefreshViewResult>;
   /** The open chapter's markup layer (the suggestion layer), or null. The reader loads it per chapter. */
   markup: ChapterMarkup | null;
   loadMarkup: (bookId: string, chapterId: string) => Promise<void>;
@@ -196,6 +194,14 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     return bundle !== null;
   },
   refreshBook: async (bookId, opts) => {
+    // The auto cadence runs silently — never flash the busy controls, and only re-set the bundle when a pass
+    // actually staled/rewrote something (a throttled no-op must not churn the UI, matching insightStore.autoReconcile).
+    if (opts?.auto) {
+      const res =
+        (await window.selfos?.storyRefreshCheck({ bookId, auto: true })) ?? REFRESH_NOT_AVAILABLE;
+      if (res.bundle && (res.rewritten > 0 || res.staled > 0)) set({ bundle: res.bundle });
+      return res;
+    }
     set({ chaptersGenerating: true });
     try {
       const res =

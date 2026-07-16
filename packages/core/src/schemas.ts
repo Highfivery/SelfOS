@@ -4012,10 +4012,9 @@ export type StoryQuestionsResult =
 
 /** `story:refreshCheck` — the living-book pass (§3.4): mark stale chapters (free) + auto-rewrite them (metered,
  *  weekly-capped in the auto cadence). `auto` distinguishes the throttled launch/focus cadence from a manual
- *  "Refresh now"; `crisis` suppresses the auto rewrite. */
+ *  "Refresh now". Crisis suppression of the auto rewrite is computed host-side (never renderer-supplied). */
 export const StoryRefreshInputSchema = StoryBookRefSchema.extend({
   auto: z.boolean().optional(),
-  crisis: z.boolean().optional(),
 });
 export type StoryRefreshInput = z.infer<typeof StoryRefreshInputSchema>;
 

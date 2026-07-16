@@ -13,7 +13,18 @@ import type {
 } from '@shared/schemas';
 import { Story, buildAnchor, countApplicable } from './Story';
 import { useStoryStore } from '../../../stores/storyStore';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
+
+const ACTIVE_PERSON = {
+  id: 'me',
+  schemaVersion: 2 as const,
+  displayName: 'Ben',
+  isSubject: true,
+  tags: [],
+  createdAt: 'now',
+  updatedAt: 'now',
+};
 
 const BOOK_TYPES: StoryBookTypeView[] = [
   {
@@ -113,6 +124,7 @@ function renderStory(): void {
 afterEach(() => {
   clearMockBridge();
   useStoryStore.getState().reset();
+  useSessionStore.setState({ activePerson: null });
 });
 
 describe('Story (64)', () => {
@@ -615,6 +627,25 @@ describe('Story (64)', () => {
     renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     expect(await screen.findByText(/1 change ready to apply/)).toBeInTheDocument();
+  });
+
+  it('auto-refreshes the open book on mount (the living-book cadence)', async () => {
+    const storyRefreshCheck = vi.fn(() =>
+      Promise.resolve({ staled: 0, rewritten: 0, bundle: writtenBundle('new') }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')), // autoRefresh is on in the fixture
+      storyRefreshCheck,
+    });
+    useSessionStore.setState({ activePerson: ACTIVE_PERSON }); // the cadence is per active person
+    renderStory();
+    await screen.findByRole('heading', { name: 'The Story of Ben' });
+    // The cadence hook nudged the bridge with auto:true (the bridge owns the real daily throttle).
+    await waitFor(() =>
+      expect(storyRefreshCheck).toHaveBeenCalledWith(expect.objectContaining({ auto: true })),
+    );
   });
 
   it('refreshes the book from what’s new and reports what changed', async () => {

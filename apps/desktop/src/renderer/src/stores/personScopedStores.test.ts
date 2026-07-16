@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { useConversationStore } from './conversationStore';
 import { useBudgetStore } from './budgetStore';
 import { useUsageStore } from './usageStore';
+import { useStoryStore } from './storyStore';
 
 /**
  * On an account switch the active person changes; person-scoped stores must drop the prior account's
@@ -13,6 +14,7 @@ afterEach(() => {
   useConversationStore.getState().reset();
   useBudgetStore.getState().reset();
   useUsageStore.getState().reset();
+  useStoryStore.getState().reset();
 });
 
 describe('person-scoped store resets', () => {
@@ -54,6 +56,48 @@ describe('person-scoped store resets', () => {
     const s = useUsageStore.getState();
     expect(s.selectedPersonId).toBeNull();
     expect(s.summary).toBeNull();
+    expect(s.loaded).toBe(false);
+  });
+
+  it('storyStore.reset clears the books + the open book bundle (64 §5.7)', () => {
+    useStoryStore.setState({
+      books: [
+        {
+          id: 'b1',
+          schemaVersion: 1,
+          personId: 'me',
+          type: 'biography',
+          title: 'X',
+          config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+          status: 'outlining',
+          sharedWith: [],
+          createdAt: 'now',
+          updatedAt: 'now',
+        },
+      ],
+      bundle: {
+        manifest: {
+          id: 'b1',
+          schemaVersion: 1,
+          personId: 'me',
+          type: 'biography',
+          title: 'X',
+          config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+          status: 'outlining',
+          sharedWith: [],
+          createdAt: 'now',
+          updatedAt: 'now',
+        },
+        outline: null,
+        timeline: null,
+        chapters: [],
+      },
+      loaded: true,
+    });
+    useStoryStore.getState().reset();
+    const s = useStoryStore.getState();
+    expect(s.books).toEqual([]);
+    expect(s.bundle).toBeNull();
     expect(s.loaded).toBe(false);
   });
 });

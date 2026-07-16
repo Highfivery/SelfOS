@@ -216,6 +216,51 @@ export function webFakeClaudeClient(): ClaudeClient {
           usage: { inputTokens: 180, outputTokens: 70, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      // Your Story foundations (64 §5.3) asks to "plan a biography of" — return a valid foundations JSON so
+      // the preview renders the full create → outline-review flow. Must precede the generic JSON-object branch.
+      if (userText.includes('plan a biography of')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            essence:
+              'The story of a quiet man who spent thirty years learning that the machines he loved were easier to understand than the people he loved — and slowly learned to speak to both.',
+            timeline: [
+              { label: 'Born in Ohio', date: '1985' },
+              { label: 'The move to Denver', approx: 'mid-2010s' },
+            ],
+            outline: {
+              parts: [
+                {
+                  title: 'Roots',
+                  chapters: [
+                    {
+                      title: 'The Garage on Linden Street',
+                      brief:
+                        'A Saturday at nine, learning at his father’s lathe that a machine does exactly what you tell it — and nothing you don’t.',
+                      lifeAreas: ['Family'],
+                    },
+                    {
+                      title: 'What the House Held',
+                      brief: 'The quiet that settled over the family when the light went.',
+                      lifeAreas: ['Family', 'Emotions & patterns'],
+                    },
+                  ],
+                },
+                {
+                  title: 'Leaving',
+                  chapters: [
+                    {
+                      title: 'The Year Everything Moved',
+                      brief: 'A move west, and the first time distance felt like a decision.',
+                      lifeAreas: ['Work & purpose'],
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+          usage: { inputTokens: 200, outputTokens: 300, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // The dream-analysis synthesis turn asks for a single JSON object (12-dreams §3.2) — return a
       // valid DreamAnalysis draft so the preview can render the full synthesis card; every other turn
       // streams the canned reflective reply.

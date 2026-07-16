@@ -412,6 +412,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storySuggestPlacement, bridge.storySuggestPlacement);
   handle(IpcChannels.storySetPlacement, bridge.storySetPlacement);
   handle(IpcChannels.storyRemovePlacement, bridge.storyRemovePlacement);
+  handle(IpcChannels.storyReadSharedImage, bridge.storyReadSharedImage);
   handle(IpcChannels.relationshipsGetSynthesis, bridge.relationshipsGetSynthesis);
   handle(IpcChannels.relationshipsSynthesize, bridge.relationshipsSynthesize);
   handle(IpcChannels.challengesStart, bridge.challengesStart);

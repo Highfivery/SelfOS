@@ -72,6 +72,12 @@ function publishedManifestPath(personId: string, bookId: string): string {
 function publishedChapterPath(personId: string, bookId: string, chapterId: string): string {
   return `${publishedDir(personId, bookId)}/${chapterId}.enc`;
 }
+function publishedImagesDir(personId: string, bookId: string): string {
+  return `${publishedDir(personId, bookId)}/images`;
+}
+function publishedImageBytesPath(personId: string, bookId: string, imageId: string): string {
+  return `${publishedImagesDir(personId, bookId)}/${imageId}.enc`;
+}
 function markupPath(personId: string, bookId: string, chapterId: string): string {
   return `${bookDir(personId, bookId)}/markup/${chapterId}.enc`;
 }
@@ -624,6 +630,59 @@ export async function removeStoryImage(
   const next = index.images.filter((img) => img.id !== imageId);
   if (next.length !== index.images.length) {
     await saveStoryImageIndex(fs, key, personId, bookId, { ...index, images: next });
+  }
+}
+
+// --- Published images (§3.8) — frozen bytes the reader/export use ---------------------------------------
+
+/** Snapshot a draft image's bytes into the published head (`published/images/<id>.enc`) so a later draft edit
+ *  never changes the shared book. No-op if the draft image is missing. */
+export async function snapshotPublishedImage(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  imageId: string,
+): Promise<void> {
+  const bytes = await getStoryImageBytes(fs, key, personId, bookId, imageId);
+  if (!bytes) return;
+  const envelope = await encryptBytes(bytes, key);
+  await fs.writeAtomic(
+    publishedImageBytesPath(personId, bookId, imageId),
+    new TextEncoder().encode(JSON.stringify(envelope)),
+  );
+}
+
+/** Read a PUBLISHED image's bytes (the frozen snapshot); null if absent/unreadable. */
+export async function getPublishedImageBytes(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  imageId: string,
+): Promise<Uint8Array | null> {
+  const raw = await fs.read(publishedImageBytesPath(personId, bookId, imageId));
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(raw));
+    if (!isEncryptedEnvelope(parsed)) return null;
+    return await decryptBytes(parsed, key);
+  } catch {
+    return null;
+  }
+}
+
+/** Remove any published image no longer referenced by the new published head. */
+export async function prunePublishedImages(
+  fs: FileSystem,
+  personId: string,
+  bookId: string,
+  keepIds: Set<string>,
+): Promise<void> {
+  for (const name of await fs.list(publishedImagesDir(personId, bookId))) {
+    if (!name.endsWith('.enc')) continue;
+    const id = name.slice(0, -'.enc'.length);
+    if (!keepIds.has(id)) await fs.remove(`${publishedImagesDir(personId, bookId)}/${name}`);
   }
 }
 

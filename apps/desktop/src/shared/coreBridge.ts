@@ -181,6 +181,7 @@ import {
   StoryPinInputSchema,
   StoryInterviewCheckInputSchema,
   StoryReadSharedInputSchema,
+  StoryReadSharedImageInputSchema,
   StoryReaderGrantInputSchema,
   StoryRefreshInputSchema,
   StoryRemoveMarkInputSchema,
@@ -433,6 +434,7 @@ import {
   publishBook,
   readBookBundle,
   readSharedBook,
+  readSharedImage,
   refreshBook,
   removeExclusion,
   resolveProposal,
@@ -4789,6 +4791,22 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return null;
       // The core re-gates on every read (published + still granted) — the viewer is the active person.
       return readSharedBook(ctx.fs, ctx.key, personId, authorPersonId, bookId);
+    },
+    storyReadSharedImage: async (input): Promise<{ mime: string; dataBase64: string } | null> => {
+      const { authorPersonId, bookId, imageId } = StoryReadSharedImageInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const image = await readSharedImage(
+        ctx.fs,
+        ctx.key,
+        personId,
+        authorPersonId,
+        bookId,
+        imageId,
+      );
+      return image ? { mime: image.mime, dataBase64: toBase64(image.bytes) } : null;
     },
     storyExportMarkdown: async (input): Promise<string | null> => {
       const { bookId } = StoryBookRefSchema.parse(input);

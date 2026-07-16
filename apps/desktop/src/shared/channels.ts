@@ -342,6 +342,7 @@ export const IpcChannels = {
   storyReaderFeatured: 'story:readerFeatured',
   storySharedBooks: 'story:sharedBooks',
   storyReadShared: 'story:readShared',
+  storyReadSharedImage: 'story:readSharedImage',
   storyExportMarkdown: 'story:exportMarkdown',
   storyExportPdf: 'story:exportPdf',
   storyImages: 'story:images',
@@ -1140,6 +1141,12 @@ export interface SelfosBridge {
   storySharedBooks(): Promise<SharedBookSummary[]>;
   /** Read a book shared with the active person — the PUBLISHED head only (§3.6), re-gated; null if access is gone. */
   storyReadShared(input: StoryReadSharedInput): Promise<StoryReaderView | null>;
+  /** A granted reader fetches one PUBLISHED image's bytes (base64) for the reader view (§3.8). Re-gated. */
+  storyReadSharedImage(input: {
+    authorPersonId: string;
+    bookId: string;
+    imageId: string;
+  }): Promise<{ mime: string; dataBase64: string } | null>;
   /** Export the book's PUBLISHED head as a Markdown file OUTSIDE the encrypted vault (§3.9) — a save dialog.
    *  Returns the saved path, or null (book not published yet, or the dialog was cancelled). Gated `story.own`,
    *  author-scoped. */

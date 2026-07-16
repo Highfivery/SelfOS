@@ -7356,4 +7356,37 @@ describe('createCoreBridge — Together (58) foundation', () => {
     chapter = bundle?.chapters.find((c) => c.id === chapterId);
     expect(chapter?.imagePlacements).toEqual([]);
   });
+
+  it('story: a published book embeds its cover as an inline data URI in the Markdown export (§3.8)', async () => {
+    const { bridge, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.secretSet({ id: OPENAI_API_KEY_ID, value: 'sk-openai' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    await bridge.setSetting({ key: 'dreams.imageGenerationEnabled', value: true, scope: 'vault' });
+    const saved: { name: string; bytes: Uint8Array }[] = [];
+    host.host.saveImageFile = (name, bytes) => {
+      saved.push({ name, bytes });
+      return Promise.resolve(`/exports/${name}`);
+    };
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    await bridge.storyReviewChapter({ bookId, chapterId: chapters.bundle.chapters[0]!.id });
+
+    // Make a cover (the test host's fake image client returns a tiny PNG), then publish + export.
+    const cover = await bridge.storyGenerateImage({ bookId, target: { kind: 'cover' } });
+    if (!cover.ok) throw new Error('cover failed');
+    await bridge.storyPublish({ bookId });
+    await bridge.storyExportMarkdown({ bookId });
+    const md = new TextDecoder().decode(saved.at(-1)!.bytes);
+    expect(md).toContain('![Cover](data:image/png;base64,'); // the frozen cover is embedded inline
+  });
 });

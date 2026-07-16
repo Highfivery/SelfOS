@@ -14,13 +14,17 @@ import {
   getBook,
   getOutline,
   getPublishedChapter,
+  getPublishedImageBytes,
   getPublishedManifest,
+  getStoryImageIndex,
   listBooks,
   listChapters,
   prunePublishedChapters,
+  prunePublishedImages,
   saveManifest,
   savePublishedChapter,
   savePublishedManifest,
+  snapshotPublishedImage,
 } from './storyService';
 
 /**
@@ -111,6 +115,18 @@ export async function publishBook(
   const byId = new Map(reviewed.map((c) => [c.id, c]));
   const publishedChapters = chapterOrder.map((id) => byId.get(id)!).filter(Boolean);
 
+  // Freeze every image the published head references — the cover + every placement in a PUBLISHED chapter — so
+  // the shared book/export never changes when the draft images do (§3.8). Snapshot the bytes + record metadata.
+  const index = await getStoryImageIndex(fs, key, personId, bookId);
+  const referenced = new Set<string>();
+  if (book.coverImageId) referenced.add(book.coverImageId);
+  for (const c of publishedChapters) {
+    for (const pl of c.imagePlacements) referenced.add(pl.imageId);
+  }
+  for (const id of referenced) await snapshotPublishedImage(fs, key, personId, bookId, id);
+  await prunePublishedImages(fs, personId, bookId, referenced);
+  const images = index.images.filter((img) => referenced.has(img.id));
+
   const publishedManifest: PublishedManifest = {
     schemaVersion: 1,
     publishedAt: now.toISOString(),
@@ -121,6 +137,7 @@ export async function publishBook(
     noteOnBook: noteOnBook(publishedChapters),
     parts,
     chapterOrder,
+    images,
   };
   await savePublishedManifest(fs, key, personId, bookId, publishedManifest);
   await saveManifest(fs, key, {
@@ -257,8 +274,15 @@ export async function readSharedBook(
     const chapter = await getPublishedChapter(fs, key, authorPersonId, bookId, id);
     // Project the MINIMAL reader shape — never the raw BookChapter (its provenance names the author's private
     // sources; it must not cross to a reader, even unrendered — the cross-person "project a minimal shape" rule).
+    // `imagePlacements` IS safe to project (imageId/anchor/caption only) — the bytes come through the re-gated
+    // `readSharedImage`.
     if (chapter)
-      chapters.push({ id: chapter.id, title: chapter.title, markdown: chapter.markdown });
+      chapters.push({
+        id: chapter.id,
+        title: chapter.title,
+        markdown: chapter.markdown,
+        imagePlacements: chapter.imagePlacements,
+      });
   }
   const author = await getPerson(fs, key, authorPersonId);
   return {
@@ -268,4 +292,27 @@ export async function readSharedBook(
     manifest,
     chapters,
   };
+}
+
+/**
+ * Serve a PUBLISHED image's bytes to a granted reader (§3.6) — re-gated on every read (the book must still be
+ * published, the viewer still in `sharedWith`, and the image must belong to the published head). Null otherwise.
+ * The reader never touches the draft images; only the frozen `published/images/` snapshot.
+ */
+export async function readSharedImage(
+  fs: FileSystem,
+  key: Uint8Array,
+  viewerPersonId: string,
+  authorPersonId: string,
+  bookId: string,
+  imageId: string,
+): Promise<{ bytes: Uint8Array; mime: string } | null> {
+  if (authorPersonId === viewerPersonId) return null;
+  const book = await getBook(fs, key, authorPersonId, bookId);
+  if (!book || !book.publishedAt || !book.sharedWith.includes(viewerPersonId)) return null;
+  const manifest = await getPublishedManifest(fs, key, authorPersonId, bookId);
+  const entry = manifest?.images.find((i) => i.id === imageId);
+  if (!entry) return null; // not part of the published head
+  const bytes = await getPublishedImageBytes(fs, key, authorPersonId, bookId, imageId);
+  return bytes ? { bytes, mime: entry.mime } : null;
 }

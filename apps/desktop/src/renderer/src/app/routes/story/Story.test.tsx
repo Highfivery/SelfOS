@@ -864,8 +864,10 @@ describe('Story (64)', () => {
         title: 'The Life of Ben',
         matter: { dedication: 'For my mother' },
         noteOnBook: 'This book was written from 3 coaching insights — never invented.',
+        coverImageId: 'cov1',
         parts: [{ id: 'p1', title: 'Roots', chapterIds: ['c1'] }],
         chapterOrder: ['c1'],
+        images: [{ id: 'cov1', kind: 'cover' as const, mime: 'image/png', createdAt: 'now' }],
       },
       chapters: [
         {
@@ -901,12 +903,18 @@ describe('Story (64)', () => {
           },
         ]),
       storyReadShared: () => Promise.resolve(readerView),
+      storyReadSharedImage: () => Promise.resolve({ mime: 'image/png', dataBase64: 'AAAA' }),
     });
     renderStory();
     expect(await screen.findByText('Shared with you')).toBeInTheDocument();
     expect(screen.getByText(/By Ben · 1 chapter/)).toBeInTheDocument();
     // Open it → the reader view renders the published head (prose + front matter + the honesty page).
     await userEvent.click(screen.getByRole('button', { name: /The Life of Ben/ }));
+    // The cover image (fetched via the re-gated readSharedImage) renders on the cover page.
+    expect(await screen.findByAltText('Cover')).toHaveAttribute(
+      'src',
+      'data:image/png;base64,AAAA',
+    );
     expect(await screen.findByText('The garage smelled of cut pine.')).toBeInTheDocument();
     expect(screen.getByText('For my mother')).toBeInTheDocument();
     expect(screen.getByText(/never invented/)).toBeInTheDocument();

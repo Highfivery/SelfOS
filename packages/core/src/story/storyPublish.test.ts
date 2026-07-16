@@ -14,8 +14,10 @@ import {
   noteOnBook,
   publishBook,
   readSharedBook,
+  readSharedImage,
   revokeReader,
 } from './storyPublish';
+import { setImagePlacement } from './storyPlacementService';
 import {
   bookToHtml,
   bookToMarkdown,
@@ -25,11 +27,13 @@ import {
 } from './storyExport';
 import type { PublishedManifest } from '../schemas';
 import {
+  addUploadedPhoto,
   applyFoundations,
   approveOutline,
   createBook,
   getBook,
   getChapter,
+  getPublishedImageBytes,
   saveChapter,
 } from './storyService';
 
@@ -156,8 +160,14 @@ describe('publishBook (64 §3.5)', () => {
     const originalProse = view!.chapters[0]!.markdown;
     expect(view?.manifest.title).toBe('The Story of Ben');
     expect(view?.manifest.noteOnBook).toContain('never invented');
-    // The reader gets the MINIMAL shape only — the author's per-paragraph source provenance never crosses.
-    expect(Object.keys(view!.chapters[0]!).sort()).toEqual(['id', 'markdown', 'title']);
+    // The reader gets the MINIMAL shape only — `imagePlacements` is safe to project (imageId/anchor/caption,
+    // no private provenance), but the author's per-paragraph source provenance must NEVER cross.
+    expect(Object.keys(view!.chapters[0]!).sort()).toEqual([
+      'id',
+      'imagePlacements',
+      'markdown',
+      'title',
+    ]);
     expect('provenance' in view!.chapters[0]!).toBe(false);
 
     // Edit the DRAFT c1 after publishing — the reader's head is unchanged (snapshot isolation).
@@ -271,9 +281,15 @@ describe('export (64 §3.9)', () => {
       noteOnBook: 'Drawn from your record — never invented.',
       parts: [{ id: 'p1', title: 'Roots', chapterIds: ['c1'] }],
       chapterOrder: ['c1'],
+      images: [],
     };
     const md = bookToMarkdown(manifest, [
-      { id: 'c1', title: 'The Garage', markdown: 'The garage smelled of pine.' },
+      {
+        id: 'c1',
+        title: 'The Garage',
+        markdown: 'The garage smelled of pine.',
+        imagePlacements: [],
+      },
     ]);
     expect(md).toContain('# The Story of Ben');
     expect(md).toContain('> Begin.');
@@ -305,6 +321,7 @@ describe('export (64 §3.9)', () => {
       noteOnBook: 'Drawn from your record — never invented.',
       parts: [{ id: 'p1', title: 'Roots', chapterIds: ['c1'] }],
       chapterOrder: ['c1'],
+      images: [],
     };
     const html = bookToHtml(manifest, [
       // a hostile chapter: raw HTML + bold/italic; escaping must neutralize the tag but keep the formatting
@@ -312,6 +329,7 @@ describe('export (64 §3.9)', () => {
         id: 'c1',
         title: 'The Garage',
         markdown: 'The **garage** smelled <script>alert(1)</script> of *pine*.',
+        imagePlacements: [],
       },
     ]);
     expect(html.startsWith('<!doctype html>')).toBe(true);
@@ -335,5 +353,75 @@ describe('export (64 §3.9)', () => {
     const built = await buildPublishedHtml(fs, key, 'author', bookId);
     expect(built?.title).toBe('The Story of Ben');
     expect(built?.html).toContain('<h3>The Garage</h3>');
+  });
+
+  it('embeds the cover + placed images as inline data URIs (§3.8)', () => {
+    const manifest: PublishedManifest = {
+      schemaVersion: 1,
+      publishedAt: 'now',
+      title: 'The Story of Ben',
+      coverImageId: 'cov',
+      parts: [{ id: 'p1', title: 'Roots', chapterIds: ['c1'] }],
+      chapterOrder: ['c1'],
+      images: [
+        { id: 'cov', kind: 'cover', mime: 'image/png', createdAt: 'now' },
+        { id: 'ph1', kind: 'uploaded', mime: 'image/jpeg', createdAt: 'now' },
+      ],
+    };
+    const chapters = [
+      {
+        id: 'c1',
+        title: 'The Garage',
+        markdown: 'Para one.\n\nPara two.',
+        imagePlacements: [{ imageId: 'ph1', afterAnchor: 'p0', caption: 'The garage' }],
+      },
+    ];
+    const images = {
+      cov: { mime: 'image/png', base64: 'AAAA' },
+      ph1: { mime: 'image/jpeg', base64: 'BBBB' },
+    };
+    const md = bookToMarkdown(manifest, chapters, images);
+    expect(md).toContain('![Cover](data:image/png;base64,AAAA)');
+    expect(md).toContain('![The garage](data:image/jpeg;base64,BBBB)');
+    const html = bookToHtml(manifest, chapters, images);
+    expect(html).toContain('<img class="coverImg" src="data:image/png;base64,AAAA"');
+    expect(html).toContain('<figure class="placed"><img src="data:image/jpeg;base64,BBBB"');
+    expect(html).toContain('<figcaption>The garage</figcaption>');
+  });
+});
+
+describe('published image snapshot + shared read (§3.8)', () => {
+  it('freezes referenced image bytes at publish and serves them to a granted reader, re-gated', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    // Place an uploaded photo in the reviewed chapter c1 (c2 is not reviewed → not published).
+    const photo = await addUploadedPhoto(
+      fs,
+      key,
+      'author',
+      bookId,
+      { bytes: new Uint8Array([1, 2, 3, 4]), mime: 'image/png' },
+      now,
+    );
+    await setImagePlacement(fs, key, 'author', bookId, 'c1', {
+      imageId: photo.id,
+      afterAnchor: 'p0',
+    });
+
+    await publishBook(fs, key, 'author', bookId, now);
+    // The bytes are frozen in the published head + recorded on the manifest.
+    expect(await getPublishedImageBytes(fs, key, 'author', bookId, photo.id)).toEqual(
+      new Uint8Array([1, 2, 3, 4]),
+    );
+
+    // A granted reader can read the published image; a stranger / a revoked reader cannot.
+    await grantReader(fs, key, 'author', bookId, 'reader', now);
+    const served = await readSharedImage(fs, key, 'reader', 'author', bookId, photo.id);
+    expect(served?.mime).toBe('image/png');
+    expect(Array.from(served!.bytes)).toEqual([1, 2, 3, 4]);
+    expect(await readSharedImage(fs, key, 'stranger', 'author', bookId, photo.id)).toBeNull();
+
+    await revokeReader(fs, key, 'author', bookId, 'reader', now);
+    expect(await readSharedImage(fs, key, 'reader', 'author', bookId, photo.id)).toBeNull();
   });
 });

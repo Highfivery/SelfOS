@@ -1414,8 +1414,29 @@ function SharedReaderView({
   view: StoryReaderView;
   onBack: () => void;
 }): JSX.Element {
-  const { manifest, chapters, authorName } = view;
+  const { manifest, chapters, authorName, authorPersonId, bookId } = view;
   const chapterById = new Map(chapters.map((c) => [c.id, c]));
+
+  // Fetch the published image bytes as data URLs (re-gated per read), keyed by image id.
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const needed = new Set<string>();
+    if (manifest.coverImageId) needed.add(manifest.coverImageId);
+    for (const c of chapters) for (const pl of c.imagePlacements) needed.add(pl.imageId);
+    let cancelled = false;
+    void (async () => {
+      for (const imageId of needed) {
+        const img = await window.selfos?.storyReadSharedImage({ authorPersonId, bookId, imageId });
+        if (!cancelled && img) {
+          setUrls((u) => ({ ...u, [imageId]: `data:${img.mime};base64,${img.dataBase64}` }));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authorPersonId, bookId, manifest.coverImageId, chapters]);
+
   return (
     <Stack gap={4}>
       <Inline>
@@ -1425,6 +1446,9 @@ function SharedReaderView({
       </Inline>
       <div className={styles.readerView}>
         <div className={styles.coverPage}>
+          {manifest.coverImageId && urls[manifest.coverImageId] ? (
+            <img className={styles.coverImage} src={urls[manifest.coverImageId]} alt="Cover" />
+          ) : null}
           <Heading level={1}>{manifest.title}</Heading>
           <Text tone="secondary">by {authorName}</Text>
         </div>
@@ -1465,10 +1489,25 @@ function SharedReaderView({
             {part.chapterIds.map((id) => {
               const c = chapterById.get(id);
               if (!c) return null;
+              const paras = splitParagraphs(c.markdown);
               return (
                 <article key={id} className={styles.readerChapter}>
                   <Heading level={3}>{c.title}</Heading>
-                  <Markdown>{c.markdown}</Markdown>
+                  {paras.map((para, pi) => (
+                    <div key={pi}>
+                      <Markdown>{para}</Markdown>
+                      {c.imagePlacements
+                        .filter((pl) => pl.afterAnchor === `p${pi}`)
+                        .map((pl) =>
+                          urls[pl.imageId] ? (
+                            <figure key={pl.imageId} className={styles.placedImage}>
+                              <img src={urls[pl.imageId]} alt={pl.caption || 'Book image'} />
+                              {pl.caption ? <figcaption>{pl.caption}</figcaption> : null}
+                            </figure>
+                          ) : null,
+                        )}
+                    </div>
+                  ))}
                 </article>
               );
             })}

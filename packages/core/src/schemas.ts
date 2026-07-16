@@ -3666,6 +3666,10 @@ export const PublishedManifestSchema = z.object({
   parts: z.array(PublishedPartSchema).default([]),
   /** A flat, ordered list of the published chapter ids (drives read-progress + "what's new"). */
   chapterOrder: z.array(z.string()).default([]),
+  /** Snapshot metadata for every image referenced by the published head (cover + placements, §3.8). The bytes
+   *  live in `published/images/<id>.enc` — frozen at publish so a later draft edit never changes the shared book.
+   *  `z.lazy` because `StoryImageEntrySchema` is declared further down this file. */
+  images: z.array(z.lazy(() => StoryImageEntrySchema)).default([]),
 });
 export type PublishedManifest = z.infer<typeof PublishedManifestSchema>;
 
@@ -4096,6 +4100,14 @@ export type StoryPlacementSuggestResult =
   | { ok: true; afterAnchor: string }
   | { ok: false; reason: string; message: string };
 
+/** `story:readSharedImage` — a granted reader fetches one PUBLISHED image's bytes (§3.8, re-gated per read). */
+export const StoryReadSharedImageInputSchema = z.object({
+  authorPersonId: z.string().min(1),
+  bookId: z.string().min(1),
+  imageId: z.string().min(1),
+});
+export type StoryReadSharedImageInput = z.infer<typeof StoryReadSharedImageInputSchema>;
+
 /** `story:saveOutline` / `story:approveOutline` — the (possibly edited) outline during review. */
 export const StoryOutlineInputSchema = z.object({
   bookId: z.string().min(1),
@@ -4317,6 +4329,9 @@ export interface ReaderChapter {
   id: string;
   title: string;
   markdown: string;
+  /** Image placements (§3.8) — safe to project: `{imageId, afterAnchor, caption}` carries no private
+   *  provenance, and the reader fetches the bytes through the re-gated `story:readSharedImage`. */
+  imagePlacements: ImagePlacement[];
 }
 
 /** The published head a granted reader reads (§3.6) — the manifest snapshot + its published chapters, in order.

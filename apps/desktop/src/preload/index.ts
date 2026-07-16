@@ -178,6 +178,16 @@ const bridge: SelfosBridge = {
   autoCheckinsSetConfig: (input) => ipcRenderer.invoke(IpcChannels.autoCheckinsSetConfig, input),
   autoCheckinsEnsureSeed: () => ipcRenderer.invoke(IpcChannels.autoCheckinsEnsureSeed),
   autoCheckinsRun: (input) => ipcRenderer.invoke(IpcChannels.autoCheckinsRun, input),
+  storyBookTypes: () => ipcRenderer.invoke(IpcChannels.storyBookTypes),
+  storyList: () => ipcRenderer.invoke(IpcChannels.storyList),
+  storyCreate: (input) => ipcRenderer.invoke(IpcChannels.storyCreate, input),
+  storyGet: (input) => ipcRenderer.invoke(IpcChannels.storyGet, input),
+  storyGenerateFoundations: (input) =>
+    ipcRenderer.invoke(IpcChannels.storyGenerateFoundations, input),
+  storySaveOutline: (input) => ipcRenderer.invoke(IpcChannels.storySaveOutline, input),
+  storyApproveOutline: (input) => ipcRenderer.invoke(IpcChannels.storyApproveOutline, input),
+  storyUpdate: (input) => ipcRenderer.invoke(IpcChannels.storyUpdate, input),
+  storyDelete: (input) => ipcRenderer.invoke(IpcChannels.storyDelete, input),
   relationshipsGetSynthesis: (input) =>
     ipcRenderer.invoke(IpcChannels.relationshipsGetSynthesis, input),
   relationshipsSynthesize: (input) =>

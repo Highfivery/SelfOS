@@ -3871,3 +3871,58 @@ export const StructuralProposalSchema = z.object({
   createdAt: z.string(),
 });
 export type StructuralProposal = z.infer<typeof StructuralProposalSchema>;
+
+// --- Your Story IPC view types + input schemas (§5.6) ----------------------------------------------------
+
+/** The composite a book detail view needs in one read (§5.7). Crypto-free (defined here in the schemas
+ *  shim) so the IPC layer/renderer may reference it — the `ChatTurnResult` precedent. */
+export interface StoryBookBundle {
+  manifest: BookManifest;
+  outline: BookOutline | null;
+  timeline: LifeTimeline | null;
+  chapters: BookChapter[];
+}
+
+/** The renderer-facing result of the foundations pass (§5.3): the fresh bundle on success, or an honest
+ *  failure. `AI_OFF` is distinct from `NO_KEY` so the UI can point at Settings → AI. The usage event
+ *  (recorded host-side) never crosses the boundary. */
+export type StoryFoundationsResult =
+  | { ok: true; bundle: StoryBookBundle }
+  | { ok: false; reason: AiFailureReason | 'AI_OFF'; message: string };
+
+/** A serializable projection of a registered `BookType` for the create-a-book picker (§3.2) — the renderer
+ *  can't import the story module (it pulls crypto), so the registry crosses via IPC. */
+export interface StoryBookTypeView {
+  id: string;
+  label: string;
+  blurb: string;
+  structures: { id: string; label: string; description: string; isDefault?: boolean }[];
+  stylePresets: { id: BookStyle; label: string }[];
+}
+
+/** `story:create` input — the setup screen's choices (§3.2). */
+export const StoryCreateInputSchema = z.object({
+  type: BookTypeIdSchema,
+  title: z.string().min(1).max(200),
+  config: BookConfigSchema,
+});
+export type StoryCreateInput = z.infer<typeof StoryCreateInputSchema>;
+
+/** A bare book reference (get / generate / delete). */
+export const StoryBookRefSchema = z.object({ bookId: z.string().min(1) });
+export type StoryBookRef = z.infer<typeof StoryBookRefSchema>;
+
+/** `story:saveOutline` / `story:approveOutline` — the (possibly edited) outline during review. */
+export const StoryOutlineInputSchema = z.object({
+  bookId: z.string().min(1),
+  outline: BookOutlineSchema,
+});
+export type StoryOutlineInput = z.infer<typeof StoryOutlineInputSchema>;
+
+/** `story:update` — the patchable manifest subset the setup/overview can change. */
+export const StoryUpdateInputSchema = z.object({
+  bookId: z.string().min(1),
+  title: z.string().min(1).max(200).optional(),
+  config: BookConfigSchema.optional(),
+});
+export type StoryUpdateInput = z.infer<typeof StoryUpdateInputSchema>;

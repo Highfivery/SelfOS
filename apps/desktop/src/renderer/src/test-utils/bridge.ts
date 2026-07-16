@@ -298,6 +298,16 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     autoCheckinsEnsureSeed: () =>
       Promise.resolve({ seeded: false, config: { schemaVersion: 1, enabled: false, targets: [] } }),
     autoCheckinsRun: () => Promise.resolve({ ok: false, reason: 'SKIPPED', message: 'Off.' }),
+    storyBookTypes: () => Promise.resolve([]),
+    storyList: () => Promise.resolve([]),
+    storyCreate: () => Promise.resolve(null),
+    storyGet: () => Promise.resolve(null),
+    storyGenerateFoundations: () =>
+      Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
+    storySaveOutline: () => Promise.resolve(null),
+    storyApproveOutline: () => Promise.resolve(null),
+    storyUpdate: () => Promise.resolve(null),
+    storyDelete: () => Promise.resolve(),
     relationshipsGetSynthesis: () => Promise.resolve(null),
     relationshipsSynthesize: () =>
       Promise.resolve({ ok: false, reason: 'EMPTY', message: 'Nothing yet.' }),

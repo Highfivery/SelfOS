@@ -270,6 +270,31 @@ function makeHost(): {
           usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      // Your Story foundations (64 §5.3): "plan a biography of" → a valid foundations JSON (essence +
+      // timeline + outline). Must precede the generic `JSON object` branch (the message contains that phrase).
+      if (userText.includes('plan a biography of')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            essence: 'A quiet man learning to speak up.',
+            timeline: [{ label: 'Born in Ohio', date: '1985' }],
+            outline: {
+              parts: [
+                {
+                  title: 'Roots',
+                  chapters: [
+                    {
+                      title: 'The Garage',
+                      brief: 'He learns a machine obeys.',
+                      lifeAreas: ['Family'],
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // Dream synthesis asks for a single JSON object — return a valid DreamAnalysis draft so the
       // synthesize path can parse it; every other turn just streams a short reply.
       const wantsJson = options.messages.some((m) =>
@@ -6410,5 +6435,67 @@ describe('createCoreBridge — Together (58) foundation', () => {
     // A non-participant sees none (session not accessible).
     await asPerson(host, stranger.id);
     expect(await bridge.togetherSuggestions(sessionId)).toHaveLength(0);
+  });
+
+  // --- Your Story (64-your-story §5.6) -------------------------------------------------------------------
+  it('story: create → generate foundations → approve outline → list/get → delete', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+
+    // The registry crosses via IPC (v1: the biography, with a default structure + style presets).
+    const types = await bridge.storyBookTypes();
+    expect(types.map((t) => t.id)).toEqual(['biography']);
+    expect(types[0]?.structures.some((s) => s.isDefault)).toBe(true);
+    expect(types[0]?.stylePresets.length).toBeGreaterThan(0);
+
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    expect(book?.status).toBe('outlining');
+    const bookId = book!.id;
+
+    // Foundations pass (metered story.outline via the fake claude 'plan a biography of' branch).
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    expect(gen.ok).toBe(true);
+    if (!gen.ok) return;
+    expect(gen.bundle.manifest.essence).toContain('learning to speak');
+    expect(gen.bundle.outline?.approved).toBe(false);
+    expect(gen.bundle.outline?.parts[0]?.chapters[0]?.title).toBe('The Garage');
+    expect(gen.bundle.timeline?.events[0]?.label).toBe('Born in Ohio');
+
+    // Approve the (optionally edited) outline → the book moves to drafting.
+    const approved = await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    expect(approved?.status).toBe('drafting');
+    expect((await bridge.storyGet({ bookId }))?.outline?.approved).toBe(true);
+
+    expect((await bridge.storyList()).map((b) => b.id)).toEqual([bookId]);
+    await bridge.storyDelete({ bookId });
+    expect(await bridge.storyList()).toEqual([]);
+    expect(await bridge.storyGet({ bookId })).toBeNull();
+  });
+
+  it('story: foundations returns an honest failure when AI is off / no key', async () => {
+    const { bridge } = await freshOwner();
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'X',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+
+    // No key yet → NO_KEY.
+    const noKey = await bridge.storyGenerateFoundations({ bookId });
+    expect(noKey.ok).toBe(false);
+    if (!noKey.ok) expect(noKey.reason).toBe('NO_KEY');
+
+    // Key present but AI disabled → AI_OFF (points at Settings).
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: false, scope: 'vault' });
+    const aiOff = await bridge.storyGenerateFoundations({ bookId });
+    expect(aiOff.ok).toBe(false);
+    if (!aiOff.ok) expect(aiOff.reason).toBe('AI_OFF');
   });
 });

@@ -13,6 +13,7 @@ import {
   type BookTypeId,
   type ExclusionItem,
   type LifeTimeline,
+  type StoryBookBundle,
 } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 
@@ -289,20 +290,14 @@ export async function approveOutline(
   return updateBook(fs, key, personId, bookId, { status: 'drafting' }, now);
 }
 
-/** The composite a book detail view needs in one read: manifest + outline + timeline + chapter metadata. */
-export interface BookBundle {
-  manifest: BookManifest;
-  outline: BookOutline | null;
-  timeline: LifeTimeline | null;
-  chapters: BookChapter[];
-}
-
+/** The composite a book detail view needs in one read: manifest + outline + timeline + chapters
+ *  (`StoryBookBundle` — the IPC view type in schemas). */
 export async function readBookBundle(
   fs: FileSystem,
   key: Uint8Array,
   personId: string,
   bookId: string,
-): Promise<BookBundle | null> {
+): Promise<StoryBookBundle | null> {
   const manifest = await getBook(fs, key, personId, bookId);
   if (!manifest) return null;
   return {

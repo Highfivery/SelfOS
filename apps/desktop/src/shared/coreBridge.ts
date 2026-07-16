@@ -165,6 +165,14 @@ import {
   TogetherSaveAgreementInputSchema,
   TogetherSetAgreementStatusInputSchema,
   type AgreementSummary,
+  StoryCreateInputSchema,
+  StoryBookRefSchema,
+  StoryOutlineInputSchema,
+  StoryUpdateInputSchema,
+  type BookManifest,
+  type StoryBookBundle,
+  type StoryBookTypeView,
+  type StoryFoundationsResult,
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
 import { runConnectionTest } from './claudeProxy';
@@ -334,6 +342,21 @@ import {
   suggestGoals,
   updateGoal,
 } from '@selfos/core/goals';
+import {
+  applyFoundations,
+  approveOutline,
+  createBook,
+  deleteBook,
+  generateFoundations,
+  getBook,
+  getBookType,
+  getExclusions,
+  listBookTypes,
+  listBooks,
+  readBookBundle,
+  saveOutline,
+  updateBook,
+} from '@selfos/core/story';
 import {
   clearSuggestion,
   deleteChallenge,
@@ -4123,6 +4146,127 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         });
       }
       return result;
+    },
+    // --- Your Story (64-your-story §5.6) — gated `story.own`, active-person-scoped (the trust boundary) ---
+    storyBookTypes: async (): Promise<StoryBookTypeView[]> =>
+      // The registry is code (§4) — return a serializable projection (the renderer can't import the story
+      // module, which pulls crypto). No gate: it's static, non-personal catalog metadata.
+      listBookTypes().map((t) => ({
+        id: t.id,
+        label: t.label,
+        blurb: t.blurb,
+        structures: t.structures.map((s) => ({
+          id: s.id,
+          label: s.label,
+          description: s.description,
+          ...(s.isDefault ? { isDefault: true } : {}),
+        })),
+        stylePresets: t.stylePresets.map((p) => ({ id: p.id, label: p.label })),
+      })),
+    storyList: async (): Promise<BookManifest[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return listBooks(ctx.fs, ctx.key, personId);
+    },
+    storyCreate: async (input): Promise<BookManifest | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const p = StoryCreateInputSchema.parse(input);
+      if (!getBookType(p.type)) return null; // only a registered book type (v1: biography)
+      return createBook(ctx.fs, ctx.key, {
+        personId,
+        type: p.type,
+        title: p.title,
+        config: p.config,
+        now: new Date(),
+      });
+    },
+    storyGet: async (input): Promise<StoryBookBundle | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const { bookId } = StoryBookRefSchema.parse(input);
+      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyGenerateFoundations: async (input): Promise<StoryFoundationsResult> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to write your story.',
+        };
+      }
+      const book = await getBook(deps.fs, deps.key, deps.personId, bookId);
+      if (!book) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+      const bookType = getBookType(book.type);
+      if (!bookType) return { ok: false, reason: 'ERROR', message: 'Unknown book type.' };
+      const exclusions = await getExclusions(deps.fs, deps.key, deps.personId, bookId);
+      const result = await generateFoundations(deps, { bookType, config: book.config, exclusions });
+      if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
+      await applyFoundations(
+        deps.fs,
+        deps.key,
+        deps.personId,
+        bookId,
+        { essence: result.essence, outline: result.outline, timeline: result.timeline },
+        new Date(),
+      );
+      const bundle = await readBookBundle(deps.fs, deps.key, deps.personId, bookId);
+      if (!bundle) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+      return { ok: true, bundle };
+    },
+    storySaveOutline: async (input): Promise<BookManifest | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const p = StoryOutlineInputSchema.parse(input);
+      if (!(await getBook(ctx.fs, ctx.key, personId, p.bookId))) return null;
+      await saveOutline(ctx.fs, ctx.key, personId, p.bookId, p.outline);
+      return updateBook(ctx.fs, ctx.key, personId, p.bookId, {}, new Date()); // bump updatedAt
+    },
+    storyApproveOutline: async (input): Promise<BookManifest | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const p = StoryOutlineInputSchema.parse(input);
+      return approveOutline(ctx.fs, ctx.key, personId, p.bookId, p.outline, new Date());
+    },
+    storyUpdate: async (input): Promise<BookManifest | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const p = StoryUpdateInputSchema.parse(input);
+      return updateBook(
+        ctx.fs,
+        ctx.key,
+        personId,
+        p.bookId,
+        {
+          ...(p.title !== undefined ? { title: p.title } : {}),
+          ...(p.config !== undefined ? { config: p.config } : {}),
+        },
+        new Date(),
+      );
+    },
+    storyDelete: async (input): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return;
+      const personId = await activePersonId();
+      if (!personId) return;
+      const { bookId } = StoryBookRefSchema.parse(input);
+      if (!(await getBook(ctx.fs, ctx.key, personId, bookId))) return; // only the active person's own book
+      await deleteBook(ctx.fs, personId, bookId);
     },
     // --- Relationship insights (54-memory-redesign §6) — gated `memory.own`, active-person-scoped ---
     relationshipsGetSynthesis: async (input): Promise<RelationshipSynthesis | null> => {

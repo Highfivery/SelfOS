@@ -3,6 +3,13 @@ import type {
   AiKeyStatus,
   AiProvider,
   AlignmentResult,
+  BookManifest,
+  StoryBookBundle,
+  StoryBookTypeView,
+  StoryCreateInput,
+  StoryFoundationsResult,
+  StoryOutlineInput,
+  StoryUpdateInput,
   Goal,
   GoalStatus,
   GoalSuggestResult,
@@ -261,6 +268,16 @@ export const IpcChannels = {
   autoCheckinsSetConfig: 'autoCheckins:setConfig',
   autoCheckinsEnsureSeed: 'autoCheckins:ensureSeed',
   autoCheckinsRun: 'autoCheckins:run',
+  // Your Story (64-your-story §5.6)
+  storyBookTypes: 'story:bookTypes',
+  storyList: 'story:list',
+  storyCreate: 'story:create',
+  storyGet: 'story:get',
+  storyGenerateFoundations: 'story:generateFoundations',
+  storySaveOutline: 'story:saveOutline',
+  storyApproveOutline: 'story:approveOutline',
+  storyUpdate: 'story:update',
+  storyDelete: 'story:delete',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -952,6 +969,31 @@ export interface SelfosBridge {
    * a spending pass; a manual "Run now" passes `auto:false` to skip the throttle. Budget/crisis/AI-gated.
    */
   autoCheckinsRun(input?: { auto?: boolean }): Promise<AutoCheckinRunResult>;
+  /**
+   * Your Story (64-your-story §5.6). All gated `story.own` + active-person-scoped in the bridge (the trust
+   * boundary); the Claude key stays host-side. `null`/`[]` when not signed in / not permitted.
+   */
+  /** The registered book types for the create picker (§3.2) — v1: the biography. */
+  storyBookTypes(): Promise<StoryBookTypeView[]>;
+  /** The active person's own books, newest-updated first. */
+  storyList(): Promise<BookManifest[]>;
+  /** Create a new book from the setup choices (status `outlining`). */
+  storyCreate(input: StoryCreateInput): Promise<BookManifest | null>;
+  /** The full book bundle (manifest + outline + timeline + chapters) for the detail view. */
+  storyGet(input: { bookId: string }): Promise<StoryBookBundle | null>;
+  /**
+   * Run the foundations pass (§5.3) — metered `story.outline`, budget-gated, tolerant-parsed. On success
+   * persists essence + outline + timeline and returns the fresh bundle; else an honest failure.
+   */
+  storyGenerateFoundations(input: { bookId: string }): Promise<StoryFoundationsResult>;
+  /** Save an edited outline during review (§3.2). Returns the updated manifest. */
+  storySaveOutline(input: StoryOutlineInput): Promise<BookManifest | null>;
+  /** Approve the (possibly edited) outline → move the book to `drafting` (§3.2). */
+  storyApproveOutline(input: StoryOutlineInput): Promise<BookManifest | null>;
+  /** Update the book's title / config (§3.2). */
+  storyUpdate(input: StoryUpdateInput): Promise<BookManifest | null>;
+  /** Delete a book and all its files. */
+  storyDelete(input: { bookId: string }): Promise<void>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

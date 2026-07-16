@@ -337,6 +337,15 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.autoCheckinsSetConfig, bridge.autoCheckinsSetConfig);
   handle(IpcChannels.autoCheckinsEnsureSeed, bridge.autoCheckinsEnsureSeed);
   handle(IpcChannels.autoCheckinsRun, bridge.autoCheckinsRun);
+  handle(IpcChannels.storyBookTypes, bridge.storyBookTypes);
+  handle(IpcChannels.storyList, bridge.storyList);
+  handle(IpcChannels.storyCreate, bridge.storyCreate);
+  handle(IpcChannels.storyGet, bridge.storyGet);
+  handle(IpcChannels.storyGenerateFoundations, bridge.storyGenerateFoundations);
+  handle(IpcChannels.storySaveOutline, bridge.storySaveOutline);
+  handle(IpcChannels.storyApproveOutline, bridge.storyApproveOutline);
+  handle(IpcChannels.storyUpdate, bridge.storyUpdate);
+  handle(IpcChannels.storyDelete, bridge.storyDelete);
   handle(IpcChannels.relationshipsGetSynthesis, bridge.relationshipsGetSynthesis);
   handle(IpcChannels.relationshipsSynthesize, bridge.relationshipsSynthesize);
   handle(IpcChannels.challengesStart, bridge.challengesStart);

@@ -743,6 +743,7 @@ function ChapterReader({
   const addMark = useStoryStore((s) => s.addMark);
   const removeMark = useStoryStore((s) => s.removeMark);
   const updateMark = useStoryStore((s) => s.updateMark);
+  const flagInsight = useStoryStore((s) => s.flagInsight);
   const applyMarkup = useStoryStore((s) => s.applyMarkup);
   const editPassage = useStoryStore((s) => s.editPassage);
   const pinQuote = useStoryStore((s) => s.pinQuote);
@@ -757,12 +758,17 @@ function ChapterReader({
   const [mode, setMode] = useState<'menu' | 'comment' | 'edit' | 'exclude' | 'todo' | null>(null);
   const [commentIntent, setCommentIntent] = useState<CommentIntent>('addContext');
   const [todoKind, setTodoKind] = useState<ReaderTodoKind>('remind');
+  const [flagSource, setFlagSource] = useState(false);
   const [draft, setDraft] = useState('');
 
   const bookId = bundle.manifest.id;
   const chapterId = chapter.id;
   const paragraphs = splitParagraphs(chapter.markdown);
   const provByAnchor = new Map(chapter.provenance.map((p) => [p.anchor, p.refs]));
+
+  // The Memory insight a paragraph drew on, if any — a "Fix this" comment can also flag it inaccurate (§3.3).
+  const insightIdFor = (i: number): string | null =>
+    (provByAnchor.get(`p${i}`) ?? []).find((r) => r.kind === 'insight')?.id ?? null;
 
   useEffect(() => {
     void loadMarkup(bookId, chapterId);
@@ -775,6 +781,7 @@ function ChapterReader({
     setMode(null);
     setDraft('');
     setTodoKind('remind'); // don't leave the To-do form defaulted to the metered "questions" kind
+    setFlagSource(false);
   };
 
   // Open the toolbar for a paragraph, seeded with the current text selection (if any is inside it).
@@ -802,6 +809,8 @@ function ChapterReader({
 
   const submitComment = async (i: number): Promise<void> => {
     if (draft.trim().length === 0) return;
+    // A "Fix this" comment can also flag the source insight inaccurate in Memory (specs 20/44).
+    const insightId = commentIntent === 'fix' && flagSource ? insightIdFor(i) : null;
     await addMark(bookId, chapterId, {
       id: crypto.randomUUID(),
       kind: 'comment',
@@ -810,7 +819,9 @@ function ChapterReader({
       text: draft.trim(),
       status: 'open',
       createdAt: new Date().toISOString(),
+      ...(insightId ? { flagInsightId: insightId } : {}),
     });
+    if (insightId) await flagInsight(insightId);
     closeMenu();
   };
 
@@ -1082,6 +1093,18 @@ function ChapterReader({
                           rows={2}
                           placeholder="What should the biographer know?"
                         />
+                        {commentIntent === 'fix' && insightIdFor(i) ? (
+                          <label className={styles.flagRow}>
+                            <input
+                              type="checkbox"
+                              checked={flagSource}
+                              onChange={(e) => setFlagSource(e.target.checked)}
+                            />
+                            <Text size="sm" tone="secondary">
+                              Also mark the source insight as inaccurate in your Memory
+                            </Text>
+                          </label>
+                        ) : null}
                         <Inline justify="flex-end">
                           <Button variant="ghost" onClick={closeMenu}>
                             Cancel

@@ -104,6 +104,14 @@
   text-decoration: line-through;
 }
 
+/* The "also flag the source insight" checkbox on a Fix-this comment. */
+.flagRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
 .sourcesToggle {
   border: none;
   background: none;

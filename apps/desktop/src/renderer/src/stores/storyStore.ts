@@ -53,6 +53,8 @@ interface StoryState {
     patch: StoryMarkPatch,
   ) => Promise<void>;
   removeMark: (bookId: string, chapterId: string, markId: string) => Promise<void>;
+  /** Flag a source insight as inaccurate in Memory (specs 20/44) — the "Fix this" comment hand-off (§3.3). */
+  flagInsight: (insightId: string) => Promise<void>;
   applyMarkup: (bookId: string, chapterId: string) => Promise<StoryRevisionResult>;
   editPassage: (
     bookId: string,
@@ -204,6 +206,9 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   removeMark: async (bookId, chapterId, markId) => {
     const markup = (await window.selfos?.storyRemoveMark({ bookId, chapterId, markId })) ?? null;
     if (markup) set({ markup });
+  },
+  flagInsight: async (insightId) => {
+    await window.selfos?.insightsFlag({ insightId, flagged: true });
   },
   applyMarkup: async (bookId, chapterId) => {
     set({ chaptersGenerating: true });

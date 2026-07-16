@@ -301,6 +301,54 @@ describe('Story (64)', () => {
     expect(screen.getByRole('button', { name: 'Review & apply' })).toBeInTheDocument();
   });
 
+  it('a Fix-this comment can also flag the source insight in Memory', async () => {
+    const storyMark = vi.fn(
+      (input: StoryMarkInput): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: input.chapterId, marks: [input.mark] }),
+    );
+    const insightsFlag = vi.fn(() => Promise.resolve(null));
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')), // p0 provenance carries insight i1
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
+      storyMark,
+      insightsFlag,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!); // p0
+    await userEvent.click(await screen.findByRole('button', { name: 'Comment' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Fix this' }));
+    // The flag-to-Memory checkbox appears only for a Fix-this comment on an insight-backed paragraph.
+    await userEvent.click(screen.getByRole('checkbox', { name: /mark the source insight/ }));
+    await userEvent.type(screen.getByLabelText('Comment'), 'that isn’t right about me');
+    await userEvent.click(screen.getByRole('button', { name: 'Add comment' }));
+    expect(storyMark).toHaveBeenCalledWith(
+      expect.objectContaining({ mark: expect.objectContaining({ flagInsightId: 'i1' }) }),
+    );
+    expect(insightsFlag).toHaveBeenCalledWith({ insightId: 'i1', flagged: true });
+  });
+
+  it('does not offer the flag checkbox for a non-fix comment', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!);
+    await userEvent.click(await screen.findByRole('button', { name: 'Comment' }));
+    // Default intent is "Add context" → no flag checkbox.
+    expect(
+      screen.queryByRole('checkbox', { name: /mark the source insight/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it('adds a comment with an intent', async () => {
     const storyMark = vi.fn(
       (input: StoryMarkInput): Promise<ChapterMarkup> =>

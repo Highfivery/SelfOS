@@ -1643,6 +1643,16 @@ function ChapterReader({
   const todoToQuestions = useStoryStore((s) => s.todoToQuestions);
   const exclude = useStoryStore((s) => s.exclude);
   const busy = useStoryStore((s) => s.chaptersGenerating);
+  // Image placement (§3.8, Phase H3).
+  const bookImages = useStoryStore((s) => s.images);
+  const imageUrls = useStoryStore((s) => s.imageUrls);
+  const loadImages = useStoryStore((s) => s.loadImages);
+  const getImageUrl = useStoryStore((s) => s.getImageUrl);
+  const generateImage = useStoryStore((s) => s.generateImage);
+  const suggestPlacement = useStoryStore((s) => s.suggestPlacement);
+  const setPlacement = useStoryStore((s) => s.setPlacement);
+  const removePlacement = useStoryStore((s) => s.removePlacement);
+  const [imageBusy, setImageBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [openSources, setOpenSources] = useState<number | null>(null);
@@ -1667,6 +1677,41 @@ function ChapterReader({
     void loadMarkup(bookId, chapterId);
     return () => clearMarkup();
   }, [bookId, chapterId, loadMarkup, clearMarkup]);
+
+  useEffect(() => {
+    void loadImages(bookId);
+  }, [bookId, loadImages]);
+
+  // Resolve data URLs for every image placed in THIS chapter.
+  useEffect(() => {
+    for (const p of chapter.imagePlacements) {
+      if (!imageUrls[p.imageId]) void getImageUrl(bookId, p.imageId);
+    }
+  }, [bookId, chapter.imagePlacements, imageUrls, getImageUrl]);
+
+  const placedIds = new Set(chapter.imagePlacements.map((p) => p.imageId));
+  // Images that can still be placed here: illustrations + uploaded photos not already in this chapter.
+  const placeable = bookImages.filter((i) => i.kind !== 'cover' && !placedIds.has(i.id));
+
+  // Place an image: ask the AI where it fits, then set it (fall back to the first paragraph on failure so it's
+  // never a dead-end — the author can move it).
+  const placeImage = async (imageId: string): Promise<void> => {
+    setImageBusy(true);
+    setError(null);
+    const suggested = await suggestPlacement(bookId, chapterId, imageId);
+    const anchor = suggested.ok ? suggested.afterAnchor : 'p0';
+    await setPlacement(bookId, chapterId, imageId, anchor);
+    setImageBusy(false);
+  };
+
+  const illustrate = async (): Promise<void> => {
+    setImageBusy(true);
+    setError(null);
+    const res = await generateImage(bookId, { kind: 'illustration', chapterId });
+    if (res.ok) await placeImage(res.image.id);
+    else setError(res.message);
+    setImageBusy(false);
+  };
 
   const closeMenu = (): void => {
     setActivePara(null);
@@ -2110,10 +2155,95 @@ function ChapterReader({
                   </Stack>
                 </Card>
               ) : null}
+
+              {chapter.imagePlacements
+                .filter((pl) => pl.afterAnchor === `p${i}`)
+                .map((pl) => (
+                  <figure key={pl.imageId} className={styles.placedImage}>
+                    {imageUrls[pl.imageId] ? (
+                      <img src={imageUrls[pl.imageId]} alt={pl.caption || 'Book image'} />
+                    ) : null}
+                    <figcaption>
+                      <TextInput
+                        value={pl.caption}
+                        aria-label="Image caption"
+                        placeholder="Caption (optional)"
+                        onChange={(e) =>
+                          void setPlacement(
+                            bookId,
+                            chapterId,
+                            pl.imageId,
+                            pl.afterAnchor,
+                            e.target.value,
+                          )
+                        }
+                      />
+                      <Inline gap={2}>
+                        <Select
+                          aria-label="Move image after paragraph"
+                          value={pl.afterAnchor}
+                          onChange={(e) =>
+                            void setPlacement(
+                              bookId,
+                              chapterId,
+                              pl.imageId,
+                              e.target.value,
+                              pl.caption,
+                            )
+                          }
+                        >
+                          {paragraphs.map((_, pi) => (
+                            <option key={pi} value={`p${pi}`}>
+                              After paragraph {pi + 1}
+                            </option>
+                          ))}
+                        </Select>
+                        <button
+                          type="button"
+                          className={styles.sourcesToggle}
+                          aria-label="Remove this image"
+                          onClick={() => void removePlacement(bookId, chapterId, pl.imageId)}
+                        >
+                          Remove
+                        </button>
+                      </Inline>
+                    </figcaption>
+                  </figure>
+                ))}
             </div>
           );
         })}
       </Stack>
+
+      {/* Images in this chapter (§3.8) — illustrate or place an existing photo/illustration; the AI suggests
+          where it fits, and you can move it. */}
+      <Card>
+        <Stack gap={2}>
+          <Heading level={3}>Images</Heading>
+          <Inline gap={2}>
+            <Button variant="ghost" disabled={imageBusy} onClick={() => void illustrate()}>
+              {imageBusy ? 'Working…' : 'Illustrate this chapter'}
+            </Button>
+            {placeable.length > 0 ? (
+              <Select
+                aria-label="Add an image to this chapter"
+                value=""
+                disabled={imageBusy}
+                onChange={(e) => {
+                  if (e.target.value) void placeImage(e.target.value);
+                }}
+              >
+                <option value="">Add a photo or illustration…</option>
+                {placeable.map((img) => (
+                  <option key={img.id} value={img.id}>
+                    {img.caption || (img.kind === 'uploaded' ? 'Photo' : 'Illustration')}
+                  </option>
+                ))}
+              </Select>
+            ) : null}
+          </Inline>
+        </Stack>
+      </Card>
 
       <Inline justify="space-between">
         <Button

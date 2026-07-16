@@ -4073,6 +4073,29 @@ export const StoryPhotoAnswerInputSchema = z.object({
 });
 export type StoryPhotoAnswerInput = z.infer<typeof StoryPhotoAnswerInputSchema>;
 
+/** `story:suggestPlacement` / `story:removePlacement` — an image within a chapter. */
+export const StoryImagePlacementRefSchema = z.object({
+  bookId: z.string().min(1),
+  chapterId: z.string().min(1),
+  imageId: z.string().min(1),
+});
+export type StoryImagePlacementRef = z.infer<typeof StoryImagePlacementRefSchema>;
+
+/** `story:setPlacement` — place (or move) an image after a `p<index>` anchor, with a caption. */
+export const StorySetPlacementInputSchema = z.object({
+  bookId: z.string().min(1),
+  chapterId: z.string().min(1),
+  imageId: z.string().min(1),
+  afterAnchor: z.string().min(1),
+  caption: z.string().optional(),
+});
+export type StorySetPlacementInput = z.infer<typeof StorySetPlacementInputSchema>;
+
+/** The result of `story:suggestPlacement` (the AI-suggested anchor) — a failure lets the UI place manually. */
+export type StoryPlacementSuggestResult =
+  | { ok: true; afterAnchor: string }
+  | { ok: false; reason: string; message: string };
+
 /** `story:saveOutline` / `story:approveOutline` — the (possibly edited) outline during review. */
 export const StoryOutlineInputSchema = z.object({
   bookId: z.string().min(1),

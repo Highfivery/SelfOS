@@ -28,6 +28,7 @@ import type {
   StoryImageResult,
   StoryPhotoAnalyzeResult,
   StoryPhotoAnswer,
+  StoryPlacementSuggestResult,
   StoryInterviewCadenceResult,
   StoryInterviewCheckInput,
   StoryPublishResult,
@@ -351,6 +352,9 @@ export const IpcChannels = {
   storyAnalyzePhoto: 'story:analyzePhoto',
   storyAnswerPhoto: 'story:answerPhoto',
   storyPhotoAnswers: 'story:photoAnswers',
+  storySuggestPlacement: 'story:suggestPlacement',
+  storySetPlacement: 'story:setPlacement',
+  storyRemovePlacement: 'story:removePlacement',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -1179,6 +1183,26 @@ export interface SelfosBridge {
   }): Promise<void>;
   /** The photo Q&A answered so far. Gated `story.own`. */
   storyPhotoAnswers(input: { bookId: string }): Promise<StoryPhotoAnswer[]>;
+  /** Ask the AI which paragraph an image best follows in a chapter (§3.8). Gated `story.own` + needs the key. */
+  storySuggestPlacement(input: {
+    bookId: string;
+    chapterId: string;
+    imageId: string;
+  }): Promise<StoryPlacementSuggestResult>;
+  /** Place (or move) an image after a `p<index>` anchor in a chapter; returns the refreshed book. Gated `story.own`. */
+  storySetPlacement(input: {
+    bookId: string;
+    chapterId: string;
+    imageId: string;
+    afterAnchor: string;
+    caption?: string;
+  }): Promise<StoryBookBundle | null>;
+  /** Remove an image's placement from a chapter; returns the refreshed book. Gated `story.own`. */
+  storyRemovePlacement(input: {
+    bookId: string;
+    chapterId: string;
+    imageId: string;
+  }): Promise<StoryBookBundle | null>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

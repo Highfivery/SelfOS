@@ -409,6 +409,9 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyAnalyzePhoto, bridge.storyAnalyzePhoto);
   handle(IpcChannels.storyAnswerPhoto, bridge.storyAnswerPhoto);
   handle(IpcChannels.storyPhotoAnswers, bridge.storyPhotoAnswers);
+  handle(IpcChannels.storySuggestPlacement, bridge.storySuggestPlacement);
+  handle(IpcChannels.storySetPlacement, bridge.storySetPlacement);
+  handle(IpcChannels.storyRemovePlacement, bridge.storyRemovePlacement);
   handle(IpcChannels.relationshipsGetSynthesis, bridge.relationshipsGetSynthesis);
   handle(IpcChannels.relationshipsSynthesize, bridge.relationshipsSynthesize);
   handle(IpcChannels.challengesStart, bridge.challengesStart);

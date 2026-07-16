@@ -1059,6 +1059,54 @@ describe('Story (64)', () => {
     });
   });
 
+  it('places a photo in a chapter via the AI-suggested anchor (§3.8)', async () => {
+    const placed: StoryBookBundle = {
+      ...writtenBundle('new'),
+      chapters: [
+        {
+          ...writtenBundle('new').chapters[0]!,
+          imagePlacements: [{ imageId: 'ph1', afterAnchor: 'p0', caption: '' }],
+        },
+      ],
+    };
+    const storySuggestPlacement = vi.fn(() =>
+      Promise.resolve({ ok: true as const, afterAnchor: 'p0' }),
+    );
+    const storySetPlacement = vi.fn(() => Promise.resolve(placed));
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyImages: () =>
+        Promise.resolve([
+          { id: 'ph1', kind: 'uploaded' as const, mime: 'image/png', createdAt: 'now' },
+        ]),
+      storyGetImage: () => Promise.resolve({ mime: 'image/png', dataBase64: 'AAAA' }),
+      storySuggestPlacement,
+      storySetPlacement,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    // Add the photo → the AI suggests an anchor, then it's placed.
+    await userEvent.selectOptions(
+      await screen.findByLabelText('Add an image to this chapter'),
+      'ph1',
+    );
+    expect(storySuggestPlacement).toHaveBeenCalledWith({
+      bookId: 'b1',
+      chapterId: 'c1',
+      imageId: 'ph1',
+    });
+    expect(storySetPlacement).toHaveBeenCalledWith({
+      bookId: 'b1',
+      chapterId: 'c1',
+      imageId: 'ph1',
+      afterAnchor: 'p0',
+    });
+    // The placed image + its move control render in the prose.
+    expect(await screen.findByLabelText('Move image after paragraph')).toBeInTheDocument();
+  });
+
   it('lists to-dos on the overview and marks a reminder done', async () => {
     const storyUpdateMark = vi.fn(
       (): Promise<ChapterMarkup> =>

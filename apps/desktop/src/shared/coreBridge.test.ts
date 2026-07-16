@@ -7293,4 +7293,67 @@ describe('createCoreBridge — Together (58) foundation', () => {
     // A crafted non-image mime is rejected at the trust boundary.
     expect(await bridge.storyUploadPhoto({ bookId, mime: 'text/plain', dataBase64 })).toBeNull();
   });
+
+  it('story: places an uploaded photo in a chapter via the AI-suggested anchor, then moves + removes it (§3.8)', async () => {
+    const { bridge, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+
+    const dataBase64 = Buffer.from([137, 80, 78, 71, 9]).toString('base64');
+    const photo = await bridge.storyUploadPhoto({ bookId, mime: 'image/png', dataBase64 });
+
+    // The AI suggests a paragraph anchor.
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: () =>
+        Promise.resolve({
+          text: '0',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        }),
+    };
+    const suggested = await bridge.storySuggestPlacement({ bookId, chapterId, imageId: photo!.id });
+    expect(suggested.ok).toBe(true);
+    if (!suggested.ok) throw new Error('suggest failed');
+
+    // Place it, then confirm it's on the chapter.
+    let bundle = await bridge.storySetPlacement({
+      bookId,
+      chapterId,
+      imageId: photo!.id,
+      afterAnchor: suggested.afterAnchor,
+      caption: 'The garage',
+    });
+    let chapter = bundle?.chapters.find((c) => c.id === chapterId);
+    expect(chapter?.imagePlacements).toEqual([
+      { imageId: photo!.id, afterAnchor: suggested.afterAnchor, caption: 'The garage' },
+    ]);
+
+    // Move it (same image → deduped, not doubled).
+    bundle = await bridge.storySetPlacement({
+      bookId,
+      chapterId,
+      imageId: photo!.id,
+      afterAnchor: 'p0',
+    });
+    chapter = bundle?.chapters.find((c) => c.id === chapterId);
+    expect(chapter?.imagePlacements).toHaveLength(1);
+    expect(chapter?.imagePlacements[0]?.afterAnchor).toBe('p0');
+
+    // Remove it.
+    bundle = await bridge.storyRemovePlacement({ bookId, chapterId, imageId: photo!.id });
+    chapter = bundle?.chapters.find((c) => c.id === chapterId);
+    expect(chapter?.imagePlacements).toEqual([]);
+  });
 });

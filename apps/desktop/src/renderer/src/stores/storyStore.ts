@@ -23,6 +23,7 @@ import type {
   StoryImageTarget,
   StoryPhotoAnalyzeResult,
   StoryPhotoAnswer,
+  StoryPlacementSuggestResult,
   StoryInterviewCadenceResult,
   StoryPublishResult,
   StoryReaderView,
@@ -155,6 +156,20 @@ interface StoryState {
   ) => Promise<StoryImageEntry | null>;
   analyzePhoto: (bookId: string, imageId: string) => Promise<StoryPhotoAnalyzeResult>;
   answerPhoto: (bookId: string, imageId: string, question: string, answer: string) => Promise<void>;
+  /** Image placement in a chapter (§3.8) — AI suggests the anchor; set/move/remove refresh the bundle. */
+  suggestPlacement: (
+    bookId: string,
+    chapterId: string,
+    imageId: string,
+  ) => Promise<StoryPlacementSuggestResult>;
+  setPlacement: (
+    bookId: string,
+    chapterId: string,
+    imageId: string,
+    afterAnchor: string,
+    caption?: string,
+  ) => Promise<void>;
+  removePlacement: (bookId: string, chapterId: string, imageId: string) => Promise<void>;
   /** Books shared WITH the active person (§3.5) — the "Shared with you" surface + the reader view. */
   sharedBooks: SharedBookSummary[];
   loadSharedBooks: () => Promise<void>;
@@ -496,6 +511,28 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   answerPhoto: async (bookId, imageId, question, answer) => {
     await window.selfos?.storyAnswerPhoto({ bookId, imageId, question, answer });
     await get().loadPhotoAnswers(bookId);
+  },
+  suggestPlacement: async (bookId, chapterId, imageId) =>
+    (await window.selfos?.storySuggestPlacement({ bookId, chapterId, imageId })) ?? {
+      ok: false as const,
+      reason: 'ERROR',
+      message: 'SelfOS isn’t ready yet.',
+    },
+  setPlacement: async (bookId, chapterId, imageId, afterAnchor, caption) => {
+    const bundle =
+      (await window.selfos?.storySetPlacement({
+        bookId,
+        chapterId,
+        imageId,
+        afterAnchor,
+        ...(caption !== undefined ? { caption } : {}),
+      })) ?? null;
+    if (bundle) set({ bundle });
+  },
+  removePlacement: async (bookId, chapterId, imageId) => {
+    const bundle =
+      (await window.selfos?.storyRemovePlacement({ bookId, chapterId, imageId })) ?? null;
+    if (bundle) set({ bundle });
   },
   loadSharedBooks: async () => {
     const sharedBooks = (await window.selfos?.storySharedBooks()) ?? [];

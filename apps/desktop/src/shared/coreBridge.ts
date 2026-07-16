@@ -172,6 +172,8 @@ import {
   StoryImageRefSchema,
   StoryUploadPhotoInputSchema,
   StoryPhotoAnswerInputSchema,
+  StoryImagePlacementRefSchema,
+  StorySetPlacementInputSchema,
   StoryEditPassageInputSchema,
   StoryExcludeInputSchema,
   StoryMarkInputSchema,
@@ -205,6 +207,7 @@ import {
   type StoryImageResult,
   type StoryPhotoAnalyzeResult,
   type StoryPhotoAnswer,
+  type StoryPlacementSuggestResult,
   type StoryInterviewCadenceResult,
   type StoryPublishResult,
   type StoryReaderView,
@@ -410,6 +413,9 @@ import {
   addPhotoAnswer,
   addUploadedPhoto,
   analyzeStoryPhoto,
+  suggestImagePlacement,
+  setImagePlacement,
+  removeImagePlacement,
   computeStoryHomeSignal,
   deleteStoryImage,
   exportFileStem,
@@ -4938,6 +4944,41 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       return getPhotoAnswers(ctx.fs, ctx.key, personId, bookId);
+    },
+    // --- Image placement (§3.8, Phase H3) — AI-suggested anchor, instant set/move/remove -----------------
+    storySuggestPlacement: async (input): Promise<StoryPlacementSuggestResult> => {
+      const { bookId, chapterId, imageId } = StoryImagePlacementRefSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to suggest a spot.',
+        };
+      }
+      return suggestImagePlacement(deps, { bookId, chapterId, imageId });
+    },
+    storySetPlacement: async (input): Promise<StoryBookBundle | null> => {
+      const { bookId, chapterId, imageId, afterAnchor, caption } =
+        StorySetPlacementInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const chapter = await setImagePlacement(ctx.fs, ctx.key, personId, bookId, chapterId, {
+        imageId,
+        afterAnchor,
+        ...(caption !== undefined ? { caption } : {}),
+      });
+      return chapter ? readBookBundle(ctx.fs, ctx.key, personId, bookId) : null;
+    },
+    storyRemovePlacement: async (input): Promise<StoryBookBundle | null> => {
+      const { bookId, chapterId, imageId } = StoryImagePlacementRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      await removeImagePlacement(ctx.fs, ctx.key, personId, bookId, chapterId, imageId);
+      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
     },
     // The batch markup revision — the one AI call in the markup layer (§3.3.1/§5.3).
     storyApplyMarkup: async (input): Promise<StoryRevisionResult> => {

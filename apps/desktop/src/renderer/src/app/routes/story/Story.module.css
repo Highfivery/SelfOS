@@ -26,6 +26,27 @@
   display: none;
 }
 
+/* An image placed within the chapter prose (§3.8) — the image + an editable caption + move/remove controls. */
+.placedImage {
+  margin: var(--space-3) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.placedImage img {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+.placedImage figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 480px;
+}
+
 /* An uploaded photo + its caption/Q&A — thumbnail left, content right; stacks under 480px. */
 .photoRow {
   display: flex;

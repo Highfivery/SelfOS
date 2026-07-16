@@ -1,6 +1,6 @@
 # 64 — Your Story (living biography & book projects)
 
-> **Status:** Draft — _last updated 2026-07-15_
+> **Status:** **Approved** — _last updated 2026-07-15_
 >
 > Your Story turns everything SelfOS knows about a person into an ever-evolving, professionally
 > written **biography** — a real book, drafted by an AI biographer from the person's own data,
@@ -626,22 +626,27 @@ respected on progress/transition affordances; contrast per tokens (01).
   guards + full-surface-renders-to-bottom on draft (incl. the markup margin collapsing inline at
   phone width) AND reader; the §7 whole-flow coherence walk.
 
-## 11. Open questions
+## 11. Resolved decisions
 
-1. **Reader measure vs the §12 full-width rule.** A book reader wants a readable measure. Proposal:
-   a percentage-based column (~70%, the chat-bubble precedent) for the reader view only — needs
-   the owner's explicit sign-off as a §12 exception.
-2. **Household contributions** (family-submitted questions + attributed quotes through the
-   existing send machinery) — recommended as the first fast-follow after v1 (it's the market's
-   most-loved feature). Confirm placement.
-3. **Story interview sessions** (the conversational deep-scene interviewer) — recommended as the
-   final v1 phase or first fast-follow; confirm appetite.
-4. **Default book length** — recommend `standard` ≈ 10–18 chapters, 1,500–3,000 words each
-   (craft target is 2,500–5,000; we start shorter for cost/iteration and let `full` reach craft
-   length). Confirm.
-5. **Cover timing** — recommend on-demand only (never auto-spend an image). Confirm.
-6. **Nav label** — "Your Story" (recommended) vs "Story".
-7. **`STORY_WEEKLY_AUTO_CAP` = 10** chapter auto-rewrites/week — confirm the number.
+All prior open questions were resolved with the owner on 2026-07-15 (the recommended option in each
+case):
+
+1. **Reader measure — approved §12 exception.** The reader view (only) uses a percentage-based
+   readable column (~70%, the chat-bubble precedent). Owner-signed-off exception to the durable
+   "no max-width caps" rule (§12) because a book genuinely needs a readable measure; every other
+   Your Story surface fills its width normally.
+2. **Household contributions — post-v1 fast-follow** (family-submitted questions + attributed
+   quotes through the existing send machinery). Not in v1.
+3. **Story interview sessions — post-v1 fast-follow.** v1's interview surface is the questionnaire
+   check-in (Phase E); the conversational deep-scene interviewer comes after.
+4. **Default length — `standard`** ≈ 10–18 chapters, ~1,500–3,000 words each; `concise` shorter,
+   `full` reaching the 2,500–5,000-word craft target.
+5. **Cover — on-demand only** (never auto-spend an image).
+6. **Nav label — "Your Story."**
+7. **`STORY_WEEKLY_AUTO_CAP` = 10** chapter auto-rewrites per rolling 7 days (owner override
+   bypasses).
+
+No open questions remain; the spec is Approved and ready for the Phase A slice (§5.12).
 
 ## 12. Changelog
 
@@ -662,3 +667,7 @@ respected on progress/transition affordances; contrast per tokens (01).
   "Turn into questions" kind bridges into the interview engine (FOCUS = the to-do). Added
   `ChapterMarkup`/`MarkupMark`/`TextAnchor`/`StoryTodoList` schemas, the `story:mark`/`applyMarkup`/
   `todoToQuestions` channels, and the §3.3.1/§3.3.2 flows.
+- 2026-07-15 — **Approved.** All seven open questions resolved (§11) with the owner (recommended
+  option each): reader-view ~70% measure as a signed-off §12 exception; contributions + interview
+  sessions are post-v1 fast-follows; `standard` default length; on-demand covers; "Your Story" nav
+  label; `STORY_WEEKLY_AUTO_CAP = 10`. Ready for the Phase A backbone slice.

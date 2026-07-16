@@ -125,6 +125,42 @@
   height: 16px;
 }
 
+/* The live "writing N/M" indicator on the Your Story nav while a draft runs in the background (64 §3.2). */
+.navWriting {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-accent);
+}
+.navWritingDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: nav-writing-pulse 1s ease-in-out infinite;
+}
+.collapsed .navWriting {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  margin-left: 0;
+  gap: 0;
+  font-size: 0; /* hide the "N/M" text node in the icon rail; the dot keeps its fixed size */
+}
+@keyframes nav-writing-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
 /* A small "unfinished" dot beside the Onboarding nav item (18-personal-onboarding §3.1). */
 .navDot {
   margin-left: auto;

@@ -200,6 +200,8 @@ import {
   type StoryBookTypeView,
   type StoryChaptersResult,
   type StoryExcludeResult,
+  type AiFailureReason,
+  type StoryDraftProgress,
   type StoryFoundationsResult,
   type StoryQuestionsResult,
   type StoryCompleteness,
@@ -687,6 +689,8 @@ export interface BridgeHost {
   emitIntakeChunk(chunk: string): void;
   /** Deliver a Together couples-turn reply chunk to the renderer (separate sink from chat, 58 §5.4). */
   emitTogetherChunk(chunk: string): void;
+  /** Deliver a Your Story create-and-draft progress update to the renderer (64 §3.2, its own channel). */
+  emitStoryProgress(progress: StoryDraftProgress): void;
 
   // --- Platform-specific surface, forwarded verbatim to the renderer-facing bridge ---
   getBootState(): Promise<BootState>;
@@ -725,6 +729,8 @@ export interface BridgeHost {
   onIntakeChunk(listener: (delta: string) => void): () => void;
   /** Subscribe to streamed Together couples-turn chunks; the counterpart to `emitTogetherChunk`. */
   onTogetherChunk(listener: (delta: string) => void): () => void;
+  /** Subscribe to Your Story draft-progress updates; the counterpart to `emitStoryProgress`. */
+  onStoryProgress(listener: (progress: StoryDraftProgress) => void): () => void;
 }
 
 /** Vault-relative path of the plain-JSON, vault-scoped settings file (02-app-shell). */
@@ -1534,6 +1540,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     onDreamChunk: (listener) => host.onDreamChunk(listener),
     onIntakeChunk: (listener) => host.onIntakeChunk(listener),
     onTogetherChunk: (listener) => host.onTogetherChunk(listener),
+    onStoryProgress: (listener) => host.onStoryProgress(listener),
     platform: host.platform,
     // iOS/web have no OS window chrome, so there is no fullscreen-titlebar transition to report.
     onFullscreenChanged: () => () => {},
@@ -4320,6 +4327,72 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       );
       const bundle = await readBookBundle(deps.fs, deps.key, deps.personId, bookId);
       if (!bundle) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+      return { ok: true, bundle };
+    },
+    // Create-and-draft (64 §3.2): the whole book in one main-side flow — read + outline, AUTO-APPROVE (no
+    // review gate), then draft every chapter — streaming per-chapter progress via `story:progress`. Runs in
+    // main, so it continues even if the renderer navigates away; the progress stream keeps the store current.
+    storyGenerateFullDraft: async (input): Promise<StoryFoundationsResult> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const fail = (
+        reason: AiFailureReason | 'AI_OFF',
+        message: string,
+      ): StoryFoundationsResult => {
+        host.emitStoryProgress({
+          bookId,
+          phase: 'error',
+          chaptersDone: 0,
+          chaptersTotal: 0,
+          message,
+        });
+        return { ok: false, reason, message };
+      };
+      const deps = await aiDeps('story.own');
+      if (!deps) return fail('NO_KEY', 'SelfOS isn’t ready yet.');
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return fail('AI_OFF', 'Turn on AI in Settings to write your story.');
+      }
+      const book = await getBook(deps.fs, deps.key, deps.personId, bookId);
+      if (!book) return fail('ERROR', 'That book is no longer here.');
+      const bookType = getBookType(book.type);
+      if (!bookType) return fail('ERROR', 'Unknown book type.');
+
+      // Phase 1 — read everything + propose the outline (the foundations pass).
+      host.emitStoryProgress({ bookId, phase: 'reading', chaptersDone: 0, chaptersTotal: 0 });
+      const exclusions = await getExclusions(deps.fs, deps.key, deps.personId, bookId);
+      const result = await generateFoundations(deps, { bookType, config: book.config, exclusions });
+      if (!result.ok) return fail(result.reason, result.message);
+      await applyFoundations(
+        deps.fs,
+        deps.key,
+        deps.personId,
+        bookId,
+        {
+          title: result.title,
+          essence: result.essence,
+          outline: result.outline,
+          timeline: result.timeline,
+        },
+        new Date(),
+      );
+      // Auto-approve — the person shapes the drafted book with the edit/markup/suggest tools, not a gate.
+      await approveOutline(deps.fs, deps.key, deps.personId, bookId, result.outline, new Date());
+
+      // Phase 2 — draft every chapter, streaming per-chapter progress.
+      const total = result.outline.parts.reduce((n, p) => n + p.chapters.length, 0);
+      host.emitStoryProgress({ bookId, phase: 'writing', chaptersDone: 0, chaptersTotal: total });
+      await generateBookChapters(deps, bookId, (p) =>
+        host.emitStoryProgress({
+          bookId,
+          phase: 'writing',
+          chaptersDone: p.chaptersDone,
+          chaptersTotal: p.chaptersTotal,
+          currentTitle: p.title,
+        }),
+      );
+      const bundle = await readBookBundle(deps.fs, deps.key, deps.personId, bookId);
+      if (!bundle) return fail('ERROR', 'That book is no longer here.');
+      host.emitStoryProgress({ bookId, phase: 'done', chaptersDone: total, chaptersTotal: total });
       return { ok: true, bundle };
     },
     storySaveOutline: async (input): Promise<BookManifest | null> => {

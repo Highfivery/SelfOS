@@ -11,6 +11,7 @@ import type {
   StoryBookTypeView,
   StoryChaptersResult,
   StoryCreateInput,
+  StoryDraftProgress,
   StoryFoundationsResult,
   StoryMarkPatch,
   StoryQuestionsResult,
@@ -48,8 +49,18 @@ interface StoryState {
   generating: boolean;
   /** True while the chapter-generation pass is running (the book overview). */
   chaptersGenerating: boolean;
+  /** Live create-and-draft progress (§3.2), streamed from main. Non-null while a book is being drafted — it
+   *  drives the loading screen AND the sidebar indicator, and survives navigation (the draft runs in main).
+   *  `startedAt` is the renderer clock at kickoff, for the elapsed timer + the improving time estimate. */
+  progress: (StoryDraftProgress & { startedAt: number }) | null;
   load: () => Promise<void>;
   create: (input: StoryCreateInput) => Promise<BookManifest | null>;
+  /** Create a book AND draft it end-to-end (§3.2) — the new one-tap flow (no outline-review gate). */
+  createAndDraft: (input: StoryCreateInput) => Promise<{ ok: boolean; message?: string }>;
+  /** Draft an existing book end-to-end (foundations → auto-approve → chapters), streaming progress. */
+  draftBook: (bookId: string) => Promise<{ ok: boolean; message?: string }>;
+  /** Subscribe to the main-side draft-progress stream (wired once at app level). Returns an unsubscribe. */
+  subscribeProgress: () => () => void;
   open: (bookId: string) => Promise<StoryBookBundle | null>;
   generateFoundations: (bookId: string) => Promise<StoryFoundationsResult>;
   saveOutline: (bookId: string, outline: BookOutline) => Promise<void>;
@@ -221,6 +232,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   loaded: false,
   generating: false,
   chaptersGenerating: false,
+  progress: null,
   load: async () => {
     const [bookTypes, books] = await Promise.all([
       window.selfos?.storyBookTypes() ?? Promise.resolve([]),
@@ -232,6 +244,50 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     const book = (await window.selfos?.storyCreate(input)) ?? null;
     if (book) await get().load();
     return book;
+  },
+  subscribeProgress: () => {
+    const unsub = window.selfos?.onStoryProgress((p) => {
+      // Merge the streamed update, keeping the renderer-side `startedAt` for the elapsed timer/estimate. A
+      // terminal `done`/`error` clears progress (the awaiting action swaps in the finished bundle / error).
+      if (p.phase === 'done' || p.phase === 'error') {
+        set({ progress: null });
+        return;
+      }
+      set((s) => ({ progress: { ...p, startedAt: s.progress?.startedAt ?? Date.now() } }));
+    });
+    return unsub ?? (() => {});
+  },
+  createAndDraft: async (input) => {
+    const book = (await window.selfos?.storyCreate(input)) ?? null;
+    if (!book) return { ok: false, message: 'Couldn’t start your story. Try again.' };
+    await get().load();
+    return get().draftBook(book.id);
+  },
+  draftBook: async (bookId) => {
+    // Seed the progress immediately so the loading screen shows before the first event lands.
+    set({
+      progress: {
+        bookId,
+        phase: 'reading',
+        chaptersDone: 0,
+        chaptersTotal: 0,
+        startedAt: Date.now(),
+      },
+    });
+    try {
+      const result = (await window.selfos?.storyGenerateFullDraft({ bookId })) ?? NOT_AVAILABLE;
+      if (result.ok) {
+        set({ bundle: result.bundle });
+        await get().load();
+        return { ok: true };
+      }
+      // On failure, surface the book (its outline may be null) so it lands on NeedsOutline with a retry —
+      // never a silent dead-end (the DoD rule).
+      await get().open(bookId);
+      return { ok: false, message: result.message };
+    } finally {
+      set({ progress: null }); // the stream's terminal event usually clears it first; this is the backstop
+    }
   },
   open: async (bookId) => {
     const bundle = (await window.selfos?.storyGet({ bookId })) ?? null;
@@ -574,5 +630,6 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       loaded: false,
       generating: false,
       chaptersGenerating: false,
+      progress: null,
     }),
 }));

@@ -37,7 +37,7 @@ import {
 import { queryUsage, recordUsage, setPersonBudget } from '@selfos/core/usage';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
 import { DeviceStateSchema } from './schemas';
-import type { BootState, DeviceState, Insight } from './schemas';
+import type { BootState, DeviceState, Insight, StoryDraftProgress } from './schemas';
 import { createCoreBridge, type BridgeHost } from './coreBridge';
 
 /** A fake `fetch` that simulates BOTH the Cloudflare REST API and the deployed relay Worker, over an
@@ -103,6 +103,7 @@ function makeHost(): {
   dreamChunks: string[];
   intakeChunks: string[];
   togetherChunks: string[];
+  storyProgress: StoryDraftProgress[];
   device: () => DeviceState;
   deviceSettings: () => Record<string, unknown>;
 } {
@@ -126,6 +127,7 @@ function makeHost(): {
   const dreamChunks: string[] = [];
   const intakeChunks: string[] = [];
   const togetherChunks: string[] = [];
+  const storyProgress: StoryDraftProgress[] = [];
   const claude: ClaudeClient = {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta) => {
@@ -446,10 +448,12 @@ function makeHost(): {
     saveImageFile: (name) => Promise.resolve(`/tmp/${name}`),
     printToPdf: (html) => Promise.resolve(new TextEncoder().encode(`%PDF-fake\n${html.length}`)),
     onVaultChanged: () => () => {},
+    emitStoryProgress: (p) => storyProgress.push(p),
     onChatChunk: () => () => {},
     onDreamChunk: () => () => {},
     onIntakeChunk: () => () => {},
     onTogetherChunk: () => () => {},
+    onStoryProgress: () => () => {},
   };
   return {
     host,
@@ -458,6 +462,7 @@ function makeHost(): {
     dreamChunks,
     intakeChunks,
     togetherChunks,
+    storyProgress,
     device: () => device,
     deviceSettings: () => deviceSettings,
   };
@@ -6536,6 +6541,49 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await bridge.storyDelete({ bookId });
     expect(await bridge.storyList()).toEqual([]);
     expect(await bridge.storyGet({ bookId })).toBeNull();
+  });
+
+  it('story: create-and-draft writes the whole book in one flow (auto-approve, no gate) + streams progress (§3.2)', async () => {
+    const { bridge, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+
+    // Blank title → the biographer names it; no outline-review gate — it drafts straight through.
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: '',
+      config: { voice: 'third', style: 'warm', length: 'full', autoRefresh: true },
+    });
+    const res = await bridge.storyGenerateFullDraft({ bookId: book!.id });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.bundle.outline?.approved).toBe(true); // auto-approved
+    expect(res.bundle.chapters.length).toBeGreaterThanOrEqual(1);
+    expect(res.bundle.chapters.every((c) => c.markdown.trim().length > 0)).toBe(true); // all drafted
+    expect(res.bundle.manifest.status).toBe('ready');
+    expect(res.bundle.manifest.title).toBe('The Weight of Quiet'); // named by the biographer
+
+    // Progress streamed: a reading phase → per-chapter writing → a terminal done, total = chapter count.
+    const phases = host.storyProgress.map((p) => p.phase);
+    expect(phases[0]).toBe('reading');
+    expect(phases).toContain('writing');
+    expect(phases.at(-1)).toBe('done');
+    const lastWriting = [...host.storyProgress].reverse().find((p) => p.phase === 'writing');
+    expect(lastWriting?.chaptersTotal).toBe(res.bundle.chapters.length);
+  });
+
+  it('story: create-and-draft streams an error + fails honestly when AI is off (§3.2)', async () => {
+    const { bridge, host } = await freshOwner();
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'X',
+      config: { voice: 'third', style: 'warm', length: 'full', autoRefresh: true },
+    });
+    const res = await bridge.storyGenerateFullDraft({ bookId: book!.id });
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.reason).toBe('NO_KEY'); // no key set
+    expect(host.storyProgress.some((p) => p.phase === 'error')).toBe(true);
   });
 
   it('story: a blank title lets the biographer name the book, then the person can rename it (§3.2)', async () => {

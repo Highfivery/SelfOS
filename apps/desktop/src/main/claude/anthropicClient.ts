@@ -361,13 +361,17 @@ export function fakeClaudeClient(): ClaudeClient {
       }
 
       // A chapter (§5.3): prose with a per-paragraph [[SRC:s0]] citation (s0 resolves when the corpus has
-      // ≥1 item; otherwise the marker is harmlessly dropped host-side).
+      // ≥1 item; otherwise the marker is harmlessly dropped host-side). SELFOS_FAKE_STORY_SLOW adds a small
+      // per-chapter delay so an E2E can catch a draft mid-flight (background-continuation test).
       if (userText.includes('WRITE THIS CHAPTER')) {
         const prose =
           'The garage smelled of cut pine and warm oil. [[SRC:s0]]\n\n' +
           'He watched his father work the lathe, and said nothing.';
         for (const word of prose.split(' ')) onDelta(`${word} `);
-        return Promise.resolve({ text: prose, usage: STORY_USAGE });
+        const result = { text: prose, usage: STORY_USAGE };
+        return process.env['SELFOS_FAKE_STORY_SLOW']
+          ? new Promise((resolve) => setTimeout(() => resolve(result), 600))
+          : Promise.resolve(result);
       }
 
       // A batch-markup revision (§3.3.1): return the FULL revised chapter.

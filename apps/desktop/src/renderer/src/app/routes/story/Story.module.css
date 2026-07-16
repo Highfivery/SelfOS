@@ -148,6 +148,91 @@
   background: var(--color-accent-subtle-bg);
 }
 
+/* The create-and-draft progress screen (§3.2). */
+.draftIcon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--color-accent-subtle-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.draftSpinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--color-accent);
+  border-top-color: transparent;
+  animation: story-spin 0.9s linear infinite;
+}
+.progressTrack {
+  height: 8px;
+  background: var(--color-surface-alt);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progressFill {
+  height: 100%;
+  background: var(--color-accent);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+.progressIndeterminate {
+  height: 100%;
+  width: 40%;
+  background: var(--color-accent);
+  border-radius: 999px;
+  animation: story-slide 1.3s ease-in-out infinite;
+}
+.progressDots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-border-strong);
+}
+.dotDone {
+  background: var(--color-accent);
+}
+.dotCurrent {
+  background: var(--color-accent);
+  animation: story-pulse 1s ease-in-out infinite;
+}
+.draftNote {
+  background: var(--color-accent-subtle-bg);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  color: var(--color-accent);
+}
+@keyframes story-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes story-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes story-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
 /* The "New"/"Updated" read-progress marker on a "Shared with you" card (§3.6). */
 .newBadge {
   flex: none;

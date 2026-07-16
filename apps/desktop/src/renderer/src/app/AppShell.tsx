@@ -82,6 +82,7 @@ export function AppShell(): JSX.Element {
   // sessions waiting on you (invitations + your-turn), derived over your projection.
   const canTogether = useSessionStore((s) => s.can('together.own'));
   const canOwnStory = useSessionStore((s) => s.can('story.own'));
+  const storyProgress = useStoryStore((s) => s.progress);
   const togetherHasPartner = useTogetherStore((s) => s.hasPartner);
   const togetherSessions = useTogetherStore((s) => s.sessions);
   const canDoIntake = useSessionStore((s) => s.can('intake.own'));
@@ -174,6 +175,10 @@ export function AppShell(): JSX.Element {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  // Subscribe to the Your Story draft-progress stream at app level (once), so the sidebar indicator + the
+  // loading screen stay current even while the /story route is unmounted — the draft runs in main (64 §3.2).
+  useEffect(() => useStoryStore.getState().subscribeProgress(), []);
 
   // While the drawer is open: move focus into it, close on Escape, and restore focus to the
   // hamburger on close (standard overlay-menu a11y; 02-app-shell §9).
@@ -402,12 +407,26 @@ export function AppShell(): JSX.Element {
               <NavLink
                 to="/story"
                 className={navClass}
-                aria-label="Your Story"
+                aria-label={
+                  storyProgress
+                    ? storyProgress.phase === 'writing' && storyProgress.chaptersTotal > 0
+                      ? `Your Story, writing chapter ${Math.min(storyProgress.chaptersDone + 1, storyProgress.chaptersTotal)} of ${storyProgress.chaptersTotal}`
+                      : 'Your Story, writing'
+                    : 'Your Story'
+                }
                 title={tip('Your Story')}
                 onClick={closeDrawer}
               >
                 <BookOpen size={18} aria-hidden="true" />
                 <span className={styles.label}>Your Story</span>
+                {storyProgress ? (
+                  <span className={styles.navWriting} aria-hidden="true">
+                    <span className={styles.navWritingDot} />
+                    {storyProgress.phase === 'writing' && storyProgress.chaptersTotal > 0
+                      ? `${storyProgress.chaptersDone}/${storyProgress.chaptersTotal}`
+                      : '…'}
+                  </span>
+                ) : null}
               </NavLink>
             ) : null}
             {canViewMemory ? (

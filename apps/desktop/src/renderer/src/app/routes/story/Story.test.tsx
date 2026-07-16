@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type {
@@ -147,23 +147,46 @@ describe('Story (64)', () => {
     expect(await screen.findByRole('button', { name: 'Start your story' })).toBeInTheDocument();
   });
 
-  it('runs the setup → foundations → outline review flow', async () => {
+  it('setup drafts the whole book end-to-end and lands on the overview (no outline-review gate)', async () => {
     installMockBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]),
       storyCreate: () => Promise.resolve(manifest()),
-      storyGet: () => Promise.resolve(bundle(false)),
-      storyGenerateFoundations: () => Promise.resolve({ ok: true, bundle: bundle(false) }),
+      storyGet: () => Promise.resolve(writtenBundle()),
+      storyGenerateFullDraft: () => Promise.resolve({ ok: true, bundle: writtenBundle() }),
     });
     renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Start your story' }));
-    // Setup screen → create.
     expect(await screen.findByLabelText('Title')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Create .* draft the outline/ }));
-    // Foundations → outline review.
-    expect(await screen.findByRole('heading', { name: 'Review your outline' })).toBeInTheDocument();
-    expect(screen.getByDisplayValue('The Garage')).toBeInTheDocument();
-    expect(screen.getByText('A quiet man learning to speak up.')).toBeInTheDocument();
+    // No outline-review gate — it drafts straight through to the finished, editable book.
+    expect(await screen.findByRole('button', { name: /The Garage/ })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Review your outline' })).not.toBeInTheDocument();
+  });
+
+  it('shows the live writing progress screen while a draft runs (phase, chapter count, progress bar)', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([]),
+    });
+    renderStory();
+    await screen.findByRole('button', { name: 'Start your story' });
+    act(() =>
+      useStoryStore.setState({
+        progress: {
+          bookId: 'b1',
+          phase: 'writing',
+          chaptersDone: 2,
+          chaptersTotal: 8,
+          currentTitle: 'The Garage',
+          startedAt: Date.now() - 5000,
+        },
+      }),
+    );
+    expect(await screen.findByRole('heading', { name: 'Writing your story' })).toBeInTheDocument();
+    expect(screen.getByText(/chapter 3 of 8/)).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Writing progress' })).toBeInTheDocument();
+    expect(screen.getByText(/keeps writing in the background/)).toBeInTheDocument();
   });
 
   it('setup: title is optional (blank lets the biographer name it), Full is the default length, and the added styles are offered', async () => {
@@ -175,8 +198,8 @@ describe('Story (64)', () => {
         createdWith = input as never;
         return Promise.resolve(manifest());
       },
-      storyGet: () => Promise.resolve(bundle(false)),
-      storyGenerateFoundations: () => Promise.resolve({ ok: true, bundle: bundle(false) }),
+      storyGet: () => Promise.resolve(writtenBundle()),
+      storyGenerateFullDraft: () => Promise.resolve({ ok: true, bundle: writtenBundle() }),
     });
     renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Start your story' }));
@@ -191,31 +214,30 @@ describe('Story (64)', () => {
     expect(createdWith!.config.length).toBe('full'); // Full is the default for a biography
   });
 
-  it('outline review: renaming the book persists the new title (marks it the person’s own)', async () => {
+  it('renames the book from the overview (title editable in place, no outline gate)', async () => {
     let updatedWith: { bookId: string; title?: string } | null = null;
     installMockBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
-      storyList: () => Promise.resolve([manifest({ titleAuto: true })]),
-      storyGet: () => Promise.resolve(bundle(false)),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle()),
       storyUpdate: (input) => {
         updatedWith = input as never;
         return Promise.resolve(manifest());
       },
-      storyApproveOutline: () => Promise.resolve(manifest({ status: 'drafting' })),
     });
     renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Rename this book' }));
     const titleInput = await screen.findByLabelText('Book title');
-    expect(titleInput).toHaveValue('The Story of Ben');
     await userEvent.clear(titleInput);
     await userEvent.type(titleInput, 'The Weight of Quiet');
-    await userEvent.click(screen.getByRole('button', { name: 'Approve & start writing' }));
+    await userEvent.click(screen.getAllByRole('button', { name: 'Save' })[0]!);
     await waitFor(() => expect(updatedWith).not.toBeNull());
     expect(updatedWith).toEqual({ bookId: 'b1', title: 'The Weight of Quiet' });
   });
 
-  it('a failed foundations pass surfaces the error + a Try again path (no dead-end)', async () => {
-    // Realistic: after storyCreate the book EXISTS, so storyGet returns a non-null bundle with a null
-    // outline. The failure must land on the NeedsOutline state (error + Try again), never a blank overview.
+  it('a failed draft surfaces the error + a Try again path (no dead-end)', async () => {
+    // The book EXISTS after storyCreate, so on failure the draft opens it (null outline) → NeedsOutline with
+    // an error + Try again, never a blank overview.
     const noOutline: StoryBookBundle = {
       manifest: manifest(),
       outline: null,
@@ -227,7 +249,7 @@ describe('Story (64)', () => {
       storyList: () => Promise.resolve([]),
       storyCreate: () => Promise.resolve(manifest()),
       storyGet: () => Promise.resolve(noOutline),
-      storyGenerateFoundations: () =>
+      storyGenerateFullDraft: () =>
         Promise.resolve({ ok: false, reason: 'AI_OFF', message: 'Turn on AI in Settings.' }),
     });
     renderStory();
@@ -237,20 +259,6 @@ describe('Story (64)', () => {
     );
     expect(await screen.findByText('Turn on AI in Settings.')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument();
-  });
-
-  it('disables Approve when every chapter has been removed', async () => {
-    installMockBridge({
-      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
-      storyList: () => Promise.resolve([manifest()]),
-      storyGet: () => Promise.resolve(bundle(false)),
-    });
-    renderStory();
-    // Opens into outline review (one chapter). Remove it → Approve disabled.
-    const approve = await screen.findByRole('button', { name: 'Approve & start writing' });
-    expect(approve).toBeEnabled();
-    await userEvent.click(screen.getByRole('button', { name: 'Remove chapter The Garage' }));
-    expect(screen.getByRole('button', { name: 'Approve & start writing' })).toBeDisabled();
   });
 
   it('writes the chapters, then opens one to read the prose with its sources', async () => {
@@ -1284,25 +1292,21 @@ describe('Story (64)', () => {
     expect(storyUnexclude).toHaveBeenCalledWith({ bookId: 'b1', itemId: 'x1' });
   });
 
-  it('approves the outline and shows the book overview', async () => {
-    let approved = false;
+  it('opens a book with an outline straight into the overview (no approval gate)', async () => {
     installMockBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
-      storyList: () => Promise.resolve([manifest({ status: approved ? 'drafting' : 'outlining' })]),
-      storyGet: () => Promise.resolve(bundle(approved)),
-      storyApproveOutline: () => {
-        approved = true;
-        return Promise.resolve(manifest({ status: 'drafting' }));
-      },
+      storyList: () => Promise.resolve([manifest({ status: 'drafting' })]),
+      storyGet: () => Promise.resolve(bundle(true)), // approved outline, no chapters yet
     });
     renderStory();
-    // Opens straight into outline review (a book exists with an unapproved outline).
-    await userEvent.click(await screen.findByRole('button', { name: 'Approve & start writing' }));
-    // Lands on the book overview (approved, no chapters yet → offers to write them).
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: 'The Story of Ben' })).toBeInTheDocument(),
     );
+    // No approve gate — a book with an outline shows the overview + offers to write the chapters.
     expect(screen.getByRole('button', { name: 'Write your chapters' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Approve & start writing' }),
+    ).not.toBeInTheDocument();
   });
 });
 

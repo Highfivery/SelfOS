@@ -63,6 +63,7 @@ export function registerIpcHandlers(): void {
   let dreamSender: WebContents | undefined;
   let intakeSender: WebContents | undefined;
   let togetherSender: WebContents | undefined;
+  let storySender: WebContents | undefined;
   // E2E/dev: a deterministic in-memory relay (no real Cloudflare account/network), like SELFOS_FAKE_CLAUDE.
   const useFakeRelay = Boolean(process.env['SELFOS_FAKE_RELAY']);
   // E2E/dev: a deterministic update check (no real GitHub call). The env value is the latest version to
@@ -130,6 +131,11 @@ export function registerIpcHandlers(): void {
     emitTogetherChunk: (chunk) => {
       if (togetherSender && !togetherSender.isDestroyed()) {
         togetherSender.send(IpcChannels.togetherChunk, chunk);
+      }
+    },
+    emitStoryProgress: (progress) => {
+      if (storySender && !storySender.isDestroyed()) {
+        storySender.send(IpcChannels.storyProgress, progress);
       }
     },
     getBootState: currentBootState,
@@ -228,6 +234,7 @@ export function registerIpcHandlers(): void {
     onDreamChunk: () => () => {},
     onIntakeChunk: () => () => {},
     onTogetherChunk: () => () => {},
+    onStoryProgress: () => () => {},
   };
 
   const bridge = createCoreBridge(host);
@@ -400,6 +407,17 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storySharedBooks, bridge.storySharedBooks);
   handle(IpcChannels.storyReadShared, bridge.storyReadShared);
   handle(IpcChannels.storyMarkSharedRead, bridge.storyMarkSharedRead);
+  // storyGenerateFullDraft streams per-chapter progress back to the invoking window via emitStoryProgress →
+  // IPC event. Bound for the whole draft (not per-turn) so progress keeps reaching the renderer even after it
+  // navigates away — the draft runs in main regardless (64 §3.2). Reset when the draft resolves.
+  ipcMain.handle(IpcChannels.storyGenerateFullDraft, async (event, raw: unknown) => {
+    storySender = event.sender;
+    try {
+      return await bridge.storyGenerateFullDraft(raw as { bookId: string });
+    } finally {
+      storySender = undefined;
+    }
+  });
   handle(IpcChannels.storyExportMarkdown, bridge.storyExportMarkdown);
   handle(IpcChannels.storyExportPdf, bridge.storyExportPdf);
   handle(IpcChannels.storyImages, bridge.storyImages);

@@ -184,6 +184,15 @@ const bridge: SelfosBridge = {
   storyGet: (input) => ipcRenderer.invoke(IpcChannels.storyGet, input),
   storyGenerateFoundations: (input) =>
     ipcRenderer.invoke(IpcChannels.storyGenerateFoundations, input),
+  storyGenerateFullDraft: (input) => ipcRenderer.invoke(IpcChannels.storyGenerateFullDraft, input),
+  onStoryProgress: (listener) => {
+    const handler = (_event: unknown, progress: unknown): void =>
+      listener(progress as Parameters<typeof listener>[0]);
+    ipcRenderer.on(IpcChannels.storyProgress, handler);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.storyProgress, handler);
+    };
+  },
   storySaveOutline: (input) => ipcRenderer.invoke(IpcChannels.storySaveOutline, input),
   storyApproveOutline: (input) => ipcRenderer.invoke(IpcChannels.storyApproveOutline, input),
   storyUpdate: (input) => ipcRenderer.invoke(IpcChannels.storyUpdate, input),

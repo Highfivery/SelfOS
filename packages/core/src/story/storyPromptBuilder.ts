@@ -1,5 +1,13 @@
 import { SAFETY } from '../conversations';
-import type { BookConfig, BookOutline, OutlineChapter, StorySourceRef } from '../schemas';
+import type {
+  BookChapter,
+  BookConfig,
+  BookOutline,
+  ExclusionItem,
+  MarkupMark,
+  OutlineChapter,
+  StorySourceRef,
+} from '../schemas';
 import type { BookType } from './bookTypes';
 import type { CorpusItem, StoryCorpus } from './storyCorpus';
 
@@ -139,6 +147,86 @@ export function buildChapterUserMessage(
     'At the END of each paragraph, cite the [sN] sources you drew on for it as `[[SRC:sN,sN]]` (use the exact tags above; omit the marker for a paragraph that draws on nothing specific). Do not cite sources you did not use.',
     'Return ONLY the chapter prose with its inline [[SRC:…]] markers — no title heading, no preamble.',
   ].join('\n');
+}
+
+/** Render one pending mark as a plain-language revision instruction (§5.3). A `question` comment is NOT an
+ *  edit — it's the person asking the biographer why — so it never reaches this call (filtered by the caller);
+ *  a `remind` to-do is personal and a `questions` to-do routes to the interview engine, also filtered out. */
+function renderMarkInstruction(mark: MarkupMark): string | null {
+  if (mark.kind === 'delete') {
+    return `- CUT this entirely and smooth the seam so the prose still reads naturally: «${mark.anchor.quote ?? 'the anchored passage'}».`;
+  }
+  if (mark.kind === 'comment') {
+    const near = mark.anchor.quote ? ` (near «${mark.anchor.quote}»)` : '';
+    if (mark.intent === 'addContext') return `- WEAVE IN this context${near}: ${mark.text}`;
+    if (mark.intent === 'fix') return `- CORRECT this — it is wrong${near}: ${mark.text}`;
+    return null; // a 'question' comment doesn't change the prose
+  }
+  if (mark.kind === 'todo' && mark.todoKind === 'ask') {
+    const near = mark.anchor?.quote ? ` (near «${mark.anchor.quote}»)` : '';
+    return `- ${mark.text}${near}`;
+  }
+  return null;
+}
+
+/**
+ * The REVISION user message (§3.3.1/§5.3): apply a batch of the person's pending marks to an EXISTING chapter
+ * and return the full revised chapter. Unlike a fresh chapter, this seeds the model with the current prose and
+ * asks it to make only the requested changes + smooth seams — preserving everything else, the protected/pinned
+ * passages verbatim, and never reintroducing excluded material. It still cites per paragraph so provenance is
+ * refreshed. The `PRESERVE` list is ALSO code-enforced after the call (`enforceProtected`); the exclusions are
+ * ALSO filtered at the corpus boundary — the prompt instructions are the first line of defense, not the only.
+ */
+export function buildRevisionUserMessage(
+  corpus: StoryCorpus,
+  tagged: TaggedCorpusItem[],
+  opts: { chapter: BookChapter; marks: MarkupMark[]; exclusions: ExclusionItem[] },
+): string {
+  const { chapter, marks, exclusions } = opts;
+  const instructions = marks.map(renderMarkInstruction).filter((s): s is string => s !== null);
+  const preserve = [
+    ...chapter.protectedBlocks.map((b) => b.text),
+    ...chapter.pinnedQuotes.map((q) => q.text),
+  ].filter((t) => t.trim().length > 0);
+  const exclude = exclusions
+    .filter((e) => e.kind === 'topic' || e.kind === 'passage')
+    .map((e) => e.value)
+    .filter((v) => v.trim().length > 0);
+
+  const parts = [
+    `You are REVISING one chapter of ${corpus.personName || 'this person'}'s book. Make ONLY the changes requested below, then smooth any seams so the chapter still reads as a seamless whole. Keep everything else as it is — do not rewrite passages you were not asked to touch, and do not shorten the chapter beyond the requested cuts.`,
+    '',
+    'THE CURRENT CHAPTER:',
+    chapter.markdown,
+    '',
+    'CHANGES TO MAKE:',
+    instructions.length > 0
+      ? instructions.join('\n')
+      : '- (no textual changes — just re-cite the sources)',
+  ];
+  if (preserve.length > 0) {
+    parts.push(
+      '',
+      'PRESERVE these exact passages verbatim (the person’s own words — never paraphrase, move, or remove them):',
+      ...preserve.map((t) => `- «${t}»`),
+    );
+  }
+  if (exclude.length > 0) {
+    parts.push(
+      '',
+      'NEVER include or reintroduce these (the person has excluded them):',
+      ...exclude.map((v) => `- ${v}`),
+    );
+  }
+  parts.push(
+    '',
+    renderTaggedCorpus(corpus, tagged),
+    '',
+    'Return the FULL revised chapter as Markdown prose (short paragraphs; *italics* allowed; no headings, lists, or tables).',
+    'At the END of each paragraph, cite the [sN] sources you drew on as `[[SRC:sN,sN]]` (exact tags above; omit for a paragraph that draws on nothing specific).',
+    'Return ONLY the chapter prose with its inline [[SRC:…]] markers — no title heading, no preamble, no commentary on what you changed.',
+  );
+  return parts.join('\n');
 }
 
 /**

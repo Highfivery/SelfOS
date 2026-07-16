@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { BookConfigSchema } from '../schemas';
 import { BIOGRAPHY_BOOK_TYPE } from './bookTypes';
 import type { StoryCorpus } from './storyCorpus';
-import type { BookOutline } from '../schemas';
+import type { BookChapter, BookOutline, ExclusionItem, MarkupMark } from '../schemas';
 import {
   buildBiographerSystem,
   buildChapterUserMessage,
   buildFoundationsUserMessage,
+  buildRevisionUserMessage,
   renderCorpusForPrompt,
   tagCorpusItems,
 } from './storyPromptBuilder';
@@ -130,5 +131,83 @@ describe('buildChapterUserMessage', () => {
     expect(msg).toContain('He learned to sit with silence.'); // the source text
     expect(msg).toMatch(/\[\[SRC:sN,sN\]\]/); // the citation instruction
     expect(msg).toMatch(/draw only on the source material/i);
+  });
+});
+
+describe('buildRevisionUserMessage (64 §3.3.1/§5.3)', () => {
+  const chapter: BookChapter = {
+    id: 'c1',
+    schemaVersion: 1,
+    partId: 'p1',
+    order: 0,
+    title: 'The Garage',
+    markdown: 'The garage smelled of cut pine.\n\nHe watched the lathe turn.',
+    revision: 1,
+    status: 'new',
+    sourceSignature: '',
+    provenance: [],
+    protectedBlocks: [
+      { anchor: { paragraphId: 'p0', quote: 'my own words' }, text: 'my own words' },
+    ],
+    pinnedQuotes: [],
+    imagePlacements: [],
+  };
+  const marks: MarkupMark[] = [
+    {
+      id: 'd1',
+      kind: 'delete',
+      anchor: { paragraphId: 'p1', quote: 'He watched the lathe turn.' },
+      status: 'pending',
+      createdAt: 'n',
+    },
+    {
+      id: 'm1',
+      kind: 'comment',
+      anchor: { paragraphId: 'p0', quote: 'cut pine' },
+      intent: 'addContext',
+      text: 'the lathe was three generations old',
+      status: 'open',
+      createdAt: 'n',
+    },
+    {
+      id: 'q1',
+      kind: 'comment',
+      anchor: { paragraphId: 'p0' },
+      intent: 'question',
+      text: 'why this framing?',
+      status: 'open',
+      createdAt: 'n',
+    },
+  ];
+  const exclusions: ExclusionItem[] = [
+    { id: 'e1', kind: 'topic', value: 'the divorce', createdAt: 'n' },
+  ];
+
+  it('carries the current prose, renders edit instructions, and lists preserve + exclude', () => {
+    const tagged = tagCorpusItems(corpus);
+    const msg = buildRevisionUserMessage(corpus, tagged, { chapter, marks, exclusions });
+    expect(msg).toContain('THE CURRENT CHAPTER');
+    expect(msg).toContain('The garage smelled of cut pine.'); // the current prose is seeded
+    expect(msg).toMatch(/CUT this entirely/); // the delete
+    expect(msg).toMatch(/WEAVE IN this context.*three generations old/s); // the addContext comment
+    expect(msg).not.toContain('why this framing?'); // a question comment is NOT an edit instruction
+    expect(msg).toMatch(/PRESERVE these exact passages/);
+    expect(msg).toContain('my own words'); // the protected block
+    expect(msg).toMatch(/NEVER include or reintroduce/);
+    expect(msg).toContain('the divorce'); // the exclusion
+    expect(msg).toMatch(/\[\[SRC:sN,sN\]\]/); // still asks for fresh citations
+  });
+
+  it('handles a chapter with no pending edits (re-cite only) and no preserve/exclude lists', () => {
+    const tagged = tagCorpusItems(corpus);
+    const bare: BookChapter = { ...chapter, protectedBlocks: [] };
+    const msg = buildRevisionUserMessage(corpus, tagged, {
+      chapter: bare,
+      marks: [],
+      exclusions: [],
+    });
+    expect(msg).toMatch(/no textual changes/);
+    expect(msg).not.toMatch(/PRESERVE these exact passages/);
+    expect(msg).not.toMatch(/NEVER include or reintroduce/);
   });
 });

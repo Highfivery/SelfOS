@@ -8,17 +8,22 @@ import {
   type BookChapter,
   type BookConfig,
   type BookOutline,
+  type ChapterMarkup,
   type ExclusionItem,
   type LifeTimeline,
+  type MarkupMark,
   type OutlineChapter,
   type UsageEvent,
 } from '../schemas';
 import { getBookType, type BookType } from './bookTypes';
 import { buildStoryCorpus, type StoryCorpus } from './storyCorpus';
+import { enforceProtected } from './storyMarkup';
+import { syncChapterTodos } from './storyMarkupService';
 import {
   buildBiographerSystem,
   buildChapterUserMessage,
   buildFoundationsUserMessage,
+  buildRevisionUserMessage,
   tagCorpusItems,
 } from './storyPromptBuilder';
 import { stripSourceMarkers } from './storyText';
@@ -28,8 +33,10 @@ import {
   getBook,
   getChapter,
   getExclusions,
+  getMarkup,
   getOutline,
   saveChapter,
+  saveMarkup,
   updateBook,
 } from './storyService';
 
@@ -337,4 +344,106 @@ export async function generateBookChapters(
     return { ok: false, generated: 0, reason: lastFailure.reason, message: lastFailure.message };
   }
   return { ok: true, generated };
+}
+
+// --- The batch markup revision (§3.3.1/§5.3) -------------------------------------------------------------
+
+/** The marks a batch revision applies: pending deletes, open addContext/fix comments, and open `ask` to-dos.
+ *  A `question` comment (dialogue, not an edit), a `remind` to-do (personal), and a `questions` to-do (routes
+ *  to the interview engine, §5.5) are all left untouched. */
+export function pendingRevisionMarks(marks: MarkupMark[]): MarkupMark[] {
+  return marks.filter((m) => {
+    if (m.kind === 'delete') return m.status === 'pending';
+    if (m.kind === 'comment') return m.status === 'open' && m.intent !== 'question';
+    if (m.kind === 'todo') return m.status === 'open' && m.todoKind === 'ask';
+    return false;
+  });
+}
+
+/** Stamp an included mark as applied at the new revision (delete/comment → `applied`; `ask` to-do → `applied`). */
+function markApplied(mark: MarkupMark, revision: number): MarkupMark {
+  if (mark.kind === 'delete' || mark.kind === 'comment') {
+    return { ...mark, status: 'applied', appliedRevision: revision };
+  }
+  return { ...mark, status: 'applied' };
+}
+
+/**
+ * Apply a chapter's pending markup as ONE metered `story.chapter` revision (§3.3.1/§5.3): seed the model with
+ * the current prose + each pending mark rendered as an instruction, re-cite for fresh provenance, then
+ * code-enforce the protected/pinned passages (`enforceProtected` — never trust the prompt alone) and persist.
+ * On success the chapter goes `updated` (revision bumped) and every included mark → `applied`. Instant marks
+ * (inline edit, pin) are already in the chapter; excluded material is filtered at the corpus boundary. Returns
+ * an honest failure on an empty/unparseable reply, or a no-op error when there's nothing pending.
+ */
+export async function applyMarkup(
+  deps: AiDeps,
+  args: { bookId: string; chapterId: string },
+): Promise<ChapterResult> {
+  const book = await getBook(deps.fs, deps.key, deps.personId, args.bookId);
+  if (!book) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+  const bookType = getBookType(book.type);
+  if (!bookType) return { ok: false, reason: 'ERROR', message: 'Unknown book type.' };
+  const existing = await getChapter(deps.fs, deps.key, deps.personId, args.bookId, args.chapterId);
+  if (!existing) return { ok: false, reason: 'ERROR', message: 'That chapter is no longer here.' };
+
+  const markup: ChapterMarkup = await getMarkup(
+    deps.fs,
+    deps.key,
+    deps.personId,
+    args.bookId,
+    args.chapterId,
+  );
+  const pending = pendingRevisionMarks(markup.marks);
+  if (pending.length === 0) {
+    return { ok: false, reason: 'ERROR', message: 'There are no changes to apply yet.' };
+  }
+
+  const exclusions = await getExclusions(deps.fs, deps.key, deps.personId, args.bookId);
+  const corpus = await buildStoryCorpus(deps.fs, deps.key, deps.personId, exclusions);
+  const tagged = tagCorpusItems(corpus);
+  const tagToRef = new Map(tagged.map((t) => [t.tag, t.sourceRef]));
+  const system = buildBiographerSystem(bookType, book.config, corpus.personName);
+  const user = buildRevisionUserMessage(corpus, tagged, {
+    chapter: existing,
+    marks: pending,
+    exclusions,
+  });
+
+  const result = await runClaude(deps, system, user, 'story.chapter', CHAPTER_MAX_TOKENS);
+  if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
+
+  const stripped = stripSourceMarkers(result.text, tagToRef);
+  if (stripped.markdown.trim().length === 0) {
+    const { reason, message } = classifyParseOutcome(result.text, 'chapter');
+    return { ok: false, reason, message };
+  }
+  // Code-enforce the person's protected/pinned words — the prompt asked, but the guarantee is code (§5.3/§5.4).
+  const enforced = enforceProtected(
+    stripped.markdown,
+    existing.protectedBlocks,
+    existing.pinnedQuotes,
+  );
+
+  const chapter: BookChapter = {
+    ...existing,
+    markdown: enforced.markdown,
+    revision: existing.revision + 1,
+    status: 'updated',
+    provenance: stripped.provenance,
+    lastGeneratedAt: deps.now.toISOString(),
+  };
+  await saveChapter(deps.fs, deps.key, deps.personId, args.bookId, chapter);
+
+  // Stamp every applied mark; leave the rest (questions, reminders, dismissed) as they were.
+  const includedIds = new Set(pending.map((m) => m.id));
+  const marks = markup.marks.map((m) =>
+    includedIds.has(m.id) ? markApplied(m, chapter.revision) : m,
+  );
+  await saveMarkup(deps.fs, deps.key, deps.personId, args.bookId, { ...markup, marks });
+  // Keep the book-level to-do roll-up in step — an applied `ask` to-do must flip to `applied` there too, or
+  // the overview's one-read list would show it still open (the roll-up is denormalized; §3.3.2).
+  await syncChapterTodos(deps.fs, deps.key, deps.personId, args.bookId, args.chapterId, marks);
+
+  return { ok: true, chapter };
 }

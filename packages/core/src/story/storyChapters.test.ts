@@ -6,20 +6,34 @@ import { saveInsight } from '../insights';
 import { savePerson } from '../people';
 import type { AiDeps } from '../questionnaires';
 import { costOf, setPersonBudget } from '../usage';
-import type { BookOutline, Insight, LifeTimeline, Person, StorySourceRef } from '../schemas';
+import type {
+  BookOutline,
+  DeleteMark,
+  Insight,
+  LifeTimeline,
+  MarkupMark,
+  Person,
+  StorySourceRef,
+} from '../schemas';
 import {
+  applyMarkup,
   chapterParagraphs,
   generateBookChapters,
   generateChapter,
+  pendingRevisionMarks,
   stripSourceMarkers,
 } from './storyGenerationService';
+import { addMark } from './storyMarkupService';
 import {
   applyFoundations,
   approveOutline,
   createBook,
   getBook,
   getChapter,
+  getMarkup,
+  getTodos,
   saveChapter,
+  saveMarkup,
 } from './storyService';
 
 const key = generateMasterKey();
@@ -340,5 +354,188 @@ describe('generateBookChapters — the orchestrator (64 §5.3)', () => {
     expect((await getChapter(fs, key, 'me', bookId, 'c1'))?.markdown).toContain('Original prose'); // untouched
     expect((await getChapter(fs, key, 'me', bookId, 'c1'))?.status).toBe('reviewed');
     expect((await getChapter(fs, key, 'me', bookId, 'c2'))?.markdown).toContain('Fresh rewrite');
+  });
+});
+
+describe('pendingRevisionMarks (64 §5.3)', () => {
+  it('includes pending deletes + open addContext/fix comments + open ask to-dos; excludes the rest', () => {
+    const anchor = { paragraphId: 'p0', quote: 'x' };
+    const marks: MarkupMark[] = [
+      { id: 'd1', kind: 'delete', anchor, status: 'pending', createdAt: 'n' },
+      { id: 'd2', kind: 'delete', anchor, status: 'applied', createdAt: 'n' }, // already applied
+      {
+        id: 'c1',
+        kind: 'comment',
+        anchor,
+        intent: 'addContext',
+        text: 'a',
+        status: 'open',
+        createdAt: 'n',
+      },
+      {
+        id: 'c2',
+        kind: 'comment',
+        anchor,
+        intent: 'fix',
+        text: 'b',
+        status: 'open',
+        createdAt: 'n',
+      },
+      {
+        id: 'c3',
+        kind: 'comment',
+        anchor,
+        intent: 'question',
+        text: '?',
+        status: 'open',
+        createdAt: 'n',
+      }, // dialogue
+      { id: 't1', kind: 'todo', text: 'ask this', todoKind: 'ask', status: 'open', createdAt: 'n' },
+      {
+        id: 't2',
+        kind: 'todo',
+        text: 'remind me',
+        todoKind: 'remind',
+        status: 'open',
+        createdAt: 'n',
+      }, // personal
+      {
+        id: 't3',
+        kind: 'todo',
+        text: 'go deeper',
+        todoKind: 'questions',
+        status: 'open',
+        createdAt: 'n',
+      }, // interviews
+    ];
+    expect(pendingRevisionMarks(marks).map((m) => m.id)).toEqual(['d1', 'c1', 'c2', 't1']);
+  });
+});
+
+describe('applyMarkup — the batch revision (64 §3.3.1/§5.3)', () => {
+  async function seedWrittenChapter(fs: ReturnType<typeof memFileSystem>): Promise<string> {
+    const bookId = await seedApprovedBook(fs);
+    await generateChapter(deps(fs, fakeClient('The garage smelled of cut pine. [[SRC:s0]]')), {
+      bookId,
+      chapterId: 'c1',
+    });
+    return bookId;
+  }
+
+  it('applies pending marks: bumps the revision, marks the chapter updated, stamps the marks applied', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedWrittenChapter(fs);
+    const mark: DeleteMark = {
+      id: 'd1',
+      kind: 'delete',
+      anchor: { paragraphId: 'p0', quote: 'cut pine' },
+      status: 'pending',
+      createdAt: 'now',
+    };
+    await saveMarkup(fs, key, 'me', bookId, { schemaVersion: 1, chapterId: 'c1', marks: [mark] });
+
+    const res = await applyMarkup(deps(fs, fakeClient('The garage was quiet. [[SRC:s0]]')), {
+      bookId,
+      chapterId: 'c1',
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.chapter.status).toBe('updated');
+    expect(res.chapter.revision).toBe(2);
+    expect(res.chapter.markdown).toContain('was quiet');
+    const marks = (await getMarkup(fs, key, 'me', bookId, 'c1')).marks;
+    expect(marks[0]?.status).toBe('applied');
+    expect((marks[0] as DeleteMark).appliedRevision).toBe(2);
+  });
+
+  it('code-enforces a protected block the revision dropped (never loses the person’s words)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedWrittenChapter(fs);
+    const existing = await getChapter(fs, key, 'me', bookId, 'c1');
+    if (!existing) throw new Error('seed');
+    await saveChapter(fs, key, 'me', bookId, {
+      ...existing,
+      protectedBlocks: [
+        { anchor: { paragraphId: 'p0', quote: 'my own words' }, text: 'my own words' },
+      ],
+    });
+    await saveMarkup(fs, key, 'me', bookId, {
+      schemaVersion: 1,
+      chapterId: 'c1',
+      marks: [
+        {
+          id: 'c1m',
+          kind: 'comment',
+          anchor: { paragraphId: 'p0', quote: 'cut pine' },
+          intent: 'addContext',
+          text: 'add a detail',
+          status: 'open',
+          createdAt: 'now',
+        },
+      ],
+    });
+    // The fake revision omits the protected text entirely — enforcement must splice it back.
+    const res = await applyMarkup(
+      deps(fs, fakeClient('A totally rewritten paragraph. [[SRC:s0]]')),
+      { bookId, chapterId: 'c1' },
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.chapter.markdown).toContain('my own words');
+  });
+
+  it('is an honest no-op when there is nothing pending', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedWrittenChapter(fs);
+    const res = await applyMarkup(deps(fs, fakeClient('unused')), { bookId, chapterId: 'c1' });
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.message).toMatch(/no changes/i);
+  });
+
+  it('does not apply a question comment (dialogue, not an edit)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedWrittenChapter(fs);
+    await saveMarkup(fs, key, 'me', bookId, {
+      schemaVersion: 1,
+      chapterId: 'c1',
+      marks: [
+        {
+          id: 'q1',
+          kind: 'comment',
+          anchor: { paragraphId: 'p0', quote: 'cut pine' },
+          intent: 'question',
+          text: 'why frame it this way?',
+          status: 'open',
+          createdAt: 'now',
+        },
+      ],
+    });
+    const res = await applyMarkup(deps(fs, fakeClient('unused')), { bookId, chapterId: 'c1' });
+    expect(res.ok).toBe(false); // a lone question comment leaves nothing to apply
+  });
+
+  it('flips an applied ask to-do in the book-level roll-up too (no denormalization drift)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedWrittenChapter(fs);
+    // Add an `ask` to-do through the real path so the roll-up starts with it `open`.
+    await addMark(fs, key, 'me', bookId, 'c1', {
+      id: 'a1',
+      kind: 'todo',
+      text: 'go deeper on the winter he got sick',
+      todoKind: 'ask',
+      status: 'open',
+      createdAt: 'now',
+    });
+    expect((await getTodos(fs, key, 'me', bookId)).todos[0]?.status).toBe('open');
+
+    const res = await applyMarkup(deps(fs, fakeClient('A deeper scene. [[SRC:s0]]')), {
+      bookId,
+      chapterId: 'c1',
+    });
+    expect(res.ok).toBe(true);
+    // The chapter markup AND the denormalized roll-up both show the ask to-do applied.
+    expect((await getMarkup(fs, key, 'me', bookId, 'c1')).marks[0]?.status).toBe('applied');
+    expect((await getTodos(fs, key, 'me', bookId)).todos[0]?.status).toBe('applied');
   });
 });

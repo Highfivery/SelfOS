@@ -244,6 +244,7 @@ export function buildFoundationsUserMessage(corpus: StoryCorpus, bookType: BookT
     renderCorpusForPrompt(corpus),
     '',
     'Then return ONE JSON object with exactly these keys:',
+    `- "title": an evocative, book-worthy title for THIS ${bookType.label.toLowerCase()}, drawn from its through-line — a few words, title case, the kind of title you'd see on a published book's spine. NOT a bare name and NOT a generic "The Story of ${corpus.personName || 'this person'}"; a subtitle only if it truly earns one.`,
     '- "essence": 2–4 sentences stating what THIS book is about — the emotional truth and through-line, not a summary of events. This governs every later chapter.',
     '- "timeline": an array of the key dated moments you can anchor, each { "label": string, "date"?: "YYYY" or "YYYY-MM-DD", "approx"?: a fuzzy label like "mid-90s" when no date is known }. Include only moments the material supports.',
     '- "outline": { "parts": [ { "title": string, "chapters": [ { "title": an evocative chapter title (not a bare number), "brief": 1–2 sentences on what this chapter is about and the one scene it turns on, "eraFrom"?: "YYYY", "eraTo"?: "YYYY", "lifeAreas"?: string[] } ] } ] }.',

@@ -100,6 +100,56 @@ describe('storyService — persistence (64 §5.7)', () => {
     expect((await getTimeline(fs, key, 'me', book.id))?.events[0]?.label).toBe('Born');
   });
 
+  it('createBook marks a blank title auto (placeholder) and a supplied title the person’s own (§3.2)', async () => {
+    const fs = memFileSystem();
+    const auto = await createBook(fs, key, {
+      personId: 'me',
+      type: 'biography',
+      title: '   ',
+      config,
+      now,
+    });
+    expect(auto.title).toBe('Your Story');
+    expect(auto.titleAuto).toBe(true);
+
+    const chosen = await newBook(fs); // 'The Story of Ben'
+    expect(chosen.titleAuto).toBeUndefined();
+  });
+
+  it('applyFoundations names an auto-titled book from the content, but never overwrites a chosen title (§3.2)', async () => {
+    const fs = memFileSystem();
+    // Auto-titled → the proposed title is applied (auto flag stays set until the person edits it).
+    const autoBook = await createBook(fs, key, {
+      personId: 'me',
+      type: 'biography',
+      title: '',
+      config,
+      now,
+    });
+    const named = await applyFoundations(
+      fs,
+      key,
+      'me',
+      autoBook.id,
+      { title: '  The Weight of Quiet  ', essence: 'e', outline, timeline },
+      now,
+    );
+    expect(named?.title).toBe('The Weight of Quiet'); // trimmed, applied
+    expect(named?.titleAuto).toBe(true);
+
+    // Person-chosen title → the proposed title is ignored.
+    const chosenBook = await newBook(fs); // 'The Story of Ben', not auto
+    const kept = await applyFoundations(
+      fs,
+      key,
+      'me',
+      chosenBook.id,
+      { title: 'A Different Title', essence: 'e', outline, timeline },
+      now,
+    );
+    expect(kept?.title).toBe('The Story of Ben');
+  });
+
   it('approveOutline marks the outline approved and moves the book to drafting', async () => {
     const fs = memFileSystem();
     const book = await newBook(fs);

@@ -3502,17 +3502,26 @@ export type BookTypeId = z.infer<typeof BookTypeIdSchema>;
 
 export const BookVoiceSchema = z.enum(['third', 'first']);
 export type BookVoice = z.infer<typeof BookVoiceSchema>;
-export const BookStyleSchema = z.enum(['literary', 'warm', 'plain']);
+export const BookStyleSchema = z.enum([
+  'literary',
+  'warm',
+  'plain',
+  'journalistic',
+  'reflective',
+  'cinematic',
+  'poetic',
+]);
 export type BookStyle = z.infer<typeof BookStyleSchema>;
 export const BookLengthSchema = z.enum(['concise', 'standard', 'full']);
 export type BookLength = z.infer<typeof BookLengthSchema>;
 
 /** Per-book generation config (64 §3.2). Voice/style/length steer the Biographer; `autoRefresh` gates the
- *  hybrid living-book cadence (§3.4). Defaults are the owner-approved defaults (third person, warm, standard). */
+ *  hybrid living-book cadence (§3.4). Defaults are the owner-approved defaults (third person, warm, full —
+ *  a biography reads at published-book length by default, still selectable in setup). */
 export const BookConfigSchema = z.object({
   voice: BookVoiceSchema.default('third'),
   style: BookStyleSchema.default('warm'),
-  length: BookLengthSchema.default('standard'),
+  length: BookLengthSchema.default('full'),
   autoRefresh: z.boolean().default(true),
 });
 export type BookConfig = z.infer<typeof BookConfigSchema>;
@@ -3537,6 +3546,10 @@ export const BookManifestSchema = z.object({
   personId: z.string().min(1),
   type: BookTypeIdSchema,
   title: z.string().min(1),
+  // `titleAuto` = the title was assigned by the app (a placeholder or the AI-proposed title), not chosen by
+  // the person (§3.2). While true, the foundations pass may overwrite it with a title drawn from the content;
+  // it flips to absent/false the moment the person edits the title on the outline-review screen.
+  titleAuto: z.boolean().optional(),
   config: BookConfigSchema,
   essence: z.string().optional(),
   status: BookStatusSchema,
@@ -4027,10 +4040,11 @@ export interface StoryBookTypeView {
   stylePresets: { id: BookStyle; label: string }[];
 }
 
-/** `story:create` input — the setup screen's choices (§3.2). */
+/** `story:create` input — the setup screen's choices (§3.2). `title` may be blank: the person can leave it
+ *  empty and the foundations pass proposes a title from their content (which they can then edit). */
 export const StoryCreateInputSchema = z.object({
   type: BookTypeIdSchema,
-  title: z.string().min(1).max(200),
+  title: z.string().max(200),
   config: BookConfigSchema,
 });
 export type StoryCreateInput = z.infer<typeof StoryCreateInputSchema>;

@@ -276,6 +276,7 @@ function makeHost(): {
       if (userText.includes('plan a biography of')) {
         return Promise.resolve({
           text: JSON.stringify({
+            title: 'The Weight of Quiet',
             essence: 'A quiet man learning to speak up.',
             timeline: [{ label: 'Born in Ohio', date: '1985' }],
             outline: {
@@ -6520,6 +6521,8 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(gen.ok).toBe(true);
     if (!gen.ok) return;
     expect(gen.bundle.manifest.essence).toContain('learning to speak');
+    // A title the person supplied is never overwritten by the foundations pass (§3.2).
+    expect(gen.bundle.manifest.title).toBe('The Story of Ben');
     expect(gen.bundle.outline?.approved).toBe(false);
     expect(gen.bundle.outline?.parts[0]?.chapters[0]?.title).toBe('The Garage');
     expect(gen.bundle.timeline?.events[0]?.label).toBe('Born in Ohio');
@@ -6533,6 +6536,39 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await bridge.storyDelete({ bookId });
     expect(await bridge.storyList()).toEqual([]);
     expect(await bridge.storyGet({ bookId })).toBeNull();
+  });
+
+  it('story: a blank title lets the biographer name the book, then the person can rename it (§3.2)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+
+    // Blank title → a placeholder + `titleAuto` so the foundations pass may name it.
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: '',
+      config: { voice: 'third', style: 'cinematic', length: 'full', autoRefresh: true },
+    });
+    expect(book?.title).toBe('Your Story');
+    expect(book?.titleAuto).toBe(true);
+    const bookId = book!.id;
+
+    // Foundations proposes a title from the content → applied because the title was still auto.
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    expect(gen.ok).toBe(true);
+    if (!gen.ok) return;
+    expect(gen.bundle.manifest.title).toBe('The Weight of Quiet');
+
+    // The person renames it on review → their title is now their own (auto cleared).
+    const renamed = await bridge.storyUpdate({ bookId, title: 'A Machine and a Voice' });
+    expect(renamed?.title).toBe('A Machine and a Voice');
+    expect(renamed?.titleAuto ?? false).toBe(false);
+
+    // "Start over" re-runs foundations → the person's chosen title is preserved, never re-proposed.
+    const again = await bridge.storyGenerateFoundations({ bookId });
+    expect(again.ok).toBe(true);
+    if (!again.ok) return;
+    expect(again.bundle.manifest.title).toBe('A Machine and a Voice');
   });
 
   it('story: foundations returns an honest failure when AI is off / no key', async () => {

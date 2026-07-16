@@ -85,6 +85,7 @@ const DraftTimelineEventSchema = z.object({
 type DraftTimelineEvent = z.infer<typeof DraftTimelineEventSchema>;
 
 const FoundationsDraftSchema = z.object({
+  title: z.string().catch(''),
   essence: z.string().catch(''),
   timeline: tolerantArray(
     DraftTimelineEventSchema,
@@ -103,7 +104,14 @@ const FoundationsDraftSchema = z.object({
 });
 
 export type FoundationsResult =
-  | { ok: true; essence: string; outline: BookOutline; timeline: LifeTimeline; usage: UsageEvent }
+  | {
+      ok: true;
+      title: string;
+      essence: string;
+      outline: BookOutline;
+      timeline: LifeTimeline;
+      usage: UsageEvent;
+    }
   | { ok: false; reason: AiFailureReason; message: string };
 
 /**
@@ -176,7 +184,14 @@ export async function generateFoundations(
     })),
   };
 
-  return { ok: true, essence: draft.essence.trim(), outline, timeline, usage: result.usage };
+  return {
+    ok: true,
+    title: draft.title.trim(),
+    essence: draft.essence.trim(),
+    outline,
+    timeline,
+    usage: result.usage,
+  };
 }
 
 // --- Chapter generation (§5.3) ---------------------------------------------------------------------------

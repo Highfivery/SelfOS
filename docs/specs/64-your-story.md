@@ -93,17 +93,23 @@ projections), 20/44/62 (Memory, flag-inaccurate loop).
 
 1. `/story` empty state explains the feature (and its privacy model: "written from your private
    vault; nobody sees it until you share") → **"Start your story"**.
-2. **Setup (one screen, not a wizard)**: title (default "The Story of {name}", editable), narrative
-   voice (**third person** default; first person available), style register (Literary · Warm ·
-   Plain — style presets from the BookType), length target (Concise · Standard · Full), and a note
-   that the biographer reads everything it knows unless excluded later. No area-picking step — all
-   data feeds the draft (owner decision, 2026-07-15; §8.3 governs safety).
-3. **Foundations pass** (one metered call): produces the book's **essence statement**, a proposed
-   **timeline**, and a proposed **outline** — parts + chapters, each chapter with a title, a 1–2
-   sentence brief ("essence"), an era/date range, and the source material it will draw on. The
-   McAdams "life chapters" concept shapes the proposal.
-4. **Outline review** — the first collaboration moment: rename/reorder/merge/split chapters, edit
-   briefs, delete proposed chapters. **Approve outline** → chapter drafting begins (queued,
+2. **Setup (one screen, not a wizard)**: title (**optional** — leave it blank and the biographer
+   proposes one from your content, editable on outline review; owner decision 2026-07-16), narrative
+   voice (**third person** default; first person available), style register (Literary · Warm · Plain ·
+   Journalistic · Reflective · Cinematic · Poetic — style presets from the BookType, shown as a
+   full-width Select once past what a SegmentedControl holds at phone width, §12), length target
+   (Concise · Standard · Full, **default Full** — a biography reads at published-book length; owner
+   decision 2026-07-16), and a note that the biographer reads everything it knows unless excluded
+   later. No area-picking step — all data feeds the draft (owner decision, 2026-07-15; §8.3 governs
+   safety).
+3. **Foundations pass** (one metered call): produces a proposed **title** (drawn from the book's
+   through-line; applied only when the person left the title blank — never overwrites a chosen one,
+   `BookManifest.titleAuto`), the book's **essence statement**, a proposed **timeline**, and a
+   proposed **outline** — parts + chapters, each chapter with a title, a 1–2 sentence brief
+   ("essence"), an era/date range, and the source material it will draw on. The McAdams "life
+   chapters" concept shapes the proposal.
+4. **Outline review** — the first collaboration moment: rename the book, rename/reorder/merge/split
+   chapters, edit briefs, delete proposed chapters. **Approve outline** → chapter drafting begins (queued,
    progress shown per chapter, resumable; budget-gated so an over-budget stop resumes cleanly next
    period).
 
@@ -290,10 +296,12 @@ people/<personId>/story/books/<bookId>/
 Zod schemas (in `packages/core/src/schemas.ts` unless noted; names final at implementation):
 
 - **`BookManifestSchema`** — `{ schemaVersion:1, id, personId, type: BookTypeId ('biography'),
-title, config: { voice:'third'|'first', style:'literary'|'warm'|'plain', length:
-'concise'|'standard'|'full', autoRefresh: boolean (default true) }, essence?: string, status:
-'outlining'|'drafting'|'ready', coverImageId?, sharedWith: string[] (person ids), createdAt,
-updatedAt, publishedAt? }`.
+title, titleAuto?: boolean (the title was app-assigned — a placeholder or the AI-proposed title — so
+the foundations pass may overwrite it; cleared once the person edits the title), config: {
+voice:'third'|'first', style:'literary'|'warm'|'plain'|'journalistic'|'reflective'|'cinematic'|'poetic',
+length:'concise'|'standard'|'full' (default 'full'), autoRefresh: boolean (default true) }, essence?:
+string, status:'outlining'|'drafting'|'ready', coverImageId?, sharedWith: string[] (person ids),
+createdAt, updatedAt, publishedAt? }`.
 - **`BookOutlineSchema`** — `{ schemaVersion:1, approved: boolean, parts: [{ id, title, chapters:
 [{ id, title, brief, eraFrom?, eraTo?, lifeAreas: LifeArea[], order }] }] }`.
 - **`LifeTimelineSchema`** — `{ schemaVersion:1, events: [{ id, date?: string, approx?: string,
@@ -642,8 +650,9 @@ case):
    quotes through the existing send machinery). Not in v1.
 3. **Story interview sessions — post-v1 fast-follow.** v1's interview surface is the questionnaire
    check-in (Phase E); the conversational deep-scene interviewer comes after.
-4. **Default length — `standard`** ≈ 10–18 chapters, ~1,500–3,000 words each; `concise` shorter,
-   `full` reaching the 2,500–5,000-word craft target.
+4. **Default length — `full`** (owner decision 2026-07-16 — a biography reads at published-book
+   length): `full` ≈ 16–24 substantial chapters, ~2,500–5,000 words each; `standard` ≈ 10–18 chapters
+   at ~1,500–3,000 words; `concise` shorter still. Length stays selectable in setup.
 5. **Cover — on-demand only** (never auto-spend an image).
 6. **Nav label — "Your Story."**
 7. **`STORY_WEEKLY_AUTO_CAP` = 10** chapter auto-rewrites per rolling 7 days (owner override
@@ -674,3 +683,12 @@ No open questions remain; the spec is Approved and ready for the Phase A slice (
   option each): reader-view ~70% measure as a signed-off §12 exception; contributions + interview
   sessions are post-v1 fast-follows; `standard` default length; on-demand covers; "Your Story" nav
   label; `STORY_WEEKLY_AUTO_CAP = 10`. Ready for the Phase A backbone slice.
+- 2026-07-16 — **Setup refinements (testing feedback, on `feat/auto-checkins-finish`, PR [#218]).**
+  Three owner-decided tweaks to the "Start your story" screen: (1) **title is optional** — leaving it
+  blank lets the foundations pass propose a title from the content, applied via the new additive
+  `BookManifest.titleAuto` flag (never overwrites a title the person supplied or later edits on the
+  outline-review screen, which now has an editable book-title field); (2) **four more style presets**
+  (Journalistic · Reflective · Cinematic · Poetic — the Style control became a full-width Select since
+  seven options overflow a SegmentedControl at phone width, §12); (3) **default length is now Full**
+  (published-book length), still selectable. Additive schema (no version bump). §3.2 / §4 / §11
+  amended.

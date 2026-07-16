@@ -48,10 +48,28 @@ const VOICE_OPTIONS: SegmentOption<Voice>[] = [
   { value: 'third', label: 'Third person' },
   { value: 'first', label: 'First person' },
 ];
-const STYLE_OPTIONS: SegmentOption<Style>[] = [
-  { value: 'literary', label: 'Literary' },
-  { value: 'warm', label: 'Warm' },
-  { value: 'plain', label: 'Plain' },
+// Styles have grown past what a SegmentedControl can hold at phone width (§12 — no horizontal scroll), so the
+// style picker is a full-width Select with a one-line hint for the chosen register.
+const STYLE_CHOICES: { value: Style; label: string; hint: string }[] = [
+  { value: 'literary', label: 'Literary', hint: 'Vivid, image-led prose with deliberate rhythm.' },
+  { value: 'warm', label: 'Warm', hint: 'Plain, tender, dinner-table narration.' },
+  { value: 'plain', label: 'Plain', hint: 'Direct, unadorned, concrete; short sentences.' },
+  {
+    value: 'journalistic',
+    label: 'Journalistic',
+    hint: 'Reportorial and evidence-led; clear and propulsive.',
+  },
+  {
+    value: 'reflective',
+    label: 'Reflective',
+    hint: 'Essayistic and meditative; interior and thoughtful.',
+  },
+  {
+    value: 'cinematic',
+    label: 'Cinematic',
+    hint: 'Scene-forward and dramatic; vivid set-pieces.',
+  },
+  { value: 'poetic', label: 'Poetic', hint: 'Lyrical and image-dense; heightened rhythm.' },
 ];
 const LENGTH_OPTIONS: SegmentOption<Length>[] = [
   { value: 'concise', label: 'Concise' },
@@ -190,7 +208,7 @@ export function Story(): JSX.Element {
     return (
       <div className={styles.page}>
         <StorySetup
-          defaultTitle={personName ? `The Story of ${personName}` : 'Your Story'}
+          titleHint={personName ? `e.g. The Story of ${personName}` : 'e.g. The Story of a Life'}
           onCancel={() => setMode('idle')}
           onCreate={async (title, config) => {
             setError(null);
@@ -235,18 +253,19 @@ export function Story(): JSX.Element {
 }
 
 function StorySetup({
-  defaultTitle,
+  titleHint,
   onCreate,
   onCancel,
 }: {
-  defaultTitle: string;
+  titleHint: string;
   onCreate: (title: string, config: BookConfig) => void | Promise<void>;
   onCancel: () => void;
 }): JSX.Element {
-  const [title, setTitle] = useState(defaultTitle);
+  const [title, setTitle] = useState('');
   const [voice, setVoice] = useState<Voice>('third');
   const [style, setStyle] = useState<Style>('warm');
-  const [length, setLength] = useState<Length>('standard');
+  const [length, setLength] = useState<Length>('full');
+  const styleHint = STYLE_CHOICES.find((s) => s.value === style)?.hint ?? '';
 
   return (
     <Card>
@@ -255,11 +274,22 @@ function StorySetup({
           <Heading level={2}>Start your story</Heading>
           <Text tone="secondary">
             Your biographer reads everything it knows about you unless you exclude it later. Choose
-            a title and how it should read.
+            how it should read — you can leave the title to your biographer.
           </Text>
         </Stack>
-        <Labeled label="Title">
-          <TextInput value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Title" />
+        <Labeled label="Title (optional)">
+          <Stack gap={1}>
+            <TextInput
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              aria-label="Title"
+              placeholder={titleHint}
+            />
+            <Text size="sm" tone="secondary">
+              Leave blank and your biographer will suggest a title from your story — you can rename
+              it before it starts writing.
+            </Text>
+          </Stack>
         </Labeled>
         <Labeled label="Narrative voice">
           <SegmentedControl
@@ -270,12 +300,24 @@ function StorySetup({
           />
         </Labeled>
         <Labeled label="Style">
-          <SegmentedControl
-            options={STYLE_OPTIONS}
-            value={style}
-            onChange={setStyle}
-            aria-label="Style"
-          />
+          <Stack gap={1}>
+            <Select
+              value={style}
+              aria-label="Style"
+              onChange={(e) => setStyle(e.target.value as Style)}
+            >
+              {STYLE_CHOICES.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </Select>
+            {styleHint ? (
+              <Text size="sm" tone="secondary">
+                {styleHint}
+              </Text>
+            ) : null}
+          </Stack>
         </Labeled>
         <Labeled label="Length">
           <SegmentedControl
@@ -289,7 +331,6 @@ function StorySetup({
           <Button onClick={onCancel}>Cancel</Button>
           <Button
             variant="primary"
-            disabled={title.trim().length === 0}
             onClick={() => onCreate(title.trim(), { voice, style, length, autoRefresh: true })}
           >
             Create &amp; draft the outline
@@ -354,11 +395,19 @@ function OutlineReview({ bundle }: { bundle: StoryBookBundle }): JSX.Element {
   const approveOutline = useStoryStore((s) => s.approveOutline);
   const saveOutline = useStoryStore((s) => s.saveOutline);
   const generateFoundations = useStoryStore((s) => s.generateFoundations);
+  const update = useStoryStore((s) => s.update);
   const [outline, setOutline] = useState<BookOutline>(
     bundle.outline ?? { schemaVersion: 1, approved: false, parts: [] },
   );
+  const [title, setTitle] = useState(bundle.manifest.title);
   const [busy, setBusy] = useState(false);
   const bookId = bundle.manifest.id;
+
+  // Persist a title the person changed (marks it their own so a later "Start over" won't overwrite it, §3.2).
+  const persistTitle = async (): Promise<void> => {
+    const next = title.trim();
+    if (next && next !== bundle.manifest.title) await update(bookId, { title: next });
+  };
 
   const editChapter = (
     partId: string,
@@ -391,10 +440,18 @@ function OutlineReview({ bundle }: { bundle: StoryBookBundle }): JSX.Element {
       <Stack gap={2}>
         <Heading level={1}>Review your outline</Heading>
         <Text tone="secondary">
-          This is the shape of your book. Rename or adjust anything, remove what doesn’t fit, then
+          This is the shape of your book. Rename it, adjust anything, remove what doesn’t fit, then
           approve it and your biographer will start writing.
         </Text>
       </Stack>
+
+      <Labeled label="Book title">
+        <TextInput
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          aria-label="Book title"
+        />
+      </Labeled>
 
       {bundle.manifest.essence ? (
         <Card>
@@ -458,9 +515,10 @@ function OutlineReview({ bundle }: { bundle: StoryBookBundle }): JSX.Element {
         </Button>
         <Inline>
           <Button
-            disabled={busy || chapterCount === 0}
+            disabled={busy || chapterCount === 0 || title.trim().length === 0}
             onClick={async () => {
               setBusy(true);
+              await persistTitle();
               await saveOutline(bookId, outline);
               setBusy(false);
             }}
@@ -469,9 +527,10 @@ function OutlineReview({ bundle }: { bundle: StoryBookBundle }): JSX.Element {
           </Button>
           <Button
             variant="primary"
-            disabled={busy || chapterCount === 0}
+            disabled={busy || chapterCount === 0 || title.trim().length === 0}
             onClick={async () => {
               setBusy(true);
+              await persistTitle();
               await approveOutline(bookId, outline);
               setBusy(false);
             }}

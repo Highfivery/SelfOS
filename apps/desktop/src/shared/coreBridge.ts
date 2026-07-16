@@ -4310,7 +4310,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         deps.key,
         deps.personId,
         bookId,
-        { essence: result.essence, outline: result.outline, timeline: result.timeline },
+        {
+          title: result.title,
+          essence: result.essence,
+          outline: result.outline,
+          timeline: result.timeline,
+        },
         new Date(),
       );
       const bundle = await readBookBundle(deps.fs, deps.key, deps.personId, bookId);
@@ -4347,7 +4352,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personId,
         p.bookId,
         {
-          ...(p.title !== undefined ? { title: p.title } : {}),
+          // A title the person sets here is their own — clear the `auto` flag so a later foundations pass
+          // (e.g. "Start over") never overwrites it (§3.2).
+          ...(p.title !== undefined ? { title: p.title, titleAuto: false } : {}),
           ...(p.config !== undefined ? { config: p.config } : {}),
           ...(p.matter !== undefined ? { matter: p.matter } : {}),
         },

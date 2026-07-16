@@ -123,12 +123,16 @@ export async function createBook(
   },
 ): Promise<BookManifest> {
   const at = input.now.toISOString();
+  const trimmedTitle = input.title.trim();
   const manifest: BookManifest = {
     id: uuid(),
     schemaVersion: 1,
     personId: input.personId,
     type: input.type,
-    title: input.title.trim() || 'Your Story',
+    // A blank title means "let the biographer name it" (§3.2): stamp a placeholder + mark it auto so the
+    // foundations pass overwrites it with a title drawn from the content. A supplied title is the person's own.
+    title: trimmedTitle || 'Your Story',
+    ...(trimmedTitle ? {} : { titleAuto: true }),
     config: input.config,
     status: 'outlining',
     sharedWith: [],
@@ -179,6 +183,7 @@ export async function updateBook(
     Pick<
       BookManifest,
       | 'title'
+      | 'titleAuto'
       | 'config'
       | 'essence'
       | 'status'
@@ -689,21 +694,27 @@ export async function prunePublishedImages(
 // --- Foundations + outline approval ----------------------------------------------------------------------
 
 /** Persist the foundations pass output (essence on the manifest + outline + timeline). Status stays
- *  `outlining` — the person reviews/edits the outline, then approves it (`approveOutline`). */
+ *  `outlining` — the person reviews/edits the outline, then approves it (`approveOutline`). When the title is
+ *  still auto (the person left it blank, §3.2), the AI-proposed `title` is stamped onto the manifest; a title
+ *  the person chose is never overwritten. */
 export async function applyFoundations(
   fs: FileSystem,
   key: Uint8Array,
   personId: string,
   bookId: string,
-  foundations: { essence: string; outline: BookOutline; timeline: LifeTimeline },
+  foundations: { title?: string; essence: string; outline: BookOutline; timeline: LifeTimeline },
   now: Date,
 ): Promise<BookManifest | null> {
+  const existing = await getBook(fs, key, personId, bookId);
+  if (!existing) return null;
+  const proposedTitle = foundations.title?.trim();
+  const setTitle = existing.titleAuto === true && proposedTitle ? { title: proposedTitle } : {};
   const manifest = await updateBook(
     fs,
     key,
     personId,
     bookId,
-    { essence: foundations.essence },
+    { essence: foundations.essence, ...setTitle },
     now,
   );
   if (!manifest) return null;

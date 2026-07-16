@@ -166,6 +166,53 @@ describe('Story (64)', () => {
     expect(screen.getByText('A quiet man learning to speak up.')).toBeInTheDocument();
   });
 
+  it('setup: title is optional (blank lets the biographer name it), Full is the default length, and the added styles are offered', async () => {
+    let createdWith: { title: string; config: { length: string } } | null = null;
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([]),
+      storyCreate: (input) => {
+        createdWith = input as never;
+        return Promise.resolve(manifest());
+      },
+      storyGet: () => Promise.resolve(bundle(false)),
+      storyGenerateFoundations: () => Promise.resolve({ ok: true, bundle: bundle(false) }),
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Start your story' }));
+    // A new style register is offered in the Style dropdown.
+    expect(await screen.findByRole('option', { name: 'Cinematic' })).toBeInTheDocument();
+    // The Create button is enabled with NO title typed — blank means the AI names it.
+    const create = screen.getByRole('button', { name: /Create .* draft the outline/ });
+    expect(create).toBeEnabled();
+    await userEvent.click(create);
+    await waitFor(() => expect(createdWith).not.toBeNull());
+    expect(createdWith!.title).toBe(''); // left blank → the biographer proposes one
+    expect(createdWith!.config.length).toBe('full'); // Full is the default for a biography
+  });
+
+  it('outline review: renaming the book persists the new title (marks it the person’s own)', async () => {
+    let updatedWith: { bookId: string; title?: string } | null = null;
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ titleAuto: true })]),
+      storyGet: () => Promise.resolve(bundle(false)),
+      storyUpdate: (input) => {
+        updatedWith = input as never;
+        return Promise.resolve(manifest());
+      },
+      storyApproveOutline: () => Promise.resolve(manifest({ status: 'drafting' })),
+    });
+    renderStory();
+    const titleInput = await screen.findByLabelText('Book title');
+    expect(titleInput).toHaveValue('The Story of Ben');
+    await userEvent.clear(titleInput);
+    await userEvent.type(titleInput, 'The Weight of Quiet');
+    await userEvent.click(screen.getByRole('button', { name: 'Approve & start writing' }));
+    await waitFor(() => expect(updatedWith).not.toBeNull());
+    expect(updatedWith).toEqual({ bookId: 'b1', title: 'The Weight of Quiet' });
+  });
+
   it('a failed foundations pass surfaces the error + a Try again path (no dead-end)', async () => {
     // Realistic: after storyCreate the book EXISTS, so storyGet returns a non-null bundle with a null
     // outline. The failure must land on the NeedsOutline state (error + Try again), never a blank overview.

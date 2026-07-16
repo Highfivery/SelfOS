@@ -221,6 +221,7 @@ export function webFakeClaudeClient(): ClaudeClient {
       if (userText.includes('plan a biography of')) {
         return Promise.resolve({
           text: JSON.stringify({
+            title: 'The Weight of Quiet',
             essence:
               'The story of a quiet man who spent thirty years learning that the machines he loved were easier to understand than the people he loved — and slowly learned to speak to both.',
             timeline: [

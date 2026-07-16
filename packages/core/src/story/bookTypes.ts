@@ -188,6 +188,30 @@ export const BIOGRAPHY_BOOK_TYPE: BookType = {
       directive:
         'Plain register: direct, unadorned, concrete; short sentences; no literary flourish.',
     },
+    {
+      id: 'journalistic',
+      label: 'Journalistic',
+      directive:
+        'Journalistic register: reportorial and evidence-led; clear, propulsive, fact-forward narration that lets the record speak; attribute what is not certain.',
+    },
+    {
+      id: 'reflective',
+      label: 'Reflective',
+      directive:
+        'Reflective register: essayistic and meditative; interior and thoughtful, braiding scene with the narrator’s considered understanding — reflection always earned in a concrete moment.',
+    },
+    {
+      id: 'cinematic',
+      label: 'Cinematic',
+      directive:
+        'Cinematic register: scene-forward and dramatic; vivid, sensory set-pieces with momentum; render in scene far more than you summarize, cutting between moments like film.',
+    },
+    {
+      id: 'poetic',
+      label: 'Poetic',
+      directive:
+        'Poetic register: lyrical and image-dense; heightened, musical rhythm and figurative language — more ornate than the literary register, but never purple or vague.',
+    },
   ],
   interview: {
     framing:

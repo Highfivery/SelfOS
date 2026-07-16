@@ -55,6 +55,7 @@ function deps(
 }
 
 const VALID_JSON = JSON.stringify({
+  title: '  The Weight of Quiet  ',
   essence: '  A quiet man learning to speak.  ',
   timeline: [
     { label: 'Born in Ohio', date: '1985' },
@@ -86,6 +87,7 @@ describe('generateFoundations (64 §5.3)', () => {
     const res = await generateFoundations(deps(fs, fakeClient(VALID_JSON), 'sk-test'), opts);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
+    expect(res.title).toBe('The Weight of Quiet'); // proposed title, trimmed
     expect(res.essence).toBe('A quiet man learning to speak.'); // trimmed
     expect(res.usage.type).toBe('story.outline'); // metered under the right type
     // Outline: one part, one chapter, ids minted here (unique, non-empty), order stamped.
@@ -149,6 +151,7 @@ describe('generateFoundations (64 §5.3)', () => {
     const res = await generateFoundations(deps(fs, fakeClient(messy), 'sk-test'), opts);
     expect(res.ok).toBe(true);
     if (!res.ok) return;
+    expect(res.title).toBe(''); // a reply with no title is tolerated (the caller keeps the current one)
     const titles = res.outline.parts.flatMap((p) => p.chapters.map((c) => c.title));
     expect(titles).toEqual(['Kept Chapter']);
   });

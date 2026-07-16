@@ -303,6 +303,7 @@ export interface BookChaptersResult {
 export async function generateBookChapters(
   deps: AiDeps,
   bookId: string,
+  onProgress?: (progress: { chaptersDone: number; chaptersTotal: number; title: string }) => void,
 ): Promise<BookChaptersResult> {
   const outline = await getOutline(deps.fs, deps.key, deps.personId, bookId);
   if (!outline || outline.parts.length === 0) {
@@ -316,6 +317,10 @@ export async function generateBookChapters(
   );
 
   const chapters = outline.parts.flatMap((part) => part.chapters);
+  // Progress reflects the whole book: already-written chapters count as done (a resumed draft picks up where it
+  // left off), and `title` is the chapter about to be written.
+  const total = chapters.length;
+  let completed = 0; // chapters already done or completed this pass
   let generated = 0;
   let budgetHit = false;
   let allWritten = true;
@@ -324,10 +329,15 @@ export async function generateBookChapters(
     const existing = await getChapter(deps.fs, deps.key, deps.personId, bookId, chapter.id);
     // Skip a chapter that's already written and not flagged stale (idempotent/resumable). Never overwrite a
     // reviewed chapter.
-    if (existing && existing.status !== 'stale') continue;
+    if (existing && existing.status !== 'stale') {
+      completed += 1;
+      continue;
+    }
+    onProgress?.({ chaptersDone: completed, chaptersTotal: total, title: chapter.title });
     const res = await generateChapter(deps, { bookId, chapterId: chapter.id, corpus });
     if (res.ok) {
       generated += 1;
+      completed += 1;
       continue;
     }
     allWritten = false; // an unwritten chapter remains → the book isn't fully drafted

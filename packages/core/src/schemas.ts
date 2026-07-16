@@ -4245,6 +4245,21 @@ export interface StoryRefreshViewResult {
   bundle: StoryBookBundle | null;
 }
 
+/** Live progress of the create-and-draft flow (§3.2) — streamed to the renderer via the `story:progress`
+ *  event so the loading screen + the sidebar indicator show real per-chapter progress. `phase`: `reading`
+ *  = the foundations pass (outline not known yet, so `chaptersTotal` is 0); `writing` = drafting chapters
+ *  (`chaptersDone`/`chaptersTotal` + the current chapter's `title`); `done` when the book is fully drafted;
+ *  `error` with a `message`. The draft runs in the main process, so it continues even if the renderer
+ *  navigates away (the event stream keeps the store's progress current). */
+export interface StoryDraftProgress {
+  bookId: string;
+  phase: 'reading' | 'writing' | 'done' | 'error';
+  chaptersDone: number;
+  chaptersTotal: number;
+  currentTitle?: string;
+  message?: string;
+}
+
 /** `story:resolveProposal` — approve (apply the restructure) or dismiss a pending structural proposal (§3.4). */
 export const StoryResolveProposalInputSchema = StoryBookRefSchema.extend({
   proposalId: z.string().min(1),

@@ -9,6 +9,7 @@ import type {
   StoryBookBundle,
   StoryBookTypeView,
   StoryChaptersResult,
+  StoryDraftProgress,
   StoryChapterRef,
   StoryCreateInput,
   StoryEditPassageInput,
@@ -310,6 +311,8 @@ export const IpcChannels = {
   storyCreate: 'story:create',
   storyGet: 'story:get',
   storyGenerateFoundations: 'story:generateFoundations',
+  storyGenerateFullDraft: 'story:generateFullDraft',
+  storyProgress: 'story:progress',
   storySaveOutline: 'story:saveOutline',
   storyApproveOutline: 'story:approveOutline',
   storyUpdate: 'story:update',
@@ -1065,6 +1068,11 @@ export interface SelfosBridge {
    * persists essence + outline + timeline and returns the fresh bundle; else an honest failure.
    */
   storyGenerateFoundations(input: { bookId: string }): Promise<StoryFoundationsResult>;
+  /** Create-and-draft the whole book (§3.2): read + outline (auto-approved) + draft every chapter, streaming
+   *  per-chapter progress via `onStoryProgress`. Runs in main, so it continues if the renderer navigates away. */
+  storyGenerateFullDraft(input: { bookId: string }): Promise<StoryFoundationsResult>;
+  /** Subscribe to Your Story draft progress (§3.2); the counterpart to the main-side `emitStoryProgress`. */
+  onStoryProgress(listener: (progress: StoryDraftProgress) => void): () => void;
   /** Save an edited outline during review (§3.2). Returns the updated manifest. */
   storySaveOutline(input: StoryOutlineInput): Promise<BookManifest | null>;
   /** Approve the (possibly edited) outline → move the book to `drafting` (§3.2). */

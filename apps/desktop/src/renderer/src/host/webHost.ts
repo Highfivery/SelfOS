@@ -1,5 +1,5 @@
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
-import type { BootState } from '@shared/schemas';
+import type { BootState, StoryDraftProgress } from '@shared/schemas';
 import type { ClaudeClient, FileSystem, ImageClient, SecretStore } from '@selfos/core/host';
 import { loadMasterKey } from '@selfos/core/crypto';
 import { uuid } from '@selfos/core/id';
@@ -88,6 +88,7 @@ function createBridgeHost(parts: HostParts): BridgeHost {
   const dreamListeners = new Set<(delta: string) => void>();
   const intakeListeners = new Set<(delta: string) => void>();
   const togetherListeners = new Set<(delta: string) => void>();
+  const storyProgressListeners = new Set<(progress: StoryDraftProgress) => void>();
 
   const activeVaultId = async (): Promise<string | null> =>
     (await deviceStore.read()).vaultBookmark ?? null;
@@ -166,6 +167,9 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     emitTogetherChunk: (chunk) => {
       for (const listener of togetherListeners) listener(chunk);
     },
+    emitStoryProgress: (progress) => {
+      for (const listener of storyProgressListeners) listener(progress);
+    },
     getBootState: bootState,
     refreshBootState: bootState,
     selectVaultFolder: parts.selectVaultFolder,
@@ -225,6 +229,10 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     onTogetherChunk: (listener) => {
       togetherListeners.add(listener);
       return () => togetherListeners.delete(listener);
+    },
+    onStoryProgress: (listener) => {
+      storyProgressListeners.add(listener);
+      return () => storyProgressListeners.delete(listener);
     },
   };
 }

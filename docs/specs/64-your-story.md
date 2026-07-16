@@ -102,16 +102,21 @@ projections), 20/44/62 (Memory, flag-inaccurate loop).
    decision 2026-07-16), and a note that the biographer reads everything it knows unless excluded
    later. No area-picking step — all data feeds the draft (owner decision, 2026-07-15; §8.3 governs
    safety).
-3. **Foundations pass** (one metered call): produces a proposed **title** (drawn from the book's
-   through-line; applied only when the person left the title blank — never overwrites a chosen one,
-   `BookManifest.titleAuto`), the book's **essence statement**, a proposed **timeline**, and a
-   proposed **outline** — parts + chapters, each chapter with a title, a 1–2 sentence brief
-   ("essence"), an era/date range, and the source material it will draw on. The McAdams "life
-   chapters" concept shapes the proposal.
-4. **Outline review** — the first collaboration moment: rename the book, rename/reorder/merge/split
-   chapters, edit briefs, delete proposed chapters. **Approve outline** → chapter drafting begins (queued,
-   progress shown per chapter, resumable; budget-gated so an over-budget stop resumes cleanly next
-   period).
+3. **Create-and-draft (one flow, no outline-review gate; owner decision 2026-07-16)** — creating a book
+   drafts it end-to-end in the **main process**: the **foundations pass** (a proposed title drawn from the
+   through-line, applied only when the person left the title blank — `BookManifest.titleAuto`; the essence,
+   timeline, and outline), the outline is **auto-approved**, then every chapter is drafted (queued,
+   budget-gated so an over-budget stop resumes cleanly next period). The person shapes the finished book
+   with the edit/markup/suggest tools (§3.3) rather than a gate — the title stays editable in place on the
+   overview.
+   - A rich **"Writing your story"** progress screen shows real-time status streamed over the
+     `story:progress` event: the phase (reading → `Writing "<chapter>" — chapter N of M`), a determinate
+     progress bar + chapter dots, an **elapsed timer** and an **improving time estimate** (from the observed
+     per-chapter pace), and a clear "you can keep using SelfOS — this continues in the background" note.
+   - Because the draft runs in main, it **continues if the person navigates away**; a live **"Your Story ·
+     N/M" sidebar indicator** shows progress from any page, and returning to `/story` shows the live screen.
+     The store's `progress` (fed by the stream, subscribed at app level) survives navigation; a failed draft
+     lands on the retry state, never a dead-end.
 
 ### 3.3 The Draft view (the control room)
 
@@ -722,3 +727,18 @@ No open questions remain; the spec is Approved and ready for the Phase A slice (
   the onboarding-attention relaunch assertion tightened to the onboarding item, since a freshly-onboarded
   owner now legitimately gets the auto check-ins seed notice). Additive schema (no version bump); full gate
   green (core 1412 + desktop 1256, 6 story E2E ×3 no flake).
+- 2026-07-16 — **Create-and-draft redesign (testing feedback; §3.2/§3.3 amended; on
+  `feat/story-draft-progress`).** Two owner-decided changes to the creation flow: (1) **no outline-review
+  gate** — creating a book now drafts it end-to-end in one flow (foundations → auto-approve → all chapters)
+  and lands on the editable book; the title is renamed in place on the overview (the `OutlineReview` screen
+  is removed). (2) A **rich real-time writing screen** replacing the plain "Reading your story…" card — a
+  new main-side `story:generateFullDraft` streams per-chapter progress over a `story:progress` event
+  (mirroring chat streaming: host `emitStoryProgress`/`onStoryProgress` + a `storySender` binding); the
+  renderer shows the phase, a determinate bar + chapter dots, an **elapsed timer** and an **improving
+  estimate**, and a "keeps writing in the background" note. The draft runs in main, so it **continues across
+  navigation** — a live **"Your Story · N/M" sidebar indicator** (subscribed at app level via the store's
+  `progress`, fed by the stream) shows it from any page, verified by an E2E that navigates away mid-draft and
+  returns to the finished book. New `StoryDraftProgress` view type; `generateBookChapters` gained an
+  `onProgress` callback. Mockup approved first (the standard UI-redesign process). Gate green: core 1413 +
+  desktop 1258, 5 story E2E ×3 no flake; real-Electron visual QA of the writing screen + sidebar indicator +
+  the drafted overview.

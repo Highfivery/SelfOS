@@ -11215,15 +11215,15 @@ test('story (64): setup names the book, outline rename, chapters + sources, mark
     await expect(create).toBeEnabled();
     await create.click();
 
-    // Foundations → outline review, pre-filled with the AI-proposed title. Rename it (marks it the person’s own).
-    await expect(w.getByRole('heading', { name: 'Review your outline' })).toBeVisible();
+    // No outline-review gate — it reads, outlines, and drafts every chapter in one flow, landing on the
+    // finished, editable book. Rename the AI-proposed title in place on the overview.
+    await w.getByRole('button', { name: 'Rename this book' }).click();
     const titleField = w.getByRole('textbox', { name: 'Book title' });
     await expect(titleField).toHaveValue('The Weight of Quiet');
     await titleField.fill('A Machine and a Voice');
-    await w.getByRole('button', { name: 'Approve & start writing' }).click();
+    await w.getByRole('button', { name: 'Save', exact: true }).first().click();
 
-    // Write the chapters, open one, and read its prose + provenance.
-    await w.getByRole('button', { name: /Write (your|the remaining)/ }).click();
+    // Open a drafted chapter and read its prose + provenance.
     await w.getByRole('button', { name: /The Garage/ }).click();
     await expect(w.getByText(/cut pine/)).toBeVisible();
     await w
@@ -11292,9 +11292,7 @@ test('story (64): living book — refresh proposes a structural change, approvin
     await w.getByRole('button', { name: 'Start your story' }).click();
     await w.getByRole('textbox', { name: 'Title' }).fill('Living Book');
     await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
-    await expect(w.getByRole('heading', { name: 'Review your outline' })).toBeVisible();
-    await w.getByRole('button', { name: 'Approve & start writing' }).click();
-    await w.getByRole('button', { name: /Write (your|the remaining)/ }).click();
+    // One-flow draft (no outline gate): read + outline (auto-approved) + every chapter, landing on the book.
     // Back on the overview once the chapters are written.
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
 
@@ -11369,9 +11367,7 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     await w.getByRole('button', { name: 'Start your story' }).click();
     await w.getByRole('textbox', { name: 'Title' }).fill('Shared Life');
     await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
-    await expect(w.getByRole('heading', { name: 'Review your outline' })).toBeVisible();
-    await w.getByRole('button', { name: 'Approve & start writing' }).click();
-    await w.getByRole('button', { name: /Write (your|the remaining)/ }).click();
+    // One-flow draft (no outline gate): read + outline (auto-approved) + every chapter, landing on the book.
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
 
     // Create a symbolic cover (H1): the distill → render flow behind the shared image consent.
@@ -11450,9 +11446,7 @@ test('story (64): upload a photo, Claude vision proposes a caption + questions, 
     await w.getByRole('button', { name: 'Start your story' }).click();
     await w.getByRole('textbox', { name: 'Title' }).fill('Photo Book');
     await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
-    await expect(w.getByRole('heading', { name: 'Review your outline' })).toBeVisible();
-    await w.getByRole('button', { name: 'Approve & start writing' }).click();
-    await w.getByRole('button', { name: /Write (your|the remaining)/ }).click();
+    // One-flow draft (no outline gate): read + outline (auto-approved) + every chapter, landing on the book.
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
 
     // Upload a personal photo (downscaled + EXIF-stripped in the renderer). A photo is vision-only — never an
@@ -11478,3 +11472,44 @@ test('story (64): upload a photo, Claude vision proposes a caption + questions, 
 // NOTE: crisis-suppression of the auto refresh/interview cadence (§8) is verified at the coreBridge level
 // (a recurring-crisis seed → the auto pass rewrites/mints nothing) — it's host-side + timing-sensitive, so it
 // stays a bridge test rather than an E2E walk.
+
+test('story (64): the draft shows live progress, keeps writing in the background while you navigate away, then finishes', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  // SELFOS_FAKE_STORY_SLOW adds a per-chapter delay so we can catch the draft mid-flight.
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_STORY_SLOW: '1' },
+  });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Start your story' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Background Book');
+    await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
+
+    // The live writing screen appears — real progress + the "you can keep working" note.
+    await expect(w.getByRole('heading', { name: 'Writing your story' })).toBeVisible();
+    await expect(w.getByText(/keeps writing in the background/)).toBeVisible();
+
+    // Navigate AWAY mid-draft → the sidebar still shows it writing (it continues in the background, in main).
+    await w.getByRole('link', { name: 'Home' }).click();
+    await expect(w.getByRole('link', { name: /Your Story, writing/ })).toBeVisible();
+
+    // It finishes while we're on another page — the writing indicator clears (the nav reverts to plain).
+    await expect(w.getByRole('link', { name: 'Your Story', exact: true })).toBeVisible({
+      timeout: 25_000,
+    });
+
+    // Returning shows the finished, fully-drafted book (no outline gate was ever shown).
+    await w.getByRole('link', { name: 'Your Story', exact: true }).click();
+    await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
+    expect(await w.getByRole('heading', { name: 'Review your outline' }).count()).toBe(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});

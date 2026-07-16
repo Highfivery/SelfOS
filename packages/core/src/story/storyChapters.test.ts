@@ -281,6 +281,20 @@ describe('generateBookChapters — the orchestrator (64 §5.3)', () => {
     );
   });
 
+  it('reports per-chapter progress via onProgress (§3.2): each chapter about-to-write, with a running done count', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedApprovedBook(fs);
+    const seen: { chaptersDone: number; chaptersTotal: number; title: string }[] = [];
+    await generateBookChapters(deps(fs, fakeClient('A rendered scene. [[SRC:s0]]')), bookId, (p) =>
+      seen.push(p),
+    );
+    // One update per chapter, in order, total constant, done climbing (0 then 1) as each starts.
+    expect(seen).toHaveLength(2);
+    expect(seen.every((p) => p.chaptersTotal === 2)).toBe(true);
+    expect(seen.map((p) => p.chaptersDone)).toEqual([0, 1]);
+    expect(seen.map((p) => p.title.length > 0)).toEqual([true, true]);
+  });
+
   it('stops cleanly on BUDGET, leaves the book unfinished, and resumes when the budget is raised', async () => {
     const fs = memFileSystem();
     const bookId = await seedApprovedBook(fs);

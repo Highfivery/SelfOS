@@ -27,13 +27,13 @@ import { downscaleImage } from '../sessions/downscaleImage';
 import { AdminOnlyBadge } from '../../../design-system/components';
 import type {
   BookConfig,
-  BookOutline,
   ChapterMarkup,
   BookMatter,
   CommentIntent,
   StoryBookBundle,
   StoryCompleteness,
   StoryCompletenessStage,
+  StoryDraftProgress,
   StoryReaderView,
   StructuralProposal,
   TextAnchor,
@@ -94,11 +94,11 @@ export function Story(): JSX.Element {
   const books = useStoryStore((s) => s.books);
   const bundle = useStoryStore((s) => s.bundle);
   const loaded = useStoryStore((s) => s.loaded);
-  const generating = useStoryStore((s) => s.generating);
+  const progress = useStoryStore((s) => s.progress);
   const load = useStoryStore((s) => s.load);
-  const create = useStoryStore((s) => s.create);
   const open = useStoryStore((s) => s.open);
-  const generateFoundations = useStoryStore((s) => s.generateFoundations);
+  const createAndDraft = useStoryStore((s) => s.createAndDraft);
+  const draftBook = useStoryStore((s) => s.draftBook);
   const readerView = useStoryStore((s) => s.readerView);
   const closeSharedBook = useStoryStore((s) => s.closeSharedBook);
 
@@ -128,18 +128,12 @@ export function Story(): JSX.Element {
     setReading(null);
   }, [activePersonId]);
 
-  // Open the first book once loaded so returning lands on it — but never while a pass is running (so it
-  // can't race the create → generate sequence or open a book into a dead-end mid-generation).
+  // Open the first book once loaded so returning lands on it — but never while a draft is running (so it
+  // can't race the create → draft sequence or open a book into a dead-end mid-generation).
   useEffect(() => {
     const first = books[0];
-    if (loaded && first && !bundle && !generating) void open(first.id);
-  }, [loaded, books, bundle, generating, open]);
-
-  const draftFoundations = async (bookId: string): Promise<void> => {
-    setError(null);
-    const res = await generateFoundations(bookId);
-    if (!res.ok) setError(res.message);
-  };
+    if (loaded && first && !bundle && !progress) void open(first.id);
+  }, [loaded, books, bundle, progress, open]);
 
   if (!loaded) return <div className={styles.page} aria-busy="true" />;
 
@@ -152,30 +146,17 @@ export function Story(): JSX.Element {
     );
   }
 
-  if (generating) {
+  // A draft is in progress (§3.2) — the rich, real-time writing screen. It survives navigation (the draft
+  // runs in main; the progress stream keeps this current), so returning to /story shows live progress.
+  if (progress) {
     return (
       <div className={styles.page}>
-        <Card>
-          <Stack gap={3}>
-            <Heading level={2}>Reading your story…</Heading>
-            <Text tone="secondary">
-              Your biographer is reading everything you’ve shared and shaping the outline. This
-              takes a moment.
-            </Text>
-          </Stack>
-        </Card>
+        <DraftProgress p={progress} />
       </div>
     );
   }
 
   if (bundle) {
-    if (bundle.outline && !bundle.outline.approved) {
-      return (
-        <div className={styles.page}>
-          <OutlineReview bundle={bundle} />
-        </div>
-      );
-    }
     if (bundle.outline) {
       const openChapter = reading ? bundle.chapters.find((c) => c.id === reading) : undefined;
       if (openChapter) {
@@ -191,14 +172,18 @@ export function Story(): JSX.Element {
         </div>
       );
     }
-    // A book exists but has no outline yet — never generated, or a foundations pass that failed. Offer to
-    // draft (or retry) it, and surface any error, so it's never a silent dead-end.
+    // A book exists but has no outline yet — a draft that hasn't run, or one that failed. Offer to draft (or
+    // retry) it, and surface any error, so it's never a silent dead-end.
     return (
       <div className={styles.page}>
         <NeedsOutline
           bundle={bundle}
           error={error}
-          onGenerate={() => draftFoundations(bundle.manifest.id)}
+          onGenerate={async () => {
+            setError(null);
+            const res = await draftBook(bundle.manifest.id);
+            if (!res.ok && res.message) setError(res.message);
+          }}
         />
       </div>
     );
@@ -212,14 +197,11 @@ export function Story(): JSX.Element {
           onCancel={() => setMode('idle')}
           onCreate={async (title, config) => {
             setError(null);
-            const book = await create({ type: 'biography', title, config });
-            if (!book) {
-              setError('Couldn’t start your story. Try again.');
-              return;
-            }
             setMode('idle');
-            await open(book.id); // land on the book so a failed pass shows NeedsOutline (not the empty state)
-            await draftFoundations(book.id);
+            // Create AND draft the whole book in one flow — no outline-review gate. The draft screen shows
+            // immediately (progress is seeded), and the finished book lands ready to edit.
+            const res = await createAndDraft({ type: 'biography', title, config });
+            if (!res.ok && res.message) setError(res.message);
           }}
         />
         {error ? <Banner tone="danger">{error}</Banner> : null}
@@ -391,155 +373,109 @@ function NeedsOutline({
   );
 }
 
-function OutlineReview({ bundle }: { bundle: StoryBookBundle }): JSX.Element {
-  const approveOutline = useStoryStore((s) => s.approveOutline);
-  const saveOutline = useStoryStore((s) => s.saveOutline);
-  const generateFoundations = useStoryStore((s) => s.generateFoundations);
-  const update = useStoryStore((s) => s.update);
-  const [outline, setOutline] = useState<BookOutline>(
-    bundle.outline ?? { schemaVersion: 1, approved: false, parts: [] },
-  );
-  const [title, setTitle] = useState(bundle.manifest.title);
-  const [busy, setBusy] = useState(false);
-  const bookId = bundle.manifest.id;
+/** mm:ss for a millisecond duration. */
+function fmtDuration(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
 
-  // Persist a title the person changed (marks it their own so a later "Start over" won't overwrite it, §3.2).
-  const persistTitle = async (): Promise<void> => {
-    const next = title.trim();
-    if (next && next !== bundle.manifest.title) await update(bookId, { title: next });
-  };
+/** A soft "about N left" from the observed pace (only once ≥1 chapter is done, so it's real, not guessed). */
+function estimateRemaining(elapsedMs: number, done: number, total: number): string | null {
+  if (done < 1 || total <= done) return null;
+  const perChapter = elapsedMs / done;
+  const leftSec = Math.round((perChapter * (total - done)) / 1000);
+  if (leftSec <= 15) return 'almost done';
+  if (leftSec < 90) return `about ${leftSec} sec left`;
+  return `about ${Math.round(leftSec / 60)} min left`;
+}
 
-  const editChapter = (
-    partId: string,
-    chapterId: string,
-    patch: { title?: string; brief?: string },
-  ) =>
-    setOutline((o) => ({
-      ...o,
-      parts: o.parts.map((p) =>
-        p.id === partId
-          ? { ...p, chapters: p.chapters.map((c) => (c.id === chapterId ? { ...c, ...patch } : c)) }
-          : p,
-      ),
-    }));
+/**
+ * The create-and-draft progress screen (§3.2) — real per-chapter progress with a live timer + estimate, and a
+ * clear "you can keep working, this continues in the background" note. Driven by the store's `progress` (which
+ * is fed by the main-side stream and survives navigation), so returning to /story mid-draft shows live status.
+ */
+function DraftProgress({ p }: { p: StoryDraftProgress & { startedAt: number } }): JSX.Element {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
 
-  const removeChapter = (partId: string, chapterId: string) =>
-    setOutline((o) => ({
-      ...o,
-      parts: o.parts
-        .map((p) =>
-          p.id === partId ? { ...p, chapters: p.chapters.filter((c) => c.id !== chapterId) } : p,
-        )
-        .filter((p) => p.chapters.length > 0),
-    }));
-
-  const chapterCount = outline.parts.reduce((n, p) => n + p.chapters.length, 0);
+  const writing = p.phase === 'writing';
+  const total = p.chaptersTotal;
+  const done = p.chaptersDone;
+  const elapsed = now - p.startedAt;
+  const pct = writing && total > 0 ? Math.min(99, 15 + (done / total) * 84) : 8;
+  const eta = writing ? estimateRemaining(elapsed, done, total) : null;
+  const phaseLabel = writing
+    ? p.currentTitle
+      ? `Writing “${p.currentTitle}” — chapter ${Math.min(done + 1, total)} of ${total}`
+      : `Writing your chapters — ${done} of ${total}`
+    : 'Reading everything you’ve shared, and shaping the outline…';
 
   return (
-    <Stack gap={4}>
-      <Stack gap={2}>
-        <Heading level={1}>Review your outline</Heading>
-        <Text tone="secondary">
-          This is the shape of your book. Rename it, adjust anything, remove what doesn’t fit, then
-          approve it and your biographer will start writing.
-        </Text>
-      </Stack>
-
-      <Labeled label="Book title">
-        <TextInput
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          aria-label="Book title"
-        />
-      </Labeled>
-
-      {bundle.manifest.essence ? (
-        <Card>
-          <Stack gap={2}>
-            <Text size="sm" tone="secondary">
-              What this book is about
+    <Card>
+      <Stack gap={4}>
+        <Inline gap={3}>
+          <div className={styles.draftIcon} aria-hidden="true">
+            <span className={styles.draftSpinner} />
+          </div>
+          <Stack gap={1}>
+            <Heading level={2}>Writing your story</Heading>
+            <Text tone="secondary" size="sm" aria-live="polite">
+              {phaseLabel}
             </Text>
-            <Markdown>{bundle.manifest.essence}</Markdown>
           </Stack>
-        </Card>
-      ) : null}
-
-      {outline.parts.map((part) => (
-        <Card key={part.id}>
-          <Stack gap={3}>
-            <Heading level={2}>{part.title}</Heading>
-            {part.chapters.map((chapter) => (
-              <div key={chapter.id} className={styles.chapterRow}>
-                <Stack gap={2}>
-                  <Inline justify="space-between">
-                    <div className={styles.grow}>
-                      <TextInput
-                        value={chapter.title}
-                        onChange={(e) =>
-                          editChapter(part.id, chapter.id, { title: e.target.value })
-                        }
-                        aria-label="Chapter title"
-                      />
-                    </div>
-                    <Button
-                      variant="ghost"
-                      onClick={() => removeChapter(part.id, chapter.id)}
-                      aria-label={`Remove chapter ${chapter.title}`}
-                    >
-                      Remove
-                    </Button>
-                  </Inline>
-                  <Textarea
-                    value={chapter.brief}
-                    onChange={(e) => editChapter(part.id, chapter.id, { brief: e.target.value })}
-                    aria-label="Chapter brief"
-                    rows={2}
-                  />
-                </Stack>
-              </div>
-            ))}
-          </Stack>
-        </Card>
-      ))}
-
-      <Inline justify="space-between">
-        <Button
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            await generateFoundations(bookId);
-            setBusy(false);
-          }}
-        >
-          Start over
-        </Button>
-        <Inline>
-          <Button
-            disabled={busy || chapterCount === 0 || title.trim().length === 0}
-            onClick={async () => {
-              setBusy(true);
-              await persistTitle();
-              await saveOutline(bookId, outline);
-              setBusy(false);
-            }}
-          >
-            Save changes
-          </Button>
-          <Button
-            variant="primary"
-            disabled={busy || chapterCount === 0 || title.trim().length === 0}
-            onClick={async () => {
-              setBusy(true);
-              await persistTitle();
-              await approveOutline(bookId, outline);
-              setBusy(false);
-            }}
-          >
-            Approve &amp; start writing
-          </Button>
         </Inline>
-      </Inline>
-    </Stack>
+
+        <Stack gap={2}>
+          <div
+            className={styles.progressTrack}
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            {...(writing && total > 0 ? { 'aria-valuenow': Math.round(pct) } : {})}
+            aria-label="Writing progress"
+          >
+            <div
+              className={writing ? styles.progressFill : styles.progressIndeterminate}
+              style={writing ? { width: `${pct}%` } : undefined}
+            />
+          </div>
+          <Inline justify="space-between">
+            <Text size="sm" tone="secondary">
+              {fmtDuration(elapsed)} elapsed
+            </Text>
+            <Text size="sm" tone="secondary">
+              {eta ?? (writing ? 'estimating…' : 'this takes a moment')}
+            </Text>
+          </Inline>
+          {writing && total > 0 ? (
+            <div className={styles.progressDots} aria-hidden="true">
+              {Array.from({ length: total }, (_, i) => (
+                <span
+                  key={i}
+                  className={
+                    i < done
+                      ? `${styles.dot} ${styles.dotDone}`
+                      : i === done
+                        ? `${styles.dot} ${styles.dotCurrent}`
+                        : styles.dot
+                  }
+                />
+              ))}
+            </div>
+          ) : null}
+        </Stack>
+
+        <div className={styles.draftNote}>
+          <Text size="sm">
+            You can keep using SelfOS — your biographer keeps writing in the background. We’ll have
+            your book ready when you come back.
+          </Text>
+        </div>
+      </Stack>
+    </Card>
   );
 }
 
@@ -879,6 +815,7 @@ function BookOverview({
   const completeness = useStoryStore((s) => s.completeness);
   const loadCompleteness = useStoryStore((s) => s.loadCompleteness);
   const runInterviewCheck = useStoryStore((s) => s.runInterviewCheck);
+  const update = useStoryStore((s) => s.update);
   const busy = useStoryStore((s) => s.chaptersGenerating);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -886,6 +823,7 @@ function BookOverview({
   const [interviewBusy, setInterviewBusy] = useState(false);
   const { manifest, outline, chapters } = bundle;
   const bookId = manifest.id;
+  const [titleDraft, setTitleDraft] = useState<string | null>(null); // non-null while renaming
 
   useEffect(() => {
     void loadExclusions(bookId);
@@ -903,7 +841,43 @@ function BookOverview({
   return (
     <Stack gap={4}>
       <Inline justify="space-between">
-        <Heading level={1}>{manifest.title}</Heading>
+        {titleDraft === null ? (
+          <Inline gap={2}>
+            <Heading level={1}>{manifest.title}</Heading>
+            <button
+              type="button"
+              className={styles.sourcesToggle}
+              aria-label="Rename this book"
+              onClick={() => setTitleDraft(manifest.title)}
+            >
+              Rename
+            </button>
+          </Inline>
+        ) : (
+          <Inline gap={2}>
+            <div className={styles.grow}>
+              <TextInput
+                value={titleDraft}
+                aria-label="Book title"
+                onChange={(e) => setTitleDraft(e.target.value)}
+              />
+            </div>
+            <Button
+              variant="primary"
+              disabled={titleDraft.trim().length === 0}
+              onClick={async () => {
+                const next = titleDraft.trim();
+                if (next && next !== manifest.title) await update(bookId, { title: next });
+                setTitleDraft(null);
+              }}
+            >
+              Save
+            </Button>
+            <Button variant="ghost" onClick={() => setTitleDraft(null)}>
+              Cancel
+            </Button>
+          </Inline>
+        )}
         <Text tone="secondary" size="sm">
           Biography · {manifest.config.voice === 'first' ? 'first person' : 'third person'}
         </Text>

@@ -7147,10 +7147,20 @@ describe('createCoreBridge — Together (58) foundation', () => {
       authorName: 'Ben',
       title: 'The Story of Ben',
       chapterCount: 1,
+      neverOpened: true, // never opened yet → drives the one-time "shared with you" notification
+      updated: true,
     });
     const view = await bridge.storyReadShared({ authorPersonId: ownerId, bookId });
     expect(view?.chapters.map((c) => c.id)).toEqual([chapterId]);
     expect(view?.manifest.noteOnBook).toContain('never invented');
+
+    // Recording the open clears the read-progress cues (device-local, per-person) — the notification stops
+    // and the "Updated" marker goes quiet until the author republishes (§3.6).
+    await bridge.storyMarkSharedRead({ authorPersonId: ownerId, bookId });
+    expect((await bridge.storySharedBooks())[0]).toMatchObject({
+      neverOpened: false,
+      updated: false,
+    });
 
     // Author revokes → the reader loses access at the next read (no stale access).
     await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });

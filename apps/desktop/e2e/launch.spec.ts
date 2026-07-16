@@ -599,7 +599,13 @@ test('onboarding attention (55): a completed profile with a NEW section surfaces
   try {
     const w = await app.firstWindow();
     await expect(w.getByRole('heading', { name: /more things to tell SelfOS/i })).toBeVisible();
-    await expect(w.getByRole('button', { name: /Notifications, \d+ unread/ })).toHaveCount(0);
+    // The dismissed ONBOARDING notification stays dismissed (device-local, per-person, onIncrease). Other
+    // kinds may legitimately appear on relaunch — a freshly-onboarded owner gets the auto check-ins "now on"
+    // seed (63) — so assert the onboarding item specifically doesn't re-surface, not that the bell is empty.
+    await w.getByRole('button', { name: /^Notifications/ }).click();
+    await expect(
+      w.getByRole('menu', { name: 'Notifications' }).getByText('More of your profile to fill in'),
+    ).toHaveCount(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -6115,7 +6121,9 @@ test('dreams: a typed new name offers to be added as a contact + optional relati
     await w.getByRole('button', { name: /add as contact/i }).click({ force: true });
     // The chip upgrades to linked, and the optional relationship step appears.
     await expect(w.getByText('linked')).toBeVisible();
-    await w.getByLabel('Relationship').selectOption({ label: 'Friend' });
+    // `{ exact: true }` — a nav item "Sharing & relationships" (added later) otherwise substring-collides
+    // with the "Relationship" select (the recurring Playwright aria-label substring footgun).
+    await w.getByLabel('Relationship', { exact: true }).selectOption({ label: 'Friend' });
     await w.getByRole('button', { name: 'Save', exact: true }).click({ force: true });
 
     // The new contact + relationship persist household-wide the moment they're created (decrypt the vault) —
@@ -11313,6 +11321,10 @@ test('story (64): living book — refresh proposes a structural change, approvin
         return defs.some((d) => d.storyProvenance !== undefined);
       })
       .toBe(true);
+
+    // The check-in lands in the Inbox with a "Your biographer" eyebrow so the ask is never mysterious (§5.5).
+    await w.getByRole('link', { name: 'Inbox' }).click();
+    await expect(w.getByText(/Your biographer ·/)).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -11378,7 +11390,7 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     await w.getByRole('button', { name: 'Add as reader' }).click();
     await expect(w.getByRole('button', { name: 'Remove Reader as a reader' })).toBeVisible();
 
-    // Export the published book as Markdown — the file lands OUTSIDE the encrypted vault.
+    // Export the published book as Markdown AND PDF — both files land OUTSIDE the encrypted vault.
     await w.getByRole('button', { name: 'Export as Markdown' }).click();
     await expect(w.getByText(/leaves your encrypted vault/)).toBeVisible();
     await expect
@@ -11388,14 +11400,31 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
         return md ? readFile(join(saveDir, md), 'utf8') : '';
       })
       .toContain('Shared Life');
+    await w.getByRole('button', { name: 'Export as PDF' }).click();
+    await expect
+      .poll(async () => (await readdir(saveDir)).some((f) => f.endsWith('.pdf')))
+      .toBe(true);
 
-    // The reader signs in and reads the PUBLISHED head — never the working draft.
+    // The reader signs in: the first share raises a one-time notification + a "New" marker on the card (§3.6).
     await switchTogetherPerson(w, 'Reader');
     await w.getByRole('link', { name: 'Your Story' }).click();
     await expect(w.getByRole('heading', { name: 'Shared with you' })).toBeVisible();
-    await w.getByRole('button', { name: /Shared Life/ }).click();
+    const card = w.getByRole('button', { name: /Shared Life/ });
+    await expect(card.getByText('New')).toBeVisible();
+    await w.getByRole('button', { name: /^Notifications/ }).click();
+    await expect(
+      w.getByRole('menu', { name: 'Notifications' }).getByText(/shared their story/),
+    ).toBeVisible();
+    await w.keyboard.press('Escape');
+
+    // Open the book → read the PUBLISHED head (never the working draft).
+    await card.click();
     await expect(w.getByRole('heading', { name: 'Shared Life' })).toBeVisible();
     await expect(w.getByText(/cut pine/)).toBeVisible();
+
+    // Back → the open was recorded (device-local read progress), so the "New" marker is gone.
+    await w.getByRole('button', { name: /Back/ }).click();
+    await expect(w.getByRole('button', { name: /Shared Life/ }).getByText('New')).toHaveCount(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -11403,3 +11432,49 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     await rm(saveDir, { recursive: true, force: true });
   }
 });
+
+test('story (64): upload a photo, Claude vision proposes a caption + questions, answering feeds the biography', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({
+    'ai.enabled': true,
+    'dreams.imageGenerationEnabled': true,
+  });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  await secrets.set('openai.apiKey', 'sk-openai-e2e');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Start your story' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Photo Book');
+    await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
+    await expect(w.getByRole('heading', { name: 'Review your outline' })).toBeVisible();
+    await w.getByRole('button', { name: 'Approve & start writing' }).click();
+    await w.getByRole('button', { name: /Write (your|the remaining)/ }).click();
+    await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
+
+    // Upload a personal photo (downscaled + EXIF-stripped in the renderer). A photo is vision-only — never an
+    // image-generation input (§3.7).
+    await w
+      .locator('input[type="file"]')
+      .setInputFiles({ name: 'dad-shop.png', mimeType: 'image/png', buffer: makePng() });
+    await expect(w.locator('img[alt="Uploaded photo"]')).toBeVisible();
+
+    // Claude vision proposes a caption + 2–4 questions; answering one persists to the interview corpus.
+    await w.getByRole('button', { name: 'Caption & ask about this' }).click();
+    await expect(w.getByText('Who took this photo?')).toBeVisible();
+    await w.getByLabel('Who took this photo?').fill('My father did, in his workshop.');
+    await w.getByRole('button', { name: 'Save answer' }).first().click();
+    await expect(w.getByText(/My father did, in his workshop\./)).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+// NOTE: crisis-suppression of the auto refresh/interview cadence (§8) is verified at the coreBridge level
+// (a recurring-crisis seed → the auto pass rewrites/mints nothing) — it's host-side + timing-sensitive, so it
+// stays a bridge test rather than an E2E walk.

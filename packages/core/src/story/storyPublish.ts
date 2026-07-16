@@ -230,6 +230,7 @@ export async function listSharedBooks(
   fs: FileSystem,
   key: Uint8Array,
   viewerPersonId: string,
+  readAt: Record<string, string> = {},
 ): Promise<SharedBookSummary[]> {
   const out: SharedBookSummary[] = [];
   for (const author of await listPeople(fs, key)) {
@@ -238,6 +239,11 @@ export async function listSharedBooks(
       if (!book.publishedAt || !book.sharedWith.includes(viewerPersonId)) continue;
       const published = await getPublishedManifest(fs, key, author.id, book.id);
       if (!published) continue;
+      // The viewer's device-local last-open for THIS book (§3.6). `neverOpened` gates the one-time
+      // notification; `updated` is the quiet marker (author published newer content since the last open).
+      const lastReadAt = readAt[book.id];
+      const neverOpened = lastReadAt === undefined;
+      const updated = neverOpened || published.publishedAt > lastReadAt;
       out.push({
         authorPersonId: author.id,
         authorName: author.displayName,
@@ -245,7 +251,9 @@ export async function listSharedBooks(
         title: published.title,
         publishedAt: published.publishedAt,
         chapterCount: published.chapterOrder.length,
-        newChapters: published.chapterOrder.length, // read-progress refines this host-side (F3)
+        newChapters: updated ? published.chapterOrder.length : 0,
+        neverOpened,
+        updated,
       });
     }
   }

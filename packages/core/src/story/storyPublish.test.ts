@@ -243,6 +243,31 @@ describe('readers + the read-time re-gate (64 §3.5)', () => {
     expect(await listSharedBooks(fs, key, 'reader')).toEqual([]);
     expect(await readSharedBook(fs, key, 'reader', 'author', bookId)).toBeNull();
   });
+
+  it('read-progress derives neverOpened + updated cues from the viewer’s last-read (§3.6)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    await publishBook(fs, key, 'author', bookId, now); // publishedAt = now
+    await grantReader(fs, key, 'author', bookId, 'reader', now);
+
+    // No read progress → never opened → both cues true (drives the first-share notification + the marker).
+    const fresh = (await listSharedBooks(fs, key, 'reader'))[0]!;
+    expect(fresh.neverOpened).toBe(true);
+    expect(fresh.updated).toBe(true);
+
+    // Opened AFTER the publish → not new, not updated (the notification + marker clear).
+    const afterPublish = new Date(now.getTime() + 1000).toISOString();
+    const read = (await listSharedBooks(fs, key, 'reader', { [bookId]: afterPublish }))[0]!;
+    expect(read.neverOpened).toBe(false);
+    expect(read.updated).toBe(false);
+
+    // Opened BEFORE the publish (a stale read) → opened, but updated (re-published since) → the quiet marker
+    // shows, without ever re-notifying (the notification gates on neverOpened only).
+    const beforePublish = new Date(now.getTime() - 1000).toISOString();
+    const stale = (await listSharedBooks(fs, key, 'reader', { [bookId]: beforePublish }))[0]!;
+    expect(stale.neverOpened).toBe(false);
+    expect(stale.updated).toBe(true);
+  });
 });
 
 describe('honesty note + featured-reader scan', () => {

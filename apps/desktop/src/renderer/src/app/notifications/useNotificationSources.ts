@@ -5,7 +5,7 @@ import type {
   ReminderDueSummary,
   ResponsesArrivedSummary,
 } from '@shared/channels';
-import type { CoachingSynthesis, Goal } from '@shared/schemas';
+import type { CoachingSynthesis, Goal, SharedBookSummary } from '@shared/schemas';
 import { checkInDueChallenge } from '@selfos/core/challenges';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useNotificationStore } from '../../stores/notificationStore';
@@ -35,6 +35,7 @@ export function useNotificationSources(conflicts: string[]): void {
   const canTogether = useSessionStore((s) => s.can('together.own'));
   const canAnswer = useSessionStore((s) => s.can('questionnaires.answer'));
   const canAutoCheckin = useSessionStore((s) => s.can('questionnaires.autoCheckin'));
+  const canStory = useSessionStore((s) => s.can('story.own'));
   // Together sessions are loaded + reset per active person by AppShell (58 §5.3) — derive the invite/turn
   // notifications from the projection-computed summaries (no extra fetch, no message content, §3.11).
   const togetherSessions = useTogetherStore((s) => s.sessions);
@@ -58,6 +59,9 @@ export function useNotificationSources(conflicts: string[]): void {
   // Auto check-ins (63): how many auto-generated check-ins are waiting to answer + the one-time seed marker.
   const [autoPending, setAutoPending] = useState(0);
   const [autoSeededAt, setAutoSeededAt] = useState<string | null>(null);
+  // Your Story (64 §3.6): books shared WITH the active person — the never-opened ones drive the one-time
+  // "shared with you" notification (the "Updated" marker lives on the /story card, not the bell).
+  const [sharedBooks, setSharedBooks] = useState<SharedBookSummary[]>([]);
 
   // One-shot reads per active person. Guarded so a fetch resolving after a person switch is ignored.
   useEffect(() => {
@@ -72,8 +76,9 @@ export function useNotificationSources(conflicts: string[]): void {
     setFreshnessAreas([]);
     setAutoPending(0);
     setAutoSeededAt(null);
+    setSharedBooks([]);
     void (async () => {
-      const [sugg, resp, edits, rem, gls, chs, syn, inbox, autoConfig] = await Promise.all([
+      const [sugg, resp, edits, rem, gls, chs, syn, inbox, autoConfig, shared] = await Promise.all([
         canIntake
           ? (window.selfos?.profileSuggestions() ?? Promise.resolve([]))
           : Promise.resolve([]),
@@ -99,6 +104,7 @@ export function useNotificationSources(conflicts: string[]): void {
         canAutoCheckin
           ? (window.selfos?.autoCheckinsGetConfig() ?? Promise.resolve(null))
           : Promise.resolve(null),
+        canStory ? (window.selfos?.storySharedBooks() ?? Promise.resolve([])) : Promise.resolve([]),
       ]);
       if (!active || useSessionStore.getState().activePerson?.id !== activePersonId) return;
       setSuggestionIds(sugg.map((s) => s.id).sort());
@@ -112,6 +118,7 @@ export function useNotificationSources(conflicts: string[]): void {
       setAutoPending(inbox.filter((i) => i.autoCheckin && i.answerable).length);
       // The one-time seed notice only while it's still on (turning it off = they've engaged, no notice).
       setAutoSeededAt(autoConfig?.enabled ? (autoConfig.seededAt ?? null) : null);
+      setSharedBooks(shared);
     })();
     return () => {
       active = false;
@@ -125,6 +132,7 @@ export function useNotificationSources(conflicts: string[]): void {
     canChallenges,
     canAnswer,
     canAutoCheckin,
+    canStory,
   ]);
 
   // Rebuild the candidate list whenever any source changes; conflicts arrive reactively via the prop.
@@ -317,6 +325,21 @@ export function useNotificationSources(conflicts: string[]): void {
       });
     }
 
+    // A Story book shared with you (64 §3.6) — one notification per NEVER-OPENED book, the first-share cue.
+    // Opening it records read progress → the book drops from `neverOpened` → the notification clears and never
+    // re-pops (later republishes surface only as the quiet "Updated" marker on the /story card, not the bell).
+    for (const book of sharedBooks) {
+      if (!book.neverOpened) continue;
+      candidates.push({
+        kind: 'story-shared',
+        coalesceKey: `story-shared:${book.authorPersonId}:${book.bookId}`,
+        signature: book.bookId, // stable per book — a dismissal without opening stays dismissed
+        title: `${book.authorName} shared their story`,
+        body: `“${book.title}” is ready for you to read.`,
+        action: { type: 'navigate', to: '/story' },
+      });
+    }
+
     setCandidates(candidates);
   }, [
     conflicts,
@@ -335,6 +358,7 @@ export function useNotificationSources(conflicts: string[]): void {
     togetherSessions,
     autoPending,
     autoSeededAt,
+    sharedBooks,
     activePersonId,
     setCandidates,
   ]);

@@ -148,6 +148,18 @@
   background: var(--color-accent-subtle-bg);
 }
 
+/* The "New"/"Updated" read-progress marker on a "Shared with you" card (§3.6). */
+.newBadge {
+  flex: none;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1.6;
+}
+
 /* A paragraph in the draft view holds the prose + its suggestion strip + a Mark up / Sources action row. */
 .paraBody {
   margin-bottom: var(--space-1);

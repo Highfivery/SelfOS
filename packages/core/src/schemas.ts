@@ -65,6 +65,7 @@ export const NOTIFICATION_KINDS = [
   'together-private', // 58-together §3.14 Part B — the coach left a private note just for you in a Together session
   'auto-checkin-ready', // 63-auto-checkins §6.4 — an auto-generated check-in is waiting in the inbox
   'auto-checkin-enabled', // 63-auto-checkins §5.1 — the one-time "Auto check-ins is now on" seed notice
+  'story-shared', // 64-your-story §3.6 — someone shared their Story book with you (fires once, on first share)
 ] as const;
 export const NotificationKindSchema = z.enum(NOTIFICATION_KINDS);
 export type NotificationKind = z.infer<typeof NotificationKindSchema>;
@@ -2531,6 +2532,9 @@ export interface InboxItem {
   // Auto check-ins provenance (63 §4.2), present only on an engine-generated send — the recipient's Inbox
   // shows an "Auto check-in" eyebrow + the rationale (never covert, §8.3), read from the frozen snapshot.
   autoCheckin?: AutoCheckinProvenance;
+  // True when the send originated from the Your Story interview engine (64 §5.5) — the frozen snapshot carries
+  // `storyProvenance`. The Inbox card shows a "Your biographer" eyebrow so the person knows why they're asked.
+  fromBiographer?: boolean;
 }
 
 /**
@@ -4333,6 +4337,12 @@ export interface SharedBookSummary {
   publishedAt: string;
   chapterCount: number;
   newChapters: number;
+  // Read-progress cues (§3.6), derived host-side from the viewer's device-local `storyReadProgress`:
+  // `neverOpened` = the viewer has never opened this book (drives the one-time `story-shared` notification);
+  // `updated` = the author has published newer content since the viewer last opened it (the quiet "Updated"
+  // marker on the "Shared with you" card — never re-notifies, owner decision 2026-07-16).
+  neverOpened: boolean;
+  updated: boolean;
 }
 
 /** What a granted reader sees of a chapter (§3.6) — the MINIMAL projection: title + prose only. Deliberately NOT

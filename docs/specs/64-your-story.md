@@ -639,10 +639,13 @@ stock` / `reviewing the SHAPE`; the vision/distill/placement system prompts) so 
   completeness **stage** (never a %) → **Find what's missing** → a story-provenance questionnaire is
   minted into the Inbox (decrypt-level); (3) **publish/reader/export/cover** — create → write →
   **Create a cover** (distill→render behind the shared image consent) → mark a chapter **Looks good**
-  → **Publish** → grant a household **reader** → **Export as Markdown** (the file lands OUTSIDE the
-  vault, contains the title) → switch persona → the reader reads the **published head** (title + prose)
-  via "Shared with you". Photo-upload vision Q&A + the PDF export + a crisis-suppression seed remain
-  covered by coreBridge/RTL; broadening the E2E to those is a follow-up.
+  → **Publish** → grant a household **reader** → **Export as Markdown AND PDF** (both files land OUTSIDE
+  the vault; the .md contains the title) → switch persona → a first-share **`story-shared` notification** +
+  a **"New" marker** greet the reader → they read the **published head** (title + prose) via "Shared with
+  you" → returning clears the marker (device-local read progress). Extended to (4) **photos** — upload →
+  Claude vision proposes a caption + questions → answering one feeds the interview corpus. The "Your
+  biographer" Inbox eyebrow is asserted in (2). Crisis-suppression of the auto cadence stays a coreBridge
+  test (host-side + timing-sensitive).
 
 ## 11. Resolved decisions
 
@@ -706,3 +709,16 @@ No open questions remain; the spec is Approved and ready for the Phase A slice (
   and publish/reader/export/cover (see §10). 3/3 green (×3 no flake); the fake reordering is safe for
   the existing suite (two pre-existing, unrelated failures on `main` — `onboarding attention (55)`,
   `dreams typed-new-name` — were confirmed failing without this change).
+- 2026-07-16 — **Deferred coordination items BUILT + those two pre-existing failures fixed (on
+  `test/story-e2e`).** (1) **Reader read-progress + "what's new"** (§3.6): `listSharedBooks` now derives
+  `neverOpened`/`updated` from the viewer's device-local `storyReadProgress`; a new `story:markSharedRead`
+  records the open (opening a shared book clears the cues); the "Shared with you" card shows a **"New"/
+  "Updated"** badge. (2) **`story-shared` notification** — a one-time bell notice per newly-shared book
+  (owner decision: notify on first share only; later republishes surface as the quiet card marker, never a
+  re-notify), derived in `useNotificationSources`, kind added to the registry. (3) **"Your biographer"
+  Inbox eyebrow** — `InboxItem.fromBiographer` set when the frozen snapshot carries `storyProvenance`.
+  Broadened the E2E (photos/vision, PDF export, the notification + marker + eyebrow). Also fixed the two
+  pre-existing `main` failures (Playwright substring collision on a new "Sharing & relationships" nav item;
+  the onboarding-attention relaunch assertion tightened to the onboarding item, since a freshly-onboarded
+  owner now legitimately gets the auto check-ins seed notice). Additive schema (no version bump); full gate
+  green (core 1412 + desktop 1256, 6 story E2E ×3 no flake).

@@ -216,6 +216,7 @@ const bridge: SelfosBridge = {
   storyReaderFeatured: (input) => ipcRenderer.invoke(IpcChannels.storyReaderFeatured, input),
   storySharedBooks: () => ipcRenderer.invoke(IpcChannels.storySharedBooks),
   storyReadShared: (input) => ipcRenderer.invoke(IpcChannels.storyReadShared, input),
+  storyMarkSharedRead: (input) => ipcRenderer.invoke(IpcChannels.storyMarkSharedRead, input),
   storyReadSharedImage: (input) => ipcRenderer.invoke(IpcChannels.storyReadSharedImage, input),
   storyExportMarkdown: (input) => ipcRenderer.invoke(IpcChannels.storyExportMarkdown, input),
   storyExportPdf: (input) => ipcRenderer.invoke(IpcChannels.storyExportPdf, input),

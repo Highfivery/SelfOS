@@ -416,4 +416,34 @@ describe('runStoryInterviewCadence (64 §3.7 — the autonomous loop)', () => {
       (await getInterviewState(fs, key, 'me', bookId)).openCheckinAssignmentId,
     ).toBeUndefined();
   });
+
+  it('a RESOLVED check-in + a no-gaps pass keeps the FRESH throttle stamp (no lost update)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    // Run 1: mint a check-in (has gaps), then answer it → resolved (its flag is still set).
+    const first = await runStoryInterviewCadence(deps(fs, routingClient(gapJson, validQuestions)), {
+      bookId,
+      auto: false,
+    });
+    expect(first.outcome).toBe('minted');
+    await updateAssignmentStatus(fs, key, first.assignmentId!, 'submitted');
+    // Run 2, 10 days later (manual bypasses the interval; the earlier pass is out of the weekly window): the
+    // gap pass returns NO gaps → the resolved flag is cleared ON TOP of the fresh stamp, not reverted.
+    const noGaps = JSON.stringify({
+      coverage: { chapters: true, scenes: { highPoint: true } },
+      gaps: [],
+    });
+    const later = new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000);
+    const res = await runStoryInterviewCadence(
+      depsAt(fs, routingClient(noGaps, validQuestions), later),
+      {
+        bookId,
+        auto: false,
+      },
+    );
+    expect(res.outcome).toBe('noGaps');
+    const state = await getInterviewState(fs, key, 'me', bookId);
+    expect(state.lastGapPassAt).toBe(later.toISOString()); // the fresh stamp survives (the fix)
+    expect(state.openCheckinAssignmentId).toBeUndefined(); // the resolved flag is cleared
+  });
 });

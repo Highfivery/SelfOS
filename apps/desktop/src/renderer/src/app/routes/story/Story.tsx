@@ -805,6 +805,7 @@ function CompletenessMeter({ c }: { c: StoryCompleteness }): JSX.Element {
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={pct}
+        aria-valuetext={label}
         aria-label={`Your story is ${label.toLowerCase()}`}
       >
         <div className={styles.meterFill} style={{ width: `${Math.max(4, pct)}%` }} />

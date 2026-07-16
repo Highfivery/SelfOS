@@ -366,7 +366,16 @@ export async function runStoryInterviewCadence(
   }
   const top = pass.gaps[0];
   if (!top) {
-    return await clearOpenIfResolved(deps, args.bookId, interview, 'noGaps', pass.completeness);
+    // The gap pass already persisted fresh coverage + lastGapPassAt — clear a resolved flag ON TOP of THAT
+    // (re-read `after`, not the stale top-level `interview`, or we'd revert the fresh coverage/throttle stamp).
+    const after = await getInterviewState(deps.fs, deps.key, deps.personId, args.bookId);
+    if (after.openCheckinAssignmentId) {
+      await saveInterviewState(deps.fs, deps.key, deps.personId, args.bookId, {
+        ...after,
+        openCheckinAssignmentId: undefined,
+      });
+    }
+    return { outcome: 'noGaps', completeness: pass.completeness };
   }
 
   // Mint ONE check-in from the top gap (the same self-send path the markup to-do uses).

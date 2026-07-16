@@ -13,6 +13,7 @@ import type {
   StoryCreateInput,
   StoryFoundationsResult,
   StoryMarkPatch,
+  StoryQuestionsResult,
   StoryRevisionResult,
   StoryTodoEntry,
   TextAnchor,
@@ -68,6 +69,13 @@ interface StoryState {
   /** The book-level to-do roll-up ("To do" list on the overview). */
   todos: StoryTodoEntry[];
   loadTodos: (bookId: string) => Promise<void>;
+  /** Turn a to-do into a story check-in (§5.5) — mints an in-app self-send + records a questionsSent to-do. */
+  todoToQuestions: (
+    bookId: string,
+    chapterId: string,
+    focus: string,
+    anchor?: TextAnchor,
+  ) => Promise<StoryQuestionsResult>;
   /** The book's exclusions ("never write about this again") — for the overview panel. */
   exclusions: ExclusionItem[];
   loadExclusions: (bookId: string) => Promise<void>;
@@ -90,6 +98,11 @@ const CHAPTERS_NOT_AVAILABLE: StoryChaptersResult = {
   message: 'Not available.',
 };
 const REVISION_NOT_AVAILABLE: StoryRevisionResult = {
+  ok: false,
+  reason: 'ERROR',
+  message: 'Not available.',
+};
+const QUESTIONS_NOT_AVAILABLE: StoryQuestionsResult = {
   ok: false,
   reason: 'ERROR',
   message: 'Not available.',
@@ -218,6 +231,22 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   loadTodos: async (bookId) => {
     const roll = (await window.selfos?.storyTodos({ bookId })) ?? null;
     set({ todos: roll?.todos ?? [] });
+  },
+  todoToQuestions: async (bookId, chapterId, focus, anchor) => {
+    set({ chaptersGenerating: true });
+    try {
+      const res =
+        (await window.selfos?.storyTodoToQuestions({
+          bookId,
+          chapterId,
+          focus,
+          ...(anchor ? { anchor } : {}),
+        })) ?? QUESTIONS_NOT_AVAILABLE;
+      if (res.ok) set({ markup: res.markup });
+      return res;
+    } finally {
+      set({ chaptersGenerating: false });
+    }
   },
   loadExclusions: async (bookId) => {
     const exclusions = (await window.selfos?.storyExclusions({ bookId })) ?? [];

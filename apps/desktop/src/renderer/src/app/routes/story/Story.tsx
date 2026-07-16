@@ -678,12 +678,13 @@ const INTENT_LABEL: Record<CommentIntent, string> = {
   question: 'Question',
 };
 
-// v1 to-do kinds the reader creates: a personal reminder, or an instruction to fold into the next revision.
-// The "questions" kind (mint a story check-in) arrives in a later slice.
-type ReaderTodoKind = 'remind' | 'ask';
+// The to-do kinds the reader creates: a personal reminder, an instruction to fold into the next revision, or
+// "turn into questions" (mint a story check-in into the Inbox — an explicit, metered AI action).
+type ReaderTodoKind = 'remind' | 'ask' | 'questions';
 const TODO_KIND_OPTIONS: SegmentOption<ReaderTodoKind>[] = [
   { value: 'remind', label: 'Remind me' },
   { value: 'ask', label: 'Ask my biographer' },
+  { value: 'questions', label: 'Turn into questions' },
 ];
 const TODO_KIND_LABEL: Record<string, string> = {
   remind: 'Reminder',
@@ -745,6 +746,7 @@ function ChapterReader({
   const applyMarkup = useStoryStore((s) => s.applyMarkup);
   const editPassage = useStoryStore((s) => s.editPassage);
   const pinQuote = useStoryStore((s) => s.pinQuote);
+  const todoToQuestions = useStoryStore((s) => s.todoToQuestions);
   const exclude = useStoryStore((s) => s.exclude);
   const busy = useStoryStore((s) => s.chaptersGenerating);
   const [error, setError] = useState<string | null>(null);
@@ -772,6 +774,7 @@ function ChapterReader({
     setActiveQuote(null);
     setMode(null);
     setDraft('');
+    setTodoKind('remind'); // don't leave the To-do form defaulted to the metered "questions" kind
   };
 
   // Open the toolbar for a paragraph, seeded with the current text selection (if any is inside it).
@@ -813,6 +816,20 @@ function ChapterReader({
 
   const submitTodo = async (i: number): Promise<void> => {
     if (draft.trim().length === 0) return;
+    if (todoKind === 'questions') {
+      // Explicit, metered: mint a story check-in into the Inbox (§5.5).
+      setNotice(null);
+      const res = await todoToQuestions(
+        bookId,
+        chapterId,
+        draft.trim(),
+        buildAnchor(paragraphs, i, activeQuote),
+      );
+      if (res.ok) setNotice('A few questions are waiting in your Inbox.');
+      else setError(res.message);
+      closeMenu();
+      return;
+    }
     await addMark(bookId, chapterId, {
       id: crypto.randomUUID(),
       kind: 'todo',
@@ -1090,7 +1107,9 @@ function ChapterReader({
                         <Text size="sm" tone="secondary">
                           {todoKind === 'remind'
                             ? 'A private reminder for you — your biographer never touches it.'
-                            : 'An instruction your biographer folds into the next revision.'}
+                            : todoKind === 'ask'
+                              ? 'An instruction your biographer folds into the next revision.'
+                              : 'Your biographer will ask you a few questions to gather this, waiting in your Inbox.'}
                         </Text>
                         <Textarea
                           value={draft}
@@ -1109,10 +1128,14 @@ function ChapterReader({
                           </Button>
                           <Button
                             variant="primary"
-                            disabled={draft.trim().length === 0}
+                            disabled={draft.trim().length === 0 || busy}
                             onClick={() => void submitTodo(i)}
                           >
-                            Add to-do
+                            {todoKind === 'questions'
+                              ? busy
+                                ? 'Sending…'
+                                : 'Send me questions'
+                              : 'Add to-do'}
                           </Button>
                         </Inline>
                       </Stack>

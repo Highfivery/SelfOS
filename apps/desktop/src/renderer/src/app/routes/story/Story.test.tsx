@@ -499,6 +499,49 @@ describe('Story (64)', () => {
     );
   });
 
+  it('turns a to-do into questions (mints a check-in)', async () => {
+    const storyTodoToQuestions = vi.fn(() =>
+      Promise.resolve({
+        ok: true as const,
+        markup: {
+          schemaVersion: 1 as const,
+          chapterId: 'c1',
+          marks: [
+            {
+              id: 'q1',
+              kind: 'todo' as const,
+              text: 'the winter he got sick',
+              todoKind: 'questions' as const,
+              status: 'questionsSent' as const,
+              assignmentId: 'a1',
+              createdAt: 'now',
+            },
+          ],
+        },
+        assignmentId: 'a1',
+      }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
+      storyTodoToQuestions,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!);
+    await userEvent.click(await screen.findByRole('button', { name: 'To-do' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Turn into questions' }));
+    await userEvent.type(screen.getByLabelText('To-do'), 'the winter he got sick');
+    await userEvent.click(screen.getByRole('button', { name: 'Send me questions' }));
+    expect(storyTodoToQuestions).toHaveBeenCalledWith(
+      expect.objectContaining({ bookId: 'b1', chapterId: 'c1', focus: 'the winter he got sick' }),
+    );
+    expect(await screen.findByText(/waiting in your Inbox/)).toBeInTheDocument();
+  });
+
   it('an ask to-do counts toward the apply bar', async () => {
     installMockBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),

@@ -360,6 +360,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyExclusions, bridge.storyExclusions);
   handle(IpcChannels.storyExclude, bridge.storyExclude);
   handle(IpcChannels.storyUnexclude, bridge.storyUnexclude);
+  handle(IpcChannels.storyTodoToQuestions, bridge.storyTodoToQuestions);
   handle(IpcChannels.relationshipsGetSynthesis, bridge.relationshipsGetSynthesis);
   handle(IpcChannels.relationshipsSynthesize, bridge.relationshipsSynthesize);
   handle(IpcChannels.challengesStart, bridge.challengesStart);

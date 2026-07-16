@@ -3,6 +3,7 @@ export * from './storyCorpus';
 export * from './storyExclusionService';
 export * from './storyPromptBuilder';
 export * from './storyGenerationService';
+export * from './storyInterviewService';
 export * from './storyMarkup';
 export * from './storyMarkupService';
 export * from './storyService';

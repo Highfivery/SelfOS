@@ -3996,6 +3996,20 @@ export type StoryRevisionResult =
   | { ok: true; bundle: StoryBookBundle; markup: ChapterMarkup }
   | { ok: false; reason: AiFailureReason | 'AI_OFF'; message: string };
 
+/** `story:todoToQuestions` — turn a to-do into a targeted story check-in (§3.3.2/§5.5). Mints an in-app
+ *  self-send from the FOCUS text, then records a `questions` to-do stamped `questionsSent` + `assignmentId`. */
+export const StoryTodoToQuestionsInputSchema = StoryChapterRefSchema.extend({
+  focus: z.string().min(1),
+  anchor: TextAnchorSchema.optional(),
+});
+export type StoryTodoToQuestionsInput = z.infer<typeof StoryTodoToQuestionsInputSchema>;
+
+/** The result of a to-do→questions mint (§5.5): the chapter's updated markup + the new assignment id, or an
+ *  honest failure (nothing persisted). */
+export type StoryQuestionsResult =
+  | { ok: true; markup: ChapterMarkup; assignmentId: string }
+  | { ok: false; reason: AiFailureReason | 'AI_OFF'; message: string };
+
 // --- Exclusions IPC (§3.3/§5.1) --------------------------------------------------------------------------
 
 /** `story:exclude` — add a "never write about this again" exclusion, scoped (§3.3). `value` by kind: topic/

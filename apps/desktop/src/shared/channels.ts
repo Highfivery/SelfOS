@@ -19,8 +19,10 @@ import type {
   StoryOutlineInput,
   StoryPinInput,
   StoryRemoveMarkInput,
+  StoryQuestionsResult,
   StoryRevisionResult,
   StoryTodoList,
+  StoryTodoToQuestionsInput,
   StoryUnexcludeInput,
   StoryUpdateInput,
   StoryUpdateMarkInput,
@@ -306,6 +308,7 @@ export const IpcChannels = {
   storyExclusions: 'story:exclusions',
   storyExclude: 'story:exclude',
   storyUnexclude: 'story:unexclude',
+  storyTodoToQuestions: 'story:todoToQuestions',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -1054,6 +1057,9 @@ export interface SelfosBridge {
   storyExclude(input: StoryExcludeInput): Promise<StoryExcludeResult>;
   /** Remove an exclusion (written chapters unchanged). Returns the updated list. */
   storyUnexclude(input: StoryUnexcludeInput): Promise<ExclusionItem[]>;
+  /** Turn a to-do into a story check-in (§3.3.2/§5.5): mint an in-app self-send from the focus + record a
+   *  `questionsSent` to-do. The one AI call here — honest AI_OFF/NO_KEY/failure, nothing persisted on failure. */
+  storyTodoToQuestions(input: StoryTodoToQuestionsInput): Promise<StoryQuestionsResult>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

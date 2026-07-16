@@ -310,6 +310,24 @@ function makeHost(): {
           usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      // The story to-do→questions mint (64 §5.5) — matched by its distinctive brief so it doesn't intercept
+      // the generic questionnaire-generation tests (which expect a non-JSON reply). Returns valid questions.
+      if (userText.includes('Your biographer wants to go deeper on this for the book')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            title: 'A few questions for your story',
+            questions: [
+              {
+                type: 'shortText',
+                prompt: 'What was that winter like, day to day?',
+                required: false,
+              },
+              { type: 'shortText', prompt: 'Who was in the house with you then?', required: false },
+            ],
+          }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // Dream synthesis asks for a single JSON object — return a valid DreamAnalysis draft so the
       // synthesize path can parse it; every other turn just streams a short reply.
       const wantsJson = options.messages.some((m) =>
@@ -6613,6 +6631,48 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(revised?.markdown).toContain('cold steel'); // the protected inline edit was preserved (enforced)
     expect(revised?.status).toBe('updated');
     expect(applied.markup.marks[0]?.status).toBe('applied');
+  });
+
+  it('story: turn a to-do into questions — mints an Inbox self-send + records a questionsSent to-do', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+
+    const res = await bridge.storyTodoToQuestions({
+      bookId,
+      chapterId,
+      focus: 'the winter he got sick',
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    // A questionsSent to-do is recorded, carrying the assignment id.
+    const todo = res.markup.marks.find((m) => m.kind === 'todo');
+    expect(todo).toMatchObject({
+      todoKind: 'questions',
+      status: 'questionsSent',
+      assignmentId: res.assignmentId,
+    });
+    // It lands in the person's own Inbox (a self-send).
+    const inbox = await bridge.assignmentsInbox();
+    expect(inbox.some((it) => it.assignmentId === res.assignmentId)).toBe(true);
+
+    // AI off → an honest AI_OFF, nothing minted.
+    await bridge.setSetting({ key: 'ai.enabled', value: false, scope: 'vault' });
+    const off = await bridge.storyTodoToQuestions({ bookId, chapterId, focus: 'something else' });
+    expect(off.ok).toBe(false);
+    if (!off.ok) expect(off.reason).toBe('AI_OFF');
   });
 
   it('story: a to-do mark flows into the book-level roll-up and can be marked done', async () => {

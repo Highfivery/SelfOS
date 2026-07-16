@@ -174,17 +174,20 @@ import {
   StoryOutlineInputSchema,
   StoryPinInputSchema,
   StoryRemoveMarkInputSchema,
+  StoryTodoToQuestionsInputSchema,
   StoryUnexcludeInputSchema,
   StoryUpdateInputSchema,
   StoryUpdateMarkInputSchema,
   type BookManifest,
   type ChapterMarkup,
   type ExclusionItem,
+  type MarkupMark,
   type StoryBookBundle,
   type StoryBookTypeView,
   type StoryChaptersResult,
   type StoryExcludeResult,
   type StoryFoundationsResult,
+  type StoryQuestionsResult,
   type StoryRevisionResult,
   type StoryTodoList,
 } from './schemas';
@@ -376,6 +379,7 @@ import {
   getTodos,
   listBookTypes,
   listBooks,
+  mintStoryCheckInFromTodo,
   pinPassage,
   readBookBundle,
   removeExclusion,
@@ -4479,6 +4483,33 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return [];
       return removeExclusion(ctx.fs, ctx.key, personId, bookId, itemId);
+    },
+    storyTodoToQuestions: async (input): Promise<StoryQuestionsResult> => {
+      const { bookId, chapterId, focus, anchor } = StoryTodoToQuestionsInputSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to gather answers.',
+        };
+      }
+      const res = await mintStoryCheckInFromTodo(deps, { bookId, focus });
+      if (!res.ok) return { ok: false, reason: res.reason, message: res.message };
+      // Record the to-do only AFTER the mint succeeds (so a failed mint leaves no dangling questionsSent to-do).
+      const mark: MarkupMark = {
+        id: globalThis.crypto.randomUUID(),
+        kind: 'todo',
+        text: focus,
+        todoKind: 'questions',
+        status: 'questionsSent',
+        assignmentId: res.assignmentId,
+        createdAt: new Date().toISOString(),
+        ...(anchor ? { anchor } : {}),
+      };
+      const markup = await addMark(deps.fs, deps.key, deps.personId, bookId, chapterId, mark);
+      return { ok: true, markup, assignmentId: res.assignmentId };
     },
     // The batch markup revision — the one AI call in the markup layer (§3.3.1/§5.3).
     storyApplyMarkup: async (input): Promise<StoryRevisionResult> => {

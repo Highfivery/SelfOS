@@ -338,6 +338,7 @@ export const IpcChannels = {
   storySharedBooks: 'story:sharedBooks',
   storyReadShared: 'story:readShared',
   storyExportMarkdown: 'story:exportMarkdown',
+  storyExportPdf: 'story:exportPdf',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -1127,6 +1128,9 @@ export interface SelfosBridge {
    *  Returns the saved path, or null (book not published yet, or the dialog was cancelled). Gated `story.own`,
    *  author-scoped. */
   storyExportMarkdown(input: { bookId: string }): Promise<string | null>;
+  /** Export the book's PUBLISHED head as a typeset PDF OUTSIDE the vault (§3.9) — Electron `printToPDF`. Returns
+   *  the saved path, or null (not published, dialog cancelled, or a host that can't render PDF). Gated `story.own`. */
+  storyExportPdf(input: { bookId: string }): Promise<string | null>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

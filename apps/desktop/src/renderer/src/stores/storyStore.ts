@@ -127,6 +127,7 @@ interface StoryState {
   readerFeatured: (bookId: string, readerPersonId: string) => Promise<boolean>;
   /** Export the published head as a Markdown file outside the vault (§3.9). Returns the saved path, or null. */
   exportMarkdown: (bookId: string) => Promise<string | null>;
+  exportPdf: (bookId: string) => Promise<string | null>;
   /** Books shared WITH the active person (§3.5) — the "Shared with you" surface + the reader view. */
   sharedBooks: SharedBookSummary[];
   loadSharedBooks: () => Promise<void>;
@@ -400,6 +401,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   readerFeatured: async (bookId, readerPersonId) =>
     (await window.selfos?.storyReaderFeatured({ bookId, readerPersonId })) ?? false,
   exportMarkdown: async (bookId) => (await window.selfos?.storyExportMarkdown({ bookId })) ?? null,
+  exportPdf: async (bookId) => (await window.selfos?.storyExportPdf({ bookId })) ?? null,
   loadSharedBooks: async () => {
     const sharedBooks = (await window.selfos?.storySharedBooks()) ?? [];
     set({ sharedBooks });

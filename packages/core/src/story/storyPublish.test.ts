@@ -16,7 +16,13 @@ import {
   readSharedBook,
   revokeReader,
 } from './storyPublish';
-import { bookToMarkdown, buildPublishedMarkdown, exportFileStem } from './storyExport';
+import {
+  bookToHtml,
+  bookToMarkdown,
+  buildPublishedHtml,
+  buildPublishedMarkdown,
+  exportFileStem,
+} from './storyExport';
 import type { PublishedManifest } from '../schemas';
 import {
   applyFoundations,
@@ -288,5 +294,46 @@ describe('export (64 §3.9)', () => {
     const built = await buildPublishedMarkdown(fs, key, 'author', bookId);
     expect(built?.title).toBe('The Story of Ben');
     expect(built?.markdown).toContain('### The Garage'); // the one Reviewed chapter
+  });
+
+  it('renders the published head as a self-contained, safely-escaped print HTML document', () => {
+    const manifest: PublishedManifest = {
+      schemaVersion: 1,
+      publishedAt: 'now',
+      title: 'The Story of Ben',
+      matter: { dedication: 'For my mother', epigraph: 'Begin.', acknowledgments: 'Thanks.' },
+      noteOnBook: 'Drawn from your record — never invented.',
+      parts: [{ id: 'p1', title: 'Roots', chapterIds: ['c1'] }],
+      chapterOrder: ['c1'],
+    };
+    const html = bookToHtml(manifest, [
+      // a hostile chapter: raw HTML + bold/italic; escaping must neutralize the tag but keep the formatting
+      {
+        id: 'c1',
+        title: 'The Garage',
+        markdown: 'The **garage** smelled <script>alert(1)</script> of *pine*.',
+      },
+    ]);
+    expect(html.startsWith('<!doctype html>')).toBe(true);
+    expect(html).toContain('<style>');
+    expect(html).toContain('<h1>The Story of Ben</h1>');
+    expect(html).toContain('<h2>Roots</h2>');
+    expect(html).toContain('<h3>The Garage</h3>');
+    expect(html).toContain('<strong>garage</strong>');
+    expect(html).toContain('<em>pine</em>');
+    expect(html).toContain('<h2>Acknowledgments</h2>');
+    // safety: the raw <script> is escaped, never a live tag (spec-34's no-raw-HTML rule).
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('builds print HTML from the published head, null before publishing', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    expect(await buildPublishedHtml(fs, key, 'author', bookId)).toBeNull(); // not published yet
+    await publishBook(fs, key, 'author', bookId, now);
+    const built = await buildPublishedHtml(fs, key, 'author', bookId);
+    expect(built?.title).toBe('The Story of Ben');
+    expect(built?.html).toContain('<h3>The Garage</h3>');
   });
 });

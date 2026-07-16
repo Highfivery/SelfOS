@@ -397,6 +397,7 @@ import {
   markStaleChapters,
   mintStoryCheckInFromTodo,
   bookMentionsReader,
+  buildPublishedHtml,
   buildPublishedMarkdown,
   computeStoryHomeSignal,
   exportFileStem,
@@ -685,6 +686,11 @@ export interface BridgeHost {
    * dialog on Electron, a download on iOS/web. Returns the chosen path, or null if cancelled.
    */
   saveImageFile(suggestedName: string, bytes: Uint8Array, mime: string): Promise<string | null>;
+  /**
+   * Render a self-contained HTML document to PDF bytes (64-your-story §3.9) — Electron `printToPDF` on an
+   * offscreen window. Returns null on a host that can't (web/iOS) so the caller degrades gracefully.
+   */
+  printToPdf(html: string): Promise<Uint8Array | null>;
   /** Subscribe to external vault changes (the host's watcher); returns an unsubscribe. */
   onVaultChanged(listener: () => void): () => void;
   /** Subscribe to streamed chat chunks; the renderer-facing counterpart to `emitChatChunk`. */
@@ -4774,6 +4780,18 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const bytes = new TextEncoder().encode(built.markdown);
       // Reuses the generic file-save host op (the dream-image export precedent) — the bytes leave the vault.
       return host.saveImageFile(`${exportFileStem(built.title)}.md`, bytes, 'text/markdown');
+    },
+    storyExportPdf: async (input): Promise<string | null> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const built = await buildPublishedHtml(ctx.fs, ctx.key, personId, bookId);
+      if (!built) return null; // not published
+      const pdf = await host.printToPdf(built.html);
+      if (!pdf) return null; // a host that can't render PDF (web/iOS), or a render failure
+      return host.saveImageFile(`${exportFileStem(built.title)}.pdf`, pdf, 'application/pdf');
     },
     // The batch markup revision — the one AI call in the markup layer (§3.3.1/§5.3).
     storyApplyMarkup: async (input): Promise<StoryRevisionResult> => {

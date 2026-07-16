@@ -443,6 +443,7 @@ function makeHost(): {
     openExternal: () => Promise.resolve(),
     checkForUpdate: () => Promise.resolve(null),
     saveImageFile: (name) => Promise.resolve(`/tmp/${name}`),
+    printToPdf: (html) => Promise.resolve(new TextEncoder().encode(`%PDF-fake\n${html.length}`)),
     onVaultChanged: () => () => {},
     onChatChunk: () => () => {},
     onDreamChunk: () => () => {},
@@ -7155,5 +7156,39 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const md = new TextDecoder().decode(saved[0]!.bytes);
     expect(md).toContain('# The Story of Ben');
     expect(md).toContain('### '); // the published chapter heading
+  });
+
+  it('story: exports the published book as a PDF file outside the vault (§3.9)', async () => {
+    const { bridge, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const saved: { name: string; bytes: Uint8Array; mime?: string }[] = [];
+    host.host.saveImageFile = (name, bytes, mime) => {
+      saved.push({ name, bytes, mime });
+      return Promise.resolve(`/exports/${name}`);
+    };
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+
+    // Not published yet → nothing to export.
+    expect(await bridge.storyExportPdf({ bookId })).toBeNull();
+    expect(saved).toHaveLength(0);
+
+    await bridge.storyReviewChapter({ bookId, chapterId: chapters.bundle.chapters[0]!.id });
+    await bridge.storyPublish({ bookId });
+    const path = await bridge.storyExportPdf({ bookId });
+    expect(path).toBe('/exports/The-Story-of-Ben.pdf');
+    expect(saved[0]!.mime).toBe('application/pdf');
+    // The test host's fake printToPdf echoes the rendered HTML length, so a non-trivial doc means we rendered.
+    expect(new TextDecoder().decode(saved[0]!.bytes)).toContain('%PDF-fake');
   });
 });

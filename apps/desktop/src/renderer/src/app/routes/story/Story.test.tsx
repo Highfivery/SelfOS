@@ -926,6 +926,26 @@ describe('Story (64)', () => {
     ).toBeInTheDocument();
   });
 
+  it('exports the published book as PDF, noting it leaves the vault (§3.9)', async () => {
+    const storyExportPdf = vi.fn(() => Promise.resolve('/exports/The-Story-of-Ben.pdf'));
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () =>
+        Promise.resolve({
+          ...writtenBundle('new'),
+          manifest: manifest({ status: 'ready', publishedAt: '2026-07-16T00:00:00.000Z' }),
+        }),
+      storyExportPdf,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Export as PDF' }));
+    expect(storyExportPdf).toHaveBeenCalledWith({ bookId: 'b1' });
+    expect(
+      await screen.findByText(/Saved to .* — this file leaves your encrypted vault/),
+    ).toBeInTheDocument();
+  });
+
   it('lists to-dos on the overview and marks a reminder done', async () => {
     const storyUpdateMark = vi.fn(
       (): Promise<ChapterMarkup> =>

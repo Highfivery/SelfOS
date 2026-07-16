@@ -1,4 +1,12 @@
-import { app, dialog, ipcMain, shell, type IpcMainInvokeEvent, type WebContents } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  shell,
+  type IpcMainInvokeEvent,
+  type WebContents,
+} from 'electron';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -196,6 +204,23 @@ export function registerIpcHandlers(): void {
       await writeFile(filePath, Buffer.from(bytes));
       return filePath;
     },
+    printToPdf: async (html) => {
+      // Render the self-contained HTML offscreen and print it to PDF bytes (64-your-story §3.9). The window
+      // is hidden, sandboxed (no node), and destroyed after — it only ever loads our own data: URL.
+      const win = new BrowserWindow({
+        show: false,
+        webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true },
+      });
+      try {
+        await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+        const pdf = await win.webContents.printToPDF({ printBackground: true });
+        return new Uint8Array(pdf);
+      } catch {
+        return null;
+      } finally {
+        win.destroy();
+      }
+    },
     // On Electron the renderer subscribes to these over IPC in the preload, not via the in-process
     // bridge — so the bridge's own subscriptions are unused in main (they exist for the iOS host).
     onVaultChanged: () => () => {},
@@ -375,6 +400,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storySharedBooks, bridge.storySharedBooks);
   handle(IpcChannels.storyReadShared, bridge.storyReadShared);
   handle(IpcChannels.storyExportMarkdown, bridge.storyExportMarkdown);
+  handle(IpcChannels.storyExportPdf, bridge.storyExportPdf);
   handle(IpcChannels.relationshipsGetSynthesis, bridge.relationshipsGetSynthesis);
   handle(IpcChannels.relationshipsSynthesize, bridge.relationshipsSynthesize);
   handle(IpcChannels.challengesStart, bridge.challengesStart);

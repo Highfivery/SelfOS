@@ -820,6 +820,7 @@ function ShareReadersPanel({
 }): JSX.Element {
   const publish = useStoryStore((s) => s.publish);
   const exportMarkdown = useStoryStore((s) => s.exportMarkdown);
+  const exportPdf = useStoryStore((s) => s.exportPdf);
   const readers = useStoryStore((s) => s.readers);
   const loadReaders = useStoryStore((s) => s.loadReaders);
   const grantReader = useStoryStore((s) => s.grantReader);
@@ -878,6 +879,16 @@ function ShareReadersPanel({
                 }}
               >
                 Export as Markdown
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  setNotice(null);
+                  const path = await exportPdf(bookId);
+                  if (path) setNotice(`Saved to ${path} — this file leaves your encrypted vault.`);
+                }}
+              >
+                Export as PDF
               </Button>
               <Text tone="secondary" size="sm">
                 Last shared {new Date(publishedAt).toLocaleDateString()}

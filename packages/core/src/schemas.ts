@@ -3774,9 +3774,11 @@ export const StoryTodoListSchema = z.object({
 });
 export type StoryTodoList = z.infer<typeof StoryTodoListSchema>;
 
-/** `exclusions.enc` — the durable "never write about this again" list (§3.3). `value` is the topic text /
- *  personId / a StorySourceRef id / a passage fingerprint depending on `kind`; filtered at the CORPUS
- *  boundary (§5.1) so excluded material can never be reintroduced by a later rewrite. */
+/** `exclusions.enc` — the durable "never write about this again" list (§3.3). `value` by `kind`: `topic` =
+ *  the topic phrase; `passage` = the excluded passage's TEXT (a text-avoidance phrase, not a hash — so the
+ *  corpus can substring-match it, §5.1); `person` = the person id (its display name is ALSO avoided in text);
+ *  `source` = a StorySourceRef id. Filtered at the CORPUS boundary (§5.1) so excluded material can never be
+ *  reintroduced by a later rewrite. */
 export const ExclusionKindSchema = z.enum(['passage', 'topic', 'person', 'source']);
 export type ExclusionKind = z.infer<typeof ExclusionKindSchema>;
 export const ExclusionItemSchema = z.object({

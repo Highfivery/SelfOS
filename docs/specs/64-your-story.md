@@ -328,8 +328,11 @@ createdAt, appliedRevision? }`.
 createdAt }] }` — a denormalized book-level roll-up (source of truth stays each chapter's markup)
   so the overview "To do" list needs one read, not N.
 - **`ExclusionListSchema`** — `{ schemaVersion:1, items: [{ id, kind:
-'passage'|'topic'|'person'|'source', value: string (topic text / personId / StorySourceRef /
-passage fingerprint), note?, createdAt }] }`.
+'passage'|'topic'|'person'|'source', value: string, note?, createdAt }] }`. `value` by kind: `topic`
+  = the topic phrase; `passage` = the excluded passage's **text** (a text-avoidance phrase, not a hash,
+  so the corpus can substring-match it); `person` = the person id (the corpus ALSO avoids that person's
+  display name in free text, so the subject's own mentions are dropped, not just cross-shared facts);
+  `source` = a `StorySourceRef` id.
 - **`StoryInterviewStateSchema`** — `{ schemaVersion:1, askedPrompts: string[], frameworkCoverage:
 { chapters: boolean, scenes: Record<McAdamsScene, boolean>, challenges, ideology, futureScript },
 photoAnswers: [{ imageId, question, answer, at }], lastGapPassAt?, openCheckinAssignmentId? }`.

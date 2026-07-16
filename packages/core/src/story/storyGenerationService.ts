@@ -17,6 +17,7 @@ import {
 } from '../schemas';
 import { getBookType, type BookType } from './bookTypes';
 import { buildStoryCorpus, type StoryCorpus } from './storyCorpus';
+import { computeSourceSignature } from './storyFreshness';
 import { enforceProtected } from './storyMarkup';
 import { syncChapterTodos } from './storyMarkupService';
 import {
@@ -255,7 +256,9 @@ export async function generateChapter(
     markdown,
     revision: (existing?.revision ?? 0) + 1,
     status: existing ? 'updated' : 'new',
-    sourceSignature: '', // computed by the freshness engine (slice D)
+    // Stamp the freshness fingerprint from the corpus it was just written against (§5.4), so a later source
+    // change flags this chapter stale.
+    sourceSignature: computeSourceSignature(corpus, { provenance }),
     provenance,
     protectedBlocks: existing?.protectedBlocks ?? [], // preserved across regeneration (enforced in slice C)
     pinnedQuotes: existing?.pinnedQuotes ?? [],
@@ -431,6 +434,8 @@ export async function applyMarkup(
     revision: existing.revision + 1,
     status: 'updated',
     provenance: stripped.provenance,
+    // Re-stamp the freshness fingerprint against the corpus this revision was written from (§5.4).
+    sourceSignature: computeSourceSignature(corpus, { provenance: stripped.provenance }),
     lastGeneratedAt: deps.now.toISOString(),
   };
   await saveChapter(deps.fs, deps.key, deps.personId, args.bookId, chapter);

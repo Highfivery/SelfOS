@@ -15,8 +15,10 @@ import type {
   StoryMarkPatch,
   StoryQuestionsResult,
   StoryRefreshViewResult,
+  StoryResolveProposalResult,
   StoryRevisionResult,
   StoryTodoEntry,
+  StructuralProposal,
   TextAnchor,
 } from '@shared/schemas';
 
@@ -88,6 +90,14 @@ interface StoryState {
   loadExclusions: (bookId: string) => Promise<void>;
   exclude: (bookId: string, kind: ExclusionKind, value: string, note?: string) => Promise<number>;
   unexclude: (bookId: string, itemId: string) => Promise<void>;
+  /** The book's PENDING structural proposals (§3.4) — the overview "Suggested changes" panel. */
+  proposals: StructuralProposal[];
+  loadProposals: (bookId: string) => Promise<void>;
+  resolveProposal: (
+    bookId: string,
+    proposalId: string,
+    action: 'approve' | 'dismiss',
+  ) => Promise<StoryResolveProposalResult>;
   update: (bookId: string, patch: { title?: string; config?: BookConfig }) => Promise<void>;
   remove: (bookId: string) => Promise<void>;
   clearBundle: () => void;
@@ -123,6 +133,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   markup: null,
   todos: [],
   exclusions: [],
+  proposals: [],
   loaded: false,
   generating: false,
   chaptersGenerating: false,
@@ -297,6 +308,20 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     const exclusions = (await window.selfos?.storyUnexclude({ bookId, itemId })) ?? [];
     set({ exclusions });
   },
+  loadProposals: async (bookId) => {
+    const proposals = (await window.selfos?.storyProposals({ bookId })) ?? [];
+    set({ proposals });
+  },
+  resolveProposal: async (bookId, proposalId, action) => {
+    const res = (await window.selfos?.storyResolveProposal({ bookId, proposalId, action })) ?? {
+      ok: false,
+      proposals: [],
+      bundle: null,
+    };
+    // Approve mutates the outline/chapters → adopt the fresh bundle; both actions update the pending list.
+    set({ proposals: res.proposals, ...(res.bundle ? { bundle: res.bundle } : {}) });
+    return res;
+  },
   update: async (bookId, patch) => {
     await window.selfos?.storyUpdate({ bookId, ...patch });
     await get().open(bookId);
@@ -316,6 +341,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       markup: null,
       todos: [],
       exclusions: [],
+      proposals: [],
       loaded: false,
       generating: false,
       chaptersGenerating: false,

@@ -175,6 +175,7 @@ import {
   StoryPinInputSchema,
   StoryRefreshInputSchema,
   StoryRemoveMarkInputSchema,
+  StoryResolveProposalInputSchema,
   StoryTodoToQuestionsInputSchema,
   StoryUnexcludeInputSchema,
   StoryUpdateInputSchema,
@@ -190,8 +191,10 @@ import {
   type StoryFoundationsResult,
   type StoryQuestionsResult,
   type StoryRefreshViewResult,
+  type StoryResolveProposalResult,
   type StoryRevisionResult,
   type StoryTodoList,
+  type StructuralProposal,
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
 import { runConnectionTest } from './claudeProxy';
@@ -383,10 +386,12 @@ import {
   listBooks,
   markStaleChapters,
   mintStoryCheckInFromTodo,
+  listStructuralProposals,
   pinPassage,
   readBookBundle,
   refreshBook,
   removeExclusion,
+  resolveProposal,
   removeMark,
   saveChapter,
   saveOutline,
@@ -4588,6 +4593,32 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(proposalsAdded ? { proposalsAdded } : {}),
         ...(capped ? { capped: true } : {}),
         ...(budgetReached ? { budgetReached: true } : {}),
+      };
+    },
+    storyProposals: async (input): Promise<StructuralProposal[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return listStructuralProposals(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyResolveProposal: async (input): Promise<StoryResolveProposalResult> => {
+      const { bookId, proposalId, action } = StoryResolveProposalInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, proposals: [], bundle: null, message: 'Not permitted.' };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { ok: false, proposals: [], bundle: null };
+      // Approve applies the restructure (mutates the outline/chapters) — no AI spend; dismiss just files it away.
+      const res = await resolveProposal(ctx.fs, ctx.key, personId, { bookId, proposalId, action });
+      const bundle = await readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      return {
+        ok: res.ok,
+        proposals: res.proposals,
+        bundle,
+        ...(res.message ? { message: res.message } : {}),
       };
     },
     // The batch markup revision — the one AI call in the markup layer (§3.3.1/§5.3).

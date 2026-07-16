@@ -362,6 +362,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyUnexclude, bridge.storyUnexclude);
   handle(IpcChannels.storyTodoToQuestions, bridge.storyTodoToQuestions);
   handle(IpcChannels.storyRefreshCheck, bridge.storyRefreshCheck);
+  handle(IpcChannels.storyProposals, bridge.storyProposals);
+  handle(IpcChannels.storyResolveProposal, bridge.storyResolveProposal);
   handle(IpcChannels.relationshipsGetSynthesis, bridge.relationshipsGetSynthesis);
   handle(IpcChannels.relationshipsSynthesize, bridge.relationshipsSynthesize);
   handle(IpcChannels.challengesStart, bridge.challengesStart);

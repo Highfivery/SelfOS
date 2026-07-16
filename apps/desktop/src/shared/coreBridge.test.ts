@@ -28,6 +28,7 @@ import { matrixRowKey } from '@selfos/core/schemas';
 import { saveGoal } from '@selfos/core/goals';
 import { listChallenges, recordCheckIn } from '@selfos/core/challenges';
 import { buildContext } from '@selfos/core/people';
+import { saveProposals } from '@selfos/core/story';
 import {
   captureJointChallengeFromMarker,
   captureSuggestionFromMarker,
@@ -6852,6 +6853,82 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(manual.bundle?.chapters.find((c) => c.id === chapterId)?.status).not.toBe('stale');
   });
 
+  it('story: structural proposals — list pending, approve (restructures the outline), dismiss', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const ctx = (await host.host.vaultAndKey())!;
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.storyGenerateChapters({ bookId });
+    const before = await bridge.storyGet({ bookId });
+    const partId = before!.outline!.parts[0]!.id;
+    const chapterId = before!.outline!.parts[0]!.chapters[0]!.id;
+
+    // Seed two pending proposals directly (a generation pass mints these; here we control the ids).
+    await saveProposals(ctx.fs, ctx.key, ownerId, bookId, {
+      schemaVersion: 1,
+      proposals: [
+        {
+          id: 'pr-new',
+          kind: 'newChapter',
+          rationale: 'A new era emerged.',
+          createdAt: '2026-07-16T00:00:00.000Z',
+          status: 'pending',
+          partId,
+          title: 'The Middle Years',
+          brief: 'Settling in.',
+          lifeAreas: [],
+        },
+        {
+          id: 'pr-prologue',
+          kind: 'prologueRewrite',
+          rationale: 'The opening no longer fits.',
+          createdAt: '2026-07-16T00:00:00.000Z',
+          status: 'pending',
+          chapterId,
+        },
+      ],
+    });
+
+    // The panel lists both pending proposals.
+    expect((await bridge.storyProposals({ bookId })).map((p) => p.id).sort()).toEqual([
+      'pr-new',
+      'pr-prologue',
+    ]);
+
+    // Approve the new-chapter proposal → it restructures the outline (a new un-written chapter appears).
+    const approved = await bridge.storyResolveProposal({
+      bookId,
+      proposalId: 'pr-new',
+      action: 'approve',
+    });
+    expect(approved.ok).toBe(true);
+    expect(approved.proposals.map((p) => p.id)).toEqual(['pr-prologue']); // only the other stays pending
+    const titles = approved.bundle!.outline!.parts.flatMap((p) => p.chapters.map((c) => c.title));
+    expect(titles).toContain('The Middle Years');
+    // The new chapter is un-written (stale) — drafted on the next refresh, not now.
+    const shell = approved.bundle!.chapters.find((c) => c.title === 'The Middle Years');
+    expect(shell?.status).toBe('stale');
+    expect(shell?.markdown).toBe('');
+
+    // Dismiss the other → it leaves the pending list (kept stored for dedup, not shown).
+    const dismissed = await bridge.storyResolveProposal({
+      bookId,
+      proposalId: 'pr-prologue',
+      action: 'dismiss',
+    });
+    expect(dismissed.ok).toBe(true);
+    expect(await bridge.storyProposals({ bookId })).toEqual([]);
+  });
+
   it('story: markup + refresh ops are denied for a person without story.own', async () => {
     const { bridge } = await freshOwner();
     // A Guest role has no story.own.
@@ -6862,8 +6939,15 @@ describe('createCoreBridge — Together (58) foundation', () => {
     // Reads degrade to empty; there's no book to target, but the gate is what we're asserting.
     expect((await bridge.storyGetMarkup({ bookId: 'x', chapterId: 'c' })).marks).toEqual([]);
     expect((await bridge.storyTodos({ bookId: 'x' })).todos).toEqual([]);
+    expect(await bridge.storyProposals({ bookId: 'x' })).toEqual([]);
     const applied = await bridge.storyApplyMarkup({ bookId: 'x', chapterId: 'c' });
     expect(applied.ok).toBe(false);
+    const resolved = await bridge.storyResolveProposal({
+      bookId: 'x',
+      proposalId: 'p',
+      action: 'approve',
+    });
+    expect(resolved.ok).toBe(false);
     const refreshed = await bridge.storyRefreshCheck({ bookId: 'x' });
     expect(refreshed).toEqual({ staled: 0, rewritten: 0, bundle: null });
   });

@@ -22,6 +22,9 @@ import type {
   StoryQuestionsResult,
   StoryRefreshInput,
   StoryRefreshViewResult,
+  StoryResolveProposalInput,
+  StoryResolveProposalResult,
+  StructuralProposal,
   StoryRevisionResult,
   StoryTodoList,
   StoryTodoToQuestionsInput,
@@ -312,6 +315,8 @@ export const IpcChannels = {
   storyUnexclude: 'story:unexclude',
   storyTodoToQuestions: 'story:todoToQuestions',
   storyRefreshCheck: 'story:refreshCheck',
+  storyProposals: 'story:proposals',
+  storyResolveProposal: 'story:resolveProposal',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -1066,6 +1071,12 @@ export interface SelfosBridge {
   /** The living-book refresh pass (§3.4): mark stale chapters (free) + auto-rewrite them (metered, weekly-
    *  capped in the auto cadence). Marking stale runs even with AI off; the rewrite needs AI + budget. */
   storyRefreshCheck(input: StoryRefreshInput): Promise<StoryRefreshViewResult>;
+  /** The book's PENDING structural proposals (§3.4) for the "Suggested changes" panel (dismissed ones stay
+   *  stored for dedup but aren't shown). Gated `story.own`, active-person-scoped. */
+  storyProposals(input: { bookId: string }): Promise<StructuralProposal[]>;
+  /** Approve (apply the restructure — new/split chapters land un-written, drafted next refresh) or dismiss a
+   *  pending structural proposal. No AI spend. Returns the remaining pending proposals + the fresh bundle. */
+  storyResolveProposal(input: StoryResolveProposalInput): Promise<StoryResolveProposalResult>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

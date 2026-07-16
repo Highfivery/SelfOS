@@ -10,6 +10,7 @@ import type {
   StoryBookTypeView,
   StoryMarkInput,
   StoryRevisionResult,
+  StructuralProposal,
 } from '@shared/schemas';
 import { Story, buildAnchor, countApplicable } from './Story';
 import { useStoryStore } from '../../../stores/storyStore';
@@ -677,6 +678,55 @@ describe('Story (64)', () => {
     renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Refresh from what’s new' }));
     expect(await screen.findByText('Your story is up to date.')).toBeInTheDocument();
+  });
+
+  it('shows structural proposals and approves one (restructure, no prose written)', async () => {
+    const proposal: StructuralProposal = {
+      id: 'pr1',
+      kind: 'newChapter',
+      rationale: 'A new era emerged that the current chapters don’t hold.',
+      createdAt: 'now',
+      status: 'pending',
+      partId: 'p1',
+      title: 'The Middle Years',
+      brief: 'Settling in.',
+      lifeAreas: [],
+    };
+    const storyResolveProposal = vi.fn(() =>
+      Promise.resolve({ ok: true, proposals: [], bundle: writtenBundle('new') }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyProposals: () => Promise.resolve([proposal]),
+      storyResolveProposal,
+    });
+    renderStory();
+    expect(await screen.findByText(/Add a new chapter/)).toBeInTheDocument();
+    expect(screen.getByText(/A new era emerged/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    expect(storyResolveProposal).toHaveBeenCalledWith(
+      expect.objectContaining({ bookId: 'b1', proposalId: 'pr1', action: 'approve' }),
+    );
+  });
+
+  it('the refresh reports newly-filed structural suggestions', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyRefreshCheck: () =>
+        Promise.resolve({
+          staled: 0,
+          rewritten: 0,
+          proposalsAdded: 1,
+          bundle: writtenBundle('new'),
+        }),
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Refresh from what’s new' }));
+    expect(await screen.findByText(/1 suggested change to review below/)).toBeInTheDocument();
   });
 
   it('lists to-dos on the overview and marks a reminder done', async () => {

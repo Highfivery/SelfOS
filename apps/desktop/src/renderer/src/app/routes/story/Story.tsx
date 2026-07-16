@@ -22,6 +22,7 @@ import type {
   ChapterMarkup,
   CommentIntent,
   StoryBookBundle,
+  StructuralProposal,
   TextAnchor,
 } from '@shared/schemas';
 import styles from './Story.module.css';
@@ -479,6 +480,9 @@ function BookOverview({
   const exclusions = useStoryStore((s) => s.exclusions);
   const loadExclusions = useStoryStore((s) => s.loadExclusions);
   const unexclude = useStoryStore((s) => s.unexclude);
+  const proposals = useStoryStore((s) => s.proposals);
+  const loadProposals = useStoryStore((s) => s.loadProposals);
+  const resolveProposal = useStoryStore((s) => s.resolveProposal);
   const busy = useStoryStore((s) => s.chaptersGenerating);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -489,7 +493,8 @@ function BookOverview({
   useEffect(() => {
     void loadExclusions(bookId);
     void loadTodos(bookId);
-  }, [bookId, loadExclusions, loadTodos]);
+    void loadProposals(bookId);
+  }, [bookId, loadExclusions, loadTodos, loadProposals]);
 
   const openTodos = todos.filter((t) => t.status === 'open' || t.status === 'questionsSent');
 
@@ -523,18 +528,74 @@ function BookOverview({
               setError(null);
               setRefreshNotice(null);
               const res = await refreshBook(manifest.id, { auto: false });
-              setRefreshNotice(
-                res.rewritten > 0
-                  ? `Brought ${res.rewritten} chapter${res.rewritten === 1 ? '' : 's'} up to date with what’s new.`
-                  : res.staled > 0
-                    ? `${res.staled} chapter${res.staled === 1 ? ' has' : 's have'} new material to fold in — turn on AI to update ${res.staled === 1 ? 'it' : 'them'}.`
-                    : 'Your story is up to date.',
-              );
+              // The pass may have filed structural proposals — reload the panel so they appear.
+              await loadProposals(manifest.id);
+              const bits: string[] = [];
+              if (res.rewritten > 0)
+                bits.push(
+                  `Brought ${res.rewritten} chapter${res.rewritten === 1 ? '' : 's'} up to date with what’s new.`,
+                );
+              else if (res.staled > 0)
+                bits.push(
+                  `${res.staled} chapter${res.staled === 1 ? ' has' : 's have'} new material to fold in — turn on AI to update ${res.staled === 1 ? 'it' : 'them'}.`,
+                );
+              if (res.proposalsAdded)
+                bits.push(
+                  `${res.proposalsAdded} suggested change${res.proposalsAdded === 1 ? '' : 's'} to review below.`,
+                );
+              setRefreshNotice(bits.length > 0 ? bits.join(' ') : 'Your story is up to date.');
             }}
           >
             {busy ? 'Checking…' : 'Refresh from what’s new'}
           </Button>
         </Inline>
+      ) : null}
+
+      {proposals.length > 0 ? (
+        <Card>
+          <Stack gap={2}>
+            <Heading level={2}>Suggested changes</Heading>
+            <Text tone="secondary" size="sm">
+              Your biographer thinks the book’s shape could change. Nothing happens until you
+              approve — a new or split chapter is written on your next refresh.
+            </Text>
+            {proposals.map((p) => (
+              <div key={p.id} className={styles.markRow}>
+                <Stack gap={1}>
+                  <Text size="sm" className={styles.rowTitle}>
+                    {proposalSummary(p)}
+                  </Text>
+                  {p.rationale ? (
+                    <Text size="sm" tone="secondary">
+                      {p.rationale}
+                    </Text>
+                  ) : null}
+                </Stack>
+                <Inline gap={1}>
+                  <button
+                    type="button"
+                    className={styles.sourcesToggle}
+                    onClick={async () => {
+                      setError(null);
+                      const r = await resolveProposal(bookId, p.id, 'approve');
+                      if (!r.ok && r.message) setError(r.message);
+                    }}
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.sourcesToggle}
+                    aria-label="Dismiss this suggestion"
+                    onClick={() => void resolveProposal(bookId, p.id, 'dismiss')}
+                  >
+                    Dismiss
+                  </button>
+                </Inline>
+              </div>
+            ))}
+          </Stack>
+        </Card>
       ) : null}
 
       {pending > 0 ? (
@@ -672,6 +733,20 @@ function BookOverview({
       </Inline>
     </Stack>
   );
+}
+
+/** A one-line, human-readable summary of what a structural proposal would do (the rationale is shown beneath). */
+function proposalSummary(p: StructuralProposal): string {
+  switch (p.kind) {
+    case 'newChapter':
+      return `Add a new chapter: “${p.title}”`;
+    case 'splitChapter':
+      return `Split a chapter into “${p.firstTitle}” and “${p.secondTitle}”`;
+    case 'reorder':
+      return 'Reorder the chapters in a part';
+    case 'prologueRewrite':
+      return 'Rewrite the opening chapter';
+  }
 }
 
 const SOURCE_KIND_LABEL: Record<string, string> = {

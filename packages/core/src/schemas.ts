@@ -4084,6 +4084,20 @@ export interface StoryRefreshViewResult {
   bundle: StoryBookBundle | null;
 }
 
+/** `story:resolveProposal` — approve (apply the restructure) or dismiss a pending structural proposal (§3.4). */
+export const StoryResolveProposalInputSchema = StoryBookRefSchema.extend({
+  proposalId: z.string().min(1),
+  action: z.enum(['approve', 'dismiss']),
+});
+export type StoryResolveProposalInput = z.infer<typeof StoryResolveProposalInputSchema>;
+/** The remaining pending proposals + the fresh bundle (an approved restructure changed the outline/chapters). */
+export interface StoryResolveProposalResult {
+  ok: boolean;
+  proposals: StructuralProposal[];
+  bundle: StoryBookBundle | null;
+  message?: string;
+}
+
 // --- Exclusions IPC (§3.3/§5.1) --------------------------------------------------------------------------
 
 /** `story:exclude` — add a "never write about this again" exclusion, scoped (§3.3). `value` by kind: topic/

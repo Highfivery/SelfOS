@@ -10975,6 +10975,22 @@ test('auto check-ins (63): a completed onboarding seeds an on self stream that g
     await expect(w.getByRole('heading', { name: 'Auto check-ins' })).toBeVisible();
     await expect(w.getByText('Yourself')).toBeVisible();
 
+    // ~360px: the panel (incl. the target row's focus/cadence/intimacy controls) renders with no horizontal
+    // scrollbar / inner overflow (CLAUDE.md §12).
+    await w.setViewportSize({ width: 360, height: 800 });
+    const offenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(offenders).toEqual([]);
+    await w.setViewportSize({ width: 1100, height: 800 });
+
     // Force a run (bypasses the 24h throttle) — a calm success note appears.
     await w.getByRole('button', { name: /Run now/ }).click();
     await expect(w.getByText(/Added \d+ new check-in|Nothing new right now/)).toBeVisible();
@@ -10993,6 +11009,151 @@ test('auto check-ins (63): a completed onboarding seeds an on self stream that g
     // The recipient's Inbox marks it as auto-generated (never covert, §8.3).
     await w.getByRole('link', { name: /Inbox/ }).click();
     await expect(w.getByText(/Auto check-in/).first()).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('auto check-ins (63): an owner streams check-ins to a partner, including unfiltered intimacy', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('auto check-ins partner e2e: master key missing');
+  // The partner: an adult, onboarded subject with a member login + 18+ ack.
+  await savePerson(fs, key, {
+    id: 'angel-1',
+    schemaVersion: 1,
+    displayName: 'Angel',
+    isSubject: true,
+    tags: [],
+    birthday: '1992-03-01',
+    createdAt: 'now',
+    updatedAt: 'now',
+  });
+  await setAccount(fs, key, { personId: 'angel-1', roleId: 'member' });
+  await seedCompletedIntake(fs, key, 'angel-1');
+  await writeEncryptedJson(
+    fs,
+    'people/angel-1/guidance/prefs.enc',
+    { schemaVersion: 1, adultAcknowledged: true },
+    key,
+  );
+  // The owner: 18+ acked + a partner edge to Angel.
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/guidance/prefs.enc',
+    { schemaVersion: 1, adultAcknowledged: true },
+    key,
+  );
+  await saveRelationship(fs, key, {
+    id: 'rel-owner-angel',
+    schemaVersion: 2,
+    fromPersonId: 'owner-1',
+    toPersonId: 'angel-1',
+    type: 'partner',
+    createdAt: 'now',
+    updatedAt: 'now',
+  });
+  // Seed the config with a partner target (intimacy on) — write-once, so the default self-seed is skipped.
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/questionnaires/autoCheckins.enc',
+    {
+      schemaVersion: 1,
+      enabled: true,
+      targets: [
+        {
+          id: 't-angel',
+          target: { kind: 'person', personId: 'angel-1' },
+          enabled: true,
+          includeIntimacy: true,
+          explorationFocus: '',
+          cadence: 'daily',
+        },
+      ],
+    },
+    key,
+  );
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Home' }).waitFor();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await expect(w.getByRole('heading', { name: 'Auto check-ins' })).toBeVisible();
+    // The owner sees the partner target row with the resolved name (not "Someone"). Scope to the panel —
+    // "Angel" also appears in recipient chips elsewhere on the Questionnaires page.
+    const acPanel = w.getByLabel('Auto check-ins', { exact: true });
+    await expect(acPanel.getByText('Angel')).toBeVisible();
+    await w.getByRole('button', { name: /Run now/ }).click();
+    await expect(w.getByText(/Added \d+ new check-in|Nothing new right now/)).toBeVisible();
+
+    // Decrypt: Angel's inbox received auto check-ins from the owner, INCLUDING an unfiltered intimacy one.
+    await expect
+      .poll(
+        async () =>
+          (
+            await listAssignments(fs, key, {
+              senderPersonId: 'owner-1',
+              recipientPersonId: 'angel-1',
+            })
+          ).length,
+      )
+      .toBeGreaterThan(0);
+    const angelDefs = (await listQuestionnaires(fs, key)).filter(
+      (d) => d.autoCheckin && d.recipient?.kind === 'person' && d.recipient.personId === 'angel-1',
+    );
+    expect(angelDefs.length).toBeGreaterThan(0);
+    expect(angelDefs.some((d) => d.type === 'intimacy' && d.sensitivity === 'unfiltered')).toBe(
+      true,
+    );
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('auto check-ins (63): a recurring crisis signal pauses generation entirely', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('auto check-ins crisis e2e: master key missing');
+  await seedCompletedIntake(fs, key, 'owner-1');
+  // Two crisis-flagged approved insights in the recent window → aggregateCrisisSignal.recurring (§8.1).
+  const now = new Date().toISOString();
+  for (const id of ['crisis-1', 'crisis-2']) {
+    await saveInsight(fs, key, {
+      id,
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: 'owner-1',
+      summary: 'a hard week',
+      facts: [],
+      confidence: 'medium',
+      categories: [],
+      approved: true,
+      crisisFlag: true,
+      provenance: { at: now },
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Home' }).waitFor();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await expect(w.getByText('Yourself')).toBeVisible();
+    await w.getByRole('button', { name: /Run now/ }).click();
+    // Crisis suppresses everything — the run generates nothing; the panel leads with support.
+    await expect(w.getByText(/Support comes first/)).toBeVisible();
+    expect((await listQuestionnaires(fs, key)).filter((d) => d.autoCheckin)).toHaveLength(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

@@ -1,6 +1,6 @@
 # 63 — Auto check-ins (autonomous questionnaire generation)
 
-> **Status:** Built (slices A–C) · §11 resolved · _last updated 2026-07-15_
+> **Status:** Built (slices A–C + notification fast-follows) · §11 resolved · _last updated 2026-07-16_
 >
 > An opt-in, per-person engine that once a day looks at everything SelfOS has learned about a person
 > (sessions, memory/insights, goals, dreams, Together, questionnaire history, onboarding) and — if that
@@ -585,3 +585,20 @@ ensureSeed/run`, owner-gated other-targets, crisis + throttle stamp), the per-pe
   - intake + guidance (which already import questionnaires) must live in its OWN top-level core module, not
     inside `questionnaires/`, or it forms an import cycle; and its de-dup assembly must MIRROR the manual path's
     per-section caps (not a single global cap) or a heavy onboarding truncates away the later sources.\*\*
+- 2026-07-16 — **Finishing pass (the two fast-follows landed) on `feat/auto-checkins-notifications`.** The
+  standalone `auto-checkin-ready` notification (a gentle "a new reflection is ready" toast + bell entry,
+  `onIncrease` by waiting count → answering some never re-pops, a new one does; `→/inbox`) + the one-time
+  `auto-checkin-enabled` seed notice ("Auto check-ins is now on", `onChange` but write-once so it fires once
+  then never returns; `→/questionnaires`) are now wired: two literals in `NOTIFICATION_KINDS` +
+  `NOTIFICATION_KIND_DEFS`, two capability-gated reads in `useNotificationSources` (`assignmentsInbox` filtered
+  to `autoCheckin && answerable` for the count; `autoCheckinsGetConfig().seededAt` while still enabled), and an
+  additive-optional `AutoCheckinConfig.seededAt` (stamped by the onboarding seed) carrying no answers. Full E2E
+  matrix (the DoD §7 self/partner/crisis coverage): the self-loop seed→generate (+360px overflow guard), an
+  owner→partner stream including an unfiltered-intimacy questionnaire (decrypt-verified), and a recurring-crisis
+  pause. Gate green: typecheck (all), lint, format, 1221 core + 1179 desktop unit (+3 `useNotificationSources`
+  tests: ready surfaces, seed notice fires, neither fires when off/empty), 3 auto check-ins E2Es + the
+  notification-center E2Es (no regression). **Lesson: `getByText('<partner name>')` collides with the recipient
+  chips elsewhere on the Questionnaires page — scope a panel assertion to `getByLabel('Auto check-ins', { exact:
+true })`; and when a concurrent session's uncommitted spec-64 commits contaminate the shared checkout, isolate
+  the finishing pass onto a fresh worktree off `origin/main` and re-apply only your hunks (the `schemas.ts` edits
+  anchor on already-released lines, so they graft cleanly).**

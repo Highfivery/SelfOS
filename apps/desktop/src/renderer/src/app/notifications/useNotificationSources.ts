@@ -33,6 +33,8 @@ export function useNotificationSources(conflicts: string[]): void {
   const canSessions = useSessionStore((s) => s.can('sessions.own'));
   const canChallenges = useSessionStore((s) => s.can('challenges.own'));
   const canTogether = useSessionStore((s) => s.can('together.own'));
+  const canAnswer = useSessionStore((s) => s.can('questionnaires.answer'));
+  const canAutoCheckin = useSessionStore((s) => s.can('questionnaires.autoCheckin'));
   // Together sessions are loaded + reset per active person by AppShell (58 §5.3) — derive the invite/turn
   // notifications from the projection-computed summaries (no extra fetch, no message content, §3.11).
   const togetherSessions = useTogetherStore((s) => s.sessions);
@@ -53,6 +55,9 @@ export function useNotificationSources(conflicts: string[]): void {
   // The life-areas covered by active DEPTH invitations — a synthesis observation for the same area yields
   // to the more specific, actionable nudge (§3.7).
   const [freshnessAreas, setFreshnessAreas] = useState<string[]>([]);
+  // Auto check-ins (63): how many auto-generated check-ins are waiting to answer + the one-time seed marker.
+  const [autoPending, setAutoPending] = useState(0);
+  const [autoSeededAt, setAutoSeededAt] = useState<string | null>(null);
 
   // One-shot reads per active person. Guarded so a fetch resolving after a person switch is ignored.
   useEffect(() => {
@@ -65,8 +70,10 @@ export function useNotificationSources(conflicts: string[]): void {
     setChallenges([]);
     setSynthesis(null);
     setFreshnessAreas([]);
+    setAutoPending(0);
+    setAutoSeededAt(null);
     void (async () => {
-      const [sugg, resp, edits, rem, gls, chs, syn] = await Promise.all([
+      const [sugg, resp, edits, rem, gls, chs, syn, inbox, autoConfig] = await Promise.all([
         canIntake
           ? (window.selfos?.profileSuggestions() ?? Promise.resolve([]))
           : Promise.resolve([]),
@@ -86,6 +93,12 @@ export function useNotificationSources(conflicts: string[]): void {
         canSessions
           ? (window.selfos?.coachingGetSynthesis() ?? Promise.resolve(null))
           : Promise.resolve(null),
+        canAnswer
+          ? (window.selfos?.assignmentsInbox() ?? Promise.resolve([]))
+          : Promise.resolve([]),
+        canAutoCheckin
+          ? (window.selfos?.autoCheckinsGetConfig() ?? Promise.resolve(null))
+          : Promise.resolve(null),
       ]);
       if (!active || useSessionStore.getState().activePerson?.id !== activePersonId) return;
       setSuggestionIds(sugg.map((s) => s.id).sort());
@@ -96,11 +109,23 @@ export function useNotificationSources(conflicts: string[]): void {
       setGoals(gls);
       setChallenges(chs);
       setSynthesis(syn);
+      setAutoPending(inbox.filter((i) => i.autoCheckin && i.answerable).length);
+      // The one-time seed notice only while it's still on (turning it off = they've engaged, no notice).
+      setAutoSeededAt(autoConfig?.enabled ? (autoConfig.seededAt ?? null) : null);
     })();
     return () => {
       active = false;
     };
-  }, [activePersonId, canIntake, canViewResults, canMemory, canSessions, canChallenges]);
+  }, [
+    activePersonId,
+    canIntake,
+    canViewResults,
+    canMemory,
+    canSessions,
+    canChallenges,
+    canAnswer,
+    canAutoCheckin,
+  ]);
 
   // Rebuild the candidate list whenever any source changes; conflicts arrive reactively via the prop.
   useEffect(() => {
@@ -267,6 +292,31 @@ export function useNotificationSources(conflicts: string[]): void {
       candidates.push(...togetherNotificationCandidates(togetherSessions, activePersonId));
     }
 
+    // Auto check-ins (63): a gentle "a reflection is ready" + the one-time "it's now on" seed notice.
+    if (autoPending > 0) {
+      candidates.push({
+        kind: 'auto-checkin-ready',
+        coalesceKey: 'auto-checkin-ready',
+        signature: String(autoPending), // a new one → higher count → re-surfaces; answering some never re-pops
+        title:
+          autoPending === 1
+            ? 'A new reflection is ready'
+            : `${autoPending} new reflections are ready`,
+        body: 'SelfOS created a check-in for you from what it’s learned.',
+        action: { type: 'navigate', to: '/inbox' },
+      });
+    }
+    if (autoSeededAt) {
+      candidates.push({
+        kind: 'auto-checkin-enabled',
+        coalesceKey: 'auto-checkin-enabled',
+        signature: autoSeededAt, // fires once (write-once seed); once dismissed it never returns
+        title: 'Auto check-ins is now on',
+        body: 'SelfOS will create the occasional check-in for you — manage it under Questionnaires.',
+        action: { type: 'navigate', to: '/questionnaires' },
+      });
+    }
+
     setCandidates(candidates);
   }, [
     conflicts,
@@ -283,6 +333,8 @@ export function useNotificationSources(conflicts: string[]): void {
     intake,
     canTogether,
     togetherSessions,
+    autoPending,
+    autoSeededAt,
     activePersonId,
     setCandidates,
   ]);

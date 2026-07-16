@@ -159,7 +159,14 @@ export async function updateBook(
   patch: Partial<
     Pick<
       BookManifest,
-      'title' | 'config' | 'essence' | 'status' | 'coverImageId' | 'sharedWith' | 'publishedAt'
+      | 'title'
+      | 'config'
+      | 'essence'
+      | 'status'
+      | 'coverImageId'
+      | 'matter'
+      | 'sharedWith'
+      | 'publishedAt'
     >
   >,
   now: Date,

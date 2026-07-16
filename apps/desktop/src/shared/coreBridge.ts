@@ -4317,6 +4317,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         {
           ...(p.title !== undefined ? { title: p.title } : {}),
           ...(p.config !== undefined ? { config: p.config } : {}),
+          ...(p.matter !== undefined ? { matter: p.matter } : {}),
         },
         new Date(),
       );

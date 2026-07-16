@@ -4005,6 +4005,7 @@ export const StoryUpdateInputSchema = z.object({
   bookId: z.string().min(1),
   title: z.string().min(1).max(200).optional(),
   config: BookConfigSchema.optional(),
+  matter: BookMatterSchema.optional(),
 });
 export type StoryUpdateInput = z.infer<typeof StoryUpdateInputSchema>;
 

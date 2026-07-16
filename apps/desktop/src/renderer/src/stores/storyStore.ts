@@ -14,8 +14,11 @@ import type {
   StoryFoundationsResult,
   StoryMarkPatch,
   StoryQuestionsResult,
+  BookMatter,
+  BookReader,
   StoryCompleteness,
   StoryInterviewCadenceResult,
+  StoryPublishResult,
   StoryRefreshViewResult,
   StoryResolveProposalResult,
   StoryRevisionResult,
@@ -109,7 +112,17 @@ interface StoryState {
     bookId: string,
     opts?: { auto?: boolean },
   ) => Promise<StoryInterviewCadenceResult>;
-  update: (bookId: string, patch: { title?: string; config?: BookConfig }) => Promise<void>;
+  update: (
+    bookId: string,
+    patch: { title?: string; config?: BookConfig; matter?: BookMatter },
+  ) => Promise<void>;
+  /** Publishing & readers (§3.5) — the "Share & readers" panel. */
+  readers: BookReader[];
+  loadReaders: (bookId: string) => Promise<void>;
+  publish: (bookId: string) => Promise<StoryPublishResult>;
+  grantReader: (bookId: string, readerPersonId: string) => Promise<void>;
+  revokeReader: (bookId: string, readerPersonId: string) => Promise<void>;
+  readerFeatured: (bookId: string, readerPersonId: string) => Promise<boolean>;
   remove: (bookId: string) => Promise<void>;
   clearBundle: () => void;
   reset: () => void;
@@ -146,6 +159,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   exclusions: [],
   proposals: [],
   completeness: null,
+  readers: [],
   loaded: false,
   generating: false,
   chaptersGenerating: false,
@@ -351,6 +365,28 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     await get().open(bookId);
     await get().load();
   },
+  loadReaders: async (bookId) => {
+    const readers = (await window.selfos?.storyReaders({ bookId })) ?? [];
+    set({ readers });
+  },
+  publish: async (bookId) => {
+    const res = (await window.selfos?.storyPublish({ bookId })) ?? {
+      ok: false as const,
+      message: 'Not available.',
+    };
+    if (res.ok) await get().open(bookId); // the manifest gains publishedAt
+    return res;
+  },
+  grantReader: async (bookId, readerPersonId) => {
+    const readers = (await window.selfos?.storyGrantReader({ bookId, readerPersonId })) ?? [];
+    set({ readers });
+  },
+  revokeReader: async (bookId, readerPersonId) => {
+    const readers = (await window.selfos?.storyRevokeReader({ bookId, readerPersonId })) ?? [];
+    set({ readers });
+  },
+  readerFeatured: async (bookId, readerPersonId) =>
+    (await window.selfos?.storyReaderFeatured({ bookId, readerPersonId })) ?? false,
   remove: async (bookId) => {
     await window.selfos?.storyDelete({ bookId });
     set({ bundle: null });
@@ -367,6 +403,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       exclusions: [],
       proposals: [],
       completeness: null,
+      readers: [],
       loaded: false,
       generating: false,
       chaptersGenerating: false,

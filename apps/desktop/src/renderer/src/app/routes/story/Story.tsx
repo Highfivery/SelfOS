@@ -3,10 +3,12 @@ import {
   Banner,
   Button,
   Card,
+  Field,
   Heading,
   Inline,
   Markdown,
   SegmentedControl,
+  Select,
   Stack,
   Text,
   TextInput,
@@ -15,12 +17,14 @@ import {
 } from '../../../design-system/components';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryStore } from '../../../stores/storyStore';
+import { usePeopleStore } from '../../../stores/peopleStore';
 import { useStoryRefresh } from '../../notifications/useStoryRefresh';
 import { useStoryInterview } from '../../notifications/useStoryInterview';
 import type {
   BookConfig,
   BookOutline,
   ChapterMarkup,
+  BookMatter,
   CommentIntent,
   StoryBookBundle,
   StoryCompleteness,
@@ -756,6 +760,17 @@ function BookOverview({
         </Card>
       ) : null}
 
+      {chapters.length > 0 ? (
+        <>
+          <MatterEditor bookId={bookId} {...(manifest.matter ? { matter: manifest.matter } : {})} />
+          <ShareReadersPanel
+            bookId={bookId}
+            authorPersonId={manifest.personId}
+            {...(manifest.publishedAt ? { publishedAt: manifest.publishedAt } : {})}
+          />
+        </>
+      ) : null}
+
       <Inline>
         {confirmDelete ? (
           <Inline>
@@ -774,6 +789,211 @@ function BookOverview({
         )}
       </Inline>
     </Stack>
+  );
+}
+
+/** The "Share & readers" panel (§3.5): publish (Reviewed chapters → the published head) + grant/revoke readers.
+ *  Readers never see the working draft — only what's been marked "Looks good". */
+function ShareReadersPanel({
+  bookId,
+  publishedAt,
+  authorPersonId,
+}: {
+  bookId: string;
+  publishedAt?: string;
+  authorPersonId: string;
+}): JSX.Element {
+  const publish = useStoryStore((s) => s.publish);
+  const readers = useStoryStore((s) => s.readers);
+  const loadReaders = useStoryStore((s) => s.loadReaders);
+  const grantReader = useStoryStore((s) => s.grantReader);
+  const revokeReader = useStoryStore((s) => s.revokeReader);
+  const readerFeatured = useStoryStore((s) => s.readerFeatured);
+  const people = usePeopleStore((s) => s.people);
+  const loadPeople = usePeopleStore((s) => s.load);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [candidate, setCandidate] = useState('');
+  const [featured, setFeatured] = useState(false);
+
+  useEffect(() => {
+    void loadReaders(bookId);
+    void loadPeople();
+  }, [bookId, loadReaders, loadPeople]);
+
+  const readerIds = new Set(readers.map((r) => r.personId));
+  const candidates = people.filter((p) => p.id !== authorPersonId && !readerIds.has(p.id));
+  const candidateName = people.find((p) => p.id === candidate)?.displayName ?? '';
+
+  return (
+    <Card>
+      <Stack gap={2}>
+        <Heading level={2}>Share &amp; readers</Heading>
+        <Text tone="secondary" size="sm">
+          Readers see only the chapters you’ve marked “Looks good” — never your working draft.
+          Sharing updates re-publishes those chapters.
+        </Text>
+        {notice ? <Banner tone="info">{notice}</Banner> : null}
+        <Inline>
+          <Button
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setNotice(null);
+              const res = await publish(bookId);
+              setNotice(
+                res.ok
+                  ? `Shared ${res.publishedChapters} chapter${res.publishedChapters === 1 ? '' : 's'} with your readers.`
+                  : res.message,
+              );
+              setBusy(false);
+            }}
+          >
+            {busy ? 'Sharing…' : publishedAt ? 'Share updates' : 'Publish & choose readers'}
+          </Button>
+          {publishedAt ? (
+            <Text tone="secondary" size="sm">
+              Last shared {new Date(publishedAt).toLocaleDateString()}
+            </Text>
+          ) : null}
+        </Inline>
+
+        {readers.length > 0 ? (
+          <Stack gap={1}>
+            {readers.map((r) => (
+              <div key={r.personId} className={styles.markRow}>
+                <Text size="sm">{r.displayName}</Text>
+                <button
+                  type="button"
+                  className={styles.sourcesToggle}
+                  aria-label={`Remove ${r.displayName} as a reader`}
+                  onClick={() => void revokeReader(bookId, r.personId)}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </Stack>
+        ) : null}
+
+        {candidates.length > 0 ? (
+          <Stack gap={1}>
+            <Inline>
+              <Select
+                value={candidate}
+                aria-label="Add a reader"
+                onChange={async (e) => {
+                  const id = e.target.value;
+                  setCandidate(id);
+                  setFeatured(id ? await readerFeatured(bookId, id) : false);
+                }}
+              >
+                <option value="">Add a reader…</option>
+                {candidates.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.displayName}
+                  </option>
+                ))}
+              </Select>
+              <Button
+                variant="ghost"
+                disabled={!candidate}
+                onClick={async () => {
+                  await grantReader(bookId, candidate);
+                  setCandidate('');
+                  setFeatured(false);
+                }}
+              >
+                Add as reader
+              </Button>
+            </Inline>
+            {featured && candidateName ? (
+              <Text tone="secondary" size="sm">
+                {candidateName} appears in this book — they’ll be able to read what you’ve written
+                about them.
+              </Text>
+            ) : null}
+          </Stack>
+        ) : null}
+      </Stack>
+    </Card>
+  );
+}
+
+/** The front/back matter editor (§3.6) — the person's own dedication, epigraph, and acknowledgments. */
+function MatterEditor({ bookId, matter }: { bookId: string; matter?: BookMatter }): JSX.Element {
+  const update = useStoryStore((s) => s.update);
+  const [dedication, setDedication] = useState(matter?.dedication ?? '');
+  const [epigraph, setEpigraph] = useState(matter?.epigraph ?? '');
+  const [acknowledgments, setAcknowledgments] = useState(matter?.acknowledgments ?? '');
+  const [saved, setSaved] = useState(false);
+  const touch = (setter: (v: string) => void) => (v: string) => {
+    setter(v);
+    setSaved(false);
+  };
+  return (
+    <Card>
+      <Stack gap={2}>
+        <Heading level={2}>Dedication &amp; acknowledgments</Heading>
+        <Text tone="secondary" size="sm">
+          Your own words for the opening and closing pages — added to what readers see. Optional.
+        </Text>
+        <Field label="Dedication">
+          {(p) => (
+            <Textarea
+              {...p}
+              value={dedication}
+              rows={2}
+              placeholder="For…"
+              onChange={(e) => touch(setDedication)(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label="Epigraph">
+          {(p) => (
+            <Textarea
+              {...p}
+              value={epigraph}
+              rows={2}
+              placeholder="A line or quote to open with…"
+              onChange={(e) => touch(setEpigraph)(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field label="Acknowledgments">
+          {(p) => (
+            <Textarea
+              {...p}
+              value={acknowledgments}
+              rows={3}
+              placeholder="With thanks to…"
+              onChange={(e) => touch(setAcknowledgments)(e.target.value)}
+            />
+          )}
+        </Field>
+        <Inline>
+          <Button
+            onClick={async () => {
+              await update(bookId, {
+                matter: {
+                  ...(dedication.trim() ? { dedication: dedication.trim() } : {}),
+                  ...(epigraph.trim() ? { epigraph: epigraph.trim() } : {}),
+                  ...(acknowledgments.trim() ? { acknowledgments: acknowledgments.trim() } : {}),
+                },
+              });
+              setSaved(true);
+            }}
+          >
+            Save
+          </Button>
+          {saved ? (
+            <Text tone="secondary" size="sm">
+              Saved.
+            </Text>
+          ) : null}
+        </Inline>
+      </Stack>
+    </Card>
   );
 }
 

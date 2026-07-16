@@ -779,6 +779,71 @@ describe('Story (64)', () => {
     );
   });
 
+  it('publishes the book and reports what was shared (§3.5)', async () => {
+    const storyPublish = vi.fn(() => Promise.resolve({ ok: true as const, publishedChapters: 1 }));
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyPublish,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Publish & choose readers' }));
+    expect(storyPublish).toHaveBeenCalledWith({ bookId: 'b1' });
+    expect(await screen.findByText(/Shared 1 chapter with your readers/)).toBeInTheDocument();
+  });
+
+  it('grants a reader and shows the featured-book note (§3.5)', async () => {
+    const storyGrantReader = vi.fn(() =>
+      Promise.resolve([{ personId: 'r1', displayName: 'Angel' }]),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      peopleList: () =>
+        Promise.resolve([
+          {
+            id: 'r1',
+            schemaVersion: 2 as const,
+            displayName: 'Angel',
+            isSubject: true,
+            tags: [],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+      storyReaders: () => Promise.resolve([]),
+      storyReaderFeatured: () => Promise.resolve(true),
+      storyGrantReader,
+    });
+    renderStory();
+    const select = await screen.findByRole('combobox', { name: 'Add a reader' });
+    await userEvent.selectOptions(select, 'r1');
+    expect(await screen.findByText(/Angel appears in this book/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add as reader' }));
+    expect(storyGrantReader).toHaveBeenCalledWith({ bookId: 'b1', readerPersonId: 'r1' });
+  });
+
+  it('saves the front/back matter (§3.6)', async () => {
+    const storyUpdate = vi.fn(() => Promise.resolve(manifest({ status: 'ready' })));
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyUpdate,
+    });
+    renderStory();
+    await userEvent.type(await screen.findByLabelText('Dedication'), 'For my mother');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(storyUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bookId: 'b1',
+        matter: expect.objectContaining({ dedication: 'For my mother' }),
+      }),
+    );
+  });
+
   it('lists to-dos on the overview and marks a reminder done', async () => {
     const storyUpdateMark = vi.fn(
       (): Promise<ChapterMarkup> =>

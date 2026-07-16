@@ -4,16 +4,20 @@ import {
   BookChapterSchema,
   BookManifestSchema,
   BookOutlineSchema,
+  ChapterMarkupSchema,
   ExclusionListSchema,
   LifeTimelineSchema,
+  StoryTodoListSchema,
   type BookChapter,
   type BookConfig,
   type BookManifest,
   type BookOutline,
   type BookTypeId,
+  type ChapterMarkup,
   type ExclusionItem,
   type LifeTimeline,
   type StoryBookBundle,
+  type StoryTodoList,
 } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 
@@ -48,6 +52,12 @@ function chaptersDir(personId: string, bookId: string): string {
 }
 function chapterPath(personId: string, bookId: string, chapterId: string): string {
   return `${chaptersDir(personId, bookId)}/${chapterId}.enc`;
+}
+function markupPath(personId: string, bookId: string, chapterId: string): string {
+  return `${bookDir(personId, bookId)}/markup/${chapterId}.enc`;
+}
+function todosPath(personId: string, bookId: string): string {
+  return `${bookDir(personId, bookId)}/todos.enc`;
 }
 
 // --- Manifest / book lifecycle ---------------------------------------------------------------------------
@@ -205,6 +215,53 @@ export async function saveExclusions(
   items: ExclusionItem[],
 ): Promise<void> {
   await writeEncryptedJson(fs, exclusionsPath(personId, bookId), { schemaVersion: 1, items }, key);
+}
+
+// --- Markup (the per-chapter suggestion layer) + the book-level to-do roll-up (§3.3) ---------------------
+
+/** A chapter's markup layer, or an empty one when nothing's been marked up yet (never null — the caller
+ *  always gets a valid layer to append to). */
+export async function getMarkup(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  chapterId: string,
+): Promise<ChapterMarkup> {
+  const raw = await readEncryptedJson(fs, markupPath(personId, bookId, chapterId), key);
+  return raw ? ChapterMarkupSchema.parse(raw) : { schemaVersion: 1, chapterId, marks: [] };
+}
+
+export async function saveMarkup(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  markup: ChapterMarkup,
+): Promise<void> {
+  await writeEncryptedJson(fs, markupPath(personId, bookId, markup.chapterId), markup, key);
+}
+
+/** The denormalized book-level to-do roll-up (§3.3.2) — one read for the overview "To do" list; the source of
+ *  truth stays each chapter's markup. Empty (never null) when nothing's been added. */
+export async function getTodos(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<StoryTodoList> {
+  const raw = await readEncryptedJson(fs, todosPath(personId, bookId), key);
+  return raw ? StoryTodoListSchema.parse(raw) : { schemaVersion: 1, todos: [] };
+}
+
+export async function saveTodos(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  todos: StoryTodoList,
+): Promise<void> {
+  await writeEncryptedJson(fs, todosPath(personId, bookId), todos, key);
 }
 
 // --- Chapters (draft head) -------------------------------------------------------------------------------

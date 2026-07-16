@@ -625,7 +625,11 @@ function BookOverview({
               <Stack gap={2}>
                 <Heading level={2}>{part.title}</Heading>
                 {part.chapters.map((chapter) => {
-                  const written = chapters.find((c) => c.id === chapter.id);
+                  // An approved structural proposal leaves an un-written shell (empty markdown, status stale)
+                  // that the next refresh drafts — show it as "Not yet written", not a clickable blank chapter.
+                  const written = chapters.find(
+                    (c) => c.id === chapter.id && c.markdown.trim().length > 0,
+                  );
                   return written ? (
                     <button
                       key={chapter.id}

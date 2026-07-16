@@ -252,6 +252,7 @@ describe('resolveProposal — approve applies the restructure (no prose written)
   it('splitChapter: narrows the original (stale) and adds a stale sibling after it', async () => {
     const fs = memFileSystem();
     const bookId = await seedBook(fs);
+    const originalProse = (await getChapter(fs, key, 'me', bookId, 'c1'))!.markdown;
     const gen = await generateStructuralProposals(
       deps(
         fs,
@@ -281,6 +282,7 @@ describe('resolveProposal — approve applies the restructure (no prose written)
     ]);
     const original = chapters.find((c) => c.id === 'c1')!;
     expect(original.status).toBe('stale'); // rewritten to the narrower brief next pass
+    expect(original.markdown).toBe(originalProse); // no reviewed prose destroyed (owner's concern)
     expect(chapters.find((c) => c.title === 'The Garage, part two')!.status).toBe('stale');
   });
 

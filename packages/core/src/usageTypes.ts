@@ -28,6 +28,7 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'together.analyze': 'Together — session summary',
   'story.outline': 'Your Story — outline',
   'story.chapter': 'Your Story — chapter',
+  'story.structure': 'Your Story — structure proposals',
   'story.interview': 'Your Story — interview questions',
   'story.imagePrompt': 'Your Story — image prompt',
   'story.image': 'Your Story — image',

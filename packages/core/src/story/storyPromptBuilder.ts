@@ -252,3 +252,48 @@ export function buildFoundationsUserMessage(corpus: StoryCorpus, bookType: BookT
     'Return ONLY the JSON object — no prose, no markdown fences.',
   ].join('\n');
 }
+
+/**
+ * The STRUCTURE-ANALYSIS user message (§3.4/§5.4): given the CURRENT outline (with stable ids) and the corpus,
+ * ask whether the book's SHAPE should change now that new material has arrived — a new chapter for an era/theme
+ * that doesn't fit, splitting a chapter that grew too big, reordering within a part, or rewriting an opening
+ * that no longer fits. It returns proposals only (never prose, never applied silently); every reference uses the
+ * exact ids given here (the apply step re-validates them and drops any that no longer exist). Zero proposals is
+ * a valid, common answer — most refreshes need no structural change.
+ */
+export function buildStructureUserMessage(
+  corpus: StoryCorpus,
+  opts: { outline: BookOutline; essence?: string },
+): string {
+  const { outline, essence } = opts;
+  const structure = outline.parts
+    .map((part) => {
+      const chapters = part.chapters
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((c) => {
+          const era = [c.eraFrom, c.eraTo].filter(Boolean).join('–');
+          return `    - [chapter ${c.id}] "${c.title}"${era ? ` (${era})` : ''}: ${c.brief}`;
+        })
+        .join('\n');
+      return `  [part ${part.id}] "${part.title}"\n${chapters}`;
+    })
+    .join('\n');
+  return [
+    `You are the biographer reviewing the SHAPE of ${corpus.personName || 'this person'}'s book${
+      essence ? ` (about: ${essence})` : ''
+    } now that the source material has grown. Decide whether the outline's structure should change — do NOT rewrite any prose.`,
+    '',
+    'THE CURRENT OUTLINE (use these exact ids in any proposal):',
+    structure,
+    '',
+    renderCorpusForPrompt(corpus),
+    '',
+    'Return ONE JSON object: { "proposals": [ … ] }. Propose a change ONLY when the material clearly warrants it — an empty array is the right answer for a book that is already well-shaped. Each proposal is one of:',
+    '- { "kind": "newChapter", "rationale": one sentence on why, "partId": an existing part id, "afterChapterId"?: an existing chapter id to insert after (omit for the end of the part), "title": an evocative title, "brief": 1–2 sentences, "eraFrom"?: "YYYY", "eraTo"?: "YYYY", "lifeAreas"?: string[] } — for an era/theme the current chapters don\'t hold.',
+    '- { "kind": "splitChapter", "rationale": …, "chapterId": an existing chapter id, "firstTitle", "firstBrief", "secondTitle", "secondBrief" } — when one chapter has grown to cover two distinct things.',
+    '- { "kind": "reorder", "rationale": …, "partId": an existing part id, "order": [every chapter id in that part, in the new order] } — when the sequence reads out of order.',
+    '- { "kind": "prologueRewrite", "rationale": …, "chapterId": the opening chapter\'s id } — when the opening no longer fits the book it became.',
+    'Keep the total to at most a few of the most valuable changes. Return ONLY the JSON object — no prose, no markdown fences.',
+  ].join('\n');
+}

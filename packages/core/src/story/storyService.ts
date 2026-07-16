@@ -7,6 +7,7 @@ import {
   ChapterMarkupSchema,
   ExclusionListSchema,
   LifeTimelineSchema,
+  StoryProposalListSchema,
   StoryTodoListSchema,
   type BookChapter,
   type BookConfig,
@@ -17,6 +18,7 @@ import {
   type ExclusionItem,
   type LifeTimeline,
   type StoryBookBundle,
+  type StoryProposalList,
   type StoryTodoList,
 } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
@@ -58,6 +60,9 @@ function markupPath(personId: string, bookId: string, chapterId: string): string
 }
 function todosPath(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/todos.enc`;
+}
+function proposalsPath(personId: string, bookId: string): string {
+  return `${bookDir(personId, bookId)}/proposals.enc`;
 }
 
 // --- Manifest / book lifecycle ---------------------------------------------------------------------------
@@ -262,6 +267,28 @@ export async function saveTodos(
   todos: StoryTodoList,
 ): Promise<void> {
   await writeEncryptedJson(fs, todosPath(personId, bookId), todos, key);
+}
+
+// --- Structural proposals (stored alongside the outline, §5.4) --------------------------------------------
+
+export async function getProposals(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<StoryProposalList> {
+  const raw = await readEncryptedJson(fs, proposalsPath(personId, bookId), key);
+  return raw ? StoryProposalListSchema.parse(raw) : { schemaVersion: 1, proposals: [] };
+}
+
+export async function saveProposals(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  list: StoryProposalList,
+): Promise<void> {
+  await writeEncryptedJson(fs, proposalsPath(personId, bookId), list, key);
 }
 
 // --- Chapters (draft head) -------------------------------------------------------------------------------

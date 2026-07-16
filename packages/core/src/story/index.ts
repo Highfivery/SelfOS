@@ -9,3 +9,4 @@ export * from './storyMarkup';
 export * from './storyMarkupService';
 export * from './storyRefreshService';
 export * from './storyService';
+export * from './storyStructureService';

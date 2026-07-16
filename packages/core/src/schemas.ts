@@ -3856,7 +3856,10 @@ export const StoryImageIndexSchema = z.object({
 export type StoryImageIndex = z.infer<typeof StoryImageIndexSchema>;
 
 /** A structural change the freshness engine proposes but never applies silently (§3.4) — the spec-20
- *  merge-proposal pattern: a human-readable rationale that waits for one-tap approval. */
+ *  merge-proposal pattern: a human-readable rationale that waits for one-tap approval. Each kind carries the
+ *  structured change the apply step needs. `status: dismissed` is kept (not deleted) so a rejected idea isn't
+ *  re-proposed; an approved proposal is removed once applied. Applying only RESTRUCTURES the outline — new/split
+ *  chapters land un-written (stale) and are drafted on the next refresh (owner decision 2026-07-16). */
 export const StructuralProposalKindSchema = z.enum([
   'newChapter',
   'splitChapter',
@@ -3864,13 +3867,64 @@ export const StructuralProposalKindSchema = z.enum([
   'prologueRewrite',
 ]);
 export type StructuralProposalKind = z.infer<typeof StructuralProposalKindSchema>;
-export const StructuralProposalSchema = z.object({
+export const StructuralProposalStatusSchema = z.enum(['pending', 'dismissed']);
+export type StructuralProposalStatus = z.infer<typeof StructuralProposalStatusSchema>;
+
+const proposalBase = {
   id: z.string().min(1),
-  kind: StructuralProposalKindSchema,
   rationale: z.string(),
   createdAt: z.string(),
+  status: StructuralProposalStatusSchema.default('pending'),
+};
+/** Add a brand-new chapter into a part (after `afterChapterId`, or at the part's end). */
+export const NewChapterProposalSchema = z.object({
+  ...proposalBase,
+  kind: z.literal('newChapter'),
+  partId: z.string().min(1),
+  afterChapterId: z.string().optional(),
+  title: z.string().min(1),
+  brief: z.string().default(''),
+  lifeAreas: z.array(z.string()).default([]),
+  eraFrom: z.string().optional(),
+  eraTo: z.string().optional(),
 });
+/** Split one chapter into two: the original narrows to `first*` (rewritten next pass), a new sibling holds `second*`. */
+export const SplitChapterProposalSchema = z.object({
+  ...proposalBase,
+  kind: z.literal('splitChapter'),
+  chapterId: z.string().min(1),
+  firstTitle: z.string().min(1),
+  firstBrief: z.string().default(''),
+  secondTitle: z.string().min(1),
+  secondBrief: z.string().default(''),
+});
+/** Reorder the chapters within one part; `order` is the full set of that part's chapter ids in the new order. */
+export const ReorderProposalSchema = z.object({
+  ...proposalBase,
+  kind: z.literal('reorder'),
+  partId: z.string().min(1),
+  order: z.array(z.string().min(1)).min(2),
+});
+/** The opening chapter no longer fits — mark it stale so the next pass rewrites it. */
+export const PrologueRewriteProposalSchema = z.object({
+  ...proposalBase,
+  kind: z.literal('prologueRewrite'),
+  chapterId: z.string().min(1),
+});
+export const StructuralProposalSchema = z.discriminatedUnion('kind', [
+  NewChapterProposalSchema,
+  SplitChapterProposalSchema,
+  ReorderProposalSchema,
+  PrologueRewriteProposalSchema,
+]);
 export type StructuralProposal = z.infer<typeof StructuralProposalSchema>;
+
+/** `proposals.enc` — the pending/dismissed structural proposals stored alongside the outline (§5.4). */
+export const StoryProposalListSchema = z.object({
+  schemaVersion: z.literal(1),
+  proposals: z.array(StructuralProposalSchema).default([]),
+});
+export type StoryProposalList = z.infer<typeof StoryProposalListSchema>;
 
 // --- Your Story IPC view types + input schemas (§5.6) ----------------------------------------------------
 

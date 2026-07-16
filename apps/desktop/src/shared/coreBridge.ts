@@ -4546,6 +4546,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         deps && deps.apiKey && (await readVaultSettingsValues(deps.fs))['ai.enabled'] !== false;
       let staled = 0;
       let rewritten = 0;
+      let proposalsAdded: number | undefined;
       let capped: boolean | undefined;
       let budgetReached: boolean | undefined;
       if (deps && aiReady) {
@@ -4565,6 +4566,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         });
         staled = res.staled;
         rewritten = res.rewritten;
+        proposalsAdded = res.proposalsAdded;
         capped = res.capped;
         budgetReached = res.budgetReached;
       } else {
@@ -4583,6 +4585,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         staled,
         rewritten,
         bundle,
+        ...(proposalsAdded ? { proposalsAdded } : {}),
         ...(capped ? { capped: true } : {}),
         ...(budgetReached ? { budgetReached: true } : {}),
       };

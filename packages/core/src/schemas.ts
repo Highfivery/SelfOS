@@ -4077,6 +4077,8 @@ export type StoryRefreshInput = z.infer<typeof StoryRefreshInputSchema>;
 export interface StoryRefreshViewResult {
   staled: number;
   rewritten: number;
+  /** New structural proposals filed this pass (§3.4) — surfaced in the "Suggested changes" panel. */
+  proposalsAdded?: number;
   capped?: boolean;
   budgetReached?: boolean;
   bundle: StoryBookBundle | null;

@@ -8,8 +8,17 @@ import type { AiDeps } from '../questionnaires';
 import { recordUsage } from '../usage';
 import type { BookOutline, Insight, LifeTimeline, Person } from '../schemas';
 import { generateChapter } from './storyGenerationService';
-import { STORY_WEEKLY_AUTO_CAP, refreshBook } from './storyRefreshService';
+import {
+  STORY_STRUCTURE_WEEKLY_CAP,
+  STORY_WEEKLY_AUTO_CAP,
+  refreshBook,
+} from './storyRefreshService';
+import { listStructuralProposals } from './storyStructureService';
 import { applyFoundations, approveOutline, createBook, getChapter } from './storyService';
+
+const proposalJson = JSON.stringify({
+  proposals: [{ kind: 'newChapter', partId: 'p1', title: 'A New Era', brief: 'x', rationale: 'y' }],
+});
 
 const key = generateMasterKey();
 const now = new Date('2026-07-16T00:00:00.000Z');
@@ -172,5 +181,50 @@ describe('refreshBook (64 §3.4/§5.4)', () => {
     expect(res.staled).toBe(1);
     expect(res.rewritten).toBe(0);
     expect((await getChapter(fs, key, 'me', bookId, 'c1'))?.status).toBe('stale');
+  });
+
+  it('files structural proposals on a refresh (they ride the cadence)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedWrittenBook(fs);
+    // Nothing has drifted → no rewrite; the structural pass returns one proposal.
+    const res = await refreshBook(deps(fs, fakeClient(proposalJson)), { bookId, auto: false });
+    expect(res.rewritten).toBe(0);
+    expect(res.proposalsAdded).toBe(1);
+    expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(1);
+  });
+
+  it('caps structural proposals per week — on the manual cadence too', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedWrittenBook(fs);
+    for (let i = 0; i < STORY_STRUCTURE_WEEKLY_CAP; i += 1) {
+      await recordUsage(fs, key, {
+        id: `s${i}`,
+        schemaVersion: 1,
+        type: 'story.structure',
+        personId: 'me',
+        model: 'claude-sonnet-4-6',
+        at: new Date(now.getTime() - 60_000).toISOString(),
+        inputTokens: 1,
+        outputTokens: 1,
+        cacheWriteTokens: 0,
+        cacheReadTokens: 0,
+        costUsd: 0,
+      });
+    }
+    const res = await refreshBook(deps(fs, fakeClient(proposalJson)), { bookId, auto: false });
+    expect(res.proposalsAdded ?? 0).toBe(0); // capped — even a manual refresh doesn't force a structural pass
+    expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(0);
+  });
+
+  it('the auto cadence files no proposals during a crisis', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedWrittenBook(fs);
+    const res = await refreshBook(deps(fs, fakeClient(proposalJson)), {
+      bookId,
+      auto: true,
+      crisis: true,
+    });
+    expect(res.proposalsAdded ?? 0).toBe(0);
+    expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(0);
   });
 });

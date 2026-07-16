@@ -397,7 +397,9 @@ import {
   markStaleChapters,
   mintStoryCheckInFromTodo,
   bookMentionsReader,
+  buildPublishedMarkdown,
   computeStoryHomeSignal,
+  exportFileStem,
   getStoryCompleteness,
   grantReader,
   listChapters,
@@ -4759,6 +4761,19 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return null;
       // The core re-gates on every read (published + still granted) — the viewer is the active person.
       return readSharedBook(ctx.fs, ctx.key, personId, authorPersonId, bookId);
+    },
+    storyExportMarkdown: async (input): Promise<string | null> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      // Export the PUBLISHED head (owner decision) — null when the book has never been published.
+      const built = await buildPublishedMarkdown(ctx.fs, ctx.key, personId, bookId);
+      if (!built) return null;
+      const bytes = new TextEncoder().encode(built.markdown);
+      // Reuses the generic file-save host op (the dream-image export precedent) — the bytes leave the vault.
+      return host.saveImageFile(`${exportFileStem(built.title)}.md`, bytes, 'text/markdown');
     },
     // The batch markup revision — the one AI call in the markup layer (§3.3.1/§5.3).
     storyApplyMarkup: async (input): Promise<StoryRevisionResult> => {

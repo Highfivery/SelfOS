@@ -16,6 +16,8 @@ import {
   readSharedBook,
   revokeReader,
 } from './storyPublish';
+import { bookToMarkdown, buildPublishedMarkdown, exportFileStem } from './storyExport';
+import type { PublishedManifest } from '../schemas';
 import {
   applyFoundations,
   approveOutline,
@@ -250,5 +252,41 @@ describe('honesty note + featured-reader scan', () => {
     // The featured-reader scan is a word-boundary match.
     expect(bookMentionsReader(chapters, 'Angel')).toBe(true);
     expect(bookMentionsReader(chapters, 'Angela')).toBe(false);
+  });
+});
+
+describe('export (64 §3.9)', () => {
+  it('renders the published head as a Markdown document', () => {
+    const manifest: PublishedManifest = {
+      schemaVersion: 1,
+      publishedAt: 'now',
+      title: 'The Story of Ben',
+      matter: { dedication: 'For my mother', epigraph: 'Begin.', acknowledgments: 'Thanks.' },
+      noteOnBook: 'Drawn from your record — never invented.',
+      parts: [{ id: 'p1', title: 'Roots', chapterIds: ['c1'] }],
+      chapterOrder: ['c1'],
+    };
+    const md = bookToMarkdown(manifest, [
+      { id: 'c1', title: 'The Garage', markdown: 'The garage smelled of pine.' },
+    ]);
+    expect(md).toContain('# The Story of Ben');
+    expect(md).toContain('> Begin.');
+    expect(md).toContain('*For my mother*');
+    expect(md).toContain('## Roots');
+    expect(md).toContain('### The Garage');
+    expect(md).toContain('The garage smelled of pine.');
+    expect(md).toContain('## Acknowledgments');
+    expect(md).toContain('*Drawn from your record — never invented.*');
+    expect(exportFileStem('The Story of Ben!')).toBe('The-Story-of-Ben');
+  });
+
+  it('builds Markdown from the published head, null before publishing', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    expect(await buildPublishedMarkdown(fs, key, 'author', bookId)).toBeNull(); // not published yet
+    await publishBook(fs, key, 'author', bookId, now);
+    const built = await buildPublishedMarkdown(fs, key, 'author', bookId);
+    expect(built?.title).toBe('The Story of Ben');
+    expect(built?.markdown).toContain('### The Garage'); // the one Reviewed chapter
   });
 });

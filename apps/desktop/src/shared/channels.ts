@@ -337,6 +337,7 @@ export const IpcChannels = {
   storyReaderFeatured: 'story:readerFeatured',
   storySharedBooks: 'story:sharedBooks',
   storyReadShared: 'story:readShared',
+  storyExportMarkdown: 'story:exportMarkdown',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -1122,6 +1123,10 @@ export interface SelfosBridge {
   storySharedBooks(): Promise<SharedBookSummary[]>;
   /** Read a book shared with the active person — the PUBLISHED head only (§3.6), re-gated; null if access is gone. */
   storyReadShared(input: StoryReadSharedInput): Promise<StoryReaderView | null>;
+  /** Export the book's PUBLISHED head as a Markdown file OUTSIDE the encrypted vault (§3.9) — a save dialog.
+   *  Returns the saved path, or null (book not published yet, or the dialog was cancelled). Gated `story.own`,
+   *  author-scoped. */
+  storyExportMarkdown(input: { bookId: string }): Promise<string | null>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

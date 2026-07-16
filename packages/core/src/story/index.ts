@@ -1,6 +1,7 @@
 export * from './bookTypes';
 export * from './storyCorpus';
 export * from './storyExclusionService';
+export * from './storyExport';
 export * from './storyFreshness';
 export * from './storyHome';
 export * from './storyPromptBuilder';

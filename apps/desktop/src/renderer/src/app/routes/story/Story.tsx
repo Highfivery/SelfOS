@@ -819,6 +819,7 @@ function ShareReadersPanel({
   authorPersonId: string;
 }): JSX.Element {
   const publish = useStoryStore((s) => s.publish);
+  const exportMarkdown = useStoryStore((s) => s.exportMarkdown);
   const readers = useStoryStore((s) => s.readers);
   const loadReaders = useStoryStore((s) => s.loadReaders);
   const grantReader = useStoryStore((s) => s.grantReader);
@@ -867,10 +868,26 @@ function ShareReadersPanel({
             {busy ? 'Sharing…' : publishedAt ? 'Share updates' : 'Publish & choose readers'}
           </Button>
           {publishedAt ? (
+            <>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  setNotice(null);
+                  const path = await exportMarkdown(bookId);
+                  if (path) setNotice(`Saved to ${path} — this file leaves your encrypted vault.`);
+                }}
+              >
+                Export as Markdown
+              </Button>
+              <Text tone="secondary" size="sm">
+                Last shared {new Date(publishedAt).toLocaleDateString()}
+              </Text>
+            </>
+          ) : (
             <Text tone="secondary" size="sm">
-              Last shared {new Date(publishedAt).toLocaleDateString()}
+              Share your story to export it.
             </Text>
-          ) : null}
+          )}
         </Inline>
 
         {readers.length > 0 ? (

@@ -374,6 +374,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyReaderFeatured, bridge.storyReaderFeatured);
   handle(IpcChannels.storySharedBooks, bridge.storySharedBooks);
   handle(IpcChannels.storyReadShared, bridge.storyReadShared);
+  handle(IpcChannels.storyExportMarkdown, bridge.storyExportMarkdown);
   handle(IpcChannels.relationshipsGetSynthesis, bridge.relationshipsGetSynthesis);
   handle(IpcChannels.relationshipsSynthesize, bridge.relationshipsSynthesize);
   handle(IpcChannels.challengesStart, bridge.challengesStart);

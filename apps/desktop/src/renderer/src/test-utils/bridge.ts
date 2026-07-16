@@ -362,6 +362,9 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         unwrittenChapters: 0,
         signature: '',
       }),
+    storyCompleteness: () =>
+      Promise.resolve({ stage: 'beginning' as const, ratio: 0, covered: 0, total: 12 }),
+    storyInterviewCheck: () => Promise.resolve({ outcome: 'noBook' as const }),
     relationshipsGetSynthesis: () => Promise.resolve(null),
     relationshipsSynthesize: () =>
       Promise.resolve({ ok: false, reason: 'EMPTY', message: 'Nothing yet.' }),

@@ -7,11 +7,18 @@ import type {
   StoryCompletenessStage,
   StoryFrameworkCoverage,
   StoryGap,
+  StoryInterviewCadenceResult,
+  StoryInterviewOutcome,
   UsageEvent,
 } from '../schemas';
-import { createAssignment } from '../questionnaires/assignmentService';
+import {
+  createAssignment,
+  getAssignment,
+  updateAssignmentStatus,
+} from '../questionnaires/assignmentService';
 import { type AiDeps, generateQuestions, runClaude } from '../questionnaires/generationService';
 import { saveQuestionnaire, validateQuestionnaire } from '../questionnaires/questionnaireService';
+import { queryUsage } from '../usage';
 import { MCADAMS_SCENES, getBookType } from './bookTypes';
 import { buildStoryCorpus, type StoryCorpus } from './storyCorpus';
 import { buildBiographerSystem, buildGapPassUserMessage } from './storyPromptBuilder';
@@ -274,4 +281,127 @@ export async function runGapPass(
     gaps,
     ...(result.usage ? { usage: result.usage } : {}),
   };
+}
+
+// --- The autonomous interview cadence (§3.7 — the spec-63 loop) ------------------------------------------
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** The AUTO cadence re-checks for gaps at most this often (the spec-63 base interval; a manual check bypasses). */
+export const STORY_INTERVIEW_INTERVAL_DAYS = 7;
+/** An ignored open check-in lapses after this so the loop isn't blocked forever (spec-63 AUTO_CHECKIN_EXPIRY_DAYS). */
+export const STORY_CHECKIN_EXPIRY_DAYS = 14;
+/** A hard weekly cap on gap passes (protects the MANUAL path, which bypasses the interval throttle). */
+export const STORY_INTERVIEW_WEEKLY_CAP = 2;
+
+/** An open check-in is one the person still hasn't answered (nor declined). */
+const PENDING_STATUSES = new Set(['sent', 'opened', 'inProgress']);
+
+/**
+ * The autonomous interview loop (§3.7, owner decision 2026-07-16 = the spec-63 cadence): when warranted, run a
+ * gap pass and mint ONE story check-in from the top gap into the person's Inbox. Self-pacing + gentle:
+ *  - never spends during a crisis (`auto` + `crisis`);
+ *  - keeps AT MOST ONE open check-in at a time — while one is unanswered it mints nothing (the back-off), and an
+ *    ignored one lapses after `STORY_CHECKIN_EXPIRY_DAYS` so the loop isn't blocked forever;
+ *  - the AUTO cadence re-checks at most every `STORY_INTERVIEW_INTERVAL_DAYS`; a manual check bypasses that but
+ *    both are bounded by `STORY_INTERVIEW_WEEKLY_CAP` gap passes / rolling 7 days.
+ * When the open check-in is answered, the corpus grows → the next gap pass re-scores it covered and the next
+ * refresh stales the relevant chapter; this call clears the resolved id so the loop can mint the next gap.
+ */
+export async function runStoryInterviewCadence(
+  deps: AiDeps,
+  args: { bookId: string; auto: boolean; crisis?: boolean },
+): Promise<StoryInterviewCadenceResult> {
+  // The cadence never spends during an active crisis (§8).
+  if (args.auto && args.crisis) return { outcome: 'crisis' };
+
+  const book = await getBook(deps.fs, deps.key, deps.personId, args.bookId);
+  const outline = book ? await getOutline(deps.fs, deps.key, deps.personId, args.bookId) : null;
+  const chapterCount = outline?.parts.reduce((n, p) => n + p.chapters.length, 0) ?? 0;
+  if (!book || !outline || chapterCount === 0) return { outcome: 'noBook' };
+
+  const interview = await getInterviewState(deps.fs, deps.key, deps.personId, args.bookId);
+
+  // ≤1 open check-in. A still-unanswered one blocks a new mint (the back-off). An ANSWERED one lets the loop
+  // continue (reward engagement — the flag is cleared below). An IGNORED one that has lapsed is expired + we
+  // back off this run (don't pile a second check-in on someone who isn't answering).
+  if (interview.openCheckinAssignmentId) {
+    const a = await getAssignment(deps.fs, deps.key, interview.openCheckinAssignmentId);
+    if (a && PENDING_STATUSES.has(a.status)) {
+      const lapsed =
+        deps.now.getTime() - Date.parse(a.createdAt) > STORY_CHECKIN_EXPIRY_DAYS * DAY_MS;
+      if (!lapsed) return { outcome: 'openCheckin' };
+      await updateAssignmentStatus(deps.fs, deps.key, a.id, 'expired');
+      await saveInterviewState(deps.fs, deps.key, deps.personId, args.bookId, {
+        ...interview,
+        openCheckinAssignmentId: undefined,
+      });
+      return { outcome: 'throttled' }; // backed off; a future interval may mint a fresh gap
+    }
+    // Resolved / gone → clear the flag so the loop can mint the next gap (the saves below own it).
+  }
+
+  // The AUTO cadence re-checks at most every interval (the last gap pass drives it); manual bypasses.
+  if (args.auto && interview.lastGapPassAt) {
+    const since = deps.now.getTime() - Date.parse(interview.lastGapPassAt);
+    if (since < STORY_INTERVIEW_INTERVAL_DAYS * DAY_MS) {
+      return await clearOpenIfResolved(deps, args.bookId, interview, 'throttled');
+    }
+  }
+  // Both cadences are bounded by the weekly cap (protects the manual path from spamming the gap pass).
+  const weekAgo = new Date(deps.now.getTime() - 7 * DAY_MS).toISOString();
+  const passes = await queryUsage(deps.fs, deps.key, {
+    from: weekAgo,
+    to: deps.now.toISOString(),
+    personId: deps.personId,
+    type: 'story.interview',
+  });
+  if (passes.length >= STORY_INTERVIEW_WEEKLY_CAP) {
+    return await clearOpenIfResolved(deps, args.bookId, interview, 'throttled');
+  }
+
+  // Run the gap pass (persists coverage + lastGapPassAt).
+  const pass = await runGapPass(deps, { bookId: args.bookId });
+  if (!pass.ok) {
+    return await clearOpenIfResolved(deps, args.bookId, interview, 'noGaps');
+  }
+  const top = pass.gaps[0];
+  if (!top) {
+    return await clearOpenIfResolved(deps, args.bookId, interview, 'noGaps', pass.completeness);
+  }
+
+  // Mint ONE check-in from the top gap (the same self-send path the markup to-do uses).
+  const mint = await mintStoryCheckInFromTodo(deps, { bookId: args.bookId, focus: top.focus });
+  // Re-read: the gap pass persisted fresh coverage/lastGapPassAt — build the final save on top of THAT.
+  const after = await getInterviewState(deps.fs, deps.key, deps.personId, args.bookId);
+  if (!mint.ok) {
+    await saveInterviewState(deps.fs, deps.key, deps.personId, args.bookId, {
+      ...after,
+      askedPrompts: after.askedPrompts,
+      openCheckinAssignmentId: undefined,
+    });
+    return { outcome: 'noGaps', completeness: pass.completeness };
+  }
+  await saveInterviewState(deps.fs, deps.key, deps.personId, args.bookId, {
+    ...after,
+    askedPrompts: [...after.askedPrompts, top.focus].slice(-50),
+    openCheckinAssignmentId: mint.assignmentId,
+  });
+  return { outcome: 'minted', assignmentId: mint.assignmentId, completeness: pass.completeness };
+}
+
+/** A no-spend early return that still clears a resolved/lapsed open-check-in flag so the loop can advance. */
+async function clearOpenIfResolved(
+  deps: AiDeps,
+  bookId: string,
+  interview: Awaited<ReturnType<typeof getInterviewState>>,
+  outcome: StoryInterviewOutcome,
+  completeness?: StoryCompleteness,
+): Promise<StoryInterviewCadenceResult> {
+  if (interview.openCheckinAssignmentId) {
+    await saveInterviewState(deps.fs, deps.key, deps.personId, bookId, {
+      ...interview,
+      openCheckinAssignmentId: undefined,
+    });
+  }
+  return { outcome, ...(completeness ? { completeness } : {}) };
 }

@@ -20,7 +20,10 @@ import type {
   StoryPinInput,
   StoryRemoveMarkInput,
   StoryQuestionsResult,
+  StoryCompleteness,
   StoryHomeSignal,
+  StoryInterviewCadenceResult,
+  StoryInterviewCheckInput,
   StoryRefreshInput,
   StoryRefreshViewResult,
   StoryResolveProposalInput,
@@ -319,6 +322,8 @@ export const IpcChannels = {
   storyProposals: 'story:proposals',
   storyResolveProposal: 'story:resolveProposal',
   storyHomeSignal: 'story:homeSignal',
+  storyCompleteness: 'story:completeness',
+  storyInterviewCheck: 'story:interviewCheck',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -1082,6 +1087,13 @@ export interface SelfosBridge {
   /** The living-book Home signal (§5.6) for the active person's book — computed host-side, no AI. Feeds the
    *  `story-living` "For you" card. Gated `story.own`; `hasBook:false` when denied or there's no book. */
   storyHomeSignal(): Promise<StoryHomeSignal>;
+  /** How far along the book is (§3.6) — a qualitative stage + a subtle ratio, from the stored coverage. A cheap
+   *  no-AI read. Gated `story.own`, active-person-scoped. */
+  storyCompleteness(input: { bookId: string }): Promise<StoryCompleteness>;
+  /** Run the autonomous interview cadence (§3.7): when warranted, gap-pass the book + mint ≤1 story check-in
+   *  into the Inbox. `auto` throttles + host-side-crisis-gates; manual bypasses the interval (still weekly-capped).
+   *  Gated `story.own`, active-person-scoped; the key stays host-side. */
+  storyInterviewCheck(input: StoryInterviewCheckInput): Promise<StoryInterviewCadenceResult>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

@@ -311,6 +311,29 @@ function makeHost(): {
           usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      // Your Story gap pass (64 §3.7): the interview-engine scoring prompt → coverage + one prioritized gap.
+      if (userText.includes('EIGHT KEY SCENES')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            coverage: {
+              chapters: true,
+              scenes: { highPoint: true, lowPoint: false },
+              challenges: false,
+              ideology: false,
+              futureScript: false,
+            },
+            gaps: [
+              {
+                dimension: 'lowPoint',
+                label: 'A hard season',
+                focus: 'Ask about a low point that stayed with them.',
+                priority: 9,
+              },
+            ],
+          }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // The story to-do→questions mint (64 §5.5) — matched by its distinctive brief so it doesn't intercept
       // the generic questionnaire-generation tests (which expect a non-JSON reply). Returns valid questions.
       if (userText.includes('Your biographer wants to go deeper on this for the book')) {
@@ -6975,6 +6998,53 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
     expect(await bridge.storyHomeSignal()).toMatchObject({ hasBook: false });
+  });
+
+  it('story: the interview cadence gap-passes + mints ≤1 check-in; completeness reflects it; Guest denied', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.storyGenerateChapters({ bookId });
+
+    // Empty completeness before any gap pass.
+    expect(await bridge.storyCompleteness({ bookId })).toMatchObject({
+      stage: 'beginning',
+      covered: 0,
+    });
+
+    // A manual interview check runs the gap pass + mints one check-in into the Inbox.
+    const first = await bridge.storyInterviewCheck({ bookId });
+    expect(first.outcome).toBe('minted');
+    expect(first.assignmentId).toBeTruthy();
+    // The gap pass persisted coverage → completeness climbed (chapters + highPoint = 2/12).
+    expect(await bridge.storyCompleteness({ bookId })).toMatchObject({
+      covered: 2,
+      stage: 'beginning',
+    });
+    // The minted check-in is a self-send in the owner's Inbox.
+    const inbox = await bridge.assignmentsInbox();
+    expect(inbox.some((i) => i.assignmentId === first.assignmentId && i.fromSelf)).toBe(true);
+    // A second check while it's open → nothing minted (≤1).
+    expect((await bridge.storyInterviewCheck({ bookId })).outcome).toBe('openCheckin');
+
+    // A Guest (no story.own) is denied both reads.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.storyCompleteness({ bookId })).toMatchObject({
+      stage: 'beginning',
+      covered: 0,
+    });
+    expect((await bridge.storyInterviewCheck({ bookId })).outcome).toBe('noBook');
   });
 
   it('story: markup + refresh ops are denied for a person without story.own', async () => {

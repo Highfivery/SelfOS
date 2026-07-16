@@ -4,7 +4,12 @@ import type { ClaudeClient, ClaudeUsage } from '../host';
 import { memFileSystem } from '../host/memFileSystem';
 import { savePerson } from '../people';
 import { saveInsight } from '../insights';
-import { listAssignments, getAssignmentSnapshot } from '../questionnaires/assignmentService';
+import {
+  getAssignment,
+  getAssignmentSnapshot,
+  listAssignments,
+  updateAssignmentStatus,
+} from '../questionnaires/assignmentService';
 import type { AiDeps } from '../questionnaires/generationService';
 import type {
   BookOutline,
@@ -13,14 +18,17 @@ import type {
   Person,
   StoryFrameworkCoverage,
 } from '../schemas';
+import { recordUsage } from '../usage';
 import {
+  STORY_INTERVIEW_WEEKLY_CAP,
   computeStoryCompleteness,
   getStoryCompleteness,
   mintStoryCheckInFromTodo,
   runGapPass,
+  runStoryInterviewCadence,
 } from './storyInterviewService';
 import { generateChapter } from './storyGenerationService';
-import { applyFoundations, approveOutline, createBook } from './storyService';
+import { applyFoundations, approveOutline, createBook, getInterviewState } from './storyService';
 
 const key = generateMasterKey();
 const now = new Date('2026-07-16T00:00:00.000Z');
@@ -42,6 +50,22 @@ function fakeClient(text: string): ClaudeClient {
 }
 function deps(fs: ReturnType<typeof memFileSystem>, client: ClaudeClient): AiDeps {
   return { fs, key, client, apiKey: 'sk', model: 'claude-sonnet-4-6', personId: 'me', now };
+}
+function depsAt(fs: ReturnType<typeof memFileSystem>, client: ClaudeClient, at: Date): AiDeps {
+  return { fs, key, client, apiKey: 'sk', model: 'claude-sonnet-4-6', personId: 'me', now: at };
+}
+/** A fake that answers the gap-pass prompt with `gap` JSON and every other call (the mint) with `questions`. */
+function routingClient(gap: string, questions: string): ClaudeClient {
+  const pick = (opts: { messages?: readonly { content?: unknown }[] }): string =>
+    String(opts?.messages?.[0]?.content ?? '').includes('EIGHT KEY SCENES') ? gap : questions;
+  return {
+    send: (opts) => Promise.resolve(pick(opts)),
+    stream: (opts, onDelta) => {
+      const t = pick(opts);
+      onDelta(t);
+      return Promise.resolve({ text: t, usage: USAGE });
+    },
+  };
 }
 
 const person: Person = {
@@ -277,5 +301,119 @@ describe('runGapPass (64 §3.7)', () => {
     const bookId = await seedBook(fs);
     const res = await runGapPass(deps(fs, fakeClient('I could not do that.')), { bookId });
     expect(res.ok).toBe(false);
+  });
+});
+
+describe('runStoryInterviewCadence (64 §3.7 — the autonomous loop)', () => {
+  it('mints ONE check-in from the top gap; a second run mints nothing (≤1 open)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    const client = routingClient(gapJson, validQuestions);
+    const first = await runStoryInterviewCadence(deps(fs, client), { bookId, auto: false });
+    expect(first.outcome).toBe('minted');
+    expect(first.assignmentId).toBeTruthy();
+    // The open check-in is tracked; a self-send in the Inbox exists.
+    const state = await getInterviewState(fs, key, 'me', bookId);
+    expect(state.openCheckinAssignmentId).toBe(first.assignmentId);
+    expect((await getAssignment(fs, key, first.assignmentId!))?.status).toBe('sent');
+    // A second run while it's still open → nothing minted (the back-off).
+    const second = await runStoryInterviewCadence(deps(fs, client), { bookId, auto: false });
+    expect(second.outcome).toBe('openCheckin');
+  });
+
+  it('never spends during a crisis, and no-ops without a book/outline', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    let streamed = false;
+    const spy: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: () => {
+        streamed = true;
+        return Promise.resolve({ text: '', usage: USAGE });
+      },
+    };
+    const crisis = await runStoryInterviewCadence(deps(fs, spy), {
+      bookId,
+      auto: true,
+      crisis: true,
+    });
+    expect(crisis.outcome).toBe('crisis');
+    expect(streamed).toBe(false);
+
+    const fs2 = memFileSystem();
+    await savePerson(fs2, key, person);
+    const book = await createBook(fs2, key, {
+      personId: 'me',
+      type: 'biography',
+      title: 'Empty',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      now,
+    });
+    const res = await runStoryInterviewCadence(deps(fs2, spy), { bookId: book.id, auto: true });
+    expect(res.outcome).toBe('noBook');
+    expect(streamed).toBe(false);
+  });
+
+  it('the weekly cap throttles the manual path (no spend past the cap)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    for (let i = 0; i < STORY_INTERVIEW_WEEKLY_CAP; i += 1) {
+      await recordUsage(fs, key, {
+        id: `g${i}`,
+        schemaVersion: 1,
+        type: 'story.interview',
+        personId: 'me',
+        model: 'claude-sonnet-4-6',
+        at: new Date(now.getTime() - 60_000).toISOString(),
+        inputTokens: 1,
+        outputTokens: 1,
+        cacheWriteTokens: 0,
+        cacheReadTokens: 0,
+        costUsd: 0,
+      });
+    }
+    let streamed = false;
+    const client: ClaudeClient = {
+      send: () => Promise.resolve(gapJson),
+      stream: (_o, onDelta) => {
+        streamed = true;
+        onDelta(gapJson);
+        return Promise.resolve({ text: gapJson, usage: USAGE });
+      },
+    };
+    const res = await runStoryInterviewCadence(deps(fs, client), { bookId, auto: false });
+    expect(res.outcome).toBe('throttled');
+    expect(streamed).toBe(false); // capped BEFORE the gap pass — no spend
+  });
+
+  it('an ignored check-in lapses: it is expired and the loop backs off (no pile-up)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    const client = routingClient(gapJson, validQuestions);
+    const first = await runStoryInterviewCadence(deps(fs, client), { bookId, auto: false });
+    expect(first.outcome).toBe('minted');
+    // Advance well past the expiry, computed from the assignment's real createdAt (non-fragile).
+    const a = await getAssignment(fs, key, first.assignmentId!);
+    const later = new Date(Date.parse(a!.createdAt) + 20 * 24 * 60 * 60 * 1000);
+    const res = await runStoryInterviewCadence(depsAt(fs, client, later), { bookId, auto: false });
+    expect(res.outcome).toBe('throttled'); // backed off — did NOT mint a second check-in
+    expect((await getAssignment(fs, key, first.assignmentId!))?.status).toBe('expired');
+    expect(
+      (await getInterviewState(fs, key, 'me', bookId)).openCheckinAssignmentId,
+    ).toBeUndefined();
+  });
+
+  it('clears a RESOLVED (answered) check-in so the loop can advance next time', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    const client = routingClient(gapJson, validQuestions);
+    const first = await runStoryInterviewCadence(deps(fs, client), { bookId, auto: false });
+    // Mark it answered, then run the AUTO cadence within the interval → the flag clears + it throttles (no spend).
+    await updateAssignmentStatus(fs, key, first.assignmentId!, 'submitted');
+    const res = await runStoryInterviewCadence(deps(fs, client), { bookId, auto: true });
+    expect(res.outcome).toBe('throttled'); // lastGapPassAt is recent → auto throttled
+    expect(
+      (await getInterviewState(fs, key, 'me', bookId)).openCheckinAssignmentId,
+    ).toBeUndefined();
   });
 });

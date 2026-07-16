@@ -173,6 +173,7 @@ import {
   StoryMarkInputSchema,
   StoryOutlineInputSchema,
   StoryPinInputSchema,
+  StoryInterviewCheckInputSchema,
   StoryRefreshInputSchema,
   StoryRemoveMarkInputSchema,
   StoryResolveProposalInputSchema,
@@ -190,7 +191,9 @@ import {
   type StoryExcludeResult,
   type StoryFoundationsResult,
   type StoryQuestionsResult,
+  type StoryCompleteness,
   type StoryHomeSignal,
+  type StoryInterviewCadenceResult,
   type StoryRefreshViewResult,
   type StoryResolveProposalResult,
   type StoryRevisionResult,
@@ -388,12 +391,14 @@ import {
   markStaleChapters,
   mintStoryCheckInFromTodo,
   computeStoryHomeSignal,
+  getStoryCompleteness,
   listStructuralProposals,
   pinPassage,
   readBookBundle,
   refreshBook,
   removeExclusion,
   resolveProposal,
+  runStoryInterviewCadence,
   removeMark,
   saveChapter,
   saveOutline,
@@ -4636,6 +4641,47 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return empty;
       return computeStoryHomeSignal(ctx.fs, ctx.key, personId);
+    },
+    storyCompleteness: async (input): Promise<StoryCompleteness> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const empty: StoryCompleteness = { stage: 'beginning', ratio: 0, covered: 0, total: 12 };
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return empty;
+      const personId = await activePersonId();
+      if (!personId) return empty;
+      return getStoryCompleteness(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyInterviewCheck: async (input): Promise<StoryInterviewCadenceResult> => {
+      const { bookId, auto } = StoryInterviewCheckInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { outcome: 'noBook' };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { outcome: 'noBook' };
+      // The gap pass + mint need a real key + AI on; without them, the cadence is a no-op (never a NO_KEY spend).
+      const deps = await aiDeps('story.own');
+      const aiReady =
+        deps && deps.apiKey && (await readVaultSettingsValues(deps.fs))['ai.enabled'] !== false;
+      if (!deps || !aiReady) return { outcome: 'throttled' };
+      // The auto cadence never spends during recurring distress — computed HOST-SIDE from the person's own
+      // approved insights (the storyRefreshCheck precedent), so it doesn't depend on the renderer.
+      let crisis = false;
+      if (auto) {
+        const own = (await listInsightsForPerson(ctx.fs, ctx.key, personId)).filter(
+          (i) => i.approved,
+        );
+        crisis = aggregateCrisisSignal({
+          insights: own,
+          nightmareNudge: false,
+          now: new Date(),
+        }).recurring;
+      }
+      return runStoryInterviewCadence(deps, {
+        bookId,
+        auto: auto ?? false,
+        ...(crisis ? { crisis } : {}),
+      });
     },
     // The batch markup revision — the one AI call in the markup layer (§3.3.1/§5.3).
     storyApplyMarkup: async (input): Promise<StoryRevisionResult> => {

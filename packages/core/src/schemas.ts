@@ -4143,6 +4143,29 @@ export interface StoryGapPassResult {
   gaps: StoryGap[];
 }
 
+/** The outcome of one autonomous interview-cadence run (§3.7 — the spec-63 loop). `minted` = a new story
+ *  check-in went to the Inbox; `openCheckin` = one is already open (≤1); `throttled`/`crisis`/`noGaps`/`noBook`
+ *  = no spend / nothing to do. */
+export type StoryInterviewOutcome =
+  | 'minted'
+  | 'openCheckin'
+  | 'throttled'
+  | 'crisis'
+  | 'noGaps'
+  | 'noBook';
+export interface StoryInterviewCadenceResult {
+  outcome: StoryInterviewOutcome;
+  assignmentId?: string;
+  completeness?: StoryCompleteness;
+}
+
+/** `story:interviewCheck` — run the autonomous interview cadence (§3.7). `auto` = the throttled launch/focus
+ *  cadence; omit for a manual "find what's missing" (bypasses the interval, still weekly-capped). */
+export const StoryInterviewCheckInputSchema = StoryBookRefSchema.extend({
+  auto: z.boolean().optional(),
+});
+export type StoryInterviewCheckInput = z.infer<typeof StoryInterviewCheckInputSchema>;
+
 // --- Exclusions IPC (§3.3/§5.1) --------------------------------------------------------------------------
 
 /** `story:exclude` — add a "never write about this again" exclusion, scoped (§3.3). `value` by kind: topic/

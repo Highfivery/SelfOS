@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.0](https://github.com/Highfivery/SelfOS/compare/v0.28.0...v0.29.0) (2026-07-16)
+
+
+### Features
+
+* **auto-checkins:** surface via notifications + full E2E matrix (spec 63) ([#216](https://github.com/Highfivery/SelfOS/issues/216)) ([1d62c52](https://github.com/Highfivery/SelfOS/commit/1d62c5262b873e2466c6eb66528baa802f24606e))
+
 ## [0.28.0](https://github.com/Highfivery/SelfOS/compare/v0.27.0...v0.28.0) (2026-07-15)
 
 

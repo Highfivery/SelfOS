@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { BookConfigSchema } from '../schemas';
 import { BIOGRAPHY_BOOK_TYPE } from './bookTypes';
 import type { StoryCorpus } from './storyCorpus';
+import type { BookOutline } from '../schemas';
 import {
   buildBiographerSystem,
+  buildChapterUserMessage,
   buildFoundationsUserMessage,
   renderCorpusForPrompt,
+  tagCorpusItems,
 } from './storyPromptBuilder';
 
 const cfg = (over: Partial<ReturnType<typeof BookConfigSchema.parse>> = {}) => ({
@@ -82,5 +85,50 @@ describe('renderCorpusForPrompt + buildFoundationsUserMessage', () => {
     expect(msg).toMatch(/character-revealing scene, not at birth/);
     expect(msg).toContain('He learned to sit with silence.'); // the corpus is embedded
     expect(msg).toMatch(/ONLY the JSON object/);
+  });
+});
+
+describe('buildChapterUserMessage', () => {
+  const outline: BookOutline = {
+    schemaVersion: 1,
+    approved: true,
+    parts: [
+      {
+        id: 'p1',
+        title: 'Roots',
+        chapters: [
+          {
+            id: 'c1',
+            title: 'The Garage',
+            brief: 'He learns a machine obeys.',
+            lifeAreas: [],
+            order: 0,
+          },
+          { id: 'c2', title: 'Leaving', brief: 'A move west.', lifeAreas: [], order: 1 },
+        ],
+      },
+    ],
+  };
+
+  it('tags corpus items with stable index-based [sN] tags', () => {
+    const tagged = tagCorpusItems(corpus);
+    expect(tagged[0]?.tag).toBe('s0');
+    expect(tagged[0]?.sourceRef.id).toBe('i1');
+  });
+
+  it('embeds the brief + tagged corpus, marks the target chapter, and asks for [[SRC]] citations', () => {
+    const tagged = tagCorpusItems(corpus);
+    const msg = buildChapterUserMessage(corpus, tagged, {
+      chapter: outline.parts[0]!.chapters[0]!,
+      outline,
+      essence: 'A quiet man.',
+    });
+    expect(msg).toMatch(/WRITE THIS CHAPTER — "The Garage"/);
+    expect(msg).toContain('He learns a machine obeys.'); // the brief
+    expect(msg).toContain('▶'); // the target chapter is marked in the ToC
+    expect(msg).toContain('[s0]'); // the tagged source
+    expect(msg).toContain('He learned to sit with silence.'); // the source text
+    expect(msg).toMatch(/\[\[SRC:sN,sN\]\]/); // the citation instruction
+    expect(msg).toMatch(/draw only on the source material/i);
   });
 });

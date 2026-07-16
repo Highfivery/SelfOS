@@ -5,15 +5,32 @@ import { type AiDeps, runClaude } from '../questionnaires';
 import {
   LIFE_AREAS,
   type AiFailureReason,
+  type BookChapter,
   type BookConfig,
   type BookOutline,
+  type ChapterProvenanceEntry,
   type ExclusionItem,
   type LifeTimeline,
+  type OutlineChapter,
+  type StorySourceRef,
   type UsageEvent,
 } from '../schemas';
-import type { BookType } from './bookTypes';
-import { buildStoryCorpus } from './storyCorpus';
-import { buildBiographerSystem, buildFoundationsUserMessage } from './storyPromptBuilder';
+import { getBookType, type BookType } from './bookTypes';
+import { buildStoryCorpus, type StoryCorpus } from './storyCorpus';
+import {
+  buildBiographerSystem,
+  buildChapterUserMessage,
+  buildFoundationsUserMessage,
+  tagCorpusItems,
+} from './storyPromptBuilder';
+import {
+  getBook,
+  getChapter,
+  getExclusions,
+  getOutline,
+  saveChapter,
+  updateBook,
+} from './storyService';
 
 /**
  * The Your Story generation service (64-your-story §5.3) — the orchestrator that turns the corpus into the
@@ -151,4 +168,211 @@ export async function generateFoundations(
   };
 
   return { ok: true, essence: draft.essence.trim(), outline, timeline, usage: result.usage };
+}
+
+// --- Chapter generation (§5.3) ---------------------------------------------------------------------------
+
+/** A chapter is ~1,500–3,000 words (≈2–4k tokens); give headroom so a rich chapter doesn't truncate. */
+const CHAPTER_MAX_TOKENS = 8000;
+
+const SOURCE_MARKER = /\[\[SRC:([^\]]*)\]\]/g;
+
+/**
+ * Strip the model's per-paragraph `[[SRC:sN,sN]]` citation markers from a chapter's markdown, resolving the
+ * `sN` tags to `StorySourceRef`s via `tagToRef` and recording them as the chapter's provenance (anchored to
+ * the paragraph index `p<N>`). The markers NEVER render (the stripCoachMarkers precedent). An unknown tag is
+ * dropped; a paragraph with no valid citation contributes no provenance entry. Pure + tested.
+ */
+export function stripSourceMarkers(
+  markdown: string,
+  tagToRef: Map<string, StorySourceRef>,
+): { markdown: string; provenance: ChapterProvenanceEntry[] } {
+  const blocks = markdown.split(/\n{2,}/);
+  const provenance: ChapterProvenanceEntry[] = [];
+  const cleaned = blocks.map((block, index) => {
+    const refs: StorySourceRef[] = [];
+    const seen = new Set<string>();
+    for (const match of block.matchAll(SOURCE_MARKER)) {
+      for (const rawTag of (match[1] ?? '').split(',')) {
+        const tag = rawTag.trim();
+        const ref = tagToRef.get(tag);
+        if (ref && !seen.has(tag)) {
+          seen.add(tag);
+          refs.push(ref);
+        }
+      }
+    }
+    if (refs.length > 0) provenance.push({ anchor: `p${index}`, refs });
+    return block
+      .replace(SOURCE_MARKER, '')
+      .replace(/[ \t]+$/gm, '')
+      .trim();
+  });
+  return {
+    markdown: cleaned
+      .filter((b) => b.length > 0)
+      .join('\n\n')
+      .trim(),
+    provenance,
+  };
+}
+
+export type ChapterResult =
+  | { ok: true; chapter: BookChapter }
+  | { ok: false; reason: AiFailureReason; message: string };
+
+/**
+ * Generate (or regenerate) ONE chapter's prose from the corpus + its outline brief (§5.3). Reads the book +
+ * outline, builds the corpus (or reuses a pre-built one — the orchestrator builds it once for the whole book),
+ * runs the metered `story.chapter` pass, strips the citation markers into provenance, and PERSISTS the chapter.
+ * A `reviewed` chapter's protected blocks + pinned quotes are carried forward (their code-enforcement is slice
+ * C); status becomes `updated` on a regenerate, `new` on first write. Returns the saved chapter or an honest
+ * failure. Never trusts model ids — the chapter id/partId/order/title come from the outline.
+ */
+export async function generateChapter(
+  deps: AiDeps,
+  args: { bookId: string; chapterId: string; corpus?: StoryCorpus },
+): Promise<ChapterResult> {
+  const book = await getBook(deps.fs, deps.key, deps.personId, args.bookId);
+  if (!book) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+  const bookType = getBookType(book.type);
+  if (!bookType) return { ok: false, reason: 'ERROR', message: 'Unknown book type.' };
+  const outline = await getOutline(deps.fs, deps.key, deps.personId, args.bookId);
+  if (!outline) return { ok: false, reason: 'ERROR', message: 'This book has no outline yet.' };
+
+  let target: OutlineChapter | undefined;
+  let partId = '';
+  for (const part of outline.parts) {
+    const found = part.chapters.find((c) => c.id === args.chapterId);
+    if (found) {
+      target = found;
+      partId = part.id;
+      break;
+    }
+  }
+  if (!target)
+    return { ok: false, reason: 'ERROR', message: 'That chapter is no longer in the outline.' };
+
+  const corpus =
+    args.corpus ??
+    (await buildStoryCorpus(
+      deps.fs,
+      deps.key,
+      deps.personId,
+      await getExclusions(deps.fs, deps.key, deps.personId, args.bookId),
+    ));
+  const tagged = tagCorpusItems(corpus);
+  const tagToRef = new Map(tagged.map((t) => [t.tag, t.sourceRef]));
+  const system = buildBiographerSystem(bookType, book.config, corpus.personName);
+  const user = buildChapterUserMessage(corpus, tagged, {
+    chapter: target,
+    outline,
+    ...(book.essence ? { essence: book.essence } : {}),
+  });
+
+  const result = await runClaude(deps, system, user, 'story.chapter', CHAPTER_MAX_TOKENS);
+  if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
+
+  const { markdown, provenance } = stripSourceMarkers(result.text, tagToRef);
+  if (markdown.trim().length === 0) {
+    const { reason, message } = classifyParseOutcome(result.text, 'chapter');
+    return { ok: false, reason, message };
+  }
+
+  const existing = await getChapter(deps.fs, deps.key, deps.personId, args.bookId, args.chapterId);
+  const chapter: BookChapter = {
+    id: target.id,
+    schemaVersion: 1,
+    partId,
+    order: target.order,
+    title: target.title,
+    markdown,
+    revision: (existing?.revision ?? 0) + 1,
+    status: existing ? 'updated' : 'new',
+    sourceSignature: '', // computed by the freshness engine (slice D)
+    provenance,
+    protectedBlocks: existing?.protectedBlocks ?? [], // preserved across regeneration (enforced in slice C)
+    pinnedQuotes: existing?.pinnedQuotes ?? [],
+    imagePlacements: existing?.imagePlacements ?? [],
+    lastGeneratedAt: deps.now.toISOString(),
+    ...(existing?.lastReviewedAt ? { lastReviewedAt: existing.lastReviewedAt } : {}),
+  };
+  await saveChapter(deps.fs, deps.key, deps.personId, args.bookId, chapter);
+  return { ok: true, chapter };
+}
+
+export interface BookChaptersResult {
+  ok: boolean;
+  generated: number;
+  reason?: AiFailureReason;
+  message?: string;
+}
+
+/**
+ * The chapter orchestrator (§5.3): generate every not-yet-written (or stale) chapter of an approved book, as a
+ * queue of independent metered `story.chapter` calls. Builds the corpus ONCE and reuses it for every chapter
+ * (the review perf note). A `reviewed` chapter is never overwritten; an already-written non-stale chapter is
+ * skipped (idempotent + resumable). Stops cleanly on `BUDGET` (the remaining chapters resume next period); a
+ * per-chapter non-budget failure is skipped so one bad chapter never blocks the rest. Marks the book `ready`
+ * once every outline chapter has prose.
+ */
+export async function generateBookChapters(
+  deps: AiDeps,
+  bookId: string,
+): Promise<BookChaptersResult> {
+  const outline = await getOutline(deps.fs, deps.key, deps.personId, bookId);
+  if (!outline || outline.parts.length === 0) {
+    return { ok: false, generated: 0, reason: 'ERROR', message: 'This book has no outline yet.' };
+  }
+  const corpus = await buildStoryCorpus(
+    deps.fs,
+    deps.key,
+    deps.personId,
+    await getExclusions(deps.fs, deps.key, deps.personId, bookId),
+  );
+
+  const chapters = outline.parts.flatMap((part) => part.chapters);
+  let generated = 0;
+  let budgetHit = false;
+  let allWritten = true;
+  for (const chapter of chapters) {
+    const existing = await getChapter(deps.fs, deps.key, deps.personId, bookId, chapter.id);
+    // Skip a chapter that's already written and not flagged stale (idempotent/resumable). Never overwrite a
+    // reviewed chapter.
+    if (existing && existing.status !== 'stale') continue;
+    const res = await generateChapter(deps, { bookId, chapterId: chapter.id, corpus });
+    if (res.ok) {
+      generated += 1;
+      continue;
+    }
+    if (res.reason === 'BUDGET') {
+      budgetHit = true;
+      allWritten = false;
+      break; // stop the queue cleanly; the rest resume next period
+    }
+    // A per-chapter failure (REFUSED/TRUNCATED/ERROR) — leave it unwritten and continue with the rest.
+    allWritten = false;
+  }
+
+  // Any remaining unwritten chapter means the book isn't fully drafted.
+  for (const chapter of chapters) {
+    const existing = await getChapter(deps.fs, deps.key, deps.personId, bookId, chapter.id);
+    if (!existing || existing.status === 'stale') {
+      allWritten = false;
+      break;
+    }
+  }
+  if (allWritten) {
+    await updateBook(deps.fs, deps.key, deps.personId, bookId, { status: 'ready' }, deps.now);
+  }
+
+  if (budgetHit) {
+    return {
+      ok: true,
+      generated,
+      reason: 'BUDGET',
+      message: 'AI budget reached — the rest resume next period.',
+    };
+  }
+  return { ok: true, generated };
 }

@@ -1,7 +1,7 @@
 import { SAFETY } from '../conversations';
-import type { BookConfig } from '../schemas';
+import type { BookConfig, BookOutline, OutlineChapter, StorySourceRef } from '../schemas';
 import type { BookType } from './bookTypes';
-import type { StoryCorpus } from './storyCorpus';
+import type { CorpusItem, StoryCorpus } from './storyCorpus';
 
 /**
  * The Your Story prompt builder (64-your-story §5.2). Assembles the Biographer's system prompt and the
@@ -72,6 +72,73 @@ export function renderCorpusForPrompt(corpus: StoryCorpus): string {
     }
   }
   return lines.join('\n');
+}
+
+/** A corpus item paired with the short `[sN]` citation tag the chapter prompt gives it, so the model can
+ *  cite its sources per paragraph and we can resolve those citations back to provenance (§5.3). */
+export interface TaggedCorpusItem {
+  tag: string;
+  sourceRef: StorySourceRef;
+  item: CorpusItem;
+}
+
+/** Assign each corpus item a stable, index-based citation tag (`s0`, `s1`, …). Pure + deterministic, so the
+ *  prompt render and the marker-stripping resolve to the same mapping. */
+export function tagCorpusItems(corpus: StoryCorpus): TaggedCorpusItem[] {
+  return corpus.items.map((item, i) => ({ tag: `s${i}`, sourceRef: item.sourceRef, item }));
+}
+
+/** Render the tagged corpus for a chapter prompt: profile first, then each source line prefixed with its
+ *  `[sN]` tag so the model can cite it. */
+function renderTaggedCorpus(corpus: StoryCorpus, tagged: TaggedCorpusItem[]): string {
+  const lines: string[] = [];
+  if (corpus.profile.length > 0) {
+    lines.push('WHO THEY ARE (profile):');
+    for (const line of corpus.profile) lines.push(`  ${line}`);
+  }
+  if (tagged.length > 0) {
+    lines.push('', 'SOURCE MATERIAL (cite by [sN]; draw ONLY on this — never invent beyond it):');
+    for (const { tag, item } of tagged) {
+      const meta = [item.label, item.date, item.lifeArea].filter(Boolean).join(' · ');
+      lines.push(`[${tag}] (${meta}) ${item.text}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+/**
+ * The CHAPTER user message (§5.3): write ONE chapter's prose from the corpus, following its brief, sitting it
+ * correctly among the other chapters, and citing the sources it drew on per paragraph with `[[SRC:sN]]`
+ * markers (stripped into provenance host-side, never rendered). Markdown prose only — the doctrine + voice
+ * live in the shared system prompt.
+ */
+export function buildChapterUserMessage(
+  corpus: StoryCorpus,
+  tagged: TaggedCorpusItem[],
+  opts: { chapter: OutlineChapter; outline: BookOutline; essence?: string },
+): string {
+  const { chapter, outline, essence } = opts;
+  const toc = outline.parts
+    .flatMap((part) => part.chapters.map((c) => ({ part: part.title, c })))
+    .map(({ part, c }) => `  ${c.id === chapter.id ? '▶ ' : '  '}${part} — ${c.title}: ${c.brief}`)
+    .join('\n');
+  const era = [chapter.eraFrom, chapter.eraTo].filter(Boolean).join('–');
+  return [
+    `You are writing ONE chapter of ${corpus.personName || 'this person'}'s book${
+      essence ? `. The book is about: ${essence}` : ''
+    }.`,
+    '',
+    'Where this chapter sits (▶ = the one you are writing now):',
+    toc,
+    '',
+    `WRITE THIS CHAPTER — "${chapter.title}"${era ? ` (${era})` : ''}: ${chapter.brief}`,
+    '',
+    renderTaggedCorpus(corpus, tagged),
+    '',
+    'Write the chapter as Markdown prose (short paragraphs; you may use *italics*; no headings, no lists, no tables). Open on a rendered scene, not a summary. Draw ONLY on the source material above — if a detail you need is missing, write around it rather than inventing it.',
+    'At the END of each paragraph, cite the [sN] sources you drew on for it as `[[SRC:sN,sN]]` (use the exact tags above; omit the marker for a paragraph that draws on nothing specific). Do not cite sources you did not use.',
+    'Return ONLY the chapter prose with its inline [[SRC:…]] markers — no title heading, no preamble.',
+  ].join('\n');
 }
 
 /**

@@ -1,7 +1,28 @@
-import type { AiFailureReason, QuestionnaireInput } from '../schemas';
+import { z } from 'zod';
+import { classifyParseOutcome, extractJsonObject, tolerantArray } from '../ai';
+import type {
+  AiFailureReason,
+  QuestionnaireInput,
+  StoryCompleteness,
+  StoryCompletenessStage,
+  StoryFrameworkCoverage,
+  StoryGap,
+  UsageEvent,
+} from '../schemas';
 import { createAssignment } from '../questionnaires/assignmentService';
-import { type AiDeps, generateQuestions } from '../questionnaires/generationService';
+import { type AiDeps, generateQuestions, runClaude } from '../questionnaires/generationService';
 import { saveQuestionnaire, validateQuestionnaire } from '../questionnaires/questionnaireService';
+import { MCADAMS_SCENES, getBookType } from './bookTypes';
+import { buildStoryCorpus, type StoryCorpus } from './storyCorpus';
+import { buildBiographerSystem, buildGapPassUserMessage } from './storyPromptBuilder';
+import {
+  getBook,
+  getExclusions,
+  getInterviewState,
+  getOutline,
+  listChapters,
+  saveInterviewState,
+} from './storyService';
 
 /**
  * The Your Story interview bridge (64-your-story §3.3.2/§5.5) — the ONE path that turns a to-do into a targeted
@@ -95,4 +116,162 @@ export async function mintStoryCheckInFromTodo(
   } catch {
     return { ok: false, reason: 'ERROR', message: 'Couldn’t send those questions. Try again.' };
   }
+}
+
+// --- The gap engine: completeness + the gap pass (§3.6/§3.7/§5.5) ----------------------------------------
+
+/** How far along a story is, derived deterministically from the framework coverage (no AI). The 12 dimensions:
+ *  the eight McAdams scenes + life-chapters + challenges + ideology + future-script. Owner decision (2026-07-16):
+ *  a QUALITATIVE stage + a subtle ratio, never a bare percentage. */
+export function computeStoryCompleteness(coverage: StoryFrameworkCoverage): StoryCompleteness {
+  const total = MCADAMS_SCENES.length + 4;
+  let covered = 0;
+  if (coverage.chapters) covered += 1;
+  for (const s of MCADAMS_SCENES) if (coverage.scenes[s.key]) covered += 1;
+  if (coverage.challenges) covered += 1;
+  if (coverage.ideology) covered += 1;
+  if (coverage.futureScript) covered += 1;
+  const ratio = total > 0 ? covered / total : 0;
+  const stage: StoryCompletenessStage =
+    ratio >= 0.8
+      ? 'richlyTold'
+      : ratio >= 0.5
+        ? 'comingTogether'
+        : ratio >= 0.25
+          ? 'takingShape'
+          : 'beginning';
+  return { stage, ratio, covered, total };
+}
+
+/** The book's current completeness — a cheap read from the stored coverage (no AI, no spend). */
+export async function getStoryCompleteness(
+  fs: AiDeps['fs'],
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<StoryCompleteness> {
+  const interview = await getInterviewState(fs, key, personId, bookId);
+  return computeStoryCompleteness(interview.frameworkCoverage);
+}
+
+const GAP_MAX_TOKENS = 3000;
+const MAX_GAPS = 6;
+
+const GapItemSchema = z.object({
+  dimension: z.string().catch(''),
+  label: z.string().catch(''),
+  focus: z.string().catch(''),
+  priority: z.number().catch(0),
+});
+const GapDraftSchema = z.object({
+  coverage: z
+    .object({
+      chapters: z.boolean().optional().catch(undefined),
+      scenes: z.record(z.string(), z.boolean()).optional().catch(undefined),
+      challenges: z.boolean().optional().catch(undefined),
+      ideology: z.boolean().optional().catch(undefined),
+      futureScript: z.boolean().optional().catch(undefined),
+    })
+    .optional()
+    .catch(undefined),
+  gaps: tolerantArray(
+    GapItemSchema,
+    { dimension: '', label: '', focus: '', priority: 0 },
+    (g) => g.focus.trim().length > 0,
+  ).catch([]),
+});
+
+export type GapPassResult =
+  | { ok: true; completeness: StoryCompleteness; gaps: StoryGap[]; usage?: UsageEvent }
+  | { ok: false; reason: AiFailureReason; message: string };
+
+/**
+ * Score the book against the McAdams framework + craft needs (§3.7): a metered `story.interview` pass that reads
+ * the outline + drafted chapters + corpus, decides which dimensions the material genuinely covers ("take no one
+ * at their word"), and emits the prioritized GAPS worth interviewing for. PERSISTS the refreshed coverage (+
+ * `lastGapPassAt`) to `interview.enc` and returns the completeness + gaps. Meter-before-parse; an unparseable
+ * reply is an honest failure; a book with no outline yet is a no-op (nothing to score, no spend).
+ */
+export async function runGapPass(
+  deps: AiDeps,
+  args: { bookId: string; corpus?: StoryCorpus },
+): Promise<GapPassResult> {
+  const book = await getBook(deps.fs, deps.key, deps.personId, args.bookId);
+  if (!book) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+  const bookType = getBookType(book.type);
+  if (!bookType) return { ok: false, reason: 'ERROR', message: 'Unknown book type.' };
+  const outline = await getOutline(deps.fs, deps.key, deps.personId, args.bookId);
+  const chapterCount = outline?.parts.reduce((n, p) => n + p.chapters.length, 0) ?? 0;
+  const interview = await getInterviewState(deps.fs, deps.key, deps.personId, args.bookId);
+  // Nothing to score yet — return the current completeness without spending.
+  if (!outline || chapterCount === 0) {
+    return {
+      ok: true,
+      completeness: computeStoryCompleteness(interview.frameworkCoverage),
+      gaps: [],
+    };
+  }
+
+  const chapters = await listChapters(deps.fs, deps.key, deps.personId, args.bookId);
+  const corpus =
+    args.corpus ??
+    (await buildStoryCorpus(
+      deps.fs,
+      deps.key,
+      deps.personId,
+      await getExclusions(deps.fs, deps.key, deps.personId, args.bookId),
+    ));
+  const system = buildBiographerSystem(bookType, book.config, corpus.personName);
+  const user = buildGapPassUserMessage(corpus, {
+    outline,
+    chapters,
+    framework: bookType.interview,
+    askedPrompts: interview.askedPrompts,
+    ...(book.essence ? { essence: book.essence } : {}),
+  });
+
+  const result = await runClaude(deps, system, user, 'story.interview', GAP_MAX_TOKENS);
+  if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
+
+  // Usage is already recorded (meter-before-parse). An unparseable reply is an honest failure.
+  const json = extractJsonObject(result.text);
+  if (!json) {
+    const { reason, message } = classifyParseOutcome(result.text, 'gaps');
+    return { ok: false, reason, message };
+  }
+  const draft = GapDraftSchema.parse(json);
+
+  // Build the coverage from the draft, normalizing the scene keys against the fixed framework (drop invented ones).
+  const scenes: Record<string, boolean> = {};
+  for (const s of MCADAMS_SCENES) scenes[s.key] = Boolean(draft.coverage?.scenes?.[s.key]);
+  const coverage: StoryFrameworkCoverage = {
+    chapters: Boolean(draft.coverage?.chapters),
+    scenes,
+    challenges: Boolean(draft.coverage?.challenges),
+    ideology: Boolean(draft.coverage?.ideology),
+    futureScript: Boolean(draft.coverage?.futureScript),
+  };
+  const gaps: StoryGap[] = (draft.gaps ?? [])
+    .filter((g) => g.focus.trim().length > 0)
+    .map((g) => ({
+      dimension: g.dimension.trim(),
+      label: g.label.trim() || 'Something worth telling',
+      focus: g.focus.trim(),
+      priority: g.priority,
+    }))
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, MAX_GAPS);
+
+  await saveInterviewState(deps.fs, deps.key, deps.personId, args.bookId, {
+    ...interview,
+    frameworkCoverage: coverage,
+    lastGapPassAt: deps.now.toISOString(),
+  });
+
+  return {
+    ok: true,
+    completeness: computeStoryCompleteness(coverage),
+    gaps,
+    ...(result.usage ? { usage: result.usage } : {}),
+  };
 }

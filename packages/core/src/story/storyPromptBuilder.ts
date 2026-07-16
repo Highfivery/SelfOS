@@ -8,7 +8,7 @@ import type {
   OutlineChapter,
   StorySourceRef,
 } from '../schemas';
-import type { BookType } from './bookTypes';
+import type { BookInterviewFramework, BookType } from './bookTypes';
 import type { CorpusItem, StoryCorpus } from './storyCorpus';
 
 /**
@@ -249,6 +249,61 @@ export function buildFoundationsUserMessage(corpus: StoryCorpus, bookType: BookT
     '- "outline": { "parts": [ { "title": string, "chapters": [ { "title": an evocative chapter title (not a bare number), "brief": 1–2 sentences on what this chapter is about and the one scene it turns on, "eraFrom"?: "YYYY", "eraTo"?: "YYYY", "lifeAreas"?: string[] } ] } ] }.',
     '',
     `Shape the chapters the way a life is actually organized — you may draw on the person's own life chapters and the key scenes (${framework.scenes.map((s) => s.label.toLowerCase()).join(', ')}). Open the book in a character-revealing scene, not at birth. Propose only chapters the material can actually support; where a chapter would be thin, make it broader or leave it for later.`,
+    'Return ONLY the JSON object — no prose, no markdown fences.',
+  ].join('\n');
+}
+
+/**
+ * The GAP-PASS user message (§3.7/§5.5): score the book against the McAdams life-story framework + craft needs
+ * and return (a) which dimensions the material ALREADY covers, and (b) the prioritized GAPS worth interviewing
+ * for — each with a warm FOCUS brief the check-in minter turns into a question. It reads the current outline (+
+ * which chapters are written), the corpus, and the framework's eight key scenes. The biographer's rule holds:
+ * "take no one at their word" — mark a dimension covered ONLY if the material genuinely supports it, and NEVER
+ * invent detail; where it's missing, that's a gap to interview for.
+ */
+export function buildGapPassUserMessage(
+  corpus: StoryCorpus,
+  opts: {
+    outline: BookOutline;
+    chapters: BookChapter[];
+    framework: BookInterviewFramework;
+    essence?: string;
+    askedPrompts?: string[];
+  },
+): string {
+  const { outline, chapters, framework, essence, askedPrompts } = opts;
+  const writtenIds = new Set(chapters.filter((c) => c.markdown.trim().length > 0).map((c) => c.id));
+  const toc = outline.parts
+    .flatMap((part) => part.chapters.map((c) => ({ part: part.title, c })))
+    .map(
+      ({ part, c }) =>
+        `  - ${part} — "${c.title}" [${writtenIds.has(c.id) ? 'written' : 'not written yet'}]: ${c.brief}`,
+    )
+    .join('\n');
+  const sceneList = framework.scenes
+    .map((s) => `  - ${s.key}: ${s.label} — ${s.prompt}`)
+    .join('\n');
+  const asked =
+    askedPrompts && askedPrompts.length > 0
+      ? `\nAlready asked (do NOT propose a gap that re-asks these):\n${askedPrompts.map((p) => `  - ${p}`).join('\n')}\n`
+      : '';
+  return [
+    `You are the biographer taking stock of ${corpus.personName || 'this person'}'s book${
+      essence ? ` (about: ${essence})` : ''
+    } — what the life story has, and what it still needs before it can be richly told. Do NOT write prose.`,
+    '',
+    'THE OUTLINE (and which chapters are drafted):',
+    toc,
+    '',
+    'THE EIGHT KEY SCENES a full life story wants (McAdams):',
+    sceneList,
+    '',
+    renderCorpusForPrompt(corpus),
+    asked,
+    '',
+    'Return ONE JSON object with two keys:',
+    '- "coverage": { "chapters": bool (are the life eras/chapters well mapped?), "scenes": { each scene key above → bool (is that scene actually present in the material, told as a scene?) }, "challenges": bool (are the person’s central struggles/obstacles covered?), "ideology": bool (are their values/beliefs/worldview covered?), "futureScript": bool (are their hopes/what-comes-next covered?) }. Mark a dimension TRUE only if the material genuinely supports it — take no one at their word.',
+    '- "gaps": an array (top-priority FIRST, at most 6) of the most valuable things to interview for now, each { "dimension": one of the scene keys OR "chapters"/"challenges"/"ideology"/"futureScript" OR a craft gap "scene"/"sensory"/"timeline", "label": a short human title for the gap, "focus": 1–2 warm sentences briefing the question to ask — open How/What/Why, invite sensory + bodily detail ("what did the kitchen smell like"), and end deeper ones with one meaning-probe ("why does this matter — what does it say about you?"). NEVER ask for something the material already answers. }.',
     'Return ONLY the JSON object — no prose, no markdown fences.',
   ].join('\n');
 }

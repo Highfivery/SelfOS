@@ -4111,6 +4111,38 @@ export interface StoryHomeSignal {
   signature: string;
 }
 
+/** How far along a story is (§3.6) — a QUALITATIVE stage + a subtle ratio (owner decision 2026-07-16: never a
+ *  bare %; a life isn't a percentage). Derived deterministically from the framework coverage (no AI). */
+export type StoryCompletenessStage = 'beginning' | 'takingShape' | 'comingTogether' | 'richlyTold';
+export interface StoryCompleteness {
+  stage: StoryCompletenessStage;
+  /** 0..1 across the 12 framework dimensions (8 McAdams scenes + life-chapters + challenges + ideology +
+   *  future-script) — drives a subtle progress bar, never shown as a number. */
+  ratio: number;
+  covered: number;
+  total: number;
+}
+
+/** One thing the book is missing (§3.7), from the AI gap pass — a McAdams/craft dimension not yet covered, with
+ *  a FOCUS brief the interview minter turns into a story check-in. Higher `priority` = ask sooner. */
+export interface StoryGap {
+  /** The coverage dimension this fills: a McAdams scene key, or `chapters`/`challenges`/`ideology`/`futureScript`,
+   *  or a craft dimension (`scene`/`sensory`/`timeline`). Free string — normalized against the framework host-side. */
+  dimension: string;
+  /** A short, human-readable label for the gap (the biographer's own words). */
+  label: string;
+  /** The FOCUS brief the check-in minter uses (`generateQuestions` FOCUS = this). */
+  focus: string;
+  priority: number;
+}
+
+/** The result of a gap pass (§3.7): the refreshed completeness + the prioritized gaps (top-first). Non-persisted
+ *  view — the coverage itself is persisted to `interview.enc`. */
+export interface StoryGapPassResult {
+  completeness: StoryCompleteness;
+  gaps: StoryGap[];
+}
+
 // --- Exclusions IPC (§3.3/§5.1) --------------------------------------------------------------------------
 
 /** `story:exclude` — add a "never write about this again" exclusion, scoped (§3.3). `value` by kind: topic/

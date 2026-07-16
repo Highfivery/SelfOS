@@ -7,6 +7,7 @@ import {
   ChapterMarkupSchema,
   ExclusionListSchema,
   LifeTimelineSchema,
+  StoryInterviewStateSchema,
   StoryProposalListSchema,
   StoryTodoListSchema,
   type BookChapter,
@@ -18,6 +19,7 @@ import {
   type ExclusionItem,
   type LifeTimeline,
   type StoryBookBundle,
+  type StoryInterviewState,
   type StoryProposalList,
   type StoryTodoList,
 } from '../schemas';
@@ -63,6 +65,9 @@ function todosPath(personId: string, bookId: string): string {
 }
 function proposalsPath(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/proposals.enc`;
+}
+function interviewPath(personId: string, bookId: string): string {
+  return `${bookDir(personId, bookId)}/interview.enc`;
 }
 
 // --- Manifest / book lifecycle ---------------------------------------------------------------------------
@@ -289,6 +294,41 @@ export async function saveProposals(
   list: StoryProposalList,
 ): Promise<void> {
   await writeEncryptedJson(fs, proposalsPath(personId, bookId), list, key);
+}
+
+// --- Interview state (the gap engine, §5.5) --------------------------------------------------------------
+
+const EMPTY_INTERVIEW: StoryInterviewState = {
+  schemaVersion: 1,
+  askedPrompts: [],
+  frameworkCoverage: {
+    chapters: false,
+    scenes: {},
+    challenges: false,
+    ideology: false,
+    futureScript: false,
+  },
+  photoAnswers: [],
+};
+
+export async function getInterviewState(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<StoryInterviewState> {
+  const raw = await readEncryptedJson(fs, interviewPath(personId, bookId), key);
+  return raw ? StoryInterviewStateSchema.parse(raw) : { ...EMPTY_INTERVIEW };
+}
+
+export async function saveInterviewState(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  state: StoryInterviewState,
+): Promise<void> {
+  await writeEncryptedJson(fs, interviewPath(personId, bookId), state, key);
 }
 
 // --- Chapters (draft head) -------------------------------------------------------------------------------

@@ -124,3 +124,28 @@
 .sourcesToggle:hover {
   color: var(--color-accent);
 }
+
+/* The completeness meter (§3.6) — a warm stage label + a quiet bar (never a bare percentage). */
+.completeness {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.meterTrack {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-surface-alt);
+  overflow: hidden;
+}
+
+.meterFill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-accent);
+  transition: width 0.3s ease;
+}

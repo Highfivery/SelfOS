@@ -14,6 +14,8 @@ import type {
   StoryFoundationsResult,
   StoryMarkPatch,
   StoryQuestionsResult,
+  StoryCompleteness,
+  StoryInterviewCadenceResult,
   StoryRefreshViewResult,
   StoryResolveProposalResult,
   StoryRevisionResult,
@@ -98,6 +100,15 @@ interface StoryState {
     proposalId: string,
     action: 'approve' | 'dismiss',
   ) => Promise<StoryResolveProposalResult>;
+  /** How far along the book is (§3.6) — a qualitative stage + subtle ratio, from the stored coverage. */
+  completeness: StoryCompleteness | null;
+  loadCompleteness: (bookId: string) => Promise<void>;
+  /** The autonomous interview cadence (§3.7): gap-pass + mint ≤1 story check-in. `auto` = the throttled
+   *  launch/focus cadence; omit for a manual "find what's missing". Refreshes completeness on a real pass. */
+  runInterviewCheck: (
+    bookId: string,
+    opts?: { auto?: boolean },
+  ) => Promise<StoryInterviewCadenceResult>;
   update: (bookId: string, patch: { title?: string; config?: BookConfig }) => Promise<void>;
   remove: (bookId: string) => Promise<void>;
   clearBundle: () => void;
@@ -134,6 +145,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   todos: [],
   exclusions: [],
   proposals: [],
+  completeness: null,
   loaded: false,
   generating: false,
   chaptersGenerating: false,
@@ -322,6 +334,18 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     set({ proposals: res.proposals, ...(res.bundle ? { bundle: res.bundle } : {}) });
     return res;
   },
+  loadCompleteness: async (bookId) => {
+    const completeness = (await window.selfos?.storyCompleteness({ bookId })) ?? null;
+    set({ completeness });
+  },
+  runInterviewCheck: async (bookId, opts) => {
+    const res = (await window.selfos?.storyInterviewCheck({ bookId, ...(opts ?? {}) })) ?? {
+      outcome: 'noBook' as const,
+    };
+    // A run that actually gap-passed refreshed the coverage — adopt the new completeness.
+    if (res.completeness) set({ completeness: res.completeness });
+    return res;
+  },
   update: async (bookId, patch) => {
     await window.selfos?.storyUpdate({ bookId, ...patch });
     await get().open(bookId);
@@ -342,6 +366,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       todos: [],
       exclusions: [],
       proposals: [],
+      completeness: null,
       loaded: false,
       generating: false,
       chaptersGenerating: false,

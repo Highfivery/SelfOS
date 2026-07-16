@@ -16,12 +16,15 @@ import {
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryStore } from '../../../stores/storyStore';
 import { useStoryRefresh } from '../../notifications/useStoryRefresh';
+import { useStoryInterview } from '../../notifications/useStoryInterview';
 import type {
   BookConfig,
   BookOutline,
   ChapterMarkup,
   CommentIntent,
   StoryBookBundle,
+  StoryCompleteness,
+  StoryCompletenessStage,
   StructuralProposal,
   TextAnchor,
 } from '@shared/schemas';
@@ -76,6 +79,9 @@ export function Story(): JSX.Element {
   // The automatic living-book refresh cadence (§3.4) — nudges the bridge (daily-throttled + capped) for the
   // open book if its autoRefresh is on. Silent: it just re-stamps stale badges / weaves in new material.
   useStoryRefresh(bundle?.manifest.id ?? null, bundle?.manifest.config.autoRefresh ?? false);
+  // The autonomous interview cadence (§3.7) — nudges the bridge (7-day-throttled + capped + ≤1 open) to gap-pass
+  // the book + mint a story check-in when warranted. Silent: check-ins land gently in the Inbox.
+  useStoryInterview(bundle?.manifest.id ?? null, bundle?.manifest.config.autoRefresh ?? false);
 
   useEffect(() => {
     void load();
@@ -483,10 +489,14 @@ function BookOverview({
   const proposals = useStoryStore((s) => s.proposals);
   const loadProposals = useStoryStore((s) => s.loadProposals);
   const resolveProposal = useStoryStore((s) => s.resolveProposal);
+  const completeness = useStoryStore((s) => s.completeness);
+  const loadCompleteness = useStoryStore((s) => s.loadCompleteness);
+  const runInterviewCheck = useStoryStore((s) => s.runInterviewCheck);
   const busy = useStoryStore((s) => s.chaptersGenerating);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
+  const [interviewBusy, setInterviewBusy] = useState(false);
   const { manifest, outline, chapters } = bundle;
   const bookId = manifest.id;
 
@@ -494,7 +504,8 @@ function BookOverview({
     void loadExclusions(bookId);
     void loadTodos(bookId);
     void loadProposals(bookId);
-  }, [bookId, loadExclusions, loadTodos, loadProposals]);
+    void loadCompleteness(bookId);
+  }, [bookId, loadExclusions, loadTodos, loadProposals, loadCompleteness]);
 
   const openTodos = todos.filter((t) => t.status === 'open' || t.status === 'questionsSent');
 
@@ -516,6 +527,8 @@ function BookOverview({
           <Markdown>{manifest.essence}</Markdown>
         </Card>
       ) : null}
+
+      {completeness && chapters.length > 0 ? <CompletenessMeter c={completeness} /> : null}
 
       {error ? <Banner tone="danger">{error}</Banner> : null}
       {refreshNotice ? <Banner tone="info">{refreshNotice}</Banner> : null}
@@ -547,6 +560,31 @@ function BookOverview({
             }}
           >
             {busy ? 'Checking…' : 'Refresh from what’s new'}
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={interviewBusy}
+            onClick={async () => {
+              setError(null);
+              setRefreshNotice(null);
+              setInterviewBusy(true);
+              try {
+                const res = await runInterviewCheck(manifest.id);
+                setRefreshNotice(
+                  res.outcome === 'minted'
+                    ? 'Your biographer sent a few questions to your Inbox to fill a gap.'
+                    : res.outcome === 'openCheckin'
+                      ? 'You already have questions from your biographer waiting in your Inbox.'
+                      : res.outcome === 'noGaps'
+                        ? 'Nothing new to ask right now — your story is well covered.'
+                        : 'No new questions right now — check back later.',
+                );
+              } finally {
+                setInterviewBusy(false);
+              }
+            }}
+          >
+            {interviewBusy ? 'Looking…' : 'Find what’s missing'}
           </Button>
         </Inline>
       ) : null}
@@ -736,6 +774,42 @@ function BookOverview({
         )}
       </Inline>
     </Stack>
+  );
+}
+
+/** The completeness stage → a warm label (§3.6, owner decision: a qualitative stage + a subtle bar, never a %). */
+const COMPLETENESS_STAGE: Record<StoryCompletenessStage, string> = {
+  beginning: 'Just beginning',
+  takingShape: 'Taking shape',
+  comingTogether: 'Coming together',
+  richlyTold: 'Richly told',
+};
+
+/** How far along the story is — a warm stage label + a quiet progress bar (never a bare percentage). */
+function CompletenessMeter({ c }: { c: StoryCompleteness }): JSX.Element {
+  const label = COMPLETENESS_STAGE[c.stage];
+  const pct = Math.round(c.ratio * 100);
+  return (
+    <div className={styles.completeness}>
+      <Inline justify="space-between">
+        <Text size="sm" className={styles.rowTitle}>
+          Your story so far
+        </Text>
+        <Text size="sm" tone="secondary">
+          {label}
+        </Text>
+      </Inline>
+      <div
+        className={styles.meterTrack}
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+        aria-label={`Your story is ${label.toLowerCase()}`}
+      >
+        <div className={styles.meterFill} style={{ width: `${Math.max(4, pct)}%` }} />
+      </div>
+    </div>
   );
 }
 

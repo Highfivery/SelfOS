@@ -729,6 +729,56 @@ describe('Story (64)', () => {
     expect(await screen.findByText(/1 suggested change to review below/)).toBeInTheDocument();
   });
 
+  it('shows the completeness meter as a warm stage + a bar, never a percentage (§3.6)', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyCompleteness: () =>
+        Promise.resolve({ stage: 'takingShape' as const, ratio: 0.33, covered: 4, total: 12 }),
+    });
+    renderStory();
+    expect(await screen.findByText('Taking shape')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toBeInTheDocument();
+    expect(screen.queryByText(/%/)).toBeNull(); // never a bare percentage (owner decision)
+  });
+
+  it('runs a manual gap check + reports a minted check-in', async () => {
+    const storyInterviewCheck = vi.fn(() =>
+      Promise.resolve({
+        outcome: 'minted' as const,
+        assignmentId: 'a1',
+        completeness: { stage: 'takingShape' as const, ratio: 0.25, covered: 3, total: 12 },
+      }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyInterviewCheck,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Find what’s missing' }));
+    // Manual = the plain `{ bookId }` call (no `auto` flag).
+    expect(storyInterviewCheck).toHaveBeenCalledWith({ bookId: 'b1' });
+    expect(await screen.findByText(/sent a few questions to your Inbox/i)).toBeInTheDocument();
+  });
+
+  it('the interview cadence fires storyInterviewCheck({auto:true}) on mount', async () => {
+    const storyInterviewCheck = vi.fn(() => Promise.resolve({ outcome: 'throttled' as const }));
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyInterviewCheck,
+    });
+    useSessionStore.setState({ activePerson: ACTIVE_PERSON });
+    renderStory();
+    await waitFor(() =>
+      expect(storyInterviewCheck).toHaveBeenCalledWith(expect.objectContaining({ auto: true })),
+    );
+  });
+
   it('lists to-dos on the overview and marks a reminder done', async () => {
     const storyUpdateMark = vi.fn(
       (): Promise<ChapterMarkup> =>

@@ -113,29 +113,65 @@ projections), 20/44/62 (Memory, flag-inaccurate loop).
   ~64% told" — §5.6), parts/chapters list with per-chapter status chips (Generating · New · Stale ·
   Reviewed), pending structural proposals, pending interview nudges, and actions (Refresh now ·
   Share & readers · Export).
-- Opening a chapter shows **rendered prose** (book renderer, §5.9) with per-paragraph affordances
-  (hover/tap):
-  - **Sources** — a popover listing the paragraph's provenance (e.g. "From your onboarding — Your
-    story · From the session on May 12") with deep links to the source surface (Memory insight,
-    session, dream), the spec-20 provenance pattern.
-  - **Comment** — anchored feedback ("this is overstated", "my sister wasn't there — it was my
-    cousin"). Comments queue per chapter; **"Apply feedback"** runs one revision call that
-    addresses open comments and marks them applied. A comment can also flow to Memory: "this fact
-    is wrong" offers the existing flag-inaccurate action on the underlying insight, fixing the
-    book AND the memory.
-  - **Edit text** — direct editing of a passage (Textarea in place). User-edited passages become
-    **protected blocks**: later rewrites must preserve them verbatim (code-enforced, §5.4 — not
-    just prompted).
-  - **Pin quote** — mark a sentence as untouchable "in your own words" material (rendered as a
-    pull-quote; never paraphrased by rewrites).
-  - **Exclude** — remove a passage, and choose scope: _this passage_ · _this topic_ · _this
-    person_ · _this source_. Writes a durable `ExclusionItem`; the passage disappears, the chapter
-    is queued for a seam-smoothing revision, and every future generation filters the exclusion at
-    the **corpus level** (§5.2) so it can never be reintroduced. An **Exclusions panel** on the
-    book overview lists and un-excludes items.
-- **Chapter review**: a chapter freshly generated or auto-rewritten is status **New/Updated** with
-  a diff-oriented affordance ("what changed"); **"Looks good"** marks it Reviewed. Only Reviewed
-  content can be published (§3.5).
+- Opening a chapter shows **rendered prose** (book renderer, §5.9). Marking it up is
+  **selection-based**: highlighting any span (word → paragraph) raises a contextual toolbar
+  (Delete · Edit · Comment · To-do · Pin · Exclude · Sources). A per-paragraph affordance handle
+  also opens the same toolbar for touch/keyboard users (a highlight isn't required — the toolbar is
+  reachable from a focusable paragraph menu). The marks a person places form a visible
+  **suggestion layer** over the chapter (deletions struck through, comments/to-dos anchored in the
+  margin); they are reviewed and applied together (§3.3.1), not one AI call per action.
+  - **Delete** — mark a span to cut. Struck through in place, pending until applied; the applying
+    revision removes it and smooths the seam. (One-time, chapter-local — distinct from Exclude.)
+  - **Edit** — replace a span with the person's own words (inline Textarea). Applies **instantly,
+    no AI** (it's their text), and the edited span becomes a **protected block** later rewrites
+    must preserve verbatim (code-enforced, §5.4).
+  - **Comment** — anchored feedback carrying an **intent**: _Add context_ ("the lathe was my
+    grandfather's — mention it's three generations old"), _Fix this_ ("my sister wasn't there — it
+    was my cousin"), or _Question_ ("why did you frame it this way?"). A _Fix this_ comment on a
+    provenance-linked fact also offers the existing **flag-inaccurate** action on the underlying
+    insight — fixing the book **and** Memory (specs 20/44).
+  - **To-do** — a tracked task anchored to the span/chapter (§3.3.2).
+  - **Pin** — mark a sentence untouchable "in your own words" (rendered as a pull-quote; applies
+    instantly, never paraphrased by any rewrite).
+  - **Exclude** — the durable "never write about this again" action, scoped: _this passage_ ·
+    _this topic_ · _this person_ · _this source_. Writes an `ExclusionItem`; the passage disappears
+    and every future generation filters it at the **corpus level** (§5.2) so it can't be
+    reintroduced. An **Exclusions panel** on the overview lists and un-excludes items. (Delete cuts
+    _here_; Exclude bars _everywhere_.)
+  - **Sources** — a popover of the span's provenance with deep links to each source surface (Memory
+    insight, session, dream, intake answer, photo), the spec-20 provenance pattern.
+
+#### 3.3.1 Review & apply (batch — owner decision, 2026-07-15)
+
+- Pending marks accumulate; the chapter shows a **"N changes ready to apply"** bar (e.g. "1 cut · 1
+  comment · 1 to-do"). **Apply changes** runs **one** metered revision (`story.chapter`, §5.3) that
+  honors every pending delete + comment (and any to-dos marked "hand to biographer") and smooths
+  seams — respecting protected edits, pinned quotes, and exclusions. Pending marks become
+  _applied_; the chapter goes to status **Updated** for review.
+- Instant, no-AI marks (inline **Edit**, **Pin**, **Exclude**) take effect immediately and don't
+  wait for a batch — but Exclude also queues the chapter for a smoothing pass folded into the next
+  Apply/refresh. **Review** previews the pending set before applying; individual marks are
+  undoable before Apply.
+- **Chapter review**: a freshly generated or auto-rewritten chapter is status **New/Updated** with
+  a "what changed" affordance; **"Looks good"** marks it **Reviewed**. Only Reviewed content
+  publishes (§3.5).
+
+#### 3.3.2 To-dos (owner decision, 2026-07-15)
+
+A to-do is a tracked note that carries **which kind** it is, with three actions:
+
+- **Remind me** — a personal checklist item the AI never touches ("upload the photo of Dad's
+  shop"); the person checks it off themselves.
+- **Ask my biographer** — an instruction folded into the next Apply/refresh revision ("go deeper on
+  the winter he got sick — this chapter skips it").
+- **Turn into questions** — hands the to-do to the **interview engine** (§5.5): mints a targeted
+  story check-in (FOCUS = the to-do text) through the existing generate + de-dup pipeline to gather
+  the missing details / go deeper / fill the gap. Answers flow back through the normal analysis →
+  insight → corpus loop and (typically) stale the chapter, which then weaves them in.
+
+To-dos render inline where placed **and** collect in a book-level **"To do"** list on the overview,
+so nothing is lost across chapters. Each shows its kind and its status (open / done / questions
+sent).
 
 ### 3.4 The living book (hybrid auto)
 
@@ -243,7 +279,8 @@ people/<personId>/story/books/<bookId>/
   chapters/<chapterId>.enc BookChapter          (draft head)
   published/<chapterId>.enc BookChapter snapshot (published head)
   published/manifest.enc   PublishedManifest    (publishedAt, chapter list + order, coverImageId)
-  comments/<commentId>.enc DraftComment
+  markup/<chapterId>.enc   ChapterMarkup        (the suggestion layer: comments, deletes, to-dos)
+  todos.enc                StoryTodoList        (book-level roll-up of every to-do)
   exclusions.enc           ExclusionList
   interview.enc            StoryInterviewState
   images/index.enc         StoryImageIndex
@@ -264,14 +301,32 @@ label, sourceRef?: StorySourceRef, userEdited: boolean }] }` — user-editable; 
   spine.
 - **`BookChapterSchema`** — `{ schemaVersion:1, id, partId, order, title, markdown, revision:
 number, status: 'generating'|'new'|'stale'|'reviewed', sourceSignature: string, provenance:
-[{ anchor: paragraphId, refs: StorySourceRef[] }], protectedBlocks: [{ anchor, text }],
-pinnedQuotes: [{ anchor, text, sourceRef? }], imagePlacements: [{ imageId, afterAnchor,
+[{ anchor: paragraphId, refs: StorySourceRef[] }], protectedBlocks: [{ anchor: TextAnchor, text }],
+pinnedQuotes: [{ anchor: TextAnchor, text, sourceRef? }], imagePlacements: [{ imageId, afterAnchor,
 caption }], lastGeneratedAt, lastReviewedAt? }`.
+- **`TextAnchorSchema`** — the shared span pointer that survives light re-flow: `{ paragraphId,
+quote?: string (the exact selected text), prefix?: string, suffix?: string }` — resolved against
+  the live markdown by exact-then-fuzzy match (the standard text-quote-anchor approach).
+  Paragraph-level marks omit `quote`. An anchor that no longer resolves after a rewrite is surfaced
+  as **orphaned** (never silently dropped, never silently reapplied).
 - **`StorySourceRefSchema`** — a discriminated pointer reusing existing provenance vocabulary:
   `{ kind: 'insight'|'intakeAnswer'|'response'|'dream'|'test'|'goal'|'challenge'|'together'|
 'timeline'|'photo', id, at? }` (deep-linkable; the Insight-provenance pattern).
-- **`DraftCommentSchema`** — `{ schemaVersion:1, id, chapterId, anchor, text, status:
-'open'|'applied'|'dismissed', createdAt, appliedRevision? }`.
+- **`ChapterMarkupSchema`** — the per-chapter suggestion layer: `{ schemaVersion:1, chapterId,
+marks: MarkupMark[] }`. **`MarkupMarkSchema`** (discriminated on `kind`):
+  - `comment` — `{ id, kind:'comment', anchor: TextAnchor, intent:
+'addContext'|'fix'|'question', text, status: 'open'|'applied'|'dismissed', createdAt,
+appliedRevision?, flagInsightId? (a 'fix' may drive the Memory flag-inaccurate hand-off) }`.
+  - `delete` — `{ id, kind:'delete', anchor: TextAnchor, status: 'pending'|'applied'|'undone',
+createdAt, appliedRevision? }`.
+  - `todo` — `{ id, kind:'todo', anchor?: TextAnchor, text, todoKind:
+'remind'|'ask'|'questions', status: 'open'|'done'|'questionsSent'|'applied', assignmentId?, createdAt }`.
+  - Instant/no-AI marks (`edit`→`protectedBlocks`, `pin`→`pinnedQuotes`) live on the chapter, not
+    the markup layer, because they apply immediately; the markup layer holds only the pending batch
+    (deletes, comments, ask/questions to-dos) plus personal `remind` to-dos.
+- **`StoryTodoListSchema`** — `{ schemaVersion:1, todos: [{ id, chapterId, kind, text, status,
+createdAt }] }` — a denormalized book-level roll-up (source of truth stays each chapter's markup)
+  so the overview "To do" list needs one read, not N.
 - **`ExclusionListSchema`** — `{ schemaVersion:1, items: [{ id, kind:
 'passage'|'topic'|'person'|'source', value: string (topic text / personId / StorySourceRef /
 passage fingerprint), note?, createdAt }] }`.
@@ -346,11 +401,20 @@ as a **queue of independent bounded calls** (each metered, each budget-gated, re
   `extendedThinking:false`). The model emits per-paragraph source markers
   (`[[SRC:ref,ref]]`) which are **stripped from the stored markdown** and captured into
   `chapter.provenance` (the stripCoachMarkers pattern — markers never render).
-- `reviseChapter(chapterId, {comments|instruction, range?})` → targeted revision
-  (`story.chapter`, smaller budget); marks comments applied.
-- **Protected-block enforcement is code, not prompt**: after any (re)generation, protected blocks
-  and pinned quotes are verified present byte-verbatim; a violating draft has the blocks
-  re-inserted at their anchors (deterministic splice) before save.
+- `applyMarkup(chapterId)` → **the batch revision** (§3.3.1): reads the chapter's pending markup
+  (deletes + comments + `ask`/`questions` to-dos) and runs **one** `story.chapter` revision whose
+  user message carries the current markdown + each pending mark rendered as an instruction (a
+  `delete` → "cut this span: «quote»"; an `addContext` comment → "weave in: «text» near «quote»"; a
+  `fix` → "correct: «text»"; an `ask` to-do → "«text»"). Protected blocks, pinned quotes, and
+  exclusions are enforced (below). On success, every included mark → `applied` (stamped with the new
+  `revision`); the chapter → `updated`. Deterministic marks (inline edit, pin, exclude) are already
+  in the chapter before this runs. A `questions` to-do does **not** go to this call — it routes to
+  §5.5.
+- **Protected-block enforcement is code, not prompt**: after any (re)generation or `applyMarkup`,
+  protected blocks and pinned quotes are verified present byte-verbatim; a violating draft has the
+  blocks re-inserted at their anchors (deterministic splice) before save. `TextAnchor`s are
+  re-resolved after every rewrite; a mark whose anchor no longer resolves is left **orphaned** for
+  the person to re-place — never silently dropped or reapplied to the wrong span.
 - **Queue semantics**: chapters generate sequentially; `BUDGET` stops the queue cleanly (state
   `generating` persists; the cadence hook resumes next period) — the spec-63 `budgetHit` pattern.
 - Meter-before-parse everywhere; failures surface honestly (TRUNCATED/MALFORMED/REFUSED — 37).
@@ -371,6 +435,13 @@ book's `askedPrompts`) + `createAssignment` (in-app self-send, `storyProvenance`
 analysis + question generation. Completeness meter = deterministic coverage % over the framework
 map + chapter thinness (no AI).
 
+**To-do → questions** (§3.3.2): a `questions` to-do calls the same minting path with **FOCUS = the
+to-do text** (e.g. "the winter Dad got sick"), producing a targeted check-in rather than a
+framework-gap one; the to-do goes `questionsSent` and stores the `assignmentId`, so its status can
+reflect when the answers land (and it auto-closes once the resulting insight reaches the corpus).
+This is the one bridge from the markup layer into the interview engine — no new generation code, a
+different FOCUS.
+
 ### 5.6 IPC seam, capability, settings, usage types
 
 - Capability **`story.own`** (Member ON; label "Your Story"). No new EXPLICIT_GRANT_ONLY caps.
@@ -379,9 +450,12 @@ map + chapter thinness (no AI).
 - Settings: none global in v1 — per-book config lives on the manifest (autoRefresh, voice, style).
 - Channels (all gated `story.own` + active-person-scoped in the bridge; Zod-validated; keys stay
   host-side): `story:list`, `story:create`, `story:get` (manifest+outline+chapters meta),
-  `story:getChapter`, `story:approveOutline`, `story:updateOutline`, `story:generate` (foundations
-  | chapter | all-stale), `story:reviewChapter`, `story:editPassage`, `story:pinQuote`,
-  `story:comment` / `story:applyComments`, `story:exclude` / `story:unexclude`,
+  `story:getChapter` (+ its markup layer), `story:approveOutline`, `story:updateOutline`,
+  `story:generate` (foundations | chapter | all-stale), `story:reviewChapter`, `story:editPassage`
+  (instant, → protected block), `story:pinQuote`, `story:mark` / `story:updateMark` /
+  `story:removeMark` (add/edit/undo a comment · delete · to-do in the markup layer),
+  `story:applyMarkup` (the batch revision), `story:todos` (book-level roll-up) /
+  `story:todoToQuestions` (§5.5), `story:exclude` / `story:unexclude`,
   `story:proposals` / `story:resolveProposal`, `story:refreshCheck` (cadence),
   `story:interviewRun`, `story:photoUpload` / `story:photoAnswer`, `story:generateCover` /
   `story:illustrate`, `story:getImage`, `story:share` / `story:revokeShare`,
@@ -421,9 +495,11 @@ corpus like any session. Household contributions; editions. Each is additive.
   store + the creation flow + foundations pass + outline review UI.
 - **B — Chapters**: the generation orchestrator + provenance capture + the draft reading view
   (source popovers, deep links) + "Refresh now" + honest failure states.
-- **C — Collaboration**: comments → apply-with-AI; direct edits + protected blocks (code-enforced);
-  exclusions (all four scopes) + seam-smoothing revision; pinned quotes; the flag-to-Memory
-  hand-off.
+- **C — Collaboration (the markup layer)**: selection toolbar + text anchors; the suggestion layer
+  (delete · comment-with-intent · to-do) + the batch **Review & apply** revision; instant inline
+  edits → protected blocks (code-enforced) + pins; exclusions (all four scopes); the book-level "To
+  do" list + the to-do→questions bridge; the flag-to-Memory hand-off. (This is the largest v1 slice
+  — may sub-slice C1 markup/apply, C2 to-dos + exclusions.)
 - **D — Living book**: source signatures + the cadence hook + weekly-capped auto-rewrites +
   structural proposals + the Home recommendation provider.
 - **E — Interviews**: the gap pass + story check-ins through the questionnaire pipeline (Inbox
@@ -524,7 +600,12 @@ respected on progress/transition affordances; contrast per tokens (01).
   staleness truth table; protected-block/pinned-quote enforcement (model output that mangles them
   is corrected deterministically); provenance-marker strip + capture; queue resume after BUDGET;
   weekly cap; publish snapshot isolation (draft edits after publish don't leak); gap pass never
-  re-asks (dedup against askedPrompts + corpus); tolerant parses (imperfect fakes).
+  re-asks (dedup against askedPrompts + corpus); tolerant parses (imperfect fakes). **Markup layer**:
+  `TextAnchor` resolve (exact + fuzzy + orphan-on-miss, never mis-reapply); `applyMarkup` batches
+  all pending marks into ONE revision (call count = 1) honoring deletes/comments/ask-to-dos while
+  preserving protected/pinned spans; instant edit/pin/exclude bypass the batch; a `questions` to-do
+  routes to the interview minter (not `applyMarkup`) with FOCUS = the to-do text; the to-do
+  book-roll-up stays consistent with per-chapter markup.
 - **Bridge (two-persona, decrypt-level)**: reader sees published head only — never draft, never
   unpublished revisions; revoke re-gates at read; non-reader denied; grants survive/reap on
   person-delete; export produces plaintext markdown OUTSIDE the vault while chapters at rest stay
@@ -534,13 +615,16 @@ respected on progress/transition affordances; contrast per tokens (01).
 - **E2E (Playwright, offline fakes — new fake-Claude branches keyed on unique prompt markers for
   outline/chapter/revise/interview, deliberately imperfect; `SELFOS_FAKE_IMAGE`;
   `SELFOS_FAKE_SAVE_DIR`)**: the crown jewel — seed a rich persona → create book → approve outline
-  → chapters generate → provenance deep-link opens the source → comment → apply → exclude a topic
-  → regenerate (excluded content stays gone — decrypt-level assert) → publish → grant reader →
-  switch persona → reader sees published book but NOT a post-publish draft edit → revoke → denied
-  → export .md + PDF (files exist outside vault; .md contains the chapter text; vault chapter
-  still encrypted). Plus: photo upload → vision questions → answer → caption renders; crisis seed
-  suppresses generation; 360px overflow guards + full-surface-renders-to-bottom on draft AND
-  reader; the §7 whole-flow coherence walk.
+  → chapters generate → provenance deep-link opens the source → **select a span → mark delete +
+  add-context comment + a to-do** → Review & apply (one revision: the deleted span is gone, the
+  context woven in — decrypt-level assert) → inline-edit a span → it's a protected block a later
+  refresh leaves verbatim → exclude a topic → regenerate (excluded content stays gone) → a
+  `questions` to-do mints an Inbox check-in → publish → grant reader → switch persona → reader sees
+  published book but NOT a post-publish draft edit → revoke → denied → export .md + PDF (files exist
+  outside vault; .md contains the chapter text; vault chapter still encrypted). Plus: photo upload →
+  vision questions → answer → caption renders; crisis seed suppresses generation; 360px overflow
+  guards + full-surface-renders-to-bottom on draft (incl. the markup margin collapsing inline at
+  phone width) AND reader; the §7 whole-flow coherence walk.
 
 ## 11. Open questions
 
@@ -569,3 +653,12 @@ respected on progress/transition affordances; contrast per tokens (01).
   competitor research: StoryWorth/Remento/Autobiographer et al.; craft research: Caro, Isaacson,
   Karr, Gornick, Lee, Lopate, McAdams Life Story Interview, StoryCorps/Smithsonian oral-history
   practice).
+- 2026-07-15 — Draft view upgraded to a **selection-based markup layer** after mockup review (two
+  further owner decisions): highlight any span → contextual toolbar (Delete · Edit · Comment ·
+  To-do · Pin · Exclude · Sources); marks accumulate as a visible **suggestion layer** applied
+  together via one **Review & apply** revision (inline edits + pins + excludes are instant/no-AI);
+  comments carry an intent (Add context / Fix this / Question); **to-dos** carry a kind (Remind me /
+  Ask my biographer / Turn into questions), collect in a book-level "To do" list, and the
+  "Turn into questions" kind bridges into the interview engine (FOCUS = the to-do). Added
+  `ChapterMarkup`/`MarkupMark`/`TextAnchor`/`StoryTodoList` schemas, the `story:mark`/`applyMarkup`/
+  `todoToQuestions` channels, and the §3.3.1/§3.3.2 flows.

@@ -3882,6 +3882,37 @@ export const StoryImageIndexSchema = z.object({
 });
 export type StoryImageIndex = z.infer<typeof StoryImageIndexSchema>;
 
+/**
+ * The result of generating (or regenerating) a Your Story image — a cover or a chapter illustration (§3.8).
+ * Mirrors `DreamImageGenerateResult`: on success the bytes are encrypted under `images/<id>.enc` and the
+ * metadata indexed; the caller fetches the bytes separately (the distilled prompt never travels back).
+ * `promptUsage` is the Claude distillation charge (`story.imagePrompt`); `imageUsage` the flat OpenAI charge
+ * (`story.image`) — present only when the provider was actually billed. A `REFUSED` (content-policy decline)
+ * is uncharged and carries no `imageUsage` (the distillation, if it ran + billed, still does).
+ */
+export type StoryImageGenerateResult =
+  | { ok: true; image: StoryImageEntry; promptUsage: UsageEvent; imageUsage: UsageEvent }
+  | {
+      ok: false;
+      reason: 'NO_CONSENT' | 'NO_KEY' | 'BUDGET' | 'REFUSED' | 'ERROR';
+      message: string;
+      promptUsage?: UsageEvent;
+      imageUsage?: UsageEvent;
+    };
+
+/**
+ * The slim IPC result the renderer sees for `story:generateImage` — the usage events stay host-side (the
+ * dream-image precedent); the renderer fetches the bytes separately. `costUsd` is present only for admins
+ * (`budgets.manage`), combining the flat image charge + the small distillation charge.
+ */
+export type StoryImageResult =
+  | { ok: true; image: StoryImageEntry; costUsd?: number }
+  | {
+      ok: false;
+      reason: 'NO_CONSENT' | 'NO_KEY' | 'BUDGET' | 'REFUSED' | 'ERROR';
+      message: string;
+    };
+
 /** A structural change the freshness engine proposes but never applies silently (§3.4) — the spec-20
  *  merge-proposal pattern: a human-readable rationale that waits for one-tap approval. Each kind carries the
  *  structured change the apply step needs. `status: dismissed` is kept (not deleted) so a rejected idea isn't
@@ -3992,6 +4023,26 @@ export type StoryCreateInput = z.infer<typeof StoryCreateInputSchema>;
 /** A bare book reference (get / generate / delete). */
 export const StoryBookRefSchema = z.object({ bookId: z.string().min(1) });
 export type StoryBookRef = z.infer<typeof StoryBookRefSchema>;
+
+/** `story:generateImage` — cover or a chapter's illustration, with an optional per-image style override. */
+export const StoryImageTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('cover') }),
+  z.object({ kind: z.literal('illustration'), chapterId: z.string().min(1) }),
+]);
+export type StoryImageTarget = z.infer<typeof StoryImageTargetSchema>;
+export const StoryGenerateImageInputSchema = z.object({
+  bookId: z.string().min(1),
+  target: StoryImageTargetSchema,
+  style: z.string().optional(),
+});
+export type StoryGenerateImageInput = z.infer<typeof StoryGenerateImageInputSchema>;
+
+/** `story:getImage` / `story:deleteImage` — a book image by id. */
+export const StoryImageRefSchema = z.object({
+  bookId: z.string().min(1),
+  imageId: z.string().min(1),
+});
+export type StoryImageRef = z.infer<typeof StoryImageRefSchema>;
 
 /** `story:saveOutline` / `story:approveOutline` — the (possibly edited) outline during review. */
 export const StoryOutlineInputSchema = z.object({

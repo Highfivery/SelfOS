@@ -168,6 +168,8 @@ import {
   StoryCreateInputSchema,
   StoryBookRefSchema,
   StoryChapterRefSchema,
+  StoryGenerateImageInputSchema,
+  StoryImageRefSchema,
   StoryEditPassageInputSchema,
   StoryExcludeInputSchema,
   StoryMarkInputSchema,
@@ -197,6 +199,8 @@ import {
   type StoryQuestionsResult,
   type StoryCompleteness,
   type StoryHomeSignal,
+  type StoryImageEntry,
+  type StoryImageResult,
   type StoryInterviewCadenceResult,
   type StoryPublishResult,
   type StoryReaderView,
@@ -400,8 +404,12 @@ import {
   buildPublishedHtml,
   buildPublishedMarkdown,
   computeStoryHomeSignal,
+  deleteStoryImage,
   exportFileStem,
+  generateStoryImage,
   getStoryCompleteness,
+  getStoryImage,
+  getStoryImageIndex,
   grantReader,
   listChapters,
   listReaders,
@@ -4792,6 +4800,73 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const pdf = await host.printToPdf(built.html);
       if (!pdf) return null; // a host that can't render PDF (web/iOS), or a render failure
       return host.saveImageFile(`${exportFileStem(built.title)}.pdf`, pdf, 'application/pdf');
+    },
+    // --- Images (§3.8, Phase H) — shares the ONE image consent + OpenAI key with dreams ---------------
+    storyImages: async (input): Promise<StoryImageEntry[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return (await getStoryImageIndex(ctx.fs, ctx.key, personId, bookId)).images;
+    },
+    storyGenerateImage: async (input): Promise<StoryImageResult> => {
+      const { bookId, target, style } = StoryGenerateImageInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      // Consent + image model + default style are the SAME vault settings as dream images (one switch,
+      // owner decision 2026-07-16). Both API keys are read host-side and never cross to the renderer.
+      const settings = await readVaultSettingsValues(ctx.fs);
+      const imageModel =
+        typeof settings['dreams.imageModel'] === 'string'
+          ? settings['dreams.imageModel']
+          : 'gpt-image-2';
+      const defaultStyle =
+        typeof settings['dreams.imageStyle'] === 'string'
+          ? settings['dreams.imageStyle']
+          : 'oil painting';
+      const result = await generateStoryImage({
+        fs: ctx.fs,
+        key: ctx.key,
+        claude: host.claude,
+        image: host.image,
+        anthropicApiKey: (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
+        openaiApiKey: (await resolveOpenAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
+        consent: settings['dreams.imageGenerationEnabled'] === true,
+        claudeModel: await host.activeModel(),
+        imageModel,
+        style: style ?? defaultStyle,
+        personId,
+        bookId,
+        target,
+        now: new Date(),
+      });
+      if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
+      // Cost ($) is admin-only (budgets.manage) — combines the flat image + the small distillation charge.
+      const showCost = await activePersonCan(ctx.fs, ctx.key, 'budgets.manage');
+      return {
+        ok: true,
+        image: result.image,
+        ...(showCost ? { costUsd: result.imageUsage.costUsd + result.promptUsage.costUsd } : {}),
+      };
+    },
+    storyGetImage: async (input): Promise<{ mime: string; dataBase64: string } | null> => {
+      const { bookId, imageId } = StoryImageRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const image = await getStoryImage(ctx.fs, ctx.key, personId, bookId, imageId);
+      return image ? { mime: image.mime, dataBase64: toBase64(image.bytes) } : null;
+    },
+    storyDeleteImage: async (input): Promise<void> => {
+      const { bookId, imageId } = StoryImageRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return;
+      await deleteStoryImage(ctx.fs, ctx.key, personId, bookId, imageId, new Date());
     },
     // The batch markup revision — the one AI call in the markup layer (§3.3.1/§5.3).
     storyApplyMarkup: async (input): Promise<StoryRevisionResult> => {

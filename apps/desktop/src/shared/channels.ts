@@ -24,6 +24,8 @@ import type {
   SharedBookSummary,
   StoryCompleteness,
   StoryHomeSignal,
+  StoryImageEntry,
+  StoryImageResult,
   StoryInterviewCadenceResult,
   StoryInterviewCheckInput,
   StoryPublishResult,
@@ -339,6 +341,10 @@ export const IpcChannels = {
   storyReadShared: 'story:readShared',
   storyExportMarkdown: 'story:exportMarkdown',
   storyExportPdf: 'story:exportPdf',
+  storyImages: 'story:images',
+  storyGenerateImage: 'story:generateImage',
+  storyGetImage: 'story:getImage',
+  storyDeleteImage: 'story:deleteImage',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -1131,6 +1137,22 @@ export interface SelfosBridge {
   /** Export the book's PUBLISHED head as a typeset PDF OUTSIDE the vault (§3.9) — Electron `printToPDF`. Returns
    *  the saved path, or null (not published, dialog cancelled, or a host that can't render PDF). Gated `story.own`. */
   storyExportPdf(input: { bookId: string }): Promise<string | null>;
+  /** The book's image index (cover + illustrations + uploads), metadata only. Gated `story.own`. */
+  storyImages(input: { bookId: string }): Promise<StoryImageEntry[]>;
+  /** Generate (or regenerate) a cover or chapter illustration via the spec-13 distill→render flow (§3.8).
+   *  Gated `story.own`; shares the one image consent (`dreams.imageGenerationEnabled`) + the OpenAI key. */
+  storyGenerateImage(input: {
+    bookId: string;
+    target: { kind: 'cover' } | { kind: 'illustration'; chapterId: string };
+    style?: string;
+  }): Promise<StoryImageResult>;
+  /** Decrypt one image's bytes (base64) for display; null if absent. Gated `story.own`. */
+  storyGetImage(input: {
+    bookId: string;
+    imageId: string;
+  }): Promise<{ mime: string; dataBase64: string } | null>;
+  /** Delete an image (bytes + index; clears the cover pointer if it was the cover). Gated `story.own`. */
+  storyDeleteImage(input: { bookId: string; imageId: string }): Promise<void>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

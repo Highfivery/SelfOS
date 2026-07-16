@@ -18,6 +18,9 @@ import type {
   BookReader,
   SharedBookSummary,
   StoryCompleteness,
+  StoryImageEntry,
+  StoryImageResult,
+  StoryImageTarget,
   StoryInterviewCadenceResult,
   StoryPublishResult,
   StoryReaderView,
@@ -128,6 +131,17 @@ interface StoryState {
   /** Export the published head as a Markdown file outside the vault (§3.9). Returns the saved path, or null. */
   exportMarkdown: (bookId: string) => Promise<string | null>;
   exportPdf: (bookId: string) => Promise<string | null>;
+  /** Images (§3.8) — cover + chapter illustrations. `imageUrls` caches decrypted data URLs by image id. */
+  images: StoryImageEntry[];
+  imageUrls: Record<string, string>;
+  loadImages: (bookId: string) => Promise<void>;
+  generateImage: (
+    bookId: string,
+    target: StoryImageTarget,
+    style?: string,
+  ) => Promise<StoryImageResult>;
+  getImageUrl: (bookId: string, imageId: string) => Promise<string | null>;
+  deleteImage: (bookId: string, imageId: string) => Promise<void>;
   /** Books shared WITH the active person (§3.5) — the "Shared with you" surface + the reader view. */
   sharedBooks: SharedBookSummary[];
   loadSharedBooks: () => Promise<void>;
@@ -171,6 +185,8 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   proposals: [],
   completeness: null,
   readers: [],
+  images: [],
+  imageUrls: {},
   sharedBooks: [],
   readerView: null,
   loaded: false,
@@ -402,6 +418,43 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     (await window.selfos?.storyReaderFeatured({ bookId, readerPersonId })) ?? false,
   exportMarkdown: async (bookId) => (await window.selfos?.storyExportMarkdown({ bookId })) ?? null,
   exportPdf: async (bookId) => (await window.selfos?.storyExportPdf({ bookId })) ?? null,
+  loadImages: async (bookId) => {
+    const images = (await window.selfos?.storyImages({ bookId })) ?? [];
+    set({ images });
+  },
+  generateImage: async (bookId, target, style) => {
+    const res = (await window.selfos?.storyGenerateImage({
+      bookId,
+      target,
+      ...(style ? { style } : {}),
+    })) ?? { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+    if (res.ok) {
+      // Refresh the index + the book (a cover updates the manifest's coverImageId), then cache the new bytes.
+      await get().loadImages(bookId);
+      await get().open(bookId);
+      await get().getImageUrl(bookId, res.image.id);
+    }
+    return res;
+  },
+  getImageUrl: async (bookId, imageId) => {
+    const cached = get().imageUrls[imageId];
+    if (cached) return cached;
+    const image = await window.selfos?.storyGetImage({ bookId, imageId });
+    if (!image) return null;
+    const url = `data:${image.mime};base64,${image.dataBase64}`;
+    set((s) => ({ imageUrls: { ...s.imageUrls, [imageId]: url } }));
+    return url;
+  },
+  deleteImage: async (bookId, imageId) => {
+    await window.selfos?.storyDeleteImage({ bookId, imageId });
+    await get().loadImages(bookId);
+    await get().open(bookId);
+    set((s) => {
+      const next = { ...s.imageUrls };
+      delete next[imageId];
+      return { imageUrls: next };
+    });
+  },
   loadSharedBooks: async () => {
     const sharedBooks = (await window.selfos?.storySharedBooks()) ?? [];
     set({ sharedBooks });
@@ -428,6 +481,8 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       proposals: [],
       completeness: null,
       readers: [],
+      images: [],
+      imageUrls: {},
       sharedBooks: [],
       readerView: null,
       loaded: false,

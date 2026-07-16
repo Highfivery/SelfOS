@@ -1,3 +1,4 @@
+import { decryptBytes, encryptBytes, isEncryptedEnvelope } from '../crypto';
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
 import {
@@ -8,6 +9,7 @@ import {
   ExclusionListSchema,
   LifeTimelineSchema,
   PublishedManifestSchema,
+  StoryImageIndexSchema,
   StoryInterviewStateSchema,
   StoryProposalListSchema,
   StoryTodoListSchema,
@@ -21,6 +23,7 @@ import {
   type LifeTimeline,
   type PublishedManifest,
   type StoryBookBundle,
+  type StoryImageIndex,
   type StoryInterviewState,
   type StoryProposalList,
   type StoryTodoList,
@@ -79,6 +82,15 @@ function proposalsPath(personId: string, bookId: string): string {
 }
 function interviewPath(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/interview.enc`;
+}
+function imagesDir(personId: string, bookId: string): string {
+  return `${bookDir(personId, bookId)}/images`;
+}
+function imageIndexPath(personId: string, bookId: string): string {
+  return `${imagesDir(personId, bookId)}/index.enc`;
+}
+function imageBytesPath(personId: string, bookId: string, imageId: string): string {
+  return `${imagesDir(personId, bookId)}/${imageId}.enc`;
 }
 
 // --- Manifest / book lifecycle ---------------------------------------------------------------------------
@@ -176,6 +188,22 @@ export async function updateBook(
   const updated: BookManifest = { ...existing, ...patch, updatedAt: now.toISOString() };
   await saveManifest(fs, key, updated);
   return updated;
+}
+
+/** Clear the book's cover pointer (deleting the optional field cleanly — `updateBook`'s patch can't express
+ *  "remove a field" under exactOptionalPropertyTypes). Used when the current cover image is deleted. */
+export async function clearBookCover(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  now: Date,
+): Promise<void> {
+  const existing = await getBook(fs, key, personId, bookId);
+  if (!existing?.coverImageId) return;
+  const updated: BookManifest = { ...existing, updatedAt: now.toISOString() };
+  delete updated.coverImageId;
+  await saveManifest(fs, key, updated);
 }
 
 /** Delete a book and every file under it (the whole folder). */
@@ -445,6 +473,80 @@ export async function prunePublishedChapters(
     if (!name.endsWith('.enc') || name === 'manifest.enc') continue;
     const id = name.slice(0, -'.enc'.length);
     if (!keepIds.has(id)) await fs.remove(`${publishedDir(personId, bookId)}/${name}`);
+  }
+}
+
+// --- Images (§3.8/§4.4) ----------------------------------------------------------------------------------
+
+/** The book's image index (metadata for cover / illustrations / uploads). Empty when the book has none. */
+export async function getStoryImageIndex(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<StoryImageIndex> {
+  const raw = await readEncryptedJson(fs, imageIndexPath(personId, bookId), key);
+  return raw ? StoryImageIndexSchema.parse(raw) : { schemaVersion: 1, images: [] };
+}
+
+export async function saveStoryImageIndex(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  index: StoryImageIndex,
+): Promise<void> {
+  await writeEncryptedJson(fs, imageIndexPath(personId, bookId), index, key);
+}
+
+/** Encrypt + store an image's bytes at `images/<imageId>.enc` (the `08` §13.2 `encryptBytes` envelope). */
+export async function saveStoryImageBytes(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  imageId: string,
+  bytes: Uint8Array,
+): Promise<void> {
+  const envelope = await encryptBytes(bytes, key);
+  await fs.writeAtomic(
+    imageBytesPath(personId, bookId, imageId),
+    new TextEncoder().encode(JSON.stringify(envelope)),
+  );
+}
+
+/** Read + decrypt an image's bytes; null if absent or unreadable. */
+export async function getStoryImageBytes(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  imageId: string,
+): Promise<Uint8Array | null> {
+  const raw = await fs.read(imageBytesPath(personId, bookId, imageId));
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(new TextDecoder().decode(raw));
+    if (!isEncryptedEnvelope(parsed)) return null;
+    return await decryptBytes(parsed, key);
+  } catch {
+    return null;
+  }
+}
+
+/** Remove an image's bytes AND its index entry (used by regenerate-cover cleanup + explicit delete). */
+export async function removeStoryImage(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  imageId: string,
+): Promise<void> {
+  await fs.remove(imageBytesPath(personId, bookId, imageId));
+  const index = await getStoryImageIndex(fs, key, personId, bookId);
+  const next = index.images.filter((img) => img.id !== imageId);
+  if (next.length !== index.images.length) {
+    await saveStoryImageIndex(fs, key, personId, bookId, { ...index, images: next });
   }
 }
 

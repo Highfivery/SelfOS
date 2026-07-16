@@ -20,6 +20,10 @@ import { useStoryStore } from '../../../stores/storyStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useStoryRefresh } from '../../notifications/useStoryRefresh';
 import { useStoryInterview } from '../../notifications/useStoryInterview';
+import { useSetting } from '../../../settings/useSetting';
+import { aiKeyResolved } from '../../aiAvailability';
+import { DEFAULT_IMAGE_STYLE, IMAGE_STYLE_PRESETS } from '../dreams/imageStyles';
+import { AdminOnlyBadge } from '../../../design-system/components';
 import type {
   BookConfig,
   BookOutline,
@@ -487,6 +491,148 @@ const CHAPTER_STATUS_LABEL: Record<string, string> = {
   reviewed: 'Reviewed',
 };
 
+/**
+ * The book cover (§3.8, Phase H). Reuses the spec-13 distill→render image flow behind the ONE shared image
+ * consent (`dreams.imageGenerationEnabled`) + the OpenAI key. A cover is symbolic — never a portrait of the
+ * subject (the service enforces name-free/no-likeness). When AI images aren't set up, a calm setup note
+ * appears instead of a button that could only fail — owner sees the Settings path, a member is pointed at
+ * the owner (41 §3.3). An existing cover always stays viewable/removable even if AI is later turned off.
+ */
+function CoverPanel({
+  bookId,
+  coverImageId,
+}: {
+  bookId: string;
+  coverImageId?: string;
+}): JSX.Element {
+  const isAdmin = useSessionStore((s) => s.can('budgets.manage'));
+  const canManageAi = useSessionStore((s) => s.can('settings.manage'));
+  const [consent] = useSetting('dreams.imageGenerationEnabled');
+  const [aiEnabled] = useSetting('ai.enabled');
+  const [defaultStyle] = useSetting('dreams.imageStyle');
+  const generateImage = useStoryStore((s) => s.generateImage);
+  const getImageUrl = useStoryStore((s) => s.getImageUrl);
+  const deleteImage = useStoryStore((s) => s.deleteImage);
+
+  const [style, setStyle] = useState<string>('');
+  const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const [hasKey, setHasKey] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cost, setCost] = useState<number | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+
+  useEffect(() => {
+    setError(null);
+    setConfirmRemove(false);
+    void (async () => {
+      const has = await aiKeyResolved('openai');
+      const url = coverImageId ? await getImageUrl(bookId, coverImageId) : null;
+      setHasKey(Boolean(has));
+      setCoverUrl(url);
+      setLoading(false);
+    })();
+  }, [bookId, coverImageId, getImageUrl]);
+
+  const ready = consent === true && aiEnabled !== false && hasKey;
+  const chosenStyle =
+    style || (typeof defaultStyle === 'string' && defaultStyle) || DEFAULT_IMAGE_STYLE;
+
+  const create = async (): Promise<void> => {
+    setBusy(true);
+    setError(null);
+    const res = await generateImage(bookId, { kind: 'cover' }, chosenStyle);
+    if (res.ok) {
+      const url = await getImageUrl(bookId, res.image.id);
+      setCoverUrl(url);
+      setCost(typeof res.costUsd === 'number' ? res.costUsd : null);
+    } else {
+      setError(res.message);
+    }
+    setBusy(false);
+  };
+
+  return (
+    <Card>
+      <Stack gap={2}>
+        <Heading level={2}>Cover</Heading>
+        {error ? <Banner tone="danger">{error}</Banner> : null}
+        {coverUrl ? (
+          <img className={styles.coverImage} src={coverUrl} alt={`Cover for this book`} />
+        ) : (
+          <Text tone="secondary" size="sm">
+            A symbolic cover for your story — evocative art, never a literal portrait.
+          </Text>
+        )}
+        {ready ? (
+          <Stack gap={2}>
+            <Field label="Style">
+              {(p) => (
+                <Select {...p} value={style} onChange={(e) => setStyle(e.target.value)}>
+                  <option value="">Default ({chosenStyle})</option>
+                  {IMAGE_STYLE_PRESETS.map((group) => (
+                    <optgroup key={group.label} label={group.label}>
+                      {group.options.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Inline>
+              <Button disabled={busy} onClick={create}>
+                {busy ? 'Creating…' : coverUrl ? 'Regenerate cover' : 'Create a cover'}
+              </Button>
+              {coverUrl && coverImageId ? (
+                confirmRemove ? (
+                  <Inline>
+                    <Button
+                      variant="danger"
+                      disabled={busy}
+                      onClick={async () => {
+                        setBusy(true);
+                        await deleteImage(bookId, coverImageId);
+                        setCoverUrl(null);
+                        setCost(null);
+                        setConfirmRemove(false);
+                        setBusy(false);
+                      }}
+                    >
+                      Remove cover
+                    </Button>
+                    <Button variant="ghost" onClick={() => setConfirmRemove(false)}>
+                      Keep
+                    </Button>
+                  </Inline>
+                ) : (
+                  <Button variant="ghost" onClick={() => setConfirmRemove(true)}>
+                    Remove
+                  </Button>
+                )
+              ) : null}
+              {isAdmin && cost !== null ? (
+                <Text tone="secondary" size="sm">
+                  <AdminOnlyBadge /> ~${cost.toFixed(3)}
+                </Text>
+              ) : null}
+            </Inline>
+          </Stack>
+        ) : loading ? null : (
+          <Text tone="secondary" size="sm">
+            {canManageAi
+              ? 'Turn on AI image generation and add your OpenAI key in Settings → Dreams to create a cover.'
+              : 'Ask the person who set up this household to turn on AI image generation.'}
+          </Text>
+        )}
+      </Stack>
+    </Card>
+  );
+}
+
 function BookOverview({
   bundle,
   onOpenChapter,
@@ -543,6 +689,13 @@ function BookOverview({
         <Card>
           <Markdown>{manifest.essence}</Markdown>
         </Card>
+      ) : null}
+
+      {chapters.length > 0 ? (
+        <CoverPanel
+          bookId={bookId}
+          {...(manifest.coverImageId ? { coverImageId: manifest.coverImageId } : {})}
+        />
       ) : null}
 
       {completeness && chapters.length > 0 ? <CompletenessMeter c={completeness} /> : null}

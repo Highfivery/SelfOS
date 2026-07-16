@@ -4,6 +4,7 @@ export * from './storyExclusionService';
 export * from './storyExport';
 export * from './storyFreshness';
 export * from './storyHome';
+export * from './storyImageService';
 export * from './storyPromptBuilder';
 export * from './storyPublish';
 export * from './storyGenerationService';

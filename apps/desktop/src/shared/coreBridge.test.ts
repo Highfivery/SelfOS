@@ -7191,4 +7191,50 @@ describe('createCoreBridge — Together (58) foundation', () => {
     // The test host's fake printToPdf echoes the rendered HTML length, so a non-trivial doc means we rendered.
     expect(new TextDecoder().decode(saved[0]!.bytes)).toContain('%PDF-fake');
   });
+
+  it('story: generates a cover behind the shared image consent + key, encrypted, then serves it (§3.8)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+
+    // Consent off → refused, nothing created.
+    const off = await bridge.storyGenerateImage({ bookId, target: { kind: 'cover' } });
+    expect(off.ok === false && off.reason).toBe('NO_CONSENT');
+    expect(await bridge.storyImages({ bookId })).toEqual([]);
+
+    // Turn on the ONE shared image consent + the OpenAI key → a cover generates + is indexed + served.
+    await bridge.setSetting({ key: 'dreams.imageGenerationEnabled', value: true, scope: 'vault' });
+    await bridge.secretSet({ id: OPENAI_API_KEY_ID, value: 'sk-openai' });
+    const made = await bridge.storyGenerateImage({ bookId, target: { kind: 'cover' } });
+    expect(made.ok).toBe(true);
+    if (!made.ok) throw new Error('generate failed');
+    expect(made.image.kind).toBe('cover');
+    // The owner is an admin → the cost figure is present.
+    expect(typeof made.costUsd).toBe('number');
+
+    const index = await bridge.storyImages({ bookId });
+    expect(index.map((i) => i.id)).toEqual([made.image.id]);
+    // The book's manifest now points at the cover.
+    expect((await bridge.storyGet({ bookId }))?.manifest.coverImageId).toBe(made.image.id);
+    // The bytes are served base64 (decrypted host-side); the pixels never travel through the generate result.
+    const served = await bridge.storyGetImage({ bookId, imageId: made.image.id });
+    expect(served?.mime).toBe('image/png');
+    expect(served?.dataBase64.length).toBeGreaterThan(0);
+
+    // Delete clears the cover pointer + the index.
+    await bridge.storyDeleteImage({ bookId, imageId: made.image.id });
+    expect(await bridge.storyImages({ bookId })).toEqual([]);
+    expect((await bridge.storyGet({ bookId }))?.manifest.coverImageId).toBeUndefined();
+  });
 });

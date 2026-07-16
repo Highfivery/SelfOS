@@ -15,7 +15,8 @@ import type {
 import { Story, buildAnchor, countApplicable } from './Story';
 import { useStoryStore } from '../../../stores/storyStore';
 import { useSessionStore } from '../../../stores/sessionStore';
-import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
+import { clearMockBridge, elevateToOwner, installMockBridge } from '../../../test-utils/bridge';
+import { useSettingsStore } from '../../../settings/settingsStore';
 
 const ACTIVE_PERSON = {
   id: 'me',
@@ -125,7 +126,15 @@ function renderStory(): void {
 afterEach(() => {
   clearMockBridge();
   useStoryStore.getState().reset();
-  useSessionStore.setState({ activePerson: null });
+  useSessionStore.setState({ activePerson: null, access: null });
+  useSettingsStore.setState((s) => ({
+    values: {
+      ...s.values,
+      'ai.enabled': false,
+      'dreams.imageGenerationEnabled': false,
+      'dreams.imageStyle': 'oil painting',
+    },
+  }));
 });
 
 describe('Story (64)', () => {
@@ -944,6 +953,63 @@ describe('Story (64)', () => {
     expect(
       await screen.findByText(/Saved to .* — this file leaves your encrypted vault/),
     ).toBeInTheDocument();
+  });
+
+  it('creates a book cover behind the shared image consent + OpenAI key (§3.8)', async () => {
+    elevateToOwner(); // budgets.manage → the cost figure shows; settings.manage → the setup path is theirs
+    useSettingsStore.setState((s) => ({
+      values: { ...s.values, 'ai.enabled': true, 'dreams.imageGenerationEnabled': true },
+    }));
+    const storyGenerateImage = vi.fn(() =>
+      Promise.resolve({
+        ok: true as const,
+        image: { id: 'img1', kind: 'cover' as const, mime: 'image/png', createdAt: 'now' },
+        costUsd: 0.171,
+      }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () =>
+        Promise.resolve({ ...writtenBundle('new'), manifest: manifest({ status: 'ready' }) }),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+      storyGenerateImage,
+      storyGetImage: () => Promise.resolve({ mime: 'image/png', dataBase64: 'AAAA' }),
+      storyImages: () => Promise.resolve([]),
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Create a cover' }));
+    expect(storyGenerateImage).toHaveBeenCalledWith({
+      bookId: 'b1',
+      target: { kind: 'cover' },
+      style: expect.any(String),
+    });
+    // The generated cover renders + the admin cost figure appears.
+    const cover = await screen.findByAltText(/Cover for this book/);
+    expect(cover).toHaveAttribute('src', 'data:image/png;base64,AAAA');
+    expect(await screen.findByText(/\$0\.171/)).toBeInTheDocument();
+  });
+
+  it('shows a calm setup note when AI images are not turned on (§3.8)', async () => {
+    elevateToOwner(); // an owner sees the Settings path (a member sees "ask the owner")
+    // consent stays off (afterEach default) → no "Create a cover" button, just the note.
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () =>
+        Promise.resolve({ ...writtenBundle('new'), manifest: manifest({ status: 'ready' }) }),
+    });
+    renderStory();
+    expect(
+      await screen.findByText(/Turn on AI image generation .* to create a cover/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create a cover' })).not.toBeInTheDocument();
   });
 
   it('lists to-dos on the overview and marks a reminder done', async () => {

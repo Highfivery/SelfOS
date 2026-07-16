@@ -148,6 +148,9 @@ describe('publishBook (64 §3.5)', () => {
     const originalProse = view!.chapters[0]!.markdown;
     expect(view?.manifest.title).toBe('The Story of Ben');
     expect(view?.manifest.noteOnBook).toContain('never invented');
+    // The reader gets the MINIMAL shape only — the author's per-paragraph source provenance never crosses.
+    expect(Object.keys(view!.chapters[0]!).sort()).toEqual(['id', 'markdown', 'title']);
+    expect('provenance' in view!.chapters[0]!).toBe(false);
 
     // Edit the DRAFT c1 after publishing — the reader's head is unchanged (snapshot isolation).
     const c1 = await getChapter(fs, key, 'author', bookId, 'c1');

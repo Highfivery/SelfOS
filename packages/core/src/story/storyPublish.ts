@@ -5,6 +5,7 @@ import type {
   BookReader,
   PublishedManifest,
   PublishedPart,
+  ReaderChapter,
   SharedBookSummary,
   StoryPublishResult,
   StoryReaderView,
@@ -104,6 +105,11 @@ export async function publishBook(
     }))
     .filter((p) => p.chapterIds.length > 0);
   const chapterOrder = parts.flatMap((p) => p.chapterIds);
+  // The honesty note counts sources from the chapters actually PUBLISHED (in `chapterOrder`), not every reviewed
+  // chapter — a reviewed-but-orphaned chapter (not in any outline part) is snapshotted but never shown, so its
+  // sources mustn't inflate the note.
+  const byId = new Map(reviewed.map((c) => [c.id, c]));
+  const publishedChapters = chapterOrder.map((id) => byId.get(id)!).filter(Boolean);
 
   const publishedManifest: PublishedManifest = {
     schemaVersion: 1,
@@ -112,7 +118,7 @@ export async function publishBook(
     ...(book.essence ? { essence: book.essence } : {}),
     ...(book.coverImageId ? { coverImageId: book.coverImageId } : {}),
     ...(book.matter ? { matter: book.matter } : {}),
-    noteOnBook: noteOnBook(reviewed),
+    noteOnBook: noteOnBook(publishedChapters),
     parts,
     chapterOrder,
   };
@@ -246,10 +252,13 @@ export async function readSharedBook(
   if (!book || !book.publishedAt || !book.sharedWith.includes(viewerPersonId)) return null;
   const manifest = await getPublishedManifest(fs, key, authorPersonId, bookId);
   if (!manifest) return null;
-  const chapters: BookChapter[] = [];
+  const chapters: ReaderChapter[] = [];
   for (const id of manifest.chapterOrder) {
     const chapter = await getPublishedChapter(fs, key, authorPersonId, bookId, id);
-    if (chapter) chapters.push(chapter);
+    // Project the MINIMAL reader shape — never the raw BookChapter (its provenance names the author's private
+    // sources; it must not cross to a reader, even unrendered — the cross-person "project a minimal shape" rule).
+    if (chapter)
+      chapters.push({ id: chapter.id, title: chapter.title, markdown: chapter.markdown });
   }
   const author = await getPerson(fs, key, authorPersonId);
   return {

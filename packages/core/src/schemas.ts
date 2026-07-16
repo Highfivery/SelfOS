@@ -4206,6 +4206,16 @@ export interface SharedBookSummary {
   newChapters: number;
 }
 
+/** What a granted reader sees of a chapter (§3.6) — the MINIMAL projection: title + prose only. Deliberately NOT
+ *  a `BookChapter` — the author's per-paragraph `provenance` (the kind/timestamp of their private sources) must
+ *  never cross to a reader, even though the UI wouldn't render it (the cross-person "project a minimal shape"
+ *  rule, memory-dashboard 2026-06-16). */
+export interface ReaderChapter {
+  id: string;
+  title: string;
+  markdown: string;
+}
+
 /** The published head a granted reader reads (§3.6) — the manifest snapshot + its published chapters, in order.
  *  Never the draft. Read-time re-gated (viewer must still be in `sharedWith` + the book still published). */
 export interface StoryReaderView {
@@ -4213,7 +4223,7 @@ export interface StoryReaderView {
   authorName: string;
   bookId: string;
   manifest: PublishedManifest;
-  chapters: BookChapter[];
+  chapters: ReaderChapter[];
 }
 
 /** `story:grantReader` / `story:revokeReader` — add/remove a household reader for a book (§3.5). */

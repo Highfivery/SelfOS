@@ -14,6 +14,7 @@ import type {
   StoryFoundationsResult,
   StoryMarkPatch,
   StoryQuestionsResult,
+  StoryRefreshViewResult,
   StoryRevisionResult,
   StoryTodoEntry,
   TextAnchor,
@@ -41,6 +42,12 @@ interface StoryState {
   generateChapters: (bookId: string) => Promise<StoryChaptersResult>;
   regenerateChapter: (bookId: string, chapterId: string) => Promise<StoryChaptersResult>;
   reviewChapter: (bookId: string, chapterId: string) => Promise<boolean>;
+  /** The living-book refresh pass (§3.4): mark stale + auto-rewrite. `auto` = the throttled cadence; omit for
+   *  a manual "Refresh now" (uncapped). Sets the fresh bundle. */
+  refreshBook: (
+    bookId: string,
+    opts?: { auto?: boolean; crisis?: boolean },
+  ) => Promise<StoryRefreshViewResult>;
   /** The open chapter's markup layer (the suggestion layer), or null. The reader loads it per chapter. */
   markup: ChapterMarkup | null;
   loadMarkup: (bookId: string, chapterId: string) => Promise<void>;
@@ -109,6 +116,7 @@ const QUESTIONS_NOT_AVAILABLE: StoryQuestionsResult = {
   reason: 'ERROR',
   message: 'Not available.',
 };
+const REFRESH_NOT_AVAILABLE: StoryRefreshViewResult = { staled: 0, rewritten: 0, bundle: null };
 
 export const useStoryStore = create<StoryState>((set, get) => ({
   bookTypes: [],
@@ -186,6 +194,18 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     const bundle = (await window.selfos?.storyReviewChapter({ bookId, chapterId })) ?? null;
     if (bundle) set({ bundle });
     return bundle !== null;
+  },
+  refreshBook: async (bookId, opts) => {
+    set({ chaptersGenerating: true });
+    try {
+      const res =
+        (await window.selfos?.storyRefreshCheck({ bookId, ...(opts ?? {}) })) ??
+        REFRESH_NOT_AVAILABLE;
+      if (res.bundle) set({ bundle: res.bundle });
+      return res;
+    } finally {
+      set({ chaptersGenerating: false });
+    }
   },
   loadMarkup: async (bookId, chapterId) => {
     const markup = (await window.selfos?.storyGetMarkup({ bookId, chapterId })) ?? null;

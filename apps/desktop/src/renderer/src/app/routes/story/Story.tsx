@@ -467,6 +467,7 @@ function BookOverview({
 }): JSX.Element {
   const remove = useStoryStore((s) => s.remove);
   const generateChapters = useStoryStore((s) => s.generateChapters);
+  const refreshBook = useStoryStore((s) => s.refreshBook);
   const todos = useStoryStore((s) => s.todos);
   const loadTodos = useStoryStore((s) => s.loadTodos);
   const updateMark = useStoryStore((s) => s.updateMark);
@@ -476,6 +477,7 @@ function BookOverview({
   const busy = useStoryStore((s) => s.chaptersGenerating);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
   const { manifest, outline, chapters } = bundle;
   const bookId = manifest.id;
 
@@ -506,6 +508,29 @@ function BookOverview({
       ) : null}
 
       {error ? <Banner tone="danger">{error}</Banner> : null}
+      {refreshNotice ? <Banner tone="info">{refreshNotice}</Banner> : null}
+
+      {chapters.length > 0 ? (
+        <Inline>
+          <Button
+            disabled={busy}
+            onClick={async () => {
+              setError(null);
+              setRefreshNotice(null);
+              const res = await refreshBook(manifest.id, { auto: false });
+              setRefreshNotice(
+                res.rewritten > 0
+                  ? `Brought ${res.rewritten} chapter${res.rewritten === 1 ? '' : 's'} up to date with what’s new.`
+                  : res.staled > 0
+                    ? `${res.staled} chapter${res.staled === 1 ? ' has' : 's have'} new material to fold in — turn on AI to update ${res.staled === 1 ? 'it' : 'them'}.`
+                    : 'Your story is up to date.',
+              );
+            }}
+          >
+            {busy ? 'Checking…' : 'Refresh from what’s new'}
+          </Button>
+        </Inline>
+      ) : null}
 
       {pending > 0 ? (
         <Inline>

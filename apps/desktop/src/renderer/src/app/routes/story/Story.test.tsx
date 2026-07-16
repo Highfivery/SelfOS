@@ -617,6 +617,37 @@ describe('Story (64)', () => {
     expect(await screen.findByText(/1 change ready to apply/)).toBeInTheDocument();
   });
 
+  it('refreshes the book from what’s new and reports what changed', async () => {
+    const storyRefreshCheck = vi.fn((input: { bookId: string; auto?: boolean }) =>
+      Promise.resolve({ staled: 2, rewritten: 2, bundle: writtenBundle('new'), ...input }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyRefreshCheck,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Refresh from what’s new' }));
+    expect(storyRefreshCheck).toHaveBeenCalledWith(
+      expect.objectContaining({ bookId: 'b1', auto: false }),
+    );
+    expect(await screen.findByText(/Brought 2 chapters up to date/)).toBeInTheDocument();
+  });
+
+  it('the refresh reports when the story is already up to date', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyRefreshCheck: () =>
+        Promise.resolve({ staled: 0, rewritten: 0, bundle: writtenBundle('new') }),
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Refresh from what’s new' }));
+    expect(await screen.findByText('Your story is up to date.')).toBeInTheDocument();
+  });
+
   it('lists to-dos on the overview and marks a reminder done', async () => {
     const storyUpdateMark = vi.fn(
       (): Promise<ChapterMarkup> =>

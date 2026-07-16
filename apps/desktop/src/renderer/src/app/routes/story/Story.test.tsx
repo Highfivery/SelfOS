@@ -469,6 +469,100 @@ describe('Story (64)', () => {
     );
   });
 
+  it('adds a reminder to-do from the reader', async () => {
+    const storyMark = vi.fn(
+      (input: StoryMarkInput): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: input.chapterId, marks: [input.mark] }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
+      storyMark,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!);
+    await userEvent.click(await screen.findByRole('button', { name: 'To-do' }));
+    await userEvent.type(screen.getByLabelText('To-do'), 'upload the shop photo');
+    await userEvent.click(screen.getByRole('button', { name: 'Add to-do' }));
+    expect(storyMark).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mark: expect.objectContaining({
+          kind: 'todo',
+          todoKind: 'remind',
+          text: 'upload the shop photo',
+        }),
+      }),
+    );
+  });
+
+  it('an ask to-do counts toward the apply bar', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({
+          schemaVersion: 1,
+          chapterId: 'c1',
+          marks: [
+            {
+              id: 't1',
+              kind: 'todo',
+              anchor: { paragraphId: 'p0' },
+              text: 'go deeper here',
+              todoKind: 'ask',
+              status: 'open',
+              createdAt: 'now',
+            },
+          ],
+        }),
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    expect(await screen.findByText(/1 change ready to apply/)).toBeInTheDocument();
+  });
+
+  it('lists to-dos on the overview and marks a reminder done', async () => {
+    const storyUpdateMark = vi.fn(
+      (): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyTodos: () =>
+        Promise.resolve({
+          schemaVersion: 1,
+          todos: [
+            {
+              id: 't1',
+              chapterId: 'c1',
+              kind: 'remind',
+              text: 'call my sister',
+              status: 'open',
+              createdAt: 'now',
+            },
+          ],
+        }),
+      storyUpdateMark,
+    });
+    renderStory();
+    expect(await screen.findByRole('heading', { name: 'To do' })).toBeInTheDocument();
+    expect(screen.getByText(/call my sister/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Mark done' }));
+    expect(storyUpdateMark).toHaveBeenCalledWith({
+      bookId: 'b1',
+      chapterId: 'c1',
+      markId: 't1',
+      patch: { status: 'done' },
+    });
+  });
+
   it('excludes a topic from the reader toolbar', async () => {
     const storyExclude = vi.fn((input: { bookId: string; value: string }) =>
       Promise.resolve({

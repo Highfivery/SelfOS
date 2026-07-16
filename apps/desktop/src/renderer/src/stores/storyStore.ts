@@ -14,6 +14,7 @@ import type {
   StoryFoundationsResult,
   StoryMarkPatch,
   StoryRevisionResult,
+  StoryTodoEntry,
   TextAnchor,
 } from '@shared/schemas';
 
@@ -64,6 +65,9 @@ interface StoryState {
     anchor: TextAnchor,
     text: string,
   ) => Promise<boolean>;
+  /** The book-level to-do roll-up ("To do" list on the overview). */
+  todos: StoryTodoEntry[];
+  loadTodos: (bookId: string) => Promise<void>;
   /** The book's exclusions ("never write about this again") — for the overview panel. */
   exclusions: ExclusionItem[];
   loadExclusions: (bookId: string) => Promise<void>;
@@ -96,6 +100,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   books: [],
   bundle: null,
   markup: null,
+  todos: [],
   exclusions: [],
   loaded: false,
   generating: false,
@@ -210,6 +215,10 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     if (bundle) set({ bundle });
     return bundle !== null;
   },
+  loadTodos: async (bookId) => {
+    const roll = (await window.selfos?.storyTodos({ bookId })) ?? null;
+    set({ todos: roll?.todos ?? [] });
+  },
   loadExclusions: async (bookId) => {
     const exclusions = (await window.selfos?.storyExclusions({ bookId })) ?? [];
     set({ exclusions });
@@ -245,6 +254,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       books: [],
       bundle: null,
       markup: null,
+      todos: [],
       exclusions: [],
       loaded: false,
       generating: false,

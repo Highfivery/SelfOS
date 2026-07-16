@@ -467,6 +467,9 @@ function BookOverview({
 }): JSX.Element {
   const remove = useStoryStore((s) => s.remove);
   const generateChapters = useStoryStore((s) => s.generateChapters);
+  const todos = useStoryStore((s) => s.todos);
+  const loadTodos = useStoryStore((s) => s.loadTodos);
+  const updateMark = useStoryStore((s) => s.updateMark);
   const exclusions = useStoryStore((s) => s.exclusions);
   const loadExclusions = useStoryStore((s) => s.loadExclusions);
   const unexclude = useStoryStore((s) => s.unexclude);
@@ -478,7 +481,10 @@ function BookOverview({
 
   useEffect(() => {
     void loadExclusions(bookId);
-  }, [bookId, loadExclusions]);
+    void loadTodos(bookId);
+  }, [bookId, loadExclusions, loadTodos]);
+
+  const openTodos = todos.filter((t) => t.status === 'open' || t.status === 'questionsSent');
 
   const outlineChapters = outline ? outline.parts.flatMap((p) => p.chapters) : [];
   const writtenIds = new Set(chapters.map((c) => c.id));
@@ -554,6 +560,39 @@ function BookOverview({
             </Card>
           ))
         : null}
+
+      {openTodos.length > 0 ? (
+        <Card>
+          <Stack gap={2}>
+            <Heading level={2}>To do</Heading>
+            {openTodos.map((t) => (
+              <div key={t.id} className={styles.markRow}>
+                <Text size="sm">
+                  {TODO_KIND_LABEL[t.kind] ?? 'To-do'}: {t.text}
+                </Text>
+                {t.kind === 'remind' && t.status === 'open' ? (
+                  <button
+                    type="button"
+                    className={styles.sourcesToggle}
+                    onClick={async () => {
+                      await updateMark(bookId, t.chapterId, t.id, { status: 'done' });
+                      await loadTodos(bookId);
+                    }}
+                  >
+                    Mark done
+                  </button>
+                ) : (
+                  <Text size="sm" tone="secondary">
+                    {t.status === 'questionsSent'
+                      ? 'Questions sent'
+                      : 'Folds into your next revision'}
+                  </Text>
+                )}
+              </div>
+            ))}
+          </Stack>
+        </Card>
+      ) : null}
 
       {exclusions.length > 0 ? (
         <Card>
@@ -639,6 +678,19 @@ const INTENT_LABEL: Record<CommentIntent, string> = {
   question: 'Question',
 };
 
+// v1 to-do kinds the reader creates: a personal reminder, or an instruction to fold into the next revision.
+// The "questions" kind (mint a story check-in) arrives in a later slice.
+type ReaderTodoKind = 'remind' | 'ask';
+const TODO_KIND_OPTIONS: SegmentOption<ReaderTodoKind>[] = [
+  { value: 'remind', label: 'Remind me' },
+  { value: 'ask', label: 'Ask my biographer' },
+];
+const TODO_KIND_LABEL: Record<string, string> = {
+  remind: 'Reminder',
+  ask: 'For your biographer',
+  questions: 'Turned into questions',
+};
+
 /** Build a text anchor for a mark: a selected span, or the whole paragraph when nothing is selected. Records a
  *  short prefix/suffix so a paragraph mark survives light re-flow. A selection that appears MORE THAN ONCE in
  *  the paragraph can't be pinned to the right occurrence from the DOM string alone, so it falls back to the
@@ -689,6 +741,7 @@ function ChapterReader({
   const clearMarkup = useStoryStore((s) => s.clearMarkup);
   const addMark = useStoryStore((s) => s.addMark);
   const removeMark = useStoryStore((s) => s.removeMark);
+  const updateMark = useStoryStore((s) => s.updateMark);
   const applyMarkup = useStoryStore((s) => s.applyMarkup);
   const editPassage = useStoryStore((s) => s.editPassage);
   const pinQuote = useStoryStore((s) => s.pinQuote);
@@ -699,8 +752,9 @@ function ChapterReader({
   const [openSources, setOpenSources] = useState<number | null>(null);
   const [activePara, setActivePara] = useState<number | null>(null);
   const [activeQuote, setActiveQuote] = useState<string | null>(null);
-  const [mode, setMode] = useState<'menu' | 'comment' | 'edit' | 'exclude' | null>(null);
+  const [mode, setMode] = useState<'menu' | 'comment' | 'edit' | 'exclude' | 'todo' | null>(null);
   const [commentIntent, setCommentIntent] = useState<CommentIntent>('addContext');
+  const [todoKind, setTodoKind] = useState<ReaderTodoKind>('remind');
   const [draft, setDraft] = useState('');
 
   const bookId = bundle.manifest.id;
@@ -751,6 +805,20 @@ function ChapterReader({
       anchor: buildAnchor(paragraphs, i, activeQuote),
       intent: commentIntent,
       text: draft.trim(),
+      status: 'open',
+      createdAt: new Date().toISOString(),
+    });
+    closeMenu();
+  };
+
+  const submitTodo = async (i: number): Promise<void> => {
+    if (draft.trim().length === 0) return;
+    await addMark(bookId, chapterId, {
+      id: crypto.randomUUID(),
+      kind: 'todo',
+      anchor: buildAnchor(paragraphs, i, activeQuote),
+      text: draft.trim(),
+      todoKind,
       status: 'open',
       createdAt: new Date().toISOString(),
     });
@@ -850,7 +918,8 @@ function ChapterReader({
             (m) =>
               m.anchor?.paragraphId === `p${i}` &&
               ((m.kind === 'delete' && m.status === 'pending') ||
-                (m.kind === 'comment' && m.status === 'open')),
+                (m.kind === 'comment' && m.status === 'open') ||
+                (m.kind === 'todo' && m.status === 'open')),
           );
           return (
             <div key={i} className={styles.para}>
@@ -870,15 +939,31 @@ function ChapterReader({
                         <Text size="sm" tone="secondary">
                           💬 {INTENT_LABEL[m.intent]}: {m.text}
                         </Text>
+                      ) : m.kind === 'todo' ? (
+                        <Text size="sm" tone="secondary">
+                          ☐ {TODO_KIND_LABEL[m.todoKind] ?? 'To-do'}: {m.text}
+                        </Text>
                       ) : null}
-                      <button
-                        type="button"
-                        className={styles.sourcesToggle}
-                        aria-label={`Undo this ${m.kind === 'delete' ? 'deletion' : 'comment'}`}
-                        onClick={() => void removeMark(bookId, chapterId, m.id)}
-                      >
-                        Undo
-                      </button>
+                      {m.kind === 'todo' && m.todoKind === 'remind' ? (
+                        <button
+                          type="button"
+                          className={styles.sourcesToggle}
+                          onClick={() =>
+                            void updateMark(bookId, chapterId, m.id, { status: 'done' })
+                          }
+                        >
+                          Mark done
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.sourcesToggle}
+                          aria-label={`Undo this ${m.kind === 'delete' ? 'deletion' : m.kind}`}
+                          onClick={() => void removeMark(bookId, chapterId, m.id)}
+                        >
+                          Undo
+                        </button>
+                      )}
                     </div>
                   ))}
                 </Stack>
@@ -943,6 +1028,14 @@ function ChapterReader({
                           Edit
                         </Button>
                         <Button onClick={() => setMode('comment')}>Comment</Button>
+                        <Button
+                          onClick={() => {
+                            setMode('todo');
+                            setDraft('');
+                          }}
+                        >
+                          To-do
+                        </Button>
                         <Button onClick={() => void addPin(i)}>Pin</Button>
                         <Button
                           onClick={() => {
@@ -982,6 +1075,44 @@ function ChapterReader({
                             onClick={() => void submitComment(i)}
                           >
                             Add comment
+                          </Button>
+                        </Inline>
+                      </Stack>
+                    ) : null}
+                    {mode === 'todo' ? (
+                      <Stack gap={2}>
+                        <SegmentedControl
+                          options={TODO_KIND_OPTIONS}
+                          value={todoKind}
+                          onChange={setTodoKind}
+                          aria-label="To-do kind"
+                        />
+                        <Text size="sm" tone="secondary">
+                          {todoKind === 'remind'
+                            ? 'A private reminder for you — your biographer never touches it.'
+                            : 'An instruction your biographer folds into the next revision.'}
+                        </Text>
+                        <Textarea
+                          value={draft}
+                          onChange={(e) => setDraft(e.target.value)}
+                          aria-label="To-do"
+                          rows={2}
+                          placeholder={
+                            todoKind === 'remind'
+                              ? 'e.g. upload the photo of Dad’s shop'
+                              : 'e.g. go deeper on the winter he got sick'
+                          }
+                        />
+                        <Inline justify="flex-end">
+                          <Button variant="ghost" onClick={closeMenu}>
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="primary"
+                            disabled={draft.trim().length === 0}
+                            onClick={() => void submitTodo(i)}
+                          >
+                            Add to-do
                           </Button>
                         </Inline>
                       </Stack>

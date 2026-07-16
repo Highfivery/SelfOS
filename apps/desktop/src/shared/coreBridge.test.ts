@@ -6615,6 +6615,51 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(applied.markup.marks[0]?.status).toBe('applied');
   });
 
+  it('story: a to-do mark flows into the book-level roll-up and can be marked done', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+
+    await bridge.storyMark({
+      bookId,
+      chapterId,
+      mark: {
+        id: 'r1',
+        kind: 'todo',
+        text: 'upload the shop photo',
+        todoKind: 'remind',
+        status: 'open',
+        createdAt: '2026-07-16',
+      },
+    });
+    // The denormalized roll-up shows it.
+    let roll = await bridge.storyTodos({ bookId });
+    expect(roll.todos).toEqual([
+      expect.objectContaining({
+        id: 'r1',
+        kind: 'remind',
+        text: 'upload the shop photo',
+        status: 'open',
+      }),
+    ]);
+    // Mark it done → the roll-up reflects the new status.
+    await bridge.storyUpdateMark({ bookId, chapterId, markId: 'r1', patch: { status: 'done' } });
+    roll = await bridge.storyTodos({ bookId });
+    expect(roll.todos[0]?.status).toBe('done');
+  });
+
   it('story: exclude marks a mentioning chapter stale (option 1), then un-exclude', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });

@@ -342,6 +342,7 @@ export const IpcChannels = {
   storyReaderFeatured: 'story:readerFeatured',
   storySharedBooks: 'story:sharedBooks',
   storyReadShared: 'story:readShared',
+  storyMarkSharedRead: 'story:markSharedRead',
   storyReadSharedImage: 'story:readSharedImage',
   storyExportMarkdown: 'story:exportMarkdown',
   storyExportPdf: 'story:exportPdf',
@@ -1141,6 +1142,8 @@ export interface SelfosBridge {
   storySharedBooks(): Promise<SharedBookSummary[]>;
   /** Read a book shared with the active person — the PUBLISHED head only (§3.6), re-gated; null if access is gone. */
   storyReadShared(input: StoryReadSharedInput): Promise<StoryReaderView | null>;
+  /** Record that the active viewer opened a shared book (§3.6) — device-local, per-person read progress. */
+  storyMarkSharedRead(input: StoryReadSharedInput): Promise<void>;
   /** A granted reader fetches one PUBLISHED image's bytes (base64) for the reader view (§3.8). Re-gated. */
   storyReadSharedImage(input: {
     authorPersonId: string;

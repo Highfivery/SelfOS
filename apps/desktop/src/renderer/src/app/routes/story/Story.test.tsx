@@ -947,6 +947,8 @@ describe('Story (64)', () => {
             publishedAt: '2026-07-16T00:00:00.000Z',
             chapterCount: 1,
             newChapters: 1,
+            neverOpened: true,
+            updated: true,
           },
         ]),
       storyReadShared: () => Promise.resolve(readerView),

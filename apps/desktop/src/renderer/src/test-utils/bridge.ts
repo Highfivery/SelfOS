@@ -372,6 +372,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     storyReaderFeatured: () => Promise.resolve(false),
     storySharedBooks: () => Promise.resolve([]),
     storyReadShared: () => Promise.resolve(null),
+    storyMarkSharedRead: () => Promise.resolve(),
     storyReadSharedImage: () => Promise.resolve(null),
     storyExportMarkdown: () => Promise.resolve(null),
     storyExportPdf: () => Promise.resolve(null),

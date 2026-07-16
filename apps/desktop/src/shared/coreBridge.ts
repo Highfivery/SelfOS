@@ -4788,7 +4788,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return listSharedBooks(ctx.fs, ctx.key, personId);
+      // The viewer's device-local read progress (per-person, never synced) refines the "new/updated" cues.
+      const readAt = (await host.readDeviceState()).storyReadProgress?.[personId] ?? {};
+      return listSharedBooks(ctx.fs, ctx.key, personId, readAt);
     },
     storyReadShared: async (input): Promise<StoryReaderView | null> => {
       const { authorPersonId, bookId } = StoryReadSharedInputSchema.parse(input);
@@ -4798,6 +4800,25 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return null;
       // The core re-gates on every read (published + still granted) — the viewer is the active person.
       return readSharedBook(ctx.fs, ctx.key, personId, authorPersonId, bookId);
+    },
+    storyMarkSharedRead: async (input): Promise<void> => {
+      // Record that the active viewer opened a shared book (§3.6) — device-local + per-person, never synced.
+      // Clears the one-time `story-shared` notification and the "Updated" marker until the author republishes.
+      const { bookId } = StoryReadSharedInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return;
+      const personId = await activePersonId();
+      if (!personId) return;
+      const device = await host.readDeviceState();
+      await host.updateDeviceState({
+        storyReadProgress: {
+          ...device.storyReadProgress,
+          [personId]: {
+            ...device.storyReadProgress?.[personId],
+            [bookId]: new Date().toISOString(),
+          },
+        },
+      });
     },
     storyReadSharedImage: async (input): Promise<{ mime: string; dataBase64: string } | null> => {
       const { authorPersonId, bookId, imageId } = StoryReadSharedImageInputSchema.parse(input);
@@ -5324,6 +5345,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             : {}),
           // Surface the auto-checkin provenance so the Inbox card shows it's auto-generated (§8.3, never covert).
           ...(snapshot.autoCheckin ? { autoCheckin: snapshot.autoCheckin } : {}),
+          // A Your Story interview send (64 §5.5) → a "Your biographer" eyebrow so the ask is never mysterious.
+          ...(snapshot.storyProvenance ? { fromBiographer: true } : {}),
         });
       }
       return items;

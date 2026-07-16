@@ -104,6 +104,14 @@ describe('Inbox', () => {
     expect(screen.getByText('New')).toBeInTheDocument();
   });
 
+  it('shows a "Your biographer" eyebrow on a Your Story interview send (64 §5.5)', async () => {
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([item({ fromBiographer: true })]),
+    });
+    renderInbox();
+    expect(await screen.findByText(/Your biographer · From Ben/)).toBeInTheDocument();
+  });
+
   it('opens an assignment, shows the privacy promise + crisis footer, and submits answers', async () => {
     const submit = vi.fn(() => Promise.resolve());
     installMockBridge({

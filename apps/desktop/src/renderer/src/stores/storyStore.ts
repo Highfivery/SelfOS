@@ -541,6 +541,12 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   openSharedBook: async (authorPersonId, bookId) => {
     const readerView = (await window.selfos?.storyReadShared({ authorPersonId, bookId })) ?? null;
     set({ readerView });
+    if (readerView) {
+      // Record the open (device-local read progress) so the one-time "shared with you" notification + the
+      // "Updated" marker clear until the author republishes (§3.6).
+      await window.selfos?.storyMarkSharedRead({ authorPersonId, bookId });
+      await get().loadSharedBooks();
+    }
   },
   closeSharedBook: () => set({ readerView: null }),
   remove: async (bookId) => {

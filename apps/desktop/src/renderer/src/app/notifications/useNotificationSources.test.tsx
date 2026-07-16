@@ -407,3 +407,46 @@ describe('useNotificationSources — auto check-ins (63)', () => {
     expect(keys).not.toContain('auto-checkin-ready');
   });
 });
+
+describe('useNotificationSources — story-shared (64 §3.6)', () => {
+  const sharedBook = (over: Record<string, unknown> = {}) => ({
+    authorPersonId: 'auth1',
+    authorName: 'Angel',
+    bookId: 'b1',
+    title: 'The Weight of Quiet',
+    publishedAt: '2026-07-16T00:00:00.000Z',
+    chapterCount: 5,
+    newChapters: 5,
+    neverOpened: true,
+    updated: true,
+    ...over,
+  });
+
+  it('surfaces a one-time notification for a NEVER-opened shared book, keyed per book', async () => {
+    installMockBridge({ storySharedBooks: () => Promise.resolve([sharedBook()]) });
+    asOwner();
+    await useNotificationStore.getState().load();
+    render(<Harness />);
+    await waitFor(() => {
+      const n = useNotificationStore
+        .getState()
+        .notifications.find((x) => x.coalesceKey === 'story-shared:auth1:b1');
+      expect(n).toBeDefined();
+      expect(n?.title).toBe('Angel shared their story');
+      expect(n?.action).toEqual({ type: 'navigate', to: '/story' });
+    });
+  });
+
+  it('does NOT notify once the book has been opened (updated marker only, never re-notifies)', async () => {
+    // Opened before, but the author republished (updated) — the quiet marker shows on /story, no bell.
+    installMockBridge({
+      storySharedBooks: () => Promise.resolve([sharedBook({ neverOpened: false, updated: true })]),
+    });
+    asOwner();
+    await useNotificationStore.getState().load();
+    render(<Harness />);
+    await waitFor(() => expect(useNotificationStore.getState().notifications).toBeDefined());
+    const keys = useNotificationStore.getState().notifications.map((n) => n.coalesceKey);
+    expect(keys.some((k) => k.startsWith('story-shared:'))).toBe(false);
+  });
+});

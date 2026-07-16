@@ -1449,7 +1449,12 @@ function SharedWithYou(): JSX.Element | null {
             onClick={() => void openSharedBook(b.authorPersonId, b.bookId)}
           >
             <Stack gap={1}>
-              <Text className={styles.rowTitle}>{b.title}</Text>
+              <Inline gap={2}>
+                <Text className={styles.rowTitle}>{b.title}</Text>
+                {b.updated ? (
+                  <span className={styles.newBadge}>{b.neverOpened ? 'New' : 'Updated'}</span>
+                ) : null}
+              </Inline>
               <Text tone="secondary" size="sm">
                 By {b.authorName} · {b.chapterCount} chapter{b.chapterCount === 1 ? '' : 's'}
               </Text>

@@ -623,19 +623,29 @@ respected on progress/transition affordances; contrast per tokens (01).
   AES-GCM envelopes.
 - **RTL**: outline editor; chapter pane affordances (comment/apply, exclude scopes, pin, edit →
   protected); proposals approve/dismiss; reader "what's new"; calm AI-off/budget states.
-- **E2E (Playwright, offline fakes — new fake-Claude branches keyed on unique prompt markers for
-  outline/chapter/revise/interview, deliberately imperfect; `SELFOS_FAKE_IMAGE`;
-  `SELFOS_FAKE_SAVE_DIR`)**: the crown jewel — seed a rich persona → create book → approve outline
-  → chapters generate → provenance deep-link opens the source → **select a span → mark delete +
-  add-context comment + a to-do** → Review & apply (one revision: the deleted span is gone, the
-  context woven in — decrypt-level assert) → inline-edit a span → it's a protected block a later
-  refresh leaves verbatim → exclude a topic → regenerate (excluded content stays gone) → a
-  `questions` to-do mints an Inbox check-in → publish → grant reader → switch persona → reader sees
-  published book but NOT a post-publish draft edit → revoke → denied → export .md + PDF (files exist
-  outside vault; .md contains the chapter text; vault chapter still encrypted). Plus: photo upload →
-  vision questions → answer → caption renders; crisis seed suppresses generation; 360px overflow
-  guards + full-surface-renders-to-bottom on draft (incl. the markup margin collapsing inline at
-  phone width) AND reader; the §7 whole-flow coherence walk.
+- **E2E (Playwright, offline fakes)** — BUILT (2026-07-16, `test/story-e2e`). The main-process
+  `fakeClaudeClient` gained Your Story branches keyed on each pass's unique prompt phrase (`plan a
+biography of` / `WRITE THIS CHAPTER` / `You are REVISING one chapter` / `the biographer taking
+stock` / `reviewing the SHAPE`; the vision/distill/placement system prompts) so the whole feature
+  is drivable through the real UI (previously the AI passes were reachable only via the bridge, hence
+  the core+coreBridge+RTL-only coverage). Three focused walks in `launch.spec.ts` (kept under the
+  30s/test budget, the Together lesson): (1) **author spine** — setup (blank title → the biographer
+  names it; the added styles; Full default) → outline **rename** → write chapters → read prose + a
+  provenance **Sources** popover (a seeded corpus insight makes `[[SRC:s0]]` resolve) → mark a
+  paragraph with a comment → **Review & apply** (revised prose) → **exclude** a topic → decrypt the
+  manifest (title renamed, `titleAuto` cleared, `config.length='full'`/`style='cinematic'`) + a 360px
+  overflow guard; (2) **living book** — create → approve → write → **Refresh from what's new** files a
+  structural proposal → **Approve** restructures the outline (a new un-written shell) → the
+  completeness **stage** (never a %) → **Find what's missing** → a story-provenance questionnaire is
+  minted into the Inbox (decrypt-level); (3) **publish/reader/export/cover** — create → write →
+  **Create a cover** (distill→render behind the shared image consent) → mark a chapter **Looks good**
+  → **Publish** → grant a household **reader** → **Export as Markdown AND PDF** (both files land OUTSIDE
+  the vault; the .md contains the title) → switch persona → a first-share **`story-shared` notification** +
+  a **"New" marker** greet the reader → they read the **published head** (title + prose) via "Shared with
+  you" → returning clears the marker (device-local read progress). Extended to (4) **photos** — upload →
+  Claude vision proposes a caption + questions → answering one feeds the interview corpus. The "Your
+  biographer" Inbox eyebrow is asserted in (2). Crisis-suppression of the auto cadence stays a coreBridge
+  test (host-side + timing-sensitive).
 
 ## 11. Resolved decisions
 
@@ -692,3 +702,23 @@ No open questions remain; the spec is Approved and ready for the Phase A slice (
   seven options overflow a SegmentedControl at phone width, §12); (3) **default length is now Full**
   (published-book length), still selectable. Additive schema (no version bump). §3.2 / §4 / §11
   amended.
+- 2026-07-16 — **Full Playwright E2E added (on `test/story-e2e`, after PR #218 merged).** Closed the
+  standing E2E gap: the main-process `fakeClaudeClient` gained Your Story branches (foundations /
+  chapter / revision / gap / structure / vision / distill / placement) so the whole feature is
+  drivable through the real UI, plus three focused `launch.spec.ts` walks — author spine, living book,
+  and publish/reader/export/cover (see §10). 3/3 green (×3 no flake); the fake reordering is safe for
+  the existing suite (two pre-existing, unrelated failures on `main` — `onboarding attention (55)`,
+  `dreams typed-new-name` — were confirmed failing without this change).
+- 2026-07-16 — **Deferred coordination items BUILT + those two pre-existing failures fixed (on
+  `test/story-e2e`).** (1) **Reader read-progress + "what's new"** (§3.6): `listSharedBooks` now derives
+  `neverOpened`/`updated` from the viewer's device-local `storyReadProgress`; a new `story:markSharedRead`
+  records the open (opening a shared book clears the cues); the "Shared with you" card shows a **"New"/
+  "Updated"** badge. (2) **`story-shared` notification** — a one-time bell notice per newly-shared book
+  (owner decision: notify on first share only; later republishes surface as the quiet card marker, never a
+  re-notify), derived in `useNotificationSources`, kind added to the registry. (3) **"Your biographer"
+  Inbox eyebrow** — `InboxItem.fromBiographer` set when the frozen snapshot carries `storyProvenance`.
+  Broadened the E2E (photos/vision, PDF export, the notification + marker + eyebrow). Also fixed the two
+  pre-existing `main` failures (Playwright substring collision on a new "Sharing & relationships" nav item;
+  the onboarding-attention relaunch assertion tightened to the onboarding item, since a freshly-onboarded
+  owner now legitimately gets the auto check-ins seed notice). Additive schema (no version bump); full gate
+  green (core 1412 + desktop 1256, 6 story E2E ×3 no flake).

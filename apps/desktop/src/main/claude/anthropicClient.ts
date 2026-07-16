@@ -319,6 +319,145 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // --- Your Story (64) ---------------------------------------------------------------------------
+      // Every biographer pass, so the whole feature is drivable end-to-end through the real UI (the
+      // coreBridge tests exercise the same passes through the bridge). Each is detected by a distinctive
+      // phrase from its prompt builder; the JSON ones MUST precede the generic "JSON object" branch below.
+      const STORY_USAGE = {
+        inputTokens: 150,
+        outputTokens: 70,
+        cacheWriteTokens: 0,
+        cacheReadTokens: 0,
+      };
+
+      // Foundations (§5.3): a proposed title + essence + timeline + a small outline (two chapters).
+      if (userText.includes('plan a biography of')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            title: 'The Weight of Quiet',
+            essence: 'The story of a quiet man learning to speak up.',
+            timeline: [{ label: 'Born in Ohio', date: '1985' }],
+            outline: {
+              parts: [
+                {
+                  title: 'Roots',
+                  chapters: [
+                    {
+                      title: 'The Garage',
+                      brief: 'He learns a machine obeys.',
+                      lifeAreas: ['Family'],
+                    },
+                    {
+                      title: 'What the House Held',
+                      brief: 'The quiet that settled over the family.',
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+          usage: STORY_USAGE,
+        });
+      }
+
+      // A chapter (§5.3): prose with a per-paragraph [[SRC:s0]] citation (s0 resolves when the corpus has
+      // ≥1 item; otherwise the marker is harmlessly dropped host-side).
+      if (userText.includes('WRITE THIS CHAPTER')) {
+        const prose =
+          'The garage smelled of cut pine and warm oil. [[SRC:s0]]\n\n' +
+          'He watched his father work the lathe, and said nothing.';
+        for (const word of prose.split(' ')) onDelta(`${word} `);
+        return Promise.resolve({ text: prose, usage: STORY_USAGE });
+      }
+
+      // A batch-markup revision (§3.3.1): return the FULL revised chapter.
+      if (userText.includes('You are REVISING one chapter')) {
+        const prose =
+          'The garage smelled of cut pine, and for once he spoke up. [[SRC:s0]]\n\n' +
+          'His father looked up from the lathe, surprised.';
+        return Promise.resolve({ text: prose, usage: STORY_USAGE });
+      }
+
+      // The gap pass (§3.7): coverage + one prioritized gap so "Find what's missing" mints a check-in.
+      if (userText.includes('the biographer taking stock')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            coverage: {
+              chapters: true,
+              scenes: {
+                highPoint: false,
+                lowPoint: false,
+                turningPoint: false,
+                positiveChildhood: true,
+                negativeChildhood: false,
+                vividAdult: false,
+                spiritual: false,
+                wisdom: false,
+              },
+              challenges: false,
+              ideology: false,
+              futureScript: false,
+            },
+            gaps: [
+              {
+                dimension: 'challenges',
+                label: 'Your central struggle',
+                focus: 'Ask warmly about the hardest thing they have faced and how they met it.',
+              },
+            ],
+          }),
+          usage: STORY_USAGE,
+        });
+      }
+
+      // The structure pass (§3.4): propose one new chapter, referencing the REAL part id parsed from the
+      // prompt (the service re-validates ids against the current outline).
+      if (userText.includes('reviewing the SHAPE')) {
+        const partId = /\[part ([^\]]+)\]/.exec(userText)?.[1];
+        return Promise.resolve({
+          text: JSON.stringify({
+            proposals: partId
+              ? [
+                  {
+                    kind: 'newChapter',
+                    rationale: 'A distinct new era has emerged in the material.',
+                    partId,
+                    title: 'The Move West',
+                    brief: 'Leaving the town that made him.',
+                  },
+                ]
+              : [],
+          }),
+          usage: STORY_USAGE,
+        });
+      }
+
+      // Photo vision (§3.7): a gentle caption + questions to draw out the memory.
+      if ((options.system ?? '').includes('warm biographer looking at a personal photo')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            caption: 'A quiet afternoon in the workshop.',
+            questions: ['Who took this photo?', 'What do you remember most about that day?'],
+          }),
+          usage: STORY_USAGE,
+        });
+      }
+
+      // Image-brief distillation (§3.8): a single symbolic visual prompt (the fake image client renders it).
+      if (
+        (options.system ?? '').includes('turn a life-story brief into a SINGLE vivid visual prompt')
+      ) {
+        return Promise.resolve({
+          text: 'A dim workshop lit by a single bulb, tools at rest, dust suspended in a shaft of afternoon light — quiet, waiting.',
+          usage: STORY_USAGE,
+        });
+      }
+
+      // Image placement (§3.8): the 0-based paragraph index the image should follow.
+      if ((options.system ?? '').includes('You place an image within a book chapter')) {
+        return Promise.resolve({ text: '0', usage: STORY_USAGE });
+      }
+
       // The session-analysis turn (09 §5) asks to "summarize this session" as a JSON object. Return a
       // valid SessionAnalysisDraft so the offline End & summarize path parses + produces facts/mood.
       if (userText.includes('summarize this session')) {

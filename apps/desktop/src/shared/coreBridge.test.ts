@@ -6615,6 +6615,34 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(applied.markup.marks[0]?.status).toBe('applied');
   });
 
+  it('story: exclude marks a mentioning chapter stale (option 1), then un-exclude', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id; // prose mentions "warm oil"
+
+    const res = await bridge.storyExclude({ bookId, kind: 'topic', value: 'warm oil' });
+    expect(res.staled).toBe(1);
+    expect(res.exclusions[0]).toMatchObject({ kind: 'topic', value: 'warm oil' });
+    expect(res.bundle.chapters.find((c) => c.id === chapterId)?.status).toBe('stale');
+    expect((await bridge.storyExclusions({ bookId })).map((e) => e.value)).toEqual(['warm oil']);
+
+    // Un-exclude removes the rule; the chapter stays as it is.
+    expect(await bridge.storyUnexclude({ bookId, itemId: res.exclusions[0]!.id })).toEqual([]);
+    expect(await bridge.storyExclusions({ bookId })).toEqual([]);
+  });
+
   it('story: markup ops are denied for a person without story.own', async () => {
     const { bridge } = await freshOwner();
     // A Guest role has no story.own.

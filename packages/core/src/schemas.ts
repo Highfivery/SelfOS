@@ -3995,3 +3995,30 @@ export type StoryPinInput = z.infer<typeof StoryPinInputSchema>;
 export type StoryRevisionResult =
   | { ok: true; bundle: StoryBookBundle; markup: ChapterMarkup }
   | { ok: false; reason: AiFailureReason | 'AI_OFF'; message: string };
+
+// --- Exclusions IPC (§3.3/§5.1) --------------------------------------------------------------------------
+
+/** `story:exclude` — add a "never write about this again" exclusion, scoped (§3.3). `value` by kind: topic/
+ *  passage = the text; person = the person id; source = a StorySourceRef id. */
+export const StoryExcludeInputSchema = z.object({
+  bookId: z.string().min(1),
+  kind: ExclusionKindSchema,
+  value: z.string().min(1),
+  note: z.string().optional(),
+});
+export type StoryExcludeInput = z.infer<typeof StoryExcludeInputSchema>;
+
+/** `story:unexclude` — remove an exclusion (written chapters are left as-is). */
+export const StoryUnexcludeInputSchema = z.object({
+  bookId: z.string().min(1),
+  itemId: z.string().min(1),
+});
+export type StoryUnexcludeInput = z.infer<typeof StoryUnexcludeInputSchema>;
+
+/** The result of adding an exclusion: the updated list + the fresh bundle (chapters that mentioned the excluded
+ *  material are now `stale`, option 1) so the overview reflects them immediately. */
+export interface StoryExcludeResult {
+  exclusions: ExclusionItem[];
+  bundle: StoryBookBundle;
+  staled: number;
+}

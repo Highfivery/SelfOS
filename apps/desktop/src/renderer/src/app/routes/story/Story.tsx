@@ -467,10 +467,18 @@ function BookOverview({
 }): JSX.Element {
   const remove = useStoryStore((s) => s.remove);
   const generateChapters = useStoryStore((s) => s.generateChapters);
+  const exclusions = useStoryStore((s) => s.exclusions);
+  const loadExclusions = useStoryStore((s) => s.loadExclusions);
+  const unexclude = useStoryStore((s) => s.unexclude);
   const busy = useStoryStore((s) => s.chaptersGenerating);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { manifest, outline, chapters } = bundle;
+  const bookId = manifest.id;
+
+  useEffect(() => {
+    void loadExclusions(bookId);
+  }, [bookId, loadExclusions]);
 
   const outlineChapters = outline ? outline.parts.flatMap((p) => p.chapters) : [];
   const writtenIds = new Set(chapters.map((c) => c.id));
@@ -546,6 +554,35 @@ function BookOverview({
             </Card>
           ))
         : null}
+
+      {exclusions.length > 0 ? (
+        <Card>
+          <Stack gap={2}>
+            <Heading level={2}>Never written about</Heading>
+            <Text tone="secondary" size="sm">
+              Things you’ve asked your biographer to leave out. They won’t appear in future
+              chapters.
+            </Text>
+            {exclusions.map((item) => {
+              // A `source` exclusion's `value` is a cryptic ref id; show its friendly `note` label instead.
+              const label = item.note ?? item.value;
+              return (
+                <div key={item.id} className={styles.markRow}>
+                  <Text size="sm">{label}</Text>
+                  <button
+                    type="button"
+                    className={styles.sourcesToggle}
+                    aria-label={`Allow writing about ${label} again`}
+                    onClick={() => void unexclude(bookId, item.id)}
+                  >
+                    Allow again
+                  </button>
+                </div>
+              );
+            })}
+          </Stack>
+        </Card>
+      ) : null}
 
       <Inline>
         {confirmDelete ? (
@@ -655,12 +692,14 @@ function ChapterReader({
   const applyMarkup = useStoryStore((s) => s.applyMarkup);
   const editPassage = useStoryStore((s) => s.editPassage);
   const pinQuote = useStoryStore((s) => s.pinQuote);
+  const exclude = useStoryStore((s) => s.exclude);
   const busy = useStoryStore((s) => s.chaptersGenerating);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [openSources, setOpenSources] = useState<number | null>(null);
   const [activePara, setActivePara] = useState<number | null>(null);
   const [activeQuote, setActiveQuote] = useState<string | null>(null);
-  const [mode, setMode] = useState<'menu' | 'comment' | 'edit' | null>(null);
+  const [mode, setMode] = useState<'menu' | 'comment' | 'edit' | 'exclude' | null>(null);
   const [commentIntent, setCommentIntent] = useState<CommentIntent>('addContext');
   const [draft, setDraft] = useState('');
 
@@ -737,6 +776,37 @@ function ChapterReader({
     closeMenu();
   };
 
+  const noticeExcluded = (staled: number): void => {
+    setNotice(
+      staled > 0
+        ? `Won’t be written again. ${staled} chapter${staled === 1 ? '' : 's'} that mentioned it ${
+            staled === 1 ? 'is' : 'are'
+          } marked to rewrite.`
+        : 'Won’t be written again.',
+    );
+  };
+
+  const submitExclude = async (): Promise<void> => {
+    if (draft.trim().length === 0) return;
+    setNotice(null);
+    try {
+      noticeExcluded(await exclude(bookId, 'topic', draft.trim()));
+    } catch {
+      setError('Couldn’t exclude that. Try again.');
+    }
+    closeMenu();
+  };
+
+  const excludeSource = async (kind: string, id: string): Promise<void> => {
+    setNotice(null);
+    try {
+      noticeExcluded(await exclude(bookId, 'source', id, SOURCE_KIND_LABEL[kind] ?? 'a source'));
+    } catch {
+      setError('Couldn’t exclude that. Try again.');
+    }
+    setOpenSources(null);
+  };
+
   const applicable = countApplicable(markup);
 
   return (
@@ -752,6 +822,7 @@ function ChapterReader({
 
       <Heading level={1}>{chapter.title}</Heading>
       {error ? <Banner tone="danger">{error}</Banner> : null}
+      {notice ? <Banner tone="info">{notice}</Banner> : null}
 
       {applicable > 0 ? (
         <div className={styles.applyBar} role="status">
@@ -837,10 +908,19 @@ function ChapterReader({
               {openSources === i && refs ? (
                 <Stack gap={1}>
                   {refs.map((ref, j) => (
-                    <Text key={j} size="sm" tone="secondary">
-                      Drawn from {SOURCE_KIND_LABEL[ref.kind] ?? 'your history'}
-                      {ref.at ? ` · ${ref.at.slice(0, 10)}` : ''}
-                    </Text>
+                    <div key={j} className={styles.markRow}>
+                      <Text size="sm" tone="secondary">
+                        Drawn from {SOURCE_KIND_LABEL[ref.kind] ?? 'your history'}
+                        {ref.at ? ` · ${ref.at.slice(0, 10)}` : ''}
+                      </Text>
+                      <button
+                        type="button"
+                        className={styles.sourcesToggle}
+                        onClick={() => void excludeSource(ref.kind, ref.id)}
+                      >
+                        Don’t draw on this again
+                      </button>
+                    </div>
                   ))}
                 </Stack>
               ) : null}
@@ -864,6 +944,14 @@ function ChapterReader({
                         </Button>
                         <Button onClick={() => setMode('comment')}>Comment</Button>
                         <Button onClick={() => void addPin(i)}>Pin</Button>
+                        <Button
+                          onClick={() => {
+                            setMode('exclude');
+                            setDraft(activeQuote ?? para);
+                          }}
+                        >
+                          Exclude
+                        </Button>
                         <Button variant="ghost" onClick={closeMenu}>
                           Cancel
                         </Button>
@@ -919,6 +1007,32 @@ function ChapterReader({
                             onClick={() => void submitEdit(i)}
                           >
                             Save my words
+                          </Button>
+                        </Inline>
+                      </Stack>
+                    ) : null}
+                    {mode === 'exclude' ? (
+                      <Stack gap={2}>
+                        <Text size="sm" tone="secondary">
+                          Never write about this again. It won’t appear in future chapters, and any
+                          chapter that already mentions it is marked to rewrite.
+                        </Text>
+                        <Textarea
+                          value={draft}
+                          onChange={(e) => setDraft(e.target.value)}
+                          aria-label="What to never write about"
+                          rows={2}
+                        />
+                        <Inline justify="flex-end">
+                          <Button variant="ghost" onClick={closeMenu}>
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="danger"
+                            disabled={draft.trim().length === 0}
+                            onClick={() => void submitExclude()}
+                          >
+                            Never write about this
                           </Button>
                         </Inline>
                       </Stack>

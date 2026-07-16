@@ -469,6 +469,89 @@ describe('Story (64)', () => {
     );
   });
 
+  it('excludes a topic from the reader toolbar', async () => {
+    const storyExclude = vi.fn((input: { bookId: string; value: string }) =>
+      Promise.resolve({
+        exclusions: [{ id: 'x1', kind: 'topic' as const, value: input.value, createdAt: 'now' }],
+        bundle: writtenBundle('new'),
+        staled: 1,
+      }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
+      storyExclude,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!);
+    await userEvent.click(await screen.findByRole('button', { name: 'Exclude' }));
+    const box = screen.getByLabelText('What to never write about');
+    await userEvent.clear(box);
+    await userEvent.type(box, 'the divorce');
+    await userEvent.click(screen.getByRole('button', { name: 'Never write about this' }));
+    expect(storyExclude).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'topic', value: 'the divorce' }),
+    );
+    // The person is told what happened to already-written chapters.
+    expect(await screen.findByText(/marked to rewrite/)).toBeInTheDocument();
+  });
+
+  it('excludes a source from the Sources popover', async () => {
+    const storyExclude = vi.fn(() =>
+      Promise.resolve({
+        exclusions: [{ id: 'x1', kind: 'source' as const, value: 'i1', createdAt: 'now' }],
+        bundle: writtenBundle('new'),
+        staled: 0,
+      }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
+      storyExclude,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /Sources/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Don’t draw on this again' }));
+    expect(storyExclude).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'source', value: 'i1' }),
+    );
+  });
+
+  it('lists exclusions on the overview and allows them again', async () => {
+    const storyUnexclude = vi.fn(() => Promise.resolve([]));
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyExclusions: () =>
+        Promise.resolve([
+          { id: 'x1', kind: 'topic', value: 'the divorce', createdAt: 'now' },
+          // a source exclusion carries a cryptic id in `value` but a friendly `note` label.
+          { id: 'x2', kind: 'source', value: 'i1', note: 'a coaching insight', createdAt: 'now' },
+        ]),
+      storyUnexclude,
+    });
+    renderStory();
+    // The overview shows the "Never written about" panel.
+    expect(await screen.findByRole('heading', { name: 'Never written about' })).toBeInTheDocument();
+    expect(screen.getByText('the divorce')).toBeInTheDocument();
+    // The source exclusion shows its friendly label, never the raw ref id.
+    expect(screen.getByText('a coaching insight')).toBeInTheDocument();
+    expect(screen.queryByText('i1')).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole('button', { name: /Allow writing about the divorce again/ }),
+    );
+    expect(storyUnexclude).toHaveBeenCalledWith({ bookId: 'b1', itemId: 'x1' });
+  });
+
   it('approves the outline and shows the book overview', async () => {
     let approved = false;
     installMockBridge({

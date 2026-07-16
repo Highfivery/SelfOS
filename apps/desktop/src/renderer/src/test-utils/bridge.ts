@@ -325,6 +325,30 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     storyEditPassage: () => Promise.resolve(null),
     storyPinQuote: () => Promise.resolve(null),
     storyTodos: () => Promise.resolve({ schemaVersion: 1, todos: [] }),
+    storyExclusions: () => Promise.resolve([]),
+    storyExclude: (input) =>
+      Promise.resolve({
+        exclusions: [{ id: 'x1', kind: input.kind, value: input.value, createdAt: 'now' }],
+        bundle: {
+          manifest: {
+            id: input.bookId,
+            schemaVersion: 1,
+            personId: 'me',
+            type: 'biography',
+            title: 'Book',
+            config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+            status: 'ready',
+            sharedWith: [],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+          outline: null,
+          timeline: null,
+          chapters: [],
+        },
+        staled: 0,
+      }),
+    storyUnexclude: () => Promise.resolve([]),
     relationshipsGetSynthesis: () => Promise.resolve(null),
     relationshipsSynthesize: () =>
       Promise.resolve({ ok: false, reason: 'EMPTY', message: 'Nothing yet.' }),

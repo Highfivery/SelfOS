@@ -4,6 +4,8 @@ import type {
   BookManifest,
   BookOutline,
   ChapterMarkup,
+  ExclusionItem,
+  ExclusionKind,
   MarkupMark,
   StoryBookBundle,
   StoryBookTypeView,
@@ -62,6 +64,11 @@ interface StoryState {
     anchor: TextAnchor,
     text: string,
   ) => Promise<boolean>;
+  /** The book's exclusions ("never write about this again") — for the overview panel. */
+  exclusions: ExclusionItem[];
+  loadExclusions: (bookId: string) => Promise<void>;
+  exclude: (bookId: string, kind: ExclusionKind, value: string, note?: string) => Promise<number>;
+  unexclude: (bookId: string, itemId: string) => Promise<void>;
   update: (bookId: string, patch: { title?: string; config?: BookConfig }) => Promise<void>;
   remove: (bookId: string) => Promise<void>;
   clearBundle: () => void;
@@ -89,6 +96,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   books: [],
   bundle: null,
   markup: null,
+  exclusions: [],
   loaded: false,
   generating: false,
   chaptersGenerating: false,
@@ -202,6 +210,24 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     if (bundle) set({ bundle });
     return bundle !== null;
   },
+  loadExclusions: async (bookId) => {
+    const exclusions = (await window.selfos?.storyExclusions({ bookId })) ?? [];
+    set({ exclusions });
+  },
+  exclude: async (bookId, kind, value, note) => {
+    const res = await window.selfos?.storyExclude({
+      bookId,
+      kind,
+      value,
+      ...(note ? { note } : {}),
+    });
+    if (res) set({ exclusions: res.exclusions, bundle: res.bundle });
+    return res?.staled ?? 0;
+  },
+  unexclude: async (bookId, itemId) => {
+    const exclusions = (await window.selfos?.storyUnexclude({ bookId, itemId })) ?? [];
+    set({ exclusions });
+  },
   update: async (bookId, patch) => {
     await window.selfos?.storyUpdate({ bookId, ...patch });
     await get().open(bookId);
@@ -219,6 +245,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       books: [],
       bundle: null,
       markup: null,
+      exclusions: [],
       loaded: false,
       generating: false,
       chaptersGenerating: false,

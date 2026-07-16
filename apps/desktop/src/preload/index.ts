@@ -199,6 +199,9 @@ const bridge: SelfosBridge = {
   storyEditPassage: (input) => ipcRenderer.invoke(IpcChannels.storyEditPassage, input),
   storyPinQuote: (input) => ipcRenderer.invoke(IpcChannels.storyPinQuote, input),
   storyTodos: (input) => ipcRenderer.invoke(IpcChannels.storyTodos, input),
+  storyExclusions: (input) => ipcRenderer.invoke(IpcChannels.storyExclusions, input),
+  storyExclude: (input) => ipcRenderer.invoke(IpcChannels.storyExclude, input),
+  storyUnexclude: (input) => ipcRenderer.invoke(IpcChannels.storyUnexclude, input),
   relationshipsGetSynthesis: (input) =>
     ipcRenderer.invoke(IpcChannels.relationshipsGetSynthesis, input),
   relationshipsSynthesize: (input) =>

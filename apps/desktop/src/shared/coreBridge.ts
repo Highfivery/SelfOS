@@ -169,17 +169,21 @@ import {
   StoryBookRefSchema,
   StoryChapterRefSchema,
   StoryEditPassageInputSchema,
+  StoryExcludeInputSchema,
   StoryMarkInputSchema,
   StoryOutlineInputSchema,
   StoryPinInputSchema,
   StoryRemoveMarkInputSchema,
+  StoryUnexcludeInputSchema,
   StoryUpdateInputSchema,
   StoryUpdateMarkInputSchema,
   type BookManifest,
   type ChapterMarkup,
+  type ExclusionItem,
   type StoryBookBundle,
   type StoryBookTypeView,
   type StoryChaptersResult,
+  type StoryExcludeResult,
   type StoryFoundationsResult,
   type StoryRevisionResult,
   type StoryTodoList,
@@ -353,6 +357,7 @@ import {
   updateGoal,
 } from '@selfos/core/goals';
 import {
+  addExclusion,
   addMark,
   applyFoundations,
   applyMarkup,
@@ -373,6 +378,7 @@ import {
   listBooks,
   pinPassage,
   readBookBundle,
+  removeExclusion,
   removeMark,
   saveChapter,
   saveOutline,
@@ -4437,6 +4443,42 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return { schemaVersion: 1, todos: [] };
       return getTodos(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyExclusions: async (input): Promise<ExclusionItem[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return getExclusions(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyExclude: async (input): Promise<StoryExcludeResult> => {
+      const { bookId, kind, value, note } = StoryExcludeInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        throw new Error('Not permitted.');
+      }
+      const personId = await activePersonId();
+      if (!personId) throw new Error('No active person.');
+      const { exclusions, staled } = await addExclusion(
+        ctx.fs,
+        ctx.key,
+        personId,
+        bookId,
+        { kind, value, ...(note ? { note } : {}) },
+        new Date(),
+      );
+      const bundle = await readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      if (!bundle) throw new Error('That book is no longer here.');
+      return { exclusions, bundle, staled };
+    },
+    storyUnexclude: async (input): Promise<ExclusionItem[]> => {
+      const { bookId, itemId } = StoryUnexcludeInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return removeExclusion(ctx.fs, ctx.key, personId, bookId, itemId);
     },
     // The batch markup revision — the one AI call in the markup layer (§3.3.1/§5.3).
     storyApplyMarkup: async (input): Promise<StoryRevisionResult> => {

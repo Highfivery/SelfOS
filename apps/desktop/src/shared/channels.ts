@@ -5,12 +5,15 @@ import type {
   AlignmentResult,
   BookManifest,
   ChapterMarkup,
+  ExclusionItem,
   StoryBookBundle,
   StoryBookTypeView,
   StoryChaptersResult,
   StoryChapterRef,
   StoryCreateInput,
   StoryEditPassageInput,
+  StoryExcludeInput,
+  StoryExcludeResult,
   StoryFoundationsResult,
   StoryMarkInput,
   StoryOutlineInput,
@@ -18,6 +21,7 @@ import type {
   StoryRemoveMarkInput,
   StoryRevisionResult,
   StoryTodoList,
+  StoryUnexcludeInput,
   StoryUpdateInput,
   StoryUpdateMarkInput,
   Goal,
@@ -299,6 +303,9 @@ export const IpcChannels = {
   storyEditPassage: 'story:editPassage',
   storyPinQuote: 'story:pinQuote',
   storyTodos: 'story:todos',
+  storyExclusions: 'story:exclusions',
+  storyExclude: 'story:exclude',
+  storyUnexclude: 'story:unexclude',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -1041,6 +1048,12 @@ export interface SelfosBridge {
   storyPinQuote(input: StoryPinInput): Promise<StoryBookBundle | null>;
   /** The book-level to-do roll-up for the overview "To do" list (§3.3.2) — one read, not N. */
   storyTodos(input: { bookId: string }): Promise<StoryTodoList>;
+  /** The book's exclusions ("never write about this again") for the Exclusions panel (§3.3). */
+  storyExclusions(input: { bookId: string }): Promise<ExclusionItem[]>;
+  /** Add an exclusion; chapters that already mention it are marked stale (option 1). Fresh bundle + list. */
+  storyExclude(input: StoryExcludeInput): Promise<StoryExcludeResult>;
+  /** Remove an exclusion (written chapters unchanged). Returns the updated list. */
+  storyUnexclude(input: StoryUnexcludeInput): Promise<ExclusionItem[]>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

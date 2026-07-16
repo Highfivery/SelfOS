@@ -55,8 +55,9 @@ export function AutoCheckinsPanel(): JSX.Element | null {
     void load();
   }, [load]);
   useEffect(() => {
-    // Load the household once (for the owner's add-person picker) only if it isn't already loaded — never
-    // re-fetch over an already-populated store (that would clobber a recipient picker elsewhere on the page).
+    // Load the household once (for the owner's add-person picker + person-target names) only if it isn't
+    // already loaded — never re-fetch over an already-populated store (that would clobber a recipient picker
+    // elsewhere on the page).
     if (isOwner && !peopleLoaded) void loadPeople();
   }, [isOwner, peopleLoaded, loadPeople]);
 

@@ -63,6 +63,8 @@ export const NOTIFICATION_KINDS = [
   'together-invite', // 58-together §3.11 — a partner invited you to a Together session
   'together-turn', // 58-together §3.11 — your turn in a Together session (coalesced per session, projection signature)
   'together-private', // 58-together §3.14 Part B — the coach left a private note just for you in a Together session
+  'auto-checkin-ready', // 63-auto-checkins §6.4 — an auto-generated check-in is waiting in the inbox
+  'auto-checkin-enabled', // 63-auto-checkins §5.1 — the one-time "Auto check-ins is now on" seed notice
 ] as const;
 export const NotificationKindSchema = z.enum(NOTIFICATION_KINDS);
 export type NotificationKind = z.infer<typeof NotificationKindSchema>;
@@ -1504,6 +1506,9 @@ export const AutoCheckinConfigSchema = z.object({
   schemaVersion: z.number().int().positive(),
   enabled: z.boolean().default(false), // author master toggle — default OFF (seeded on at onboarding, §5.1)
   targets: z.array(AutoCheckinTargetSchema).default([]),
+  // When the onboarding-completion seed first flipped this person on (§5.1) — drives the one-time
+  // "Auto check-ins is now on" notice. Absent on a manually-configured config (no surprise to announce).
+  seededAt: z.string().optional(),
 });
 export type AutoCheckinConfig = z.infer<typeof AutoCheckinConfigSchema>;
 

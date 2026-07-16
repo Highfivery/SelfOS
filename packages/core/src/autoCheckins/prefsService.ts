@@ -92,6 +92,7 @@ export async function seedDefaultConfigIfAbsent(
   const config: AutoCheckinConfig = {
     schemaVersion: SCHEMA_VERSION,
     enabled: true,
+    seededAt: new Date().toISOString(), // drives the one-time "it's now on" notice (§5.1)
     targets: [
       {
         id: uuid(),

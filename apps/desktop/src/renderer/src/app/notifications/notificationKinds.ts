@@ -87,6 +87,12 @@ export const NOTIFICATION_KIND_DEFS: Record<NotificationKind, KindDef> = {
   // The coach left a private note just for you (58 §3.14 Part B), coalesced per session. onChange by the
   // note's ts — a NEW private note re-surfaces; it never carries the note's text.
   'together-private': { icon: Lock, severity: 'info', resurfaces: onChange },
+  // An auto-generated check-in is waiting (63 §6.4). onIncrease by count: dismissing never re-nags unless
+  // ANOTHER arrives; answering some (a lower count) never re-pops it.
+  'auto-checkin-ready': { icon: ClipboardList, severity: 'info', resurfaces: onIncrease },
+  // The one-time "Auto check-ins is now on" seed notice (63 §5.1). onChange: the seed fires once (write-once),
+  // so the candidate is pushed once and, once dismissed, never returns (the seed can't re-fire).
+  'auto-checkin-enabled': { icon: Sparkles, severity: 'info', resurfaces: onChange },
 };
 
 /** The icon for a kind (used by the bell rows + toasts). */

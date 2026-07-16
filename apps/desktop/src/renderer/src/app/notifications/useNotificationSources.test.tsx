@@ -327,3 +327,83 @@ describe('useNotificationSources — responses-arrived (38 §3.1)', () => {
     });
   });
 });
+
+describe('useNotificationSources — auto check-ins (63)', () => {
+  const autoInboxItem = {
+    assignmentId: 'a1',
+    title: 'A quick check-in',
+    type: 'general',
+    questionCount: 3,
+    status: 'sent' as const,
+    privacy: 'standard' as const,
+    senderName: 'Ben',
+    createdAt: 'now',
+    favorite: false,
+    answerable: true,
+    hasDraft: false,
+    fromSelf: true,
+    autoCheckin: {
+      targetId: 't-self',
+      intent: 'deepen' as const,
+      rationale: 'why',
+      generatedAt: 'now',
+    },
+  };
+
+  it('surfaces "a new reflection is ready" for a waiting auto check-in, linking to the Inbox', async () => {
+    installMockBridge({ assignmentsInbox: () => Promise.resolve([autoInboxItem]) });
+    asOwner();
+    await useNotificationStore.getState().load();
+    render(<Harness />);
+    await waitFor(() => {
+      const n = useNotificationStore
+        .getState()
+        .notifications.find((x) => x.coalesceKey === 'auto-checkin-ready');
+      expect(n?.title).toBe('A new reflection is ready');
+      expect(n?.action).toEqual({ type: 'navigate', to: '/inbox' });
+    });
+  });
+
+  it('fires the one-time "it’s now on" notice when the config was seeded (still enabled)', async () => {
+    installMockBridge({
+      autoCheckinsGetConfig: () =>
+        Promise.resolve({
+          schemaVersion: 1,
+          enabled: true,
+          seededAt: '2026-07-15T00:00:00.000Z',
+          targets: [],
+        }),
+    });
+    asOwner();
+    await useNotificationStore.getState().load();
+    render(<Harness />);
+    await waitFor(() => {
+      const n = useNotificationStore
+        .getState()
+        .notifications.find((x) => x.coalesceKey === 'auto-checkin-enabled');
+      expect(n?.title).toBe('Auto check-ins is now on');
+      expect(n?.action).toEqual({ type: 'navigate', to: '/questionnaires' });
+    });
+  });
+
+  it('does NOT fire the seed notice once turned off, nor the ready notice with nothing waiting', async () => {
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([]),
+      autoCheckinsGetConfig: () =>
+        Promise.resolve({
+          schemaVersion: 1,
+          enabled: false,
+          seededAt: '2026-07-15T00:00:00.000Z',
+          targets: [],
+        }),
+    });
+    asOwner();
+    await useNotificationStore.getState().load();
+    render(<Harness />);
+    // Let the effects settle, then assert neither candidate exists.
+    await waitFor(() => expect(useNotificationStore.getState().notifications).toBeDefined());
+    const keys = useNotificationStore.getState().notifications.map((n) => n.coalesceKey);
+    expect(keys).not.toContain('auto-checkin-enabled');
+    expect(keys).not.toContain('auto-checkin-ready');
+  });
+});

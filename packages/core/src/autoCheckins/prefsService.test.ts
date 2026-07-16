@@ -64,6 +64,7 @@ describe('seedDefaultConfigIfAbsent', () => {
     });
     expect(seeded).toBe(true);
     expect(config.enabled).toBe(true);
+    expect(config.seededAt).toBeTruthy(); // drives the one-time "it's now on" notice (§5.1)
     expect(config.targets).toHaveLength(1);
     expect(config.targets[0]?.target).toEqual({ kind: 'self' });
     expect(config.targets[0]?.enabled).toBe(true);

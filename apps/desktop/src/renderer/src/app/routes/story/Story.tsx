@@ -29,6 +29,7 @@ import type {
   StoryBookBundle,
   StoryCompleteness,
   StoryCompletenessStage,
+  StoryReaderView,
   StructuralProposal,
   TextAnchor,
 } from '@shared/schemas';
@@ -75,6 +76,8 @@ export function Story(): JSX.Element {
   const create = useStoryStore((s) => s.create);
   const open = useStoryStore((s) => s.open);
   const generateFoundations = useStoryStore((s) => s.generateFoundations);
+  const readerView = useStoryStore((s) => s.readerView);
+  const closeSharedBook = useStoryStore((s) => s.closeSharedBook);
 
   const [mode, setMode] = useState<'idle' | 'setup'>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -116,6 +119,15 @@ export function Story(): JSX.Element {
   };
 
   if (!loaded) return <div className={styles.page} aria-busy="true" />;
+
+  // Reading a book someone shared with you takes over the surface (the published head, read-only).
+  if (readerView) {
+    return (
+      <div className={styles.page}>
+        <SharedReaderView view={readerView} onBack={closeSharedBook} />
+      </div>
+    );
+  }
 
   if (generating) {
     return (
@@ -212,6 +224,7 @@ export function Story(): JSX.Element {
           </Inline>
         </Stack>
       </Card>
+      <SharedWithYou />
     </div>
   );
 }
@@ -771,6 +784,8 @@ function BookOverview({
         </>
       ) : null}
 
+      <SharedWithYou />
+
       <Inline>
         {confirmDelete ? (
           <Inline>
@@ -1004,6 +1019,132 @@ const COMPLETENESS_STAGE: Record<StoryCompletenessStage, string> = {
   comingTogether: 'Coming together',
   richlyTold: 'Richly told',
 };
+
+/** The "Shared with you" section (§3.5) — books others have published to the active person. Self-hides when
+ *  empty; opening a card reads the published head (never the author's draft). */
+function SharedWithYou(): JSX.Element | null {
+  const sharedBooks = useStoryStore((s) => s.sharedBooks);
+  const loadSharedBooks = useStoryStore((s) => s.loadSharedBooks);
+  const openSharedBook = useStoryStore((s) => s.openSharedBook);
+  useEffect(() => {
+    void loadSharedBooks();
+  }, [loadSharedBooks]);
+  if (sharedBooks.length === 0) return null;
+  return (
+    <Card>
+      <Stack gap={2}>
+        <Heading level={2}>Shared with you</Heading>
+        {sharedBooks.map((b) => (
+          <button
+            key={`${b.authorPersonId}:${b.bookId}`}
+            type="button"
+            className={styles.chapterLink}
+            onClick={() => void openSharedBook(b.authorPersonId, b.bookId)}
+          >
+            <Stack gap={1}>
+              <Text className={styles.rowTitle}>{b.title}</Text>
+              <Text tone="secondary" size="sm">
+                By {b.authorName} · {b.chapterCount} chapter{b.chapterCount === 1 ? '' : 's'}
+              </Text>
+            </Stack>
+            <Text tone="secondary" size="sm">
+              Read ›
+            </Text>
+          </button>
+        ))}
+      </Stack>
+    </Card>
+  );
+}
+
+/** The reader view (§3.6) — a granted reader reads a book's PUBLISHED head: cover → front matter → contents →
+ *  parts/chapters (read-only, typography-first) → back matter + the "A Note on this book" honesty page. */
+function SharedReaderView({
+  view,
+  onBack,
+}: {
+  view: StoryReaderView;
+  onBack: () => void;
+}): JSX.Element {
+  const { manifest, chapters, authorName } = view;
+  const chapterById = new Map(chapters.map((c) => [c.id, c]));
+  return (
+    <Stack gap={4}>
+      <Inline>
+        <button type="button" className={styles.sourcesToggle} onClick={onBack}>
+          ‹ Back
+        </button>
+      </Inline>
+      <div className={styles.readerView}>
+        <div className={styles.coverPage}>
+          <Heading level={1}>{manifest.title}</Heading>
+          <Text tone="secondary">by {authorName}</Text>
+        </div>
+
+        {manifest.matter?.dedication ? (
+          <p className={styles.dedication}>
+            <em>{manifest.matter.dedication}</em>
+          </p>
+        ) : null}
+        {manifest.matter?.epigraph ? (
+          <blockquote className={styles.epigraph}>{manifest.matter.epigraph}</blockquote>
+        ) : null}
+
+        {manifest.parts.length > 0 ? (
+          <nav className={styles.toc} aria-label="Contents">
+            <Heading level={3}>Contents</Heading>
+            {manifest.parts.map((part) => (
+              <Stack key={part.id} gap={1}>
+                <Text size="sm" tone="secondary">
+                  {part.title}
+                </Text>
+                {part.chapterIds.map((id) => {
+                  const c = chapterById.get(id);
+                  return c ? (
+                    <Text key={id} size="sm">
+                      {c.title}
+                    </Text>
+                  ) : null;
+                })}
+              </Stack>
+            ))}
+          </nav>
+        ) : null}
+
+        {manifest.parts.map((part) => (
+          <section key={part.id}>
+            <Heading level={2}>{part.title}</Heading>
+            {part.chapterIds.map((id) => {
+              const c = chapterById.get(id);
+              if (!c) return null;
+              return (
+                <article key={id} className={styles.readerChapter}>
+                  <Heading level={3}>{c.title}</Heading>
+                  <Markdown>{c.markdown}</Markdown>
+                </article>
+              );
+            })}
+          </section>
+        ))}
+
+        {manifest.matter?.acknowledgments ? (
+          <section className={styles.backMatter}>
+            <Heading level={3}>Acknowledgments</Heading>
+            <Markdown>{manifest.matter.acknowledgments}</Markdown>
+          </section>
+        ) : null}
+        {manifest.noteOnBook ? (
+          <section className={styles.backMatter}>
+            <Heading level={3}>A note on this book</Heading>
+            <Text tone="secondary" size="sm">
+              {manifest.noteOnBook}
+            </Text>
+          </section>
+        ) : null}
+      </div>
+    </Stack>
+  );
+}
 
 /** How far along the story is — a warm stage label + a quiet progress bar (never a bare percentage). */
 function CompletenessMeter({ c }: { c: StoryCompleteness }): JSX.Element {

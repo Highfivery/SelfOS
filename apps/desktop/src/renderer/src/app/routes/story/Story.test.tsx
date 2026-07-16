@@ -844,6 +844,68 @@ describe('Story (64)', () => {
     );
   });
 
+  it('shows "Shared with you" and reads a shared book’s published head (§3.5/§3.6)', async () => {
+    const readerView = {
+      authorPersonId: 'auth1',
+      authorName: 'Ben',
+      bookId: 'sb1',
+      manifest: {
+        schemaVersion: 1 as const,
+        publishedAt: '2026-07-16T00:00:00.000Z',
+        title: 'The Life of Ben',
+        matter: { dedication: 'For my mother' },
+        noteOnBook: 'This book was written from 3 coaching insights — never invented.',
+        parts: [{ id: 'p1', title: 'Roots', chapterIds: ['c1'] }],
+        chapterOrder: ['c1'],
+      },
+      chapters: [
+        {
+          id: 'c1',
+          schemaVersion: 1 as const,
+          partId: 'p1',
+          order: 0,
+          title: 'The Garage',
+          markdown: 'The garage smelled of cut pine.',
+          revision: 1,
+          status: 'reviewed' as const,
+          sourceSignature: '',
+          provenance: [],
+          protectedBlocks: [],
+          pinnedQuotes: [],
+          imagePlacements: [],
+        },
+      ],
+    };
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([]), // no OWN book → the empty landing, where "Shared with you" shows
+      storySharedBooks: () =>
+        Promise.resolve([
+          {
+            authorPersonId: 'auth1',
+            authorName: 'Ben',
+            bookId: 'sb1',
+            title: 'The Life of Ben',
+            publishedAt: '2026-07-16T00:00:00.000Z',
+            chapterCount: 1,
+            newChapters: 1,
+          },
+        ]),
+      storyReadShared: () => Promise.resolve(readerView),
+    });
+    renderStory();
+    expect(await screen.findByText('Shared with you')).toBeInTheDocument();
+    expect(screen.getByText(/By Ben · 1 chapter/)).toBeInTheDocument();
+    // Open it → the reader view renders the published head (prose + front matter + the honesty page).
+    await userEvent.click(screen.getByRole('button', { name: /The Life of Ben/ }));
+    expect(await screen.findByText('The garage smelled of cut pine.')).toBeInTheDocument();
+    expect(screen.getByText('For my mother')).toBeInTheDocument();
+    expect(screen.getByText(/never invented/)).toBeInTheDocument();
+    // Back returns to the surface.
+    await userEvent.click(screen.getByRole('button', { name: '‹ Back' }));
+    expect(await screen.findByText('Shared with you')).toBeInTheDocument();
+  });
+
   it('lists to-dos on the overview and marks a reminder done', async () => {
     const storyUpdateMark = vi.fn(
       (): Promise<ChapterMarkup> =>

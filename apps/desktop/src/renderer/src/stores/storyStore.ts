@@ -16,9 +16,11 @@ import type {
   StoryQuestionsResult,
   BookMatter,
   BookReader,
+  SharedBookSummary,
   StoryCompleteness,
   StoryInterviewCadenceResult,
   StoryPublishResult,
+  StoryReaderView,
   StoryRefreshViewResult,
   StoryResolveProposalResult,
   StoryRevisionResult,
@@ -123,6 +125,12 @@ interface StoryState {
   grantReader: (bookId: string, readerPersonId: string) => Promise<void>;
   revokeReader: (bookId: string, readerPersonId: string) => Promise<void>;
   readerFeatured: (bookId: string, readerPersonId: string) => Promise<boolean>;
+  /** Books shared WITH the active person (§3.5) — the "Shared with you" surface + the reader view. */
+  sharedBooks: SharedBookSummary[];
+  loadSharedBooks: () => Promise<void>;
+  readerView: StoryReaderView | null;
+  openSharedBook: (authorPersonId: string, bookId: string) => Promise<void>;
+  closeSharedBook: () => void;
   remove: (bookId: string) => Promise<void>;
   clearBundle: () => void;
   reset: () => void;
@@ -160,6 +168,8 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   proposals: [],
   completeness: null,
   readers: [],
+  sharedBooks: [],
+  readerView: null,
   loaded: false,
   generating: false,
   chaptersGenerating: false,
@@ -387,6 +397,15 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   },
   readerFeatured: async (bookId, readerPersonId) =>
     (await window.selfos?.storyReaderFeatured({ bookId, readerPersonId })) ?? false,
+  loadSharedBooks: async () => {
+    const sharedBooks = (await window.selfos?.storySharedBooks()) ?? [];
+    set({ sharedBooks });
+  },
+  openSharedBook: async (authorPersonId, bookId) => {
+    const readerView = (await window.selfos?.storyReadShared({ authorPersonId, bookId })) ?? null;
+    set({ readerView });
+  },
+  closeSharedBook: () => set({ readerView: null }),
   remove: async (bookId) => {
     await window.selfos?.storyDelete({ bookId });
     set({ bundle: null });
@@ -404,6 +423,8 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       proposals: [],
       completeness: null,
       readers: [],
+      sharedBooks: [],
+      readerView: null,
       loaded: false,
       generating: false,
       chaptersGenerating: false,

@@ -64,6 +64,7 @@ import {
   pairKeyFor,
   saveAgreement,
 } from '@selfos/core/together';
+import { getBook, listBooks } from '@selfos/core/story';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
@@ -11158,5 +11159,247 @@ test('auto check-ins (63): a recurring crisis signal pauses generation entirely'
     await app.close();
     await rm(userData, { recursive: true, force: true });
     await rm(vault, { recursive: true, force: true });
+  }
+});
+
+// --- Your Story (spec 64) --------------------------------------------------------------------------------
+// The whole biographer flow driven through the real UI (the enabling change is the story branches in the
+// main-process fake Claude). These are the end-to-end walks the feature previously lacked (it shipped with
+// core + coreBridge + RTL coverage only, the documented Together-style exception).
+
+test('story (64): setup names the book, outline rename, chapters + sources, mark up → apply, exclude; 360px clean', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  // Seed one approved corpus insight so a written chapter can cite a real source ([[SRC:s0]] resolves).
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+  const now = new Date().toISOString();
+  await saveInsight(fs, key, {
+    id: 'seed-portrait',
+    schemaVersion: 1,
+    source: 'intake',
+    subjectPersonId: 'owner-1',
+    summary: 'A quiet, careful person who grew up around machines.',
+    facts: [{ id: 'f1', text: 'Grew up in his father’s garage.', shareable: false }],
+    confidence: 'medium',
+    categories: [],
+    approved: true,
+    provenance: { intakeSection: 'basics', at: now },
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Start your story' }).click();
+
+    // Feedback changes: the Style control offers more than the original three registers; the title is optional
+    // (Create is enabled with it blank); Full is the default length.
+    const style = w.getByRole('combobox', { name: 'Style' });
+    expect(await style.locator('option').count()).toBeGreaterThan(3);
+    await style.selectOption({ label: 'Cinematic' });
+    const create = w.getByRole('button', { name: /Create .* draft the outline/ });
+    await expect(create).toBeEnabled();
+    await create.click();
+
+    // Foundations → outline review, pre-filled with the AI-proposed title. Rename it (marks it the person’s own).
+    await expect(w.getByRole('heading', { name: 'Review your outline' })).toBeVisible();
+    const titleField = w.getByRole('textbox', { name: 'Book title' });
+    await expect(titleField).toHaveValue('The Weight of Quiet');
+    await titleField.fill('A Machine and a Voice');
+    await w.getByRole('button', { name: 'Approve & start writing' }).click();
+
+    // Write the chapters, open one, and read its prose + provenance.
+    await w.getByRole('button', { name: /Write (your|the remaining)/ }).click();
+    await w.getByRole('button', { name: /The Garage/ }).click();
+    await expect(w.getByText(/cut pine/)).toBeVisible();
+    await w
+      .getByRole('button', { name: /Sources/ })
+      .first()
+      .click();
+    await expect(w.getByText(/Drawn from/)).toBeVisible();
+
+    // Mark up the first paragraph with a comment → it queues for the batch revision → apply it.
+    await w.getByRole('button', { name: 'Mark up' }).first().click();
+    await w.getByRole('button', { name: 'Comment' }).click();
+    await w.getByRole('textbox', { name: 'Comment' }).fill('Mention the winter he got sick.');
+    await w.getByRole('button', { name: 'Add comment' }).click();
+    await expect(w.getByText(/change(s)? ready to apply/)).toBeVisible();
+    await w.getByRole('button', { name: 'Review & apply' }).click();
+    await expect(w.getByText(/for once he spoke up/)).toBeVisible();
+
+    // Exclude a topic — "never write about this again".
+    await w.getByRole('button', { name: 'Mark up' }).first().click();
+    await w.getByRole('button', { name: 'Exclude' }).click();
+    await w.getByRole('textbox', { name: 'What to never write about' }).fill('the lake house');
+    await w.getByRole('button', { name: 'Never write about this' }).click();
+    await expect(w.getByText(/written again/)).toBeVisible();
+
+    // Decrypt the manifest: the rename stuck (auto flag cleared) and the setup choices persisted.
+    const books = await listBooks(fs, key, 'owner-1');
+    const book = await getBook(fs, key, 'owner-1', books[0]!.id);
+    expect(book?.title).toBe('A Machine and a Voice');
+    expect(book?.titleAuto ?? false).toBe(false);
+    expect(book?.config.length).toBe('full');
+    expect(book?.config.style).toBe('cinematic');
+
+    // 360px: the reader scrolls vertically only — no horizontal scrollbar (CLAUDE.md §12).
+    await w.setViewportSize({ width: 360, height: 780 });
+    const offenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(offenders).toEqual([]);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('story (64): living book — refresh proposes a structural change, approving restructures the outline; find-what’s-missing mints a check-in', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Start your story' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Living Book');
+    await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
+    await expect(w.getByRole('heading', { name: 'Review your outline' })).toBeVisible();
+    await w.getByRole('button', { name: 'Approve & start writing' }).click();
+    await w.getByRole('button', { name: /Write (your|the remaining)/ }).click();
+    // Back on the overview once the chapters are written.
+    await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
+
+    // A manual refresh runs the structural pass → the "Suggested changes" panel with a proposal to review
+    // (the auto-cadence hook may file it first; either way the panel appears after the refresh reloads it).
+    await w.getByRole('button', { name: /Refresh from what’s new/ }).click();
+    await expect(w.getByRole('heading', { name: 'Suggested changes' })).toBeVisible();
+    // Approving restructures the outline: a new, not-yet-written chapter shell appears.
+    await w.getByRole('button', { name: 'Approve' }).first().click();
+    await expect(w.getByText('The Move West')).toBeVisible();
+
+    // The completeness meter shows a warm stage (never a bare %), and "Find what’s missing" runs the gap pass.
+    await expect(
+      w.getByText(/Just beginning|Taking shape|Coming together|Richly told/),
+    ).toBeVisible();
+    await w.getByRole('button', { name: /Find what’s missing/ }).click();
+    // Either the pass just minted a check-in or one is already waiting — both point at the Inbox.
+    await expect(w.getByText(/Inbox/)).toBeVisible();
+
+    // A story-provenance questionnaire was minted end-to-end (the interview engine → the Inbox).
+    await expect
+      .poll(async () => {
+        const defs = await listQuestionnaires(fs, key);
+        return defs.some((d) => d.storyProvenance !== undefined);
+      })
+      .toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('story (64): a cover, publish to a household reader who reads the shared book, and export leaves the vault', async () => {
+  test.setTimeout(90_000);
+  const { userData, vault } = await seedReadyVault({
+    'ai.enabled': true,
+    'dreams.imageGenerationEnabled': true,
+  });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  await secrets.set('openai.apiKey', 'sk-openai-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+  const now = new Date().toISOString();
+  // A second household person to grant as a reader (member, onboarding already complete so no gate).
+  await savePerson(fs, key, {
+    id: 'reader-1',
+    schemaVersion: 1,
+    displayName: 'Reader',
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await setAccount(fs, key, { personId: 'reader-1', roleId: 'member' });
+  await seedCompletedIntake(fs, key, 'reader-1');
+
+  const saveDir = await mkdtemp(join(tmpdir(), 'selfos-e2e-save-'));
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_SAVE_DIR: saveDir },
+  });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Start your story' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Shared Life');
+    await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
+    await expect(w.getByRole('heading', { name: 'Review your outline' })).toBeVisible();
+    await w.getByRole('button', { name: 'Approve & start writing' }).click();
+    await w.getByRole('button', { name: /Write (your|the remaining)/ }).click();
+    await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
+
+    // Create a symbolic cover (H1): the distill → render flow behind the shared image consent.
+    await w.getByRole('button', { name: 'Create a cover' }).click();
+    await expect(w.locator('img[alt="Cover for this book"]')).toBeVisible();
+
+    // Mark a chapter reviewed so there's something to publish.
+    await w.getByRole('button', { name: /The Garage/ }).click();
+    await w.getByRole('button', { name: 'Looks good' }).click();
+    await w.getByRole('button', { name: /Back to the book/ }).click();
+
+    // Publish the reviewed chapter, then grant the household reader.
+    await w.getByRole('button', { name: /Publish & choose readers/ }).click();
+    await expect(w.getByText(/Shared \d+ chapter/)).toBeVisible();
+    await w.getByRole('combobox', { name: 'Add a reader' }).selectOption({ label: 'Reader' });
+    await w.getByRole('button', { name: 'Add as reader' }).click();
+    await expect(w.getByRole('button', { name: 'Remove Reader as a reader' })).toBeVisible();
+
+    // Export the published book as Markdown — the file lands OUTSIDE the encrypted vault.
+    await w.getByRole('button', { name: 'Export as Markdown' }).click();
+    await expect(w.getByText(/leaves your encrypted vault/)).toBeVisible();
+    await expect
+      .poll(async () => {
+        const files = await readdir(saveDir);
+        const md = files.find((f) => f.endsWith('.md'));
+        return md ? readFile(join(saveDir, md), 'utf8') : '';
+      })
+      .toContain('Shared Life');
+
+    // The reader signs in and reads the PUBLISHED head — never the working draft.
+    await switchTogetherPerson(w, 'Reader');
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await expect(w.getByRole('heading', { name: 'Shared with you' })).toBeVisible();
+    await w.getByRole('button', { name: /Shared Life/ }).click();
+    await expect(w.getByRole('heading', { name: 'Shared Life' })).toBeVisible();
+    await expect(w.getByText(/cut pine/)).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+    await rm(saveDir, { recursive: true, force: true });
   }
 });

@@ -300,7 +300,7 @@ updatedAt, publishedAt? }`.
 label, sourceRef?: StorySourceRef, userEdited: boolean }] }` — user-editable; the chronology
   spine.
 - **`BookChapterSchema`** — `{ schemaVersion:1, id, partId, order, title, markdown, revision:
-number, status: 'generating'|'new'|'stale'|'reviewed', sourceSignature: string, provenance:
+number, status: 'generating'|'new'|'updated'|'stale'|'reviewed', sourceSignature: string, provenance:
 [{ anchor: paragraphId, refs: StorySourceRef[] }], protectedBlocks: [{ anchor: TextAnchor, text }],
 pinnedQuotes: [{ anchor: TextAnchor, text, sourceRef? }], imagePlacements: [{ imageId, afterAnchor,
 caption }], lastGeneratedAt, lastReviewedAt? }`.

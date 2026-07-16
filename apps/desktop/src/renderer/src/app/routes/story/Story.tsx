@@ -62,6 +62,7 @@ export function Story(): JSX.Element {
 
   const [mode, setMode] = useState<'idle' | 'setup'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [reading, setReading] = useState<string | null>(null); // the open chapter's id, or null
 
   useEffect(() => {
     void load();
@@ -75,6 +76,7 @@ export function Story(): JSX.Element {
     }
     setMode('idle');
     setError(null);
+    setReading(null);
   }, [activePersonId]);
 
   // Open the first book once loaded so returning lands on it — but never while a pass is running (so it
@@ -117,9 +119,17 @@ export function Story(): JSX.Element {
       );
     }
     if (bundle.outline) {
+      const openChapter = reading ? bundle.chapters.find((c) => c.id === reading) : undefined;
+      if (openChapter) {
+        return (
+          <div className={styles.page}>
+            <ChapterReader bundle={bundle} chapter={openChapter} onBack={() => setReading(null)} />
+          </div>
+        );
+      }
       return (
         <div className={styles.page}>
-          <BookOverview bundle={bundle} />
+          <BookOverview bundle={bundle} onOpenChapter={setReading} />
         </div>
       );
     }
@@ -433,10 +443,31 @@ function OutlineReview({ bundle }: { bundle: StoryBookBundle }): JSX.Element {
   );
 }
 
-function BookOverview({ bundle }: { bundle: StoryBookBundle }): JSX.Element {
+const CHAPTER_STATUS_LABEL: Record<string, string> = {
+  generating: 'Writing…',
+  new: 'New',
+  updated: 'Updated',
+  stale: 'New material',
+  reviewed: 'Reviewed',
+};
+
+function BookOverview({
+  bundle,
+  onOpenChapter,
+}: {
+  bundle: StoryBookBundle;
+  onOpenChapter: (chapterId: string) => void;
+}): JSX.Element {
   const remove = useStoryStore((s) => s.remove);
+  const generateChapters = useStoryStore((s) => s.generateChapters);
+  const busy = useStoryStore((s) => s.chaptersGenerating);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { manifest, outline, chapters } = bundle;
+
+  const outlineChapters = outline ? outline.parts.flatMap((p) => p.chapters) : [];
+  const writtenIds = new Set(chapters.map((c) => c.id));
+  const pending = outlineChapters.filter((c) => !writtenIds.has(c.id)).length;
 
   return (
     <Stack gap={4}>
@@ -453,10 +484,28 @@ function BookOverview({ bundle }: { bundle: StoryBookBundle }): JSX.Element {
         </Card>
       ) : null}
 
-      <Banner tone="info">
-        Your chapters are being written from your outline. This first release drafts the outline;
-        chapter writing arrives in the next update.
-      </Banner>
+      {error ? <Banner tone="danger">{error}</Banner> : null}
+
+      {pending > 0 ? (
+        <Inline>
+          <Button
+            variant="primary"
+            disabled={busy}
+            onClick={async () => {
+              setError(null);
+              const res = await generateChapters(manifest.id);
+              if (!res.ok) setError(res.message);
+              else if (res.budgetReached && res.message) setError(res.message);
+            }}
+          >
+            {busy
+              ? 'Writing your chapters…'
+              : chapters.length > 0
+                ? `Write the remaining ${pending} chapter${pending === 1 ? '' : 's'}`
+                : 'Write your chapters'}
+          </Button>
+        </Inline>
+      ) : null}
 
       {outline
         ? outline.parts.map((part) => (
@@ -465,11 +514,23 @@ function BookOverview({ bundle }: { bundle: StoryBookBundle }): JSX.Element {
                 <Heading level={2}>{part.title}</Heading>
                 {part.chapters.map((chapter) => {
                   const written = chapters.find((c) => c.id === chapter.id);
-                  return (
-                    <div key={chapter.id} className={styles.overviewRow}>
-                      <Text>{chapter.title}</Text>
+                  return written ? (
+                    <button
+                      key={chapter.id}
+                      type="button"
+                      className={styles.chapterLink}
+                      onClick={() => onOpenChapter(chapter.id)}
+                    >
+                      <Text className={styles.rowTitle}>{chapter.title}</Text>
                       <Text tone="secondary" size="sm">
-                        {written ? written.status : 'Not yet written'}
+                        {CHAPTER_STATUS_LABEL[written.status] ?? written.status} ›
+                      </Text>
+                    </button>
+                  ) : (
+                    <div key={chapter.id} className={styles.overviewRow}>
+                      <Text className={styles.rowTitle}>{chapter.title}</Text>
+                      <Text tone="secondary" size="sm">
+                        Not yet written
                       </Text>
                     </div>
                   );
@@ -493,6 +554,127 @@ function BookOverview({ bundle }: { bundle: StoryBookBundle }): JSX.Element {
         ) : (
           <Button variant="ghost" onClick={() => setConfirmDelete(true)}>
             Delete book
+          </Button>
+        )}
+      </Inline>
+    </Stack>
+  );
+}
+
+const SOURCE_KIND_LABEL: Record<string, string> = {
+  insight: 'a coaching insight',
+  intakeAnswer: 'your onboarding',
+  response: 'a check-in answer',
+  dream: 'a dream',
+  test: 'a self-reflection',
+  goal: 'a goal',
+  challenge: 'a challenge',
+  together: 'a session with your partner',
+  timeline: 'your timeline',
+  photo: 'a photo',
+};
+
+/** Split a chapter's markdown into paragraphs the SAME way the core anchors provenance (`p<index>` over
+ *  blank-line-separated non-empty blocks — mirrors `chapterParagraphs`; kept inline since the renderer can't
+ *  import the story core, which pulls crypto). */
+function splitParagraphs(markdown: string): string[] {
+  return markdown
+    .split(/\n{2,}/)
+    .map((b) => b.trim())
+    .filter((b) => b.length > 0);
+}
+
+function ChapterReader({
+  bundle,
+  chapter,
+  onBack,
+}: {
+  bundle: StoryBookBundle;
+  chapter: StoryBookBundle['chapters'][number];
+  onBack: () => void;
+}): JSX.Element {
+  const regenerateChapter = useStoryStore((s) => s.regenerateChapter);
+  const reviewChapter = useStoryStore((s) => s.reviewChapter);
+  const busy = useStoryStore((s) => s.chaptersGenerating);
+  const [error, setError] = useState<string | null>(null);
+  const [openSources, setOpenSources] = useState<number | null>(null);
+
+  const paragraphs = splitParagraphs(chapter.markdown);
+  const provByAnchor = new Map(chapter.provenance.map((p) => [p.anchor, p.refs]));
+  const bookId = bundle.manifest.id;
+
+  return (
+    <Stack gap={4}>
+      <Inline justify="space-between">
+        <Button variant="ghost" onClick={onBack} aria-label="Back to the book">
+          ‹ Back
+        </Button>
+        <Text tone="secondary" size="sm">
+          {CHAPTER_STATUS_LABEL[chapter.status] ?? chapter.status}
+        </Text>
+      </Inline>
+
+      <Heading level={1}>{chapter.title}</Heading>
+      {error ? <Banner tone="danger">{error}</Banner> : null}
+
+      <Stack gap={3}>
+        {paragraphs.map((para, i) => {
+          const refs = provByAnchor.get(`p${i}`);
+          return (
+            <div key={i} className={styles.para}>
+              <Markdown>{para}</Markdown>
+              {refs && refs.length > 0 ? (
+                <div className={styles.sources}>
+                  <button
+                    type="button"
+                    className={styles.sourcesToggle}
+                    aria-expanded={openSources === i}
+                    onClick={() => setOpenSources(openSources === i ? null : i)}
+                  >
+                    Sources ({refs.length})
+                  </button>
+                  {openSources === i ? (
+                    <Stack gap={1}>
+                      {refs.map((ref, j) => (
+                        <Text key={j} size="sm" tone="secondary">
+                          Drawn from {SOURCE_KIND_LABEL[ref.kind] ?? 'your history'}
+                          {ref.at ? ` · ${ref.at.slice(0, 10)}` : ''}
+                        </Text>
+                      ))}
+                    </Stack>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </Stack>
+
+      <Inline justify="space-between">
+        <Button
+          disabled={busy}
+          onClick={async () => {
+            setError(null);
+            const res = await regenerateChapter(bookId, chapter.id);
+            if (!res.ok) setError(res.message);
+          }}
+        >
+          {busy ? 'Rewriting…' : 'Rewrite this chapter'}
+        </Button>
+        {chapter.status === 'reviewed' ? (
+          <Text tone="secondary" size="sm">
+            Reviewed
+          </Text>
+        ) : (
+          <Button
+            variant="primary"
+            onClick={async () => {
+              setError(null);
+              const ok = await reviewChapter(bookId, chapter.id);
+              if (!ok) setError('Couldn’t save that. Try again.');
+            }}
+          >
+            Looks good
           </Button>
         )}
       </Inline>

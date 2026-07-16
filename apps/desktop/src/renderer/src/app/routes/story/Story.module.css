@@ -34,3 +34,59 @@
 .overviewRow:first-of-type {
   border-top: none;
 }
+
+/* A written-chapter row is a full-width button that reads like the overview rows but is clickable. */
+.chapterLink {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gap-md);
+  width: 100%;
+  padding: var(--pad-xs) 0;
+  border: none;
+  border-top: 1px solid var(--color-border);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chapterLink:first-of-type {
+  border-top: none;
+}
+
+.chapterLink:hover {
+  color: var(--color-accent);
+}
+
+/* A chapter title in a space-between row must be able to shrink and ellipsize, or a long title forces the row
+   wide (§12 flex-truncation footgun). The status/chevron beside it keeps its intrinsic width. */
+.rowTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Reader prose: a comfortable readable column. The reader view uses a PERCENTAGE-based measure (~70%, the
+   chat-bubble precedent) — an owner-signed-off §12 exception to the no-max-width rule (spec 64 §3.6/§11.1),
+   not a fixed cap. Left-capped, so the page still fills and never scrolls horizontally. */
+.para {
+  max-width: 70%;
+}
+
+.sources {
+  margin-top: var(--space-1);
+}
+
+.sourcesToggle {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.sourcesToggle:hover {
+  color: var(--color-accent);
+}

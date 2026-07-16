@@ -187,9 +187,9 @@ export function stripSourceMarkers(
   markdown: string,
   tagToRef: Map<string, StorySourceRef>,
 ): { markdown: string; provenance: ChapterProvenanceEntry[] } {
-  const blocks = markdown.split(/\n{2,}/);
   const provenance: ChapterProvenanceEntry[] = [];
-  const cleaned = blocks.map((block, index) => {
+  const outParagraphs: string[] = [];
+  for (const block of markdown.split(/\n{2,}/)) {
     const refs: StorySourceRef[] = [];
     const seen = new Set<string>();
     for (const match of block.matchAll(SOURCE_MARKER)) {
@@ -202,19 +202,28 @@ export function stripSourceMarkers(
         }
       }
     }
-    if (refs.length > 0) provenance.push({ anchor: `p${index}`, refs });
-    return block
-      .replace(SOURCE_MARKER, '')
-      .replace(/[ \t]+$/gm, '')
-      .trim();
-  });
-  return {
-    markdown: cleaned
-      .filter((b) => b.length > 0)
-      .join('\n\n')
-      .trim(),
-    provenance,
-  };
+    // Removing a marker can leave an internal blank line — e.g. an own-line `[[SRC:s0]]` between two lines
+    // cleans to a `\n\n` that splits the block in two. So re-split the CLEANED text with the SAME function
+    // the reader uses (`chapterParagraphs` over the stored markdown); anchoring and rendering then can't
+    // diverge. The block's citations attach to its FIRST resulting paragraph; a marker-only block yields no
+    // paragraph (and drops its refs, having no prose to anchor to).
+    const cleanParas = chapterParagraphs(block.replace(SOURCE_MARKER, ''));
+    cleanParas.forEach((para, i) => {
+      if (i === 0 && refs.length > 0) provenance.push({ anchor: `p${outParagraphs.length}`, refs });
+      outParagraphs.push(para);
+    });
+  }
+  return { markdown: outParagraphs.join('\n\n').trim(), provenance };
+}
+
+/** Split a chapter's stored markdown into paragraphs (`p<index>` over blank-line-separated non-empty blocks).
+ *  Both the anchoring (`stripSourceMarkers`, which calls this on the CLEANED text) and the draft-view renderer
+ *  split through this exact rule, so a paragraph's sources always line up with its `p<index>`. Pure. */
+export function chapterParagraphs(markdown: string): string[] {
+  return markdown
+    .split(/\n{2,}/)
+    .map((b) => b.trim())
+    .filter((b) => b.length > 0);
 }
 
 export type ChapterResult =
@@ -335,6 +344,7 @@ export async function generateBookChapters(
   let generated = 0;
   let budgetHit = false;
   let allWritten = true;
+  let lastFailure: { reason: AiFailureReason; message: string } | null = null;
   for (const chapter of chapters) {
     const existing = await getChapter(deps.fs, deps.key, deps.personId, bookId, chapter.id);
     // Skip a chapter that's already written and not flagged stale (idempotent/resumable). Never overwrite a
@@ -345,23 +355,19 @@ export async function generateBookChapters(
       generated += 1;
       continue;
     }
+    allWritten = false; // an unwritten chapter remains → the book isn't fully drafted
     if (res.reason === 'BUDGET') {
       budgetHit = true;
-      allWritten = false;
       break; // stop the queue cleanly; the rest resume next period
     }
-    // A per-chapter failure (REFUSED/TRUNCATED/ERROR) — leave it unwritten and continue with the rest.
-    allWritten = false;
+    // A per-chapter failure (REFUSED/TRUNCATED/ERROR) — remember it in case NOTHING succeeds, then continue
+    // so one bad chapter never blocks the rest.
+    lastFailure = { reason: res.reason, message: res.message };
   }
 
-  // Any remaining unwritten chapter means the book isn't fully drafted.
-  for (const chapter of chapters) {
-    const existing = await getChapter(deps.fs, deps.key, deps.personId, bookId, chapter.id);
-    if (!existing || existing.status === 'stale') {
-      allWritten = false;
-      break;
-    }
-  }
+  // `allWritten` is exact from the loop: an already-written non-stale chapter is skipped (keeps it true); any
+  // freshly-written chapter keeps it true; any fail/budget sets it false — so no second pass is needed. Mark
+  // the book ready only once every outline chapter has prose.
   if (allWritten) {
     await updateBook(deps.fs, deps.key, deps.personId, bookId, { status: 'ready' }, deps.now);
   }
@@ -373,6 +379,12 @@ export async function generateBookChapters(
       reason: 'BUDGET',
       message: 'AI budget reached — the rest resume next period.',
     };
+  }
+  // Every attempted chapter failed and none succeeded → surface it so the UI isn't a silent dead-end (the DoD
+  // "never a silent dead-end" rule). A PARTIAL pass (some written, some failed) stays quiet — the progress is
+  // visible in the overview/reader.
+  if (generated === 0 && lastFailure) {
+    return { ok: false, generated: 0, reason: lastFailure.reason, message: lastFailure.message };
   }
   return { ok: true, generated };
 }

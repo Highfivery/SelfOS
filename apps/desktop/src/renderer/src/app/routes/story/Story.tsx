@@ -15,7 +15,14 @@ import {
 } from '../../../design-system/components';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryStore } from '../../../stores/storyStore';
-import type { BookConfig, BookOutline, StoryBookBundle } from '@shared/schemas';
+import type {
+  BookConfig,
+  BookOutline,
+  ChapterMarkup,
+  CommentIntent,
+  StoryBookBundle,
+  TextAnchor,
+} from '@shared/schemas';
 import styles from './Story.module.css';
 
 type Voice = BookConfig['voice'];
@@ -584,6 +591,51 @@ function splitParagraphs(markdown: string): string[] {
     .filter((b) => b.length > 0);
 }
 
+const INTENT_OPTIONS: SegmentOption<CommentIntent>[] = [
+  { value: 'addContext', label: 'Add context' },
+  { value: 'fix', label: 'Fix this' },
+  { value: 'question', label: 'Ask' },
+];
+const INTENT_LABEL: Record<CommentIntent, string> = {
+  addContext: 'Add context',
+  fix: 'Fix this',
+  question: 'Question',
+};
+
+/** Build a text anchor for a mark: a selected span, or the whole paragraph when nothing is selected. Records a
+ *  short prefix/suffix so a paragraph mark survives light re-flow. A selection that appears MORE THAN ONCE in
+ *  the paragraph can't be pinned to the right occurrence from the DOM string alone, so it falls back to the
+ *  whole paragraph — otherwise the backend would anchor to the first match and an instant Edit would rewrite
+ *  the wrong span (a silent data bug on the person's own words). Exported for a unit test. */
+export function buildAnchor(paragraphs: string[], i: number, quote: string | null): TextAnchor {
+  const para = paragraphs[i] ?? '';
+  const sel = quote && quote.trim().length > 0 ? quote : null;
+  const unique = sel !== null && para.indexOf(sel) === para.lastIndexOf(sel) && para.includes(sel);
+  const q = unique ? sel : para;
+  const idx = para.indexOf(q);
+  const prefix = idx > 0 ? para.slice(Math.max(0, idx - 24), idx) : undefined;
+  const afterText = idx >= 0 ? para.slice(idx + q.length, idx + q.length + 24) : '';
+  return {
+    paragraphId: `p${i}`,
+    quote: q,
+    ...(prefix ? { prefix } : {}),
+    ...(afterText.length > 0 ? { suffix: afterText } : {}),
+  };
+}
+
+/** The marks the batch revision will act on (mirrors the core `pendingRevisionMarks`): pending deletes + open
+ *  addContext/fix comments + open `ask` to-dos. A question comment is recorded but not applied. Exported so a
+ *  test can lock down the question-comment exclusion (the one place this diverges from the strip). */
+export function countApplicable(markup: ChapterMarkup | null): number {
+  if (!markup) return 0;
+  return markup.marks.filter(
+    (m) =>
+      (m.kind === 'delete' && m.status === 'pending') ||
+      (m.kind === 'comment' && m.status === 'open' && m.intent !== 'question') ||
+      (m.kind === 'todo' && m.status === 'open' && m.todoKind === 'ask'),
+  ).length;
+}
+
 function ChapterReader({
   bundle,
   chapter,
@@ -595,13 +647,97 @@ function ChapterReader({
 }): JSX.Element {
   const regenerateChapter = useStoryStore((s) => s.regenerateChapter);
   const reviewChapter = useStoryStore((s) => s.reviewChapter);
+  const markup = useStoryStore((s) => s.markup);
+  const loadMarkup = useStoryStore((s) => s.loadMarkup);
+  const clearMarkup = useStoryStore((s) => s.clearMarkup);
+  const addMark = useStoryStore((s) => s.addMark);
+  const removeMark = useStoryStore((s) => s.removeMark);
+  const applyMarkup = useStoryStore((s) => s.applyMarkup);
+  const editPassage = useStoryStore((s) => s.editPassage);
+  const pinQuote = useStoryStore((s) => s.pinQuote);
   const busy = useStoryStore((s) => s.chaptersGenerating);
   const [error, setError] = useState<string | null>(null);
   const [openSources, setOpenSources] = useState<number | null>(null);
+  const [activePara, setActivePara] = useState<number | null>(null);
+  const [activeQuote, setActiveQuote] = useState<string | null>(null);
+  const [mode, setMode] = useState<'menu' | 'comment' | 'edit' | null>(null);
+  const [commentIntent, setCommentIntent] = useState<CommentIntent>('addContext');
+  const [draft, setDraft] = useState('');
 
+  const bookId = bundle.manifest.id;
+  const chapterId = chapter.id;
   const paragraphs = splitParagraphs(chapter.markdown);
   const provByAnchor = new Map(chapter.provenance.map((p) => [p.anchor, p.refs]));
-  const bookId = bundle.manifest.id;
+
+  useEffect(() => {
+    void loadMarkup(bookId, chapterId);
+    return () => clearMarkup();
+  }, [bookId, chapterId, loadMarkup, clearMarkup]);
+
+  const closeMenu = (): void => {
+    setActivePara(null);
+    setActiveQuote(null);
+    setMode(null);
+    setDraft('');
+  };
+
+  // Open the toolbar for a paragraph, seeded with the current text selection (if any is inside it).
+  const openMenu = (i: number): void => {
+    const sel = typeof window !== 'undefined' ? window.getSelection() : null;
+    const selected = sel && !sel.isCollapsed ? sel.toString().trim() : '';
+    setActivePara(i);
+    setActiveQuote(
+      selected.length > 0 && (paragraphs[i] ?? '').includes(selected) ? selected : null,
+    );
+    setMode('menu');
+    setDraft('');
+  };
+
+  const addDelete = async (i: number): Promise<void> => {
+    await addMark(bookId, chapterId, {
+      id: crypto.randomUUID(),
+      kind: 'delete',
+      anchor: buildAnchor(paragraphs, i, activeQuote),
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    });
+    closeMenu();
+  };
+
+  const submitComment = async (i: number): Promise<void> => {
+    if (draft.trim().length === 0) return;
+    await addMark(bookId, chapterId, {
+      id: crypto.randomUUID(),
+      kind: 'comment',
+      anchor: buildAnchor(paragraphs, i, activeQuote),
+      intent: commentIntent,
+      text: draft.trim(),
+      status: 'open',
+      createdAt: new Date().toISOString(),
+    });
+    closeMenu();
+  };
+
+  const submitEdit = async (i: number): Promise<void> => {
+    if (draft.trim().length === 0) return;
+    const ok = await editPassage(
+      bookId,
+      chapterId,
+      buildAnchor(paragraphs, i, activeQuote),
+      draft.trim(),
+    );
+    if (!ok) setError('That passage has moved — reopen the chapter and try the edit again.');
+    closeMenu();
+  };
+
+  const addPin = async (i: number): Promise<void> => {
+    const anchor = buildAnchor(paragraphs, i, activeQuote);
+    const ok = await pinQuote(bookId, chapterId, anchor, anchor.quote ?? '');
+    if (!ok) setError('That passage has moved — reopen the chapter and try again.');
+    closeMenu();
+  };
+
+  const applicable = countApplicable(markup);
 
   return (
     <Stack gap={4}>
@@ -617,14 +753,76 @@ function ChapterReader({
       <Heading level={1}>{chapter.title}</Heading>
       {error ? <Banner tone="danger">{error}</Banner> : null}
 
+      {applicable > 0 ? (
+        <div className={styles.applyBar} role="status">
+          <Text size="sm">
+            {applicable} change{applicable === 1 ? '' : 's'} ready to apply
+          </Text>
+          <Button
+            variant="primary"
+            disabled={busy}
+            onClick={async () => {
+              setError(null);
+              const res = await applyMarkup(bookId, chapterId);
+              if (!res.ok) setError(res.message);
+            }}
+          >
+            {busy ? 'Applying…' : 'Review & apply'}
+          </Button>
+        </div>
+      ) : null}
+
       <Stack gap={3}>
         {paragraphs.map((para, i) => {
           const refs = provByAnchor.get(`p${i}`);
+          const marks = (markup?.marks ?? []).filter(
+            (m) =>
+              m.anchor?.paragraphId === `p${i}` &&
+              ((m.kind === 'delete' && m.status === 'pending') ||
+                (m.kind === 'comment' && m.status === 'open')),
+          );
           return (
             <div key={i} className={styles.para}>
-              <Markdown>{para}</Markdown>
-              {refs && refs.length > 0 ? (
-                <div className={styles.sources}>
+              <div className={styles.paraBody}>
+                <Markdown>{para}</Markdown>
+              </div>
+
+              {marks.length > 0 ? (
+                <Stack gap={1}>
+                  {marks.map((m) => (
+                    <div key={m.id} className={styles.markRow}>
+                      {m.kind === 'delete' ? (
+                        <Text size="sm" tone="secondary">
+                          ✂ <del className={styles.deleteQuote}>{m.anchor.quote}</del>
+                        </Text>
+                      ) : m.kind === 'comment' ? (
+                        <Text size="sm" tone="secondary">
+                          💬 {INTENT_LABEL[m.intent]}: {m.text}
+                        </Text>
+                      ) : null}
+                      <button
+                        type="button"
+                        className={styles.sourcesToggle}
+                        aria-label={`Undo this ${m.kind === 'delete' ? 'deletion' : 'comment'}`}
+                        onClick={() => void removeMark(bookId, chapterId, m.id)}
+                      >
+                        Undo
+                      </button>
+                    </div>
+                  ))}
+                </Stack>
+              ) : null}
+
+              <Inline gap={2}>
+                <button
+                  type="button"
+                  className={styles.sourcesToggle}
+                  aria-expanded={activePara === i}
+                  onClick={() => (activePara === i && mode ? closeMenu() : openMenu(i))}
+                >
+                  Mark up
+                </button>
+                {refs && refs.length > 0 ? (
                   <button
                     type="button"
                     className={styles.sourcesToggle}
@@ -633,17 +831,100 @@ function ChapterReader({
                   >
                     Sources ({refs.length})
                   </button>
-                  {openSources === i ? (
-                    <Stack gap={1}>
-                      {refs.map((ref, j) => (
-                        <Text key={j} size="sm" tone="secondary">
-                          Drawn from {SOURCE_KIND_LABEL[ref.kind] ?? 'your history'}
-                          {ref.at ? ` · ${ref.at.slice(0, 10)}` : ''}
+                ) : null}
+              </Inline>
+
+              {openSources === i && refs ? (
+                <Stack gap={1}>
+                  {refs.map((ref, j) => (
+                    <Text key={j} size="sm" tone="secondary">
+                      Drawn from {SOURCE_KIND_LABEL[ref.kind] ?? 'your history'}
+                      {ref.at ? ` · ${ref.at.slice(0, 10)}` : ''}
+                    </Text>
+                  ))}
+                </Stack>
+              ) : null}
+
+              {activePara === i && mode ? (
+                <Card>
+                  <Stack gap={3}>
+                    <Text size="sm" tone="secondary">
+                      {activeQuote ? `Selected: “${activeQuote}”` : 'This whole paragraph'}
+                    </Text>
+                    {mode === 'menu' ? (
+                      <Inline gap={2}>
+                        <Button onClick={() => void addDelete(i)}>Delete</Button>
+                        <Button
+                          onClick={() => {
+                            setMode('edit');
+                            setDraft(activeQuote ?? para);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                        <Button onClick={() => setMode('comment')}>Comment</Button>
+                        <Button onClick={() => void addPin(i)}>Pin</Button>
+                        <Button variant="ghost" onClick={closeMenu}>
+                          Cancel
+                        </Button>
+                      </Inline>
+                    ) : null}
+                    {mode === 'comment' ? (
+                      <Stack gap={2}>
+                        <SegmentedControl
+                          options={INTENT_OPTIONS}
+                          value={commentIntent}
+                          onChange={setCommentIntent}
+                          aria-label="Comment kind"
+                        />
+                        <Textarea
+                          value={draft}
+                          onChange={(e) => setDraft(e.target.value)}
+                          aria-label="Comment"
+                          rows={2}
+                          placeholder="What should the biographer know?"
+                        />
+                        <Inline justify="flex-end">
+                          <Button variant="ghost" onClick={closeMenu}>
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="primary"
+                            disabled={draft.trim().length === 0}
+                            onClick={() => void submitComment(i)}
+                          >
+                            Add comment
+                          </Button>
+                        </Inline>
+                      </Stack>
+                    ) : null}
+                    {mode === 'edit' ? (
+                      <Stack gap={2}>
+                        <Text size="sm" tone="secondary">
+                          Rewrite this in your own words — it’s kept exactly as you write it.
                         </Text>
-                      ))}
-                    </Stack>
-                  ) : null}
-                </div>
+                        <Textarea
+                          value={draft}
+                          onChange={(e) => setDraft(e.target.value)}
+                          aria-label="Your words"
+                          rows={3}
+                        />
+                        <Inline justify="flex-end">
+                          <Button variant="ghost" onClick={closeMenu}>
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="primary"
+                            disabled={draft.trim().length === 0}
+                            onClick={() => void submitEdit(i)}
+                          >
+                            Save my words
+                          </Button>
+                        </Inline>
+                      </Stack>
+                    ) : null}
+                  </Stack>
+                </Card>
               ) : null}
             </div>
           );
@@ -655,7 +936,7 @@ function ChapterReader({
           disabled={busy}
           onClick={async () => {
             setError(null);
-            const res = await regenerateChapter(bookId, chapter.id);
+            const res = await regenerateChapter(bookId, chapterId);
             if (!res.ok) setError(res.message);
           }}
         >
@@ -670,7 +951,7 @@ function ChapterReader({
             variant="primary"
             onClick={async () => {
               setError(null);
-              const ok = await reviewChapter(bookId, chapter.id);
+              const ok = await reviewChapter(bookId, chapterId);
               if (!ok) setError('Couldn’t save that. Try again.');
             }}
           >

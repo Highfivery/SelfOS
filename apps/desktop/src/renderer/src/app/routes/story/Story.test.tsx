@@ -1,14 +1,17 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type {
   BookManifest,
   BookOutline,
+  ChapterMarkup,
   StoryBookBundle,
   StoryBookTypeView,
+  StoryMarkInput,
+  StoryRevisionResult,
 } from '@shared/schemas';
-import { Story } from './Story';
+import { Story, buildAnchor, countApplicable } from './Story';
 import { useStoryStore } from '../../../stores/storyStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
 
@@ -271,6 +274,201 @@ describe('Story (64)', () => {
     expect(screen.getAllByText('Reviewed').length).toBeGreaterThan(0);
   });
 
+  it('marks a paragraph for deletion — the suggestion strip + apply bar appear', async () => {
+    const storyMark = vi.fn(
+      (input: StoryMarkInput): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: input.chapterId, marks: [input.mark] }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
+      storyMark,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    // Each paragraph offers a "Mark up" affordance; open the first paragraph's toolbar.
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!);
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+    // The mark was created as a delete…
+    expect(storyMark).toHaveBeenCalledWith(
+      expect.objectContaining({ mark: expect.objectContaining({ kind: 'delete' }) }),
+    );
+    // …and the suggestion strip + apply bar reflect it.
+    expect(await screen.findByText(/1 change ready to apply/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Review & apply' })).toBeInTheDocument();
+  });
+
+  it('adds a comment with an intent', async () => {
+    const storyMark = vi.fn(
+      (input: StoryMarkInput): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: input.chapterId, marks: [input.mark] }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
+      storyMark,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!);
+    await userEvent.click(await screen.findByRole('button', { name: 'Comment' }));
+    await userEvent.type(screen.getByLabelText('Comment'), 'the lathe was three generations old');
+    await userEvent.click(screen.getByRole('button', { name: 'Add comment' }));
+    expect(storyMark).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mark: expect.objectContaining({
+          kind: 'comment',
+          intent: 'addContext',
+          text: 'the lathe was three generations old',
+        }),
+      }),
+    );
+  });
+
+  it('applies pending changes from the apply bar', async () => {
+    const storyApplyMarkup = vi.fn(
+      (): Promise<StoryRevisionResult> =>
+        Promise.resolve({
+          ok: true,
+          bundle: writtenBundle('new'),
+          markup: { schemaVersion: 1, chapterId: 'c1', marks: [] },
+        }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({
+          schemaVersion: 1,
+          chapterId: 'c1',
+          marks: [
+            {
+              id: 'd1',
+              kind: 'delete',
+              anchor: { paragraphId: 'p0', quote: 'The garage smelled of cut pine.' },
+              status: 'pending',
+              createdAt: 'now',
+            },
+          ],
+        }),
+      storyApplyMarkup,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    // The pending delete surfaces the apply bar on load.
+    await userEvent.click(await screen.findByRole('button', { name: 'Review & apply' }));
+    expect(storyApplyMarkup).toHaveBeenCalledWith({ bookId: 'b1', chapterId: 'c1' });
+  });
+
+  it('undoes a pending mark from its strip', async () => {
+    const storyRemoveMark = vi.fn(
+      (): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({
+          schemaVersion: 1,
+          chapterId: 'c1',
+          marks: [
+            {
+              id: 'd1',
+              kind: 'delete',
+              anchor: { paragraphId: 'p0', quote: 'The garage smelled of cut pine.' },
+              status: 'pending',
+              createdAt: 'now',
+            },
+          ],
+        }),
+      storyRemoveMark,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Undo this deletion' }));
+    expect(storyRemoveMark).toHaveBeenCalledWith({ bookId: 'b1', chapterId: 'c1', markId: 'd1' });
+  });
+
+  it('pins a passage in your own words', async () => {
+    const storyPinQuote = vi.fn(() => Promise.resolve(writtenBundle('new')));
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
+      storyPinQuote,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!);
+    await userEvent.click(await screen.findByRole('button', { name: 'Pin' }));
+    expect(storyPinQuote).toHaveBeenCalledWith(
+      expect.objectContaining({ bookId: 'b1', chapterId: 'c1' }),
+    );
+  });
+
+  it('does not count a question comment toward the apply bar', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({
+          schemaVersion: 1,
+          chapterId: 'c1',
+          marks: [
+            {
+              id: 'q1',
+              kind: 'comment',
+              anchor: { paragraphId: 'p0', quote: 'cut pine' },
+              intent: 'question',
+              text: 'why frame it this way?',
+              status: 'open',
+              createdAt: 'now',
+            },
+          ],
+        }),
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    // The comment shows in the strip, but it's not an "apply" change → no bar.
+    expect(await screen.findByText(/why frame it this way/)).toBeInTheDocument();
+    expect(screen.queryByText(/ready to apply/)).not.toBeInTheDocument();
+  });
+
+  it('makes an instant inline edit', async () => {
+    const storyEditPassage = vi.fn(() => Promise.resolve(writtenBundle('new')));
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
+      storyEditPassage,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    const box = screen.getByLabelText('Your words');
+    await userEvent.clear(box);
+    await userEvent.type(box, 'The garage smelled of cold steel.');
+    await userEvent.click(screen.getByRole('button', { name: 'Save my words' }));
+    expect(storyEditPassage).toHaveBeenCalledWith(
+      expect.objectContaining({ newText: 'The garage smelled of cold steel.' }),
+    );
+  });
+
   it('approves the outline and shows the book overview', async () => {
     let approved = false;
     installMockBridge({
@@ -290,5 +488,51 @@ describe('Story (64)', () => {
       expect(screen.getByRole('heading', { name: 'The Story of Ben' })).toBeInTheDocument(),
     );
     expect(screen.getByRole('button', { name: 'Write your chapters' })).toBeInTheDocument();
+  });
+});
+
+describe('buildAnchor + countApplicable (64 §5.3)', () => {
+  const paras = ['the war ended, then the war began again.', 'A quiet second paragraph.'];
+
+  it('anchors a UNIQUE selection to that span', () => {
+    expect(buildAnchor(paras, 1, 'quiet')).toMatchObject({ paragraphId: 'p1', quote: 'quiet' });
+  });
+
+  it('falls back to the whole paragraph for a REPEATED selection (never the wrong occurrence)', () => {
+    // "the war" appears twice → can't tell which from the DOM string → the whole paragraph, so an instant
+    // edit can't silently rewrite the first match.
+    expect(buildAnchor(paras, 0, 'the war').quote).toBe(paras[0]);
+  });
+
+  it('uses the whole paragraph when nothing is selected', () => {
+    expect(buildAnchor(paras, 1, null).quote).toBe(paras[1]);
+  });
+
+  it('counts deletes + addContext/fix comments + ask to-dos, never question comments', () => {
+    const markup: ChapterMarkup = {
+      schemaVersion: 1,
+      chapterId: 'c1',
+      marks: [
+        {
+          id: 'd',
+          kind: 'delete',
+          anchor: { paragraphId: 'p0', quote: 'x' },
+          status: 'pending',
+          createdAt: 'n',
+        },
+        {
+          id: 'q',
+          kind: 'comment',
+          anchor: { paragraphId: 'p0' },
+          intent: 'question',
+          text: '?',
+          status: 'open',
+          createdAt: 'n',
+        },
+        { id: 'a', kind: 'todo', text: 'ask', todoKind: 'ask', status: 'open', createdAt: 'n' },
+      ],
+    };
+    expect(countApplicable(markup)).toBe(2); // the delete + the ask to-do; the question comment is excluded
+    expect(countApplicable(null)).toBe(0);
   });
 });

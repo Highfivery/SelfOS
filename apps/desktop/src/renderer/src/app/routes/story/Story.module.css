@@ -2,11 +2,11 @@
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: var(--gap-lg);
+  gap: var(--space-6);
 }
 
 .chapterRow {
-  padding: var(--pad-sm) 0;
+  padding: var(--space-2) 0;
   border-top: 1px solid var(--color-border);
 }
 
@@ -26,8 +26,8 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--gap-md);
-  padding: var(--pad-xs) 0;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
   border-top: 1px solid var(--color-border);
 }
 
@@ -40,9 +40,9 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--gap-md);
+  gap: var(--space-3);
   width: 100%;
-  padding: var(--pad-xs) 0;
+  padding: var(--space-1) 0;
   border: none;
   border-top: 1px solid var(--color-border);
   background: none;
@@ -74,15 +74,41 @@
   max-width: 70%;
 }
 
-.sources {
-  margin-top: var(--space-1);
+/* The "N changes ready to apply" bar (§3.3.1) — a calm accent strip above the prose. */
+.applyBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle-bg);
+}
+
+/* A paragraph in the draft view holds the prose + its suggestion strip + a Mark up / Sources action row. */
+.paraBody {
+  margin-bottom: var(--space-1);
+}
+
+/* One pending mark under its paragraph (a delete struck-through, or a comment). */
+.markRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.deleteQuote {
+  text-decoration: line-through;
 }
 
 .sourcesToggle {
   border: none;
   background: none;
   padding: 0;
-  font-size: var(--font-size-sm);
+  font-size: var(--text-sm);
   color: var(--color-text-secondary);
   cursor: pointer;
 }

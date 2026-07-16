@@ -3,11 +3,16 @@ import type {
   BookConfig,
   BookManifest,
   BookOutline,
+  ChapterMarkup,
+  MarkupMark,
   StoryBookBundle,
   StoryBookTypeView,
   StoryChaptersResult,
   StoryCreateInput,
   StoryFoundationsResult,
+  StoryMarkPatch,
+  StoryRevisionResult,
+  TextAnchor,
 } from '@shared/schemas';
 
 interface StoryState {
@@ -32,6 +37,31 @@ interface StoryState {
   generateChapters: (bookId: string) => Promise<StoryChaptersResult>;
   regenerateChapter: (bookId: string, chapterId: string) => Promise<StoryChaptersResult>;
   reviewChapter: (bookId: string, chapterId: string) => Promise<boolean>;
+  /** The open chapter's markup layer (the suggestion layer), or null. The reader loads it per chapter. */
+  markup: ChapterMarkup | null;
+  loadMarkup: (bookId: string, chapterId: string) => Promise<void>;
+  clearMarkup: () => void;
+  addMark: (bookId: string, chapterId: string, mark: MarkupMark) => Promise<void>;
+  updateMark: (
+    bookId: string,
+    chapterId: string,
+    markId: string,
+    patch: StoryMarkPatch,
+  ) => Promise<void>;
+  removeMark: (bookId: string, chapterId: string, markId: string) => Promise<void>;
+  applyMarkup: (bookId: string, chapterId: string) => Promise<StoryRevisionResult>;
+  editPassage: (
+    bookId: string,
+    chapterId: string,
+    anchor: TextAnchor,
+    newText: string,
+  ) => Promise<boolean>;
+  pinQuote: (
+    bookId: string,
+    chapterId: string,
+    anchor: TextAnchor,
+    text: string,
+  ) => Promise<boolean>;
   update: (bookId: string, patch: { title?: string; config?: BookConfig }) => Promise<void>;
   remove: (bookId: string) => Promise<void>;
   clearBundle: () => void;
@@ -48,11 +78,17 @@ const CHAPTERS_NOT_AVAILABLE: StoryChaptersResult = {
   reason: 'ERROR',
   message: 'Not available.',
 };
+const REVISION_NOT_AVAILABLE: StoryRevisionResult = {
+  ok: false,
+  reason: 'ERROR',
+  message: 'Not available.',
+};
 
 export const useStoryStore = create<StoryState>((set, get) => ({
   bookTypes: [],
   books: [],
   bundle: null,
+  markup: null,
   loaded: false,
   generating: false,
   chaptersGenerating: false,
@@ -123,6 +159,49 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     if (bundle) set({ bundle });
     return bundle !== null;
   },
+  loadMarkup: async (bookId, chapterId) => {
+    const markup = (await window.selfos?.storyGetMarkup({ bookId, chapterId })) ?? null;
+    // Guard a stale, late-resolving load (fast chapter A→B nav) from overwriting the newer chapter's markup —
+    // the returned layer carries its own chapterId (display-only; the backend always applies the right one).
+    if (!markup || markup.chapterId === chapterId) set({ markup });
+  },
+  clearMarkup: () => set({ markup: null }),
+  addMark: async (bookId, chapterId, mark) => {
+    const markup = (await window.selfos?.storyMark({ bookId, chapterId, mark })) ?? null;
+    if (markup) set({ markup });
+  },
+  updateMark: async (bookId, chapterId, markId, patch) => {
+    const markup =
+      (await window.selfos?.storyUpdateMark({ bookId, chapterId, markId, patch })) ?? null;
+    if (markup) set({ markup });
+  },
+  removeMark: async (bookId, chapterId, markId) => {
+    const markup = (await window.selfos?.storyRemoveMark({ bookId, chapterId, markId })) ?? null;
+    if (markup) set({ markup });
+  },
+  applyMarkup: async (bookId, chapterId) => {
+    set({ chaptersGenerating: true });
+    try {
+      const result =
+        (await window.selfos?.storyApplyMarkup({ bookId, chapterId })) ?? REVISION_NOT_AVAILABLE;
+      if (result.ok) set({ bundle: result.bundle, markup: result.markup });
+      return result;
+    } finally {
+      set({ chaptersGenerating: false });
+    }
+  },
+  editPassage: async (bookId, chapterId, anchor, newText) => {
+    const bundle =
+      (await window.selfos?.storyEditPassage({ bookId, chapterId, anchor, newText })) ?? null;
+    if (bundle) set({ bundle });
+    return bundle !== null;
+  },
+  pinQuote: async (bookId, chapterId, anchor, text) => {
+    const bundle =
+      (await window.selfos?.storyPinQuote({ bookId, chapterId, anchor, text })) ?? null;
+    if (bundle) set({ bundle });
+    return bundle !== null;
+  },
   update: async (bookId, patch) => {
     await window.selfos?.storyUpdate({ bookId, ...patch });
     await get().open(bookId);
@@ -139,6 +218,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       bookTypes: [],
       books: [],
       bundle: null,
+      markup: null,
       loaded: false,
       generating: false,
       chaptersGenerating: false,

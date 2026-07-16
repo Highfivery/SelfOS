@@ -36,7 +36,8 @@
     "./intimacy": "./src/intimacy/index.ts",
     "./profile": "./src/profile/index.ts",
     "./relay": "./src/relay/index.ts",
-    "./updates": "./src/updates/index.ts"
+    "./updates": "./src/updates/index.ts",
+    "./story": "./src/story/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",

@@ -207,6 +207,8 @@ function createBridgeHost(parts: HostParts): BridgeHost {
       URL.revokeObjectURL(url);
       return Promise.resolve(suggestedName);
     },
+    // PDF rendering uses Electron's offscreen printToPDF — not available on the web/iOS host (§3.9).
+    printToPdf: () => Promise.resolve(null),
     onVaultChanged: parts.onVaultChanged,
     onChatChunk: (listener) => {
       chatListeners.add(listener);

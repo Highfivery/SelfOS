@@ -165,6 +165,58 @@ import {
   TogetherSaveAgreementInputSchema,
   TogetherSetAgreementStatusInputSchema,
   type AgreementSummary,
+  StoryCreateInputSchema,
+  StoryBookRefSchema,
+  StoryChapterRefSchema,
+  StoryGenerateImageInputSchema,
+  StoryImageRefSchema,
+  StoryUploadPhotoInputSchema,
+  StoryPhotoAnswerInputSchema,
+  StoryImagePlacementRefSchema,
+  StorySetPlacementInputSchema,
+  StoryEditPassageInputSchema,
+  StoryExcludeInputSchema,
+  StoryMarkInputSchema,
+  StoryOutlineInputSchema,
+  StoryPinInputSchema,
+  StoryInterviewCheckInputSchema,
+  StoryReadSharedInputSchema,
+  StoryReadSharedImageInputSchema,
+  StoryReaderGrantInputSchema,
+  StoryRefreshInputSchema,
+  StoryRemoveMarkInputSchema,
+  StoryResolveProposalInputSchema,
+  StoryTodoToQuestionsInputSchema,
+  StoryUnexcludeInputSchema,
+  StoryUpdateInputSchema,
+  StoryUpdateMarkInputSchema,
+  type BookManifest,
+  type BookReader,
+  type ChapterMarkup,
+  type ExclusionItem,
+  type MarkupMark,
+  type SharedBookSummary,
+  type StoryBookBundle,
+  type StoryBookTypeView,
+  type StoryChaptersResult,
+  type StoryExcludeResult,
+  type StoryFoundationsResult,
+  type StoryQuestionsResult,
+  type StoryCompleteness,
+  type StoryHomeSignal,
+  type StoryImageEntry,
+  type StoryImageResult,
+  type StoryPhotoAnalyzeResult,
+  type StoryPhotoAnswer,
+  type StoryPlacementSuggestResult,
+  type StoryInterviewCadenceResult,
+  type StoryPublishResult,
+  type StoryReaderView,
+  type StoryRefreshViewResult,
+  type StoryResolveProposalResult,
+  type StoryRevisionResult,
+  type StoryTodoList,
+  type StructuralProposal,
 } from './schemas';
 import { OWNER_ROLE_ID, roleAllows, type CapabilityKey } from './capabilities';
 import { runConnectionTest } from './claudeProxy';
@@ -334,6 +386,66 @@ import {
   suggestGoals,
   updateGoal,
 } from '@selfos/core/goals';
+import {
+  addExclusion,
+  addMark,
+  applyFoundations,
+  applyMarkup,
+  approveOutline,
+  createBook,
+  deleteBook,
+  editPassage,
+  generateBookChapters,
+  generateChapter,
+  generateFoundations,
+  getBook,
+  getBookType,
+  getChapter,
+  getExclusions,
+  getMarkup,
+  getTodos,
+  listBookTypes,
+  listBooks,
+  markStaleChapters,
+  mintStoryCheckInFromTodo,
+  bookMentionsReader,
+  buildPublishedHtml,
+  buildPublishedMarkdown,
+  addPhotoAnswer,
+  addUploadedPhoto,
+  analyzeStoryPhoto,
+  suggestImagePlacement,
+  setImagePlacement,
+  removeImagePlacement,
+  computeStoryHomeSignal,
+  deleteStoryImage,
+  exportFileStem,
+  generateStoryImage,
+  getPhotoAnswers,
+  getStoryCompleteness,
+  getStoryImage,
+  getStoryImageIndex,
+  grantReader,
+  listChapters,
+  listReaders,
+  listSharedBooks,
+  listStructuralProposals,
+  pinPassage,
+  publishBook,
+  readBookBundle,
+  readSharedBook,
+  readSharedImage,
+  refreshBook,
+  removeExclusion,
+  resolveProposal,
+  revokeReader,
+  runStoryInterviewCadence,
+  removeMark,
+  saveChapter,
+  saveOutline,
+  updateBook,
+  updateMark,
+} from '@selfos/core/story';
 import {
   clearSuggestion,
   deleteChallenge,
@@ -598,6 +710,11 @@ export interface BridgeHost {
    * dialog on Electron, a download on iOS/web. Returns the chosen path, or null if cancelled.
    */
   saveImageFile(suggestedName: string, bytes: Uint8Array, mime: string): Promise<string | null>;
+  /**
+   * Render a self-contained HTML document to PDF bytes (64-your-story §3.9) — Electron `printToPDF` on an
+   * offscreen window. Returns null on a host that can't (web/iOS) so the caller degrades gracefully.
+   */
+  printToPdf(html: string): Promise<Uint8Array | null>;
   /** Subscribe to external vault changes (the host's watcher); returns an unsubscribe. */
   onVaultChanged(listener: () => void): () => void;
   /** Subscribe to streamed chat chunks; the renderer-facing counterpart to `emitChatChunk`. */
@@ -4123,6 +4240,789 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         });
       }
       return result;
+    },
+    // --- Your Story (64-your-story §5.6) — gated `story.own`, active-person-scoped (the trust boundary) ---
+    storyBookTypes: async (): Promise<StoryBookTypeView[]> =>
+      // The registry is code (§4) — return a serializable projection (the renderer can't import the story
+      // module, which pulls crypto). No gate: it's static, non-personal catalog metadata.
+      listBookTypes().map((t) => ({
+        id: t.id,
+        label: t.label,
+        blurb: t.blurb,
+        structures: t.structures.map((s) => ({
+          id: s.id,
+          label: s.label,
+          description: s.description,
+          ...(s.isDefault ? { isDefault: true } : {}),
+        })),
+        stylePresets: t.stylePresets.map((p) => ({ id: p.id, label: p.label })),
+      })),
+    storyList: async (): Promise<BookManifest[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return listBooks(ctx.fs, ctx.key, personId);
+    },
+    storyCreate: async (input): Promise<BookManifest | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const p = StoryCreateInputSchema.parse(input);
+      if (!getBookType(p.type)) return null; // only a registered book type (v1: biography)
+      return createBook(ctx.fs, ctx.key, {
+        personId,
+        type: p.type,
+        title: p.title,
+        config: p.config,
+        now: new Date(),
+      });
+    },
+    storyGet: async (input): Promise<StoryBookBundle | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const { bookId } = StoryBookRefSchema.parse(input);
+      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyGenerateFoundations: async (input): Promise<StoryFoundationsResult> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to write your story.',
+        };
+      }
+      const book = await getBook(deps.fs, deps.key, deps.personId, bookId);
+      if (!book) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+      const bookType = getBookType(book.type);
+      if (!bookType) return { ok: false, reason: 'ERROR', message: 'Unknown book type.' };
+      const exclusions = await getExclusions(deps.fs, deps.key, deps.personId, bookId);
+      const result = await generateFoundations(deps, { bookType, config: book.config, exclusions });
+      if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
+      await applyFoundations(
+        deps.fs,
+        deps.key,
+        deps.personId,
+        bookId,
+        {
+          title: result.title,
+          essence: result.essence,
+          outline: result.outline,
+          timeline: result.timeline,
+        },
+        new Date(),
+      );
+      const bundle = await readBookBundle(deps.fs, deps.key, deps.personId, bookId);
+      if (!bundle) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+      return { ok: true, bundle };
+    },
+    storySaveOutline: async (input): Promise<BookManifest | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const p = StoryOutlineInputSchema.parse(input);
+      if (!(await getBook(ctx.fs, ctx.key, personId, p.bookId))) return null;
+      await saveOutline(ctx.fs, ctx.key, personId, p.bookId, p.outline);
+      return updateBook(ctx.fs, ctx.key, personId, p.bookId, {}, new Date()); // bump updatedAt
+    },
+    storyApproveOutline: async (input): Promise<BookManifest | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const p = StoryOutlineInputSchema.parse(input);
+      return approveOutline(ctx.fs, ctx.key, personId, p.bookId, p.outline, new Date());
+    },
+    storyUpdate: async (input): Promise<BookManifest | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const p = StoryUpdateInputSchema.parse(input);
+      return updateBook(
+        ctx.fs,
+        ctx.key,
+        personId,
+        p.bookId,
+        {
+          // A title the person sets here is their own — clear the `auto` flag so a later foundations pass
+          // (e.g. "Start over") never overwrites it (§3.2).
+          ...(p.title !== undefined ? { title: p.title, titleAuto: false } : {}),
+          ...(p.config !== undefined ? { config: p.config } : {}),
+          ...(p.matter !== undefined ? { matter: p.matter } : {}),
+        },
+        new Date(),
+      );
+    },
+    storyDelete: async (input): Promise<void> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return;
+      const personId = await activePersonId();
+      if (!personId) return;
+      const { bookId } = StoryBookRefSchema.parse(input);
+      if (!(await getBook(ctx.fs, ctx.key, personId, bookId))) return; // only the active person's own book
+      await deleteBook(ctx.fs, personId, bookId);
+    },
+    storyGenerateChapters: async (input): Promise<StoryChaptersResult> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to write your story.',
+        };
+      }
+      const result = await generateBookChapters(deps, bookId);
+      if (!result.ok) {
+        return {
+          ok: false,
+          reason: result.reason ?? 'ERROR',
+          message: result.message ?? 'Couldn’t write the chapters.',
+        };
+      }
+      const bundle = await readBookBundle(deps.fs, deps.key, deps.personId, bookId);
+      if (!bundle) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+      return {
+        ok: true,
+        generated: result.generated,
+        bundle,
+        ...(result.reason === 'BUDGET' && result.message
+          ? { budgetReached: true, message: result.message }
+          : {}),
+      };
+    },
+    storyRegenerateChapter: async (input): Promise<StoryChaptersResult> => {
+      const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to write your story.',
+        };
+      }
+      const res = await generateChapter(deps, { bookId, chapterId });
+      if (!res.ok) return { ok: false, reason: res.reason, message: res.message };
+      const bundle = await readBookBundle(deps.fs, deps.key, deps.personId, bookId);
+      if (!bundle) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+      return { ok: true, generated: 1, bundle };
+    },
+    storyReviewChapter: async (input): Promise<StoryBookBundle | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
+      const chapter = await getChapter(ctx.fs, ctx.key, personId, bookId, chapterId);
+      if (!chapter) return null;
+      await saveChapter(ctx.fs, ctx.key, personId, bookId, {
+        ...chapter,
+        status: 'reviewed',
+        lastReviewedAt: new Date().toISOString(),
+      });
+      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
+    },
+    // --- Markup layer (§3.3) — non-AI ops gated `story.own` + active-person-scoped ---
+    storyGetMarkup: async (input): Promise<ChapterMarkup> => {
+      const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { schemaVersion: 1, chapterId, marks: [] };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { schemaVersion: 1, chapterId, marks: [] };
+      return getMarkup(ctx.fs, ctx.key, personId, bookId, chapterId);
+    },
+    storyMark: async (input): Promise<ChapterMarkup> => {
+      const { bookId, chapterId, mark } = StoryMarkInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { schemaVersion: 1, chapterId, marks: [] };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { schemaVersion: 1, chapterId, marks: [] };
+      return addMark(ctx.fs, ctx.key, personId, bookId, chapterId, mark);
+    },
+    storyUpdateMark: async (input): Promise<ChapterMarkup | null> => {
+      const { bookId, chapterId, markId, patch } = StoryUpdateMarkInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      return updateMark(ctx.fs, ctx.key, personId, bookId, chapterId, markId, patch);
+    },
+    storyRemoveMark: async (input): Promise<ChapterMarkup> => {
+      const { bookId, chapterId, markId } = StoryRemoveMarkInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { schemaVersion: 1, chapterId, marks: [] };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { schemaVersion: 1, chapterId, marks: [] };
+      return removeMark(ctx.fs, ctx.key, personId, bookId, chapterId, markId);
+    },
+    storyEditPassage: async (input): Promise<StoryBookBundle | null> => {
+      const { bookId, chapterId, anchor, newText } = StoryEditPassageInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const edited = await editPassage(
+        ctx.fs,
+        ctx.key,
+        personId,
+        bookId,
+        chapterId,
+        anchor,
+        newText,
+      );
+      if (!edited) return null; // orphaned anchor / chapter gone
+      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyPinQuote: async (input): Promise<StoryBookBundle | null> => {
+      const parsed = StoryPinInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const pinned = await pinPassage(
+        ctx.fs,
+        ctx.key,
+        personId,
+        parsed.bookId,
+        parsed.chapterId,
+        parsed.anchor,
+        parsed.text,
+        parsed.sourceRef,
+      );
+      if (!pinned) return null;
+      return readBookBundle(ctx.fs, ctx.key, personId, parsed.bookId);
+    },
+    storyTodos: async (input): Promise<StoryTodoList> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { schemaVersion: 1, todos: [] };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { schemaVersion: 1, todos: [] };
+      return getTodos(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyExclusions: async (input): Promise<ExclusionItem[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return getExclusions(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyExclude: async (input): Promise<StoryExcludeResult> => {
+      const { bookId, kind, value, note } = StoryExcludeInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        throw new Error('Not permitted.');
+      }
+      const personId = await activePersonId();
+      if (!personId) throw new Error('No active person.');
+      const { exclusions, staled } = await addExclusion(
+        ctx.fs,
+        ctx.key,
+        personId,
+        bookId,
+        { kind, value, ...(note ? { note } : {}) },
+        new Date(),
+      );
+      const bundle = await readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      if (!bundle) throw new Error('That book is no longer here.');
+      return { exclusions, bundle, staled };
+    },
+    storyUnexclude: async (input): Promise<ExclusionItem[]> => {
+      const { bookId, itemId } = StoryUnexcludeInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return removeExclusion(ctx.fs, ctx.key, personId, bookId, itemId);
+    },
+    storyTodoToQuestions: async (input): Promise<StoryQuestionsResult> => {
+      const { bookId, chapterId, focus, anchor } = StoryTodoToQuestionsInputSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to gather answers.',
+        };
+      }
+      const res = await mintStoryCheckInFromTodo(deps, { bookId, focus });
+      if (!res.ok) return { ok: false, reason: res.reason, message: res.message };
+      // Record the to-do only AFTER the mint succeeds (so a failed mint leaves no dangling questionsSent to-do).
+      const mark: MarkupMark = {
+        id: globalThis.crypto.randomUUID(),
+        kind: 'todo',
+        text: focus,
+        todoKind: 'questions',
+        status: 'questionsSent',
+        assignmentId: res.assignmentId,
+        createdAt: new Date().toISOString(),
+        ...(anchor ? { anchor } : {}),
+      };
+      const markup = await addMark(deps.fs, deps.key, deps.personId, bookId, chapterId, mark);
+      return { ok: true, markup, assignmentId: res.assignmentId };
+    },
+    storyRefreshCheck: async (input): Promise<StoryRefreshViewResult> => {
+      const { bookId, auto } = StoryRefreshInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { staled: 0, rewritten: 0, bundle: null };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { staled: 0, rewritten: 0, bundle: null };
+
+      const now = new Date();
+      const DAY_MS = 24 * 60 * 60 * 1000;
+      // The AUTO cadence throttles to once per device-local day — a manual "Refresh now" is never throttled.
+      if (auto) {
+        const last = (await host.readDeviceState()).storyRefreshCheckedAt?.[personId];
+        if (last && now.getTime() - Date.parse(last) < DAY_MS) {
+          return {
+            staled: 0,
+            rewritten: 0,
+            bundle: await readBookBundle(ctx.fs, ctx.key, personId, bookId),
+          };
+        }
+      }
+
+      // Marking stale is free + always runs; the auto-rewrite needs a real key + AI on + budget (refreshBook).
+      // With AI off OR no key, just mark stale so the badges still update — never run the rewrite loop (which
+      // would build the corpus then fail NO_KEY per chapter).
+      const deps = await aiDeps('story.own');
+      const aiReady =
+        deps && deps.apiKey && (await readVaultSettingsValues(deps.fs))['ai.enabled'] !== false;
+      let staled = 0;
+      let rewritten = 0;
+      let proposalsAdded: number | undefined;
+      let capped: boolean | undefined;
+      let budgetReached: boolean | undefined;
+      if (deps && aiReady) {
+        // The auto cadence never spends during recurring distress (§8) — computed HOST-SIDE from the person's
+        // own approved insights, so it doesn't depend on the renderer having loaded anything.
+        let crisis = false;
+        if (auto) {
+          const own = (await listInsightsForPerson(ctx.fs, ctx.key, personId)).filter(
+            (i) => i.approved,
+          );
+          crisis = aggregateCrisisSignal({ insights: own, nightmareNudge: false, now }).recurring;
+        }
+        const res = await refreshBook(deps, {
+          bookId,
+          auto: auto ?? false,
+          ...(crisis ? { crisis } : {}),
+        });
+        staled = res.staled;
+        rewritten = res.rewritten;
+        proposalsAdded = res.proposalsAdded;
+        capped = res.capped;
+        budgetReached = res.budgetReached;
+      } else {
+        staled = await markStaleChapters(ctx.fs, ctx.key, personId, bookId);
+      }
+
+      // Stamp the auto-cadence throttle after a run (a manual refresh never touches it).
+      if (auto) {
+        const device = await host.readDeviceState();
+        await host.updateDeviceState({
+          storyRefreshCheckedAt: { ...device.storyRefreshCheckedAt, [personId]: now.toISOString() },
+        });
+      }
+      const bundle = await readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      return {
+        staled,
+        rewritten,
+        bundle,
+        ...(proposalsAdded ? { proposalsAdded } : {}),
+        ...(capped ? { capped: true } : {}),
+        ...(budgetReached ? { budgetReached: true } : {}),
+      };
+    },
+    storyProposals: async (input): Promise<StructuralProposal[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return listStructuralProposals(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyResolveProposal: async (input): Promise<StoryResolveProposalResult> => {
+      const { bookId, proposalId, action } = StoryResolveProposalInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, proposals: [], bundle: null, message: 'Not permitted.' };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { ok: false, proposals: [], bundle: null };
+      // Approve applies the restructure (mutates the outline/chapters) — no AI spend; dismiss just files it away.
+      const res = await resolveProposal(ctx.fs, ctx.key, personId, { bookId, proposalId, action });
+      const bundle = await readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      return {
+        ok: res.ok,
+        proposals: res.proposals,
+        bundle,
+        ...(res.message ? { message: res.message } : {}),
+      };
+    },
+    storyHomeSignal: async (): Promise<StoryHomeSignal> => {
+      const empty: StoryHomeSignal = {
+        hasBook: false,
+        staleChapters: 0,
+        pendingProposals: 0,
+        unwrittenChapters: 0,
+        signature: '',
+      };
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return empty;
+      const personId = await activePersonId();
+      if (!personId) return empty;
+      return computeStoryHomeSignal(ctx.fs, ctx.key, personId);
+    },
+    storyCompleteness: async (input): Promise<StoryCompleteness> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const empty: StoryCompleteness = { stage: 'beginning', ratio: 0, covered: 0, total: 12 };
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return empty;
+      const personId = await activePersonId();
+      if (!personId) return empty;
+      return getStoryCompleteness(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyInterviewCheck: async (input): Promise<StoryInterviewCadenceResult> => {
+      const { bookId, auto } = StoryInterviewCheckInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { outcome: 'noBook' };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { outcome: 'noBook' };
+      // The gap pass + mint need a real key + AI on; without them, the cadence is a no-op (never a NO_KEY spend).
+      const deps = await aiDeps('story.own');
+      const aiReady =
+        deps && deps.apiKey && (await readVaultSettingsValues(deps.fs))['ai.enabled'] !== false;
+      if (!deps || !aiReady) return { outcome: 'throttled' };
+      // The auto cadence never spends during recurring distress — computed HOST-SIDE from the person's own
+      // approved insights (the storyRefreshCheck precedent), so it doesn't depend on the renderer.
+      let crisis = false;
+      if (auto) {
+        const own = (await listInsightsForPerson(ctx.fs, ctx.key, personId)).filter(
+          (i) => i.approved,
+        );
+        crisis = aggregateCrisisSignal({
+          insights: own,
+          nightmareNudge: false,
+          now: new Date(),
+        }).recurring;
+      }
+      return runStoryInterviewCadence(deps, {
+        bookId,
+        auto: auto ?? false,
+        ...(crisis ? { crisis } : {}),
+      });
+    },
+    // --- Publishing & readers (§3.5) — the publish gate is the ONE way a book reaches another person. ---
+    storyPublish: async (input): Promise<StoryPublishResult> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, message: 'Not permitted.' };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { ok: false, message: 'No active person.' };
+      return publishBook(ctx.fs, ctx.key, personId, bookId, new Date());
+    },
+    storyReaders: async (input): Promise<BookReader[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return listReaders(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyGrantReader: async (input): Promise<BookReader[]> => {
+      const { bookId, readerPersonId } = StoryReaderGrantInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return grantReader(ctx.fs, ctx.key, personId, bookId, readerPersonId, new Date());
+    },
+    storyRevokeReader: async (input): Promise<BookReader[]> => {
+      const { bookId, readerPersonId } = StoryReaderGrantInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return revokeReader(ctx.fs, ctx.key, personId, bookId, readerPersonId, new Date());
+    },
+    storyReaderFeatured: async (input): Promise<boolean> => {
+      const { bookId, readerPersonId } = StoryReaderGrantInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return false;
+      const personId = await activePersonId();
+      if (!personId) return false;
+      const reader = await getPerson(ctx.fs, ctx.key, readerPersonId);
+      if (!reader) return false;
+      const chapters = await listChapters(ctx.fs, ctx.key, personId, bookId);
+      return bookMentionsReader(chapters, reader.displayName);
+    },
+    storySharedBooks: async (): Promise<SharedBookSummary[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return listSharedBooks(ctx.fs, ctx.key, personId);
+    },
+    storyReadShared: async (input): Promise<StoryReaderView | null> => {
+      const { authorPersonId, bookId } = StoryReadSharedInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      // The core re-gates on every read (published + still granted) — the viewer is the active person.
+      return readSharedBook(ctx.fs, ctx.key, personId, authorPersonId, bookId);
+    },
+    storyReadSharedImage: async (input): Promise<{ mime: string; dataBase64: string } | null> => {
+      const { authorPersonId, bookId, imageId } = StoryReadSharedImageInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const image = await readSharedImage(
+        ctx.fs,
+        ctx.key,
+        personId,
+        authorPersonId,
+        bookId,
+        imageId,
+      );
+      return image ? { mime: image.mime, dataBase64: toBase64(image.bytes) } : null;
+    },
+    storyExportMarkdown: async (input): Promise<string | null> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      // Export the PUBLISHED head (owner decision) — null when the book has never been published.
+      const built = await buildPublishedMarkdown(ctx.fs, ctx.key, personId, bookId);
+      if (!built) return null;
+      const bytes = new TextEncoder().encode(built.markdown);
+      // Reuses the generic file-save host op (the dream-image export precedent) — the bytes leave the vault.
+      return host.saveImageFile(`${exportFileStem(built.title)}.md`, bytes, 'text/markdown');
+    },
+    storyExportPdf: async (input): Promise<string | null> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const built = await buildPublishedHtml(ctx.fs, ctx.key, personId, bookId);
+      if (!built) return null; // not published
+      const pdf = await host.printToPdf(built.html);
+      if (!pdf) return null; // a host that can't render PDF (web/iOS), or a render failure
+      return host.saveImageFile(`${exportFileStem(built.title)}.pdf`, pdf, 'application/pdf');
+    },
+    // --- Images (§3.8, Phase H) — shares the ONE image consent + OpenAI key with dreams ---------------
+    storyImages: async (input): Promise<StoryImageEntry[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return (await getStoryImageIndex(ctx.fs, ctx.key, personId, bookId)).images;
+    },
+    storyGenerateImage: async (input): Promise<StoryImageResult> => {
+      const { bookId, target, style } = StoryGenerateImageInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      // Consent + image model + default style are the SAME vault settings as dream images (one switch,
+      // owner decision 2026-07-16). Both API keys are read host-side and never cross to the renderer.
+      const settings = await readVaultSettingsValues(ctx.fs);
+      const imageModel =
+        typeof settings['dreams.imageModel'] === 'string'
+          ? settings['dreams.imageModel']
+          : 'gpt-image-2';
+      const defaultStyle =
+        typeof settings['dreams.imageStyle'] === 'string'
+          ? settings['dreams.imageStyle']
+          : 'oil painting';
+      const result = await generateStoryImage({
+        fs: ctx.fs,
+        key: ctx.key,
+        claude: host.claude,
+        image: host.image,
+        anthropicApiKey: (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
+        openaiApiKey: (await resolveOpenAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
+        consent: settings['dreams.imageGenerationEnabled'] === true,
+        claudeModel: await host.activeModel(),
+        imageModel,
+        style: style ?? defaultStyle,
+        personId,
+        bookId,
+        target,
+        now: new Date(),
+      });
+      if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
+      // Cost ($) is admin-only (budgets.manage) — combines the flat image + the small distillation charge.
+      const showCost = await activePersonCan(ctx.fs, ctx.key, 'budgets.manage');
+      return {
+        ok: true,
+        image: result.image,
+        ...(showCost ? { costUsd: result.imageUsage.costUsd + result.promptUsage.costUsd } : {}),
+      };
+    },
+    storyGetImage: async (input): Promise<{ mime: string; dataBase64: string } | null> => {
+      const { bookId, imageId } = StoryImageRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const image = await getStoryImage(ctx.fs, ctx.key, personId, bookId, imageId);
+      return image ? { mime: image.mime, dataBase64: toBase64(image.bytes) } : null;
+    },
+    storyDeleteImage: async (input): Promise<void> => {
+      const { bookId, imageId } = StoryImageRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return;
+      await deleteStoryImage(ctx.fs, ctx.key, personId, bookId, imageId, new Date());
+    },
+    // --- Photos (§3.7, Phase H2) — uploads + Claude vision Q&A; a photo is NEVER a generation input --------
+    storyUploadPhoto: async (input): Promise<StoryImageEntry | null> => {
+      const { bookId, mime, dataBase64, chapterId } = StoryUploadPhotoInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      // Defense in depth: the renderer already downscaled + stripped EXIF (spec 45), but re-validate the
+      // mime + size at the trust boundary (a crafted call can't stash arbitrary bytes).
+      const ALLOWED = ['image/png', 'image/webp', 'image/jpeg', 'image/gif'];
+      if (!ALLOWED.includes(mime)) return null;
+      const bytes = fromBase64(dataBase64);
+      if (bytes.length === 0 || bytes.length > 5 * 1024 * 1024) return null;
+      return addUploadedPhoto(
+        ctx.fs,
+        ctx.key,
+        personId,
+        bookId,
+        { bytes, mime, ...(chapterId ? { chapterId } : {}) },
+        new Date(),
+      );
+    },
+    storyAnalyzePhoto: async (input): Promise<StoryPhotoAnalyzeResult> => {
+      const { bookId, imageId } = StoryImageRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const showCost = await activePersonCan(ctx.fs, ctx.key, 'budgets.manage');
+      return analyzeStoryPhoto({
+        fs: ctx.fs,
+        key: ctx.key,
+        claude: host.claude,
+        anthropicApiKey: (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
+        claudeModel: await host.activeModel(),
+        personId,
+        bookId,
+        imageId,
+        now: new Date(),
+        showCost,
+      });
+    },
+    storyAnswerPhoto: async (input): Promise<void> => {
+      const { bookId, imageId, question, answer } = StoryPhotoAnswerInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return;
+      await addPhotoAnswer(
+        ctx.fs,
+        ctx.key,
+        personId,
+        bookId,
+        { imageId, question, answer },
+        new Date(),
+      );
+    },
+    storyPhotoAnswers: async (input): Promise<StoryPhotoAnswer[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      return getPhotoAnswers(ctx.fs, ctx.key, personId, bookId);
+    },
+    // --- Image placement (§3.8, Phase H3) — AI-suggested anchor, instant set/move/remove -----------------
+    storySuggestPlacement: async (input): Promise<StoryPlacementSuggestResult> => {
+      const { bookId, chapterId, imageId } = StoryImagePlacementRefSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to suggest a spot.',
+        };
+      }
+      return suggestImagePlacement(deps, { bookId, chapterId, imageId });
+    },
+    storySetPlacement: async (input): Promise<StoryBookBundle | null> => {
+      const { bookId, chapterId, imageId, afterAnchor, caption } =
+        StorySetPlacementInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const chapter = await setImagePlacement(ctx.fs, ctx.key, personId, bookId, chapterId, {
+        imageId,
+        afterAnchor,
+        ...(caption !== undefined ? { caption } : {}),
+      });
+      return chapter ? readBookBundle(ctx.fs, ctx.key, personId, bookId) : null;
+    },
+    storyRemovePlacement: async (input): Promise<StoryBookBundle | null> => {
+      const { bookId, chapterId, imageId } = StoryImagePlacementRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      await removeImagePlacement(ctx.fs, ctx.key, personId, bookId, chapterId, imageId);
+      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
+    },
+    // The batch markup revision — the one AI call in the markup layer (§3.3.1/§5.3).
+    storyApplyMarkup: async (input): Promise<StoryRevisionResult> => {
+      const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to apply your changes.',
+        };
+      }
+      const res = await applyMarkup(deps, { bookId, chapterId });
+      if (!res.ok) return { ok: false, reason: res.reason, message: res.message };
+      const bundle = await readBookBundle(deps.fs, deps.key, deps.personId, bookId);
+      if (!bundle) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+      const markup = await getMarkup(deps.fs, deps.key, deps.personId, bookId, chapterId);
+      return { ok: true, bundle, markup };
     },
     // --- Relationship insights (54-memory-redesign §6) — gated `memory.own`, active-person-scoped ---
     relationshipsGetSynthesis: async (input): Promise<RelationshipSynthesis | null> => {

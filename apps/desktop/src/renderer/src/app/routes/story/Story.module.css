@@ -1,0 +1,275 @@
+.page {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.chapterRow {
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+/* A generated cover — a symbolic square, capped so it reads as a book cover, never full-bleed (§12: a
+   fixed-aspect visualization may cap width). */
+.coverImage {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.hiddenFile {
+  display: none;
+}
+
+/* An image placed within the chapter prose (§3.8) — the image + an editable caption + move/remove controls. */
+.placedImage {
+  margin: var(--space-3) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.placedImage img {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+.placedImage figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 480px;
+}
+
+/* An uploaded photo + its caption/Q&A — thumbnail left, content right; stacks under 480px. */
+.photoRow {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+}
+.photoThumb {
+  flex: 0 0 auto;
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+.photoRow > :last-child {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+@media (max-width: 480px) {
+  .photoRow {
+    flex-direction: column;
+  }
+}
+
+/* The chapter-title input must be allowed to shrink beside the Remove button (flex min-width:auto would
+   otherwise resolve to the input's intrinsic min and overflow the row at narrow widths, §12). */
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.chapterRow:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.overviewRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.overviewRow:first-of-type {
+  border-top: none;
+}
+
+/* A written-chapter row is a full-width button that reads like the overview rows but is clickable. */
+.chapterLink {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-1) 0;
+  border: none;
+  border-top: 1px solid var(--color-border);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chapterLink:first-of-type {
+  border-top: none;
+}
+
+.chapterLink:hover {
+  color: var(--color-accent);
+}
+
+/* A chapter title in a space-between row must be able to shrink and ellipsize, or a long title forces the row
+   wide (§12 flex-truncation footgun). The status/chevron beside it keeps its intrinsic width. */
+.rowTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Reader prose: a comfortable readable column. The reader view uses a PERCENTAGE-based measure (~70%, the
+   chat-bubble precedent) — an owner-signed-off §12 exception to the no-max-width rule (spec 64 §3.6/§11.1),
+   not a fixed cap. Left-capped, so the page still fills and never scrolls horizontally. */
+.para {
+  max-width: 70%;
+}
+
+/* The "N changes ready to apply" bar (§3.3.1) — a calm accent strip above the prose. */
+.applyBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle-bg);
+}
+
+/* A paragraph in the draft view holds the prose + its suggestion strip + a Mark up / Sources action row. */
+.paraBody {
+  margin-bottom: var(--space-1);
+}
+
+/* One pending mark under its paragraph (a delete struck-through, or a comment). */
+.markRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.deleteQuote {
+  text-decoration: line-through;
+}
+
+/* The "also flag the source insight" checkbox on a Fix-this comment. */
+.flagRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+
+.sourcesToggle {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.sourcesToggle:hover {
+  color: var(--color-accent);
+}
+
+/* The completeness meter (§3.6) — a warm stage label + a quiet bar (never a bare percentage). */
+.completeness {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.meterTrack {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-surface-alt);
+  overflow: hidden;
+}
+
+.meterFill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-accent);
+  transition: width 0.3s ease;
+}
+
+/* The reader view (§3.6) — typography-first, a comfortable measure (the owner-approved §12 reader exception). */
+.readerView {
+  max-width: 70%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  line-height: 1.7;
+}
+
+@media (max-width: 768px) {
+  .readerView {
+    max-width: 100%;
+  }
+}
+
+.coverPage {
+  text-align: center;
+  padding: var(--space-6) 0;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dedication {
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.epigraph {
+  margin: 0;
+  padding-left: var(--space-4);
+  border-left: 3px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.toc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.readerChapter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.backMatter {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}

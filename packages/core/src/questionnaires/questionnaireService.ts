@@ -56,6 +56,8 @@ export async function saveQuestionnaire(
   // Auto check-ins provenance (63 §4.2): set only on create by the auto engine; preserved across an edit
   // like `favorite`/`createdAt` (a manual edit must not strip the "auto-generated" tag off a def/snapshot).
   const autoCheckin = existing?.autoCheckin ?? input.autoCheckin;
+  // Your Story interview provenance (64 §5.5) — the same host-side-only, preserved-across-edit rule.
+  const storyProvenance = existing?.storyProvenance ?? input.storyProvenance;
   const questionnaire: Questionnaire = {
     id: existing?.id ?? input.id ?? uuid(),
     schemaVersion: 1,
@@ -74,6 +76,7 @@ export async function saveQuestionnaire(
     // an edit from the existing def rather than dropping it (38 §13.8) — like createdAt/creatorPersonId.
     ...(existing?.favorite ? { favorite: existing.favorite } : {}),
     ...(autoCheckin !== undefined ? { autoCheckin } : {}),
+    ...(storyProvenance !== undefined ? { storyProvenance } : {}),
   };
   await writeEncryptedJson(fs, defPath(questionnaire.id), questionnaire, key);
   return questionnaire;

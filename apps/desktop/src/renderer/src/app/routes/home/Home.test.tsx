@@ -302,6 +302,26 @@ describe('Home — the "For you" engine', () => {
     expect(screen.queryByRole('heading', { name: /welcome to selfos/i })).toBeNull();
   });
 
+  it('surfaces the living-book "Your story grew" card when a chapter has new material (64 §5.6)', async () => {
+    installMockBridge({
+      // Some activity so the person isn't "new" (which suppresses all "For you" pushes).
+      conversationsList: () => Promise.resolve([meta('c1', 'A past talk', 'complete')]),
+      storyHomeSignal: () =>
+        Promise.resolve({
+          hasBook: true,
+          staleChapters: 1,
+          pendingProposals: 0,
+          unwrittenChapters: 0,
+          signature: 'b1:1:0:0',
+        }),
+    });
+    renderHome();
+    // Proves the capability snapshot includes `story.own` (else the provider is filtered — the spec-52 lesson);
+    // findByText polls until the async storyHomeSignal resolves + the card renders.
+    expect(await screen.findByText(/new material to weave in/i)).toBeInTheDocument();
+    expect(forYouRegion()).not.toBeNull();
+  });
+
   it('surfaces a Together invitation in the "Needs attention" queue (58 §3.12 / 60 §3.1.2a)', async () => {
     installMockBridge({
       coachingGetPrefs: () => Promise.resolve({ schemaVersion: 1, proactivity: 'active' as const }),

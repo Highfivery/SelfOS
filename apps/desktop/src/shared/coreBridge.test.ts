@@ -28,6 +28,7 @@ import { matrixRowKey } from '@selfos/core/schemas';
 import { saveGoal } from '@selfos/core/goals';
 import { listChallenges, recordCheckIn } from '@selfos/core/challenges';
 import { buildContext } from '@selfos/core/people';
+import { saveProposals } from '@selfos/core/story';
 import {
   captureJointChallengeFromMarker,
   captureSuggestionFromMarker,
@@ -270,6 +271,88 @@ function makeHost(): {
           usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      // Your Story foundations (64 §5.3): "plan a biography of" → a valid foundations JSON (essence +
+      // timeline + outline). Must precede the generic `JSON object` branch (the message contains that phrase).
+      if (userText.includes('plan a biography of')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            title: 'The Weight of Quiet',
+            essence: 'A quiet man learning to speak up.',
+            timeline: [{ label: 'Born in Ohio', date: '1985' }],
+            outline: {
+              parts: [
+                {
+                  title: 'Roots',
+                  chapters: [
+                    {
+                      title: 'The Garage',
+                      brief: 'He learns a machine obeys.',
+                      lifeAreas: ['Family'],
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+      // Your Story chapter (64 §5.3): "WRITE THIS CHAPTER" → chapter prose with a source marker.
+      if (userText.includes('WRITE THIS CHAPTER')) {
+        return Promise.resolve({
+          text: 'The garage smelled of cut pine and warm oil. [[SRC:s0]]\n\nHe watched, and said nothing.',
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+      // Your Story batch revision (64 §3.3.1): "REVISING one chapter" → the revised prose (a different line,
+      // so the test can tell the revision from the original).
+      if (userText.includes('REVISING one chapter')) {
+        return Promise.resolve({
+          text: 'The garage was quiet the day he finally spoke. [[SRC:s0]]',
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+      // Your Story gap pass (64 §3.7): the interview-engine scoring prompt → coverage + one prioritized gap.
+      if (userText.includes('EIGHT KEY SCENES')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            coverage: {
+              chapters: true,
+              scenes: { highPoint: true, lowPoint: false },
+              challenges: false,
+              ideology: false,
+              futureScript: false,
+            },
+            gaps: [
+              {
+                dimension: 'lowPoint',
+                label: 'A hard season',
+                focus: 'Ask about a low point that stayed with them.',
+                priority: 9,
+              },
+            ],
+          }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+      // The story to-do→questions mint (64 §5.5) — matched by its distinctive brief so it doesn't intercept
+      // the generic questionnaire-generation tests (which expect a non-JSON reply). Returns valid questions.
+      if (userText.includes('Your biographer wants to go deeper on this for the book')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            title: 'A few questions for your story',
+            questions: [
+              {
+                type: 'shortText',
+                prompt: 'What was that winter like, day to day?',
+                required: false,
+              },
+              { type: 'shortText', prompt: 'Who was in the house with you then?', required: false },
+            ],
+          }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // Dream synthesis asks for a single JSON object — return a valid DreamAnalysis draft so the
       // synthesize path can parse it; every other turn just streams a short reply.
       const wantsJson = options.messages.some((m) =>
@@ -361,6 +444,7 @@ function makeHost(): {
     openExternal: () => Promise.resolve(),
     checkForUpdate: () => Promise.resolve(null),
     saveImageFile: (name) => Promise.resolve(`/tmp/${name}`),
+    printToPdf: (html) => Promise.resolve(new TextEncoder().encode(`%PDF-fake\n${html.length}`)),
     onVaultChanged: () => () => {},
     onChatChunk: () => () => {},
     onDreamChunk: () => () => {},
@@ -6410,5 +6494,935 @@ describe('createCoreBridge — Together (58) foundation', () => {
     // A non-participant sees none (session not accessible).
     await asPerson(host, stranger.id);
     expect(await bridge.togetherSuggestions(sessionId)).toHaveLength(0);
+  });
+
+  // --- Your Story (64-your-story §5.6) -------------------------------------------------------------------
+  it('story: create → generate foundations → approve outline → list/get → delete', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+
+    // The registry crosses via IPC (v1: the biography, with a default structure + style presets).
+    const types = await bridge.storyBookTypes();
+    expect(types.map((t) => t.id)).toEqual(['biography']);
+    expect(types[0]?.structures.some((s) => s.isDefault)).toBe(true);
+    expect(types[0]?.stylePresets.length).toBeGreaterThan(0);
+
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    expect(book?.status).toBe('outlining');
+    const bookId = book!.id;
+
+    // Foundations pass (metered story.outline via the fake claude 'plan a biography of' branch).
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    expect(gen.ok).toBe(true);
+    if (!gen.ok) return;
+    expect(gen.bundle.manifest.essence).toContain('learning to speak');
+    // A title the person supplied is never overwritten by the foundations pass (§3.2).
+    expect(gen.bundle.manifest.title).toBe('The Story of Ben');
+    expect(gen.bundle.outline?.approved).toBe(false);
+    expect(gen.bundle.outline?.parts[0]?.chapters[0]?.title).toBe('The Garage');
+    expect(gen.bundle.timeline?.events[0]?.label).toBe('Born in Ohio');
+
+    // Approve the (optionally edited) outline → the book moves to drafting.
+    const approved = await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    expect(approved?.status).toBe('drafting');
+    expect((await bridge.storyGet({ bookId }))?.outline?.approved).toBe(true);
+
+    expect((await bridge.storyList()).map((b) => b.id)).toEqual([bookId]);
+    await bridge.storyDelete({ bookId });
+    expect(await bridge.storyList()).toEqual([]);
+    expect(await bridge.storyGet({ bookId })).toBeNull();
+  });
+
+  it('story: a blank title lets the biographer name the book, then the person can rename it (§3.2)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+
+    // Blank title → a placeholder + `titleAuto` so the foundations pass may name it.
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: '',
+      config: { voice: 'third', style: 'cinematic', length: 'full', autoRefresh: true },
+    });
+    expect(book?.title).toBe('Your Story');
+    expect(book?.titleAuto).toBe(true);
+    const bookId = book!.id;
+
+    // Foundations proposes a title from the content → applied because the title was still auto.
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    expect(gen.ok).toBe(true);
+    if (!gen.ok) return;
+    expect(gen.bundle.manifest.title).toBe('The Weight of Quiet');
+
+    // The person renames it on review → their title is now their own (auto cleared).
+    const renamed = await bridge.storyUpdate({ bookId, title: 'A Machine and a Voice' });
+    expect(renamed?.title).toBe('A Machine and a Voice');
+    expect(renamed?.titleAuto ?? false).toBe(false);
+
+    // "Start over" re-runs foundations → the person's chosen title is preserved, never re-proposed.
+    const again = await bridge.storyGenerateFoundations({ bookId });
+    expect(again.ok).toBe(true);
+    if (!again.ok) return;
+    expect(again.bundle.manifest.title).toBe('A Machine and a Voice');
+  });
+
+  it('story: foundations returns an honest failure when AI is off / no key', async () => {
+    const { bridge } = await freshOwner();
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'X',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+
+    // No key yet → NO_KEY.
+    const noKey = await bridge.storyGenerateFoundations({ bookId });
+    expect(noKey.ok).toBe(false);
+    if (!noKey.ok) expect(noKey.reason).toBe('NO_KEY');
+
+    // Key present but AI disabled → AI_OFF (points at Settings).
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: false, scope: 'vault' });
+    const aiOff = await bridge.storyGenerateFoundations({ bookId });
+    expect(aiOff.ok).toBe(false);
+    if (!aiOff.ok) expect(aiOff.reason).toBe('AI_OFF');
+  });
+
+  it('story: generate chapters → book ready → review a chapter', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    expect(gen.ok).toBe(true);
+    if (!gen.ok) return;
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+
+    // Write the chapters (one, per the fake foundations outline).
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    expect(chapters.ok).toBe(true);
+    if (!chapters.ok) return;
+    expect(chapters.generated).toBe(1);
+    const chapter = chapters.bundle.chapters[0]!;
+    expect(chapter.markdown).toContain('cut pine'); // the generated prose
+    expect(chapter.markdown).not.toContain('[[SRC'); // markers stripped
+    expect(chapter.status).toBe('new');
+    expect(chapters.bundle.manifest.status).toBe('ready'); // fully drafted
+
+    // Re-run writes nothing (idempotent).
+    const rerun = await bridge.storyGenerateChapters({ bookId });
+    expect(rerun.ok && rerun.generated).toBe(0);
+
+    // Mark it reviewed.
+    const reviewed = await bridge.storyReviewChapter({ bookId, chapterId: chapter.id });
+    expect(reviewed?.chapters[0]?.status).toBe('reviewed');
+  });
+
+  it('story: markup layer — mark, instant edit/pin, apply the batch revision', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+
+    // Add a comment mark → it appears in the chapter's markup layer.
+    const marked = await bridge.storyMark({
+      bookId,
+      chapterId,
+      mark: {
+        id: 'm1',
+        kind: 'comment',
+        anchor: { paragraphId: 'p0', quote: 'cut pine' },
+        intent: 'addContext',
+        text: 'the lathe was three generations old',
+        status: 'open',
+        createdAt: '2026-07-15',
+      },
+    });
+    expect(marked.marks.map((m) => m.id)).toEqual(['m1']);
+    expect((await bridge.storyGetMarkup({ bookId, chapterId })).marks).toHaveLength(1);
+
+    // Instant inline edit → the chapter's prose changes and a protected block is recorded.
+    const edited = await bridge.storyEditPassage({
+      bookId,
+      chapterId,
+      anchor: { paragraphId: 'p0', quote: 'warm oil' },
+      newText: 'cold steel',
+    });
+    const editedChapter = edited?.chapters.find((c) => c.id === chapterId);
+    expect(editedChapter?.markdown).toContain('cold steel');
+    expect(editedChapter?.protectedBlocks[0]?.text).toBe('cold steel');
+    // An orphaned edit is refused (null), not misapplied.
+    expect(
+      await bridge.storyEditPassage({
+        bookId,
+        chapterId,
+        anchor: { paragraphId: 'p0', quote: 'nonexistent span' },
+        newText: 'x',
+      }),
+    ).toBeNull();
+
+    // Apply the batch revision (the fake 'REVISING' branch) → fresh prose + the mark applied; protected words
+    // survive.
+    const applied = await bridge.storyApplyMarkup({ bookId, chapterId });
+    expect(applied.ok).toBe(true);
+    if (!applied.ok) return;
+    const revised = applied.bundle.chapters.find((c) => c.id === chapterId);
+    expect(revised?.markdown).toContain('finally spoke'); // the revised line
+    expect(revised?.markdown).toContain('cold steel'); // the protected inline edit was preserved (enforced)
+    expect(revised?.status).toBe('updated');
+    expect(applied.markup.marks[0]?.status).toBe('applied');
+  });
+
+  it('story: turn a to-do into questions — mints an Inbox self-send + records a questionsSent to-do', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+
+    const res = await bridge.storyTodoToQuestions({
+      bookId,
+      chapterId,
+      focus: 'the winter he got sick',
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    // A questionsSent to-do is recorded, carrying the assignment id.
+    const todo = res.markup.marks.find((m) => m.kind === 'todo');
+    expect(todo).toMatchObject({
+      todoKind: 'questions',
+      status: 'questionsSent',
+      assignmentId: res.assignmentId,
+    });
+    // It lands in the person's own Inbox (a self-send).
+    const inbox = await bridge.assignmentsInbox();
+    expect(inbox.some((it) => it.assignmentId === res.assignmentId)).toBe(true);
+
+    // AI off → an honest AI_OFF, nothing minted.
+    await bridge.setSetting({ key: 'ai.enabled', value: false, scope: 'vault' });
+    const off = await bridge.storyTodoToQuestions({ bookId, chapterId, focus: 'something else' });
+    expect(off.ok).toBe(false);
+    if (!off.ok) expect(off.reason).toBe('AI_OFF');
+  });
+
+  it('story: a to-do mark flows into the book-level roll-up and can be marked done', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+
+    await bridge.storyMark({
+      bookId,
+      chapterId,
+      mark: {
+        id: 'r1',
+        kind: 'todo',
+        text: 'upload the shop photo',
+        todoKind: 'remind',
+        status: 'open',
+        createdAt: '2026-07-16',
+      },
+    });
+    // The denormalized roll-up shows it.
+    let roll = await bridge.storyTodos({ bookId });
+    expect(roll.todos).toEqual([
+      expect.objectContaining({
+        id: 'r1',
+        kind: 'remind',
+        text: 'upload the shop photo',
+        status: 'open',
+      }),
+    ]);
+    // Mark it done → the roll-up reflects the new status.
+    await bridge.storyUpdateMark({ bookId, chapterId, markId: 'r1', patch: { status: 'done' } });
+    roll = await bridge.storyTodos({ bookId });
+    expect(roll.todos[0]?.status).toBe('done');
+  });
+
+  it('story: exclude marks a mentioning chapter stale (option 1), then un-exclude', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id; // prose mentions "warm oil"
+
+    const res = await bridge.storyExclude({ bookId, kind: 'topic', value: 'warm oil' });
+    expect(res.staled).toBe(1);
+    expect(res.exclusions[0]).toMatchObject({ kind: 'topic', value: 'warm oil' });
+    expect(res.bundle.chapters.find((c) => c.id === chapterId)?.status).toBe('stale');
+    expect((await bridge.storyExclusions({ bookId })).map((e) => e.value)).toEqual(['warm oil']);
+
+    // Un-exclude removes the rule; the chapter stays as it is.
+    expect(await bridge.storyUnexclude({ bookId, itemId: res.exclusions[0]!.id })).toEqual([]);
+    expect(await bridge.storyExclusions({ bookId })).toEqual([]);
+  });
+
+  it('story: refreshCheck returns a fresh bundle and no-ops when nothing drifted', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.storyGenerateChapters({ bookId });
+
+    // Nothing has changed since the chapter was written → nothing stales, nothing rewrites; fresh bundle back.
+    const res = await bridge.storyRefreshCheck({ bookId, auto: false });
+    expect(res.staled).toBe(0);
+    expect(res.rewritten).toBe(0);
+    expect(res.bundle).not.toBeNull();
+  });
+
+  it('story: the auto refresh cadence stamps a device-local daily throttle; a manual refresh does not', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.storyGenerateChapters({ bookId });
+
+    // Not stamped yet.
+    expect(host.device().storyRefreshCheckedAt?.[ownerId]).toBeUndefined();
+    // An auto refresh runs + stamps the per-person daily-throttle marker.
+    await bridge.storyRefreshCheck({ bookId, auto: true });
+    const stamp = host.device().storyRefreshCheckedAt?.[ownerId];
+    expect(stamp).toBeTruthy();
+    // A second auto refresh within the day is throttled (no-op) — the stamp is unchanged.
+    await bridge.storyRefreshCheck({ bookId, auto: true });
+    expect(host.device().storyRefreshCheckedAt?.[ownerId]).toBe(stamp);
+    // A manual "Refresh now" never touches the throttle stamp.
+    await bridge.storyRefreshCheck({ bookId, auto: false });
+    expect(host.device().storyRefreshCheckedAt?.[ownerId]).toBe(stamp);
+  });
+
+  it('story: recurring crisis suppresses the AUTO rewrite (host-side, §8) but a manual refresh still rewrites', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const ctx = (await host.host.vaultAndKey())!;
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+
+    // Induce a stale chapter (a rewrite candidate) via an exclusion.
+    const excluded = await bridge.storyExclude({ bookId, kind: 'topic', value: 'warm oil' });
+    expect(excluded.bundle.chapters.find((c) => c.id === chapterId)?.status).toBe('stale');
+
+    // Seed a recurring-crisis signal (≥2 approved crisis flags in 14 days) on the person's OWN insights.
+    const seedCrisis = (id: string): Promise<void> =>
+      saveInsight(ctx.fs, ctx.key, {
+        id,
+        schemaVersion: 1,
+        source: 'session',
+        subjectPersonId: ownerId,
+        summary: `hard week ${id}`,
+        facts: [],
+        confidence: 'medium',
+        categories: ['Emotions & patterns'],
+        approved: true,
+        crisisFlag: true,
+        provenance: { conversationId: id, at: new Date().toISOString() },
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    await seedCrisis('x1');
+    await seedCrisis('x2');
+
+    // The AUTO cadence must NOT spend during recurring distress — the stale chapter stays stale, nothing rewrites.
+    const auto = await bridge.storyRefreshCheck({ bookId, auto: true });
+    expect(auto.rewritten).toBe(0);
+    expect(auto.bundle?.chapters.find((c) => c.id === chapterId)?.status).toBe('stale');
+
+    // A manual "Refresh now" is user-initiated (crisis is not computed) — it rewrites the stale chapter.
+    const manual = await bridge.storyRefreshCheck({ bookId, auto: false });
+    expect(manual.rewritten).toBeGreaterThan(0);
+    expect(manual.bundle?.chapters.find((c) => c.id === chapterId)?.status).not.toBe('stale');
+  });
+
+  it('story: structural proposals — list pending, approve (restructures the outline), dismiss', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const ctx = (await host.host.vaultAndKey())!;
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.storyGenerateChapters({ bookId });
+    const before = await bridge.storyGet({ bookId });
+    const partId = before!.outline!.parts[0]!.id;
+    const chapterId = before!.outline!.parts[0]!.chapters[0]!.id;
+
+    // Seed two pending proposals directly (a generation pass mints these; here we control the ids).
+    await saveProposals(ctx.fs, ctx.key, ownerId, bookId, {
+      schemaVersion: 1,
+      proposals: [
+        {
+          id: 'pr-new',
+          kind: 'newChapter',
+          rationale: 'A new era emerged.',
+          createdAt: '2026-07-16T00:00:00.000Z',
+          status: 'pending',
+          partId,
+          title: 'The Middle Years',
+          brief: 'Settling in.',
+          lifeAreas: [],
+        },
+        {
+          id: 'pr-prologue',
+          kind: 'prologueRewrite',
+          rationale: 'The opening no longer fits.',
+          createdAt: '2026-07-16T00:00:00.000Z',
+          status: 'pending',
+          chapterId,
+        },
+      ],
+    });
+
+    // The panel lists both pending proposals.
+    expect((await bridge.storyProposals({ bookId })).map((p) => p.id).sort()).toEqual([
+      'pr-new',
+      'pr-prologue',
+    ]);
+
+    // Approve the new-chapter proposal → it restructures the outline (a new un-written chapter appears).
+    const approved = await bridge.storyResolveProposal({
+      bookId,
+      proposalId: 'pr-new',
+      action: 'approve',
+    });
+    expect(approved.ok).toBe(true);
+    expect(approved.proposals.map((p) => p.id)).toEqual(['pr-prologue']); // only the other stays pending
+    const titles = approved.bundle!.outline!.parts.flatMap((p) => p.chapters.map((c) => c.title));
+    expect(titles).toContain('The Middle Years');
+    // The new chapter is un-written (stale) — drafted on the next refresh, not now.
+    const shell = approved.bundle!.chapters.find((c) => c.title === 'The Middle Years');
+    expect(shell?.status).toBe('stale');
+    expect(shell?.markdown).toBe('');
+
+    // Dismiss the other → it leaves the pending list (kept stored for dedup, not shown).
+    const dismissed = await bridge.storyResolveProposal({
+      bookId,
+      proposalId: 'pr-prologue',
+      action: 'dismiss',
+    });
+    expect(dismissed.ok).toBe(true);
+    expect(await bridge.storyProposals({ bookId })).toEqual([]);
+  });
+
+  it('story: the Home signal reports the book’s living state; false for no book or a Guest', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const ctx = (await host.host.vaultAndKey())!;
+
+    // No book yet → hasBook:false (starting one is the nav's job, not a Home push).
+    expect(await bridge.storyHomeSignal()).toMatchObject({ hasBook: false });
+
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    // Chapters aren't written → they're all unwritten. Seed one pending proposal.
+    const before = await bridge.storyGet({ bookId });
+    const firstChapterId = before!.outline!.parts[0]!.chapters[0]!.id;
+    await saveProposals(ctx.fs, ctx.key, ownerId, bookId, {
+      schemaVersion: 1,
+      proposals: [
+        {
+          id: 'pr1',
+          kind: 'prologueRewrite',
+          rationale: 'x',
+          createdAt: '2026-07-16T00:00:00.000Z',
+          status: 'pending',
+          chapterId: firstChapterId,
+        },
+      ],
+    });
+
+    const sig = await bridge.storyHomeSignal();
+    expect(sig.hasBook).toBe(true);
+    expect(sig.unwrittenChapters).toBeGreaterThan(0);
+    expect(sig.pendingProposals).toBe(1);
+    expect(sig.staleChapters).toBe(0); // nothing written yet, so nothing has drifted
+
+    // A Guest (no story.own) gets the empty signal — never another member's book state.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.storyHomeSignal()).toMatchObject({ hasBook: false });
+  });
+
+  it('story: the interview cadence gap-passes + mints ≤1 check-in; completeness reflects it; Guest denied', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.storyGenerateChapters({ bookId });
+
+    // Empty completeness before any gap pass.
+    expect(await bridge.storyCompleteness({ bookId })).toMatchObject({
+      stage: 'beginning',
+      covered: 0,
+    });
+
+    // A manual interview check runs the gap pass + mints one check-in into the Inbox.
+    const first = await bridge.storyInterviewCheck({ bookId });
+    expect(first.outcome).toBe('minted');
+    expect(first.assignmentId).toBeTruthy();
+    // The gap pass persisted coverage → completeness climbed (chapters + highPoint = 2/12).
+    expect(await bridge.storyCompleteness({ bookId })).toMatchObject({
+      covered: 2,
+      stage: 'beginning',
+    });
+    // The minted check-in is a self-send in the owner's Inbox.
+    const inbox = await bridge.assignmentsInbox();
+    expect(inbox.some((i) => i.assignmentId === first.assignmentId && i.fromSelf)).toBe(true);
+    // A second check while it's open → nothing minted (≤1).
+    expect((await bridge.storyInterviewCheck({ bookId })).outcome).toBe('openCheckin');
+
+    // A Guest (no story.own) is denied both reads.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.storyCompleteness({ bookId })).toMatchObject({
+      stage: 'beginning',
+      covered: 0,
+    });
+    expect((await bridge.storyInterviewCheck({ bookId })).outcome).toBe('noBook');
+  });
+
+  it('story: markup + refresh ops are denied for a person without story.own', async () => {
+    const { bridge } = await freshOwner();
+    // A Guest role has no story.own.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+
+    // Reads degrade to empty; there's no book to target, but the gate is what we're asserting.
+    expect((await bridge.storyGetMarkup({ bookId: 'x', chapterId: 'c' })).marks).toEqual([]);
+    expect((await bridge.storyTodos({ bookId: 'x' })).todos).toEqual([]);
+    expect(await bridge.storyProposals({ bookId: 'x' })).toEqual([]);
+    const applied = await bridge.storyApplyMarkup({ bookId: 'x', chapterId: 'c' });
+    expect(applied.ok).toBe(false);
+    const resolved = await bridge.storyResolveProposal({
+      bookId: 'x',
+      proposalId: 'p',
+      action: 'approve',
+    });
+    expect(resolved.ok).toBe(false);
+    const refreshed = await bridge.storyRefreshCheck({ bookId: 'x' });
+    expect(refreshed).toEqual({ staled: 0, rewritten: 0, bundle: null });
+  });
+
+  it('story: publish → grant → a reader reads the published head; revoke re-gates at the next read (§3.5)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    // A second household person who will be the reader.
+    const reader = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: reader.id, roleId: 'member', pin: null });
+
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+
+    // Can't publish until a chapter is Reviewed (the gate).
+    expect((await bridge.storyPublish({ bookId })).ok).toBe(false);
+    await bridge.storyReviewChapter({ bookId, chapterId });
+    expect(await bridge.storyPublish({ bookId })).toMatchObject({ ok: true, publishedChapters: 1 });
+
+    // Grant the reader (the picker's featured-note read works too — the prose mentions "warm oil", not "Angel").
+    expect(await bridge.storyReaderFeatured({ bookId, readerPersonId: reader.id })).toBe(false);
+    expect(await bridge.storyGrantReader({ bookId, readerPersonId: reader.id })).toEqual([
+      { personId: reader.id, displayName: 'Angel' },
+    ]);
+
+    // Switch to the reader → the book appears in "Shared with you" + reads the published head.
+    await bridge.sessionSetActive({ personId: reader.id });
+    const shared = await bridge.storySharedBooks();
+    expect(shared).toHaveLength(1);
+    expect(shared[0]).toMatchObject({
+      authorName: 'Ben',
+      title: 'The Story of Ben',
+      chapterCount: 1,
+    });
+    const view = await bridge.storyReadShared({ authorPersonId: ownerId, bookId });
+    expect(view?.chapters.map((c) => c.id)).toEqual([chapterId]);
+    expect(view?.manifest.noteOnBook).toContain('never invented');
+
+    // Author revokes → the reader loses access at the next read (no stale access).
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    await bridge.storyRevokeReader({ bookId, readerPersonId: reader.id });
+    await bridge.sessionSetActive({ personId: reader.id });
+    expect(await bridge.storySharedBooks()).toEqual([]);
+    expect(await bridge.storyReadShared({ authorPersonId: ownerId, bookId })).toBeNull();
+  });
+
+  it('story: exports the published book as a Markdown file outside the vault (§3.9)', async () => {
+    const { bridge, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const saved: { name: string; bytes: Uint8Array }[] = [];
+    host.host.saveImageFile = (name, bytes) => {
+      saved.push({ name, bytes });
+      return Promise.resolve(`/exports/${name}`);
+    };
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+
+    // Not published yet → nothing to export.
+    expect(await bridge.storyExportMarkdown({ bookId })).toBeNull();
+    expect(saved).toHaveLength(0);
+
+    await bridge.storyReviewChapter({ bookId, chapterId: chapters.bundle.chapters[0]!.id });
+    await bridge.storyPublish({ bookId });
+    const path = await bridge.storyExportMarkdown({ bookId });
+    expect(path).toBe('/exports/The-Story-of-Ben.md');
+    const md = new TextDecoder().decode(saved[0]!.bytes);
+    expect(md).toContain('# The Story of Ben');
+    expect(md).toContain('### '); // the published chapter heading
+  });
+
+  it('story: exports the published book as a PDF file outside the vault (§3.9)', async () => {
+    const { bridge, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const saved: { name: string; bytes: Uint8Array; mime?: string }[] = [];
+    host.host.saveImageFile = (name, bytes, mime) => {
+      saved.push({ name, bytes, mime });
+      return Promise.resolve(`/exports/${name}`);
+    };
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+
+    // Not published yet → nothing to export.
+    expect(await bridge.storyExportPdf({ bookId })).toBeNull();
+    expect(saved).toHaveLength(0);
+
+    await bridge.storyReviewChapter({ bookId, chapterId: chapters.bundle.chapters[0]!.id });
+    await bridge.storyPublish({ bookId });
+    const path = await bridge.storyExportPdf({ bookId });
+    expect(path).toBe('/exports/The-Story-of-Ben.pdf');
+    expect(saved[0]!.mime).toBe('application/pdf');
+    // The test host's fake printToPdf echoes the rendered HTML length, so a non-trivial doc means we rendered.
+    expect(new TextDecoder().decode(saved[0]!.bytes)).toContain('%PDF-fake');
+  });
+
+  it('story: generates a cover behind the shared image consent + key, encrypted, then serves it (§3.8)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+
+    // Consent off → refused, nothing created.
+    const off = await bridge.storyGenerateImage({ bookId, target: { kind: 'cover' } });
+    expect(off.ok === false && off.reason).toBe('NO_CONSENT');
+    expect(await bridge.storyImages({ bookId })).toEqual([]);
+
+    // Turn on the ONE shared image consent + the OpenAI key → a cover generates + is indexed + served.
+    await bridge.setSetting({ key: 'dreams.imageGenerationEnabled', value: true, scope: 'vault' });
+    await bridge.secretSet({ id: OPENAI_API_KEY_ID, value: 'sk-openai' });
+    const made = await bridge.storyGenerateImage({ bookId, target: { kind: 'cover' } });
+    expect(made.ok).toBe(true);
+    if (!made.ok) throw new Error('generate failed');
+    expect(made.image.kind).toBe('cover');
+    // The owner is an admin → the cost figure is present.
+    expect(typeof made.costUsd).toBe('number');
+
+    const index = await bridge.storyImages({ bookId });
+    expect(index.map((i) => i.id)).toEqual([made.image.id]);
+    // The book's manifest now points at the cover.
+    expect((await bridge.storyGet({ bookId }))?.manifest.coverImageId).toBe(made.image.id);
+    // The bytes are served base64 (decrypted host-side); the pixels never travel through the generate result.
+    const served = await bridge.storyGetImage({ bookId, imageId: made.image.id });
+    expect(served?.mime).toBe('image/png');
+    expect(served?.dataBase64.length).toBeGreaterThan(0);
+
+    // Delete clears the cover pointer + the index.
+    await bridge.storyDeleteImage({ bookId, imageId: made.image.id });
+    expect(await bridge.storyImages({ bookId })).toEqual([]);
+    expect((await bridge.storyGet({ bookId }))?.manifest.coverImageId).toBeUndefined();
+  });
+
+  it('story: uploads a photo (encrypted), captions + asks via vision, and persists the answer (§3.7)', async () => {
+    const { bridge, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+
+    // Upload a tiny PNG (base64) → indexed `uploaded`, decrypts back.
+    const dataBase64 = Buffer.from([137, 80, 78, 71, 1, 2, 3]).toString('base64');
+    const entry = await bridge.storyUploadPhoto({ bookId, mime: 'image/png', dataBase64 });
+    expect(entry?.kind).toBe('uploaded');
+    const images = await bridge.storyImages({ bookId });
+    expect(images.map((i) => i.id)).toEqual([entry!.id]);
+    const served = await bridge.storyGetImage({ bookId, imageId: entry!.id });
+    expect(served?.mime).toBe('image/png');
+
+    // Vision analysis → caption stamped + questions returned.
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: () =>
+        Promise.resolve({
+          text: '{"caption":"A garage in winter","questions":["Who took this?","What were you building?"]}',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        }),
+    };
+    const analysis = await bridge.storyAnalyzePhoto({ bookId, imageId: entry!.id });
+    expect(analysis.ok).toBe(true);
+    if (!analysis.ok) throw new Error('analyze failed');
+    expect(analysis.analysis.caption).toBe('A garage in winter');
+    expect(analysis.analysis.questions).toHaveLength(2);
+    expect((await bridge.storyImages({ bookId }))[0]?.caption).toBe('A garage in winter');
+
+    // Answer a question → it persists to the interview corpus.
+    await bridge.storyAnswerPhoto({
+      bookId,
+      imageId: entry!.id,
+      question: 'Who took this?',
+      answer: 'My father did.',
+    });
+    const answers = await bridge.storyPhotoAnswers({ bookId });
+    expect(answers).toEqual([
+      expect.objectContaining({
+        imageId: entry!.id,
+        question: 'Who took this?',
+        answer: 'My father did.',
+      }),
+    ]);
+
+    // A crafted non-image mime is rejected at the trust boundary.
+    expect(await bridge.storyUploadPhoto({ bookId, mime: 'text/plain', dataBase64 })).toBeNull();
+  });
+
+  it('story: places an uploaded photo in a chapter via the AI-suggested anchor, then moves + removes it (§3.8)', async () => {
+    const { bridge, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+
+    const dataBase64 = Buffer.from([137, 80, 78, 71, 9]).toString('base64');
+    const photo = await bridge.storyUploadPhoto({ bookId, mime: 'image/png', dataBase64 });
+
+    // The AI suggests a paragraph anchor.
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: () =>
+        Promise.resolve({
+          text: '0',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        }),
+    };
+    const suggested = await bridge.storySuggestPlacement({ bookId, chapterId, imageId: photo!.id });
+    expect(suggested.ok).toBe(true);
+    if (!suggested.ok) throw new Error('suggest failed');
+
+    // Place it, then confirm it's on the chapter.
+    let bundle = await bridge.storySetPlacement({
+      bookId,
+      chapterId,
+      imageId: photo!.id,
+      afterAnchor: suggested.afterAnchor,
+      caption: 'The garage',
+    });
+    let chapter = bundle?.chapters.find((c) => c.id === chapterId);
+    expect(chapter?.imagePlacements).toEqual([
+      { imageId: photo!.id, afterAnchor: suggested.afterAnchor, caption: 'The garage' },
+    ]);
+
+    // Move it (same image → deduped, not doubled).
+    bundle = await bridge.storySetPlacement({
+      bookId,
+      chapterId,
+      imageId: photo!.id,
+      afterAnchor: 'p0',
+    });
+    chapter = bundle?.chapters.find((c) => c.id === chapterId);
+    expect(chapter?.imagePlacements).toHaveLength(1);
+    expect(chapter?.imagePlacements[0]?.afterAnchor).toBe('p0');
+
+    // Remove it.
+    bundle = await bridge.storyRemovePlacement({ bookId, chapterId, imageId: photo!.id });
+    chapter = bundle?.chapters.find((c) => c.id === chapterId);
+    expect(chapter?.imagePlacements).toEqual([]);
+  });
+
+  it('story: a published book embeds its cover as an inline data URI in the Markdown export (§3.8)', async () => {
+    const { bridge, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.secretSet({ id: OPENAI_API_KEY_ID, value: 'sk-openai' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    await bridge.setSetting({ key: 'dreams.imageGenerationEnabled', value: true, scope: 'vault' });
+    const saved: { name: string; bytes: Uint8Array }[] = [];
+    host.host.saveImageFile = (name, bytes) => {
+      saved.push({ name, bytes });
+      return Promise.resolve(`/exports/${name}`);
+    };
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    await bridge.storyReviewChapter({ bookId, chapterId: chapters.bundle.chapters[0]!.id });
+
+    // Make a cover (the test host's fake image client returns a tiny PNG), then publish + export.
+    const cover = await bridge.storyGenerateImage({ bookId, target: { kind: 'cover' } });
+    if (!cover.ok) throw new Error('cover failed');
+    await bridge.storyPublish({ bookId });
+    await bridge.storyExportMarkdown({ bookId });
+    const md = new TextDecoder().decode(saved.at(-1)!.bytes);
+    expect(md).toContain('![Cover](data:image/png;base64,'); // the frozen cover is embedded inline
   });
 });

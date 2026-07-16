@@ -224,6 +224,19 @@ export const DeviceStateSchema = z.object({
    * send — it must not sync or leak across personas. Additive-optional (the `discoveryDismissals` precedent).
    */
   inboxFavorites: z.record(z.string(), z.array(z.string())).optional(),
+  /**
+   * When a reader last opened a shared Your Story book (64-your-story §3.5), keyed by the ACTIVE
+   * (reading) person id → bookId → last-read ISO timestamp. Drives the reader "What's new since you
+   * last read" marker — a personal, device-local view state that must not sync or leak across
+   * personas. Additive-optional (the `inboxFavorites` precedent — no schemaVersion bump).
+   */
+  storyReadProgress: z.record(z.string(), z.record(z.string(), z.string())).optional(),
+  /**
+   * When this device last ran the Your Story freshness check, keyed by subject person id
+   * (64-your-story §3.4). The renderer-driven daily cadence throttle marker — device-local +
+   * per-person, the `autoCheckinCheckedAt` precedent. Additive-optional (no schemaVersion bump).
+   */
+  storyRefreshCheckedAt: z.record(z.string(), z.string()).optional(),
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 
@@ -1425,6 +1438,19 @@ export const AutoCheckinProvenanceSchema = z.object({
 });
 export type AutoCheckinProvenance = z.infer<typeof AutoCheckinProvenanceSchema>;
 
+/**
+ * Your Story provenance (64-your-story §5.5) — present only on a questionnaire the biography interview
+ * engine generated to fill a gap. Set host-side (never the builder); carried through an edit like
+ * `autoCheckin`. Defined here (not the Your Story block at the file's end) so `QuestionnaireSchema` below
+ * can reference it — JS consts are not hoisted.
+ */
+export const StoryProvenanceSchema = z.object({
+  bookId: z.string().min(1),
+  gapBrief: z.string().max(280),
+  generatedAt: z.string(),
+});
+export type StoryProvenance = z.infer<typeof StoryProvenanceSchema>;
+
 export const QuestionnaireSchema = z.object({
   id: z.string().min(1),
   schemaVersion: z.number().int().positive(),
@@ -1453,6 +1479,9 @@ export const QuestionnaireSchema = z.object({
   // Auto check-ins provenance (63-auto-checkins §4.2) — present only on an engine-generated questionnaire.
   // Set host-side by the auto engine (never the builder); carried through an edit like `favorite`.
   autoCheckin: AutoCheckinProvenanceSchema.optional(),
+  // Your Story provenance (64-your-story §5.5) — present only on a biography-interview gap questionnaire.
+  // Host-side only; carried through an edit like `autoCheckin`. Additive-optional, no schemaVersion bump.
+  storyProvenance: StoryProvenanceSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -1471,6 +1500,8 @@ export const QuestionnaireInputSchema = z.object({
   // Present only when the Auto check-ins engine authors the questionnaire (63 §4.2). The renderer never sets
   // this through the builder; it flows in host-side so `saveQuestionnaire` can stamp the def + snapshot.
   autoCheckin: AutoCheckinProvenanceSchema.optional(),
+  // Present only for a Your Story interview gap questionnaire (64 §5.5) — flows in host-side, never the builder.
+  storyProvenance: StoryProvenanceSchema.optional(),
 });
 export type QuestionnaireInput = z.infer<typeof QuestionnaireInputSchema>;
 
@@ -3453,4 +3484,927 @@ export interface TogetherReportView {
   report: SharedReport | null;
   stale: boolean;
   agreements: Agreement[];
+}
+
+// ============================================================================
+// Your Story — living biography & book projects (64-your-story)
+//
+// A book is stored under `people/<personId>/story/books/<bookId>/`. Markdown CONTENT lives as strings
+// inside these encrypted `.enc` files (real `.md` only via explicit export) — the owner's decision that
+// the app's most intimate document stays encrypted-at-rest like every other artifact. All schemas are
+// `schemaVersion: 1`, additive-optional evolution (the established no-migration convention).
+// ============================================================================
+
+/** A book type id — resolved against the code registry (`story/bookTypes.ts`). v1: `'biography'`. A free
+ *  string (the questionnaire `type` precedent) so future types are additive with no schema change. */
+export const BookTypeIdSchema = z.string().min(1);
+export type BookTypeId = z.infer<typeof BookTypeIdSchema>;
+
+export const BookVoiceSchema = z.enum(['third', 'first']);
+export type BookVoice = z.infer<typeof BookVoiceSchema>;
+export const BookStyleSchema = z.enum([
+  'literary',
+  'warm',
+  'plain',
+  'journalistic',
+  'reflective',
+  'cinematic',
+  'poetic',
+]);
+export type BookStyle = z.infer<typeof BookStyleSchema>;
+export const BookLengthSchema = z.enum(['concise', 'standard', 'full']);
+export type BookLength = z.infer<typeof BookLengthSchema>;
+
+/** Per-book generation config (64 §3.2). Voice/style/length steer the Biographer; `autoRefresh` gates the
+ *  hybrid living-book cadence (§3.4). Defaults are the owner-approved defaults (third person, warm, full —
+ *  a biography reads at published-book length by default, still selectable in setup). */
+export const BookConfigSchema = z.object({
+  voice: BookVoiceSchema.default('third'),
+  style: BookStyleSchema.default('warm'),
+  length: BookLengthSchema.default('full'),
+  autoRefresh: z.boolean().default(true),
+});
+export type BookConfig = z.infer<typeof BookConfigSchema>;
+
+export const BookStatusSchema = z.enum(['outlining', 'drafting', 'ready']);
+export type BookStatus = z.infer<typeof BookStatusSchema>;
+
+/** The book's front/back matter (§3.6) — the person's own words (never AI-invented). Editable in the draft;
+ *  snapshotted into the published head at publish. */
+export const BookMatterSchema = z.object({
+  dedication: z.string().optional(),
+  epigraph: z.string().optional(),
+  acknowledgments: z.string().optional(),
+});
+export type BookMatter = z.infer<typeof BookMatterSchema>;
+
+/** `book.enc` — the book's top-level record (64 §4). `sharedWith` = the household person ids granted read
+ *  access (re-checked at every read, §3.5); `publishedAt` present once the person has published a head. */
+export const BookManifestSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.literal(1),
+  personId: z.string().min(1),
+  type: BookTypeIdSchema,
+  title: z.string().min(1),
+  // `titleAuto` = the title was assigned by the app (a placeholder or the AI-proposed title), not chosen by
+  // the person (§3.2). While true, the foundations pass may overwrite it with a title drawn from the content;
+  // it flips to absent/false the moment the person edits the title on the outline-review screen.
+  titleAuto: z.boolean().optional(),
+  config: BookConfigSchema,
+  essence: z.string().optional(),
+  status: BookStatusSchema,
+  coverImageId: z.string().optional(),
+  matter: BookMatterSchema.optional(),
+  sharedWith: z.array(z.string()).default([]),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  publishedAt: z.string().optional(),
+});
+export type BookManifest = z.infer<typeof BookManifestSchema>;
+
+/** A deep-linkable pointer to the source material a passage/timeline event/photo came from (64 §4) — reuses
+ *  the existing provenance vocabulary so any book paragraph can cite its receipts and open the source. */
+export const StorySourceKindSchema = z.enum([
+  'insight',
+  'intakeAnswer',
+  'response',
+  'dream',
+  'test',
+  'goal',
+  'challenge',
+  'together',
+  'timeline',
+  'photo',
+]);
+export type StorySourceKind = z.infer<typeof StorySourceKindSchema>;
+export const StorySourceRefSchema = z.object({
+  kind: StorySourceKindSchema,
+  id: z.string().min(1),
+  at: z.string().optional(),
+});
+export type StorySourceRef = z.infer<typeof StorySourceRefSchema>;
+
+/** A span pointer that survives light re-flow (64 §4) — resolved against the live markdown by
+ *  exact-then-fuzzy quote match (the standard text-quote-anchor approach). Paragraph-level marks omit
+ *  `quote`. An anchor that no longer resolves after a rewrite is surfaced as ORPHANED (never silently
+ *  dropped, never silently reapplied to the wrong span). */
+export const TextAnchorSchema = z.object({
+  paragraphId: z.string().min(1),
+  quote: z.string().optional(),
+  prefix: z.string().optional(),
+  suffix: z.string().optional(),
+});
+export type TextAnchor = z.infer<typeof TextAnchorSchema>;
+
+// --- Chapters (draft head + published snapshot share this shape) -----------------------------------------
+
+/** `new` = first draft, unreviewed; `updated` = re-generated/auto-rewritten, unreviewed; `stale` = flagged
+ *  by the freshness engine; `reviewed` = the person marked it good (only Reviewed content publishes, §3.5);
+ *  `generating` = queued/in-flight. */
+export const ChapterStatusSchema = z.enum(['generating', 'new', 'updated', 'stale', 'reviewed']);
+export type ChapterStatus = z.infer<typeof ChapterStatusSchema>;
+
+/** One paragraph's provenance: `anchor` = the paragraph id, `refs` = every source it drew on (§5.3 strips
+ *  the model's inline `[[SRC:…]]` markers into this — the markers never render). */
+export const ChapterProvenanceEntrySchema = z.object({
+  anchor: z.string().min(1),
+  refs: z.array(StorySourceRefSchema).default([]),
+});
+export type ChapterProvenanceEntry = z.infer<typeof ChapterProvenanceEntrySchema>;
+
+/** A person's own-words span a rewrite must preserve byte-verbatim (code-enforced, §5.4). */
+export const ProtectedBlockSchema = z.object({
+  anchor: TextAnchorSchema,
+  text: z.string(),
+});
+export type ProtectedBlock = z.infer<typeof ProtectedBlockSchema>;
+
+/** A pinned "in your own words" quote — rendered as a pull-quote, never paraphrased by any rewrite (§3.3). */
+export const PinnedQuoteSchema = z.object({
+  anchor: TextAnchorSchema,
+  text: z.string(),
+  sourceRef: StorySourceRefSchema.optional(),
+});
+export type PinnedQuote = z.infer<typeof PinnedQuoteSchema>;
+
+/** Where an image sits in the chapter: after the paragraph `afterAnchor`, with its caption (§3.8). */
+export const ImagePlacementSchema = z.object({
+  imageId: z.string().min(1),
+  afterAnchor: z.string().min(1),
+  caption: z.string().default(''),
+});
+export type ImagePlacement = z.infer<typeof ImagePlacementSchema>;
+
+/** `chapters/<chapterId>.enc` (draft head) and `published/<chapterId>.enc` (published snapshot). `markdown`
+ *  is the prose; `sourceSignature` is the freshness fingerprint (§5.4). */
+export const BookChapterSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.literal(1),
+  partId: z.string().min(1),
+  order: z.number().int().nonnegative(),
+  title: z.string(),
+  markdown: z.string().default(''),
+  revision: z.number().int().nonnegative().default(0),
+  status: ChapterStatusSchema,
+  sourceSignature: z.string().default(''),
+  provenance: z.array(ChapterProvenanceEntrySchema).default([]),
+  protectedBlocks: z.array(ProtectedBlockSchema).default([]),
+  pinnedQuotes: z.array(PinnedQuoteSchema).default([]),
+  imagePlacements: z.array(ImagePlacementSchema).default([]),
+  lastGeneratedAt: z.string().optional(),
+  lastReviewedAt: z.string().optional(),
+});
+export type BookChapter = z.infer<typeof BookChapterSchema>;
+
+/** One part of the published TOC — the part title + its published chapter ids, in order (§3.6). */
+export const PublishedPartSchema = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  chapterIds: z.array(z.string()).default([]),
+});
+export type PublishedPart = z.infer<typeof PublishedPartSchema>;
+
+/** `published/manifest.enc` — the self-contained published head readers see (§3.5/§3.6). Snapshots everything the
+ *  reader view needs (title, essence, matter, the auto "A Note on this book", TOC) so a draft edit after publish
+ *  never leaks; the published chapters live in `published/<chapterId>.enc`. */
+export const PublishedManifestSchema = z.object({
+  schemaVersion: z.literal(1),
+  publishedAt: z.string(),
+  title: z.string(),
+  essence: z.string().optional(),
+  coverImageId: z.string().optional(),
+  matter: BookMatterSchema.optional(),
+  /** The auto-generated honesty page ("Drawn from N conversations, M reflections…"), computed at publish. */
+  noteOnBook: z.string().optional(),
+  parts: z.array(PublishedPartSchema).default([]),
+  /** A flat, ordered list of the published chapter ids (drives read-progress + "what's new"). */
+  chapterOrder: z.array(z.string()).default([]),
+  /** Snapshot metadata for every image referenced by the published head (cover + placements, §3.8). The bytes
+   *  live in `published/images/<id>.enc` — frozen at publish so a later draft edit never changes the shared book.
+   *  `z.lazy` because `StoryImageEntrySchema` is declared further down this file. */
+  images: z.array(z.lazy(() => StoryImageEntrySchema)).default([]),
+});
+export type PublishedManifest = z.infer<typeof PublishedManifestSchema>;
+
+// --- Outline & timeline ----------------------------------------------------------------------------------
+
+/** A proposed/approved chapter in the outline: title + `brief` (its "essence", §3.2), era range, and the
+ *  life-areas it draws on (free strings, normalized server-side against LIFE_AREAS like `InsightFact.lifeArea`). */
+export const OutlineChapterSchema = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  brief: z.string().default(''),
+  eraFrom: z.string().optional(),
+  eraTo: z.string().optional(),
+  lifeAreas: z.array(z.string()).default([]),
+  order: z.number().int().nonnegative(),
+});
+export type OutlineChapter = z.infer<typeof OutlineChapterSchema>;
+
+export const OutlinePartSchema = z.object({
+  id: z.string().min(1),
+  title: z.string(),
+  chapters: z.array(OutlineChapterSchema).default([]),
+});
+export type OutlinePart = z.infer<typeof OutlinePartSchema>;
+
+/** `outline.enc` — the parts/chapters plan; `approved` gates chapter drafting (§3.2). */
+export const BookOutlineSchema = z.object({
+  schemaVersion: z.literal(1),
+  approved: z.boolean().default(false),
+  parts: z.array(OutlinePartSchema).default([]),
+});
+export type BookOutline = z.infer<typeof BookOutlineSchema>;
+
+/** `timeline.enc` — the user-editable chronology spine (§3.2/§5.1). `date` is an ISO/partial date; `approx`
+ *  a fuzzy label ("mid-90s") when no date is known; `userEdited` protects a hand-fixed event from AI overwrite. */
+export const TimelineEventSchema = z.object({
+  id: z.string().min(1),
+  date: z.string().optional(),
+  approx: z.string().optional(),
+  label: z.string(),
+  sourceRef: StorySourceRefSchema.optional(),
+  userEdited: z.boolean().default(false),
+});
+export type TimelineEvent = z.infer<typeof TimelineEventSchema>;
+
+export const LifeTimelineSchema = z.object({
+  schemaVersion: z.literal(1),
+  events: z.array(TimelineEventSchema).default([]),
+});
+export type LifeTimeline = z.infer<typeof LifeTimelineSchema>;
+
+// --- The markup / suggestion layer (§3.3) ----------------------------------------------------------------
+
+/** A comment's intent (§3.3): weave in new context, correct a fact, or ask the biographer. A `fix` may carry
+ *  `flagInsightId` to also drive the Memory flag-inaccurate hand-off (fixing the book AND memory). */
+export const CommentIntentSchema = z.enum(['addContext', 'fix', 'question']);
+export type CommentIntent = z.infer<typeof CommentIntentSchema>;
+
+export const CommentMarkSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('comment'),
+  anchor: TextAnchorSchema,
+  intent: CommentIntentSchema,
+  text: z.string(),
+  status: z.enum(['open', 'applied', 'dismissed']).default('open'),
+  createdAt: z.string(),
+  appliedRevision: z.number().int().nonnegative().optional(),
+  flagInsightId: z.string().optional(),
+});
+
+export const DeleteMarkSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('delete'),
+  anchor: TextAnchorSchema,
+  status: z.enum(['pending', 'applied', 'undone']).default('pending'),
+  createdAt: z.string(),
+  appliedRevision: z.number().int().nonnegative().optional(),
+});
+
+/** A to-do's kind (§3.3.2): a personal reminder (AI never touches it), an instruction to fold into the next
+ *  revision, or a hand-off to the interview engine (mints a targeted check-in with FOCUS = the to-do text). */
+export const StoryTodoKindSchema = z.enum(['remind', 'ask', 'questions']);
+export type StoryTodoKind = z.infer<typeof StoryTodoKindSchema>;
+export const StoryTodoStatusSchema = z.enum(['open', 'done', 'questionsSent', 'applied']);
+export type StoryTodoStatus = z.infer<typeof StoryTodoStatusSchema>;
+
+export const TodoMarkSchema = z.object({
+  id: z.string().min(1),
+  kind: z.literal('todo'),
+  anchor: TextAnchorSchema.optional(),
+  text: z.string(),
+  todoKind: StoryTodoKindSchema,
+  status: StoryTodoStatusSchema.default('open'),
+  assignmentId: z.string().optional(),
+  createdAt: z.string(),
+});
+
+/** One pending mark in a chapter's suggestion layer. Instant/no-AI marks (inline edit → `protectedBlocks`,
+ *  pin → `pinnedQuotes`) live on the chapter, not here — this layer holds only the batch applied together
+ *  by `applyMarkup` (deletes, comments, ask/questions to-dos) plus personal `remind` to-dos. */
+export const MarkupMarkSchema = z.discriminatedUnion('kind', [
+  CommentMarkSchema,
+  DeleteMarkSchema,
+  TodoMarkSchema,
+]);
+export type MarkupMark = z.infer<typeof MarkupMarkSchema>;
+export type CommentMark = z.infer<typeof CommentMarkSchema>;
+export type DeleteMark = z.infer<typeof DeleteMarkSchema>;
+export type TodoMark = z.infer<typeof TodoMarkSchema>;
+
+/** `markup/<chapterId>.enc` — the per-chapter suggestion layer (§3.3.1). */
+export const ChapterMarkupSchema = z.object({
+  schemaVersion: z.literal(1),
+  chapterId: z.string().min(1),
+  marks: z.array(MarkupMarkSchema).default([]),
+});
+export type ChapterMarkup = z.infer<typeof ChapterMarkupSchema>;
+
+/** `todos.enc` — a denormalized book-level roll-up of every to-do (source of truth stays each chapter's
+ *  markup) so the overview "To do" list is one read, not N (§3.3.2). */
+export const StoryTodoEntrySchema = z.object({
+  id: z.string().min(1),
+  chapterId: z.string().min(1),
+  kind: StoryTodoKindSchema,
+  text: z.string(),
+  status: StoryTodoStatusSchema,
+  createdAt: z.string(),
+});
+export type StoryTodoEntry = z.infer<typeof StoryTodoEntrySchema>;
+export const StoryTodoListSchema = z.object({
+  schemaVersion: z.literal(1),
+  todos: z.array(StoryTodoEntrySchema).default([]),
+});
+export type StoryTodoList = z.infer<typeof StoryTodoListSchema>;
+
+/** `exclusions.enc` — the durable "never write about this again" list (§3.3). `value` by `kind`: `topic` =
+ *  the topic phrase; `passage` = the excluded passage's TEXT (a text-avoidance phrase, not a hash — so the
+ *  corpus can substring-match it, §5.1); `person` = the person id (its display name is ALSO avoided in text);
+ *  `source` = a StorySourceRef id. Filtered at the CORPUS boundary (§5.1) so excluded material can never be
+ *  reintroduced by a later rewrite. */
+export const ExclusionKindSchema = z.enum(['passage', 'topic', 'person', 'source']);
+export type ExclusionKind = z.infer<typeof ExclusionKindSchema>;
+export const ExclusionItemSchema = z.object({
+  id: z.string().min(1),
+  kind: ExclusionKindSchema,
+  value: z.string(),
+  note: z.string().optional(),
+  createdAt: z.string(),
+});
+export type ExclusionItem = z.infer<typeof ExclusionItemSchema>;
+export const ExclusionListSchema = z.object({
+  schemaVersion: z.literal(1),
+  items: z.array(ExclusionItemSchema).default([]),
+});
+export type ExclusionList = z.infer<typeof ExclusionListSchema>;
+
+// --- Interview state & images ----------------------------------------------------------------------------
+
+/** A photo-elicited Q&A (§3.7) — a vision-suggested question the person answered; persists to the corpus. */
+export const StoryPhotoAnswerSchema = z.object({
+  imageId: z.string().min(1),
+  question: z.string(),
+  answer: z.string(),
+  at: z.string(),
+});
+export type StoryPhotoAnswer = z.infer<typeof StoryPhotoAnswerSchema>;
+
+/** How much of the McAdams framework the interview engine has covered (§5.5) — drives the completeness meter
+ *  and gap pass. `scenes` maps a scene key (see MCADAMS_SCENES in `story/bookTypes.ts`) → covered. */
+export const StoryFrameworkCoverageSchema = z.object({
+  chapters: z.boolean(),
+  scenes: z.record(z.string(), z.boolean()),
+  challenges: z.boolean(),
+  ideology: z.boolean(),
+  futureScript: z.boolean(),
+});
+export type StoryFrameworkCoverage = z.infer<typeof StoryFrameworkCoverageSchema>;
+
+/** `interview.enc` — the biography interview engine's state (§5.5). `askedPrompts` feeds de-dup so a gap
+ *  question never re-asks what the vault already knows. */
+export const StoryInterviewStateSchema = z.object({
+  schemaVersion: z.literal(1),
+  askedPrompts: z.array(z.string()).default([]),
+  frameworkCoverage: StoryFrameworkCoverageSchema.default({
+    chapters: false,
+    scenes: {},
+    challenges: false,
+    ideology: false,
+    futureScript: false,
+  }),
+  photoAnswers: z.array(StoryPhotoAnswerSchema).default([]),
+  lastGapPassAt: z.string().optional(),
+  openCheckinAssignmentId: z.string().optional(),
+});
+export type StoryInterviewState = z.infer<typeof StoryInterviewStateSchema>;
+
+/** `images/index.enc` — metadata for every book image (bytes live in `images/<imageId>.enc` via
+ *  `encryptBytes`). `cover` is the book cover; `generated` an AI illustration; `uploaded` a user photo. */
+export const StoryImageKindSchema = z.enum(['uploaded', 'generated', 'cover']);
+export type StoryImageKind = z.infer<typeof StoryImageKindSchema>;
+export const StoryImageEntrySchema = z.object({
+  id: z.string().min(1),
+  kind: StoryImageKindSchema,
+  mime: z.string(),
+  caption: z.string().optional(),
+  visionNotes: z.string().optional(),
+  chapterId: z.string().optional(),
+  createdAt: z.string(),
+});
+export type StoryImageEntry = z.infer<typeof StoryImageEntrySchema>;
+export const StoryImageIndexSchema = z.object({
+  schemaVersion: z.literal(1),
+  images: z.array(StoryImageEntrySchema).default([]),
+});
+export type StoryImageIndex = z.infer<typeof StoryImageIndexSchema>;
+
+/**
+ * The result of generating (or regenerating) a Your Story image — a cover or a chapter illustration (§3.8).
+ * Mirrors `DreamImageGenerateResult`: on success the bytes are encrypted under `images/<id>.enc` and the
+ * metadata indexed; the caller fetches the bytes separately (the distilled prompt never travels back).
+ * `promptUsage` is the Claude distillation charge (`story.imagePrompt`); `imageUsage` the flat OpenAI charge
+ * (`story.image`) — present only when the provider was actually billed. A `REFUSED` (content-policy decline)
+ * is uncharged and carries no `imageUsage` (the distillation, if it ran + billed, still does).
+ */
+export type StoryImageGenerateResult =
+  | { ok: true; image: StoryImageEntry; promptUsage: UsageEvent; imageUsage: UsageEvent }
+  | {
+      ok: false;
+      reason: 'NO_CONSENT' | 'NO_KEY' | 'BUDGET' | 'REFUSED' | 'ERROR';
+      message: string;
+      promptUsage?: UsageEvent;
+      imageUsage?: UsageEvent;
+    };
+
+/**
+ * The slim IPC result the renderer sees for `story:generateImage` — the usage events stay host-side (the
+ * dream-image precedent); the renderer fetches the bytes separately. `costUsd` is present only for admins
+ * (`budgets.manage`), combining the flat image charge + the small distillation charge.
+ */
+export type StoryImageResult =
+  | { ok: true; image: StoryImageEntry; costUsd?: number }
+  | {
+      ok: false;
+      reason: 'NO_CONSENT' | 'NO_KEY' | 'BUDGET' | 'REFUSED' | 'ERROR';
+      message: string;
+    };
+
+/** A vision analysis of an uploaded photo (§3.7) — a suggested caption + 2–4 questions to deepen the story. */
+export interface StoryPhotoAnalysis {
+  caption: string;
+  questions: string[];
+}
+
+/** The slim IPC result for `story:analyzePhoto` — the vision usage stays host-side (like image generation). */
+export type StoryPhotoAnalyzeResult =
+  | { ok: true; analysis: StoryPhotoAnalysis; costUsd?: number }
+  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };
+
+/** A structural change the freshness engine proposes but never applies silently (§3.4) — the spec-20
+ *  merge-proposal pattern: a human-readable rationale that waits for one-tap approval. Each kind carries the
+ *  structured change the apply step needs. `status: dismissed` is kept (not deleted) so a rejected idea isn't
+ *  re-proposed; an approved proposal is removed once applied. Applying only RESTRUCTURES the outline — new/split
+ *  chapters land un-written (stale) and are drafted on the next refresh (owner decision 2026-07-16). */
+export const StructuralProposalKindSchema = z.enum([
+  'newChapter',
+  'splitChapter',
+  'reorder',
+  'prologueRewrite',
+]);
+export type StructuralProposalKind = z.infer<typeof StructuralProposalKindSchema>;
+export const StructuralProposalStatusSchema = z.enum(['pending', 'dismissed']);
+export type StructuralProposalStatus = z.infer<typeof StructuralProposalStatusSchema>;
+
+const proposalBase = {
+  id: z.string().min(1),
+  rationale: z.string(),
+  createdAt: z.string(),
+  status: StructuralProposalStatusSchema.default('pending'),
+};
+/** Add a brand-new chapter into a part (after `afterChapterId`, or at the part's end). */
+export const NewChapterProposalSchema = z.object({
+  ...proposalBase,
+  kind: z.literal('newChapter'),
+  partId: z.string().min(1),
+  afterChapterId: z.string().optional(),
+  title: z.string().min(1),
+  brief: z.string().default(''),
+  lifeAreas: z.array(z.string()).default([]),
+  eraFrom: z.string().optional(),
+  eraTo: z.string().optional(),
+});
+/** Split one chapter into two: the original narrows to `first*` (rewritten next pass), a new sibling holds `second*`. */
+export const SplitChapterProposalSchema = z.object({
+  ...proposalBase,
+  kind: z.literal('splitChapter'),
+  chapterId: z.string().min(1),
+  firstTitle: z.string().min(1),
+  firstBrief: z.string().default(''),
+  secondTitle: z.string().min(1),
+  secondBrief: z.string().default(''),
+});
+/** Reorder the chapters within one part; `order` is the full set of that part's chapter ids in the new order. */
+export const ReorderProposalSchema = z.object({
+  ...proposalBase,
+  kind: z.literal('reorder'),
+  partId: z.string().min(1),
+  order: z.array(z.string().min(1)).min(2),
+});
+/** The opening chapter no longer fits — mark it stale so the next pass rewrites it. */
+export const PrologueRewriteProposalSchema = z.object({
+  ...proposalBase,
+  kind: z.literal('prologueRewrite'),
+  chapterId: z.string().min(1),
+});
+export const StructuralProposalSchema = z.discriminatedUnion('kind', [
+  NewChapterProposalSchema,
+  SplitChapterProposalSchema,
+  ReorderProposalSchema,
+  PrologueRewriteProposalSchema,
+]);
+export type StructuralProposal = z.infer<typeof StructuralProposalSchema>;
+
+/** `proposals.enc` — the pending/dismissed structural proposals stored alongside the outline (§5.4). */
+export const StoryProposalListSchema = z.object({
+  schemaVersion: z.literal(1),
+  proposals: z.array(StructuralProposalSchema).default([]),
+});
+export type StoryProposalList = z.infer<typeof StoryProposalListSchema>;
+
+// --- Your Story IPC view types + input schemas (§5.6) ----------------------------------------------------
+
+/** The composite a book detail view needs in one read (§5.7). Crypto-free (defined here in the schemas
+ *  shim) so the IPC layer/renderer may reference it — the `ChatTurnResult` precedent. */
+export interface StoryBookBundle {
+  manifest: BookManifest;
+  outline: BookOutline | null;
+  timeline: LifeTimeline | null;
+  chapters: BookChapter[];
+}
+
+/** The renderer-facing result of the foundations pass (§5.3): the fresh bundle on success, or an honest
+ *  failure. `AI_OFF` is distinct from `NO_KEY` so the UI can point at Settings → AI. The usage event
+ *  (recorded host-side) never crosses the boundary. */
+export type StoryFoundationsResult =
+  | { ok: true; bundle: StoryBookBundle }
+  | { ok: false; reason: AiFailureReason | 'AI_OFF'; message: string };
+
+/** A serializable projection of a registered `BookType` for the create-a-book picker (§3.2) — the renderer
+ *  can't import the story module (it pulls crypto), so the registry crosses via IPC. */
+export interface StoryBookTypeView {
+  id: string;
+  label: string;
+  blurb: string;
+  structures: { id: string; label: string; description: string; isDefault?: boolean }[];
+  stylePresets: { id: BookStyle; label: string }[];
+}
+
+/** `story:create` input — the setup screen's choices (§3.2). `title` may be blank: the person can leave it
+ *  empty and the foundations pass proposes a title from their content (which they can then edit). */
+export const StoryCreateInputSchema = z.object({
+  type: BookTypeIdSchema,
+  title: z.string().max(200),
+  config: BookConfigSchema,
+});
+export type StoryCreateInput = z.infer<typeof StoryCreateInputSchema>;
+
+/** A bare book reference (get / generate / delete). */
+export const StoryBookRefSchema = z.object({ bookId: z.string().min(1) });
+export type StoryBookRef = z.infer<typeof StoryBookRefSchema>;
+
+/** `story:generateImage` — cover or a chapter's illustration, with an optional per-image style override. */
+export const StoryImageTargetSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('cover') }),
+  z.object({ kind: z.literal('illustration'), chapterId: z.string().min(1) }),
+]);
+export type StoryImageTarget = z.infer<typeof StoryImageTargetSchema>;
+export const StoryGenerateImageInputSchema = z.object({
+  bookId: z.string().min(1),
+  target: StoryImageTargetSchema,
+  style: z.string().optional(),
+});
+export type StoryGenerateImageInput = z.infer<typeof StoryGenerateImageInputSchema>;
+
+/** `story:getImage` / `story:deleteImage` — a book image by id. */
+export const StoryImageRefSchema = z.object({
+  bookId: z.string().min(1),
+  imageId: z.string().min(1),
+});
+export type StoryImageRef = z.infer<typeof StoryImageRefSchema>;
+
+/** `story:uploadPhoto` — a downscaled photo (EXIF stripped in the renderer, spec 45) as base64. */
+export const StoryUploadPhotoInputSchema = z.object({
+  bookId: z.string().min(1),
+  mime: z.string().min(1),
+  dataBase64: z.string().min(1),
+  chapterId: z.string().min(1).optional(),
+});
+export type StoryUploadPhotoInput = z.infer<typeof StoryUploadPhotoInputSchema>;
+
+/** `story:answerPhoto` — one vision-suggested question the person answered (persists to the corpus). */
+export const StoryPhotoAnswerInputSchema = z.object({
+  bookId: z.string().min(1),
+  imageId: z.string().min(1),
+  question: z.string().min(1),
+  answer: z.string().min(1),
+});
+export type StoryPhotoAnswerInput = z.infer<typeof StoryPhotoAnswerInputSchema>;
+
+/** `story:suggestPlacement` / `story:removePlacement` — an image within a chapter. */
+export const StoryImagePlacementRefSchema = z.object({
+  bookId: z.string().min(1),
+  chapterId: z.string().min(1),
+  imageId: z.string().min(1),
+});
+export type StoryImagePlacementRef = z.infer<typeof StoryImagePlacementRefSchema>;
+
+/** `story:setPlacement` — place (or move) an image after a `p<index>` anchor, with a caption. */
+export const StorySetPlacementInputSchema = z.object({
+  bookId: z.string().min(1),
+  chapterId: z.string().min(1),
+  imageId: z.string().min(1),
+  afterAnchor: z.string().min(1),
+  caption: z.string().optional(),
+});
+export type StorySetPlacementInput = z.infer<typeof StorySetPlacementInputSchema>;
+
+/** The result of `story:suggestPlacement` (the AI-suggested anchor) — a failure lets the UI place manually. */
+export type StoryPlacementSuggestResult =
+  | { ok: true; afterAnchor: string }
+  | { ok: false; reason: string; message: string };
+
+/** `story:readSharedImage` — a granted reader fetches one PUBLISHED image's bytes (§3.8, re-gated per read). */
+export const StoryReadSharedImageInputSchema = z.object({
+  authorPersonId: z.string().min(1),
+  bookId: z.string().min(1),
+  imageId: z.string().min(1),
+});
+export type StoryReadSharedImageInput = z.infer<typeof StoryReadSharedImageInputSchema>;
+
+/** `story:saveOutline` / `story:approveOutline` — the (possibly edited) outline during review. */
+export const StoryOutlineInputSchema = z.object({
+  bookId: z.string().min(1),
+  outline: BookOutlineSchema,
+});
+export type StoryOutlineInput = z.infer<typeof StoryOutlineInputSchema>;
+
+/** `story:update` — the patchable manifest subset the setup/overview can change. */
+export const StoryUpdateInputSchema = z.object({
+  bookId: z.string().min(1),
+  title: z.string().min(1).max(200).optional(),
+  config: BookConfigSchema.optional(),
+  matter: BookMatterSchema.optional(),
+});
+export type StoryUpdateInput = z.infer<typeof StoryUpdateInputSchema>;
+
+/** A book + chapter reference (review / regenerate one chapter). */
+export const StoryChapterRefSchema = z.object({
+  bookId: z.string().min(1),
+  chapterId: z.string().min(1),
+});
+export type StoryChapterRef = z.infer<typeof StoryChapterRefSchema>;
+
+/** The renderer-facing result of a chapter-generation pass (§5.3): the fresh bundle + how many chapters were
+ *  written, or an honest failure. `budgetReached` marks a partial pass whose remaining chapters resume next
+ *  period. The usage events (recorded host-side) never cross the boundary. */
+export type StoryChaptersResult =
+  | {
+      ok: true;
+      generated: number;
+      bundle: StoryBookBundle;
+      budgetReached?: boolean;
+      message?: string;
+    }
+  | { ok: false; reason: AiFailureReason | 'AI_OFF'; message: string };
+
+// --- Markup layer IPC (§3.3/§5.6) ------------------------------------------------------------------------
+
+/** A narrow, serializable patch over one mark (edit a comment's text, change a status, attach an assignment).
+ *  Validated against the mark's kind host-side (an invalid combination degrades to null, never throws). */
+export const StoryMarkPatchSchema = z.object({
+  status: z.string().optional(),
+  text: z.string().optional(),
+  assignmentId: z.string().optional(),
+});
+export type StoryMarkPatch = z.infer<typeof StoryMarkPatchSchema>;
+
+/** `story:mark` — add a mark (comment · delete · to-do) to a chapter's suggestion layer. */
+export const StoryMarkInputSchema = StoryChapterRefSchema.extend({ mark: MarkupMarkSchema });
+export type StoryMarkInput = z.infer<typeof StoryMarkInputSchema>;
+
+/** `story:updateMark` — patch a mark in place. */
+export const StoryUpdateMarkInputSchema = StoryChapterRefSchema.extend({
+  markId: z.string().min(1),
+  patch: StoryMarkPatchSchema,
+});
+export type StoryUpdateMarkInput = z.infer<typeof StoryUpdateMarkInputSchema>;
+
+/** `story:removeMark` — undo a mark before it's applied. */
+export const StoryRemoveMarkInputSchema = StoryChapterRefSchema.extend({
+  markId: z.string().min(1),
+});
+export type StoryRemoveMarkInput = z.infer<typeof StoryRemoveMarkInputSchema>;
+
+/** `story:editPassage` — the INSTANT inline edit (§3.3): replace an anchored span with the person's words. */
+export const StoryEditPassageInputSchema = StoryChapterRefSchema.extend({
+  anchor: TextAnchorSchema,
+  newText: z.string(),
+});
+export type StoryEditPassageInput = z.infer<typeof StoryEditPassageInputSchema>;
+
+/** `story:pinQuote` — the INSTANT pin (§3.3): mark a passage untouchable. */
+export const StoryPinInputSchema = StoryChapterRefSchema.extend({
+  anchor: TextAnchorSchema,
+  text: z.string(),
+  sourceRef: StorySourceRefSchema.optional(),
+});
+export type StoryPinInput = z.infer<typeof StoryPinInputSchema>;
+
+/** The renderer-facing result of the batch markup revision (§3.3.1): the fresh bundle + the chapter's updated
+ *  markup layer on success, or an honest failure (incl. an honest no-op when nothing's pending). */
+export type StoryRevisionResult =
+  | { ok: true; bundle: StoryBookBundle; markup: ChapterMarkup }
+  | { ok: false; reason: AiFailureReason | 'AI_OFF'; message: string };
+
+/** `story:todoToQuestions` — turn a to-do into a targeted story check-in (§3.3.2/§5.5). Mints an in-app
+ *  self-send from the FOCUS text, then records a `questions` to-do stamped `questionsSent` + `assignmentId`. */
+export const StoryTodoToQuestionsInputSchema = StoryChapterRefSchema.extend({
+  focus: z.string().min(1),
+  anchor: TextAnchorSchema.optional(),
+});
+export type StoryTodoToQuestionsInput = z.infer<typeof StoryTodoToQuestionsInputSchema>;
+
+/** The result of a to-do→questions mint (§5.5): the chapter's updated markup + the new assignment id, or an
+ *  honest failure (nothing persisted). */
+export type StoryQuestionsResult =
+  | { ok: true; markup: ChapterMarkup; assignmentId: string }
+  | { ok: false; reason: AiFailureReason | 'AI_OFF'; message: string };
+
+/** `story:refreshCheck` — the living-book pass (§3.4): mark stale chapters (free) + auto-rewrite them (metered,
+ *  weekly-capped in the auto cadence). `auto` distinguishes the throttled launch/focus cadence from a manual
+ *  "Refresh now". Crisis suppression of the auto rewrite is computed host-side (never renderer-supplied). */
+export const StoryRefreshInputSchema = StoryBookRefSchema.extend({
+  auto: z.boolean().optional(),
+});
+export type StoryRefreshInput = z.infer<typeof StoryRefreshInputSchema>;
+
+/** The renderer-facing result of a refresh pass: how many chapters were staled + auto-rewritten, whether the
+ *  weekly cap or the budget stopped it, and the fresh bundle. Marking stale is free and always runs. */
+export interface StoryRefreshViewResult {
+  staled: number;
+  rewritten: number;
+  /** New structural proposals filed this pass (§3.4) — surfaced in the "Suggested changes" panel. */
+  proposalsAdded?: number;
+  capped?: boolean;
+  budgetReached?: boolean;
+  bundle: StoryBookBundle | null;
+}
+
+/** `story:resolveProposal` — approve (apply the restructure) or dismiss a pending structural proposal (§3.4). */
+export const StoryResolveProposalInputSchema = StoryBookRefSchema.extend({
+  proposalId: z.string().min(1),
+  action: z.enum(['approve', 'dismiss']),
+});
+export type StoryResolveProposalInput = z.infer<typeof StoryResolveProposalInputSchema>;
+/** The remaining pending proposals + the fresh bundle (an approved restructure changed the outline/chapters). */
+export interface StoryResolveProposalResult {
+  ok: boolean;
+  proposals: StructuralProposal[];
+  bundle: StoryBookBundle | null;
+  message?: string;
+}
+
+/** `story:homeSignal` — the living-book Home presence (§5.6), computed host-side (no AI). Feeds the ONE
+ *  `story-living` "For you" card. `signature` drives the dismissal so a NEW signal re-surfaces. */
+export interface StoryHomeSignal {
+  hasBook: boolean;
+  /** Written chapters that drifted and have new material to weave in. */
+  staleChapters: number;
+  /** Pending structural proposals to review. */
+  pendingProposals: number;
+  /** Approved outline chapters awaiting a first draft (incl. approved new/split shells). */
+  unwrittenChapters: number;
+  signature: string;
+}
+
+/** How far along a story is (§3.6) — a QUALITATIVE stage + a subtle ratio (owner decision 2026-07-16: never a
+ *  bare %; a life isn't a percentage). Derived deterministically from the framework coverage (no AI). */
+export type StoryCompletenessStage = 'beginning' | 'takingShape' | 'comingTogether' | 'richlyTold';
+export interface StoryCompleteness {
+  stage: StoryCompletenessStage;
+  /** 0..1 across the 12 framework dimensions (8 McAdams scenes + life-chapters + challenges + ideology +
+   *  future-script) — drives a subtle progress bar, never shown as a number. */
+  ratio: number;
+  covered: number;
+  total: number;
+}
+
+/** One thing the book is missing (§3.7), from the AI gap pass — a McAdams/craft dimension not yet covered, with
+ *  a FOCUS brief the interview minter turns into a story check-in. Higher `priority` = ask sooner. */
+export interface StoryGap {
+  /** The coverage dimension this fills: a McAdams scene key, or `chapters`/`challenges`/`ideology`/`futureScript`,
+   *  or a craft dimension (`scene`/`sensory`/`timeline`). Free string — normalized against the framework host-side. */
+  dimension: string;
+  /** A short, human-readable label for the gap (the biographer's own words). */
+  label: string;
+  /** The FOCUS brief the check-in minter uses (`generateQuestions` FOCUS = this). */
+  focus: string;
+  priority: number;
+}
+
+/** The result of a gap pass (§3.7): the refreshed completeness + the prioritized gaps (top-first). Non-persisted
+ *  view — the coverage itself is persisted to `interview.enc`. */
+export interface StoryGapPassResult {
+  completeness: StoryCompleteness;
+  gaps: StoryGap[];
+}
+
+/** The outcome of one autonomous interview-cadence run (§3.7 — the spec-63 loop). `minted` = a new story
+ *  check-in went to the Inbox; `openCheckin` = one is already open (≤1); `throttled`/`crisis`/`noGaps`/`noBook`
+ *  = no spend / nothing to do. */
+export type StoryInterviewOutcome =
+  | 'minted'
+  | 'openCheckin'
+  | 'throttled'
+  | 'crisis'
+  | 'noGaps'
+  | 'noBook';
+export interface StoryInterviewCadenceResult {
+  outcome: StoryInterviewOutcome;
+  assignmentId?: string;
+  completeness?: StoryCompleteness;
+}
+
+/** `story:interviewCheck` — run the autonomous interview cadence (§3.7). `auto` = the throttled launch/focus
+ *  cadence; omit for a manual "find what's missing" (bypasses the interval, still weekly-capped). */
+export const StoryInterviewCheckInputSchema = StoryBookRefSchema.extend({
+  auto: z.boolean().optional(),
+});
+export type StoryInterviewCheckInput = z.infer<typeof StoryInterviewCheckInputSchema>;
+
+/** A book someone shared WITH the viewer (§3.5) — the "Shared with you" card. `newChapters` counts published
+ *  chapters the viewer hasn't read yet (device-local read progress). Published head only, read-time re-gated. */
+export interface SharedBookSummary {
+  authorPersonId: string;
+  authorName: string;
+  bookId: string;
+  title: string;
+  publishedAt: string;
+  chapterCount: number;
+  newChapters: number;
+}
+
+/** What a granted reader sees of a chapter (§3.6) — the MINIMAL projection: title + prose only. Deliberately NOT
+ *  a `BookChapter` — the author's per-paragraph `provenance` (the kind/timestamp of their private sources) must
+ *  never cross to a reader, even though the UI wouldn't render it (the cross-person "project a minimal shape"
+ *  rule, memory-dashboard 2026-06-16). */
+export interface ReaderChapter {
+  id: string;
+  title: string;
+  markdown: string;
+  /** Image placements (§3.8) — safe to project: `{imageId, afterAnchor, caption}` carries no private
+   *  provenance, and the reader fetches the bytes through the re-gated `story:readSharedImage`. */
+  imagePlacements: ImagePlacement[];
+}
+
+/** The published head a granted reader reads (§3.6) — the manifest snapshot + its published chapters, in order.
+ *  Never the draft. Read-time re-gated (viewer must still be in `sharedWith` + the book still published). */
+export interface StoryReaderView {
+  authorPersonId: string;
+  authorName: string;
+  bookId: string;
+  manifest: PublishedManifest;
+  chapters: ReaderChapter[];
+}
+
+/** `story:grantReader` / `story:revokeReader` — add/remove a household reader for a book (§3.5). */
+export const StoryReaderGrantInputSchema = StoryBookRefSchema.extend({
+  readerPersonId: z.string().min(1),
+});
+export type StoryReaderGrantInput = z.infer<typeof StoryReaderGrantInputSchema>;
+
+/** `story:readShared` — read a book shared with the viewer (published head, read-time re-gated). */
+export const StoryReadSharedInputSchema = z.object({
+  authorPersonId: z.string().min(1),
+  bookId: z.string().min(1),
+});
+export type StoryReadSharedInput = z.infer<typeof StoryReadSharedInputSchema>;
+
+/** The result of `story:publish` — how many Reviewed chapters were snapshotted, or an honest refusal (§3.5). */
+export type StoryPublishResult =
+  | { ok: true; publishedChapters: number }
+  | { ok: false; message: string };
+
+/** A book's current reader (§3.5), resolved to a name for the readers list. */
+export interface BookReader {
+  personId: string;
+  displayName: string;
+}
+
+// --- Exclusions IPC (§3.3/§5.1) --------------------------------------------------------------------------
+
+/** `story:exclude` — add a "never write about this again" exclusion, scoped (§3.3). `value` by kind: topic/
+ *  passage = the text; person = the person id; source = a StorySourceRef id. */
+export const StoryExcludeInputSchema = z.object({
+  bookId: z.string().min(1),
+  kind: ExclusionKindSchema,
+  value: z.string().min(1),
+  note: z.string().optional(),
+});
+export type StoryExcludeInput = z.infer<typeof StoryExcludeInputSchema>;
+
+/** `story:unexclude` — remove an exclusion (written chapters are left as-is). */
+export const StoryUnexcludeInputSchema = z.object({
+  bookId: z.string().min(1),
+  itemId: z.string().min(1),
+});
+export type StoryUnexcludeInput = z.infer<typeof StoryUnexcludeInputSchema>;
+
+/** The result of adding an exclusion: the updated list + the fresh bundle (chapters that mentioned the excluded
+ *  material are now `stale`, option 1) so the overview reflects them immediately. */
+export interface StoryExcludeResult {
+  exclusions: ExclusionItem[];
+  bundle: StoryBookBundle;
+  staled: number;
 }

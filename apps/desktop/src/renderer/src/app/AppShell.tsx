@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { OWNER_ROLE_ID } from '@shared/capabilities';
 import {
   BarChart3,
+  BookOpen,
   Brain,
   ClipboardList,
   Compass,
@@ -31,6 +32,7 @@ import { unansweredCount, useInboxStore } from '../stores/inboxStore';
 import { useDreamStore } from '../stores/dreamStore';
 import { useInsightStore } from '../stores/insightStore';
 import { useGoalStore } from '../stores/goalStore';
+import { useStoryStore } from '../stores/storyStore';
 import { useChallengeStore } from '../stores/challengeStore';
 import { useTestStore } from '../stores/testStore';
 import { useDreamAnalysisStore } from '../stores/dreamAnalysisStore';
@@ -79,6 +81,7 @@ export function AppShell(): JSX.Element {
   // Together (58 §3.1): the nav shows only with `together.own` AND a live partner edge; the badge counts
   // sessions waiting on you (invitations + your-turn), derived over your projection.
   const canTogether = useSessionStore((s) => s.can('together.own'));
+  const canOwnStory = useSessionStore((s) => s.can('story.own'));
   const togetherHasPartner = useTogetherStore((s) => s.hasPartner);
   const togetherSessions = useTogetherStore((s) => s.sessions);
   const canDoIntake = useSessionStore((s) => s.can('intake.own'));
@@ -148,6 +151,7 @@ export function AppShell(): JSX.Element {
     useNotificationStore.getState().reset(); // notifications are per-person, device-local (35 §4)
     useDiscoveryStore.getState().reset(); // orientation/tip dismissals are per-person, device-local (41 §4)
     useTogetherStore.getState().reset(); // Together sessions are per-person (58 §5.3)
+    useStoryStore.getState().reset(); // Your Story books are per-person (64 §5.7)
     void useNotificationStore.getState().load();
     void useDiscoveryStore.getState().load();
     void useConversationStore.getState().load();
@@ -392,6 +396,18 @@ export function AppShell(): JSX.Element {
                     {togetherWaiting}
                   </span>
                 ) : null}
+              </NavLink>
+            ) : null}
+            {canOwnStory ? (
+              <NavLink
+                to="/story"
+                className={navClass}
+                aria-label="Your Story"
+                title={tip('Your Story')}
+                onClick={closeDrawer}
+              >
+                <BookOpen size={18} aria-hidden="true" />
+                <span className={styles.label}>Your Story</span>
               </NavLink>
             ) : null}
             {canViewMemory ? (

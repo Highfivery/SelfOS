@@ -3,6 +3,49 @@ import type {
   AiKeyStatus,
   AiProvider,
   AlignmentResult,
+  BookManifest,
+  ChapterMarkup,
+  ExclusionItem,
+  StoryBookBundle,
+  StoryBookTypeView,
+  StoryChaptersResult,
+  StoryChapterRef,
+  StoryCreateInput,
+  StoryEditPassageInput,
+  StoryExcludeInput,
+  StoryExcludeResult,
+  StoryFoundationsResult,
+  StoryMarkInput,
+  StoryOutlineInput,
+  StoryPinInput,
+  StoryRemoveMarkInput,
+  StoryQuestionsResult,
+  BookReader,
+  SharedBookSummary,
+  StoryCompleteness,
+  StoryHomeSignal,
+  StoryImageEntry,
+  StoryImageResult,
+  StoryPhotoAnalyzeResult,
+  StoryPhotoAnswer,
+  StoryPlacementSuggestResult,
+  StoryInterviewCadenceResult,
+  StoryInterviewCheckInput,
+  StoryPublishResult,
+  StoryReadSharedInput,
+  StoryReaderGrantInput,
+  StoryReaderView,
+  StoryRefreshInput,
+  StoryRefreshViewResult,
+  StoryResolveProposalInput,
+  StoryResolveProposalResult,
+  StructuralProposal,
+  StoryRevisionResult,
+  StoryTodoList,
+  StoryTodoToQuestionsInput,
+  StoryUnexcludeInput,
+  StoryUpdateInput,
+  StoryUpdateMarkInput,
   Goal,
   GoalStatus,
   GoalSuggestResult,
@@ -261,6 +304,58 @@ export const IpcChannels = {
   autoCheckinsSetConfig: 'autoCheckins:setConfig',
   autoCheckinsEnsureSeed: 'autoCheckins:ensureSeed',
   autoCheckinsRun: 'autoCheckins:run',
+  // Your Story (64-your-story §5.6)
+  storyBookTypes: 'story:bookTypes',
+  storyList: 'story:list',
+  storyCreate: 'story:create',
+  storyGet: 'story:get',
+  storyGenerateFoundations: 'story:generateFoundations',
+  storySaveOutline: 'story:saveOutline',
+  storyApproveOutline: 'story:approveOutline',
+  storyUpdate: 'story:update',
+  storyDelete: 'story:delete',
+  storyGenerateChapters: 'story:generateChapters',
+  storyRegenerateChapter: 'story:regenerateChapter',
+  storyReviewChapter: 'story:reviewChapter',
+  storyGetMarkup: 'story:getMarkup',
+  storyMark: 'story:mark',
+  storyUpdateMark: 'story:updateMark',
+  storyRemoveMark: 'story:removeMark',
+  storyApplyMarkup: 'story:applyMarkup',
+  storyEditPassage: 'story:editPassage',
+  storyPinQuote: 'story:pinQuote',
+  storyTodos: 'story:todos',
+  storyExclusions: 'story:exclusions',
+  storyExclude: 'story:exclude',
+  storyUnexclude: 'story:unexclude',
+  storyTodoToQuestions: 'story:todoToQuestions',
+  storyRefreshCheck: 'story:refreshCheck',
+  storyProposals: 'story:proposals',
+  storyResolveProposal: 'story:resolveProposal',
+  storyHomeSignal: 'story:homeSignal',
+  storyCompleteness: 'story:completeness',
+  storyInterviewCheck: 'story:interviewCheck',
+  storyPublish: 'story:publish',
+  storyReaders: 'story:readers',
+  storyGrantReader: 'story:grantReader',
+  storyRevokeReader: 'story:revokeReader',
+  storyReaderFeatured: 'story:readerFeatured',
+  storySharedBooks: 'story:sharedBooks',
+  storyReadShared: 'story:readShared',
+  storyReadSharedImage: 'story:readSharedImage',
+  storyExportMarkdown: 'story:exportMarkdown',
+  storyExportPdf: 'story:exportPdf',
+  storyImages: 'story:images',
+  storyGenerateImage: 'story:generateImage',
+  storyGetImage: 'story:getImage',
+  storyDeleteImage: 'story:deleteImage',
+  storyUploadPhoto: 'story:uploadPhoto',
+  storyAnalyzePhoto: 'story:analyzePhoto',
+  storyAnswerPhoto: 'story:answerPhoto',
+  storyPhotoAnswers: 'story:photoAnswers',
+  storySuggestPlacement: 'story:suggestPlacement',
+  storySetPlacement: 'story:setPlacement',
+  storyRemovePlacement: 'story:removePlacement',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -952,6 +1047,169 @@ export interface SelfosBridge {
    * a spending pass; a manual "Run now" passes `auto:false` to skip the throttle. Budget/crisis/AI-gated.
    */
   autoCheckinsRun(input?: { auto?: boolean }): Promise<AutoCheckinRunResult>;
+  /**
+   * Your Story (64-your-story §5.6). All gated `story.own` + active-person-scoped in the bridge (the trust
+   * boundary); the Claude key stays host-side. `null`/`[]` when not signed in / not permitted.
+   */
+  /** The registered book types for the create picker (§3.2) — v1: the biography. */
+  storyBookTypes(): Promise<StoryBookTypeView[]>;
+  /** The active person's own books, newest-updated first. */
+  storyList(): Promise<BookManifest[]>;
+  /** Create a new book from the setup choices (status `outlining`). */
+  storyCreate(input: StoryCreateInput): Promise<BookManifest | null>;
+  /** The full book bundle (manifest + outline + timeline + chapters) for the detail view. */
+  storyGet(input: { bookId: string }): Promise<StoryBookBundle | null>;
+  /**
+   * Run the foundations pass (§5.3) — metered `story.outline`, budget-gated, tolerant-parsed. On success
+   * persists essence + outline + timeline and returns the fresh bundle; else an honest failure.
+   */
+  storyGenerateFoundations(input: { bookId: string }): Promise<StoryFoundationsResult>;
+  /** Save an edited outline during review (§3.2). Returns the updated manifest. */
+  storySaveOutline(input: StoryOutlineInput): Promise<BookManifest | null>;
+  /** Approve the (possibly edited) outline → move the book to `drafting` (§3.2). */
+  storyApproveOutline(input: StoryOutlineInput): Promise<BookManifest | null>;
+  /** Update the book's title / config (§3.2). */
+  storyUpdate(input: StoryUpdateInput): Promise<BookManifest | null>;
+  /** Delete a book and all its files. */
+  storyDelete(input: { bookId: string }): Promise<void>;
+  /**
+   * Write every not-yet-written (or stale) chapter of an approved book (§5.3) — a queue of metered
+   * `story.chapter` passes, budget-gated + resumable. Returns the fresh bundle + how many were written.
+   */
+  storyGenerateChapters(input: { bookId: string }): Promise<StoryChaptersResult>;
+  /** Regenerate ONE chapter from scratch (§5.3) — the draft view's "rewrite this chapter". */
+  storyRegenerateChapter(input: StoryChapterRef): Promise<StoryChaptersResult>;
+  /** Mark a chapter reviewed (§3.3.1) — only Reviewed content publishes. Returns the fresh bundle. */
+  storyReviewChapter(input: StoryChapterRef): Promise<StoryBookBundle | null>;
+  /** The chapter's markup layer (the suggestion layer — comments, deletes, to-dos) for the draft view (§3.3). */
+  storyGetMarkup(input: StoryChapterRef): Promise<ChapterMarkup>;
+  /** Add a mark (comment · delete · to-do) to a chapter's suggestion layer. Returns the updated layer. */
+  storyMark(input: StoryMarkInput): Promise<ChapterMarkup>;
+  /** Patch a mark in place (edit a comment, undo a delete, mark a to-do done). Null if not found / invalid. */
+  storyUpdateMark(input: StoryUpdateMarkInput): Promise<ChapterMarkup | null>;
+  /** Remove a mark (undo before apply). Returns the updated layer. */
+  storyRemoveMark(input: StoryRemoveMarkInput): Promise<ChapterMarkup>;
+  /** Apply the chapter's pending marks as ONE metered revision (§3.3.1). Fresh bundle + markup, or a failure. */
+  storyApplyMarkup(input: StoryChapterRef): Promise<StoryRevisionResult>;
+  /** INSTANT inline edit (§3.3): replace an anchored span with the person's words (→ protected block). Null if
+   *  orphaned. Returns the fresh bundle. */
+  storyEditPassage(input: StoryEditPassageInput): Promise<StoryBookBundle | null>;
+  /** INSTANT pin (§3.3): mark a passage untouchable. Null if orphaned. Returns the fresh bundle. */
+  storyPinQuote(input: StoryPinInput): Promise<StoryBookBundle | null>;
+  /** The book-level to-do roll-up for the overview "To do" list (§3.3.2) — one read, not N. */
+  storyTodos(input: { bookId: string }): Promise<StoryTodoList>;
+  /** The book's exclusions ("never write about this again") for the Exclusions panel (§3.3). */
+  storyExclusions(input: { bookId: string }): Promise<ExclusionItem[]>;
+  /** Add an exclusion; chapters that already mention it are marked stale (option 1). Fresh bundle + list. */
+  storyExclude(input: StoryExcludeInput): Promise<StoryExcludeResult>;
+  /** Remove an exclusion (written chapters unchanged). Returns the updated list. */
+  storyUnexclude(input: StoryUnexcludeInput): Promise<ExclusionItem[]>;
+  /** Turn a to-do into a story check-in (§3.3.2/§5.5): mint an in-app self-send from the focus + record a
+   *  `questionsSent` to-do. The one AI call here — honest AI_OFF/NO_KEY/failure, nothing persisted on failure. */
+  storyTodoToQuestions(input: StoryTodoToQuestionsInput): Promise<StoryQuestionsResult>;
+  /** The living-book refresh pass (§3.4): mark stale chapters (free) + auto-rewrite them (metered, weekly-
+   *  capped in the auto cadence). Marking stale runs even with AI off; the rewrite needs AI + budget. */
+  storyRefreshCheck(input: StoryRefreshInput): Promise<StoryRefreshViewResult>;
+  /** The book's PENDING structural proposals (§3.4) for the "Suggested changes" panel (dismissed ones stay
+   *  stored for dedup but aren't shown). Gated `story.own`, active-person-scoped. */
+  storyProposals(input: { bookId: string }): Promise<StructuralProposal[]>;
+  /** Approve (apply the restructure — new/split chapters land un-written, drafted next refresh) or dismiss a
+   *  pending structural proposal. No AI spend. Returns the remaining pending proposals + the fresh bundle. */
+  storyResolveProposal(input: StoryResolveProposalInput): Promise<StoryResolveProposalResult>;
+  /** The living-book Home signal (§5.6) for the active person's book — computed host-side, no AI. Feeds the
+   *  `story-living` "For you" card. Gated `story.own`; `hasBook:false` when denied or there's no book. */
+  storyHomeSignal(): Promise<StoryHomeSignal>;
+  /** How far along the book is (§3.6) — a qualitative stage + a subtle ratio, from the stored coverage. A cheap
+   *  no-AI read. Gated `story.own`, active-person-scoped. */
+  storyCompleteness(input: { bookId: string }): Promise<StoryCompleteness>;
+  /** Run the autonomous interview cadence (§3.7): when warranted, gap-pass the book + mint ≤1 story check-in
+   *  into the Inbox. `auto` throttles + host-side-crisis-gates; manual bypasses the interval (still weekly-capped).
+   *  Gated `story.own`, active-person-scoped; the key stays host-side. */
+  storyInterviewCheck(input: StoryInterviewCheckInput): Promise<StoryInterviewCadenceResult>;
+  /** Publish (or re-publish) the book (§3.5): snapshot every Reviewed chapter into the published head readers
+   *  see. Refuses when nothing is Reviewed. Gated `story.own`, author-scoped. */
+  storyPublish(input: { bookId: string }): Promise<StoryPublishResult>;
+  /** The book's current readers, resolved to names. Gated `story.own`, author-scoped. */
+  storyReaders(input: { bookId: string }): Promise<BookReader[]>;
+  /** Grant/revoke a household reader (§3.5) — revoke ends access at the next read. Returns the updated list. */
+  storyGrantReader(input: StoryReaderGrantInput): Promise<BookReader[]>;
+  storyRevokeReader(input: StoryReaderGrantInput): Promise<BookReader[]>;
+  /** Whether the book's Reviewed prose prominently mentions this person — the gentle "they appear in this book"
+   *  note in the grant picker (§3.5). Gated `story.own`, author-scoped. */
+  storyReaderFeatured(input: StoryReaderGrantInput): Promise<boolean>;
+  /** Books shared WITH the active person (§3.5) — published + still granted, read-time re-gated. Viewer-scoped. */
+  storySharedBooks(): Promise<SharedBookSummary[]>;
+  /** Read a book shared with the active person — the PUBLISHED head only (§3.6), re-gated; null if access is gone. */
+  storyReadShared(input: StoryReadSharedInput): Promise<StoryReaderView | null>;
+  /** A granted reader fetches one PUBLISHED image's bytes (base64) for the reader view (§3.8). Re-gated. */
+  storyReadSharedImage(input: {
+    authorPersonId: string;
+    bookId: string;
+    imageId: string;
+  }): Promise<{ mime: string; dataBase64: string } | null>;
+  /** Export the book's PUBLISHED head as a Markdown file OUTSIDE the encrypted vault (§3.9) — a save dialog.
+   *  Returns the saved path, or null (book not published yet, or the dialog was cancelled). Gated `story.own`,
+   *  author-scoped. */
+  storyExportMarkdown(input: { bookId: string }): Promise<string | null>;
+  /** Export the book's PUBLISHED head as a typeset PDF OUTSIDE the vault (§3.9) — Electron `printToPDF`. Returns
+   *  the saved path, or null (not published, dialog cancelled, or a host that can't render PDF). Gated `story.own`. */
+  storyExportPdf(input: { bookId: string }): Promise<string | null>;
+  /** The book's image index (cover + illustrations + uploads), metadata only. Gated `story.own`. */
+  storyImages(input: { bookId: string }): Promise<StoryImageEntry[]>;
+  /** Generate (or regenerate) a cover or chapter illustration via the spec-13 distill→render flow (§3.8).
+   *  Gated `story.own`; shares the one image consent (`dreams.imageGenerationEnabled`) + the OpenAI key. */
+  storyGenerateImage(input: {
+    bookId: string;
+    target: { kind: 'cover' } | { kind: 'illustration'; chapterId: string };
+    style?: string;
+  }): Promise<StoryImageResult>;
+  /** Decrypt one image's bytes (base64) for display; null if absent. Gated `story.own`. */
+  storyGetImage(input: {
+    bookId: string;
+    imageId: string;
+  }): Promise<{ mime: string; dataBase64: string } | null>;
+  /** Delete an image (bytes + index; clears the cover pointer if it was the cover). Gated `story.own`. */
+  storyDeleteImage(input: { bookId: string; imageId: string }): Promise<void>;
+  /** Upload a downscaled photo (EXIF-stripped in the renderer, spec 45) as base64; indexed `uploaded`.
+   *  Photos are only ever read by vision (§3.7) — never an image-generation input. Gated `story.own`. */
+  storyUploadPhoto(input: {
+    bookId: string;
+    mime: string;
+    dataBase64: string;
+    chapterId?: string;
+  }): Promise<StoryImageEntry | null>;
+  /** Claude-vision a photo → a caption (stamped on the entry) + 2–4 questions to answer (§3.7). Gated
+   *  `story.own`; needs the Claude key (no separate consent — vision reads the photo the author uploaded). */
+  storyAnalyzePhoto(input: { bookId: string; imageId: string }): Promise<StoryPhotoAnalyzeResult>;
+  /** Persist a photo-Q&A answer to the interview corpus (feeds the gap engine + generation). Gated `story.own`. */
+  storyAnswerPhoto(input: {
+    bookId: string;
+    imageId: string;
+    question: string;
+    answer: string;
+  }): Promise<void>;
+  /** The photo Q&A answered so far. Gated `story.own`. */
+  storyPhotoAnswers(input: { bookId: string }): Promise<StoryPhotoAnswer[]>;
+  /** Ask the AI which paragraph an image best follows in a chapter (§3.8). Gated `story.own` + needs the key. */
+  storySuggestPlacement(input: {
+    bookId: string;
+    chapterId: string;
+    imageId: string;
+  }): Promise<StoryPlacementSuggestResult>;
+  /** Place (or move) an image after a `p<index>` anchor in a chapter; returns the refreshed book. Gated `story.own`. */
+  storySetPlacement(input: {
+    bookId: string;
+    chapterId: string;
+    imageId: string;
+    afterAnchor: string;
+    caption?: string;
+  }): Promise<StoryBookBundle | null>;
+  /** Remove an image's placement from a chapter; returns the refreshed book. Gated `story.own`. */
+  storyRemovePlacement(input: {
+    bookId: string;
+    chapterId: string;
+    imageId: string;
+  }): Promise<StoryBookBundle | null>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

@@ -26,6 +26,13 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'intimacy.suggestTopics': 'Intimacy topics — AI suggestions',
   'together.chat': 'Together — couples session',
   'together.analyze': 'Together — session summary',
+  'story.outline': 'Your Story — outline',
+  'story.chapter': 'Your Story — chapter',
+  'story.structure': 'Your Story — structure proposals',
+  'story.interview': 'Your Story — interview questions',
+  'story.imagePrompt': 'Your Story — image prompt',
+  'story.image': 'Your Story — image',
+  'story.vision': 'Your Story — photo caption',
 };
 
 export function usageTypeLabel(type: string): string {

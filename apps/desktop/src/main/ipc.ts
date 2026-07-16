@@ -1,4 +1,12 @@
-import { app, dialog, ipcMain, shell, type IpcMainInvokeEvent, type WebContents } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  shell,
+  type IpcMainInvokeEvent,
+  type WebContents,
+} from 'electron';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -196,6 +204,23 @@ export function registerIpcHandlers(): void {
       await writeFile(filePath, Buffer.from(bytes));
       return filePath;
     },
+    printToPdf: async (html) => {
+      // Render the self-contained HTML offscreen and print it to PDF bytes (64-your-story §3.9). The window
+      // is hidden, sandboxed (no node), and destroyed after — it only ever loads our own data: URL.
+      const win = new BrowserWindow({
+        show: false,
+        webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true },
+      });
+      try {
+        await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+        const pdf = await win.webContents.printToPDF({ printBackground: true });
+        return new Uint8Array(pdf);
+      } catch {
+        return null;
+      } finally {
+        win.destroy();
+      }
+    },
     // On Electron the renderer subscribes to these over IPC in the preload, not via the in-process
     // bridge — so the bridge's own subscriptions are unused in main (they exist for the iOS host).
     onVaultChanged: () => () => {},
@@ -337,6 +362,57 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.autoCheckinsSetConfig, bridge.autoCheckinsSetConfig);
   handle(IpcChannels.autoCheckinsEnsureSeed, bridge.autoCheckinsEnsureSeed);
   handle(IpcChannels.autoCheckinsRun, bridge.autoCheckinsRun);
+  handle(IpcChannels.storyBookTypes, bridge.storyBookTypes);
+  handle(IpcChannels.storyList, bridge.storyList);
+  handle(IpcChannels.storyCreate, bridge.storyCreate);
+  handle(IpcChannels.storyGet, bridge.storyGet);
+  handle(IpcChannels.storyGenerateFoundations, bridge.storyGenerateFoundations);
+  handle(IpcChannels.storySaveOutline, bridge.storySaveOutline);
+  handle(IpcChannels.storyApproveOutline, bridge.storyApproveOutline);
+  handle(IpcChannels.storyUpdate, bridge.storyUpdate);
+  handle(IpcChannels.storyDelete, bridge.storyDelete);
+  handle(IpcChannels.storyGenerateChapters, bridge.storyGenerateChapters);
+  handle(IpcChannels.storyRegenerateChapter, bridge.storyRegenerateChapter);
+  handle(IpcChannels.storyReviewChapter, bridge.storyReviewChapter);
+  handle(IpcChannels.storyGetMarkup, bridge.storyGetMarkup);
+  handle(IpcChannels.storyMark, bridge.storyMark);
+  handle(IpcChannels.storyUpdateMark, bridge.storyUpdateMark);
+  handle(IpcChannels.storyRemoveMark, bridge.storyRemoveMark);
+  handle(IpcChannels.storyApplyMarkup, bridge.storyApplyMarkup);
+  handle(IpcChannels.storyEditPassage, bridge.storyEditPassage);
+  handle(IpcChannels.storyPinQuote, bridge.storyPinQuote);
+  handle(IpcChannels.storyTodos, bridge.storyTodos);
+  handle(IpcChannels.storyExclusions, bridge.storyExclusions);
+  handle(IpcChannels.storyExclude, bridge.storyExclude);
+  handle(IpcChannels.storyUnexclude, bridge.storyUnexclude);
+  handle(IpcChannels.storyTodoToQuestions, bridge.storyTodoToQuestions);
+  handle(IpcChannels.storyRefreshCheck, bridge.storyRefreshCheck);
+  handle(IpcChannels.storyProposals, bridge.storyProposals);
+  handle(IpcChannels.storyResolveProposal, bridge.storyResolveProposal);
+  handle(IpcChannels.storyHomeSignal, bridge.storyHomeSignal);
+  handle(IpcChannels.storyCompleteness, bridge.storyCompleteness);
+  handle(IpcChannels.storyInterviewCheck, bridge.storyInterviewCheck);
+  handle(IpcChannels.storyPublish, bridge.storyPublish);
+  handle(IpcChannels.storyReaders, bridge.storyReaders);
+  handle(IpcChannels.storyGrantReader, bridge.storyGrantReader);
+  handle(IpcChannels.storyRevokeReader, bridge.storyRevokeReader);
+  handle(IpcChannels.storyReaderFeatured, bridge.storyReaderFeatured);
+  handle(IpcChannels.storySharedBooks, bridge.storySharedBooks);
+  handle(IpcChannels.storyReadShared, bridge.storyReadShared);
+  handle(IpcChannels.storyExportMarkdown, bridge.storyExportMarkdown);
+  handle(IpcChannels.storyExportPdf, bridge.storyExportPdf);
+  handle(IpcChannels.storyImages, bridge.storyImages);
+  handle(IpcChannels.storyGenerateImage, bridge.storyGenerateImage);
+  handle(IpcChannels.storyGetImage, bridge.storyGetImage);
+  handle(IpcChannels.storyDeleteImage, bridge.storyDeleteImage);
+  handle(IpcChannels.storyUploadPhoto, bridge.storyUploadPhoto);
+  handle(IpcChannels.storyAnalyzePhoto, bridge.storyAnalyzePhoto);
+  handle(IpcChannels.storyAnswerPhoto, bridge.storyAnswerPhoto);
+  handle(IpcChannels.storyPhotoAnswers, bridge.storyPhotoAnswers);
+  handle(IpcChannels.storySuggestPlacement, bridge.storySuggestPlacement);
+  handle(IpcChannels.storySetPlacement, bridge.storySetPlacement);
+  handle(IpcChannels.storyRemovePlacement, bridge.storyRemovePlacement);
+  handle(IpcChannels.storyReadSharedImage, bridge.storyReadSharedImage);
   handle(IpcChannels.relationshipsGetSynthesis, bridge.relationshipsGetSynthesis);
   handle(IpcChannels.relationshipsSynthesize, bridge.relationshipsSynthesize);
   handle(IpcChannels.challengesStart, bridge.challengesStart);

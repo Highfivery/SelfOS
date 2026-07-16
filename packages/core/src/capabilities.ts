@@ -58,6 +58,10 @@ export const CAPABILITIES = [
   // with a connected partner. Member default ON; the surface is ADDITIONALLY gated on a live `partner`
   // relationship edge (resolved read-time), and the explicit-register/desire content on BOTH partners' 18+ ack.
   'together.own',
+  // Your Story (64-your-story §5.6). `story.own` = create + write + read + share one's OWN living biography /
+  // book projects. Member default ON (a book about yourself is ordinary — not break-glass). The all-data
+  // corpus read is story-scoped (§5.1); reader sharing is per-person + publish-gated (§3.5).
+  'story.own',
 ] as const;
 
 export type CapabilityKey = (typeof CAPABILITIES)[number];
@@ -88,6 +92,7 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   'tests.own': 'Take their own self-assessments',
   'challenges.own': 'Take on their own challenges',
   'together.own': 'Start & join Together sessions with a partner',
+  'story.own': 'Write & share their own life story',
 };
 
 /**
@@ -143,6 +148,7 @@ export const DEFAULT_ROLES: Role[] = [
       'tests.own',
       'challenges.own',
       'together.own',
+      'story.own',
     ]),
   },
   {

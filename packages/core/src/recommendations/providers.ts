@@ -403,6 +403,63 @@ const pulseCheckin: RecommendationProvider = {
 };
 
 /**
+ * The living-book Home presence (64 §5.6): ONE card for the person's book, surfacing the highest-priority
+ * signal — new material to weave in > structural suggestions to review > chapters awaiting a first draft. No
+ * card for someone with no book (starting one is the nav's job, not a push). The signature drives the dismissal
+ * so a NEW signal re-surfaces while the same one won't re-nag.
+ */
+const storyLiving: RecommendationProvider = {
+  id: 'story-living',
+  domain: 'story',
+  capabilityGate: 'story.own',
+  relevance: (s): RecommendationCandidate | null => {
+    const st = s.story;
+    if (!st || !st.hasBook) return null;
+    const dismissKey = `story-living:${st.signature}`;
+    if (st.staleChapters > 0) {
+      return {
+        id: 'story-living',
+        label: 'Your story grew',
+        reason:
+          st.staleChapters === 1
+            ? 'A chapter of your story has new material to weave in.'
+            : `${st.staleChapters} chapters of your story have new material to weave in.`,
+        route: '/story',
+        score: 62,
+        dismissKey,
+      };
+    }
+    if (st.pendingProposals > 0) {
+      return {
+        id: 'story-living',
+        label: 'Shape your story',
+        reason:
+          st.pendingProposals === 1
+            ? 'Your biographer suggested a change to your story’s shape — review it when you like.'
+            : `Your biographer suggested ${st.pendingProposals} changes to your story’s shape — review them when you like.`,
+        route: '/story',
+        score: 50,
+        dismissKey,
+      };
+    }
+    if (st.unwrittenChapters > 0) {
+      return {
+        id: 'story-living',
+        label: 'Keep writing your story',
+        reason:
+          st.unwrittenChapters === 1
+            ? 'A chapter of your story is waiting to be written.'
+            : `${st.unwrittenChapters} chapters of your story are waiting to be written.`,
+        route: '/story',
+        score: 44,
+        dismissKey,
+      };
+    }
+    return null;
+  },
+};
+
+/**
  * The built-in recommendation providers, registered by `registerBuiltInRecommendationProviders`. Slice A is
  * the existing-feature set; Slice B grows it as the 2026-06 features land (50/51/48/52) — each registered
  * here (the engine built-ins), so they appear in "For you" when relevant + permitted with NO `Home.tsx` edit.
@@ -427,4 +484,6 @@ export const BUILT_IN_RECOMMENDATION_PROVIDERS: readonly RecommendationProvider[
   togetherSession,
   // Together follow-through (spec 61): the inline Pulse check-in callout.
   pulseCheckin,
+  // Your Story (64 §5.6): the living-book presence on Home.
+  storyLiving,
 ];

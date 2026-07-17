@@ -9,14 +9,28 @@ const AGREEMENT_CLASS: Record<keyof typeof AGREEMENT_LABEL, string> = {
   divergent: styles.agreeDivergent ?? '',
 };
 
-/** A read-only list of answers (prompt + formatted answer) — shared by Results, reveal, and the Inbox. */
+/** A read-only list of answers (prompt + formatted answer) — shared by Results, reveal, and the Inbox. A
+ * per-question skip (08 §25.5) renders as a distinct "Skipped" chip + its reason, not a plain answer. */
 export function AnswerList({ answers }: { answers: SendAnswer[] }): JSX.Element {
   return (
     <dl className={styles.qaList}>
       {answers.map((qa, i) => (
         <div key={i} className={styles.qaItem}>
           <dt className={styles.qaPrompt}>{qa.prompt}</dt>
-          <dd className={styles.qaAnswer}>{qa.answer === '' ? '—' : qa.answer}</dd>
+          <dd className={styles.qaAnswer}>
+            {qa.declined ? (
+              <span className={styles.qaSkipped}>
+                <span className={styles.qaSkippedTag}>Skipped</span>
+                {qa.declineReason ? (
+                  <span className={styles.qaSkippedReason}>{qa.declineReason}</span>
+                ) : null}
+              </span>
+            ) : qa.answer === '' ? (
+              '—'
+            ) : (
+              qa.answer
+            )}
+          </dd>
         </div>
       ))}
     </dl>

@@ -110,4 +110,42 @@ describe('gatherRecipientPriorAnswers (08 §24.3-A1)', () => {
     const p = await upsertPerson(fs, key, { displayName: 'New', isSubject: true, tags: [] });
     expect(await gatherRecipientPriorAnswers(fs, key, p.id)).toBe('');
   });
+
+  it('OMITS a per-question decline — a skip is not biography material nor known data (§25.5)', async () => {
+    const fs = memFileSystem();
+    const mara = await upsertPerson(fs, key, { displayName: 'Mara', isSubject: true, tags: [] });
+    const def = await saveQuestionnaire(fs, key, {
+      title: 'Last week',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [
+        { id: 'q1', type: 'shortText', prompt: 'What lifted you up?', required: true },
+        { id: 'q2', type: 'shortText', prompt: 'What drained you?', required: false },
+      ],
+    });
+    const assignment = await createAssignment(fs, key, {
+      questionnaireId: def.id,
+      senderPersonId: 'owner',
+      recipient: { kind: 'person', personId: mara.id },
+      channel: 'inApp',
+      privacy: 'private',
+      senderVisibleToRecipient: true,
+    });
+    await saveResponse(fs, key, {
+      id: 'r1',
+      schemaVersion: 1,
+      assignmentId: assignment.id,
+      answers: [
+        { questionId: 'q1', value: 'A quiet hike.' },
+        { questionId: 'q2', value: { declined: true, reason: 'Prefer not to say' } },
+      ],
+      submittedAt: now,
+    });
+
+    const answers = await gatherRecipientPriorAnswers(fs, key, mara.id);
+    expect(answers).toMatch(/A: A quiet hike\./); // the real answer is included
+    expect(answers).not.toContain('What drained you?'); // the skipped question is not
+    expect(answers).not.toContain('Skipped'); // and no "Skipped" leaks in as an answer
+  });
 });

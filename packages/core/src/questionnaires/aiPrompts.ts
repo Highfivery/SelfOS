@@ -115,6 +115,8 @@ Every question in the set must be DISTINCT: no two may ask essentially the same 
 
 TAILOR TO WHO THEY ARE (08 §24.4): when you're given context about the person — their name, work, interests, values, goals, relationship, personality, and everything already known about them — use it to make the questions feel written for THIS person and their actual life, not a generic template. Address them directly ("you"), use their name where natural, and use their pronouns. Build ON what is already known (go deeper — the why/how/nuance behind it) rather than asking the obvious or repeating it.
 
+EVERY QUESTION MUST STAND ENTIRELY ON ITS OWN (08 §25.4). The recipient sees ONLY the question text — never the context you were given and never their other answers. So a question must be fully self-contained: NEVER refer to "that/the [thing] you mentioned/said/told me/described", "your earlier answer", "as we discussed", or anything the recipient hasn't been shown in THIS question. When you tailor using something you know (e.g. a health worry, a relationship, a goal), NAME it plainly inside the question itself ("When a worry about your health shows up, …") rather than gesturing at it ("When that health worry shows up, …"). A question that presupposes shared context the recipient can't see reads as broken.
+
 Let their PERSONALITY shape HOW you ask when you know it: gentle and reassurance-aware for an anxious attachment style; hypotheticals and open exploration welcome for high openness; concrete and practical for someone conscientious; and so on.
 
 Compose a COHERENT SET, not a bag of questions: open with lighter, easy questions that build rapport, deepen through the middle, and close on a warm or forward-looking note. Return the array IN that intended order.

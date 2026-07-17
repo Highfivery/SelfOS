@@ -2,12 +2,20 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   visibleQuestions,
   allocationTotal,
+  formatAnswerForDisplay,
   isAnswered,
   isDateEntryList,
+  isDeclined,
   isRosterList,
+  SKIP_REASON_PRESETS,
 } from '@selfos/core/questionnaires';
 import type { AnswerValue, AnswerMap, RosterRow } from '@selfos/core/questionnaires';
-import { matrixRowKey, matrixRowLabel, type Question } from '@selfos/core/schemas';
+import {
+  matrixRowKey,
+  matrixRowLabel,
+  type DeclinedAnswer,
+  type Question,
+} from '@selfos/core/schemas';
 import { CrisisFooter } from './CrisisFooter';
 import { QuestionImage, type LoadImage } from './QuestionImage';
 import styles from './styles.module.css';
@@ -35,20 +43,22 @@ export interface QuestionSharing {
 }
 
 /**
- * Wizard mode (08-questionnaires §21.3): one question per step. The form owns Back/Next navigation + the
- * footer action bar; the host supplies the terminal callbacks (Submit / Save for later / Decline) so the
- * SAME bar works in the in-app Inbox AND the relay page (design-system-free — plain token-CSS buttons). The
- * host stops rendering its own Submit/Save/Decline row when it passes this. Presence of `wizard` ⇒ wizard
- * mode; absent ⇒ the all-at-once form (Preview, onboarding, self-tests stay unchanged).
+ * Wizard mode, "unlocked" (08-questionnaires §25): one question per step, but you move freely (no
+ * required-blocks-Next gate), jump via the navigator, and can skip any question with a reason. The form owns
+ * navigation + the Review step + the action bar; the host supplies the terminal callbacks (Submit-on-review /
+ * Save for later / Decline the whole thing) so the SAME bar works in the in-app Inbox AND the relay page
+ * (design-system-free — plain token-CSS buttons). Presence of `wizard` ⇒ wizard mode; absent ⇒ the
+ * all-at-once form (Preview, onboarding, self-tests stay unchanged).
  */
 export interface WizardActions {
-  /** The primary action on the final step (submit the whole response). Host validates all required (§21.3). */
+  /** Submit the whole response — fired from the Review step's Send button, which the form gates on every
+   * required question being answered OR explicitly skipped (§25.3). The host still re-validates required. */
   onSubmit: () => void;
-  /** The final-step primary label — 'Submit', or 'Update answers' when editing (56 §3.1). Default 'Submit'. */
+  /** The Review Send button's label — 'Send answers' by default, or 'Update answers' when editing (56 §3.1). */
   submitLabel?: string;
   /** "Save for later" — omit ⇒ the button is hidden (e.g. an external relay recipient can't resume). */
   onSaveForLater?: () => void;
-  /** The quiet escape action — start declining (fresh answer) or cancel (editing). Omit ⇒ hidden. */
+  /** Decline the WHOLE questionnaire (distinct from a per-question skip) / cancel editing. Omit ⇒ hidden. */
   onDecline?: () => void;
   /** The escape action's label — default 'Decline'; 'Cancel' when editing. */
   declineLabel?: string;
@@ -81,8 +91,8 @@ interface QuestionnaireFormProps {
    */
   disabled?: boolean;
   /**
-   * One-question-at-a-time wizard (08 §21.3). When set, the form renders a single question per step with a
-   * step header + progress + the host's action bar; absent ⇒ the all-at-once form. See {@link WizardActions}.
+   * The unlocked one-question-at-a-time wizard (08 §25): navigator + free navigation + per-question skip +
+   * a Review step. When set, the form renders it instead of the all-at-once form. See {@link WizardActions}.
    */
   wizard?: WizardActions;
 }
@@ -94,7 +104,9 @@ const range = (min: number, max: number): number[] => {
 };
 
 const asNumberMap = (value: AnswerValue | undefined): Record<string, number> =>
-  value !== undefined && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  value !== undefined && typeof value === 'object' && !Array.isArray(value) && !isDeclined(value)
+    ? value
+    : {};
 
 /** A horizontal min→max scale of selectable points (rating, and each matrix row). */
 function ScalePicker({
@@ -840,11 +852,24 @@ function QuestionField({
   );
 }
 
+/** The preset skip reasons (08 §25.2) — the canonical list from core, so the picker and the Results
+ *  "unclear" count can't drift. "Not clear — needs more context" (the first) is the unclear flag. */
+const SKIP_REASONS = SKIP_REASON_PRESETS;
+
+/** One question's state in the wizard navigator (a chip / list-item). */
+type QState = 'answered' | 'skipped' | 'current' | 'open';
+
+/** The reason on a declined answer (empty when none / not a decline). */
+const declineReasonOf = (v: AnswerValue | undefined): string =>
+  isDeclined(v) && v.reason ? v.reason : '';
+
 /**
- * The one-question-at-a-time wizard (08 §21.3). Steps over the currently-visible questions (branch-aware —
- * a new reveal is appended to the remaining steps as answers change), with a step header (progress + a
- * "Question N of M" title), one large question, and a footer action bar (Back · Save for later · Decline ·
- * Next/Submit). Focus moves to the step title on each step change (§9).
+ * The one-question-at-a-time wizard, "unlocked" (08-questionnaires §25). You move freely — no
+ * required-blocks-Next gate — jump to any question via the navigator (state chips + a "See all questions"
+ * overview), and can SKIP any question with an optional reason (a decline value, §25.2). A final Review step
+ * gates Send until every required question is answered OR explicitly skipped (§25.3). It's branch-aware (a
+ * revealed follow-up joins the visible set) and moves focus to the step heading on each change (§9). Used by
+ * the in-app Inbox AND the relay page; the host supplies the terminal callbacks (Submit / Save / Decline).
  */
 function WizardForm({
   visible,
@@ -863,146 +888,406 @@ function WizardForm({
 }): JSX.Element {
   const total = visible.length;
   const [step, setStep] = useState(0);
-  const [stepError, setStepError] = useState(false);
-  const titleRef = useRef<HTMLHeadingElement>(null);
+  const [reviewing, setReviewing] = useState(false);
+  const [allOpen, setAllOpen] = useState(false);
+  const [skipOpen, setSkipOpen] = useState(false);
+  const [reasonSel, setReasonSel] = useState<string | null>(null);
+  const [reasonText, setReasonText] = useState('');
+  // A declined question the recipient chose to answer instead — show a fresh control (the stored decline
+  // stays until they actually answer, so leaving without answering keeps it skipped).
+  const [answerInstead, setAnswerInstead] = useState<string | null>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
 
   // Clamp the step if the visible set shrank (a branch answer hid a later question). Steps are 0..total-1.
   const current = Math.min(step, Math.max(0, total - 1));
   useEffect(() => {
     if (step !== current) setStep(current);
   }, [step, current]);
-  // Move focus to the step title on every step change so a screen-reader / keyboard user lands on the new
-  // question, not back at the top of the page.
+  // Move focus to the step heading on every step / phase change so a screen-reader / keyboard user lands on
+  // the new content, not back at the top of the page.
   useEffect(() => {
-    titleRef.current?.focus();
-  }, [current]);
+    headingRef.current?.focus();
+  }, [current, reviewing]);
 
-  const answeredCount = visible.filter((q) => isAnswered(q, answers[q.id])).length;
+  const stateOf = (q: Question): Exclude<QState, 'current'> =>
+    isAnswered(q, answers[q.id]) ? 'answered' : isDeclined(answers[q.id]) ? 'skipped' : 'open';
+  const answeredCount = visible.filter((q) => stateOf(q) === 'answered').length;
+  const skippedCount = visible.filter((q) => stateOf(q) === 'skipped').length;
+  const toGo = total - answeredCount - skippedCount;
+  // Required questions still needing an answer OR a decline — the review gate (§25.3).
+  const outstanding = visible.filter((q) => q.required && stateOf(q) === 'open');
   const question = visible[current];
   const isLast = current >= total - 1;
-  const requiredButEmpty = (q: Question | undefined): boolean =>
-    q !== undefined && q.required === true && !isAnswered(q, answers[q.id]);
 
-  // Clear a lingering "please answer this" alert as soon as the current required question is answered, so
-  // the message doesn't sit under a now-filled field until the next Back/Next.
-  const currentSatisfied = !requiredButEmpty(question);
-  useEffect(() => {
-    if (currentSatisfied) setStepError(false);
-  }, [currentSatisfied]);
-
+  const leave = (): void => {
+    setSkipOpen(false);
+    setAnswerInstead(null);
+  };
+  const jumpTo = (i: number): void => {
+    leave();
+    setReviewing(false);
+    setStep(i);
+  };
   const goNext = (): void => {
-    if (requiredButEmpty(question)) {
-      setStepError(true);
-      titleRef.current?.focus();
-      return;
-    }
-    setStepError(false);
-    setStep(current + 1);
+    leave();
+    if (isLast) setReviewing(true);
+    else setStep(current + 1);
   };
   const goBack = (): void => {
-    setStepError(false);
+    leave();
     setStep(Math.max(0, current - 1));
   };
-  const onPrimary = (): void => {
-    if (isLast) {
-      // The final step still guards its own required question; the host re-validates ALL required (§21.3).
-      if (requiredButEmpty(question)) {
-        setStepError(true);
-        titleRef.current?.focus();
-        return;
-      }
-      actions.onSubmit();
-    } else {
-      goNext();
-    }
+  const openSkip = (): void => {
+    setSkipOpen(true);
+    setReasonSel(null);
+    setReasonText('');
   };
+  const confirmSkip = (): void => {
+    if (!question) return;
+    const reason = reasonText.trim() || reasonSel || '';
+    const decline: DeclinedAnswer = reason ? { declined: true, reason } : { declined: true };
+    onChange(question.id, decline);
+    setSkipOpen(false);
+    setAnswerInstead(null);
+  };
+  const reviewAnswerText = (q: Question, v: AnswerValue | undefined): string => {
+    if (isAnswered(q, v)) return formatAnswerForDisplay(q, v) || '—';
+    if (isDeclined(v)) return v.reason ? `Skipped — ${v.reason}` : 'Skipped';
+    return q.required ? 'Needs an answer or a reason to send' : 'Left blank (optional)';
+  };
+
+  const declineButtons = (
+    <>
+      {actions.onSaveForLater ? (
+        <button
+          type="button"
+          className={styles.wizardSecondary}
+          disabled={actions.busy === true}
+          onClick={actions.onSaveForLater}
+        >
+          Save for later
+        </button>
+      ) : null}
+      {actions.onDecline ? (
+        <button
+          type="button"
+          className={styles.wizardDecline}
+          disabled={actions.busy === true}
+          onClick={actions.onDecline}
+        >
+          {actions.declineLabel ?? 'Decline'}
+        </button>
+      ) : null}
+    </>
+  );
+
+  const done = answeredCount + skippedCount;
 
   return (
     <div className={`${styles.form} ${styles.wizard}`}>
+      {/* NAVIGATOR (§25.1) — progress + state chips (jump to any) + a "See all questions" overview. */}
       {total > 0 ? (
-        <div className={styles.progressWrap}>
-          <div
-            className={styles.progressTrack}
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={total}
-            aria-valuenow={answeredCount}
-            aria-label={`${answeredCount} of ${total} questions answered`}
-          >
-            <span
-              className={styles.progressBar}
-              style={{ width: `${Math.round((answeredCount / total) * 100)}%` }}
-            />
+        <nav className={styles.nav} aria-label="Question navigator">
+          <div className={styles.progressWrap}>
+            <div
+              className={styles.progressTrack}
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={total}
+              aria-valuenow={done}
+              aria-label={`${answeredCount} answered, ${skippedCount} skipped, of ${total} questions`}
+            >
+              <span
+                className={styles.progressBar}
+                style={{ width: `${Math.round((done / total) * 100)}%` }}
+              />
+            </div>
+            <span className={styles.progressLabel} aria-hidden="true">
+              {reviewing ? 'Review' : `Question ${current + 1} of ${total}`}
+            </span>
           </div>
-          <span className={styles.progressLabel} aria-hidden="true">
-            {answeredCount} of {total} answered
+
+          <div className={styles.dots}>
+            {visible.map((q, i) => {
+              const st: QState = !reviewing && i === current ? 'current' : stateOf(q);
+              const mark = st === 'answered' ? '✓' : st === 'skipped' ? '⊘' : i + 1;
+              const showReq = q.required && st !== 'answered' && st !== 'skipped';
+              return (
+                <button
+                  key={q.id}
+                  type="button"
+                  className={styles.dot}
+                  data-state={st}
+                  aria-label={`Question ${i + 1}${q.required ? ', required' : ''} — ${st}`}
+                  {...(!reviewing && i === current ? { 'aria-current': 'step' as const } : {})}
+                  onClick={() => jumpTo(i)}
+                >
+                  {mark}
+                  {showReq ? (
+                    <span className={styles.req} aria-hidden="true">
+                      *
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            className={styles.allToggle}
+            aria-expanded={allOpen}
+            onClick={() => setAllOpen((o) => !o)}
+          >
+            {allOpen ? 'Hide all questions' : 'See all questions'}
+          </button>
+          {allOpen ? (
+            <ol className={styles.allList}>
+              {visible.map((q, i) => {
+                const st = stateOf(q);
+                const mark = st === 'answered' ? '✓' : st === 'skipped' ? '⊘' : i + 1;
+                const reason = declineReasonOf(answers[q.id]);
+                return (
+                  <li key={q.id}>
+                    <button
+                      type="button"
+                      className={styles.allItem}
+                      {...(!reviewing && i === current ? { 'data-current': 'true' } : {})}
+                      onClick={() => jumpTo(i)}
+                    >
+                      <span className={styles.allBadge} data-state={st} aria-hidden="true">
+                        {mark}
+                      </span>
+                      <span className={styles.allText}>
+                        {q.prompt}
+                        {st === 'answered' ? (
+                          <span className={`${styles.allSub} ${styles.allDone}`}>Answered</span>
+                        ) : st === 'skipped' ? (
+                          <span className={`${styles.allSub} ${styles.allSkip}`}>
+                            Skipped{reason ? ` — ${reason}` : ''}
+                          </span>
+                        ) : q.required ? (
+                          <span className={styles.allSub}>Required · not yet answered</span>
+                        ) : null}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          ) : null}
+        </nav>
+      ) : null}
+
+      {/* STAGE — the current question, or the review, or the empty state. */}
+      <div className={styles.wizardBody}>
+        {total === 0 ? (
+          <>
+            <h3 className={styles.wizardStepTitle} tabIndex={-1} ref={headingRef}>
+              No questions yet
+            </h3>
+            <p className={styles.empty}>Add a question with a prompt to preview it.</p>
+          </>
+        ) : reviewing ? (
+          <div className={styles.review}>
+            <h3 className={styles.wizardStepTitle} tabIndex={-1} ref={headingRef}>
+              You’re almost done.
+            </h3>
+            <p className={styles.reviewLede}>
+              {outstanding.length > 0 ? (
+                <>
+                  <strong className={styles.reviewWarn}>
+                    {outstanding.length} required question{outstanding.length > 1 ? 's' : ''}
+                  </strong>{' '}
+                  still {outstanding.length > 1 ? 'need' : 'needs'} an answer or a reason before you
+                  can send.
+                </>
+              ) : (
+                'Everything required is answered or has a reason. Send whenever you’re ready.'
+              )}
+            </p>
+            <ol className={styles.rlist}>
+              {visible.map((q, i) => {
+                const st = isAnswered(q, answers[q.id])
+                  ? 'answered'
+                  : isDeclined(answers[q.id])
+                    ? 'skipped'
+                    : q.required
+                      ? 'missing'
+                      : 'open';
+                const mark = st === 'answered' ? '✓' : st === 'skipped' ? '⊘' : i + 1;
+                return (
+                  <li key={q.id} className={styles.rrow}>
+                    <span className={styles.rBadge} data-state={st} aria-hidden="true">
+                      {mark}
+                    </span>
+                    <div className={styles.rq}>
+                      <p className={styles.rPrompt}>{q.prompt}</p>
+                      <p className={styles.rAnswer} data-state={st}>
+                        {reviewAnswerText(q, answers[q.id])}
+                      </p>
+                    </div>
+                    <button type="button" className={styles.rEdit} onClick={() => jumpTo(i)}>
+                      Edit
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        ) : (
+          <div className={styles.qStage}>
+            {/* The count lives next to the progress bar; the eyebrow just tags whether it's required. */}
+            <span className={styles.qNumber}>{question?.required ? 'Required' : 'Optional'}</span>
+            <h3 className={styles.wizardStepTitle} tabIndex={-1} ref={headingRef}>
+              {question?.prompt ?? ''}
+            </h3>
+            {question ? (
+              isDeclined(answers[question.id]) && answerInstead !== question.id ? (
+                <div className={styles.skippedNote}>
+                  <span aria-hidden="true">⊘</span>
+                  <span>
+                    <strong>Skipped.</strong>
+                    {declineReasonOf(answers[question.id])
+                      ? ` Reason: ${declineReasonOf(answers[question.id])}`
+                      : ' No reason given.'}
+                  </span>
+                  <button
+                    type="button"
+                    className={styles.undoSkip}
+                    onClick={() => setAnswerInstead(question.id)}
+                  >
+                    Answer it instead
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {question.help ? <p className={styles.help}>{question.help}</p> : null}
+                  {question.media && loadImage ? (
+                    <QuestionImage media={question.media} loadImage={loadImage} />
+                  ) : null}
+                  <Control
+                    question={question}
+                    value={answerInstead === question.id ? undefined : answers[question.id]}
+                    set={(v) => onChange(question.id, v)}
+                  />
+                  <div className={styles.skipRow}>
+                    {skipOpen ? (
+                      <div className={styles.reason}>
+                        <h4 className={styles.reasonHead}>
+                          What’s making this one hard to answer?
+                        </h4>
+                        <p className={styles.reasonHint}>
+                          Optional — “Not clear” tells the sender (and the app) to fix it.
+                        </p>
+                        <div className={styles.chips}>
+                          {SKIP_REASONS.map((r) => (
+                            <button
+                              key={r}
+                              type="button"
+                              className={styles.chip}
+                              aria-pressed={reasonSel === r}
+                              onClick={() => setReasonSel((s) => (s === r ? null : r))}
+                            >
+                              {r}
+                            </button>
+                          ))}
+                        </div>
+                        <textarea
+                          className={styles.reasonText}
+                          placeholder="Or say it in your own words (optional)…"
+                          value={reasonText}
+                          onChange={(e) => setReasonText(e.target.value)}
+                          aria-label="Reason for skipping (optional)"
+                        />
+                        <div className={styles.reasonActions}>
+                          <button
+                            type="button"
+                            className={styles.wizardPrimary}
+                            onClick={confirmSkip}
+                          >
+                            Skip this question
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.wizardGhost}
+                            onClick={() => setSkipOpen(false)}
+                          >
+                            Never mind
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button type="button" className={styles.skipBtn} onClick={openSkip}>
+                        Skip this — I can’t or don’t want to answer
+                      </button>
+                    )}
+                  </div>
+                </>
+              )
+            ) : null}
+          </div>
+        )}
+      </div>
+
+      {/* Live summary — answered / skipped / to-go. */}
+      {total > 0 ? (
+        <div className={styles.summary} aria-live="polite">
+          <span className={styles.sDone}>
+            <strong>{answeredCount}</strong> answered
+          </span>
+          <span className={styles.sSkip}>
+            <strong>{skippedCount}</strong> skipped
+          </span>
+          <span>
+            <strong>{toGo}</strong> to go
           </span>
         </div>
       ) : null}
 
-      <div className={styles.wizardStepRow}>
-        <h3 className={styles.wizardStepTitle} tabIndex={-1} ref={titleRef}>
-          {total > 0 ? `Question ${current + 1} of ${total}` : 'No questions yet'}
-        </h3>
-      </div>
-
-      <div className={styles.wizardBody}>
-        {question ? (
-          <QuestionField
-            question={question}
-            value={answers[question.id]}
-            onChange={onChange}
-            {...(loadImage ? { loadImage } : {})}
-          />
-        ) : (
-          <p className={styles.empty}>Add a question with a prompt to preview it.</p>
-        )}
-        {stepError ? (
-          <p className={styles.wizardError} role="alert">
-            Please answer this question before continuing.
-          </p>
-        ) : null}
-      </div>
-
-      {/* Action bar. DOM order == visual order == tab order (WCAG 2.4.3): Back · Save · Decline · Primary.
-          The primary (Next/Submit) is pushed to the far right via `margin-left:auto` in CSS. */}
+      {/* Action bar. DOM order == visual order == tab order (WCAG 2.4.3). */}
       <div className={styles.wizardActions}>
-        <button
-          type="button"
-          className={styles.wizardBack}
-          disabled={current === 0 || actions.busy === true}
-          onClick={goBack}
-        >
-          Back
-        </button>
-        {actions.onSaveForLater ? (
-          <button
-            type="button"
-            className={styles.wizardSecondary}
-            disabled={actions.busy === true}
-            onClick={actions.onSaveForLater}
-          >
-            Save for later
-          </button>
-        ) : null}
-        {actions.onDecline ? (
-          <button
-            type="button"
-            className={styles.wizardDecline}
-            disabled={actions.busy === true}
-            onClick={actions.onDecline}
-          >
-            {actions.declineLabel ?? 'Decline'}
-          </button>
-        ) : null}
-        <button
-          type="button"
-          className={styles.wizardPrimary}
-          disabled={actions.busy === true}
-          onClick={onPrimary}
-        >
-          {isLast ? (actions.submitLabel ?? 'Submit') : 'Next'}
-        </button>
+        {reviewing ? (
+          <>
+            <button
+              type="button"
+              className={styles.wizardBack}
+              disabled={actions.busy === true}
+              onClick={() => setReviewing(false)}
+            >
+              Keep editing
+            </button>
+            {declineButtons}
+            <button
+              type="button"
+              className={styles.wizardPrimary}
+              disabled={actions.busy === true || outstanding.length > 0}
+              onClick={actions.onSubmit}
+            >
+              {actions.submitLabel ?? 'Send answers'}
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className={styles.wizardBack}
+              disabled={current === 0 || actions.busy === true}
+              onClick={goBack}
+            >
+              Back
+            </button>
+            {declineButtons}
+            <button
+              type="button"
+              className={styles.wizardPrimary}
+              disabled={actions.busy === true}
+              onClick={goNext}
+            >
+              {isLast ? 'Review & send' : 'Next'}
+            </button>
+          </>
+        )}
       </div>
 
       {footer ?? <CrisisFooter />}

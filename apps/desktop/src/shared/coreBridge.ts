@@ -5759,11 +5759,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         if (a.privacy === 'standard' && a.status === 'submitted' && response) {
           const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, a.id);
           if (snapshot) {
-            const byId = new Map(response.answers.map((ans) => [ans.questionId, ans.value]));
-            answers = snapshot.questions.map((q) => ({
-              prompt: q.prompt,
-              answer: formatAnswerForDisplay(q, byId.get(q.id)),
-            }));
+            // formatResponseAnswers carries a per-question decline's flag + reason (§25.2) so Results can
+            // render a "Skipped" chip, not just the "Skipped — <reason>" string.
+            answers = formatResponseAnswers(snapshot.questions, response.answers);
           }
         }
         results.push({

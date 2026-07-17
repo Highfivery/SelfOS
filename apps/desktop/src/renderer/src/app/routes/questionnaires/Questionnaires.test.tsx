@@ -132,6 +132,21 @@ describe('Questionnaires', () => {
     );
   });
 
+  it('warns the author when a question refers back to unseen context (§25.4)', async () => {
+    installMockBridge({ questionnairesList: () => Promise.resolve([]) });
+    await openNewBuilder();
+    const prompt = screen.getByLabelText('Question 1');
+    // A dangling back-reference → the self-contained warning appears.
+    await userEvent.type(prompt, 'Tell me more about that goal you mentioned.');
+    expect(screen.getByText(/refers to something the recipient can’t see/i)).toBeInTheDocument();
+    // A self-contained rewrite → the warning clears.
+    await userEvent.clear(prompt);
+    await userEvent.type(prompt, 'What is one goal that matters to you right now?');
+    expect(
+      screen.queryByText(/refers to something the recipient can’t see/i),
+    ).not.toBeInTheDocument();
+  });
+
   it('authors a compatibility questionnaire (visibility picker + canonicalId stamping)', async () => {
     const save = saveSpy();
     installMockBridge({ questionnairesList: () => Promise.resolve([]), questionnairesSave: save });

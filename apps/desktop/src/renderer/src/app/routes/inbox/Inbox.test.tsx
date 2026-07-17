@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { InboxAssignmentDetail, InboxItem } from '@shared/channels';
@@ -130,7 +130,9 @@ describe('Inbox', () => {
     expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText('How are we doing?'), 'Pretty well');
-    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    // Last step → Review & send → Send answers (the unlocked wizard, §25.1).
+    await userEvent.click(screen.getByRole('button', { name: 'Review & send' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Send answers' }));
 
     expect(submit).toHaveBeenCalledWith({
       assignmentId: 'a1',
@@ -138,7 +140,7 @@ describe('Inbox', () => {
     });
   });
 
-  it('blocks submit until a required question is answered (wizard: the last-step guard, §21.3)', async () => {
+  it('required = answer or skip: Send is disabled on review until a required question is answered (§25.3)', async () => {
     const submit = vi.fn(() => Promise.resolve());
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item()]),
@@ -148,21 +150,23 @@ describe('Inbox', () => {
     renderInbox();
 
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
-    // A single required question → the wizard opens on the last step, so the primary is "Submit".
-    expect(await screen.findByText('Question 1 of 1')).toBeInTheDocument();
-    await userEvent.click(await screen.findByRole('button', { name: 'Submit' }));
-
-    // The wizard's final-step guard flags the empty required question and never calls the host submit.
-    expect(screen.getByText(/answer this question before continuing/i)).toBeInTheDocument();
+    // Go to review WITHOUT answering the single required question → Send is disabled, submit not called.
+    await userEvent.click(await screen.findByRole('button', { name: 'Review & send' }));
+    expect(screen.getByRole('button', { name: 'Send answers' })).toBeDisabled();
     expect(submit).not.toHaveBeenCalled();
 
-    // Answering it lets the submit through.
+    // Edit it (via the review row) → answer → back to review → Send enabled → submits.
+    const row = screen.getByText('How are we doing?').closest('li') as HTMLElement;
+    await userEvent.click(within(row).getByRole('button', { name: 'Edit' }));
     await userEvent.type(screen.getByLabelText('How are we doing?'), 'Pretty well');
-    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Review & send' }));
+    const send = screen.getByRole('button', { name: 'Send answers' });
+    expect(send).toBeEnabled();
+    await userEvent.click(send);
     expect(submit).toHaveBeenCalled();
   });
 
-  it('steps through multiple questions with Back/Next, blocking a required step (wizard, §21.3)', async () => {
+  it('steps through multiple questions with FREE Back/Next — no blocking gate (§25.1)', async () => {
     const submit = vi.fn(() => Promise.resolve());
     const twoQ = detail({
       questionnaire: {
@@ -182,17 +186,16 @@ describe('Inbox', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
     expect(await screen.findByText('Question 1 of 2')).toBeInTheDocument();
-    // Next blocks the required first step while it's empty.
-    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
-    expect(screen.getByText(/answer this question before continuing/i)).toBeInTheDocument();
-    // Answer it → advance to step 2 (its optional; the primary is now Submit).
-    await userEvent.type(screen.getByLabelText('How are we doing?'), 'Well');
+    // Next advances FREELY even though the required first question is empty (no block, §25.1).
     await userEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(await screen.findByText('Question 2 of 2')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Submit' })).toBeInTheDocument();
-    // Back returns to step 1 with the answer intact.
+    expect(screen.queryByText(/answer this question before continuing/i)).not.toBeInTheDocument();
+    // Back returns to step 1; answering it and stepping preserves the value.
     await userEvent.click(screen.getByRole('button', { name: 'Back' }));
     expect(await screen.findByText('Question 1 of 2')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('How are we doing?'), 'Well');
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
     expect(screen.getByLabelText('How are we doing?')).toHaveValue('Well');
   });
 
@@ -262,6 +265,8 @@ describe('Inbox', () => {
     expect(field).toHaveValue('Pretty well');
     await userEvent.clear(field);
     await userEvent.type(field, 'Actually, much better');
+    // Last step → Review & send → the host's "Update answers" label lands on the review Send button.
+    await userEvent.click(screen.getByRole('button', { name: 'Review & send' }));
     await userEvent.click(screen.getByRole('button', { name: 'Update answers' }));
 
     // Update = re-open the submitted send, then submit the edited answers.

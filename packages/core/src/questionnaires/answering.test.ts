@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import type { Question } from '../schemas';
+import { AnswerSchema, type Question } from '../schemas';
 import { MAX_RESPONSE_BYTES } from '../relay/relayLimits';
 import {
   allocationTotal,
   estimateSealedResponseBytes,
   formatAnswerForDisplay,
+  formatResponseAnswers,
   isAnswered,
+  isDeclined,
   isQuestionVisible,
   responseSizeGuard,
   unansweredRequired,
@@ -285,5 +287,109 @@ describe('responseSizeGuard (38 §3.9)', () => {
   it('shares the relay cap constant (the client guard can’t drift from the server)', () => {
     // The guard reports MAX_RESPONSE_BYTES — the SAME constant the relay Worker enforces.
     expect(responseSizeGuard({}).maxBytes).toBe(MAX_RESPONSE_BYTES);
+  });
+});
+
+describe('answering — per-question decline (§25)', () => {
+  const text = q({ id: 'q1', type: 'shortText', required: true });
+  const matrix = q({
+    id: 'm',
+    type: 'matrix',
+    matrix: { rows: ['calm', 'stress'], min: 1, max: 5 },
+  });
+
+  it('AnswerSchema accepts a decline value AND every pre-25 value shape (additive, no bump)', () => {
+    expect(AnswerSchema.safeParse({ questionId: 'q', value: { declined: true } }).success).toBe(
+      true,
+    );
+    // The parsed data preserves the reason (a regressed arm order that dropped it would fail here).
+    expect(
+      AnswerSchema.safeParse({ questionId: 'q', value: { declined: true, reason: 'x' } }).data,
+    ).toEqual({ questionId: 'q', value: { declined: true, reason: 'x' } });
+    // An empty object is NOT a decline — it parses as an (empty) matrix/allocation map, unchanged.
+    const empty = AnswerSchema.safeParse({ questionId: 'q', value: {} });
+    expect(empty.success).toBe(true);
+    expect(empty.data?.value).toEqual({});
+    // Legacy shapes still parse unchanged (a pre-25 response is untouched).
+    for (const value of [
+      'text',
+      5,
+      true,
+      ['a'],
+      { calm: 3 },
+      [{ label: 'A', date: '2020-01-01' }],
+    ]) {
+      expect(AnswerSchema.safeParse({ questionId: 'q', value }).success).toBe(true);
+    }
+  });
+
+  it('recognizes a decline value, and never a real answer (a matrix map is not a decline)', () => {
+    expect(isDeclined({ declined: true })).toBe(true);
+    expect(isDeclined({ declined: true, reason: 'Not clear — needs more context' })).toBe(true);
+    expect(isDeclined('an answer')).toBe(false);
+    expect(isDeclined({ calm: 3, stress: 5 })).toBe(false); // a matrix map — has no `declined` key
+    expect(isDeclined({})).toBe(false); // an empty (matrix/allocation) map is not a decline
+    expect(isDeclined({ declined: 3 } as never)).toBe(false); // `declined` must be exactly `true`
+    expect(isDeclined(undefined)).toBe(false);
+    expect(isDeclined(['a', 'b'])).toBe(false);
+  });
+
+  it('a decline is NOT a usable answer (guarded before the type switch, so a matrix arm never sees it)', () => {
+    expect(isAnswered(text, { declined: true })).toBe(false);
+    expect(isAnswered(matrix, { declined: true, reason: 'Prefer not to say' })).toBe(false);
+  });
+
+  it('a declined REQUIRED question satisfies the submit gate (answered ∨ declined — §25.3)', () => {
+    // Neither answered nor declined → outstanding.
+    expect(unansweredRequired([text], {}).map((x) => x.id)).toEqual(['q1']);
+    // Answered → satisfied.
+    expect(unansweredRequired([text], { q1: 'done' })).toEqual([]);
+    // Declined-with-a-reason → satisfied (the whole point of §25.3).
+    expect(unansweredRequired([text], { q1: { declined: true, reason: 'Too personal' } })).toEqual(
+      [],
+    );
+    // Declined with NO reason still satisfies (the reason is optional).
+    expect(unansweredRequired([text], { q1: { declined: true } })).toEqual([]);
+  });
+
+  it('a declined trigger never satisfies a branch (its follow-ups stay hidden)', () => {
+    const follow = q({
+      id: 'f',
+      type: 'shortText',
+      branch: { whenQuestionId: 't', equals: 'Yes', action: 'show' },
+    });
+    expect(isQuestionVisible(follow, { t: { declined: true } })).toBe(false);
+    expect(isQuestionVisible(follow, { t: 'Yes' })).toBe(true);
+  });
+
+  it('visibleAnswers keeps a declined entry for a visible question (it carries meaning)', () => {
+    expect(visibleAnswers([text], { q1: { declined: true, reason: 'x' } })).toEqual({
+      q1: { declined: true, reason: 'x' },
+    });
+  });
+
+  it('formats a decline as a "Skipped" line, with the reason when given', () => {
+    expect(formatAnswerForDisplay(text, { declined: true })).toBe('Skipped');
+    expect(formatAnswerForDisplay(text, { declined: true, reason: 'Not clear' })).toBe(
+      'Skipped — Not clear',
+    );
+  });
+
+  it('formatResponseAnswers carries the decline flag + reason so Results can render a chip', () => {
+    const rows = formatResponseAnswers(
+      [text, matrix],
+      [
+        { questionId: 'q1', value: { declined: true, reason: 'Prefer not to say' } },
+        { questionId: 'm', value: { calm: 4, stress: 2 } },
+      ],
+    );
+    expect(rows[0]).toEqual({
+      prompt: 'q1',
+      answer: 'Skipped — Prefer not to say',
+      declined: true,
+      declineReason: 'Prefer not to say',
+    });
+    // A real answer carries no decline flag.
+    expect(rows[1]?.declined).toBeUndefined();
   });
 });

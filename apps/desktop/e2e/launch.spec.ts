@@ -4186,21 +4186,26 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
     await expect(w.getByText(/won’t see your written answers/i)).toBeVisible();
     await expect(w.getByRole('button', { name: /get help now/i })).toBeVisible();
 
-    // The wizard (08 §21.3) shows one question per step: a progress bar + "Question 1 of 2", no Submit yet.
+    // The unlocked wizard (08 §25) shows one question per step: a progress bar + "Question 1 of 2", the
+    // navigator, and no Send yet.
     await expect(w.getByRole('progressbar')).toBeVisible();
     await expect(w.getByText('Question 1 of 2')).toBeVisible();
-    await expect(w.getByText(/0 of 2 answered/)).toBeVisible();
-    await expect(w.getByRole('button', { name: 'Submit' })).toHaveCount(0);
+    await expect(w.getByText('0 answered')).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Send answers' })).toHaveCount(0);
     await expect(w.getByText('Anything else?')).toHaveCount(0); // step 2 isn't on screen yet
 
-    // Answer step 1, advance to step 2 (Next → the last step shows Submit), then Back keeps the answer.
+    // Answer step 1; the summary reflects it. Then advance (Next never blocks — §25.1).
     await w.getByLabel('How are we doing?').fill('Doing great');
-    await expect(w.getByText(/1 of 2 answered/)).toBeVisible();
+    await expect(w.getByText('1 answered')).toBeVisible();
     await w.getByRole('button', { name: 'Next' }).click();
-    await expect(w.getByText('Question 2 of 2')).toBeVisible();
+    await expect(w.getByText('Anything else?')).toBeVisible();
+    // "See all questions" shows the full overview (jump to any); collapse it again.
+    await w.getByRole('button', { name: 'See all questions' }).click();
+    await expect(w.getByText('Required · not yet answered')).toBeVisible();
+    await w.getByRole('button', { name: 'Hide all questions' }).click();
 
-    // The wizard's four-button action bar must not overflow at 360px — scan EVERY element for an inner
-    // x-scroller AND the page width (§7/§12), WHILE a wizard step (with the action bar) is on screen.
+    // The action bar + navigator + skip affordance must not overflow at 360px — scan EVERY element for an
+    // inner x-scroller AND the page width (§7/§12), WHILE a wizard step (with the action bar) is on screen.
     await w.setViewportSize({ width: 360, height: 900 });
     const wizardOverflow = await w.evaluate(() => {
       const main = document.querySelector('main');
@@ -4217,13 +4222,20 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
     expect(wizardOverflow.inner).toBe(0);
     await w.setViewportSize({ width: 1000, height: 800 });
 
-    await w.getByLabel('Anything else?').fill('All good');
-    await w.getByRole('button', { name: 'Back' }).click();
-    await expect(w.getByLabel('How are we doing?')).toHaveValue('Doing great');
-    await w.getByRole('button', { name: 'Next' }).click();
+    // SKIP the (required) second question with a reason (§25.2): "Skip this" → pick "Not clear" → confirm.
+    // A required question satisfied by a skip-with-reason is exactly the §25.3 gate.
+    await w.getByRole('button', { name: /Skip this/ }).click();
+    await w.getByRole('button', { name: 'Not clear — needs more context' }).click();
+    await w.getByRole('button', { name: 'Skip this question' }).click();
+    await expect(w.getByText(/Skipped\./)).toBeVisible();
+    await expect(w.getByText('1 skipped')).toBeVisible();
 
-    // Submit from the last step; the row reads Submitted.
-    await w.getByRole('button', { name: 'Submit' }).click();
+    // Review & send → the review lists both, and Send is enabled (nothing required is outstanding).
+    await w.getByRole('button', { name: 'Review & send' }).click();
+    await expect(w.getByText(/almost done/i)).toBeVisible();
+    const send = w.getByRole('button', { name: 'Send answers' });
+    await expect(send).toBeEnabled();
+    await send.click();
     await expect(w.getByText('Submitted')).toBeVisible();
 
     // No horizontal overflow on the Inbox.
@@ -4253,9 +4265,16 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
     expect(assignment.status).toBe('submitted');
     expect(assignment.privacy).toBe('private');
     const response = await getResponse(fs, key, assignment.id);
-    // Both wizard steps persisted (Back preserved step 1's answer).
+    // The answered question persisted, and the SKIPPED question persisted as a per-question decline value
+    // carrying its reason (§25.2) — proving the full UI → IPC → core → at-rest path for a skip.
     expect(response?.answers.find((a) => a.value === 'Doing great')).toBeTruthy();
-    expect(response?.answers.find((a) => a.value === 'All good')).toBeTruthy();
+    const skipped = response?.answers.find(
+      (a) => typeof a.value === 'object' && a.value !== null && 'declined' in a.value,
+    );
+    expect(skipped?.value).toEqual({
+      declined: true,
+      reason: 'Not clear — needs more context',
+    });
     expect(response?.submittedAt).toBeTruthy();
   } finally {
     await app.close();
@@ -4381,11 +4400,13 @@ test('results: a Standard response surfaces the raw answers in the sender’s Re
   try {
     const w = await app.firstWindow();
 
-    // Author a one-question questionnaire.
+    // Author a two-question questionnaire (so one can be answered + one skipped, §25.5).
     await w.getByRole('link', { name: 'Questionnaires' }).click();
     await startNewQuestionnaire(w);
     await w.getByLabel('Title').fill('Weekly check-in');
     await w.getByLabel('Question 1', { exact: true }).fill('How are we doing?');
+    await w.getByRole('button', { name: 'Add question' }).click();
+    await w.getByLabel('Question 2', { exact: true }).fill('What secretly worries you?');
 
     // §16.3: save the draft first, then Send it to the bound recipient (self), switching Private → Standard.
     await w.getByRole('button', { name: 'Create draft' }).click();
@@ -4395,23 +4416,32 @@ test('results: a Standard response surfaces the raw answers in the sender’s Re
     await expect(w.getByText(/Sent to Tester/)).toBeVisible();
     await w.getByRole('button', { name: 'Done' }).click();
 
-    // Answer + submit it from the Inbox.
+    // Answer q1, then SKIP q2 flagging it "Not clear", from the Inbox (§25.2).
     await w.getByRole('link', { name: /Inbox/ }).click();
     await w.getByRole('button', { name: /^Weekly check-in/ }).click();
     await w.getByLabel('How are we doing?').fill('Doing great');
-    await w.getByRole('button', { name: 'Submit' }).click();
+    await w.getByRole('button', { name: 'Next' }).click();
+    await w.getByRole('button', { name: /Skip this/ }).click();
+    await w.getByRole('button', { name: 'Not clear — needs more context' }).click();
+    await w.getByRole('button', { name: 'Skip this question' }).click();
+    await w.getByRole('button', { name: 'Review & send' }).click();
+    await w.getByRole('button', { name: 'Send answers' }).click();
     await expect(w.getByText('Submitted')).toBeVisible();
 
     // Open the questionnaire's Results tab — a Standard send shows the raw answers.
     await w.getByRole('link', { name: 'Questionnaires' }).click();
     await w.getByRole('button', { name: /^Weekly check-in/ }).click();
     await w.getByRole('button', { name: 'Results' }).click();
+    // The "At a glance" band flags the skipped question as unclear (the reword nudge, §25.5).
+    await expect(w.getByText(/found it unclear/)).toBeVisible();
     // "Who answered" rows are collapsed by default (§21.4) — expand this recipient to reveal their answers.
     await w.getByRole('button', { name: /Expand Tester/ }).click();
     // The prompt appears in the raw-answer list AND the "At a glance" aggregate band (§20.7) — scope to the
     // first; the written answer itself is unique to the Standard raw-answer list.
     await expect(w.getByText('How are we doing?').first()).toBeVisible();
     await expect(w.getByText('Doing great')).toBeVisible();
+    // The skipped question renders as a distinct "Skipped" chip in the raw-answer list (§25.5).
+    await expect(w.getByText('Skipped').first()).toBeVisible();
     // AI is off, so analysis is offered via the calm role-aware notice (no dead Analyze button).
     await expect(w.getByText(/isn.t set up yet/i).first()).toBeVisible();
 
@@ -4463,7 +4493,8 @@ test('answer review/edit (56): recipient reviews + edits + resends → Results g
     await w.getByRole('link', { name: /Inbox/ }).click();
     await w.getByRole('button', { name: /^Weekly check-in/ }).click();
     await w.getByLabel('How are we doing?').fill('Doing okay');
-    await w.getByRole('button', { name: 'Submit' }).click();
+    await w.getByRole('button', { name: 'Review & send' }).click();
+    await w.getByRole('button', { name: 'Send answers' }).click();
     await expect(w.getByText('Submitted')).toBeVisible();
 
     // Analyze it in Results → an insight is drafted.
@@ -4484,6 +4515,8 @@ test('answer review/edit (56): recipient reviews + edits + resends → Results g
     await w.getByRole('button', { name: 'Edit answers' }).click();
     const field = w.getByLabel('How are we doing?');
     await field.fill('Actually, really well now');
+    // Last step → Review & send → the host's "Update answers" label lands on the review Send button (§25.1).
+    await w.getByRole('button', { name: 'Review & send' }).click();
     await w.getByRole('button', { name: 'Update answers' }).click();
     await expect(w.getByText('Submitted')).toBeVisible();
 
@@ -4661,7 +4694,8 @@ test('results: re-asks chart a trend, a send deletes, and the questionnaire purg
       await newItems.first().click();
       // Rating questions answer on a slider now (not number buttons).
       await w.getByRole('slider', { name: 'How connected do you feel?' }).fill(ratings[i] ?? '3');
-      await w.getByRole('button', { name: 'Submit', exact: true }).click();
+      await w.getByRole('button', { name: 'Review & send' }).click();
+      await w.getByRole('button', { name: 'Send answers' }).click();
     }
 
     // Results: the summary band + status-grouped cards + a Trends chart for the rating question (§20.6).
@@ -4910,10 +4944,11 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
     await expect(sent.getByRole('button', { name: /^Weekly mood/ })).toBeVisible();
     await w.getByRole('tab', { name: /Received/ }).click();
 
-    // Answer the received one straight from its card → submit → back on the landing its CTA flips to "View".
+    // Answer the received one straight from its card → Review & send → back on the landing its CTA flips to "View".
     await received.getByRole('button', { name: 'Answer' }).click();
     await w.getByLabel('How are we?').fill('Doing well');
-    await w.getByRole('button', { name: 'Submit' }).click();
+    await w.getByRole('button', { name: 'Review & send' }).click();
+    await w.getByRole('button', { name: 'Send answers' }).click();
     await expect(received.getByRole('button', { name: 'View' })).toBeVisible();
 
     // Decrypt proof: the UI answer round-tripped — the friend's send is now submitted in the vault.
@@ -10652,7 +10687,8 @@ test('home Questionnaires section (59): stats + a needs-you row + no overflow at
     await w.getByRole('link', { name: /Inbox/ }).click();
     await w.getByRole('button', { name: /^Weekly check-in/ }).click();
     await w.getByLabel('How are we doing?').fill('Doing great');
-    await w.getByRole('button', { name: 'Submit' }).click();
+    await w.getByRole('button', { name: 'Review & send' }).click();
+    await w.getByRole('button', { name: 'Send answers' }).click();
     await expect(w.getByText('Submitted')).toBeVisible();
 
     // Home shows the compact Questionnaires bento card (60 §3.6) with the sender's response rate.

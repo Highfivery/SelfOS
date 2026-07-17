@@ -1821,11 +1821,27 @@ export const AssignmentSchema = z.object({
 });
 export type Assignment = z.infer<typeof AssignmentSchema>;
 
+/**
+ * A per-question decline (08 §25.2) — the recipient skipped this question. Modeled as a distinct answer
+ * *value* shape so it rides the existing `{ questionId, value }` structure + the relay `submit.answers`
+ * array with no structural change. `reason` is optional (a preset label like "Not clear — needs more
+ * context" / "Prefer not to say", or free text). A whole-questionnaire decline stays a separate concept
+ * (`Assignment.declined` / `RelayResponsePayload kind:'decline'`); this is one question.
+ */
+export const DeclinedAnswerSchema = z.object({
+  declined: z.literal(true),
+  reason: z.string().optional(),
+});
+export type DeclinedAnswer = z.infer<typeof DeclinedAnswerSchema>;
+
 export const AnswerSchema = z.object({
   questionId: z.string().min(1),
   // The persisted answer value. The `Record<string, number>` arm carries matrix (row → point) and
   // allocation (option → amount) answers — matching the live `AnswerValue` the answering renderer emits.
+  // The `DeclinedAnswer` arm (first, so it's matched before the record arm) is a per-question skip (§25.2);
+  // it's additive, so a pre-25 response still parses (no schemaVersion bump).
   value: z.union([
+    DeclinedAnswerSchema,
     z.string(),
     z.number(),
     z.boolean(),
@@ -2608,7 +2624,11 @@ export interface InboxAssignmentDetail {
 /** One question + its answer rendered as display text, for the sender's Standard-send Results (§3.7). */
 export interface SendAnswer {
   prompt: string;
-  answer: string; // formatted for display; '' when unanswered
+  answer: string; // formatted for display; '' when unanswered; "Skipped — <reason>" when declined (§25.2)
+  // A per-question decline (08 §25) — set so Results can render a distinct "Skipped" chip + reason, rather
+  // than an empty "—". `declineReason` is a preset label or free text; absent when the recipient gave none.
+  declined?: boolean;
+  declineReason?: string;
 }
 
 /** One point on a per-question trend line: a numeric answer at a submission time. */
@@ -2654,6 +2674,12 @@ interface QuestionAggregateBase {
   prompt: string;
   /** How many STANDARD sends answered this question (private sends are excluded from the aggregate, §21.5). */
   responseCount: number;
+  /** How many STANDARD sends SKIPPED this question with a per-question decline (08 §25.5) — question-quality
+   * feedback the author sees, distinct from an unanswered blank. Standard-only, like the rest of the aggregate. */
+  skipped: number;
+  /** Of the skips, how many chose the "Not clear — needs more context" reason (§25.2) — the strongest signal
+   * that the QUESTION needs rewording, not the person. */
+  unclear: number;
 }
 // A proper discriminated union (each member carries the base fields) so `Extract`/switch narrowing works.
 export type QuestionAggregate =

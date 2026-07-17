@@ -3491,3 +3491,168 @@ the model splits the difference. Fix (within the UNCHANGED consensual-adult / in
 The live-model intensity verification (does the frankest tier now read genuinely extreme) needs a real API key
 and is an on-device DoD item (§22.3) — the offline fake returns canned output, so the unit tests assert the
 prompt ASSEMBLY (the extreme directive + the governing override reach the model), not the model's output.
+
+## 25. 2026-07-17 amendment — the whole-area redesign: unlocked answering + per-question skip/decline + self-contained questions
+
+A user-driven redesign of the **read-and-answer** half of questionnaires, after three concrete frictions hit while
+answering: (a) a generated question referenced _"that health worry"_ with no context the recipient ever saw; (b) you
+couldn't see all the questions or move past one without answering it; (c) there was no way to decline a single
+question (or say a question is unclear). Scope, chosen by the user: the **whole questionnaires area** — but sequenced
+so the recipient **answering experience** (where all three frictions live) leads, then Results, builder, and a
+broader landing pass.
+
+An interactive mockup of the redesigned answering flow (real SelfOS tokens) was built and **approved as the visual
+contract** before any redesign code (2026-07-17).
+
+### 25.1 Decisions (locked with the user, 2026-07-17)
+
+1. **Unlock the wizard.** Keep the modern one-question-at-a-time flow, but (a) drop the hard "a required question
+   blocks Next" gate — you can move past any question — and (b) add a **question navigator** (state-chips) plus a
+   **"See all questions"** overview (full prompts, jump to any question in any order). No separate all-at-once form.
+2. **One skip mechanism with an optional reason.** A single per-question _"Skip this — I can't or don't want to
+   answer"_ → a reason picker with presets **"Not clear — needs more context"** (this IS the unclear/needs-more-info
+   flag), **"Prefer not to say"**, **"Doesn't apply to me"**, plus free text. Decline + unclear are one control.
+3. **Required = answer OR explicitly decline.** A question the author marked required must be **answered or
+   skipped-with-a-reason** before submit (reason still optional). "Required" becomes "must engage," not "must
+   answer." Submit is gated until every required question is answered-or-declined.
+4. **Redesign the whole area** (answering → Results → builder → landing), sequenced backend-first then answering, so
+   the mechanic is fully modeled + tested before the UX lands, and each UI surface gets its own mockup before build.
+
+The root-cause fix for the dangling reference (generation must produce **self-contained** questions) and the routing
+of the skip/"unclear" signal end-to-end are treated as obvious ("do the smart thing"), not asked.
+
+### 25.2 The data model — a decline is an answer _value_ shape (additive, no schemaVersion bump)
+
+A per-question decline rides through the **existing** `{ questionId, value }` `Answer` structure and the relay
+`submit.answers` array with **no structural change** — only an additive union arm:
+
+```ts
+// schemas.ts — AnswerSchema.value gains one arm; AnswerValue (answering.ts) gains DeclinedAnswer.
+DeclinedAnswer = { declined: true; reason?: string }        // reason: a preset label or free text, optional
+```
+
+- A declined question's persisted answer is `{ questionId, value: { declined: true, reason? } }`. Existing values
+  (string/number/…/matrix/roster) still match their arms; a pre-25 response parses unchanged → **no schemaVersion
+  bump** (mirrors the additive precedents: `submittedAt`/`revision` optional).
+- The **whole-questionnaire** decline (`RelayResponsePayload kind:'decline'`, `Assignment.declined`) is UNCHANGED —
+  it means "I decline the entire questionnaire." Per-question declines are ordinary answers inside a `submit`.
+- `SendAnswer` (Results row) gains additive-optional `declined?`/`declineReason?` so a permitted reader renders a
+  "Skipped — <reason>" chip instead of "—".
+
+### 25.3 Core answering logic (`packages/core/src/questionnaires/answering.ts`)
+
+- `isDeclined(value): value is DeclinedAnswer` — object, not array, `declined === true`. A matrix/allocation
+  `Record<string, number>` has no `declined` key → false.
+- `isAnswered(q, value)` — guards `isDeclined` at the top (a decline is **not** a usable answer).
+- `isQuestionVisible` — a branch trigger whose answer is a decline never satisfies a branch (an object `!== equals`),
+  so a declined trigger correctly hides its follow-ups.
+- `visibleAnswers` — keeps declined entries for visible questions (they carry meaning), drops branch-orphans as before.
+- **`unansweredRequired`** — a **declined** value now SATISFIES a required question (required = answered ∨ declined),
+  so it filters `q.required && !isAnswered(q, v) && !isDeclined(v)`. This is the shared submit gate; onboarding intake
+  never produces declines, so its behaviour is unchanged.
+- `formatAnswerForDisplay` / `formatResponseAnswers` — a decline renders `Skipped — <reason>` (or `Skipped`), and
+  `SendAnswer.declined`/`declineReason` are set so Results can render a chip.
+
+### 25.4 Self-contained generation (the "that health worry" root cause)
+
+Generation is _told_ to weave the recipient's private context (e.g. `healthNotes`) in but **never recite it** (§24,
+`aiPrompts` "steer clear, NOT mention") — yet the model sometimes emits a prompt that presupposes shared context
+("that health worry you mentioned") with nothing on the question to resolve it. Fix at the source:
+
+- `GENERATION_SYSTEM` gains a **self-contained rule**: every question must stand entirely on its own — never
+  reference "that/the X you mentioned", a prior answer, or unshared context; if grounding is needed, state it plainly
+  inside the prompt. (The de-dup "don't re-ask known data" rule is unchanged and still forbids reciting private data.)
+- A light post-generation **validation** flags a prompt containing dangling-reference patterns
+  (`/\b(that|the)\b .* (you|your) (mentioned|said|told|described|noted)\b/i` and similar) so it can be regenerated /
+  dropped rather than shipped. Kept conservative (a real self-contained "the thing that weighs on you" must pass).
+
+### 25.5 The skip / "unclear" signal, end-to-end (the "smart system")
+
+The per-question decline + reason flows to every consumer (each made robust in the backend slice; surfaced in the UI
+slices):
+
+- **AI analysis** (`analyzeAssignment`) — a declined answer is **excluded** from the person's insight (it carries no
+  answer content; an "unclear" is feedback about the _question_, a "prefer not to say" is a boundary — neither should
+  become an inferred fact). Declines never corrupt `metrics`.
+- **Sender Results** — surface a per-question **skipped / "found this unclear"** count so the author can fix or
+  re-ask. The counts are **Standard-only** (the at-a-glance aggregate excludes Private sends entirely, §21.5 — a
+  Private send's skip stays private, like its answers), and a Standard send's raw skip reason shows per-recipient as
+  a "Skipped" chip. A fully-skipped question still surfaces (so the reword nudge shows even with zero real answers).
+- **Aggregate + trends** — declines are excluded from distributions/averages (robustness), with an additive
+  per-question skipped/unclear count for the Results surface.
+- **Auto check-ins (63)** — a question flagged "Not clear" feeds the de-dup/learning bundle so the stream stops
+  re-asking a pattern people can't parse.
+- **Your Story (64)** — the raw-answers corpus (`gatherRecipientPriorAnswers`) omits declines (no answer to draw on).
+- **Together (58)** — consumes only the distilled compatibility alignment, so it's insulated.
+
+### 25.6 Build slices (after approval)
+
+1. **Backend/core spine** — the `DeclinedAnswer` value arm + `answering.ts` helpers (`isDeclined`, `unansweredRequired`
+   = answered-or-declined, display) + self-contained generation rule + validation + every consumer made
+   decline-robust (analysis excludes, aggregate/trends exclude, `SendAnswer` carries it). Core + unit tests. No new
+   surface (the UI that _produces_ declines is slice 2).
+2. **Answering UX** — the redesigned `QuestionnaireForm` (the approved mockup): navigator + "See all questions" +
+   free navigation (no required-blocks-Next) + per-question skip-with-reason + review-and-submit gating + polish,
+   in the in-app Inbox AND the external relay page. E2E drives the produce→consume loop (decline a question →
+   submit → decrypt → analysis/Results reflect it).
+3. **Sender Results** — a first-class home for the skip/unclear signals (per-question skipped/unclear counts + an
+   "improve this question" affordance), respecting the Private boundary.
+4. **Builder** — authoring polish + the self-contained-question affordance + preview.
+5. **Landing** — broader polish beyond the §25 card-alignment fix (sequenced LAST — a concurrent
+   `feat/questionnaires-tabs-nav` change touches the landing; avoid stepping on it).
+
+**Build status (2026-07-17, `feat/questionnaire-answering-redesign`):** slices **1 + 2 + 3 + 4 BUILT** (all four
+squashed into one commit rebased onto latest `main`; PR #241). Slice **5 (broader Landing) — DELIVERED, not
+deferred:** the reported card-alignment issue shipped as **PR #235** (§25.7), and the broad landing redesign
+landed via the **mockup-approved `feat/questionnaires-tabs-nav`** (now merged) — the two stacked collapsible
+sections became a **three-tab surface** (Sent · Received · Auto check-ins, §3.1) with a nav badge, a spaced
+toolbar, and status-grouped cards. This redesign rebased cleanly onto that (it touches the answering form /
+builder / Results, never the landing route `Questionnaires.tsx`), and real-Electron visual QA of the composed
+landing reads clean + cohesive with the redesigned answering flow. A further speculative density pass on the
+cards would **regress** the just-built alignment reserve (`.cardTitleButton min-height: 2.6em` is deliberate, so
+pills/meta/CTA line up across a row — not waste), so the landing is genuinely complete: every concrete ask (card
+spacing, sleek/modern surface) is met by the combination.
+
+- **Slice 1 (backend spine)** — `DeclinedAnswer` value arm (additive, no `schemaVersion` bump) + `answering.ts`
+  (`isDeclined`, `unansweredRequired` = answered∨declined, display) + self-contained generation rule +
+  `hasDanglingReference` backstop; analysis/alignment/context-only distillation exclude declines, aggregate/trends
+  exclude them, `recipientHistory` omits them. code-reviewer fix-first (the `distillContextOnly` decline leak +
+  the alignment branch-orphan filter). 1448 core + 203 coreBridge + 187 desktop-questionnaire tests.
+- **Slice 2 (answering UX)** — the redesigned `QuestionnaireForm` wizard: a **navigator** (state chips + a "See all
+  questions" overview, jump to any), **free navigation** (no required-blocks-Next), **per-question skip-with-reason**
+  ("Skip this" → preset chips incl. "Not clear — needs more context" + free text → a `{declined:true, reason}` value;
+  an "Answer it instead" undo), and a **Review** step that gates Send until every required question is answered OR
+  skipped (§25.3). It's **host-contract-preserving** — the decline rides as an `AnswerValue`, so the in-app Inbox AND
+  the relay page light up with **no host or relay change** (the whole-questionnaire decline `onDecline` is distinct
+  and unchanged). Serif prompts (`--font-serif`, Georgia fallback on the relay); `--color-warning`/`--color-success`
+  added to the relay tokens for the answered/skipped tones (subtle bgs via `color-mix`). Verified: 29 QuestionnaireForm
+  - 14 Inbox + 12 relay + 1280 desktop unit; an inbox E2E drives the full skip loop through the real UI → decrypt
+    asserts the persisted `{declined:true, reason}` + the 360px overflow guard + the "See all" overview; real-Electron
+    visual QA of the question / see-all / reason-picker / skipped / review screens (matches the approved mockup).
+- **Slice 3 (Sender Results)** — the skip signal surfaces to the author. The at-a-glance aggregate gains
+  additive `skipped`/`unclear` counts per question (`UNCLEAR_SKIP_REASON` is the canonical preset in core, shared by
+  the form's picker + the count so they can't drift), **Standard-only** (§21.5). Each `AtAGlance` question card shows
+  an amber **"N found it unclear · M skipped · consider rewording it"** callout (a fully-skipped question still
+  surfaces so the nudge shows with zero real answers); the per-recipient raw-answer list renders a skip as a distinct
+  **"Skipped" chip + reason** (via the now-shared `AnswerList`, DRYing the old inline markup). Verified: +aggregate
+  skip/unclear counting + everyone-skipped cases, +Results RTL (the unclear callout + the skip chip), and the Standard
+  Results E2E extended to skip a question through the real UI → the "found it unclear" callout + the "Skipped" chip;
+  real-Electron visual QA.
+- **Slice 4 (Builder)** — a self-contained-question **authoring guardrail** (§25.4): when a question prompt makes
+  a dangling back-reference (`hasDanglingReference` — "…you mentioned", "your earlier answer"), a quiet amber note
+  under the prompt reminds the author the recipient only sees this question, so name what you mean plainly. Closes
+  the "that health worry" loop from the authoring side (complementing the generation-time rule). +a builder RTL
+  (the warning appears on a dangling prompt, clears on a self-contained rewrite).
+- **Slice 5 (broader Landing) — DELIVERED** (see the build-status note): the card-alignment fix shipped as PR #235
+  (§25.7) and the broad landing redesign landed via the mockup-approved `feat/questionnaires-tabs-nav` (merged) —
+  the three-tab surface (§3.1). This redesign rebased cleanly onto it (it never touches the landing route), so the
+  landing is complete; a further density pass would regress the just-built card alignment reserve.
+
+### 25.7 The landing card-alignment fix (shipped first, `fix/questionnaire-card-alignment`)
+
+A discrete, separately-shipped refinement of the two-section card grid (§3.1/§3.3): the Received/Sent cards
+misaligned — a long sender line wrapped and shoved the title down, and a 1-line vs 2-line title left the status
+pills, timing meta, and CTA at different heights. Fix: single-line sender row (name ellipsizes) clustered under the
+category eyebrow; the title clamped to + reserving 2 lines so titles line up across a row; the status pill + timing
+meta grouped tightly; the Received CTA bottom-pinned. Renderer-only (`Questionnaires.module.css` + `ReceivedCard`),
+verified by the redesign E2E (360px overflow guard) + a token-accurate visual QA.

@@ -2,6 +2,7 @@ import {
   matrixRowKey,
   matrixRowLabel,
   type Answer,
+  type DeclinedAnswer,
   type Question,
   type SendAnswer,
 } from '../schemas';
@@ -29,8 +30,37 @@ export type AnswerValue =
   | string[]
   | Record<string, number>
   | DateEntryValue[]
-  | RosterRow[];
+  | RosterRow[]
+  | DeclinedAnswer;
 export type AnswerMap = Record<string, AnswerValue>;
+
+/**
+ * The preset skip reasons offered when a recipient can't/won't answer a question (08 §25.2). The FIRST —
+ * the "unclear" flag — doubles as the strongest question-quality signal (the author should reword it); free
+ * text is always also available. Defined here (core) so the answering form's picker AND the Results
+ * aggregate's `unclear` count reference the same canonical strings and can't drift.
+ */
+export const UNCLEAR_SKIP_REASON = 'Not clear — needs more context';
+export const SKIP_REASON_PRESETS = [
+  UNCLEAR_SKIP_REASON,
+  'Prefer not to say',
+  'Doesn’t apply to me',
+] as const;
+
+/**
+ * Whether a value is a per-question decline (08 §25.2) — the recipient skipped this question (optionally
+ * with a reason). It's an object with `declined === true`; a matrix/allocation `Record<string, number>`
+ * has no `declined` key, so this is unambiguous. A declined value is NOT a usable answer (`isAnswered`
+ * returns false for it) but DOES satisfy a required question (§25.3, `unansweredRequired`).
+ */
+export function isDeclined(value: AnswerValue | undefined): value is DeclinedAnswer {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    (value as { declined?: unknown }).declined === true
+  );
+}
 
 /** Whether a value is a `dateList` answer (an array of {label, date} entries, not a string list). */
 export function isDateEntryList(value: AnswerValue | undefined): value is DateEntryValue[] {
@@ -131,9 +161,11 @@ export function responseSizeGuard(payload: unknown): ResponseSizeCheck {
   return { ok: estimatedBytes <= MAX_RESPONSE_BYTES, estimatedBytes, maxBytes: MAX_RESPONSE_BYTES };
 }
 
-/** Whether a question has a usable answer for its type (an allocation must total exactly 100). */
+/** Whether a question has a usable answer for its type (an allocation must total exactly 100). A
+ * per-question decline (§25.2) is NOT a usable answer — it's a skip, so guard it before the type switch
+ * (a decline is an object, which would otherwise reach the matrix/allocation arms). */
 export function isAnswered(question: Question, value: AnswerValue | undefined): boolean {
-  if (value === undefined) return false;
+  if (value === undefined || isDeclined(value)) return false;
   switch (question.type) {
     case 'shortText':
     case 'longText':
@@ -182,10 +214,15 @@ export function isAnswered(question: Question, value: AnswerValue | undefined): 
   }
 }
 
-/** Visible, required questions that don't yet have a usable answer (gates a test-on-self "Finish"). */
+/**
+ * Visible, required questions still outstanding — the shared submit gate. A required question is satisfied
+ * by a usable answer OR an explicit per-question decline (08 §25.3: required = answered ∨ declined), so a
+ * skipped-with-a-reason required question no longer blocks submit. Onboarding intake never produces
+ * declines, so its behaviour is unchanged.
+ */
 export function unansweredRequired(questions: Question[], answers: AnswerMap): Question[] {
   return visibleQuestions(questions, answers).filter(
-    (q) => q.required && !isAnswered(q, answers[q.id]),
+    (q) => q.required && !isAnswered(q, answers[q.id]) && !isDeclined(answers[q.id]),
   );
 }
 
@@ -196,6 +233,8 @@ export function unansweredRequired(questions: Question[], answers: AnswerMap): Q
  */
 export function formatAnswerForDisplay(question: Question, value: AnswerValue | undefined): string {
   if (value === undefined) return '';
+  // A per-question decline (§25.2) → a "Skipped" line (with the reason when given), not an empty "—".
+  if (isDeclined(value)) return value.reason ? `Skipped — ${value.reason}` : 'Skipped';
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '';
   if (typeof value === 'string') return value.trim();
@@ -246,8 +285,14 @@ export function formatAnswerForDisplay(question: Question, value: AnswerValue | 
  */
 export function formatResponseAnswers(questions: Question[], answers: Answer[]): SendAnswer[] {
   const byId = new Map(answers.map((a) => [a.questionId, a.value]));
-  return questions.map((q) => ({
-    prompt: q.prompt,
-    answer: formatAnswerForDisplay(q, byId.get(q.id) as AnswerValue | undefined),
-  }));
+  return questions.map((q) => {
+    const value = byId.get(q.id) as AnswerValue | undefined;
+    const row: SendAnswer = { prompt: q.prompt, answer: formatAnswerForDisplay(q, value) };
+    // Carry the decline so Results renders a "Skipped" chip + reason (§25.2) rather than a bare "—".
+    if (isDeclined(value)) {
+      row.declined = true;
+      if (value.reason !== undefined) row.declineReason = value.reason;
+    }
+    return row;
+  });
 }

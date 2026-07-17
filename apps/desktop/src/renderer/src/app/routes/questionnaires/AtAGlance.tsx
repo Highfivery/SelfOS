@@ -121,12 +121,40 @@ function Body({ q }: { q: QuestionAggregate }): JSX.Element {
   }
 }
 
+/**
+ * The skip / "found it unclear" signal for a question (08 §25.5) — question-quality feedback the author
+ * acts on, distinct from an unanswered blank. When people flagged it "Not clear", nudge a reword. Counts
+ * only; a skip's free-text reason is a Standard send's raw answer, shown per-recipient below, never here.
+ */
+function SkipNote({ q }: { q: QuestionAggregate }): JSX.Element | null {
+  if (q.skipped === 0) return null;
+  const skipped = `${q.skipped} skipped`;
+  return (
+    <div className={styles.glanceSkip}>
+      <Text size="sm" tone="secondary">
+        {q.unclear > 0 ? (
+          <>
+            <strong className={styles.glanceUnclear}>
+              {q.unclear} found {q.unclear === 1 ? 'it' : 'this'} unclear
+            </strong>{' '}
+            · {skipped} · consider rewording it
+          </>
+        ) : (
+          skipped
+        )}
+      </Text>
+    </div>
+  );
+}
+
 function QuestionCard({ q }: { q: QuestionAggregate }): JSX.Element {
   return (
     <Card>
       <Stack gap={2}>
         <Text weight={500}>{q.prompt}</Text>
-        <Body q={q} />
+        {/* When everyone skipped it there's no distribution to show — the skip note carries the meaning. */}
+        {q.responseCount > 0 ? <Body q={q} /> : null}
+        <SkipNote q={q} />
       </Stack>
     </Card>
   );

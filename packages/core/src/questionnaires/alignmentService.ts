@@ -25,7 +25,13 @@ import {
 } from './aiPrompts';
 import { aboutFromRecipient, type InsightAbout } from './aboutResolver';
 import { extractJsonObject } from './analysisService';
-import { formatAnswerForDisplay } from './answering';
+import {
+  formatAnswerForDisplay,
+  isDeclined,
+  visibleQuestions,
+  type AnswerMap,
+  type AnswerValue,
+} from './answering';
 import { getAssignmentSnapshot, listAssignments } from './assignmentService';
 import { alignmentReportPath, compatDir } from './paths';
 import { runClaude, type AiDeps } from './generationService';
@@ -135,11 +141,17 @@ export async function generateAlignment(
   for (const [canonicalId, aq] of aByCanon) {
     const bq = bByCanon.get(canonicalId);
     if (!bq) continue;
+    const aVal = aAnswer.get(aq.id);
+    const bVal = bAnswer.get(bq.id);
+    // If EITHER participant skipped this question (§25.5), it can't be compared — treat it like a
+    // question one side never answered (skip the item), so a "Skipped" never aligns against a real answer
+    // and a skip reason never reaches the alignment model.
+    if (isDeclined(aVal) || isDeclined(bVal)) continue;
     aligned.push({
       canonicalId,
       prompt: aq.prompt,
-      a: formatAnswerForDisplay(aq, aAnswer.get(aq.id)),
-      b: formatAnswerForDisplay(bq, bAnswer.get(bq.id)),
+      a: formatAnswerForDisplay(aq, aVal),
+      b: formatAnswerForDisplay(bq, bVal),
     });
   }
   if (aligned.length === 0) {
@@ -282,10 +294,18 @@ export async function distillContextOnly(
   for (const { subjectPersonId, snapshot, response } of ready) {
     // Distill from THIS participant's own answers only — never the other's (no cross-exposure).
     const byId = new Map(snapshot.questions.map((q) => [q.id, q]));
-    const qa = response.answers.flatMap((a) => {
-      const q = byId.get(a.questionId);
-      return q ? [{ prompt: q.prompt, answer: formatAnswerForDisplay(q, a.value) }] : [];
-    });
+    const answerMap: AnswerMap = Object.fromEntries(
+      response.answers.map((a) => [a.questionId, a.value as AnswerValue]),
+    );
+    const visibleIds = new Set(visibleQuestions(snapshot.questions, answerMap).map((q) => q.id));
+    // Exclude branch-orphans (a cleared trigger, §47) AND per-question declines (§25.5): a skip's prompt +
+    // reason must never reach the model nor become an auto-approved own-context fact (mirrors analyzeAssignment).
+    const qa = response.answers
+      .filter((a) => visibleIds.has(a.questionId) && !isDeclined(a.value as AnswerValue))
+      .flatMap((a) => {
+        const q = byId.get(a.questionId);
+        return q ? [{ prompt: q.prompt, answer: formatAnswerForDisplay(q, a.value) }] : [];
+      });
 
     const call = await runClaude(
       deps,

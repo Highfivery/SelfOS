@@ -118,4 +118,79 @@ describe('buildQuestionnaireAggregate (08 §21.5 — private excluded ENTIRELY)'
     const agg = buildQuestionnaireAggregate([send('standard', [question], [])]);
     expect(agg.questions).toEqual([]);
   });
+
+  it('a per-question decline is transparent — not a response, not in any distribution (§25.5)', () => {
+    const question = q({ id: 'c', type: 'singleChoice', prompt: 'Pick', options: ['A', 'B'] });
+    const agg = buildQuestionnaireAggregate([
+      send('standard', [question], [{ questionId: 'c', value: 'A' }]),
+      // A standard send that SKIPPED this question — it must not count as a response nor bump a bucket.
+      send('standard', [question], [{ questionId: 'c', value: { declined: true, reason: 'x' } }]),
+    ]);
+    const a = agg.questions[0];
+    expect(a?.responseCount).toBe(1); // only the real 'A' answer — the decline is not a response
+    if (a?.kind === 'distribution') {
+      expect(a.options).toEqual([
+        { label: 'A', count: 1 },
+        { label: 'B', count: 0 },
+      ]);
+    }
+  });
+
+  it('a numeric average ignores a declined answer (§25.5)', () => {
+    const question = q({ id: 'r', type: 'rating', prompt: 'How?', scale: { min: 1, max: 5 } });
+    const agg = buildQuestionnaireAggregate([
+      send('standard', [question], [{ questionId: 'r', value: 4 }]),
+      send('standard', [question], [{ questionId: 'r', value: { declined: true } }]),
+    ]);
+    const a = agg.questions[0];
+    expect(a?.kind).toBe('average');
+    if (a?.kind === 'average') {
+      expect(a.average).toBe(4); // the decline pulls nothing toward a lower average
+      expect(a.responseCount).toBe(1);
+    }
+  });
+
+  it('counts skips + how many flagged "Not clear" per question (§25.5)', () => {
+    const question = q({ id: 'r', type: 'rating', prompt: 'How?', scale: { min: 1, max: 5 } });
+    const agg = buildQuestionnaireAggregate([
+      send('standard', [question], [{ questionId: 'r', value: 4 }]),
+      send(
+        'standard',
+        [question],
+        [{ questionId: 'r', value: { declined: true, reason: 'Not clear — needs more context' } }],
+      ),
+      send(
+        'standard',
+        [question],
+        [{ questionId: 'r', value: { declined: true, reason: 'Prefer not to say' } }],
+      ),
+      // A PRIVATE send's skip is excluded from the aggregate entirely (§21.5) — counts stay Standard-only.
+      send(
+        'private',
+        [question],
+        [{ questionId: 'r', value: { declined: true, reason: 'Not clear — needs more context' } }],
+      ),
+    ]);
+    const a = agg.questions[0];
+    expect(a?.responseCount).toBe(1); // one real answer
+    expect(a?.skipped).toBe(2); // two Standard skips (the private one is excluded)
+    expect(a?.unclear).toBe(1); // one of them flagged "Not clear"
+  });
+
+  it('surfaces a question EVERYONE skipped (responseCount 0, skipped > 0 — §25.5)', () => {
+    const question = q({ id: 'r', type: 'shortText', prompt: 'The hard one?' });
+    const agg = buildQuestionnaireAggregate([
+      send(
+        'standard',
+        [question],
+        [{ questionId: 'r', value: { declined: true, reason: 'Not clear — needs more context' } }],
+      ),
+    ]);
+    // It still appears (so the author sees the reword nudge) even with zero real answers.
+    const a = agg.questions[0];
+    expect(a?.questionId).toBe('r');
+    expect(a?.responseCount).toBe(0);
+    expect(a?.skipped).toBe(1);
+    expect(a?.unclear).toBe(1);
+  });
 });

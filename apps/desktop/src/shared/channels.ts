@@ -1172,7 +1172,6 @@ export interface SelfosBridge {
   storyGenerateImage(input: {
     bookId: string;
     target: { kind: 'cover' } | { kind: 'illustration'; chapterId: string };
-    style?: string;
   }): Promise<StoryImageResult>;
   /** Decrypt one image's bytes (base64) for display; null if absent. Gated `story.own`. */
   storyGetImage(input: {
@@ -1610,7 +1609,7 @@ export interface SelfosBridge {
    * Distills a name-free prompt via Claude, renders it via OpenAI, and stores the encrypted bytes; the
    * OpenAI key is read host-side and never crosses to the renderer. Requires `dreams.generateImage`.
    */
-  dreamGenerateImage(input: { dreamId: string; style?: string }): Promise<DreamImageResult>;
+  dreamGenerateImage(input: { dreamId: string }): Promise<DreamImageResult>;
   /** The active dreamer's stored dream image as base64 for an `<img>` data URL; null if none. Requires `dreams.generateImage`. */
   dreamGetImage(input: { dreamId: string }): Promise<{ mime: string; dataBase64: string } | null>;
   /** Delete a dream's image (removes the bytes + clears the descriptor). Requires `dreams.generateImage`. */

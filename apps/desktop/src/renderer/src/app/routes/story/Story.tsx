@@ -22,7 +22,6 @@ import { useStoryRefresh } from '../../notifications/useStoryRefresh';
 import { useStoryInterview } from '../../notifications/useStoryInterview';
 import { useSetting } from '../../../settings/useSetting';
 import { aiKeyResolved } from '../../aiAvailability';
-import { DEFAULT_IMAGE_STYLE, IMAGE_STYLE_PRESETS } from '../dreams/imageStyles';
 import { downscaleImage } from '../sessions/downscaleImage';
 import { AdminOnlyBadge } from '../../../design-system/components';
 import type {
@@ -506,12 +505,10 @@ function CoverPanel({
   const canManageAi = useSessionStore((s) => s.can('settings.manage'));
   const [consent] = useSetting('dreams.imageGenerationEnabled');
   const [aiEnabled] = useSetting('ai.enabled');
-  const [defaultStyle] = useSetting('dreams.imageStyle');
   const generateImage = useStoryStore((s) => s.generateImage);
   const getImageUrl = useStoryStore((s) => s.getImageUrl);
   const deleteImage = useStoryStore((s) => s.deleteImage);
 
-  const [style, setStyle] = useState<string>('');
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [hasKey, setHasKey] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -533,13 +530,12 @@ function CoverPanel({
   }, [bookId, coverImageId, getImageUrl]);
 
   const ready = consent === true && aiEnabled !== false && hasKey;
-  const chosenStyle =
-    style || (typeof defaultStyle === 'string' && defaultStyle) || DEFAULT_IMAGE_STYLE;
 
   const create = async (): Promise<void> => {
     setBusy(true);
     setError(null);
-    const res = await generateImage(bookId, { kind: 'cover' }, chosenStyle);
+    // No per-image style — every image uses the single global style (Settings → Images, §3.8).
+    const res = await generateImage(bookId, { kind: 'cover' });
     if (res.ok) {
       const url = await getImageUrl(bookId, res.image.id);
       setCoverUrl(url);
@@ -564,22 +560,6 @@ function CoverPanel({
         )}
         {ready ? (
           <Stack gap={2}>
-            <Field label="Style">
-              {(p) => (
-                <Select {...p} value={style} onChange={(e) => setStyle(e.target.value)}>
-                  <option value="">Default ({chosenStyle})</option>
-                  {IMAGE_STYLE_PRESETS.map((group) => (
-                    <optgroup key={group.label} label={group.label}>
-                      {group.options.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                </Select>
-              )}
-            </Field>
             <Inline>
               <Button disabled={busy} onClick={create}>
                 {busy ? 'Creating…' : coverUrl ? 'Regenerate cover' : 'Create a cover'}
@@ -621,7 +601,7 @@ function CoverPanel({
         ) : loading ? null : (
           <Text tone="secondary" size="sm">
             {canManageAi
-              ? 'Turn on AI image generation and add your OpenAI key in Settings → Dreams to create a cover.'
+              ? 'Turn on AI image generation and add your OpenAI key in Settings → Images to create a cover.'
               : 'Ask the person who set up this household to turn on AI image generation.'}
           </Text>
         )}
@@ -1738,6 +1718,13 @@ function ChapterReader({
   const [imageBusy, setImageBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Image-generation setup (§3.8) — the SAME gate as the cover panel, so the "Illustrate this chapter" button
+  // is never a dead control. Errors surface IN the Images card (below), not at the top of the reader.
+  const canManageAi = useSessionStore((s) => s.can('settings.manage'));
+  const [imageConsent] = useSetting('dreams.imageGenerationEnabled');
+  const [aiEnabled] = useSetting('ai.enabled');
+  const [hasImageKey, setHasImageKey] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [openSources, setOpenSources] = useState<number | null>(null);
   const [activePara, setActivePara] = useState<number | null>(null);
   const [activeQuote, setActiveQuote] = useState<string | null>(null);
@@ -1765,6 +1752,12 @@ function ChapterReader({
     void loadImages(bookId);
   }, [bookId, loadImages]);
 
+  useEffect(() => {
+    void (async () => setHasImageKey(Boolean(await aiKeyResolved('openai'))))();
+  }, [bookId]);
+
+  const imagesReady = imageConsent === true && aiEnabled !== false && hasImageKey;
+
   // Resolve data URLs for every image placed in THIS chapter.
   useEffect(() => {
     for (const p of chapter.imagePlacements) {
@@ -1789,10 +1782,11 @@ function ChapterReader({
 
   const illustrate = async (): Promise<void> => {
     setImageBusy(true);
-    setError(null);
+    setImageError(null);
+    // No per-image style — every image uses the single global style (Settings → Images, §3.8).
     const res = await generateImage(bookId, { kind: 'illustration', chapterId });
     if (res.ok) await placeImage(res.image.id);
-    else setError(res.message);
+    else setImageError(res.message);
     setImageBusy(false);
   };
 
@@ -2303,10 +2297,13 @@ function ChapterReader({
       <Card>
         <Stack gap={2}>
           <Heading level={3}>Images</Heading>
+          {imageError ? <Banner tone="danger">{imageError}</Banner> : null}
           <Inline gap={2}>
-            <Button variant="ghost" disabled={imageBusy} onClick={() => void illustrate()}>
-              {imageBusy ? 'Working…' : 'Illustrate this chapter'}
-            </Button>
+            {imagesReady ? (
+              <Button variant="ghost" disabled={imageBusy} onClick={() => void illustrate()}>
+                {imageBusy ? 'Working…' : 'Illustrate this chapter'}
+              </Button>
+            ) : null}
             {placeable.length > 0 ? (
               <Select
                 aria-label="Add an image to this chapter"
@@ -2325,6 +2322,13 @@ function ChapterReader({
               </Select>
             ) : null}
           </Inline>
+          {!imagesReady ? (
+            <Text tone="secondary" size="sm">
+              {canManageAi
+                ? 'Turn on AI image generation and add your OpenAI key in Settings → Images to illustrate this chapter.'
+                : 'Ask the person who set up this household to turn on AI image generation.'}
+            </Text>
+          ) : null}
         </Stack>
       </Card>
 

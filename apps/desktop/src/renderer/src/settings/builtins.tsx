@@ -3,6 +3,7 @@ import {
   ClipboardList,
   Compass,
   Database,
+  Image,
   Info,
   Laptop,
   MessagesSquare,
@@ -12,6 +13,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { registerSection, registerSettings } from './registry';
+import { ImageStyleControl } from './ImageStyleControl';
 import { DevicesControl } from './DevicesControl';
 import { defineSetting } from './types';
 import {
@@ -37,7 +39,7 @@ import {
   RelayMessagesSchema,
   type RelayMessages,
 } from '../app/routes/questionnaires/relayMessages';
-import { DEFAULT_IMAGE_STYLE, IMAGE_STYLE_PRESETS } from '../app/routes/dreams/imageStyles';
+import { DEFAULT_IMAGE_STYLE } from '../app/routes/dreams/imageStyles';
 
 declare module './types' {
   interface SettingsTypeMap {
@@ -133,6 +135,16 @@ export function registerBuiltinSettings(): void {
     description: 'Your dream journal and how it informs your coaching.',
     icon: Moon,
     order: 5,
+    adminOnly: true,
+  });
+  // Images is the single home for AI image generation — one consent switch, one key, and ONE style used by
+  // every image on every page (dream images + your story's cover and illustrations), so they all match.
+  registerSection({
+    id: 'images',
+    title: 'Images',
+    description: 'AI image generation and the single style used for every image across SelfOS.',
+    icon: Image,
+    order: 5.5,
     adminOnly: true,
   });
   registerSection({
@@ -404,19 +416,19 @@ export function registerBuiltinSettings(): void {
     }),
     defineSetting({
       key: 'dreams.imageGenerationEnabled',
-      section: 'dreams',
-      label: 'Generate dream images',
+      section: 'images',
+      label: 'AI image generation',
       description:
-        'When on, you can create an AI image of a dream. Generating sends a description of the dream (never anyone’s name or private notes) to OpenAI, a third party, to draw the picture. Off by default.',
+        'When on, SelfOS can create AI images — dream images and your story’s cover and illustrations. Generating sends a description (never anyone’s name or private notes) to OpenAI, a third party, to draw the picture. Off by default.',
       schema: z.boolean(),
       default: false,
       control: { type: 'switch' },
       scope: 'vault',
-      order: 2,
+      order: 1,
     }),
     defineSetting({
       key: 'dreams.imageModel',
-      section: 'dreams',
+      section: 'images',
       label: 'Image model',
       description: 'Which OpenAI model draws the image.',
       schema: z.enum(['gpt-image-2', 'gpt-image-1']),
@@ -430,27 +442,28 @@ export function registerBuiltinSettings(): void {
       },
       scope: 'vault',
       adminOnly: true,
-      order: 3,
-      visibleWhen: dreamImagesEnabled,
-    }),
-    defineSetting({
-      key: 'dreams.imageStyle',
-      section: 'dreams',
-      label: 'Default image style',
-      description: 'The look used for new dream images. You can override it per image.',
-      schema: z.string().min(1),
-      default: DEFAULT_IMAGE_STYLE,
-      control: { type: 'select', groups: IMAGE_STYLE_PRESETS },
-      scope: 'vault',
       order: 4,
       visibleWhen: dreamImagesEnabled,
     }),
     defineSetting({
-      key: 'dreams.imageStyleNotes',
-      section: 'dreams',
-      label: 'Style notes (optional)',
+      key: 'dreams.imageStyle',
+      section: 'images',
+      label: 'Image style',
       description:
-        'Describe the look in your own words — e.g. “muted earth tones, soft focus, golden-hour light.” Applies to every dream image, on top of the style above. It never adds anyone’s name or private details.',
+        'Pick a preset or choose Custom to enter your own. Used for every AI image across SelfOS.',
+      schema: z.string().min(1),
+      default: DEFAULT_IMAGE_STYLE,
+      control: { type: 'custom', render: ImageStyleControl },
+      scope: 'vault',
+      order: 2,
+      visibleWhen: dreamImagesEnabled,
+    }),
+    defineSetting({
+      key: 'dreams.imageStyleNotes',
+      section: 'images',
+      label: 'Style direction (optional)',
+      description:
+        'Refine the look in your own words — e.g. “muted earth tones, soft focus, golden-hour light.” Applied to every AI image on top of the style above. It never adds anyone’s name or private details.',
       schema: z.string().max(300),
       default: '',
       control: {
@@ -460,12 +473,12 @@ export function registerBuiltinSettings(): void {
         placeholder: 'muted earth tones, soft focus, golden-hour light…',
       },
       scope: 'vault',
-      order: 5,
+      order: 3,
       visibleWhen: dreamImagesEnabled,
     }),
     defineSetting({
       key: 'dreams.imageApiKey',
-      section: 'dreams',
+      section: 'images',
       label: 'OpenAI API key',
       schema: z.null(),
       default: null,
@@ -473,18 +486,18 @@ export function registerBuiltinSettings(): void {
       adminOnly: true,
       // Device-local secret (00 §6.2) — never synced, like the Claude key above.
       scope: 'device',
-      order: 6,
+      order: 5,
       visibleWhen: dreamImagesEnabled,
     }),
     defineSetting({
       key: 'dreams.imageTest',
-      section: 'dreams',
+      section: 'images',
       label: 'OpenAI connection',
       schema: z.null(),
       default: null,
       control: { type: 'custom', render: OpenAiTestConnectionControl },
       scope: 'device',
-      order: 7,
+      order: 6,
       visibleWhen: dreamImagesEnabled,
     }),
     defineSetting({

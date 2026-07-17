@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.35.0](https://github.com/Highfivery/SelfOS/compare/v0.34.0...v0.35.0) (2026-07-17)
+
+
+### Features
+
+* **story:** the begin screens — invitation, commission & the writing (64 §13.3 R7) ([#245](https://github.com/Highfivery/SelfOS/issues/245)) ([85dd926](https://github.com/Highfivery/SelfOS/commit/85dd926baaff3907dc3b65c57a8041592d8ad589))
+
+
+### Bug Fixes
+
+* **questionnaires:** label auto check-in & biographer questionnaires on the Sent card ([#244](https://github.com/Highfivery/SelfOS/issues/244)) ([c4a570f](https://github.com/Highfivery/SelfOS/commit/c4a570f26aca12a1993d21d8400c6b1033a0dab6))
+
 ## [0.34.0](https://github.com/Highfivery/SelfOS/compare/v0.33.0...v0.34.0) (2026-07-17)
 
 

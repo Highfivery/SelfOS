@@ -811,14 +811,32 @@ No open questions remain; the spec is Approved and ready for the Phase A slice (
   a pure `wordDiff` (`@selfos/core/story-diff`); a `ChapterRibbon` (New/Rewritten · What changed [word-diff] ·
   Looks good ✓) on new/updated chapters; a compact "Shape" toggle in the reader bar + a "Shape this chapter ›"
   end-affordance entering the existing markup editor from the reader. The deeper Shape-surface visual restyle
-  (superscript sources, margin-rail marks, the right-hand Review & apply sheet) is a documented R3-polish
-  fast-follow into the R7 sweep. See §13.7 R3 for the full build note + test coverage.
+  (superscript sources, margin-rail marks, the right-hand Review & apply sheet) landed as **R3-polish** (below).
+  See §13.7 R3 for the full build note + test coverage.
 - 2026-07-17 — **§13 R4 (Sharing & export) BUILT** (`feat/story-sharing-export`, PR pending) — read receipts
   end-to-end + draft export + the export dialog. A `StoryReadReceipt` written by the reader on open (re-gated) and
   joined author-side into `BookReader.read` (Read-the-latest / older-version / not-yet-opened) on the Sharing tab;
   person-delete reaps receipts both directions. `buildDraftMarkdown`/`buildDraftHtml` + a `head:'draft'|'published'`
   export param so a never-published book exports its live draft; the two inline export buttons became one
   "Export…" dialog (format + version + vault-boundary line). See §13.7 R4 for the full build note + test coverage.
+- 2026-07-17 — **R3-polish (Shape editing surface, immersive look) BUILT** (`feat/story-shape-r3-polish`, PR
+  pending) — the three deferred visual refinements of the `ChapterReader` markup surface (§13.5), a restyle of the
+  existing/tested machinery with the `applyMarkup` call-count invariant + all markup RTL/E2E green: (1) provenance
+  as **numbered `<sup>` footnotes** (keeps the `aria-label="Sources (N)"` popover trigger); (2) the pending-marks
+  strip in an **absolute right-margin rail beside the ~70% measure at ≥900px** (a `@container` query over a
+  `.shapeBody` inline-size container), stacking under the paragraph below that; (3) the inline apply bar → a
+  **bottom-sticky pending pill** ("N changes ready · 1 cut · 1 comment · 1 to-do …") opening a **right-hand
+  `ReviewSheet`** (grouped Cuts / Comments / For your biographer, each removable from the batch) with
+  **"Apply with your biographer"** (the one metered revision, unchanged). code-reviewer **ship** (the apply-once
+  invariant + `ReviewSheet` type-narrowing + container-query verified against the compiled CSS) — applied the one
+  should-fix (a vestigial `paraBodySourced` class that emitted a stray `undefined` token) + nits (a live-region on
+  the pill so screen readers hear the count change, a scoped `story-shape` container name, and the sheet
+  auto-closes when the batch empties so it's never a dead-end). Gate green: typecheck, lint, format, 1290 desktop
+  unit (+4 Story RTL [superscript-replaces-inline + rail + sheet-groups/removes/applies-once + auto-close], the 4
+  apply-bar RTL re-pointed to the pill/sheet with a `toHaveBeenCalledTimes(1)` apply-once lock), 7 story E2E (the
+  author-spine walk drives the pill → sheet → Apply, asserts the absolute rail at 1440px, and runs the 360px
+  overflow guard with a pending mark on screen). Real-Electron visual QA at desktop + 360px, light + dark. See
+  §13.7 R3-polish for the full note.
 
 ## 13. The Studio & the Book — the 2026-07-17 full-surface redesign (Approved)
 
@@ -1068,11 +1086,8 @@ lastPublishedAtSeen }` (one writer: the reader; additive schema). The author's S
   first-draft-no-toggle + stale-keeps-its-review; the R2 owner-reader RTL/E2E re-pointed to the Shape toggle),
   **7 story E2E** (the author-spine walk now asserts the ribbon + reveals the word-diff after a revision).
   Real-Electron visual QA (the ribbon + the red/green word-diff + the reader-bar Shape toggle read clean +
-  book-like). **DEFERRED to an R3-polish fast-follow** (the Shape editing
-  surface still uses the pre-redesign editor layout — functional + tested, but not yet the immersive
-  margin-based look): numbered **superscript sources**, the **margin-rail marks** at ≥900px, and the right-hand
-  **Review & apply sheet** + bottom-sticky pending pill (restyle of the existing, tested apply bar). These are
-  visual refinements of the working markup surface; folded into the R7 polish sweep.
+  book-like). The immersive margin-based look of the Shape editing surface itself (superscript sources · margin
+  rail · Review & apply sheet) landed as **R3-polish** (below).
 - **R4 — Sharing & export — BUILT** (2026-07-17, `feat/story-sharing-export`, PR pending): **read receipts
   end-to-end + draft export + the export dialog**. **Read receipts (§13.6.8):** a new `StoryReadReceipt` schema
   - core `writeReadReceipt` (the reader writes `people/<readerId>/story/receipts/<bookId>.enc` on open — re-gated
@@ -1099,6 +1114,38 @@ lastPublishedAtSeen }` (one writer: the reader; additive schema). The author's S
     write is now best-effort (`.catch`) so an author-facing convenience can't break the reader's open flow — + the
     a11y nit (autoFocus the export dialog's primary button). A shared `--color-scrim` token to DRY the 3
     Story-local overlays is deferred to the R7 polish sweep.
+- **R3-polish — Shape editing surface, immersive look — BUILT** (2026-07-17, `feat/story-shape-r3-polish`, PR
+  pending): the three deferred visual refinements of the `ChapterReader` markup surface (§13.5), a restyle of the
+  existing, tested machinery — the `applyMarkup` call-count invariant + every markup RTL/E2E stay green; the
+  ribbon + Read⇄Shape toggle (R3b) are untouched. **(1) Numbered superscript sources** — the per-paragraph
+  "Sources (N)" button becomes a footnote-numbered `<sup>` marker trailing the prose (the markdown flows inline so
+  it sits on the last line; a relative offset, not `vertical-align: super`, keeps a real tappable box and doesn't
+  swell the line height); it keeps the `aria-label="Sources (N)"` accessible name, so it still opens the existing
+  "Drawn from … · Don't draw on this again" popover. **(2) Margin-rail marks** — the pending-marks strip
+  (delete/comment/to-do, with Undo/Mark done) moves to an **absolute rail in the right margin beside the ~70%
+  measure on wide containers** (a `@container shape (min-width: 900px)` query over a new `.shapeBody` inline-size
+  container; each `.para` is the positioning context) and stacks under the paragraph below that; the measure fills
+  the width on narrow containers (§12). **(3) Review & apply sheet + bottom-sticky pending pill** — the inline
+  `.applyBar` is replaced by a bottom-sticky pill ("N changes ready · 1 cut · 1 comment · 1 to-do — your inline
+  edits and pins are already in", per-kind counts mirroring `countApplicable`) that opens a **right-hand
+  `ReviewSheet`** (reusing the shared `.sheet*` chrome) — pending marks grouped Cuts / Comments / For your
+  biographer, each with its anchor excerpt + "Remove from this batch" (= the existing mark undo), the
+  "already yours" note for edits/pins, and **"Apply with your biographer"** (the one metered revision, unchanged).
+  code-reviewer **ship** — applied the one should-fix (a vestigial `paraBodySourced` CSS-module reference that
+  emitted a stray `undefined` class token; the inline layout already works via `.inlineProse`) + three nits: an
+  `aria-live="polite"` region on the pill so a screen reader hears the batch count change (restoring the old
+  `.applyBar role="status"` behaviour), a scoped `story-shape` container name (container names aren't
+  CSS-module-scoped), and the sheet **auto-closes when the batch empties** (removing the last mark, or applying)
+  so it's never a lingering empty dead-end. Gate green: typecheck, lint, format, **1290 desktop** unit (the 4
+  apply-bar RTL re-pointed to the pill/sheet flow — `toHaveBeenCalledTimes(1)` locks the apply-once invariant;
+  +4 new Story RTL: the superscript replaces the inline label + opens the popover, a mark renders in the
+  `shape-mark-rail` not under the paragraph, the sheet groups + removes-from-batch + applies once excluding the
+  question comment, and the sheet auto-closes when the last mark is removed), **7 story E2E** (the author-spine
+  walk drives the new flow: the superscript sources popover, the absolute rail asserted at 1440px, the pending
+  pill → sheet → Apply with your biographer, + the 360px overflow guard run **with a pending mark on screen** so
+  the pill + stacked rail are exercised at phone width). Real-Electron visual QA at desktop + 360px, light + dark
+  (superscript ¹ + right-margin rail + centered sticky pill; the right-hand sheet grouped with its excerpts +
+  Apply action; the 360px column fills + marks stack under the paragraph, no overflow).
 - **R5 — Interview tab**: persisted gaps + part coverage, `story:gaps`, the life map + text equivalent,
   ask-a-gap, answered history, completeness hero.
 - **R6 — Photos tab**: gallery + inline Q&A + placement affordances + the corpus wiring fix (E2E:

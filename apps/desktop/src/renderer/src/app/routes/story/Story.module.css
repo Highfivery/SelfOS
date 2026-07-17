@@ -647,7 +647,42 @@
   padding: var(--space-4) var(--space-5);
   display: flex;
   flex-direction: column;
+  gap: var(--space-4);
+}
+/* The Review & apply sheet footer holds the one metered "Apply with your biographer" action (§13.5). */
+.sheetFoot {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-4) var(--space-5);
+  border-top: 1px solid var(--color-border);
+}
+.reviewGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.reviewGroupTitle {
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+  font-weight: 700;
+}
+.reviewRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: var(--space-3);
+  min-width: 0;
+}
+.reviewRowBody {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.reviewExcerpt {
+  overflow-wrap: anywhere;
 }
 
 /* The export dialog (§13.6.1) — a centered scrim + card (the app's hand-rolled dialog pattern). */
@@ -850,23 +885,119 @@
   white-space: nowrap;
 }
 
-/* Reader prose: a comfortable readable column. The reader view uses a PERCENTAGE-based measure (~70%, the
-   chat-bubble precedent) — an owner-signed-off §12 exception to the no-max-width rule (spec 64 §3.6/§11.1),
-   not a fixed cap. Left-capped, so the page still fills and never scrolls horizontally. */
+/* Shape mode (§13.5): the prose reads at a ~70% measure with pending marks living in the RIGHT MARGIN beside
+   it on wide containers, stacking under the paragraph below that. The container query keys off the content
+   area (not the viewport), so the rail appears exactly when there's room for it. `.shapeBody` is the query
+   container; each `.para` is its own positioning context for the absolute rail. */
+.shapeBody {
+  container-type: inline-size;
+  /* A specific name — container names aren't CSS-module-scoped, so a bare `shape` is effectively global. */
+  container-name: story-shape;
+}
 .para {
-  max-width: 70%;
+  position: relative;
+}
+/* The measure — the chat-bubble-precedent ~70% column (an owner-signed-off §12 exception, spec 64 §11.1). It
+   FILLS the width on narrow containers so the page never wastes space; the cap comes back beside the rail. */
+.paraMeasure {
+  min-width: 0;
+}
+.paraActions {
+  margin-top: var(--space-1);
+}
+/* Pending marks: stacked under the paragraph on narrow containers… */
+.paraMarks {
+  margin-top: var(--space-1);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+@container story-shape (min-width: 900px) {
+  .paraMeasure {
+    max-width: 70%;
+  }
+  /* …and an absolute rail in the right margin beside the measure on wide ones. */
+  .paraMarks {
+    position: absolute;
+    top: 0;
+    left: calc(70% + var(--space-5));
+    right: 0;
+    margin-top: 0;
+    padding-top: 2px;
+  }
 }
 
-/* The "N changes ready to apply" bar (§3.3.1) — a calm accent strip above the prose. */
-.applyBar {
+/* Numbered superscript sources (§13.5): the markdown flows inline so the footnote marker trails the prose. */
+.inlineProse,
+.inlineProse p {
+  display: inline;
+}
+.inlineProse p {
+  margin: 0;
+}
+.sourceSup {
+  /* A relative offset (not `vertical-align: super`) raises the marker WITHOUT expanding the paragraph's line
+     height, and keeps a real, tappable box (a zero line-height super collapses to an unclickable 0px). */
+  display: inline-block;
+  position: relative;
+  top: -0.42em;
+  border: none;
+  background: none;
+  padding: 0 2px;
+  margin-left: 1px;
+  cursor: pointer;
+  font-size: 0.72em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-accent-text);
+}
+.sourceSup:hover {
+  text-decoration: underline;
+}
+.sourceSup[aria-expanded='true'] {
+  color: var(--color-accent);
+}
+
+/* The bottom-sticky pending pill (§13.5): sticks to the bottom of the scrollport while there are pending
+   marks, then settles at the end of the chapter. A last-child sticky-bottom leaves no gap above it. */
+.pendingPillWrap {
+  position: sticky;
+  bottom: var(--space-4);
+  z-index: 20;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  justify-content: center;
+  pointer-events: none;
+}
+.pendingPill {
+  pointer-events: auto;
+  max-width: min(680px, 100%);
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
   background: var(--color-accent-subtle-bg);
+  box-shadow: var(--shadow-overlay);
+  cursor: pointer;
+  text-align: left;
+}
+.pendingPill:hover {
+  border-color: var(--color-accent);
+}
+.pendingPill:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.pendingPillCount {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-accent-text);
+}
+.pendingPillHint {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
 }
 
 /* The Shape-mode ribbon a new/updated chapter leads with (§13.5). */

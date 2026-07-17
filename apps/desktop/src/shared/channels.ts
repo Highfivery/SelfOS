@@ -67,6 +67,8 @@ import type {
   AutoCheckinConfig,
   AutoCheckinTarget,
   AutoCheckinRunResult,
+  AutoCheckinBlocks,
+  IncomingAutoCheckinStream,
   CoachingPrefs,
   CoachingSynthesis,
   CoachingSynthesisResult,
@@ -312,6 +314,9 @@ export const IpcChannels = {
   autoCheckinsSetConfig: 'autoCheckins:setConfig',
   autoCheckinsEnsureSeed: 'autoCheckins:ensureSeed',
   autoCheckinsRun: 'autoCheckins:run',
+  autoCheckinsIncomingStreams: 'autoCheckins:incomingStreams',
+  autoCheckinsGetBlocks: 'autoCheckins:getBlocks',
+  autoCheckinsSetBlock: 'autoCheckins:setBlock',
   // Your Story (64-your-story §5.6)
   storyBookTypes: 'story:bookTypes',
   storyList: 'story:list',
@@ -1066,6 +1071,22 @@ export interface SelfosBridge {
    * a spending pass; a manual "Run now" passes `auto:false` to skip the throttle. Budget/crisis/AI-gated.
    */
   autoCheckinsRun(input?: { auto?: boolean }): Promise<AutoCheckinRunResult>;
+  /**
+   * The enabled auto check-in streams other household people have configured targeting the ACTIVE person
+   * (63 §3.3a/§6.6) — the "Check-ins others send you" surface. Scoped to streams aimed at the active person;
+   * NOT gated on `questionnaires.autoCheckin` (a person can be targeted without holding it).
+   */
+  autoCheckinsIncomingStreams(): Promise<IncomingAutoCheckinStream[]>;
+  /** The active person's own block list (63 §6.6) — senders whose check-ins they've turned off. */
+  autoCheckinsGetBlocks(): Promise<AutoCheckinBlocks>;
+  /**
+   * Turn a sender's check-ins to the active person on/off (63 §3.3a/§6.6). Writes the active person's OWN
+   * block list; a block is a hard gate on the sender's next run. Active-person-scoped in the bridge.
+   */
+  autoCheckinsSetBlock(input: {
+    senderPersonId: string;
+    blocked: boolean;
+  }): Promise<AutoCheckinBlocks>;
   /**
    * Your Story (64-your-story §5.6). All gated `story.own` + active-person-scoped in the bridge (the trust
    * boundary); the Claude key stays host-side. `null`/`[]` when not signed in / not permitted.

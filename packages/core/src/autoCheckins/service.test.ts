@@ -11,8 +11,12 @@ import type { AutoCheckinTarget, RelationshipType } from '../schemas';
 import { setAppBudget } from '../usage/budgetService';
 import { recordUsage } from '../usage/usageStore';
 import { writeEncryptedJson } from '../vault';
-import { setAutoCheckinConfig } from './prefsService';
-import { runAutoCheckins, type RunAutoCheckinsInput } from './service';
+import { setAutoCheckinBlock, setAutoCheckinConfig } from './prefsService';
+import {
+  listIncomingAutoCheckinStreams,
+  runAutoCheckins,
+  type RunAutoCheckinsInput,
+} from './service';
 
 const key = generateMasterKey();
 const now = new Date('2026-07-15T12:00:00.000Z');
@@ -307,5 +311,65 @@ describe('runAutoCheckins — other-person targets (intimacy gating §8.2)', () 
     expect(result.created).toHaveLength(0);
     expect(result.skipped.some((s) => s.reason === 'not-adult')).toBe(true);
     expect(await listAssignments(fs, key, { recipientPersonId: target })).toHaveLength(0);
+  });
+
+  it('a target who has BLOCKED the sender gets nothing — the hard opt-out gate (§3.3a)', async () => {
+    const { fs, author, target } = await seedPair('partner');
+    // The target turns the sender off.
+    await setAutoCheckinBlock(fs, key, target, author, true);
+    const blocked = await runAutoCheckins(runInput(fs, author));
+    expect(blocked.ok).toBe(true);
+    if (!blocked.ok) return;
+    expect(blocked.created).toHaveLength(0);
+    expect(blocked.skipped.some((s) => s.reason === 'blocked-by-recipient')).toBe(true);
+    expect(await listAssignments(fs, key, { recipientPersonId: target })).toHaveLength(0);
+    // Un-blocking re-enables the stream — check-ins flow again.
+    await setAutoCheckinBlock(fs, key, target, author, false);
+    const unblocked = await runAutoCheckins(runInput(fs, author));
+    expect(unblocked.ok).toBe(true);
+    if (!unblocked.ok) return;
+    expect(unblocked.created.length).toBeGreaterThan(0);
+  });
+});
+
+describe('listIncomingAutoCheckinStreams (§3.3a)', () => {
+  it('shows the viewer only the enabled streams that target THEM, with the block state', async () => {
+    const fs = memFileSystem();
+    const ben = await upsertPerson(fs, key, { displayName: 'Ben', isSubject: true, tags: [] });
+    const angel = await seedPerson(fs, { name: 'Angel', ack: true });
+    const cara = await seedPerson(fs, { name: 'Cara', ack: true });
+    await upsertRelationship(fs, key, {
+      fromPersonId: ben.id,
+      toPersonId: angel,
+      type: 'partner',
+    });
+    // Ben targets Angel (enabled) AND Cara (disabled stream).
+    await setAutoCheckinConfig(fs, key, ben.id, {
+      enabled: true,
+      targets: [
+        { ...personTarget(angel), includeIntimacy: true },
+        { ...personTarget(cara), enabled: false },
+      ],
+    });
+
+    // Angel sees Ben's stream toward her (partner, includes intimacy), not-yet-blocked.
+    const forAngel = await listIncomingAutoCheckinStreams(fs, key, angel);
+    expect(forAngel).toHaveLength(1);
+    expect(forAngel[0]).toMatchObject({
+      senderPersonId: ben.id,
+      senderName: 'Ben',
+      relationshipLabel: 'partner',
+      includeIntimacy: true,
+      blocked: false,
+    });
+    // Cara's stream is DISABLED → she sees nothing.
+    expect(await listIncomingAutoCheckinStreams(fs, key, cara)).toHaveLength(0);
+    // Ben (the owner) sees no incoming streams targeting HIM.
+    expect(await listIncomingAutoCheckinStreams(fs, key, ben.id)).toHaveLength(0);
+
+    // After Angel blocks Ben, the stream still shows (so she can un-block) but marked blocked.
+    await setAutoCheckinBlock(fs, key, angel, ben.id, true);
+    const afterBlock = await listIncomingAutoCheckinStreams(fs, key, angel);
+    expect(afterBlock[0]?.blocked).toBe(true);
   });
 });

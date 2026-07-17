@@ -65,6 +65,7 @@ export const NOTIFICATION_KINDS = [
   'together-private', // 58-together §3.14 Part B — the coach left a private note just for you in a Together session
   'auto-checkin-ready', // 63-auto-checkins §6.4 — an auto-generated check-in is waiting in the inbox
   'auto-checkin-enabled', // 63-auto-checkins §5.1 — the one-time "Auto check-ins is now on" seed notice
+  'auto-checkin-incoming', // 63 §3.3a — someone set up recurring check-ins for you (fires once per new sender)
   'story-shared', // 64-your-story §3.6 — someone shared their Story book with you (fires once, on first share)
 ] as const;
 export const NotificationKindSchema = z.enum(NOTIFICATION_KINDS);
@@ -1589,6 +1590,31 @@ export const AutoCheckinConfigSchema = z.object({
   seededAt: z.string().optional(),
 });
 export type AutoCheckinConfig = z.infer<typeof AutoCheckinConfigSchema>;
+
+/**
+ * A person's standing opt-out for auto check-ins others send them (63 §3.3a/§4.5). Lives in the TARGET's own
+ * vault (`people/<targetId>/questionnaires/autoCheckinBlocks.enc`); only they write it. A blocked sender's
+ * stream is a hard `resolveEligibility` fail — no future check-ins from them are generated or delivered.
+ */
+export const AutoCheckinBlocksSchema = z.object({
+  schemaVersion: z.number().int().positive().default(1),
+  blockedSenders: z.array(z.string()).default([]), // sender/owner person ids this person has turned off
+});
+export type AutoCheckinBlocks = z.infer<typeof AutoCheckinBlocksSchema>;
+
+/**
+ * A read-only view of one enabled auto check-in stream that another household person has configured targeting
+ * the VIEWER (63 §3.3a/§4.5) — powers the target's "Check-ins others send you" surface. Never carries the
+ * owner's private per-target exploration focus.
+ */
+export interface IncomingAutoCheckinStream {
+  senderPersonId: string;
+  senderName: string;
+  relationshipLabel?: string; // e.g. "partner" — from the viewer↔sender edge
+  cadence: AutoCheckinCadence;
+  includeIntimacy: boolean; // whether this stream can send unfiltered intimacy check-ins
+  blocked: boolean; // the viewer has turned this sender off
+}
 
 /** One questionnaire the engine created this run (63 §6.3) — IPC-facing, crypto-free. */
 export interface AutoCheckinCreated {

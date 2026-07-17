@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import {
+  Bell,
   BookOpen,
   ClipboardCheck,
   ClipboardList,
@@ -94,6 +95,9 @@ export const NOTIFICATION_KIND_DEFS: Record<NotificationKind, KindDef> = {
   // The one-time "Auto check-ins is now on" seed notice (63 §5.1). onChange: the seed fires once (write-once),
   // so the candidate is pushed once and, once dismissed, never returns (the seed can't re-fire).
   'auto-checkin-enabled': { icon: Sparkles, severity: 'info', resurfaces: onChange },
+  // Someone set up recurring check-ins for you (63 §3.3a). One per sender, coalesced by sender id; onChange
+  // with a stable signature so a dismissal stays dismissed — a genuinely NEW sender is a new key → new notice.
+  'auto-checkin-incoming': { icon: Bell, severity: 'info', resurfaces: onChange },
   // Someone shared their Story book with you (64 §3.6). Fires once, on first share — the candidate only exists
   // while the viewer has NEVER opened it; opening records read progress → the candidate drops (never re-pops).
   // Coalesced per book; onChange with a stable signature so a dismissal without opening stays dismissed.

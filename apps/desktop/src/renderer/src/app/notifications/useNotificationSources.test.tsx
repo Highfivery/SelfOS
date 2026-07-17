@@ -386,6 +386,44 @@ describe('useNotificationSources — auto check-ins (63)', () => {
     });
   });
 
+  it('fires a first-time notice when someone sets up check-ins for you — but not for one you’ve turned off (§3.3a)', async () => {
+    installMockBridge({
+      autoCheckinsIncomingStreams: () =>
+        Promise.resolve([
+          {
+            senderPersonId: 'angel',
+            senderName: 'Angel',
+            cadence: 'weekly',
+            includeIntimacy: false,
+            blocked: false,
+          },
+          {
+            senderPersonId: 'cara',
+            senderName: 'Cara',
+            cadence: 'daily',
+            includeIntimacy: false,
+            blocked: true, // already turned off → no notice
+          },
+        ]),
+    });
+    asOwner();
+    await useNotificationStore.getState().load();
+    render(<Harness />);
+    await waitFor(() => {
+      const n = useNotificationStore
+        .getState()
+        .notifications.find((x) => x.coalesceKey === 'auto-checkin-incoming:angel');
+      expect(n?.title).toBe('Angel set up check-ins for you');
+      expect(n?.action).toEqual({ type: 'navigate', to: '/questionnaires' });
+    });
+    // The blocked sender does not notify.
+    expect(
+      useNotificationStore
+        .getState()
+        .notifications.find((x) => x.coalesceKey === 'auto-checkin-incoming:cara'),
+    ).toBeUndefined();
+  });
+
   it('does NOT fire the seed notice once turned off, nor the ready notice with nothing waiting', async () => {
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([]),

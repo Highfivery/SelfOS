@@ -1247,6 +1247,54 @@ describe('createCoreBridge', () => {
       // The owner hasn't completed onboarding → no seed (write-once, onboarding-gated).
       expect((await bridge.autoCheckinsEnsureSeed())?.seeded).toBe(false);
     });
+
+    it('target visibility & control (§3.3a): the partner sees + can stop the owner’s stream; scoped per person', async () => {
+      const { bridge, ownerId } = await freshOwner();
+      const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+      const cara = await bridge.peopleSave({ displayName: 'Cara', isSubject: true, tags: [] });
+      await bridge.accessSetAccount({ personId: angel.id, roleId: 'member', pin: null });
+      await bridge.accessSetAccount({ personId: cara.id, roleId: 'member', pin: null });
+      // The OWNER configures a stream targeting Angel.
+      await bridge.autoCheckinsSetConfig({
+        enabled: true,
+        targets: [
+          {
+            id: 't-angel',
+            target: { kind: 'person', personId: angel.id },
+            enabled: true,
+            includeIntimacy: false,
+            explorationFocus: 'a private note',
+            cadence: 'weekly',
+          },
+        ],
+      });
+
+      // ANGEL sees the incoming stream (who + cadence), NOT the owner's private exploration focus.
+      await bridge.sessionSetActive({ personId: angel.id });
+      const forAngel = await bridge.autoCheckinsIncomingStreams();
+      expect(forAngel).toHaveLength(1);
+      expect(forAngel[0]).toMatchObject({
+        senderPersonId: ownerId,
+        cadence: 'weekly',
+        blocked: false,
+      });
+      expect(JSON.stringify(forAngel)).not.toContain('a private note');
+
+      // Angel turns the sender off — it writes HER own block list, and the incoming row flips to blocked.
+      await bridge.autoCheckinsSetBlock({ senderPersonId: ownerId, blocked: true });
+      expect((await bridge.autoCheckinsGetBlocks()).blockedSenders).toEqual([ownerId]);
+      expect((await bridge.autoCheckinsIncomingStreams())[0]?.blocked).toBe(true);
+
+      // CARA (not targeted) sees no incoming streams, and her own block list is untouched by Angel's edit.
+      await bridge.sessionSetActive({ personId: cara.id });
+      expect(await bridge.autoCheckinsIncomingStreams()).toHaveLength(0);
+      expect((await bridge.autoCheckinsGetBlocks()).blockedSenders).toEqual([]);
+
+      // The OWNER isn't a target of themselves, and never sees Angel's block — it's her data.
+      await bridge.sessionSetActive({ personId: ownerId });
+      expect(await bridge.autoCheckinsIncomingStreams()).toHaveLength(0);
+      expect((await bridge.autoCheckinsGetBlocks()).blockedSenders).toEqual([]);
+    });
   });
 
   it('challenges (52): start → capture a marker → list → check in → decrypt the Insight', async () => {

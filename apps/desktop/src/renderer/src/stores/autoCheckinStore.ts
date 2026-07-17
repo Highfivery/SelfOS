@@ -1,5 +1,9 @@
 import { create } from 'zustand';
-import type { AutoCheckinConfig, AutoCheckinTarget } from '@shared/schemas';
+import type {
+  AutoCheckinConfig,
+  AutoCheckinTarget,
+  IncomingAutoCheckinStream,
+} from '@shared/schemas';
 import { useBudgetStore } from './budgetStore';
 import { useInboxStore } from './inboxStore';
 
@@ -13,6 +17,8 @@ import { useInboxStore } from './inboxStore';
  */
 interface AutoCheckinStoreState {
   config: AutoCheckinConfig | null;
+  /** Streams OTHER people have configured targeting the active person (§3.3a) — "Check-ins others send you". */
+  incoming: IncomingAutoCheckinStream[];
   loaded: boolean;
   running: boolean;
   error: string | null;
@@ -21,12 +27,15 @@ interface AutoCheckinStoreState {
   load: () => Promise<void>;
   ensureSeed: () => Promise<boolean>;
   setConfig: (patch: { enabled?: boolean; targets?: AutoCheckinTarget[] }) => Promise<void>;
+  /** Turn a sender's check-ins to the active person on/off (§3.3a); refreshes the incoming list. */
+  setBlock: (senderPersonId: string, blocked: boolean) => Promise<void>;
   run: (opts?: { auto?: boolean }) => Promise<void>;
   reset: () => void;
 }
 
 const EMPTY = {
   config: null,
+  incoming: [],
   loaded: false,
   running: false,
   error: null,
@@ -36,8 +45,16 @@ const EMPTY = {
 export const useAutoCheckinStore = create<AutoCheckinStoreState>((set) => ({
   ...EMPTY,
   load: async () => {
-    const config = (await window.selfos?.autoCheckinsGetConfig()) ?? null;
-    set({ config, loaded: true });
+    const [config, incoming] = await Promise.all([
+      window.selfos?.autoCheckinsGetConfig() ?? null,
+      window.selfos?.autoCheckinsIncomingStreams() ?? [],
+    ]);
+    set({ config, incoming, loaded: true });
+  },
+  setBlock: async (senderPersonId, blocked) => {
+    await window.selfos?.autoCheckinsSetBlock({ senderPersonId, blocked });
+    const incoming = (await window.selfos?.autoCheckinsIncomingStreams()) ?? [];
+    set({ incoming });
   },
   ensureSeed: async () => {
     const result = await window.selfos?.autoCheckinsEnsureSeed();

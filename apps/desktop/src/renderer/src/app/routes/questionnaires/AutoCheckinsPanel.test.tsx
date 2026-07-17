@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AutoCheckinConfig, AutoCheckinTarget, Person } from '@shared/schemas';
@@ -107,11 +107,43 @@ describe('AutoCheckinsPanel', () => {
     expect(screen.queryByText('Add someone else')).not.toBeInTheDocument();
   });
 
-  it('self-hides when the person lacks the capability (null config)', async () => {
+  it('self-hides when the person lacks the capability AND no one targets them (null config, no incoming)', async () => {
     signIn('member');
     mount(null);
     // Nothing renders — no heading — once the (null) load settles.
     await waitFor(() => expect(useAutoCheckinStore.getState().loaded).toBe(true));
     expect(screen.queryByRole('heading', { name: 'Auto check-ins' })).not.toBeInTheDocument();
+  });
+
+  it('shows "Check-ins others send you" (even with no own config) and turning a sender off stops it (§3.3a)', async () => {
+    signIn('member');
+    const setBlock = vi.fn(() =>
+      Promise.resolve({ schemaVersion: 1 as const, blockedSenders: ['angel'] }),
+    );
+    // A person TARGETED by an owner but WITHOUT their own config still sees + controls it.
+    mount(null, {
+      autoCheckinsIncomingStreams: () =>
+        Promise.resolve([
+          {
+            senderPersonId: 'angel',
+            senderName: 'Angel',
+            relationshipLabel: 'partner',
+            cadence: 'weekly',
+            includeIntimacy: true,
+            blocked: false,
+          },
+        ]),
+      autoCheckinsSetBlock: setBlock,
+    });
+    expect(
+      await screen.findByRole('heading', { name: 'Check-ins others send you' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Angel')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Your partner · Weekly · includes intimacy check-ins/),
+    ).toBeInTheDocument();
+    // Turning the "Receiving" switch off calls setBlock(blocked: true).
+    await userEvent.click(screen.getByLabelText('Receive check-ins from Angel'));
+    expect(setBlock).toHaveBeenCalledWith({ senderPersonId: 'angel', blocked: true });
   });
 });

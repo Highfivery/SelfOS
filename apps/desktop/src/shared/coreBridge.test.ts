@@ -6827,6 +6827,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(revised?.markdown).toContain('cold steel'); // the protected inline edit was preserved (enforced)
     expect(revised?.status).toBe('updated');
     expect(applied.markup.marks[0]?.status).toBe('applied');
+    // The pre-revision text is retained so the reader can show "What changed" (§13.5)…
+    expect(revised?.previousMarkdown).toBeTruthy();
+    expect(revised?.previousMarkdown).toContain('cold steel');
+    // …and marking the chapter Reviewed resolves the diff (drops the retained prior text).
+    const reviewed = await bridge.storyReviewChapter({ bookId, chapterId });
+    const reviewedChapter = reviewed?.chapters.find((c) => c.id === chapterId);
+    expect(reviewedChapter?.status).toBe('reviewed');
+    expect(reviewedChapter?.previousMarkdown).toBeUndefined();
   });
 
   it('story: turn a to-do into questions — mints an Inbox self-send + records a questionsSent to-do', async () => {

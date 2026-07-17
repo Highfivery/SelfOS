@@ -280,6 +280,9 @@ export async function generateChapter(
     imagePlacements: existing?.imagePlacements ?? [],
     lastGeneratedAt: deps.now.toISOString(),
     ...(existing?.lastReviewedAt ? { lastReviewedAt: existing.lastReviewedAt } : {}),
+    // Keep the prior text so the "What changed" diff can show what a rewrite altered (§13.5). Only a rewrite of
+    // existing prose has something to diff — a first draft ('new', no existing) carries none.
+    ...(existing?.markdown.trim() ? { previousMarkdown: existing.markdown } : {}),
   };
   await saveChapter(deps.fs, deps.key, deps.personId, args.bookId, chapter);
   return { ok: true, chapter };
@@ -462,6 +465,8 @@ export async function applyMarkup(
     // Re-stamp the freshness fingerprint against the corpus this revision was written from (§5.4).
     sourceSignature: computeSourceSignature(corpus, { provenance: stripped.provenance }),
     lastGeneratedAt: deps.now.toISOString(),
+    // The pre-revision text drives the "What changed" diff (§13.5); cleared when the chapter is Reviewed.
+    previousMarkdown: existing.markdown,
   };
   await saveChapter(deps.fs, deps.key, deps.personId, args.bookId, chapter);
 

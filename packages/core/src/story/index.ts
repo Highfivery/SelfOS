@@ -1,5 +1,6 @@
 export * from './bookTypes';
 export * from './storyCorpus';
+export * from './storyDiff';
 export * from './storyExclusionService';
 export * from './storyExport';
 export * from './storyFreshness';

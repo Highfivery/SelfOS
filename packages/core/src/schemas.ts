@@ -3702,6 +3702,9 @@ export const BookChapterSchema = z.object({
   imagePlacements: z.array(ImagePlacementSchema).default([]),
   lastGeneratedAt: z.string().optional(),
   lastReviewedAt: z.string().optional(),
+  // The chapter text as it stood just before the latest rewrite/apply — powers the "What changed" diff on a
+  // new/updated chapter (§13.5). Cleared when the chapter is marked Reviewed. Additive (no schemaVersion bump).
+  previousMarkdown: z.string().optional(),
 });
 export type BookChapter = z.infer<typeof BookChapterSchema>;
 

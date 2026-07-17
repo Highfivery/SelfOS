@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.31.0](https://github.com/Highfivery/SelfOS/compare/v0.30.0...v0.31.0) (2026-07-17)
+
+
+### Features
+
+* **story:** chapters as a cover-backed card grid (approved redesign) ([#227](https://github.com/Highfivery/SelfOS/issues/227)) ([66e09e1](https://github.com/Highfivery/SelfOS/commit/66e09e185d8e93fd39cda842dd6689fc67d83b8c))
+
 ## [0.30.0](https://github.com/Highfivery/SelfOS/compare/v0.29.0...v0.30.0) (2026-07-17)
 
 

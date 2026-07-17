@@ -78,7 +78,11 @@ const VALID_JSON = JSON.stringify({
   },
 });
 
-const opts = { bookType: BIOGRAPHY_BOOK_TYPE, config: BookConfigSchema.parse({}) };
+const opts = {
+  bookId: 'book-1',
+  bookType: BIOGRAPHY_BOOK_TYPE,
+  config: BookConfigSchema.parse({}),
+};
 
 describe('generateFoundations (64 §5.3)', () => {
   it('parses a valid foundations reply into essence + outline + timeline, minting ids server-side', async () => {

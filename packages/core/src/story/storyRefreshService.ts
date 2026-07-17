@@ -98,6 +98,7 @@ export async function refreshBook(
     deps.fs,
     deps.key,
     deps.personId,
+    args.bookId,
     await getExclusions(deps.fs, deps.key, deps.personId, args.bookId),
   );
 

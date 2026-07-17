@@ -103,7 +103,7 @@ describe('markStaleChapters (64 §3.4)', () => {
     await savePerson(fs, key, person);
     await saveInsight(fs, key, insight(factText));
     // Stamp the chapter's signature against the current corpus (as generation would).
-    const cur = await buildStoryCorpus(fs, key, 'me', []);
+    const cur = await buildStoryCorpus(fs, key, 'me', 'book-1', []);
     await saveChapter(
       fs,
       key,

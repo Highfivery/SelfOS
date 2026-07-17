@@ -17,6 +17,7 @@ import {
 } from '../schemas';
 import { writeEncryptedJson } from '../vault';
 import { buildStoryCorpus, corpusText } from './storyCorpus';
+import { addPhotoAnswer, addUploadedPhoto, setStoryImageAnalysis } from './storyService';
 
 const key = generateMasterKey();
 
@@ -127,7 +128,7 @@ function relationship(from: string, to: string, over: Partial<Relationship> = {}
 
 describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
   it('returns an empty corpus for an unknown person (never crashes)', async () => {
-    const corpus = await buildStoryCorpus(fresh(), key, 'nobody');
+    const corpus = await buildStoryCorpus(fresh(), key, 'nobody', 'book-1');
     expect(corpus).toEqual({ personName: '', profile: [], items: [] });
   });
 
@@ -151,7 +152,7 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
         ],
       }),
     );
-    const text = corpusText(await buildStoryCorpus(fs, key, 'me'));
+    const text = corpusText(await buildStoryCorpus(fs, key, 'me', 'book-1'));
     expect(text).toContain('a restricted trauma detail'); // own restricted fact IS in the corpus
     expect(text).toContain('a private health note'); // own locked profile field IS in the corpus
   });
@@ -173,7 +174,7 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
     );
     const ctx = await buildContext(fs, key, 'me');
     expect(ctx).not.toContain('own restricted session fact'); // buildContext unchanged — withheld
-    const corpus = corpusText(await buildStoryCorpus(fs, key, 'me'));
+    const corpus = corpusText(await buildStoryCorpus(fs, key, 'me', 'book-1'));
     expect(corpus).toContain('own restricted session fact'); // corpus includes it
   });
 
@@ -191,7 +192,7 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
         ],
       }),
     );
-    const text = corpusText(await buildStoryCorpus(fs, key, 'me'));
+    const text = corpusText(await buildStoryCorpus(fs, key, 'me', 'book-1'));
     expect(text).toContain('a correct fact');
     expect(text).not.toContain('a WRONG fact');
   });
@@ -216,7 +217,7 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
         facts: [fact('a fact from the muted dream')],
       }),
     );
-    const text = corpusText(await buildStoryCorpus(fs, key, 'me'));
+    const text = corpusText(await buildStoryCorpus(fs, key, 'me', 'book-1'));
     expect(text).toContain('a dream that informs');
     expect(text).not.toContain('a muted dream narrative');
     expect(text).not.toContain('a fact from the muted dream');
@@ -243,7 +244,7 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
         facts: [fact('you tend to run anxious before big decisions')],
       }),
     );
-    const text = corpusText(await buildStoryCorpus(fs, key, 'me'));
+    const text = corpusText(await buildStoryCorpus(fs, key, 'me', 'book-1'));
     expect(text).not.toContain('CLINICAL_KEY_SEVERE_MARKER'); // raw TestResult never read
     expect(text).toContain('you tend to run anxious before big decisions'); // the display fact IS present
   });
@@ -271,7 +272,7 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
         ],
       }),
     );
-    const text = corpusText(await buildStoryCorpus(fs, key, 'me'));
+    const text = corpusText(await buildStoryCorpus(fs, key, 'me', 'book-1'));
     expect(text).toContain('angel shares this with partners'); // shared to a partner (me) → present
     expect(text).not.toContain('angel keeps this private'); // not shared → absent
     expect(text).not.toContain('angel restricted fact'); // restricted → never shared
@@ -300,7 +301,7 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
         facts: [fact('Goal: run a half marathon'), fact('a real theme')],
       }),
     );
-    const corpus = await buildStoryCorpus(fs, key, 'me');
+    const corpus = await buildStoryCorpus(fs, key, 'me', 'book-1');
     const text = corpusText(corpus);
     expect(text).toContain('run a half marathon'); // from the goal
     expect(text).toContain('call an old friend'); // the challenge action
@@ -344,7 +345,7 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
       insight('i-own-sam', 'me', { summary: 's', facts: [fact('a memory of Sam at the lake')] }),
     );
 
-    const corpus = await buildStoryCorpus(fs, key, 'me', [
+    const corpus = await buildStoryCorpus(fs, key, 'me', 'book-1', [
       { id: 'e1', kind: 'person', value: 'ex', createdAt: 'now' },
       { id: 'e2', kind: 'source', value: 'i-src', createdAt: 'now' },
       { id: 'e3', kind: 'topic', value: 'sailing', createdAt: 'now' },
@@ -383,7 +384,7 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
         ],
       }),
     );
-    const text = corpusText(await buildStoryCorpus(fs, key, 'me'));
+    const text = corpusText(await buildStoryCorpus(fs, key, 'me', 'book-1'));
     expect(text).toContain('a mixed summary that stays'); // a MIXED insight keeps its summary + live facts
     expect(text).toContain('a live fact that stays');
     expect(text).not.toContain('one flagged fact');
@@ -417,7 +418,7 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
         facts: [fact('a private together fact of angels')],
       }),
     );
-    const text = corpusText(await buildStoryCorpus(fs, key, 'me'));
+    const text = corpusText(await buildStoryCorpus(fs, key, 'me', 'book-1'));
     expect(text).toContain('a commitment I want to keep'); // own Together twin included
     expect(text).not.toContain('a private together fact of angels'); // partner's non-shared fact absent
     expect(text).not.toContain("angel's own together reflection");
@@ -426,9 +427,115 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
   it("surfaces the subject's own profile and name", async () => {
     const fs = fresh();
     await savePerson(fs, key, person('me', 'Ben', { occupation: 'teacher', location: 'Denver' }));
-    const corpus = await buildStoryCorpus(fs, key, 'me');
+    const corpus = await buildStoryCorpus(fs, key, 'me', 'book-1');
     expect(corpus.personName).toBe('Ben');
     expect(corpus.profile.join('\n')).toContain('teacher');
     expect(corpus.profile.join('\n')).toContain('Denver');
+  });
+
+  it('feeds an uploaded photo’s caption + answered Q&A into the corpus (§13.6.2 wiring fix)', async () => {
+    const fs = fresh();
+    await savePerson(fs, key, person('me', 'Ben'));
+    const at = new Date('2026-06-01T00:00:00.000Z');
+    const photo = await addUploadedPhoto(
+      fs,
+      key,
+      'me',
+      'book-1',
+      { bytes: new Uint8Array([1, 2, 3]), mime: 'image/png' },
+      at,
+    );
+    await setStoryImageAnalysis(fs, key, 'me', 'book-1', photo.id, {
+      caption: 'Us on the pier at Lake Michigan',
+    });
+    await addPhotoAnswer(
+      fs,
+      key,
+      'me',
+      'book-1',
+      {
+        imageId: photo.id,
+        question: 'Who took this?',
+        answer: 'My grandfather, on his old Nikon.',
+      },
+      at,
+    );
+    await addPhotoAnswer(
+      fs,
+      key,
+      'me',
+      'book-1',
+      {
+        imageId: photo.id,
+        question: 'What do you remember?',
+        answer: 'The smell of the fish fry.',
+      },
+      at,
+    );
+    const corpus = await buildStoryCorpus(fs, key, 'me', 'book-1');
+    const text = corpusText(corpus);
+    expect(text).toContain('Us on the pier at Lake Michigan'); // caption
+    expect(text).toContain('My grandfather, on his old Nikon.'); // answer 1
+    expect(text).toContain('The smell of the fish fry.'); // answer 2
+    // Grouped one item per photo, tagged as photo provenance so a `source` exclusion can drop it.
+    const photoItem = corpus.items.find((i) => i.sourceRef.kind === 'photo');
+    expect(photoItem?.sourceRef.id).toBe(photo.id);
+  });
+
+  it('drops a photo’s Q&A when its image id is source-excluded (§3.3)', async () => {
+    const fs = fresh();
+    await savePerson(fs, key, person('me', 'Ben'));
+    const at = new Date('2026-06-01T00:00:00.000Z');
+    const photo = await addUploadedPhoto(
+      fs,
+      key,
+      'me',
+      'book-1',
+      { bytes: new Uint8Array([1]), mime: 'image/png' },
+      at,
+    );
+    await addPhotoAnswer(
+      fs,
+      key,
+      'me',
+      'book-1',
+      { imageId: photo.id, question: 'q', answer: 'a private photo memory' },
+      at,
+    );
+    const text = corpusText(
+      await buildStoryCorpus(fs, key, 'me', 'book-1', [
+        { id: 'e1', kind: 'source', value: photo.id, createdAt: 'now' },
+      ]),
+    );
+    expect(text).not.toContain('a private photo memory');
+  });
+
+  it('reads photo answers from the RIGHT book (book-scoped)', async () => {
+    const fs = fresh();
+    await savePerson(fs, key, person('me', 'Ben'));
+    const at = new Date('2026-06-01T00:00:00.000Z');
+    const photo = await addUploadedPhoto(
+      fs,
+      key,
+      'me',
+      'book-A',
+      { bytes: new Uint8Array([1]), mime: 'image/png' },
+      at,
+    );
+    await addPhotoAnswer(
+      fs,
+      key,
+      'me',
+      'book-A',
+      { imageId: photo.id, question: 'q', answer: 'memory that belongs to book A' },
+      at,
+    );
+    // A different book must not pick up book-A's photo answers.
+    expect(corpusText(await buildStoryCorpus(fs, key, 'me', 'book-B'))).not.toContain(
+      'memory that belongs to book A',
+    );
+    expect(corpusText(await buildStoryCorpus(fs, key, 'me', 'book-A'))).toContain(
+      'memory that belongs to book A',
+    );
   });
 });

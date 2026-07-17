@@ -4343,7 +4343,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const bookType = getBookType(book.type);
       if (!bookType) return { ok: false, reason: 'ERROR', message: 'Unknown book type.' };
       const exclusions = await getExclusions(deps.fs, deps.key, deps.personId, bookId);
-      const result = await generateFoundations(deps, { bookType, config: book.config, exclusions });
+      const result = await generateFoundations(deps, {
+        bookId,
+        bookType,
+        config: book.config,
+        exclusions,
+      });
       if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
       await applyFoundations(
         deps.fs,
@@ -4393,7 +4398,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Phase 1 — read everything + propose the outline (the foundations pass).
       host.emitStoryProgress({ bookId, phase: 'reading', chaptersDone: 0, chaptersTotal: 0 });
       const exclusions = await getExclusions(deps.fs, deps.key, deps.personId, bookId);
-      const result = await generateFoundations(deps, { bookType, config: book.config, exclusions });
+      const result = await generateFoundations(deps, {
+        bookId,
+        bookType,
+        config: book.config,
+        exclusions,
+      });
       if (!result.ok) return fail(result.reason, result.message);
       await applyFoundations(
         deps.fs,
@@ -4851,6 +4861,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     storyInterviewCheck: async (input): Promise<StoryInterviewCadenceResult> => {
       const { bookId, auto } = StoryInterviewCheckInputSchema.parse(input);
+      // E2E determinism (64 §13.6): disable ONLY the autonomous cadence when this test hook is set, so a test
+      // can drive the MANUAL gap pass with a known corpus (the auto cadence otherwise mints a check-in on mount
+      // that blocks the manual pass via the ≤1-open invariant). `globalThis` read so it typechecks under web.
+      const testEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+        .process?.env;
+      if (auto && testEnv?.['SELFOS_FAKE_STORY_NO_CADENCE']) return { outcome: 'throttled' };
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
         return { outcome: 'noBook' };

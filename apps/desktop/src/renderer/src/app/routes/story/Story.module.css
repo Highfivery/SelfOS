@@ -803,28 +803,56 @@
   max-width: 480px;
 }
 
-/* An uploaded photo + its caption/Q&A — thumbnail left, content right; stacks under 480px. */
-.photoRow {
+/* The photo gallery (§13.6) — a responsive grid of photo cards; each card holds the image, its caption, the
+ * memories captured, and the vision Q&A inline. Cards fill the row via auto-fill and stack to one column at
+ * phone width; a card grows taller only while its Q&A is open, so a quiet gallery stays compact. */
+.photoGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-4);
+}
+.photoCard {
   display: flex;
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
-  border-top: 1px solid var(--color-border);
-}
-.photoThumb {
-  flex: 0 0 auto;
-  width: 96px;
-  height: 96px;
-  object-fit: cover;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-}
-.photoRow > :last-child {
+  flex-direction: column;
   min-width: 0;
-  flex: 1 1 auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-surface);
+}
+.photoCardImg,
+.photoCardImgFallback {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-bottom: 1px solid var(--color-border);
+}
+.photoCardImgFallback {
+  background: var(--color-surface-alt);
+}
+.photoCardBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-3);
+}
+.photoAnsweredChip {
+  align-self: flex-start;
+  font-size: var(--text-xs);
+  color: var(--color-accent-text);
+  background: var(--color-accent-subtle-bg);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+}
+.photoCardActions {
+  margin-top: auto;
+  padding-top: var(--space-1);
 }
 @media (max-width: 480px) {
-  .photoRow {
-    flex-direction: column;
+  .photoGrid {
+    grid-template-columns: 1fr;
   }
 }
 

@@ -118,6 +118,22 @@ function captureTogetherPrompt(system: string, transcript: string): void {
   }
 }
 
+/**
+ * 64-your-story §13.6 — capture a story biographer prompt (system + user) to `SELFOS_FAKE_PROMPT_DIR` so an
+ * E2E can prove what actually reached the model (the corpus wiring fix: a photo answer must appear in the
+ * gap-pass corpus). `name` disambiguates the pass (e.g. `gap`). Best-effort; never throws into the turn.
+ */
+function captureStoryPrompt(name: string, system: string, user: string): void {
+  const dir = process.env['SELFOS_FAKE_PROMPT_DIR'];
+  if (!dir) return;
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `story-${name}-prompt.txt`), `SYSTEM:\n${system}\n\nUSER:\n${user}\n`);
+  } catch {
+    // Capture is a test aid — never let it break the turn.
+  }
+}
+
 /** Offline stub (gated by SELFOS_FAKE_CLAUDE) so chat + the connection test are deterministic. */
 export function fakeClaudeClient(): ClaudeClient {
   return {
@@ -384,6 +400,7 @@ export function fakeClaudeClient(): ClaudeClient {
 
       // The gap pass (§3.7): coverage + one prioritized gap so "Find what's missing" mints a check-in.
       if (userText.includes('the biographer taking stock')) {
+        captureStoryPrompt('gap', options.system ?? '', userText);
         return Promise.resolve({
           text: JSON.stringify({
             coverage: {

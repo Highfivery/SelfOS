@@ -211,6 +211,7 @@ export async function generateStructuralProposals(
       deps.fs,
       deps.key,
       deps.personId,
+      args.bookId,
       await getExclusions(deps.fs, deps.key, deps.personId, args.bookId),
     ));
   const system = buildBiographerSystem(bookType, book.config, corpus.personName);

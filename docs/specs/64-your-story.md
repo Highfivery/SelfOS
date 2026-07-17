@@ -843,6 +843,12 @@ No open questions remain; the spec is Approved and ready for the Phase A slice (
   `story:answeredCheckIns`; the rebuilt `InterviewTab` (completeness hero + a `LifeMap` per-part coverage bar with
   a word text-equivalent + "Worth telling next" gap cards with "Ask me about this" + an "Answered" history block).
   The answered-history chapter linkage is deferred (deterministic-only for now). See §13.7 R5 for the full note.
+- 2026-07-17 — **§13 R6 (Photos tab + the corpus wiring fix) BUILT** (`feat/story-photos-corpus`, PR pending) —
+  the §13.6.2 functional gap: `buildStoryCorpus` now takes a `bookId` and reads `interview.enc.photoAnswers`, so
+  a photo's caption + answered Q&A finally feed the biographer (grouped one `photo`-kind corpus item per photo,
+  exclusion-filtered); threaded `bookId` through all six generation/refresh/gap callers. The Photos tab was
+  redesigned from a vertical list into a responsive gallery of cards (cover · caption · "N memories captured" ·
+  inline Q&A). See §13.7 R6 for the full build note + test coverage.
 
 ## 13. The Studio & the Book — the 2026-07-17 full-surface redesign (Approved)
 
@@ -1179,8 +1185,33 @@ lastPublishedAtSeen }` (one writer: the reader; additive schema). The author's S
     was sound but the UI didn't gate concurrent clicks) + the nits (per-item try/catch in `listAnsweredStoryCheckIns`
     so a corrupt record skips instead of blanking the list; a life-map-staleness comment; the LifeMap progressbar
     `aria-label` = the part title alone, the coverage word carried by `aria-valuetext` + the visible word).
-- **R6 — Photos tab**: gallery + inline Q&A + placement affordances + the corpus wiring fix (E2E:
-  a photo answer provably reaches a captured generation prompt).
+- **R6 — Photos tab + the corpus wiring fix — BUILT** (2026-07-17, `feat/story-photos-corpus`, PR pending):
+  the §13.6.2 functional gap closed + the Photos tab redesigned as a gallery. **Backend (the fix):**
+  `buildStoryCorpus` now takes a `bookId` and reads `interview.enc.photoAnswers` — each photo the person
+  **answered about** becomes one corpus item holding its caption + every answered Q&A (`sourceRef.kind: 'photo'`,
+  exclusion-filtered via `add()` like everything else, so a `source` exclusion on the imageId drops it); a photo
+  only vision-captioned but never answered feeds nothing (a bare AI caption is the model's guess, not the
+  subject's words). Before this, §3.7 promised
+  photo answers feed generation but the corpus never read them — the answer persisted and fed nothing. Threaded
+  `bookId` through all six call sites (generation foundations/chapters/revision, refresh, freshness, structure,
+  the gap pass); `generateFoundations` gained `opts.bookId` (both bridge callers pass it). No schema change
+  (`photoAnswers`/the image index already existed). **Renderer:** the Photos tab's vertical `photoRow` list →
+  a responsive `.photoGrid` gallery of cards (cover image at 4/3, caption, a "N memories captured" chip, the
+  answered Q&A inline, and Caption-&-ask/Remove actions bottom-aligned), single-column at ≤480px — all the
+  existing accessible names/flow preserved so the answering path is unchanged. **Tests:** +3 core (`storyCorpus`:
+  a photo caption + answers feed the corpus as one `photo`-kind item; a `source` exclusion on the imageId drops
+  it; book-scoped — book B never picks up book A's answers) + updated every `buildStoryCorpus`/`generateFoundations`
+  caller; +1 Story RTL (the gallery renders caption + the captured-memories chip + the answer); the photo E2E
+  rewritten to **prove the fix**: upload → vision caption + answer → "Find what's missing" → the captured gap
+  prompt (`SELFOS_FAKE_PROMPT_DIR`) contains the answer verbatim (a new `SELFOS_FAKE_STORY_NO_CADENCE` main-only
+  test hook disables the autonomous cadence so the manual gap pass runs with the full corpus deterministically —
+  the ≤1-open invariant otherwise let the auto cadence mint first + block it). Gate green: typecheck, lint,
+  format, **1444 core + 1293 desktop** unit, **7 story E2E**. Real-Electron visual QA at desktop (2-up gallery)
+  - 360px (single column, no overflow). **Lesson: a corpus builder that's book-scoped for one source (photo
+    answers in `interview.enc`) must take the `bookId` — every generation/refresh/gap caller already had it in
+    scope; and an E2E that captures a generation prompt via the gap pass has to defeat the autonomous cadence
+    (which mints a check-in on mount and blocks the manual pass via ≤1-open), so gate the auto cadence behind a
+    main-only test hook and poll the captured file, never a UI-text signal that a static description also matches.**
 - **R7 — Begin + polish**: invitation (`story:corpusStats`) + commission (specimens, live preview) +
   the writing experience (outline reveal); then the whole-flow coherence walk, the full-screen 360px
   sweep, dark-mode visual QA, and the §7 DoD checklist across every touched surface.

@@ -1709,6 +1709,41 @@ describe('Story (64)', () => {
     });
   });
 
+  it('renders the photo gallery — caption, the captured-memories chip, and the answered Q&A (§13.6)', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () =>
+        Promise.resolve({ ...writtenBundle('new'), manifest: manifest({ status: 'ready' }) }),
+      storyImages: () =>
+        Promise.resolve([
+          {
+            id: 'ph1',
+            kind: 'uploaded' as const,
+            mime: 'image/png',
+            createdAt: 'now',
+            caption: 'Us on the pier at Lake Michigan',
+          },
+        ]),
+      storyGetImage: () => Promise.resolve({ mime: 'image/png', dataBase64: 'AAAA' }),
+      storyPhotoAnswers: () =>
+        Promise.resolve([
+          { imageId: 'ph1', question: 'Who took this?', answer: 'My grandfather.', at: 'now' },
+        ]),
+    });
+    renderStory();
+    await openTab('Photos');
+    // The gallery shows the caption, an accessible thumbnail, the captured-memories chip and the answer.
+    expect(await screen.findByText('Us on the pier at Lake Michigan')).toBeInTheDocument();
+    expect(
+      screen.getByRole('img', { name: 'Us on the pier at Lake Michigan' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('1 memory captured')).toBeInTheDocument();
+    expect(screen.getByText('My grandfather.')).toBeInTheDocument();
+    // A captioned photo invites more, not a first caption.
+    expect(screen.getByRole('button', { name: 'Ask more' })).toBeInTheDocument();
+  });
+
   it('places a photo in a chapter via the AI-suggested anchor (§3.8)', async () => {
     const placed: StoryBookBundle = {
       ...writtenBundle('new'),

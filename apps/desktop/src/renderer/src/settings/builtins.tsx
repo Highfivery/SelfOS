@@ -64,6 +64,9 @@ declare module './types' {
     'dreams.imageStyle': string; // a free string — an IMAGE_STYLE_PRESETS value, growable without migration
     'dreams.imageStyleNotes': string;
     'updates.autoCheck': boolean;
+    // The immersive Your Story reader's text-size scale (§13.5) — a reader-local control (the aA button),
+    // persisted device-locally. Hidden from the Settings screen (it lives in the reader, not Settings).
+    'story.readerFontSize': number;
   }
 }
 
@@ -232,6 +235,20 @@ export function registerBuiltinSettings(): void {
       default: false,
       control: { type: 'switch' },
       order: 4,
+    }),
+    // The Your Story reader's text-size scale — driven by the reader's aA control, persisted device-locally.
+    // Hidden from the Settings screen (`visibleWhen: () => false`); it belongs in the reader, not Settings.
+    defineSetting({
+      key: 'story.readerFontSize',
+      section: 'appearance',
+      label: 'Reader text size',
+      description: 'The text size in the Your Story reader.',
+      schema: z.number().min(1).max(1.3),
+      default: 1,
+      scope: 'device',
+      control: { type: 'slider', min: 1, max: 1.3, step: 0.12 },
+      visibleWhen: () => false,
+      order: 99,
     }),
     defineSetting({
       key: 'ai.enabled',

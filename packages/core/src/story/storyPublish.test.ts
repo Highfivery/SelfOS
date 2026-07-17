@@ -13,6 +13,7 @@ import {
   listSharedBooks,
   noteOnBook,
   publishBook,
+  readOwnBook,
   readSharedBook,
   readSharedImage,
   revokeReader,
@@ -267,6 +268,50 @@ describe('readers + the read-time re-gate (64 §3.5)', () => {
     const stale = (await listSharedBooks(fs, key, 'reader', { [bookId]: beforePublish }))[0]!;
     expect(stale.neverOpened).toBe(false);
     expect(stale.updated).toBe(true);
+  });
+});
+
+describe('readOwnBook — the owner reads their OWN book from the DRAFT head (§13.5)', () => {
+  it('reads EVERY written chapter (draft head), carries status + the live honesty note, full projection', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs); // c1 reviewed, c2 written-but-new
+    const view = await readOwnBook(fs, key, 'author', bookId);
+    expect(view).not.toBeNull();
+    // Draft head: BOTH written chapters (unlike readSharedBook, which shows only Reviewed).
+    expect(view!.chapters.map((c) => c.id)).toEqual(['c1', 'c2']);
+    // Per-chapter status crosses (drives the reader's TOC marks) — impossible on the cross-person minimal shape.
+    expect(view!.chapters.map((c) => c.status)).toEqual(['reviewed', 'new']);
+    expect(view!.manifest.title).toBe('The Story of Ben');
+    expect(view!.manifest.essence).toBe('A quiet man.');
+    expect(view!.manifest.noteOnBook).toContain('never invented');
+    expect(view!.manifest.chapterOrder).toEqual(['c1', 'c2']);
+    expect(view!.authorName).toBe('Ben');
+  });
+
+  it('excludes an unwritten chapter shell so the reader never sees a blank chapter', async () => {
+    const fs = memFileSystem();
+    // Outline has c1 + c2, but only c1 is generated (c2 stays an unwritten shell).
+    await savePerson(fs, key, person('author', 'Ben'));
+    await saveInsight(fs, key, insight);
+    const book = await createBook(fs, key, {
+      personId: 'author',
+      type: 'biography',
+      title: 'Half a Book',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      now,
+    });
+    await applyFoundations(fs, key, 'author', book.id, { essence: 'x', outline, timeline }, now);
+    await approveOutline(fs, key, 'author', book.id, outline, now);
+    await generateChapter(deps(fs), { bookId: book.id, chapterId: 'c1' });
+    const view = await readOwnBook(fs, key, 'author', book.id);
+    expect(view!.chapters.map((c) => c.id)).toEqual(['c1']); // c2 shell omitted
+    expect(view!.manifest.parts[0]?.chapterIds).toEqual(['c1']);
+  });
+
+  it('returns null before a book/outline exists', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, person('author', 'Ben'));
+    expect(await readOwnBook(fs, key, 'author', 'nope')).toBeNull();
   });
 });
 

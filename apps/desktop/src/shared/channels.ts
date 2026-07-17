@@ -34,9 +34,11 @@ import type {
   StoryInterviewCadenceResult,
   StoryInterviewCheckInput,
   StoryPublishResult,
+  StoryOwnBookView,
   StoryReadSharedInput,
   StoryReaderGrantInput,
   StoryReaderView,
+  StorySetReadPositionInput,
   StoryRefreshInput,
   StoryRefreshViewResult,
   StoryResolveProposalInput,
@@ -348,6 +350,8 @@ export const IpcChannels = {
   storyReaderFeatured: 'story:readerFeatured',
   storySharedBooks: 'story:sharedBooks',
   storyReadShared: 'story:readShared',
+  storyReadOwnBook: 'story:readOwnBook',
+  storySetReadPosition: 'story:setReadPosition',
   storyMarkSharedRead: 'story:markSharedRead',
   storyReadSharedImage: 'story:readSharedImage',
   storyExportMarkdown: 'story:exportMarkdown',
@@ -1163,6 +1167,11 @@ export interface SelfosBridge {
   storySharedBooks(): Promise<SharedBookSummary[]>;
   /** Read a book shared with the active person — the PUBLISHED head only (§3.6), re-gated; null if access is gone. */
   storyReadShared(input: StoryReadSharedInput): Promise<StoryReaderView | null>;
+  /** The OWNER reading their OWN book as a book (§13.5) — the draft head as a `StoryReaderView` + a live honesty
+   *  note + the device-local resume position. Gated `story.own`, own-scoped; null if the book/outline isn't there. */
+  storyReadOwnBook(input: { bookId: string }): Promise<StoryOwnBookView | null>;
+  /** Record the owner's last-read chapter for their own book (§13.6.9) — device-local, per-person. */
+  storySetReadPosition(input: StorySetReadPositionInput): Promise<void>;
   /** Record that the active viewer opened a shared book (§3.6) — device-local, per-person read progress. */
   storyMarkSharedRead(input: StoryReadSharedInput): Promise<void>;
   /** A granted reader fetches one PUBLISHED image's bytes (base64) for the reader view (§3.8). Re-gated. */

@@ -423,6 +423,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyReaderFeatured, bridge.storyReaderFeatured);
   handle(IpcChannels.storySharedBooks, bridge.storySharedBooks);
   handle(IpcChannels.storyReadShared, bridge.storyReadShared);
+  handle(IpcChannels.storyReadOwnBook, bridge.storyReadOwnBook);
+  handle(IpcChannels.storySetReadPosition, bridge.storySetReadPosition);
   handle(IpcChannels.storyMarkSharedRead, bridge.storyMarkSharedRead);
   // storyGenerateFullDraft streams per-chapter progress back to the invoking window via emitStoryProgress →
   // IPC event. Bound for the whole draft (not per-turn) so progress keeps reaching the renderer even after it

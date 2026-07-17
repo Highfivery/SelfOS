@@ -11449,13 +11449,15 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     ).toBeVisible();
     await w.keyboard.press('Escape');
 
-    // Open the book → read the PUBLISHED head (never the working draft).
+    // Open the book → the immersive reader front matter (title page), then Begin reading → the PUBLISHED
+    // head prose (never the working draft) via the unified reader (§13.5).
     await card.click();
     await expect(w.getByRole('heading', { name: 'Shared Life' })).toBeVisible();
+    await w.getByRole('button', { name: /Begin reading/ }).click();
     await expect(w.getByText(/cut pine/)).toBeVisible();
 
     // Back → the open was recorded (device-local read progress), so the "New" marker is gone.
-    await w.getByRole('button', { name: /Back/ }).click();
+    await w.getByRole('button', { name: 'Back', exact: true }).click();
     await expect(w.getByRole('button', { name: /Shared Life/ }).getByText('New')).toHaveCount(0);
   } finally {
     await app.close();
@@ -11557,6 +11559,69 @@ test('story (64): the Studio tabs deep-link, and the Danger zone deletes only af
     // The book is gone → back to the empty landing (decrypt-level: no books remain for the owner).
     await expect(w.getByRole('button', { name: 'Start your story' })).toBeVisible();
     await expect.poll(async () => (await listBooks(fs, key, 'owner-1')).length).toBe(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('story (64): the owner reads their own book in the immersive reader — front matter → chapter → edit; text size; 360px clean (§13.5)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Start your story' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('The Reading Book');
+    await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
+
+    // The Studio hero → the immersive reader (route /story/read).
+    await expect(w.getByRole('heading', { name: 'The Reading Book', level: 1 })).toBeVisible();
+    await w.getByRole('button', { name: 'Read your story' }).click();
+
+    // Front matter first (the title page carries the book title), then Begin reading → the chapter prose.
+    const begin = w.getByRole('button', { name: /Begin reading/ });
+    await expect(begin).toBeVisible();
+    await begin.click();
+    await expect(w.getByText(/cut pine/)).toBeVisible();
+
+    // Text size (aA) cycles the reader scale — the immersive typography actually changes (§13.5).
+    const readerScale = () =>
+      w.evaluate(() => {
+        const r = document.querySelector<HTMLElement>('[style*="--reader-scale"]');
+        return r ? getComputedStyle(r).getPropertyValue('--reader-scale').trim() : '';
+      });
+    expect(await readerScale()).toBe('1');
+    await w.getByRole('button', { name: 'Text size' }).click();
+    await expect.poll(readerScale).not.toBe('1');
+
+    // 360px (phone): the reader scrolls vertically only — no horizontal scrollbar (CLAUDE.md §12).
+    await w.setViewportSize({ width: 360, height: 780 });
+    const offenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(offenders).toEqual([]);
+    await w.setViewportSize({ width: 1100, height: 800 });
+
+    // Edit this chapter → the owner drops into the chapter editor (the Shape/markup surface, §13.5), then
+    // back to the book and out to the Studio (the reader is a mode, not a dead end).
+    await w.getByRole('button', { name: /Edit this chapter/ }).click();
+    await expect(w.getByRole('button', { name: 'Rewrite this chapter' })).toBeVisible();
+    await w.getByRole('button', { name: 'Back to the book' }).click();
+    await w.getByRole('button', { name: 'Back to the studio' }).click();
+    await expect(w.getByRole('heading', { name: 'The Reading Book', level: 1 })).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

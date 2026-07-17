@@ -27,6 +27,7 @@ import type {
   StoryPlacementSuggestResult,
   StoryInterviewCadenceResult,
   StoryPublishResult,
+  StoryOwnBookView,
   StoryReaderView,
   StoryRefreshViewResult,
   StoryResolveProposalResult,
@@ -186,6 +187,12 @@ interface StoryState {
   readerView: StoryReaderView | null;
   openSharedBook: (authorPersonId: string, bookId: string) => Promise<void>;
   closeSharedBook: () => void;
+  /** The owner reading their OWN book as a book (§13.5) — the draft head + the device-local resume position. */
+  ownReader: StoryOwnBookView | null;
+  openOwnBook: (bookId: string) => Promise<void>;
+  clearOwnReader: () => void;
+  /** Record the owner's last-read chapter (device-local). Fire-and-forget; updates the local resume hint. */
+  setReadPosition: (bookId: string, chapterId: string) => void;
   remove: (bookId: string) => Promise<void>;
   clearBundle: () => void;
   reset: () => void;
@@ -635,6 +642,17 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     }
   },
   closeSharedBook: () => set({ readerView: null }),
+  ownReader: null,
+  openOwnBook: async (bookId) => {
+    const ownReader = (await window.selfos?.storyReadOwnBook({ bookId })) ?? null;
+    set({ ownReader });
+  },
+  clearOwnReader: () => set({ ownReader: null }),
+  setReadPosition: (bookId, chapterId) => {
+    void window.selfos?.storySetReadPosition({ bookId, chapterId });
+    // Reflect it locally so a re-open of the reader resumes here without a round-trip.
+    set((s) => (s.ownReader ? { ownReader: { ...s.ownReader, lastChapterId: chapterId } } : {}));
+  },
   remove: async (bookId) => {
     await window.selfos?.storyDelete({ bookId });
     set({ bundle: null });
@@ -657,6 +675,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       photoAnswers: [],
       sharedBooks: [],
       readerView: null,
+      ownReader: null,
       loaded: false,
       generating: false,
       chaptersGenerating: false,

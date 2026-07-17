@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { wordDiff } from '@selfos/core/story-diff';
 import {
   Banner,
   Button,
@@ -546,14 +547,6 @@ function DraftProgress({ p }: { p: StoryDraftProgress & { startedAt: number } })
     </Card>
   );
 }
-
-const CHAPTER_STATUS_LABEL: Record<string, string> = {
-  generating: 'Writing…',
-  new: 'New',
-  updated: 'Updated',
-  stale: 'New material',
-  reviewed: 'Reviewed',
-};
 
 /**
  * The book cover (§3.8, Phase H). Reuses the spec-13 distill→render image flow behind the ONE shared image
@@ -2360,6 +2353,17 @@ function BookReader({
         <span className={styles.pos}>
           {chapter ? `Ch. ${idx + 1} of ${order.length}` : 'Front matter'}
         </span>
+        {owner && chapter && onEditChapter ? (
+          <button
+            type="button"
+            className={styles.shapeButton}
+            aria-label="Shape this chapter"
+            title="Edit this chapter"
+            onClick={() => onEditChapter(chapter.id)}
+          >
+            Shape
+          </button>
+        ) : null}
         <button type="button" className={styles.aaButton} aria-label="Text size" onClick={cycleAa}>
           aA
         </button>
@@ -2407,7 +2411,7 @@ function BookReader({
               {owner && onEditChapter ? (
                 <div className={styles.readerEdit}>
                   <Button variant="ghost" onClick={() => onEditChapter(chapter.id)}>
-                    Edit this chapter ›
+                    Shape this chapter ›
                   </Button>
                 </div>
               ) : null}
@@ -2680,6 +2684,86 @@ export function countApplicable(markup: ChapterMarkup | null): number {
   ).length;
 }
 
+/** The word-level "What changed" render — added words as <ins>, removed as <del>, in reading order (§13.5). */
+function WordDiff({ previous, current }: { previous: string; current: string }): JSX.Element {
+  // Memoize the LCS so an unrelated re-render (while the diff is open) doesn't recompute the whole table.
+  const tokens = useMemo(() => wordDiff(previous, current), [previous, current]);
+  return (
+    <p className={styles.diff} role="group" aria-label="What changed in this rewrite">
+      {tokens.map((t, i) =>
+        t.op === 'added' ? (
+          <ins key={i} className={styles.diffAdd}>
+            {t.text}
+          </ins>
+        ) : t.op === 'removed' ? (
+          <del key={i} className={styles.diffRemove}>
+            {t.text}
+          </del>
+        ) : (
+          <span key={i}>{t.text}</span>
+        ),
+      )}
+    </p>
+  );
+}
+
+/**
+ * The Shape-mode ribbon a new/updated chapter leads with (§13.5): a status eyebrow + an optional "What changed"
+ * toggle (a real word-diff, only when there's prior text to diff) + the "Looks good ✓" review action. A reviewed
+ * chapter shows a calm "Reviewed" line instead.
+ */
+function ChapterRibbon({
+  chapter,
+  onReview,
+}: {
+  chapter: StoryBookBundle['chapters'][number];
+  onReview: () => void;
+}): JSX.Element | null {
+  const [showDiff, setShowDiff] = useState(false);
+  const canDiff = Boolean(chapter.previousMarkdown?.trim());
+  if (chapter.status === 'reviewed') {
+    return (
+      <div className={styles.ribbon} data-reviewed>
+        <span className={styles.ribbonLead}>Reviewed</span>
+      </div>
+    );
+  }
+  // new / updated / stale all lead with the ribbon (so a stale chapter keeps its status cue AND the spend-free
+  // "Looks good ✓" accept action — a `generating` chapter has no review action, so it shows nothing).
+  if (chapter.status !== 'new' && chapter.status !== 'updated' && chapter.status !== 'stale') {
+    return null;
+  }
+  const lead =
+    chapter.status === 'new'
+      ? 'New chapter'
+      : chapter.status === 'updated'
+        ? 'Rewritten from new material'
+        : 'New material to fold in';
+  return (
+    <div className={styles.ribbon}>
+      <div className={styles.ribbonRow}>
+        <span className={styles.ribbonLead}>{lead}</span>
+        {canDiff ? (
+          <button
+            type="button"
+            className={styles.ribbonLink}
+            aria-expanded={showDiff}
+            onClick={() => setShowDiff((v) => !v)}
+          >
+            {showDiff ? 'Hide changes' : 'What changed'}
+          </button>
+        ) : null}
+        <button type="button" className={styles.ribbonPrimary} onClick={onReview}>
+          Looks good <span aria-hidden="true">✓</span>
+        </button>
+      </div>
+      {showDiff && chapter.previousMarkdown ? (
+        <WordDiff previous={chapter.previousMarkdown} current={chapter.markdown} />
+      ) : null}
+    </div>
+  );
+}
+
 function ChapterReader({
   bundle,
   chapter,
@@ -2927,12 +3011,17 @@ function ChapterReader({
         <Button variant="ghost" onClick={onBack} aria-label="Back to the book">
           ‹ Back
         </Button>
-        <Text tone="secondary" size="sm">
-          {CHAPTER_STATUS_LABEL[chapter.status] ?? chapter.status}
-        </Text>
       </Inline>
 
       <Heading level={1}>{chapter.title}</Heading>
+      <ChapterRibbon
+        chapter={chapter}
+        onReview={async () => {
+          setError(null);
+          const ok = await reviewChapter(bookId, chapterId);
+          if (!ok) setError('Couldn’t save that. Try again.');
+        }}
+      />
       {error ? <Banner tone="danger">{error}</Banner> : null}
       {notice ? <Banner tone="info">{notice}</Banner> : null}
 
@@ -3350,22 +3439,6 @@ function ChapterReader({
         >
           {busy ? 'Rewriting…' : 'Rewrite this chapter'}
         </Button>
-        {chapter.status === 'reviewed' ? (
-          <Text tone="secondary" size="sm">
-            Reviewed
-          </Text>
-        ) : (
-          <Button
-            variant="primary"
-            onClick={async () => {
-              setError(null);
-              const ok = await reviewChapter(bookId, chapterId);
-              if (!ok) setError('Couldn’t save that. Try again.');
-            }}
-          >
-            Looks good
-          </Button>
-        )}
       </Inline>
     </Stack>
   );

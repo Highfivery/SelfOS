@@ -220,6 +220,8 @@ describe('generateChapter (64 §5.3)', () => {
     expect(res.chapter.markdown).toContain('cut pine');
     expect(res.chapter.status).toBe('new');
     expect(res.chapter.revision).toBe(1);
+    // A first draft has nothing to diff against — no retained prior text (§13.5).
+    expect(res.chapter.previousMarkdown).toBeUndefined();
     expect(res.chapter.partId).toBe('p1');
     expect(res.chapter.title).toBe('The Garage'); // from the outline, never the model
     expect(res.chapter.provenance[0]?.refs[0]?.id).toBe('i1'); // s0 resolved to the seeded insight
@@ -241,6 +243,8 @@ describe('generateChapter (64 §5.3)', () => {
     expect(res.chapter.status).toBe('updated');
     expect(res.chapter.revision).toBe(2);
     expect(res.chapter.markdown).toContain('Second draft');
+    // The prior text is retained so the "What changed" diff can show what the rewrite altered (§13.5).
+    expect(res.chapter.previousMarkdown).toBe('First draft.');
   });
 
   it('an empty reply is an honest failure (never a blank chapter)', async () => {
@@ -457,6 +461,8 @@ describe('applyMarkup — the batch revision (64 §3.3.1/§5.3)', () => {
     expect(res.chapter.status).toBe('updated');
     expect(res.chapter.revision).toBe(2);
     expect(res.chapter.markdown).toContain('was quiet');
+    // The pre-revision text is retained for the "What changed" diff (§13.5).
+    expect(res.chapter.previousMarkdown).toContain('cut pine');
     const marks = (await getMarkup(fs, key, 'me', bookId, 'c1')).marks;
     expect(marks[0]?.status).toBe('applied');
     expect((marks[0] as DeleteMark).appliedRevision).toBe(2);

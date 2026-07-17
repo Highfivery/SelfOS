@@ -493,6 +493,40 @@ A running log of durable decisions and feedback captured into the project config
   the minimal shape — the view type permits the fields, the shared builder still omits them. A device-local resume
   position must resolve against the CURRENT chapters (a deleted/renamed chapter → resume null), or a stale marker
   dead-ends the reader.**
+- 2026-07-17 — **Build (Your Story §13 R3 — the what-changed diff, the Shape ribbon & the Read⇄Shape toggle;
+  SPEC 64 §13.7 R3 [core] BUILT on `feat/story-shape-review`, PR pending).** The third slice of the redesign:
+  editing a chapter is now a **mode of the reader** and leads with a real diff. **R3a (backend):** an additive
+  **`BookChapter.previousMarkdown`** keeps the pre-rewrite text — captured in `generateChapter` (the rewrite path
+  only; a first draft carries none) + `applyMarkup`, **cleared when a chapter is marked Reviewed** (the bridge
+  writes `previousMarkdown: undefined`, dropped on the JSON write) — plus a pure, dependency-free **`wordDiff`**/
+  `hasChanges` (LCS over words, whitespace-insensitive) in `@selfos/core/story`, exposed to the renderer via a
+  lean **`@selfos/core/story-diff`** subpath export (avoids bundling the crypto-heavy story barrel). **R3b
+  (renderer):** a new/updated chapter leads with a **`ChapterRibbon`** — "New chapter" / "Rewritten from new
+  material" · a **"What changed"** toggle revealing an inline word-diff (added words `<ins>` green, removed
+  `<del>` struck red) · **"Looks good ✓"** (the existing review) — collapsing to a calm "✓ Reviewed" once
+  reviewed; and a **Read⇄Shape toggle** — a compact **"Shape"** button in the reader bar (owner-only, on a
+  chapter page) + a "Shape this chapter ›" end-affordance, both entering the existing `ChapterReader` markup
+  editor from the reader (staying on `/story/read`). The **`applyMarkup` call-count invariants are untouched** —
+  R3 restyles the entry + adds the ribbon, the markup backend is unchanged. code-reviewer **fix-first** — one
+  should-fix applied (a **`stale`** chapter now leads with the ribbon too — "New material to fold in" + the
+  spend-free "Looks good ✓" accept action; R3b's removal of the old bottom review button had left a stale chapter
+  with no status cue AND no non-metered way to be reviewed) + two nits (a `MAX_DIFF_CELLS` cap so `wordDiff`
+  degrades to a coarse whole-block diff past ~1M word-cells instead of an unbounded LCS table; `useMemo` on the
+  render + a `role="group"` label on the diff). Gate green: typecheck, lint, format,
+  **1429 core + 1278 desktop** unit (+`wordDiff` [6, incl. the cell-cap fallback]; `previousMarkdown`
+  captured-on-rewrite/apply + no-prior-on-first-draft; +coreBridge review-clears; +3 Story RTL [ribbon+diff
+  reveal/hide, first-draft-no-toggle, stale-keeps-its-review]; the R2 owner-reader RTL/E2E re-pointed to the Shape
+  toggle), **7 story E2E** (the author-spine walk asserts the ribbon + reveals the word-diff after a revision).
+  Real-Electron visual QA (the ribbon, the red/green word-diff, the reader-bar Shape toggle — all clean, book-like). **Deferred as an honest R3-polish fast-follow** (the Shape
+  editing surface still uses the pre-redesign editor layout — functional + tested, not yet the immersive
+  margin-based mockup look): numbered **superscript sources**, **margin-rail marks** at ≥900px, and the right-hand
+  **Review & apply sheet** + bottom pending pill — folded into the R7 polish sweep (a spawn_task tracks it).
+  \*\*Lesson: a "restyle the editing machinery" slice is lowest-risk when you keep the markup BACKEND (and its
+  applyMarkup call-count invariants + whole test suite) untouched and only change the ENTRY (a Read⇄Shape toggle)
+  - add a read-only overlay (the ribbon + a pure `wordDiff` fed by an additive `previousMarkdown`); expose a pure
+    renderer helper from core via a dedicated lean subpath export (`@selfos/core/story-diff`), never the crypto-heavy
+    barrel; and keep a moved control's accessible name stable (a decorative ✓ via CSS `::before`, not text) so
+    existing `getByText`/role-name matchers don't break.\*\*
 - 2026-07-16 — **Build (Your Story chapters redesigned as a cover-backed card grid — mockup approved FIRST;
   SPEC 64 §3.1/§3.3; on `feat/story-chapter-cards`, PR pending; v0.30.0 released alongside).** The user asked to
   redesign the flat part/chapter list into a **grid of modern, sleek cards "like TikTok"** with the **generated

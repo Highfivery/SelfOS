@@ -4547,6 +4547,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...chapter,
         status: 'reviewed',
         lastReviewedAt: new Date().toISOString(),
+        // Marking a chapter Reviewed resolves the "What changed" diff — drop the retained prior text (§13.5).
+        // Explicit `undefined` is omitted on write (JSON), so the persisted chapter no longer carries it.
+        previousMarkdown: undefined,
       });
       return readBookBundle(ctx.fs, ctx.key, personId, bookId);
     },

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type {
@@ -517,9 +517,9 @@ describe('Story (64)', () => {
     expect(storyMark).toHaveBeenCalledWith(
       expect.objectContaining({ mark: expect.objectContaining({ kind: 'delete' }) }),
     );
-    // …and the suggestion strip + apply bar reflect it.
-    expect(await screen.findByText(/1 change ready to apply/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Review & apply' })).toBeInTheDocument();
+    // …and the margin-rail strip + the bottom-sticky pending pill reflect it (a cut).
+    expect(await screen.findByRole('button', { name: /1 change ready/ })).toBeInTheDocument();
+    expect(screen.getByText(/1 cut/)).toBeInTheDocument();
   });
 
   it('a Fix-this comment can also flag the source insight in Memory', async () => {
@@ -631,9 +631,13 @@ describe('Story (64)', () => {
     });
     renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
-    // The pending delete surfaces the apply bar on load.
-    await userEvent.click(await screen.findByRole('button', { name: 'Review & apply' }));
+    // The pending delete surfaces the pill on load → open the Review & apply sheet → apply the one revision.
+    await userEvent.click(await screen.findByRole('button', { name: /1 change ready/ }));
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Apply with your biographer' }),
+    );
     expect(storyApplyMarkup).toHaveBeenCalledWith({ bookId: 'b1', chapterId: 'c1' });
+    expect(storyApplyMarkup).toHaveBeenCalledTimes(1);
   });
 
   it('undoes a pending mark from its strip', async () => {
@@ -710,9 +714,9 @@ describe('Story (64)', () => {
     });
     renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
-    // The comment shows in the strip, but it's not an "apply" change → no bar.
+    // The comment shows in the rail, but it's not an "apply" change → no pending pill.
     expect(await screen.findByText(/why frame it this way/)).toBeInTheDocument();
-    expect(screen.queryByText(/ready to apply/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /change.*ready/ })).not.toBeInTheDocument();
   });
 
   it('makes an instant inline edit', async () => {
@@ -811,7 +815,7 @@ describe('Story (64)', () => {
     expect(await screen.findByText(/waiting in your Inbox/)).toBeInTheDocument();
   });
 
-  it('an ask to-do counts toward the apply bar', async () => {
+  it('an ask to-do counts toward the pending pill', async () => {
     installMockBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
@@ -835,7 +839,203 @@ describe('Story (64)', () => {
     });
     renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
-    expect(await screen.findByText(/1 change ready to apply/)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /1 change ready/ })).toBeInTheDocument();
+    expect(screen.getByText(/1 to-do/)).toBeInTheDocument();
+  });
+
+  it('renders provenance as a numbered superscript that opens the sources popover (§13.5 R3)', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')), // p0 carries one insight ref
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    // The Sources affordance is now a numbered footnote superscript (not an inline "Sources (N)" button).
+    const sup = await screen.findByRole('button', { name: 'Sources (1)' });
+    // The marker shows the footnote number, not the old inline "Sources (N)" label text.
+    expect(sup).toHaveTextContent('1');
+    expect(screen.queryByText('Sources (1)')).not.toBeInTheDocument();
+    await userEvent.click(sup);
+    expect(await screen.findByText(/Drawn from a coaching insight/)).toBeInTheDocument();
+  });
+
+  it('places a pending mark in the right-margin rail, not under the paragraph (§13.5 R3)', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({
+          schemaVersion: 1,
+          chapterId: 'c1',
+          marks: [
+            {
+              id: 'd1',
+              kind: 'delete',
+              anchor: { paragraphId: 'p0', quote: 'The garage smelled of cut pine.' },
+              status: 'pending',
+              createdAt: 'now',
+            },
+          ],
+        }),
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    const rail = (await screen.findAllByTestId('shape-mark-rail'))[0]!;
+    expect(within(rail).getByText(/The garage smelled of cut pine/)).toBeInTheDocument();
+    // The undo affordance still lives on the mark in the rail (unchanged behaviour, relocated).
+    expect(within(rail).getByRole('button', { name: 'Undo this deletion' })).toBeInTheDocument();
+  });
+
+  it('the Review & apply sheet groups pending marks, removes one from the batch, and applies once (§13.5 R3)', async () => {
+    let removeArgs: unknown = null;
+    const storyRemoveMark = vi.fn((input: { markId: string }): Promise<ChapterMarkup> => {
+      removeArgs = input;
+      // Return the batch minus the removed cut so the sheet stays populated.
+      return Promise.resolve({
+        schemaVersion: 1,
+        chapterId: 'c1',
+        marks: [
+          {
+            id: 'c2',
+            kind: 'comment',
+            anchor: { paragraphId: 'p0', quote: 'cut pine' },
+            intent: 'addContext',
+            text: 'the lathe was three generations old',
+            status: 'open',
+            createdAt: 'now',
+          },
+          {
+            id: 't3',
+            kind: 'todo',
+            anchor: { paragraphId: 'p1' },
+            text: 'go deeper on the winter he got sick',
+            todoKind: 'ask',
+            status: 'open',
+            createdAt: 'now',
+          },
+        ],
+      });
+    });
+    const storyApplyMarkup = vi.fn(
+      (): Promise<StoryRevisionResult> =>
+        Promise.resolve({
+          ok: true,
+          bundle: writtenBundle('new'),
+          markup: { schemaVersion: 1, chapterId: 'c1', marks: [] },
+        }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({
+          schemaVersion: 1,
+          chapterId: 'c1',
+          marks: [
+            {
+              id: 'd1',
+              kind: 'delete',
+              anchor: { paragraphId: 'p0', quote: 'The garage smelled of cut pine.' },
+              status: 'pending',
+              createdAt: 'now',
+            },
+            {
+              id: 'c2',
+              kind: 'comment',
+              anchor: { paragraphId: 'p0', quote: 'cut pine' },
+              intent: 'addContext',
+              text: 'the lathe was three generations old',
+              status: 'open',
+              createdAt: 'now',
+            },
+            {
+              id: 't3',
+              kind: 'todo',
+              anchor: { paragraphId: 'p1' },
+              text: 'go deeper on the winter he got sick',
+              todoKind: 'ask',
+              status: 'open',
+              createdAt: 'now',
+            },
+            {
+              // a question comment: it shows in the rail but is NOT counted and NOT in the sheet.
+              id: 'q4',
+              kind: 'comment',
+              anchor: { paragraphId: 'p1', quote: 'nothing' },
+              intent: 'question',
+              text: 'why frame it this way?',
+              status: 'open',
+              createdAt: 'now',
+            },
+          ],
+        }),
+      storyRemoveMark,
+      storyApplyMarkup,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    // The pill counts the three applicable marks (the question comment is excluded).
+    await userEvent.click(await screen.findByRole('button', { name: /3 changes ready/ }));
+    const sheet = await screen.findByRole('dialog', { name: /Review and apply/ });
+    expect(within(sheet).getByText('Cuts')).toBeInTheDocument();
+    expect(within(sheet).getByText('Comments')).toBeInTheDocument();
+    expect(within(sheet).getByText('For your biographer')).toBeInTheDocument();
+    // The question comment is not offered in the applicable batch.
+    expect(within(sheet).queryByText(/why frame it this way/)).not.toBeInTheDocument();
+    // "Remove from this batch" is the existing mark undo.
+    await userEvent.click(
+      within(sheet).getAllByRole('button', { name: 'Remove from this batch' })[0]!,
+    );
+    expect(storyRemoveMark).toHaveBeenCalled();
+    expect(removeArgs).toMatchObject({ markId: 'd1' });
+    // Apply with your biographer runs the ONE metered revision (call-count invariant unchanged).
+    await userEvent.click(
+      within(sheet).getByRole('button', { name: 'Apply with your biographer' }),
+    );
+    expect(storyApplyMarkup).toHaveBeenCalledTimes(1);
+    expect(storyApplyMarkup).toHaveBeenCalledWith({ bookId: 'b1', chapterId: 'c1' });
+  });
+
+  it('closes the Review & apply sheet when the last mark is removed (no empty dead-end, §13.5 R3)', async () => {
+    const storyRemoveMark = vi.fn(
+      (): Promise<ChapterMarkup> =>
+        Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({
+          schemaVersion: 1,
+          chapterId: 'c1',
+          marks: [
+            {
+              id: 'd1',
+              kind: 'delete',
+              anchor: { paragraphId: 'p0', quote: 'The garage smelled of cut pine.' },
+              status: 'pending',
+              createdAt: 'now',
+            },
+          ],
+        }),
+      storyRemoveMark,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /1 change ready/ }));
+    const sheet = await screen.findByRole('dialog', { name: /Review and apply/ });
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Remove from this batch' }));
+    // The batch is now empty → the sheet closes AND the pill disappears (never a lingering dead-end).
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /Review and apply/ })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('button', { name: /change.*ready/ })).not.toBeInTheDocument();
   });
 
   it('auto-refreshes the open book on mount (the living-book cadence)', async () => {

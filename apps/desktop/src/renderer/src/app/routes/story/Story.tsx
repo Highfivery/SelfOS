@@ -2924,6 +2924,9 @@ function ChapterReader({
   const [todoKind, setTodoKind] = useState<ReaderTodoKind>('remind');
   const [flagSource, setFlagSource] = useState(false);
   const [draft, setDraft] = useState('');
+  // The batch Review & apply sheet (§13.5) — the bottom-sticky pill opens it; it lists the pending marks and
+  // runs the one metered revision (`applyMarkup`, call-count unchanged).
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   const bookId = bundle.manifest.id;
   const chapterId = chapter.id;
@@ -3113,6 +3116,47 @@ function ChapterReader({
 
   const applicable = countApplicable(markup);
 
+  // Close the Review & apply sheet the moment the batch empties (the last mark removed, or the revision
+  // applied) — the pill vanishes with it, so the sheet must never linger as an empty dead-end.
+  useEffect(() => {
+    if (applicable === 0) setReviewOpen(false);
+  }, [applicable]);
+
+  // Footnote numbers for the numbered superscript sources (§13.5): a running counter over the paragraphs that
+  // actually drew on something, so provenance reads as book-style footnotes rather than an inline "Sources (N)".
+  const sourceNoByPara = new Map<number, number>();
+  {
+    let n = 0;
+    paragraphs.forEach((_, i) => {
+      if ((provByAnchor.get(`p${i}`)?.length ?? 0) > 0) sourceNoByPara.set(i, (n += 1));
+    });
+  }
+
+  // Per-kind counts for the bottom-sticky pending pill copy (§13.5) — mirrors `countApplicable`'s membership so
+  // the pill total always equals what "Apply with your biographer" will act on.
+  const allMarks = markup?.marks ?? [];
+  const cutCount = allMarks.filter((m) => m.kind === 'delete' && m.status === 'pending').length;
+  const commentCount = allMarks.filter(
+    (m) => m.kind === 'comment' && m.status === 'open' && m.intent !== 'question',
+  ).length;
+  const askCount = allMarks.filter(
+    (m) => m.kind === 'todo' && m.status === 'open' && m.todoKind === 'ask',
+  ).length;
+  const pillBreakdown = [
+    cutCount > 0 ? `${cutCount} cut${cutCount === 1 ? '' : 's'}` : null,
+    commentCount > 0 ? `${commentCount} comment${commentCount === 1 ? '' : 's'}` : null,
+    askCount > 0 ? `${askCount} to-do${askCount === 1 ? '' : 's'}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const applyBatch = async (): Promise<void> => {
+    setError(null);
+    const res = await applyMarkup(bookId, chapterId);
+    if (!res.ok) setError(res.message);
+    else setReviewOpen(false);
+  };
+
   return (
     <Stack gap={4}>
       <Inline justify="space-between">
@@ -3133,362 +3177,353 @@ function ChapterReader({
       {error ? <Banner tone="danger">{error}</Banner> : null}
       {notice ? <Banner tone="info">{notice}</Banner> : null}
 
-      {applicable > 0 ? (
-        <div className={styles.applyBar} role="status">
-          <Text size="sm">
-            {applicable} change{applicable === 1 ? '' : 's'} ready to apply
-          </Text>
-          <Button
-            variant="primary"
-            disabled={busy}
-            onClick={async () => {
-              setError(null);
-              const res = await applyMarkup(bookId, chapterId);
-              if (!res.ok) setError(res.message);
-            }}
-          >
-            {busy ? 'Applying…' : 'Review & apply'}
-          </Button>
-        </div>
-      ) : null}
-
-      <Stack gap={3}>
-        {paragraphs.map((para, i) => {
-          const refs = provByAnchor.get(`p${i}`);
-          const marks = (markup?.marks ?? []).filter(
-            (m) =>
-              m.anchor?.paragraphId === `p${i}` &&
-              ((m.kind === 'delete' && m.status === 'pending') ||
-                (m.kind === 'comment' && m.status === 'open') ||
-                (m.kind === 'todo' && m.status === 'open')),
-          );
-          return (
-            <div key={i} className={styles.para}>
-              <div className={styles.paraBody}>
-                <Markdown>{para}</Markdown>
-              </div>
-
-              {marks.length > 0 ? (
-                <Stack gap={1}>
-                  {marks.map((m) => (
-                    <div key={m.id} className={styles.markRow}>
-                      {m.kind === 'delete' ? (
-                        <Text size="sm" tone="secondary">
-                          ✂ <del className={styles.deleteQuote}>{m.anchor.quote}</del>
-                        </Text>
-                      ) : m.kind === 'comment' ? (
-                        <Text size="sm" tone="secondary">
-                          💬 {INTENT_LABEL[m.intent]}: {m.text}
-                        </Text>
-                      ) : m.kind === 'todo' ? (
-                        <Text size="sm" tone="secondary">
-                          ☐ {TODO_KIND_LABEL[m.todoKind] ?? 'To-do'}: {m.text}
-                        </Text>
-                      ) : null}
-                      {m.kind === 'todo' && m.todoKind === 'remind' ? (
-                        <button
-                          type="button"
-                          className={styles.sourcesToggle}
-                          onClick={() =>
-                            void updateMark(bookId, chapterId, m.id, { status: 'done' })
-                          }
-                        >
-                          Mark done
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className={styles.sourcesToggle}
-                          aria-label={`Undo this ${m.kind === 'delete' ? 'deletion' : m.kind}`}
-                          onClick={() => void removeMark(bookId, chapterId, m.id)}
-                        >
-                          Undo
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </Stack>
-              ) : null}
-
-              <Inline gap={2}>
-                <button
-                  type="button"
-                  className={styles.sourcesToggle}
-                  aria-expanded={activePara === i}
-                  onClick={() => (activePara === i && mode ? closeMenu() : openMenu(i))}
-                >
-                  Mark up
-                </button>
-                {refs && refs.length > 0 ? (
-                  <button
-                    type="button"
-                    className={styles.sourcesToggle}
-                    aria-expanded={openSources === i}
-                    onClick={() => setOpenSources(openSources === i ? null : i)}
-                  >
-                    Sources ({refs.length})
-                  </button>
-                ) : null}
-              </Inline>
-
-              {openSources === i && refs ? (
-                <Stack gap={1}>
-                  {refs.map((ref, j) => (
-                    <div key={j} className={styles.markRow}>
-                      <Text size="sm" tone="secondary">
-                        Drawn from {SOURCE_KIND_LABEL[ref.kind] ?? 'your history'}
-                        {ref.at ? ` · ${ref.at.slice(0, 10)}` : ''}
-                      </Text>
+      <div className={styles.shapeBody}>
+        <Stack gap={3}>
+          {paragraphs.map((para, i) => {
+            const refs = provByAnchor.get(`p${i}`);
+            const marks = (markup?.marks ?? []).filter(
+              (m) =>
+                m.anchor?.paragraphId === `p${i}` &&
+                ((m.kind === 'delete' && m.status === 'pending') ||
+                  (m.kind === 'comment' && m.status === 'open') ||
+                  (m.kind === 'todo' && m.status === 'open')),
+            );
+            const sourced = Boolean(refs && refs.length > 0);
+            return (
+              <div key={i} className={styles.para}>
+                <div className={styles.paraMeasure}>
+                  <div className={styles.paraBody}>
+                    <Markdown {...(sourced ? { className: styles.inlineProse } : {})}>
+                      {para}
+                    </Markdown>
+                    {sourced && refs ? (
                       <button
                         type="button"
-                        className={styles.sourcesToggle}
-                        onClick={() => void excludeSource(ref.kind, ref.id)}
+                        className={styles.sourceSup}
+                        aria-label={`Sources (${refs.length})`}
+                        aria-expanded={openSources === i}
+                        onClick={() => setOpenSources(openSources === i ? null : i)}
                       >
-                        Don’t draw on this again
+                        {sourceNoByPara.get(i)}
                       </button>
-                    </div>
-                  ))}
-                </Stack>
-              ) : null}
-
-              {activePara === i && mode ? (
-                <Card>
-                  <Stack gap={3}>
-                    <Text size="sm" tone="secondary">
-                      {activeQuote ? `Selected: “${activeQuote}”` : 'This whole paragraph'}
-                    </Text>
-                    {mode === 'menu' ? (
-                      <Inline gap={2}>
-                        <Button onClick={() => void addDelete(i)}>Delete</Button>
-                        <Button
-                          onClick={() => {
-                            setMode('edit');
-                            setDraft(activeQuote ?? para);
-                          }}
-                        >
-                          Edit
-                        </Button>
-                        <Button onClick={() => setMode('comment')}>Comment</Button>
-                        <Button
-                          onClick={() => {
-                            setMode('todo');
-                            setDraft('');
-                          }}
-                        >
-                          To-do
-                        </Button>
-                        <Button onClick={() => void addPin(i)}>Pin</Button>
-                        <Button
-                          onClick={() => {
-                            setMode('exclude');
-                            setDraft(activeQuote ?? para);
-                          }}
-                        >
-                          Exclude
-                        </Button>
-                        <Button variant="ghost" onClick={closeMenu}>
-                          Cancel
-                        </Button>
-                      </Inline>
                     ) : null}
-                    {mode === 'comment' ? (
-                      <Stack gap={2}>
-                        <SegmentedControl
-                          options={INTENT_OPTIONS}
-                          value={commentIntent}
-                          onChange={setCommentIntent}
-                          aria-label="Comment kind"
-                        />
-                        <Textarea
-                          value={draft}
-                          onChange={(e) => setDraft(e.target.value)}
-                          aria-label="Comment"
-                          rows={2}
-                          placeholder="What should the biographer know?"
-                        />
-                        {commentIntent === 'fix' && insightIdFor(i) ? (
-                          <label className={styles.flagRow}>
-                            <input
-                              type="checkbox"
-                              checked={flagSource}
-                              onChange={(e) => setFlagSource(e.target.checked)}
+                  </div>
+
+                  <div className={styles.paraActions}>
+                    <button
+                      type="button"
+                      className={styles.sourcesToggle}
+                      aria-expanded={activePara === i}
+                      onClick={() => (activePara === i && mode ? closeMenu() : openMenu(i))}
+                    >
+                      Mark up
+                    </button>
+                  </div>
+
+                  {openSources === i && refs ? (
+                    <Stack gap={1}>
+                      {refs.map((ref, j) => (
+                        <div key={j} className={styles.markRow}>
+                          <Text size="sm" tone="secondary">
+                            Drawn from {SOURCE_KIND_LABEL[ref.kind] ?? 'your history'}
+                            {ref.at ? ` · ${ref.at.slice(0, 10)}` : ''}
+                          </Text>
+                          <button
+                            type="button"
+                            className={styles.sourcesToggle}
+                            onClick={() => void excludeSource(ref.kind, ref.id)}
+                          >
+                            Don’t draw on this again
+                          </button>
+                        </div>
+                      ))}
+                    </Stack>
+                  ) : null}
+
+                  {activePara === i && mode ? (
+                    <Card>
+                      <Stack gap={3}>
+                        <Text size="sm" tone="secondary">
+                          {activeQuote ? `Selected: “${activeQuote}”` : 'This whole paragraph'}
+                        </Text>
+                        {mode === 'menu' ? (
+                          <Inline gap={2}>
+                            <Button onClick={() => void addDelete(i)}>Delete</Button>
+                            <Button
+                              onClick={() => {
+                                setMode('edit');
+                                setDraft(activeQuote ?? para);
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button onClick={() => setMode('comment')}>Comment</Button>
+                            <Button
+                              onClick={() => {
+                                setMode('todo');
+                                setDraft('');
+                              }}
+                            >
+                              To-do
+                            </Button>
+                            <Button onClick={() => void addPin(i)}>Pin</Button>
+                            <Button
+                              onClick={() => {
+                                setMode('exclude');
+                                setDraft(activeQuote ?? para);
+                              }}
+                            >
+                              Exclude
+                            </Button>
+                            <Button variant="ghost" onClick={closeMenu}>
+                              Cancel
+                            </Button>
+                          </Inline>
+                        ) : null}
+                        {mode === 'comment' ? (
+                          <Stack gap={2}>
+                            <SegmentedControl
+                              options={INTENT_OPTIONS}
+                              value={commentIntent}
+                              onChange={setCommentIntent}
+                              aria-label="Comment kind"
+                            />
+                            <Textarea
+                              value={draft}
+                              onChange={(e) => setDraft(e.target.value)}
+                              aria-label="Comment"
+                              rows={2}
+                              placeholder="What should the biographer know?"
+                            />
+                            {commentIntent === 'fix' && insightIdFor(i) ? (
+                              <label className={styles.flagRow}>
+                                <input
+                                  type="checkbox"
+                                  checked={flagSource}
+                                  onChange={(e) => setFlagSource(e.target.checked)}
+                                />
+                                <Text size="sm" tone="secondary">
+                                  Also mark the source insight as inaccurate in your Memory
+                                </Text>
+                              </label>
+                            ) : null}
+                            <Inline justify="flex-end">
+                              <Button variant="ghost" onClick={closeMenu}>
+                                Cancel
+                              </Button>
+                              <Button
+                                variant="primary"
+                                disabled={draft.trim().length === 0}
+                                onClick={() => void submitComment(i)}
+                              >
+                                Add comment
+                              </Button>
+                            </Inline>
+                          </Stack>
+                        ) : null}
+                        {mode === 'todo' ? (
+                          <Stack gap={2}>
+                            <SegmentedControl
+                              options={TODO_KIND_OPTIONS}
+                              value={todoKind}
+                              onChange={setTodoKind}
+                              aria-label="To-do kind"
                             />
                             <Text size="sm" tone="secondary">
-                              Also mark the source insight as inaccurate in your Memory
+                              {todoKind === 'remind'
+                                ? 'A private reminder for you — your biographer never touches it.'
+                                : todoKind === 'ask'
+                                  ? 'An instruction your biographer folds into the next revision.'
+                                  : 'Your biographer will ask you a few questions to gather this, waiting in your Inbox.'}
                             </Text>
-                          </label>
+                            <Textarea
+                              value={draft}
+                              onChange={(e) => setDraft(e.target.value)}
+                              aria-label="To-do"
+                              rows={2}
+                              placeholder={
+                                todoKind === 'remind'
+                                  ? 'e.g. upload the photo of Dad’s shop'
+                                  : 'e.g. go deeper on the winter he got sick'
+                              }
+                            />
+                            <Inline justify="flex-end">
+                              <Button variant="ghost" onClick={closeMenu}>
+                                Cancel
+                              </Button>
+                              <Button
+                                variant="primary"
+                                disabled={draft.trim().length === 0 || busy}
+                                onClick={() => void submitTodo(i)}
+                              >
+                                {todoKind === 'questions'
+                                  ? busy
+                                    ? 'Sending…'
+                                    : 'Send me questions'
+                                  : 'Add to-do'}
+                              </Button>
+                            </Inline>
+                          </Stack>
                         ) : null}
-                        <Inline justify="flex-end">
-                          <Button variant="ghost" onClick={closeMenu}>
-                            Cancel
-                          </Button>
-                          <Button
-                            variant="primary"
-                            disabled={draft.trim().length === 0}
-                            onClick={() => void submitComment(i)}
-                          >
-                            Add comment
-                          </Button>
-                        </Inline>
+                        {mode === 'edit' ? (
+                          <Stack gap={2}>
+                            <Text size="sm" tone="secondary">
+                              Rewrite this in your own words — it’s kept exactly as you write it.
+                            </Text>
+                            <Textarea
+                              value={draft}
+                              onChange={(e) => setDraft(e.target.value)}
+                              aria-label="Your words"
+                              rows={3}
+                            />
+                            <Inline justify="flex-end">
+                              <Button variant="ghost" onClick={closeMenu}>
+                                Cancel
+                              </Button>
+                              <Button
+                                variant="primary"
+                                disabled={draft.trim().length === 0}
+                                onClick={() => void submitEdit(i)}
+                              >
+                                Save my words
+                              </Button>
+                            </Inline>
+                          </Stack>
+                        ) : null}
+                        {mode === 'exclude' ? (
+                          <Stack gap={2}>
+                            <Text size="sm" tone="secondary">
+                              Never write about this again. It won’t appear in future chapters, and
+                              any chapter that already mentions it is marked to rewrite.
+                            </Text>
+                            <Textarea
+                              value={draft}
+                              onChange={(e) => setDraft(e.target.value)}
+                              aria-label="What to never write about"
+                              rows={2}
+                            />
+                            <Inline justify="flex-end">
+                              <Button variant="ghost" onClick={closeMenu}>
+                                Cancel
+                              </Button>
+                              <Button
+                                variant="danger"
+                                disabled={draft.trim().length === 0}
+                                onClick={() => void submitExclude()}
+                              >
+                                Never write about this
+                              </Button>
+                            </Inline>
+                          </Stack>
+                        ) : null}
                       </Stack>
-                    ) : null}
-                    {mode === 'todo' ? (
-                      <Stack gap={2}>
-                        <SegmentedControl
-                          options={TODO_KIND_OPTIONS}
-                          value={todoKind}
-                          onChange={setTodoKind}
-                          aria-label="To-do kind"
-                        />
-                        <Text size="sm" tone="secondary">
-                          {todoKind === 'remind'
-                            ? 'A private reminder for you — your biographer never touches it.'
-                            : todoKind === 'ask'
-                              ? 'An instruction your biographer folds into the next revision.'
-                              : 'Your biographer will ask you a few questions to gather this, waiting in your Inbox.'}
-                        </Text>
-                        <Textarea
-                          value={draft}
-                          onChange={(e) => setDraft(e.target.value)}
-                          aria-label="To-do"
-                          rows={2}
-                          placeholder={
-                            todoKind === 'remind'
-                              ? 'e.g. upload the photo of Dad’s shop'
-                              : 'e.g. go deeper on the winter he got sick'
-                          }
-                        />
-                        <Inline justify="flex-end">
-                          <Button variant="ghost" onClick={closeMenu}>
-                            Cancel
-                          </Button>
-                          <Button
-                            variant="primary"
-                            disabled={draft.trim().length === 0 || busy}
-                            onClick={() => void submitTodo(i)}
-                          >
-                            {todoKind === 'questions'
-                              ? busy
-                                ? 'Sending…'
-                                : 'Send me questions'
-                              : 'Add to-do'}
-                          </Button>
-                        </Inline>
-                      </Stack>
-                    ) : null}
-                    {mode === 'edit' ? (
-                      <Stack gap={2}>
-                        <Text size="sm" tone="secondary">
-                          Rewrite this in your own words — it’s kept exactly as you write it.
-                        </Text>
-                        <Textarea
-                          value={draft}
-                          onChange={(e) => setDraft(e.target.value)}
-                          aria-label="Your words"
-                          rows={3}
-                        />
-                        <Inline justify="flex-end">
-                          <Button variant="ghost" onClick={closeMenu}>
-                            Cancel
-                          </Button>
-                          <Button
-                            variant="primary"
-                            disabled={draft.trim().length === 0}
-                            onClick={() => void submitEdit(i)}
-                          >
-                            Save my words
-                          </Button>
-                        </Inline>
-                      </Stack>
-                    ) : null}
-                    {mode === 'exclude' ? (
-                      <Stack gap={2}>
-                        <Text size="sm" tone="secondary">
-                          Never write about this again. It won’t appear in future chapters, and any
-                          chapter that already mentions it is marked to rewrite.
-                        </Text>
-                        <Textarea
-                          value={draft}
-                          onChange={(e) => setDraft(e.target.value)}
-                          aria-label="What to never write about"
-                          rows={2}
-                        />
-                        <Inline justify="flex-end">
-                          <Button variant="ghost" onClick={closeMenu}>
-                            Cancel
-                          </Button>
-                          <Button
-                            variant="danger"
-                            disabled={draft.trim().length === 0}
-                            onClick={() => void submitExclude()}
-                          >
-                            Never write about this
-                          </Button>
-                        </Inline>
-                      </Stack>
-                    ) : null}
-                  </Stack>
-                </Card>
-              ) : null}
+                    </Card>
+                  ) : null}
 
-              {chapter.imagePlacements
-                .filter((pl) => pl.afterAnchor === `p${i}`)
-                .map((pl) => (
-                  <figure key={pl.imageId} className={styles.placedImage}>
-                    {imageUrls[pl.imageId] ? (
-                      <img src={imageUrls[pl.imageId]} alt={pl.caption || 'Book image'} />
-                    ) : null}
-                    <figcaption>
-                      <TextInput
-                        value={pl.caption}
-                        aria-label="Image caption"
-                        placeholder="Caption (optional)"
-                        onChange={(e) =>
-                          void setPlacement(
-                            bookId,
-                            chapterId,
-                            pl.imageId,
-                            pl.afterAnchor,
-                            e.target.value,
-                          )
-                        }
-                      />
-                      <Inline gap={2}>
-                        <Select
-                          aria-label="Move image after paragraph"
-                          value={pl.afterAnchor}
-                          onChange={(e) =>
-                            void setPlacement(
-                              bookId,
-                              chapterId,
-                              pl.imageId,
-                              e.target.value,
-                              pl.caption,
-                            )
-                          }
-                        >
-                          {paragraphs.map((_, pi) => (
-                            <option key={pi} value={`p${pi}`}>
-                              After paragraph {pi + 1}
-                            </option>
-                          ))}
-                        </Select>
-                        <button
-                          type="button"
-                          className={styles.sourcesToggle}
-                          aria-label="Remove this image"
-                          onClick={() => void removePlacement(bookId, chapterId, pl.imageId)}
-                        >
-                          Remove
-                        </button>
-                      </Inline>
-                    </figcaption>
-                  </figure>
-                ))}
-            </div>
-          );
-        })}
-      </Stack>
+                  {chapter.imagePlacements
+                    .filter((pl) => pl.afterAnchor === `p${i}`)
+                    .map((pl) => (
+                      <figure key={pl.imageId} className={styles.placedImage}>
+                        {imageUrls[pl.imageId] ? (
+                          <img src={imageUrls[pl.imageId]} alt={pl.caption || 'Book image'} />
+                        ) : null}
+                        <figcaption>
+                          <TextInput
+                            value={pl.caption}
+                            aria-label="Image caption"
+                            placeholder="Caption (optional)"
+                            onChange={(e) =>
+                              void setPlacement(
+                                bookId,
+                                chapterId,
+                                pl.imageId,
+                                pl.afterAnchor,
+                                e.target.value,
+                              )
+                            }
+                          />
+                          <Inline gap={2}>
+                            <Select
+                              aria-label="Move image after paragraph"
+                              value={pl.afterAnchor}
+                              onChange={(e) =>
+                                void setPlacement(
+                                  bookId,
+                                  chapterId,
+                                  pl.imageId,
+                                  e.target.value,
+                                  pl.caption,
+                                )
+                              }
+                            >
+                              {paragraphs.map((_, pi) => (
+                                <option key={pi} value={`p${pi}`}>
+                                  After paragraph {pi + 1}
+                                </option>
+                              ))}
+                            </Select>
+                            <button
+                              type="button"
+                              className={styles.sourcesToggle}
+                              aria-label="Remove this image"
+                              onClick={() => void removePlacement(bookId, chapterId, pl.imageId)}
+                            >
+                              Remove
+                            </button>
+                          </Inline>
+                        </figcaption>
+                      </figure>
+                    ))}
+                </div>
+
+                {/* Pending marks live in the right-margin rail beside the measure at ≥900px (a container query,
+                  §13.5), and stack under the paragraph below that. */}
+                {marks.length > 0 ? (
+                  <div className={styles.paraMarks} data-testid="shape-mark-rail">
+                    {marks.map((m) => (
+                      <div key={m.id} className={styles.markRow}>
+                        {m.kind === 'delete' ? (
+                          <Text size="sm" tone="secondary">
+                            ✂ <del className={styles.deleteQuote}>{m.anchor.quote}</del>
+                          </Text>
+                        ) : m.kind === 'comment' ? (
+                          <Text size="sm" tone="secondary">
+                            💬 {INTENT_LABEL[m.intent]}: {m.text}
+                          </Text>
+                        ) : m.kind === 'todo' ? (
+                          <Text size="sm" tone="secondary">
+                            ☐ {TODO_KIND_LABEL[m.todoKind] ?? 'To-do'}: {m.text}
+                          </Text>
+                        ) : null}
+                        {m.kind === 'todo' && m.todoKind === 'remind' ? (
+                          <button
+                            type="button"
+                            className={styles.sourcesToggle}
+                            onClick={() =>
+                              void updateMark(bookId, chapterId, m.id, { status: 'done' })
+                            }
+                          >
+                            Mark done
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className={styles.sourcesToggle}
+                            aria-label={`Undo this ${m.kind === 'delete' ? 'deletion' : m.kind}`}
+                            onClick={() => void removeMark(bookId, chapterId, m.id)}
+                          >
+                            Undo
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </Stack>
+      </div>
 
       {/* Images in this chapter (§3.8) — illustrate or place an existing photo/illustration; the AI suggests
           where it fits, and you can move it. */}
@@ -3548,6 +3583,192 @@ function ChapterReader({
           {busy ? 'Rewriting…' : 'Rewrite this chapter'}
         </Button>
       </Inline>
+
+      {/* The bottom-sticky pending pill (§13.5): a running count of what the batch revision will act on, opening
+          the Review & apply sheet. Inline edits + pins are already applied (they're not marks), so the pill's
+          total mirrors `countApplicable`, never those instant changes. */}
+      {applicable > 0 ? (
+        <div className={styles.pendingPillWrap} aria-live="polite">
+          <button
+            type="button"
+            className={styles.pendingPill}
+            onClick={() => setReviewOpen(true)}
+            aria-haspopup="dialog"
+            aria-expanded={reviewOpen}
+          >
+            <span className={styles.pendingPillCount}>
+              {applicable} change{applicable === 1 ? '' : 's'} ready
+              {pillBreakdown ? ` · ${pillBreakdown}` : ''}
+            </span>
+            <span className={styles.pendingPillHint}>
+              — your inline edits and pins are already in
+            </span>
+          </button>
+        </div>
+      ) : null}
+
+      {reviewOpen ? (
+        <ReviewSheet
+          markup={markup}
+          busy={busy}
+          onRemove={(markId) => void removeMark(bookId, chapterId, markId)}
+          onApply={applyBatch}
+          onClose={() => setReviewOpen(false)}
+        />
+      ) : null}
     </Stack>
+  );
+}
+
+/** One grouped section inside the Review & apply sheet (Cuts / Comments / For your biographer). */
+function ReviewGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <div className={styles.reviewGroup}>
+      <span className={styles.reviewGroupTitle}>{title}</span>
+      <Stack gap={2}>{children}</Stack>
+    </div>
+  );
+}
+
+/** One pending mark in the Review & apply sheet: a short description, its anchor excerpt, and a per-mark
+ *  "Remove from this batch" (= the existing mark undo). */
+function ReviewRow({
+  label,
+  excerpt,
+  struck,
+  onRemove,
+}: {
+  label?: string;
+  excerpt?: string | undefined;
+  struck?: boolean;
+  onRemove: () => void;
+}): JSX.Element {
+  return (
+    <div className={styles.reviewRow}>
+      <div className={styles.reviewRowBody}>
+        {label ? <Text size="sm">{label}</Text> : null}
+        {excerpt ? (
+          <Text size="sm" tone="tertiary" className={styles.reviewExcerpt}>
+            {struck ? <del className={styles.deleteQuote}>{excerpt}</del> : `“${excerpt}”`}
+          </Text>
+        ) : null}
+      </div>
+      <button type="button" className={styles.sourcesToggle} onClick={onRemove}>
+        Remove from this batch
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The Review & apply sheet (§13.5) — a right-hand sheet over the dimmed chapter listing the pending marks
+ * grouped, each removable from the batch, plus the one metered revision (`applyMarkup`, unchanged). Reuses the
+ * shared `.sheet*` chrome (the same right-hand sheet the to-do list uses). Instant changes (inline edits, pins)
+ * are not marks, so they never appear here — a calm note says so.
+ */
+function ReviewSheet({
+  markup,
+  busy,
+  onRemove,
+  onApply,
+  onClose,
+}: {
+  markup: ChapterMarkup | null;
+  busy: boolean;
+  onRemove: (markId: string) => void;
+  onApply: () => void | Promise<void>;
+  onClose: () => void;
+}): JSX.Element {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  type Mark = ChapterMarkup['marks'][number];
+  const marks = markup?.marks ?? [];
+  const cuts = marks.filter(
+    (m): m is Extract<Mark, { kind: 'delete' }> => m.kind === 'delete' && m.status === 'pending',
+  );
+  const comments = marks.filter(
+    (m): m is Extract<Mark, { kind: 'comment' }> =>
+      m.kind === 'comment' && m.status === 'open' && m.intent !== 'question',
+  );
+  const asks = marks.filter(
+    (m): m is Extract<Mark, { kind: 'todo' }> =>
+      m.kind === 'todo' && m.status === 'open' && m.todoKind === 'ask',
+  );
+
+  return (
+    <div className={styles.sheetWrap}>
+      <div className={styles.sheetBackdrop} onClick={onClose} aria-hidden="true" />
+      <aside className={styles.sheetPanel} role="dialog" aria-label="Review and apply changes">
+        <div className={styles.sheetHead}>
+          <Heading level={2}>Review &amp; apply</Heading>
+          <button
+            type="button"
+            className={styles.sourcesToggle}
+            aria-label="Close"
+            onClick={onClose}
+          >
+            ✕ Close
+          </button>
+        </div>
+        <div className={styles.sheetBody}>
+          {cuts.length > 0 ? (
+            <ReviewGroup title="Cuts">
+              {cuts.map((m) => (
+                <ReviewRow
+                  key={m.id}
+                  excerpt={m.anchor.quote}
+                  struck
+                  onRemove={() => onRemove(m.id)}
+                />
+              ))}
+            </ReviewGroup>
+          ) : null}
+          {comments.length > 0 ? (
+            <ReviewGroup title="Comments">
+              {comments.map((m) => (
+                <ReviewRow
+                  key={m.id}
+                  label={`${INTENT_LABEL[m.intent]}: ${m.text}`}
+                  excerpt={m.anchor.quote}
+                  onRemove={() => onRemove(m.id)}
+                />
+              ))}
+            </ReviewGroup>
+          ) : null}
+          {asks.length > 0 ? (
+            <ReviewGroup title="For your biographer">
+              {asks.map((m) => (
+                <ReviewRow
+                  key={m.id}
+                  label={m.text}
+                  excerpt={m.anchor?.quote}
+                  onRemove={() => onRemove(m.id)}
+                />
+              ))}
+            </ReviewGroup>
+          ) : null}
+          <Text size="sm" tone="tertiary">
+            Your inline edits and pins are already in — they apply the moment you make them.
+          </Text>
+        </div>
+        <div className={styles.sheetFoot}>
+          <Button variant="primary" disabled={busy} onClick={() => void onApply()}>
+            {busy ? 'Applying…' : 'Apply with your biographer'}
+          </Button>
+        </div>
+      </aside>
+    </div>
   );
 }

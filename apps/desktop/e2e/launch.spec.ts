@@ -11255,13 +11255,25 @@ test('story (64): setup names the book, outline rename, chapters + sources, mark
       .click();
     await expect(w.getByText(/Drawn from/)).toBeVisible();
 
-    // Mark up the first paragraph with a comment → it queues for the batch revision → apply it.
+    // Mark up the first paragraph with a comment → it lands in the margin-rail strip (§13.5 R3).
     await w.getByRole('button', { name: 'Mark up' }).first().click();
     await w.getByRole('button', { name: 'Comment' }).click();
     await w.getByRole('textbox', { name: 'Comment' }).fill('Mention the winter he got sick.');
     await w.getByRole('button', { name: 'Add comment' }).click();
-    await expect(w.getByText(/change(s)? ready to apply/)).toBeVisible();
-    await w.getByRole('button', { name: 'Review & apply' }).click();
+
+    // On a wide container the pending mark sits in an absolute right-margin rail (a container query, §13.5 R3).
+    await w.setViewportSize({ width: 1440, height: 900 });
+    const railPos = await w
+      .getByTestId('shape-mark-rail')
+      .first()
+      .evaluate((el) => getComputedStyle(el).position);
+    expect(railPos).toBe('absolute');
+
+    // The bottom-sticky pending pill opens the Review & apply sheet → apply the one metered revision.
+    const pill = w.getByRole('button', { name: /change.*ready/ });
+    await expect(pill).toBeVisible();
+    await pill.click();
+    await w.getByRole('button', { name: 'Apply with your biographer' }).click();
     await expect(w.getByText(/for once he spoke up/)).toBeVisible();
 
     // The revised chapter now leads with the Shape ribbon (§13.5); "What changed" reveals a real word diff.
@@ -11286,6 +11298,12 @@ test('story (64): setup names the book, outline rename, chapters + sources, mark
     expect(book?.titleAuto ?? false).toBe(false);
     expect(book?.config.length).toBe('full');
     expect(book?.config.style).toBe('cinematic');
+
+    // Leave a pending mark on screen so the 360px scan exercises the bottom-sticky pill AND the marks strip
+    // in its narrow (stacked-under-the-paragraph) state (§13.5 R3).
+    await w.getByRole('button', { name: 'Mark up' }).first().click();
+    await w.getByRole('button', { name: 'Delete' }).click();
+    await expect(w.getByRole('button', { name: /change.*ready/ })).toBeVisible();
 
     // 360px: the reader scrolls vertically only — no horizontal scrollbar (CLAUDE.md §12).
     await w.setViewportSize({ width: 360, height: 780 });

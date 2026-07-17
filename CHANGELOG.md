@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.37.0](https://github.com/Highfivery/SelfOS/compare/v0.36.0...v0.37.0) (2026-07-17)
+
+
+### Features
+
+* **auto-checkins:** let a target see + stop check-ins others send them (63 §3.3a) ([#250](https://github.com/Highfivery/SelfOS/issues/250)) ([e9653fb](https://github.com/Highfivery/SelfOS/commit/e9653fbd25ca50be4717b9871da49398f5752c78))
+
 ## [0.36.0](https://github.com/Highfivery/SelfOS/compare/v0.35.0...v0.36.0) (2026-07-17)
 
 

@@ -11372,8 +11372,14 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     // One-flow draft (no outline gate): read + outline (auto-approved) + every chapter, landing on the book.
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
 
-    // The single global image style is surfaced ON the Story page (not only buried in Settings, §12).
+    // Story settings live ON the Story page (§3.8): a collapsible section lets the person set this book's
+    // writing (voice/tone/length/auto-refresh) AND its own image style — not buried in Settings.
+    await w.getByRole('button', { name: /Story settings/ }).click();
+    await expect(w.getByLabel('Narrative voice')).toBeVisible();
+    await expect(w.getByLabel('Tone')).toBeVisible();
     await expect(w.getByRole('combobox', { name: 'Image style' })).toBeVisible();
+    // Change the book's tone → persists to its config.
+    await w.getByLabel('Tone').selectOption({ label: 'Cinematic' });
 
     // Create a symbolic cover (H1): the distill → render flow behind the shared image consent.
     await w.getByRole('button', { name: 'Create a cover' }).click();

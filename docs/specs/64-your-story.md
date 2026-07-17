@@ -259,22 +259,25 @@ sent).
 
 ### 3.8 Images
 
-- **One global style (owner decision, 2026-07-16)**: there is **no per-image / per-surface style
-  picker**. A single setting — `dreams.imageStyle` (shared by dream images AND story cover/illustrations)
-  — is the one style every AI image uses, so they all look consistent. It's a grouped **preset select**
-  plus a **Custom…** free-text option, refined by an optional **style direction** note
-  (`dreams.imageStyleNotes`). It lives both in a dedicated owner-only **Settings → Images** section
-  (source of truth: consent, model, the global style, the direction note, the OpenAI key) **AND directly
-  on the Your Story book overview** (an `ImageStyleControl` writing the same setting) — a control belongs
-  where the work happens, not only buried in Settings (CLAUDE.md §12).
+- **Story settings section (owner decision, 2026-07-16)**: a **collapsible "Story settings"** section on the
+  Your Story book overview is the cohesive home for configuring THIS book — never a lone control jammed under
+  another card. It has two groups: **Writing** (narrative voice · tone/style register · length · auto-refresh
+  — all editable post-creation, persisted to `BookConfig` via `storyUpdate`; changes steer FUTURE rewrites,
+  existing chapters keep their text until re-drafted/refreshed) and **Images** — this book's **own** image
+  style (`BookConfig.imageStyle`, a grouped preset select + a **Custom…** free-text option) + a **style
+  direction** note (`BookConfig.imageStyleNotes`). The story's image style is **independent of the dream-image
+  style**: `generateStoryImage` uses `book.config.imageStyle`/`imageStyleNotes` when set, falling back to the
+  global `dreams.imageStyle` for a book that hasn't chosen its own (additive-optional, no migration). The
+  reusable `ImageStylePicker` is shared with the dream-image `ImageStyleControl` in Settings → Images (which
+  keeps the OpenAI model + key). A control belongs where the work happens (CLAUDE.md §12).
 - **Realtime progress (mandatory, CLAUDE.md §12)**: every image/vision generation — cover, chapter
   illustration, dream image, photo vision — shows a live **phase** (`Composing the scene…` → `Painting
 the image…`, or `Reading your photo…`), an **elapsed timer**, and an **ETA**, never a bare spinner. The
   generation runs in main and streams `image:progress` phase events (its own channel, `emitImageProgress`
   → preload → the shared `ImageProgress` renderer); vision is a single phase carried by the timer alone.
 - **Cover**: "Create a cover" on the book overview → the spec-13 two-call flow (Claude distills a
-  **name-free, symbolic** cover brief in the global style; OpenAI renders; never a photoreal likeness) →
-  cover stored encrypted; regenerate at will; admin-only cost shown (13 §-precedent).
+  **name-free, symbolic** cover brief in the book's image style; OpenAI renders; never a photoreal likeness)
+  → cover stored encrypted; regenerate at will; admin-only cost shown (13 §-precedent).
 - **Chapter illustrations**: "Illustrate this chapter" — same flow seeded from the chapter's
   distilled themes. On-demand only (no auto image spend). The button appears **only when image
   generation is set up** (consent on + AI on + an OpenAI key); otherwise the Images card shows a calm

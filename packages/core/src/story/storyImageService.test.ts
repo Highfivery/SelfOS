@@ -160,6 +160,25 @@ describe('generateStoryImage (§3.8)', () => {
     expect(noClaude.ok === false && noClaude.reason).toBe('NO_KEY');
   });
 
+  it('uses the book’s OWN image style + direction over the global fallback (§3.8)', async () => {
+    const bookId = await seed();
+    await updateBook(
+      fs,
+      key,
+      'author',
+      bookId,
+      { config: { ...config, imageStyle: 'ukiyo-e', imageStyleNotes: 'muted blues' } },
+      now,
+    );
+    captured.claudeInput = undefined;
+    // deps.style is the GLOBAL fallback; the book set its own, so its style wins in the distillation input.
+    const res = await generateStoryImage(deps({ bookId, style: 'oil painting' }));
+    expect(res.ok).toBe(true);
+    expect(captured.claudeInput).toContain('Visual style: ukiyo-e.');
+    expect(captured.claudeInput).not.toContain('oil painting');
+    expect(captured.claudeInput).toContain('Additional style direction: muted blues.');
+  });
+
   it('distills → renders → encrypts → indexes → stamps the cover, metering both charges', async () => {
     const bookId = await seed();
     const res = await generateStoryImage(deps({ bookId, target: { kind: 'cover' } }));

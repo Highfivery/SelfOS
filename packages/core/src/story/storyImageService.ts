@@ -150,7 +150,7 @@ export async function generateStoryImage(
   deps: GenerateStoryImageDeps,
 ): Promise<StoryImageGenerateResult> {
   const { fs, key, claude, image, anthropicApiKey, openaiApiKey, consent } = deps;
-  const { claudeModel, imageModel, style, personId, bookId, target, now } = deps;
+  const { claudeModel, imageModel, personId, bookId, target, now } = deps;
 
   if (!consent) {
     return {
@@ -177,6 +177,11 @@ export async function generateStoryImage(
   const book = await getBook(fs, key, personId, bookId);
   if (!book) return { ok: false, reason: 'ERROR', message: 'That book could no longer be found.' };
 
+  // Story-scoped image look (§3.8) — this book's own style/direction wins; the global `dreams.imageStyle`
+  // passed in `deps.style`/`deps.styleNotes` is only the fallback for a book that hasn't set its own.
+  const style = book.config.imageStyle?.trim() || deps.style;
+  const styleNotes = book.config.imageStyleNotes?.trim() || deps.styleNotes;
+
   // Seed the brief. A cover draws on the book essence + title; an illustration on its chapter's themes.
   let seed: string;
   if (target.kind === 'cover') {
@@ -201,7 +206,7 @@ export async function generateStoryImage(
     title: book.title,
     seed,
     style,
-    ...(deps.styleNotes ? { styleNotes: deps.styleNotes } : {}),
+    ...(styleNotes ? { styleNotes } : {}),
   });
 
   // 1. Distill via Claude. A pre-render failure here makes no OpenAI call and is not metered.

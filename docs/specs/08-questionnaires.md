@@ -228,8 +228,18 @@ backed by an additive **`QuestionnaireSentOverview.analyzedAt`** (the latest ana
 `updatedAt`, derived in the bridge). The **Questionnaires sidebar nav link** gains an aggregate badge (a pure
 `questionnaireNavCount` = **responses ready to analyze** + **received questionnaires still to answer**; passive
 "awaiting their response" is excluded); the shell loads `sentOverview` on person-change so the badge has data
-everywhere. Tabs are `role="tab"`/`tablist` with `aria-selected`; at ≤480px they tighten so all three fit with
-no horizontal scroll (§12).
+everywhere. Tabs are `role="tab"`/`tablist` + `role="tabpanel"` with `aria-selected`/`aria-controls` + a roving
+tabindex (arrow/Home/End keys); at ≤480px they tighten so all three fit with no horizontal scroll (§12).
+
+**Sort/group reconciliation + Received sort (2026-07-17b).** Because the Sent tab keeps its fixed-lifecycle
+status subgroups (Drafts → Awaiting → Answered → Analyzed), a within-group sort alone left un-analyzed groups
+pinned on top under "Recently analyzed". Now a pure **`orderSentGroups`** floats the group carrying the sort's
+date to the top (each group ranked by the max sort value among its entries; groups with no such date sink to
+the bottom; "Title" keeps the lifecycle order) — so "Recently analyzed"/"Recently answered" put the
+Analyzed/Answered group first. The **Received** tab gained its own **sort** (`sortReceived`: Recently received
+[default] · Recently answered · Title A–Z; favourites pinned, missing-date items sink). The attention count on
+the Received tab uses a soft `--color-warning-subtle-bg`/`-text` pill (both themes) rather than a harsh
+dark-yellow-on-black.
 
 ### 3.2 Sending
 

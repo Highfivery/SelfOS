@@ -92,12 +92,13 @@
   color: var(--color-accent-text);
 }
 
-/* Something needs the person's action (a received questionnaire to answer) — warm accent. */
+/* Something needs the person's action (a received questionnaire to answer) — a soft, warm highlight
+   (not a harsh dark-yellow-on-black pill). */
 .tabCountAttn,
 .tabActive .tabCountAttn {
-  background: var(--color-warning);
+  background: var(--color-warning-subtle-bg);
   border-color: transparent;
-  color: #2e2a25;
+  color: var(--color-warning-subtle-text);
 }
 
 /* The Auto check-ins on/off indicator — a small dot instead of a count (it's a config surface). */

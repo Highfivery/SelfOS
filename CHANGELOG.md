@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.36.0](https://github.com/Highfivery/SelfOS/compare/v0.35.0...v0.36.0) (2026-07-17)
+
+
+### Features
+
+* **memory:** context-rich cards, card grid, nav badge & share-with-partner default (62 §13) ([#247](https://github.com/Highfivery/SelfOS/issues/247)) ([2b55b7c](https://github.com/Highfivery/SelfOS/commit/2b55b7c75bf42013f72f18648e053456f6b328eb))
+* **story:** close out §13 — answered-history chapter linkage + a shared scrim token (64 §13.6.5) ([#249](https://github.com/Highfivery/SelfOS/issues/249)) ([659a642](https://github.com/Highfivery/SelfOS/commit/659a642f41f6c91605dc9133d6974fb41a4f314e))
+
 ## [0.35.0](https://github.com/Highfivery/SelfOS/compare/v0.34.0...v0.35.0) (2026-07-17)
 
 

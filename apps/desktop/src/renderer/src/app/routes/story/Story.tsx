@@ -939,6 +939,41 @@ function StorySettingsPanel({
   );
 }
 
+const PART_WORDS = [
+  'one',
+  'two',
+  'three',
+  'four',
+  'five',
+  'six',
+  'seven',
+  'eight',
+  'nine',
+  'ten',
+  'eleven',
+  'twelve',
+];
+function partLabel(index: number): string {
+  return `Part ${PART_WORDS[index] ?? index + 1}`;
+}
+
+/** The status pill on a chapter card: reviewed → done, generating/stale → in-progress, else new/updated. */
+function chapterBadge(status: string): { label: string; cls: string } {
+  if (status === 'reviewed') return { label: 'Reviewed', cls: styles.chBadgeDone ?? '' };
+  if (status === 'generating') return { label: 'Writing…', cls: styles.chBadgeWip ?? '' };
+  if (status === 'stale') return { label: 'New material', cls: styles.chBadgeWip ?? '' };
+  if (status === 'updated') return { label: 'Updated', cls: '' };
+  return { label: 'New', cls: '' };
+}
+
+/** A deterministic background crop per card, so cover-backed cards (which all share the one cover) aren't
+ *  pixel-identical. A chapter's own illustration is centered instead (it's already unique). */
+function coverPosition(seed: number): string {
+  const x = 25 + ((seed * 37) % 50);
+  const y = 30 + ((seed * 53) % 45);
+  return `${x}% ${y}%`;
+}
+
 function BookOverview({
   bundle,
   onOpenChapter,
@@ -964,6 +999,9 @@ function BookOverview({
   const update = useStoryStore((s) => s.update);
   const progress = useStoryStore((s) => s.progress);
   const busy = useStoryStore((s) => s.chaptersGenerating);
+  const imageUrls = useStoryStore((s) => s.imageUrls);
+  const getImageUrl = useStoryStore((s) => s.getImageUrl);
+  const loadImages = useStoryStore((s) => s.loadImages);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
@@ -977,7 +1015,20 @@ function BookOverview({
     void loadTodos(bookId);
     void loadProposals(bookId);
     void loadCompleteness(bookId);
-  }, [bookId, loadExclusions, loadTodos, loadProposals, loadCompleteness]);
+    void loadImages(bookId);
+  }, [bookId, loadExclusions, loadTodos, loadProposals, loadCompleteness, loadImages]);
+
+  // Resolve the data URLs the chapter cards use as their background: each chapter's own illustration (§3.8)
+  // where it has one, otherwise the book cover — so the grid gets richer as art is added.
+  useEffect(() => {
+    const ids = new Set<string>();
+    if (manifest.coverImageId) ids.add(manifest.coverImageId);
+    for (const c of chapters) {
+      const first = c.imagePlacements[0]?.imageId;
+      if (first) ids.add(first);
+    }
+    for (const id of ids) if (!imageUrls[id]) void getImageUrl(bookId, id);
+  }, [bookId, manifest.coverImageId, chapters, imageUrls, getImageUrl]);
 
   const openTodos = todos.filter((t) => t.status === 'open' || t.status === 'questionsSent');
 
@@ -1181,39 +1232,68 @@ function BookOverview({
       ) : null}
 
       {outline
-        ? outline.parts.map((part) => (
-            <Card key={part.id}>
-              <Stack gap={2}>
+        ? outline.parts.map((part, pi) => (
+            <section className={styles.partSection} key={part.id}>
+              <div className={styles.partHead}>
+                <span className={styles.partEyebrow}>{partLabel(pi)}</span>
                 <Heading level={2}>{part.title}</Heading>
+                <span className={styles.partCount}>
+                  {part.chapters.length} {part.chapters.length === 1 ? 'chapter' : 'chapters'}
+                </span>
+              </div>
+              <div className={styles.chapterGrid}>
                 {part.chapters.map((chapter) => {
                   // An approved structural proposal leaves an un-written shell (empty markdown, status stale)
-                  // that the next refresh drafts — show it as "Not yet written", not a clickable blank chapter.
+                  // that the next refresh drafts — show it as a calm "Not yet written" card, not a blank.
                   const written = chapters.find(
                     (c) => c.id === chapter.id && c.markdown.trim().length > 0,
                   );
-                  return written ? (
+                  const num = outlineChapters.findIndex((c) => c.id === chapter.id) + 1;
+                  const numLabel = num > 0 ? `Chapter ${num}` : 'Chapter';
+                  if (!written) {
+                    return (
+                      <div key={chapter.id} className={styles.notYetCard}>
+                        <span className={styles.chNum}>{numLabel}</span>
+                        <span className={styles.notYetTitle}>{chapter.title}</span>
+                        <span>Not yet written</span>
+                      </div>
+                    );
+                  }
+                  // The card background: the chapter's own illustration if it has one, else the book cover.
+                  const ownIllustration = written.imagePlacements[0]?.imageId;
+                  const imageId = ownIllustration ?? manifest.coverImageId;
+                  const url = imageId ? imageUrls[imageId] : undefined;
+                  const badge = chapterBadge(written.status);
+                  return (
                     <button
                       key={chapter.id}
                       type="button"
-                      className={styles.chapterLink}
+                      className={`${styles.chapterCard} ${url ? '' : styles.chapterCardFallback}`}
+                      style={
+                        url
+                          ? {
+                              backgroundImage: `url("${url}")`,
+                              // A unique illustration is centered; the shared cover gets a varied crop.
+                              backgroundPosition: ownIllustration ? 'center' : coverPosition(num),
+                            }
+                          : undefined
+                      }
                       onClick={() => onOpenChapter(chapter.id)}
                     >
-                      <Text className={styles.rowTitle}>{chapter.title}</Text>
-                      <Text tone="secondary" size="sm">
-                        {CHAPTER_STATUS_LABEL[written.status] ?? written.status} ›
-                      </Text>
+                      <span className={`${styles.chBadge} ${badge.cls}`}>
+                        <span className={styles.chDot} aria-hidden="true" />
+                        {badge.label}
+                      </span>
+                      <span className={styles.chapterCardBody}>
+                        <span className={styles.chNum}>{numLabel}</span>
+                        <span className={styles.chTitle}>{chapter.title}</span>
+                        <span className={styles.chReveal}>Read ›</span>
+                      </span>
                     </button>
-                  ) : (
-                    <div key={chapter.id} className={styles.overviewRow}>
-                      <Text className={styles.rowTitle}>{chapter.title}</Text>
-                      <Text tone="secondary" size="sm">
-                        Not yet written
-                      </Text>
-                    </div>
                   );
                 })}
-              </Stack>
-            </Card>
+              </div>
+            </section>
           ))
         : null}
 

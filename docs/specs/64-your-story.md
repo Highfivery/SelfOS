@@ -125,9 +125,17 @@ projections), 20/44/62 (Memory, flag-inaccurate loop).
 ### 3.3 The Draft view (the control room)
 
 - `/story` shows the **book overview**: cover (or placeholder), completeness meter ("Your story is
-  ~64% told" — §5.6), parts/chapters list with per-chapter status chips (Generating · New · Stale ·
-  Reviewed), pending structural proposals, pending interview nudges, and actions (Refresh now ·
-  Share & readers · Export).
+  ~64% told" — §5.6), the **chapters grid** (see below), pending structural proposals, pending
+  interview nudges, and actions (Refresh now · Share & readers · Export).
+- **Chapters grid (redesign, owner decision 2026-07-16):** chapters render as a responsive grid of
+  **portrait, cover-backed cards** grouped by part (a part eyebrow + title + chapter count over each
+  grid), inspired by a modern media grid. Each card's **background is the book's generated cover** —
+  or, where a chapter has its own illustration (§3.8), that image takes over as the card background,
+  so the grid grows richer as art is added; a warm gradient stands in until a cover exists. A dark
+  bottom scrim keeps the overlaid **chapter number + title** legible; a status pill (New · Updated ·
+  New material · Writing… · Reviewed) reads at a glance; hovering reveals a "Read ›" affordance. An
+  approved-but-unwritten chapter shell shows as a calm dashed "Not yet written" card. No horizontal
+  overflow at phone width (§12).
 - Opening a chapter shows **rendered prose** (book renderer, §5.9). Marking it up is
   **selection-based**: highlighting any span (word → paragraph) raises a contextual toolbar
   (Delete · Edit · Comment · To-do · Pin · Exclude · Sources). A per-paragraph affordance handle

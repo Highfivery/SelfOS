@@ -340,6 +340,9 @@ export async function getStoryGaps(
   const interview = await getInterviewState(fs, key, personId, bookId);
   const outline = await getOutline(fs, key, personId, bookId);
   const chapters = await listChapters(fs, key, personId, bookId);
+  // The persisted per-part coverage reflects the AI reading AT THE LAST GAP PASS — it doesn't move as chapters
+  // are written/reviewed until the next pass (a model reading can't be recomputed without AI). Before any pass,
+  // the live written/reviewed ratio fills in.
   const partCoverage =
     interview.lastPartCoverage ?? (outline ? computePartCoverage(outline, chapters) : []);
   return {
@@ -413,14 +416,20 @@ export async function listAnsweredStoryCheckIns(
   const out: StoryAnsweredCheckIn[] = [];
   for (const a of assignments) {
     if (a.status !== 'submitted' && a.status !== 'analyzed') continue;
-    const q = await getQuestionnaire(fs, key, a.questionnaireId);
-    if (q?.storyProvenance?.bookId !== bookId) continue;
-    const response = await getResponse(fs, key, a.id);
-    out.push({
-      assignmentId: a.id,
-      title: q.title,
-      answeredAt: response?.submittedAt ?? a.updatedAt,
-    });
+    // Per-item guard: a single corrupt/undecryptable questionnaire or response skips only that entry rather
+    // than blanking the whole history (this join reads three files per assignment).
+    try {
+      const q = await getQuestionnaire(fs, key, a.questionnaireId);
+      if (q?.storyProvenance?.bookId !== bookId) continue;
+      const response = await getResponse(fs, key, a.id);
+      out.push({
+        assignmentId: a.id,
+        title: q.title,
+        answeredAt: response?.submittedAt ?? a.updatedAt,
+      });
+    } catch {
+      continue;
+    }
   }
   return out; // listAssignments already sorts newest-first
 }

@@ -11367,11 +11367,11 @@ test('story (64): living book — refresh proposes a structural change, approvin
     await expect(w.getByText(/your Inbox to fill a gap|waiting in your Inbox/)).toBeVisible();
 
     // The gap pass persisted the life map + gap invitations (§13.6.3/§13.6.4) — they render on the tab with no
-    // further AI: a "Worth telling next" heading + a life-map coverage bar labelled by its coverage word.
+    // further AI: a "Worth telling next" heading + a life-map coverage bar (progressbar) with a visible coverage
+    // word (the §9 text equivalent).
     await expect(w.getByRole('heading', { name: 'Worth telling next' })).toBeVisible();
-    await expect(
-      w.getByRole('progressbar', { name: /richly told|taking shape|thin|not yet begun/ }).first(),
-    ).toBeVisible();
+    await expect(w.getByRole('progressbar').first()).toBeVisible();
+    await expect(w.getByText(/richly told|taking shape|thin|not yet begun/).first()).toBeVisible();
 
     // A story-provenance questionnaire was minted end-to-end (the interview engine → the Inbox).
     await expect

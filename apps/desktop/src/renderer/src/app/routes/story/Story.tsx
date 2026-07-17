@@ -1559,7 +1559,7 @@ function LifeMap({
               aria-valuemax={100}
               aria-valuenow={Math.round(score * 100)}
               aria-valuetext={coverageWord(score)}
-              aria-label={`${part.title}: ${coverageWord(score)}`}
+              aria-label={part.title}
             >
               <div className={styles.lifeFill} style={{ width: `${Math.max(4, score * 100)}%` }} />
             </div>
@@ -1626,9 +1626,11 @@ function InterviewTab({
           <LifeMap parts={parts} coverage={gaps?.partCoverage ?? []} />
           {notice ? <Banner tone="info">{notice}</Banner> : null}
           <Inline>
+            {/* Single-flight EVERY mint affordance (§13.6.5): while any find/ask is in flight, disable the rest,
+                or a fast second click could mint a second open check-in before the ≤1 flag catches up. */}
             <Button
               variant="primary"
-              disabled={busy}
+              disabled={busy || asking !== null}
               onClick={async () => setNotice(await onFind())}
             >
               {busy ? 'Looking…' : 'Find what’s missing'}
@@ -1658,7 +1660,7 @@ function InterviewTab({
                     </Text>
                   </div>
                   <Button
-                    disabled={hasOpenCheckin || asking === gap.id}
+                    disabled={hasOpenCheckin || busy || asking !== null}
                     onClick={async () => {
                       setAsking(gap.id);
                       setNotice(null);

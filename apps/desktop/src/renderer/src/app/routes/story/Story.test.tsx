@@ -1174,9 +1174,9 @@ describe('Story (64)', () => {
   });
 
   it('the Interview tab shows the life map, gap invitations (Ask me about this), and answered history (§13.6)', async () => {
-    const storyAskGap = vi.fn((_input: { bookId: string; gapId: string }) =>
-      Promise.resolve({ ok: true as const, assignmentId: 'a-new' }),
-    );
+    const storyAskGap = vi.fn<
+      (input: { bookId: string; gapId: string }) => Promise<{ ok: true; assignmentId: string }>
+    >(() => Promise.resolve({ ok: true as const, assignmentId: 'a-new' }));
     let asked = false;
     installMockBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
@@ -1184,25 +1184,15 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')),
       storyGaps: () =>
         Promise.resolve({
-          gaps: asked
-            ? [
-                {
-                  id: 'g1',
-                  dimension: 'lowPoint',
-                  label: 'A hard season',
-                  focus: 'Tell me about a low point.',
-                  priority: 9,
-                },
-              ]
-            : [
-                {
-                  id: 'g1',
-                  dimension: 'lowPoint',
-                  label: 'A hard season',
-                  focus: 'Tell me about a low point.',
-                  priority: 9,
-                },
-              ],
+          gaps: [
+            {
+              id: 'g1',
+              dimension: 'lowPoint',
+              label: 'A hard season',
+              focus: 'Tell me about a low point.',
+              priority: 9,
+            },
+          ],
           partCoverage: [{ partId: 'p1', score: 0.5 }],
           hasOpenCheckin: asked,
         }),

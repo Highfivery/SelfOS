@@ -1173,6 +1173,12 @@ lastPublishedAtSeen }` (one writer: the reader; additive schema). The author's S
     round-trip + Guest denial; +a Story RTL: life map + gap-card ask + answered history), **7 story E2E** (the
     living-book walk now asserts the life map + a "Worth telling next" gap card after the pass). Real-Electron
     visual QA (the completeness hero + life-map coverage bars + gap invitations + open-check-in state read clean).
+    code-reviewer **fix-first** — one should-fix applied (the "Ask me about this" UI now **single-flights** every
+    mint affordance: a gap ask / Find button disables while ANY mint is in flight [`busy || asking !== null`], so
+    a fast second click can't mint two open check-ins before the ≤1 flag catches up — the core `askGap` invariant
+    was sound but the UI didn't gate concurrent clicks) + the nits (per-item try/catch in `listAnsweredStoryCheckIns`
+    so a corrupt record skips instead of blanking the list; a life-map-staleness comment; the LifeMap progressbar
+    `aria-label` = the part title alone, the coverage word carried by `aria-valuetext` + the visible word).
 - **R6 — Photos tab**: gallery + inline Q&A + placement affordances + the corpus wiring fix (E2E:
   a photo answer provably reaches a captured generation prompt).
 - **R7 — Begin + polish**: invitation (`story:corpusStats`) + commission (specimens, live preview) +

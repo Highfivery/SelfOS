@@ -1356,11 +1356,15 @@ describe('Questionnaires', () => {
     renderApp();
 
     await screen.findByText('Relationship check-in');
-    // Rich status: who it went to, who's answered, and un-reviewed responses.
+    // Rich status: a "Sent to" label makes clear the names are the recipients, who's answered, + new count.
+    expect(screen.getByText('Sent to')).toBeInTheDocument();
     expect(screen.getByText('1 of 2 answered')).toBeInTheDocument();
     expect(screen.getByText('Angel')).toBeInTheDocument();
     expect(screen.getByText('Sam')).toBeInTheDocument();
     expect(screen.getByText('1 new')).toBeInTheDocument();
+    // Each recipient chip states its per-person state (answered vs awaiting) for hover/assistive tech.
+    expect(screen.getByTitle('Angel — answered')).toBeInTheDocument();
+    expect(screen.getByTitle('Sam — awaiting a response')).toBeInTheDocument();
   });
 
   it('Sent cards state whether answers are private or visible; drafts show no chip (§3.1 privacy badges)', async () => {

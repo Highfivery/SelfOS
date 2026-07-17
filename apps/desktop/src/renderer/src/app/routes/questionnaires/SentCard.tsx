@@ -25,8 +25,9 @@ function typeLabel(type: string): string {
 const MAX_CHIPS = 3;
 
 function RecipientChip({ recipient }: { recipient: SentRecipientSummary }): JSX.Element {
+  const state = recipient.answered ? 'answered' : 'awaiting a response';
   return (
-    <span className={styles.rchip}>
+    <span className={styles.rchip} title={`${recipient.name} — ${state}`}>
       <Avatar name={recipient.name} />
       <span className={styles.rchipName}>{recipient.name}</span>
       {recipient.answered ? (
@@ -41,7 +42,7 @@ function RecipientChip({ recipient }: { recipient: SentRecipientSummary }): JSX.
           size={13}
           role="img"
           className={`${styles.stateDot} ${styles.stateWait}`}
-          aria-label="awaiting"
+          aria-label="awaiting a response"
         />
       )}
     </span>
@@ -180,6 +181,7 @@ export function SentCard({
 
       {shown.length > 0 ? (
         <div className={styles.recips}>
+          <span className={styles.recipsLabel}>Sent to</span>
           {shown.map((r, i) => (
             <RecipientChip key={`${r.name}-${i}`} recipient={r} />
           ))}

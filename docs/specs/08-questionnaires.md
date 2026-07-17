@@ -249,7 +249,9 @@ attributed to the owner (creator + sender), so they legitimately appear in the o
 badge a partner-named "Analyzed" card read as a leak. The trust boundary is unchanged: the Sent list is
 strictly the active person's own sends (`senderPersonId === you`) and a partner-targeted send is `private`, so
 its **raw answers never cross the bridge** to the owner. (A separate consent-model amendment for
-owner-configured partner streams is tracked in spec 63.)
+owner-configured partner streams is tracked in spec 63.) The Sent card also labels its recipient chips
+**"Sent to …"** (with a per-person answered/awaiting tooltip) so the names read unambiguously as the
+recipients, not the author or subject.
 
 ### 3.2 Sending
 

@@ -419,6 +419,26 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-16 — **Build (Your Story chapters redesigned as a cover-backed card grid — mockup approved FIRST;
+  SPEC 64 §3.1/§3.3; on `feat/story-chapter-cards`, PR pending; v0.30.0 released alongside).** The user asked to
+  redesign the flat part/chapter list into a **grid of modern, sleek cards "like TikTok"** with the **generated
+  cover image as the card background**. Showed a full **Artifact mockup** first (portrait cover-backed cards,
+  dark scrim, overlaid chapter number + title + status pill, grouped by part) → **approved** → built it into the
+  real book overview. Chapters now render as a responsive `auto-fill minmax(200px)` grid of **portrait cards**
+  whose background is the chapter's **own illustration** (§3.8) where it has one, else the **book cover**, else a
+  warm dusk-gradient fallback (never a flat blank); a bottom scrim keeps the overlaid **CHAPTER N + title**
+  legible; a glass **status pill** (New/Updated/New material/Writing…/Reviewed) + a hover "Read ›"; parts get an
+  eyebrow + title + count header; an unwritten shell is a calm dashed "Not yet written" card. Renderer-only —
+  reuses the store's `getImageUrl`/`imageUrls` (resolves the cover + each chapter's first placement) + the
+  existing `onOpenChapter`; the card stays a `<button>` carrying the title so every existing
+  `getByRole('button',{name:/Title/})` test still matches. Gate green: typecheck, lint, format, **1266 desktop**
+  unit (+a card-grid RTL: part eyebrow + chapter number + status badge), **5 story E2E** (the setup walk asserts
+  the "Part one" eyebrow; the 360px overflow guard passes over the grid). Real-Electron visual QA (the grid
+  matches the approved mockup — PART ONE/Roots eyebrow + two cover-backed cards with glass "New" badges + CHAPTER
+  1/2 titles). **Lesson: for a visual redesign, show a real mockup (an Artifact for image-heavy/immersive work,
+  since the inline `visualize` widget forbids image backgrounds/gradients) and get it approved BEFORE building;
+  then keep the redesign renderer-only where possible — a card that stays a `<button>` with the title as its
+  accessible name doesn't break the existing role-name test suite.**
 - 2026-07-16 — **Feedback + Build (a proper Story SETTINGS section — not a control jammed under Cover; story-
   specific image style + editable writing tone; user FORCEFUL; on `feat/story-settings-section`, PR pending).**
   The user (angry): jamming the global image-style control **under the Cover card** — when it governs ALL images —

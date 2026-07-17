@@ -236,6 +236,22 @@ describe('Story (64)', () => {
     expect(updatedWith).toEqual({ bookId: 'b1', title: 'The Weight of Quiet' });
   });
 
+  it('renders chapters as cover-backed cards grouped by part, with number + status (§3.1 redesign)', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+      storyImages: () => Promise.resolve([]),
+    });
+    renderStory();
+    // The part is a titled section with an eyebrow; the chapter is a clickable card carrying its number + a
+    // status pill (reviewed → "Reviewed") — not a plain list row.
+    expect(await screen.findByText('Part one')).toBeInTheDocument();
+    const card = await screen.findByRole('button', { name: /The Garage/ });
+    expect(card).toHaveTextContent('Chapter 1');
+    expect(card).toHaveTextContent('Reviewed');
+  });
+
   it('Story settings: editing the book’s tone + image style persists to its config (§3.8)', async () => {
     const configs: unknown[] = [];
     installMockBridge({

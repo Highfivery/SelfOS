@@ -11224,6 +11224,10 @@ test('story (64): setup names the book, outline rename, chapters + sources, mark
     await titleField.fill('A Machine and a Voice');
     await w.getByRole('button', { name: 'Save', exact: true }).first().click();
 
+    // Chapters render as cover-backed cards grouped by part (§3.1 redesign): a part eyebrow + a card whose
+    // accessible name carries the chapter number + title.
+    await expect(w.getByText('Part one')).toBeVisible();
+
     // Open a drafted chapter and read its prose + provenance.
     await w.getByRole('button', { name: /The Garage/ }).click();
     await expect(w.getByText(/cut pine/)).toBeVisible();

@@ -11360,7 +11360,8 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
   const saveDir = await mkdtemp(join(tmpdir(), 'selfos-e2e-save-'));
   const app = await electron.launch({
     args: [`--user-data-dir=${userData}`, MAIN],
-    env: { ...e2eEnv(), SELFOS_FAKE_SAVE_DIR: saveDir },
+    // A short render delay so the realtime image-progress UI (§12) is observable mid-generation.
+    env: { ...e2eEnv(), SELFOS_FAKE_SAVE_DIR: saveDir, SELFOS_FAKE_IMAGE_DELAY_MS: '600' },
   });
   try {
     const w = await app.firstWindow();
@@ -11371,15 +11372,25 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     // One-flow draft (no outline gate): read + outline (auto-approved) + every chapter, landing on the book.
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
 
+    // The single global image style is surfaced ON the Story page (not only buried in Settings, §12).
+    await expect(w.getByRole('combobox', { name: 'Image style' })).toBeVisible();
+
     // Create a symbolic cover (H1): the distill → render flow behind the shared image consent.
     await w.getByRole('button', { name: 'Create a cover' }).click();
+    // Realtime progress (§12): while generating, a live phase + elapsed timer + progressbar show — NOT a
+    // bare spinner. (The fake render is delayed via SELFOS_FAKE_IMAGE_DELAY_MS so this is observable.)
+    await expect(w.getByRole('progressbar', { name: 'Image generation progress' })).toBeVisible();
+    await expect(w.getByText(/Creating your cover —/)).toBeVisible();
+    await expect(w.getByText(/elapsed/)).toBeVisible();
     await expect(w.locator('img[alt="Cover for this book"]')).toBeVisible();
 
     // Mark a chapter reviewed so there's something to publish.
     await w.getByRole('button', { name: /The Garage/ }).click();
     // Illustrate the chapter (§3.8): image gen is set up, so the button is present (not a dead control),
-    // clicking it distills → renders → places the image, which then appears in the chapter body.
+    // clicking it distills → renders → places the image, which then appears in the chapter body. It also
+    // shows realtime progress while generating.
     await w.getByRole('button', { name: 'Illustrate this chapter' }).click();
+    await expect(w.getByText(/Illustrating this chapter —/)).toBeVisible();
     await expect(w.getByRole('combobox', { name: 'Move image after paragraph' })).toBeVisible();
     await w.getByRole('button', { name: 'Looks good' }).click();
     await w.getByRole('button', { name: /Back to the book/ }).click();

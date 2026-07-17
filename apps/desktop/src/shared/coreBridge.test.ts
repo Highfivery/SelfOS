@@ -37,7 +37,13 @@ import {
 import { queryUsage, recordUsage, setPersonBudget } from '@selfos/core/usage';
 import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
 import { DeviceStateSchema } from './schemas';
-import type { BootState, DeviceState, Insight, StoryDraftProgress } from './schemas';
+import type {
+  BootState,
+  DeviceState,
+  ImageGenProgress,
+  Insight,
+  StoryDraftProgress,
+} from './schemas';
 import { createCoreBridge, type BridgeHost } from './coreBridge';
 
 /** A fake `fetch` that simulates BOTH the Cloudflare REST API and the deployed relay Worker, over an
@@ -104,6 +110,7 @@ function makeHost(): {
   intakeChunks: string[];
   togetherChunks: string[];
   storyProgress: StoryDraftProgress[];
+  imageProgress: ImageGenProgress[];
   device: () => DeviceState;
   deviceSettings: () => Record<string, unknown>;
 } {
@@ -128,6 +135,7 @@ function makeHost(): {
   const intakeChunks: string[] = [];
   const togetherChunks: string[] = [];
   const storyProgress: StoryDraftProgress[] = [];
+  const imageProgress: ImageGenProgress[] = [];
   const claude: ClaudeClient = {
     send: () => Promise.resolve('ok'),
     stream: (options, onDelta) => {
@@ -449,11 +457,13 @@ function makeHost(): {
     printToPdf: (html) => Promise.resolve(new TextEncoder().encode(`%PDF-fake\n${html.length}`)),
     onVaultChanged: () => () => {},
     emitStoryProgress: (p) => storyProgress.push(p),
+    emitImageProgress: (p) => imageProgress.push(p),
     onChatChunk: () => () => {},
     onDreamChunk: () => () => {},
     onIntakeChunk: () => () => {},
     onTogetherChunk: () => () => {},
     onStoryProgress: () => () => {},
+    onImageProgress: () => () => {},
   };
   return {
     host,
@@ -463,6 +473,7 @@ function makeHost(): {
     intakeChunks,
     togetherChunks,
     storyProgress,
+    imageProgress,
     device: () => device,
     deviceSettings: () => deviceSettings,
   };
@@ -7287,7 +7298,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
   });
 
   it('story: generates a cover behind the shared image consent + key, encrypted, then serves it (§3.8)', async () => {
-    const { bridge } = await freshOwner();
+    const { bridge, host } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
     const book = await bridge.storyCreate({
@@ -7310,12 +7321,18 @@ describe('createCoreBridge — Together (58) foundation', () => {
     // Turn on the ONE shared image consent + the OpenAI key → a cover generates + is indexed + served.
     await bridge.setSetting({ key: 'dreams.imageGenerationEnabled', value: true, scope: 'vault' });
     await bridge.secretSet({ id: OPENAI_API_KEY_ID, value: 'sk-openai' });
+    host.imageProgress.length = 0; // ignore the consent-off call's terminal event
     const made = await bridge.storyGenerateImage({ bookId, target: { kind: 'cover' } });
     expect(made.ok).toBe(true);
     if (!made.ok) throw new Error('generate failed');
     expect(made.image.kind).toBe('cover');
     // The owner is an admin → the cost figure is present.
     expect(typeof made.costUsd).toBe('number');
+
+    // Realtime progress (CLAUDE.md §12): the generation streamed compose → render phase events for this
+    // surface's id, so the renderer shows live status instead of a bare spinner.
+    const coverPhases = host.imageProgress.filter((p) => p.id === `story:${bookId}:cover`);
+    expect(coverPhases.map((p) => p.phase)).toEqual(['composing', 'rendering', 'done']);
 
     const index = await bridge.storyImages({ bookId });
     expect(index.map((i) => i.id)).toEqual([made.image.id]);

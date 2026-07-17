@@ -4259,6 +4259,19 @@ export interface StoryDraftProgress {
   message?: string;
 }
 
+/** Live progress of a single AI image / vision generation — streamed to the renderer via the
+ *  `image:progress` event so every image surface (story cover/illustration, dream image, photo vision)
+ *  shows a realtime phase + timer + ETA instead of a bare spinner. `id` routes the event to the surface
+ *  that started it (e.g. `story:<bookId>:cover`, `story:<bookId>:ch:<chapterId>`, `dream:<dreamId>`,
+ *  `photo:<bookId>:<imageId>`). Phases: `composing` = the Claude distillation pass; `rendering` = the
+ *  OpenAI image render; `analyzing` = a vision pass (photo Q&A / placement); `done`/`error` terminal. */
+export type ImageGenPhase = 'composing' | 'rendering' | 'analyzing' | 'done' | 'error';
+export interface ImageGenProgress {
+  id: string;
+  phase: ImageGenPhase;
+  message?: string;
+}
+
 /** `story:resolveProposal` — approve (apply the restructure) or dismiss a pending structural proposal (§3.4). */
 export const StoryResolveProposalInputSchema = StoryBookRefSchema.extend({
   proposalId: z.string().min(1),

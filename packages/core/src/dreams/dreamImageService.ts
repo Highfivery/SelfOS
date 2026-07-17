@@ -110,6 +110,9 @@ export interface GenerateDreamImageDeps {
   dreamId: string;
   now: Date;
   override?: boolean;
+  /** Realtime phase callback: `composing` before the Claude distillation, `rendering` before the OpenAI
+   *  render — forwarded to the renderer so the dream-image panel shows live progress instead of a spinner. */
+  onPhase?: (phase: 'composing' | 'rendering') => void;
 }
 
 function promptUsageEvent(
@@ -227,6 +230,7 @@ export async function generateDreamImage(
   });
 
   // 2. Distill via Claude. A pre-generation failure here makes no OpenAI call and is not metered.
+  deps.onPhase?.('composing');
   let distilled;
   try {
     distilled = await claude.stream(
@@ -260,6 +264,7 @@ export async function generateDreamImage(
   }
 
   // 3. Render via OpenAI from the distilled, name-free prompt only.
+  deps.onPhase?.('rendering');
   const outcome = await image.generate({
     apiKey: openaiApiKey,
     model: imageModel,

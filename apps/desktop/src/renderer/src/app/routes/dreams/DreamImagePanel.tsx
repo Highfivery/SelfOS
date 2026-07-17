@@ -6,6 +6,7 @@ import { aiKeyResolved } from '../../aiAvailability';
 import { useDreamStore } from '../../../stores/dreamStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSetting } from '../../../settings/useSetting';
+import { ImageProgress } from '../story/ImageProgress';
 import {
   AdminOnlyBadge,
   Banner,
@@ -270,11 +271,7 @@ export function DreamImagePanel({ dream, hero = false }: DreamImagePanelProps): 
         </Banner>
       ) : null}
 
-      {busy ? (
-        <Text tone="secondary" aria-live="polite">
-          Creating your image… this can take a few seconds.
-        </Text>
-      ) : null}
+      {busy ? <ImageProgress id={`dream:${dream.id}`} /> : null}
 
       {loading ? null : image ? (
         <Stack gap={3}>

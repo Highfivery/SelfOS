@@ -1,5 +1,5 @@
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
-import type { BootState, StoryDraftProgress } from '@shared/schemas';
+import type { BootState, StoryDraftProgress, ImageGenProgress } from '@shared/schemas';
 import type { ClaudeClient, FileSystem, ImageClient, SecretStore } from '@selfos/core/host';
 import { loadMasterKey } from '@selfos/core/crypto';
 import { uuid } from '@selfos/core/id';
@@ -89,6 +89,7 @@ function createBridgeHost(parts: HostParts): BridgeHost {
   const intakeListeners = new Set<(delta: string) => void>();
   const togetherListeners = new Set<(delta: string) => void>();
   const storyProgressListeners = new Set<(progress: StoryDraftProgress) => void>();
+  const imageProgressListeners = new Set<(progress: ImageGenProgress) => void>();
 
   const activeVaultId = async (): Promise<string | null> =>
     (await deviceStore.read()).vaultBookmark ?? null;
@@ -170,6 +171,9 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     emitStoryProgress: (progress) => {
       for (const listener of storyProgressListeners) listener(progress);
     },
+    emitImageProgress: (progress) => {
+      for (const listener of imageProgressListeners) listener(progress);
+    },
     getBootState: bootState,
     refreshBootState: bootState,
     selectVaultFolder: parts.selectVaultFolder,
@@ -233,6 +237,10 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     onStoryProgress: (listener) => {
       storyProgressListeners.add(listener);
       return () => storyProgressListeners.delete(listener);
+    },
+    onImageProgress: (listener) => {
+      imageProgressListeners.add(listener);
+      return () => imageProgressListeners.delete(listener);
     },
   };
 }

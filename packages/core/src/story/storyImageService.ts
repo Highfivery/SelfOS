@@ -133,6 +133,9 @@ export interface GenerateStoryImageDeps {
   target: StoryImageTarget;
   now: Date;
   override?: boolean;
+  /** Realtime phase callback (§ UI progress): `composing` before the Claude distillation, `rendering`
+   *  before the OpenAI render — the bridge forwards these to the renderer so it shows live progress. */
+  onPhase?: (phase: 'composing' | 'rendering') => void;
 }
 
 /**
@@ -202,6 +205,7 @@ export async function generateStoryImage(
   });
 
   // 1. Distill via Claude. A pre-render failure here makes no OpenAI call and is not metered.
+  deps.onPhase?.('composing');
   let distilled;
   try {
     distilled = await claude.stream(
@@ -242,6 +246,7 @@ export async function generateStoryImage(
   }
 
   // 2. Render via OpenAI from the distilled, name-free prompt only.
+  deps.onPhase?.('rendering');
   const outcome = await image.generate({
     apiKey: openaiApiKey,
     model: imageModel,

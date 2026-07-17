@@ -22,6 +22,8 @@ import { useStoryRefresh } from '../../notifications/useStoryRefresh';
 import { useStoryInterview } from '../../notifications/useStoryInterview';
 import { useSetting } from '../../../settings/useSetting';
 import { aiKeyResolved } from '../../aiAvailability';
+import { ImageProgress } from './ImageProgress';
+import { ImageStyleControl } from '../../../settings/ImageStyleControl';
 import { downscaleImage } from '../sessions/downscaleImage';
 import { AdminOnlyBadge } from '../../../design-system/components';
 import type {
@@ -516,6 +518,7 @@ function CoverPanel({
   const [error, setError] = useState<string | null>(null);
   const [cost, setCost] = useState<number | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     setError(null);
@@ -533,6 +536,7 @@ function CoverPanel({
 
   const create = async (): Promise<void> => {
     setBusy(true);
+    setGenerating(true);
     setError(null);
     // No per-image style — every image uses the single global style (Settings → Images, §3.8).
     const res = await generateImage(bookId, { kind: 'cover' });
@@ -543,6 +547,7 @@ function CoverPanel({
     } else {
       setError(res.message);
     }
+    setGenerating(false);
     setBusy(false);
   };
 
@@ -558,6 +563,9 @@ function CoverPanel({
             A symbolic cover for your story — evocative art, never a literal portrait.
           </Text>
         )}
+        {generating ? (
+          <ImageProgress id={`story:${bookId}:cover`} label="Creating your cover" />
+        ) : null}
         {ready ? (
           <Stack gap={2}>
             <Inline>
@@ -597,6 +605,15 @@ function CoverPanel({
                 </Text>
               ) : null}
             </Inline>
+            {/* Surface the ONE global image style right here where images are made (not only buried in
+                Settings) — it drives the cover AND every chapter illustration. Writes the same global
+                `dreams.imageStyle` setting, so it's a single source of truth. */}
+            <Stack gap={1}>
+              <Text size="sm" weight={500}>
+                Image style
+              </Text>
+              <ImageStyleControl />
+            </Stack>
           </Stack>
         ) : loading ? null : (
           <Text tone="secondary" size="sm">
@@ -630,6 +647,7 @@ function PhotosPanel({ bookId }: { bookId: string }): JSX.Element {
   const deleteImage = useStoryStore((s) => s.deleteImage);
 
   const [busy, setBusy] = useState(false);
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Per-photo vision questions (ephemeral) + a per-question draft answer, keyed by image id.
   const [questions, setQuestions] = useState<Record<string, string[]>>({});
@@ -666,10 +684,12 @@ function PhotosPanel({ bookId }: { bookId: string }): JSX.Element {
 
   const analyze = async (imageId: string): Promise<void> => {
     setBusy(true);
+    setAnalyzingId(imageId);
     setError(null);
     const res = await analyzePhoto(bookId, imageId);
     if (res.ok) setQuestions((q) => ({ ...q, [imageId]: res.analysis.questions }));
     else setError(res.message);
+    setAnalyzingId(null);
     setBusy(false);
   };
 
@@ -725,6 +745,9 @@ function PhotosPanel({ bookId }: { bookId: string }): JSX.Element {
                     Remove
                   </button>
                 </Inline>
+                {analyzingId === p.id ? (
+                  <ImageProgress id={`photo:${bookId}:${p.id}`} kind="vision" />
+                ) : null}
                 {answered.map((a, i) => (
                   <Text key={`ans-${i}`} tone="secondary" size="sm">
                     <strong>{a.question}</strong> {a.answer}
@@ -1725,6 +1748,7 @@ function ChapterReader({
   const [aiEnabled] = useSetting('ai.enabled');
   const [hasImageKey, setHasImageKey] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [illustrating, setIllustrating] = useState(false);
   const [openSources, setOpenSources] = useState<number | null>(null);
   const [activePara, setActivePara] = useState<number | null>(null);
   const [activeQuote, setActiveQuote] = useState<string | null>(null);
@@ -1782,9 +1806,11 @@ function ChapterReader({
 
   const illustrate = async (): Promise<void> => {
     setImageBusy(true);
+    setIllustrating(true);
     setImageError(null);
     // No per-image style — every image uses the single global style (Settings → Images, §3.8).
     const res = await generateImage(bookId, { kind: 'illustration', chapterId });
+    setIllustrating(false);
     if (res.ok) await placeImage(res.image.id);
     else setImageError(res.message);
     setImageBusy(false);
@@ -2298,6 +2324,12 @@ function ChapterReader({
         <Stack gap={2}>
           <Heading level={3}>Images</Heading>
           {imageError ? <Banner tone="danger">{imageError}</Banner> : null}
+          {illustrating ? (
+            <ImageProgress
+              id={`story:${bookId}:ch:${chapterId}`}
+              label="Illustrating this chapter"
+            />
+          ) : null}
           <Inline gap={2}>
             {imagesReady ? (
               <Button variant="ghost" disabled={imageBusy} onClick={() => void illustrate()}>

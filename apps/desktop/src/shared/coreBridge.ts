@@ -202,6 +202,7 @@ import {
   type StoryExcludeResult,
   type AiFailureReason,
   type StoryDraftProgress,
+  type ImageGenProgress,
   type StoryFoundationsResult,
   type StoryQuestionsResult,
   type StoryCompleteness,
@@ -691,6 +692,9 @@ export interface BridgeHost {
   emitTogetherChunk(chunk: string): void;
   /** Deliver a Your Story create-and-draft progress update to the renderer (64 §3.2, its own channel). */
   emitStoryProgress(progress: StoryDraftProgress): void;
+  /** Deliver a single-image / vision generation phase update to the renderer (its own channel), so every
+   *  image surface shows realtime progress (compose → render / analyze) instead of a bare spinner. */
+  emitImageProgress(progress: ImageGenProgress): void;
 
   // --- Platform-specific surface, forwarded verbatim to the renderer-facing bridge ---
   getBootState(): Promise<BootState>;
@@ -731,6 +735,8 @@ export interface BridgeHost {
   onTogetherChunk(listener: (delta: string) => void): () => void;
   /** Subscribe to Your Story draft-progress updates; the counterpart to `emitStoryProgress`. */
   onStoryProgress(listener: (progress: StoryDraftProgress) => void): () => void;
+  /** Subscribe to image/vision generation phase updates; the counterpart to `emitImageProgress`. */
+  onImageProgress(listener: (progress: ImageGenProgress) => void): () => void;
 }
 
 /** Vault-relative path of the plain-JSON, vault-scoped settings file (02-app-shell). */
@@ -1540,6 +1546,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     onIntakeChunk: (listener) => host.onIntakeChunk(listener),
     onTogetherChunk: (listener) => host.onTogetherChunk(listener),
     onStoryProgress: (listener) => host.onStoryProgress(listener),
+    onImageProgress: (listener) => host.onImageProgress(listener),
     platform: host.platform,
     // iOS/web have no OS window chrome, so there is no fullscreen-titlebar transition to report.
     onFullscreenChanged: () => () => {},
@@ -4989,6 +4996,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         typeof settings['dreams.imageStyleNotes'] === 'string'
           ? settings['dreams.imageStyleNotes'].trim()
           : '';
+      // Route realtime phase events to the surface that started this generation (§ image progress).
+      const progressId =
+        target.kind === 'cover'
+          ? `story:${bookId}:cover`
+          : `story:${bookId}:ch:${target.chapterId}`;
       const result = await generateStoryImage({
         fs: ctx.fs,
         key: ctx.key,
@@ -5005,7 +5017,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         bookId,
         target,
         now: new Date(),
+        onPhase: (phase) => host.emitImageProgress({ id: progressId, phase }),
       });
+      host.emitImageProgress({ id: progressId, phase: result.ok ? 'done' : 'error' });
       if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
       // Cost ($) is admin-only (budgets.manage) — combines the flat image + the small distillation charge.
       const showCost = await activePersonCan(ctx.fs, ctx.key, 'budgets.manage');
@@ -6841,6 +6855,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         typeof settings['dreams.imageStyleNotes'] === 'string'
           ? settings['dreams.imageStyleNotes'].trim()
           : '';
+      const progressId = `dream:${dreamId}`;
       const result = await generateDreamImage({
         fs: ctx.fs,
         key: ctx.key,
@@ -6856,7 +6871,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personId,
         dreamId,
         now: new Date(),
+        onPhase: (phase) => host.emitImageProgress({ id: progressId, phase }),
       });
+      host.emitImageProgress({ id: progressId, phase: result.ok ? 'done' : 'error' });
       if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
       // Cost ($) is admin-only (the budgets.manage gate, like everywhere else) — a non-admin's result
       // carries no cost figure. Combines the flat image charge + the small distillation charge.

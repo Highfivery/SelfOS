@@ -260,11 +260,18 @@ sent).
 ### 3.8 Images
 
 - **One global style (owner decision, 2026-07-16)**: there is **no per-image / per-surface style
-  picker**. A single setting — **Settings → Images** (`dreams.imageStyle`, shared by dream images AND
-  story cover/illustrations) — is the one style every AI image uses, so they all look consistent. It's a
-  grouped **preset select** plus a **Custom…** free-text option, refined by an optional **style
-  direction** note (`dreams.imageStyleNotes`). The Settings section is a dedicated, owner-only **Images**
-  section (image generation consent, model, the global style, the direction note, and the OpenAI key).
+  picker**. A single setting — `dreams.imageStyle` (shared by dream images AND story cover/illustrations)
+  — is the one style every AI image uses, so they all look consistent. It's a grouped **preset select**
+  plus a **Custom…** free-text option, refined by an optional **style direction** note
+  (`dreams.imageStyleNotes`). It lives both in a dedicated owner-only **Settings → Images** section
+  (source of truth: consent, model, the global style, the direction note, the OpenAI key) **AND directly
+  on the Your Story book overview** (an `ImageStyleControl` writing the same setting) — a control belongs
+  where the work happens, not only buried in Settings (CLAUDE.md §12).
+- **Realtime progress (mandatory, CLAUDE.md §12)**: every image/vision generation — cover, chapter
+  illustration, dream image, photo vision — shows a live **phase** (`Composing the scene…` → `Painting
+the image…`, or `Reading your photo…`), an **elapsed timer**, and an **ETA**, never a bare spinner. The
+  generation runs in main and streams `image:progress` phase events (its own channel, `emitImageProgress`
+  → preload → the shared `ImageProgress` renderer); vision is a single phase carried by the timer alone.
 - **Cover**: "Create a cover" on the book overview → the spec-13 two-call flow (Claude distills a
   **name-free, symbolic** cover brief in the global style; OpenAI renders; never a photoreal likeness) →
   cover stored encrypted; regenerate at will; admin-only cost shown (13 §-precedent).

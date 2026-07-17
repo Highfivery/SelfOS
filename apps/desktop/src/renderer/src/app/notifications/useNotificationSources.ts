@@ -5,7 +5,12 @@ import type {
   ReminderDueSummary,
   ResponsesArrivedSummary,
 } from '@shared/channels';
-import type { CoachingSynthesis, Goal, SharedBookSummary } from '@shared/schemas';
+import type {
+  CoachingSynthesis,
+  Goal,
+  IncomingAutoCheckinStream,
+  SharedBookSummary,
+} from '@shared/schemas';
 import { checkInDueChallenge } from '@selfos/core/challenges';
 import { useSessionStore } from '../../stores/sessionStore';
 import { useNotificationStore } from '../../stores/notificationStore';
@@ -59,6 +64,9 @@ export function useNotificationSources(conflicts: string[]): void {
   // Auto check-ins (63): how many auto-generated check-ins are waiting to answer + the one-time seed marker.
   const [autoPending, setAutoPending] = useState(0);
   const [autoSeededAt, setAutoSeededAt] = useState<string | null>(null);
+  // Streams others have set up targeting the active person (§3.3a) — the first-time "someone set up
+  // check-ins for you" notice. Not capability-gated (a person can be targeted without holding the capability).
+  const [incomingStreams, setIncomingStreams] = useState<IncomingAutoCheckinStream[]>([]);
   // Your Story (64 §3.6): books shared WITH the active person — the never-opened ones drive the one-time
   // "shared with you" notification (the "Updated" marker lives on the /story card, not the bell).
   const [sharedBooks, setSharedBooks] = useState<SharedBookSummary[]>([]);
@@ -76,36 +84,41 @@ export function useNotificationSources(conflicts: string[]): void {
     setFreshnessAreas([]);
     setAutoPending(0);
     setAutoSeededAt(null);
+    setIncomingStreams([]);
     setSharedBooks([]);
     void (async () => {
-      const [sugg, resp, edits, rem, gls, chs, syn, inbox, autoConfig, shared] = await Promise.all([
-        canIntake
-          ? (window.selfos?.profileSuggestions() ?? Promise.resolve([]))
-          : Promise.resolve([]),
-        canViewResults
-          ? (window.selfos?.notificationsResponsesArrived() ?? Promise.resolve([]))
-          : Promise.resolve([]),
-        canViewResults
-          ? (window.selfos?.notificationsAnswersUpdated() ?? Promise.resolve([]))
-          : Promise.resolve([]),
-        canViewResults
-          ? (window.selfos?.notificationsRemindersDue() ?? Promise.resolve([]))
-          : Promise.resolve([]),
-        canMemory ? (window.selfos?.goalsList() ?? Promise.resolve([])) : Promise.resolve([]),
-        canChallenges
-          ? (window.selfos?.challengesList() ?? Promise.resolve([]))
-          : Promise.resolve([]),
-        canSessions
-          ? (window.selfos?.coachingGetSynthesis() ?? Promise.resolve(null))
-          : Promise.resolve(null),
-        canAnswer
-          ? (window.selfos?.assignmentsInbox() ?? Promise.resolve([]))
-          : Promise.resolve([]),
-        canAutoCheckin
-          ? (window.selfos?.autoCheckinsGetConfig() ?? Promise.resolve(null))
-          : Promise.resolve(null),
-        canStory ? (window.selfos?.storySharedBooks() ?? Promise.resolve([])) : Promise.resolve([]),
-      ]);
+      const [sugg, resp, edits, rem, gls, chs, syn, inbox, autoConfig, incoming, shared] =
+        await Promise.all([
+          canIntake
+            ? (window.selfos?.profileSuggestions() ?? Promise.resolve([]))
+            : Promise.resolve([]),
+          canViewResults
+            ? (window.selfos?.notificationsResponsesArrived() ?? Promise.resolve([]))
+            : Promise.resolve([]),
+          canViewResults
+            ? (window.selfos?.notificationsAnswersUpdated() ?? Promise.resolve([]))
+            : Promise.resolve([]),
+          canViewResults
+            ? (window.selfos?.notificationsRemindersDue() ?? Promise.resolve([]))
+            : Promise.resolve([]),
+          canMemory ? (window.selfos?.goalsList() ?? Promise.resolve([])) : Promise.resolve([]),
+          canChallenges
+            ? (window.selfos?.challengesList() ?? Promise.resolve([]))
+            : Promise.resolve([]),
+          canSessions
+            ? (window.selfos?.coachingGetSynthesis() ?? Promise.resolve(null))
+            : Promise.resolve(null),
+          canAnswer
+            ? (window.selfos?.assignmentsInbox() ?? Promise.resolve([]))
+            : Promise.resolve([]),
+          canAutoCheckin
+            ? (window.selfos?.autoCheckinsGetConfig() ?? Promise.resolve(null))
+            : Promise.resolve(null),
+          window.selfos?.autoCheckinsIncomingStreams() ?? Promise.resolve([]),
+          canStory
+            ? (window.selfos?.storySharedBooks() ?? Promise.resolve([]))
+            : Promise.resolve([]),
+        ]);
       if (!active || useSessionStore.getState().activePerson?.id !== activePersonId) return;
       setSuggestionIds(sugg.map((s) => s.id).sort());
       setFreshnessAreas(sugg.map((s) => s.lifeArea).filter((a): a is string => Boolean(a)));
@@ -118,6 +131,7 @@ export function useNotificationSources(conflicts: string[]): void {
       setAutoPending(inbox.filter((i) => i.autoCheckin && i.answerable).length);
       // The one-time seed notice only while it's still on (turning it off = they've engaged, no notice).
       setAutoSeededAt(autoConfig?.enabled ? (autoConfig.seededAt ?? null) : null);
+      setIncomingStreams(incoming);
       setSharedBooks(shared);
     })();
     return () => {
@@ -325,6 +339,21 @@ export function useNotificationSources(conflicts: string[]): void {
       });
     }
 
+    // Someone set up recurring check-ins for YOU (63 §3.3a) — a first-time notice per sender (a sender you've
+    // already turned off doesn't notify). onChange with a stable per-sender signature so a dismissal stays
+    // dismissed; a genuinely NEW sender is a new coalesce key → a new notice.
+    for (const s of incomingStreams) {
+      if (s.blocked) continue;
+      candidates.push({
+        kind: 'auto-checkin-incoming',
+        coalesceKey: `auto-checkin-incoming:${s.senderPersonId}`,
+        signature: s.senderPersonId,
+        title: `${s.senderName} set up check-ins for you`,
+        body: 'They’ll send you occasional auto check-ins. See or stop them in Questionnaires → Auto check-ins.',
+        action: { type: 'navigate', to: '/questionnaires' },
+      });
+    }
+
     // A Story book shared with you (64 §3.6) — one notification per NEVER-OPENED book, the first-share cue.
     // Opening it records read progress → the book drops from `neverOpened` → the notification clears and never
     // re-pops (later republishes surface only as the quiet "Updated" marker on the /story card, not the bell).
@@ -358,6 +387,7 @@ export function useNotificationSources(conflicts: string[]): void {
     togetherSessions,
     autoPending,
     autoSeededAt,
+    incomingStreams,
     sharedBooks,
     activePersonId,
     setCandidates,

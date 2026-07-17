@@ -36,8 +36,10 @@ import {
   AnswerTypeSchema,
   AttachmentRefSchema,
   AutoCheckinTargetSchema,
+  type AutoCheckinBlocks,
   type AutoCheckinConfig,
   type AutoCheckinRunResult,
+  type IncomingAutoCheckinStream,
   BudgetSchema,
   ChallengeDomainSchema,
   ChallengeOutcomeSchema,
@@ -495,9 +497,12 @@ import {
   type GoalRaiseGoal,
 } from '@selfos/core/coaching';
 import {
+  getAutoCheckinBlocks,
   getAutoCheckinConfig,
+  listIncomingAutoCheckinStreams,
   runAutoCheckins,
   seedDefaultConfigIfAbsent,
+  setAutoCheckinBlock,
   setAutoCheckinConfig,
 } from '@selfos/core/auto-checkins';
 import {
@@ -1032,6 +1037,10 @@ const AutoCheckinSetConfigSchema = z.object({
   targets: z.array(AutoCheckinTargetSchema).optional(),
 });
 const AutoCheckinRunSchema = z.object({ auto: z.boolean().optional() });
+const AutoCheckinSetBlockSchema = z.object({
+  senderPersonId: z.string().min(1),
+  blocked: z.boolean(),
+});
 const RelationshipSynthesizeSchema = z.object({ partnerPersonId: z.string().min(1) });
 const ResolveProposalSchema = z.object({
   proposalId: z.string().min(1),
@@ -4316,6 +4325,30 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         });
       }
       return result;
+    },
+    // Target visibility & control (§3.3a/§6.6). NOT gated on `questionnaires.autoCheckin` — a person can be
+    // TARGETED by an owner without holding it, and must always be able to see + stop it. Scoped strictly to
+    // streams targeting the active person (the enumeration never reveals streams aimed at anyone else).
+    autoCheckinsIncomingStreams: async (): Promise<IncomingAutoCheckinStream[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return listIncomingAutoCheckinStreams(ctx.fs, ctx.key, personId);
+    },
+    autoCheckinsGetBlocks: async (): Promise<AutoCheckinBlocks> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId) return { schemaVersion: 1, blockedSenders: [] };
+      return getAutoCheckinBlocks(ctx.fs, ctx.key, personId);
+    },
+    autoCheckinsSetBlock: async (input): Promise<AutoCheckinBlocks> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId) return { schemaVersion: 1, blockedSenders: [] };
+      const { senderPersonId, blocked } = AutoCheckinSetBlockSchema.parse(input);
+      // The active person edits only their OWN block list (the trust boundary) — the sender can never override it.
+      return setAutoCheckinBlock(ctx.fs, ctx.key, personId, senderPersonId, blocked);
     },
     // --- Your Story (64-your-story §5.6) — gated `story.own`, active-person-scoped (the trust boundary) ---
     storyBookTypes: async (): Promise<StoryBookTypeView[]> =>

@@ -97,9 +97,12 @@ export function Questionnaires(): JSX.Element {
   // Auto check-ins config drives the third tab: it only appears when the person can use auto check-ins
   // (the bridge returns a null config otherwise, 63 §3.1). Loaded here so the tab shows without opening it.
   const autoConfig = useAutoCheckinStore((s) => s.config);
+  const autoIncoming = useAutoCheckinStore((s) => s.incoming);
   const autoLoaded = useAutoCheckinStore((s) => s.loaded);
   const loadAuto = useAutoCheckinStore((s) => s.load);
-  const autoAvailable = autoLoaded && autoConfig !== null;
+  // The Auto check-ins tab shows when the person can configure their own streams OR when someone is sending
+  // them check-ins (so a targeted person can always reach the see-and-stop control, 63 §3.3a).
+  const autoAvailable = autoLoaded && (autoConfig !== null || autoIncoming.length > 0);
 
   const location = useLocation();
   // A seed opens a prefilled builder; `startNew` (the Home quick-action) opens a blank start step directly

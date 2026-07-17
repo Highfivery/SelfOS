@@ -502,6 +502,36 @@ A running log of durable decisions and feedback captured into the project config
   functions in a `begin.ts` (unit-tested without a DOM), the specimens are static data on the style presets (a
   BookType carries its own, so a future book type is self-contained), and a card-gallery Style picker replacing a
   `<select>` means the RTL/E2E move from `getByRole('option')` to `getByRole('radio')` in a labelled radiogroup.**
+- 2026-07-17 — **Build (auto check-ins consent model — target visibility & control; SPEC 63 §3.3a amended +
+  BUILT; on `feat/autocheckin-target-control`, a worktree, PR pending).** The follow-up to the provenance-badge
+  audit (#244): an owner could unilaterally configure RECURRING auto check-ins to a partner with no standing way
+  for the partner to see or stop them (only a per-item decline). **Design decided with the user (2 forks):**
+  transparency-first (the target always sees who's sending them check-ins + a one-tap stop — no accept
+  handshake) and the insight flow stays owner-facing (raw answers still private). Spec-first: wrote spec 63 §3.3a
+  (+ §4.5 storage, §6.6 IPC, amended the §2 no-consent non-goal). **Built end-to-end:** a person's standing
+  **opt-out** (`people/<target>/questionnaires/autoCheckinBlocks.enc`, additive `AutoCheckinBlocksSchema`, the
+  target's own data) is a **hard gate** in `resolveEligibility` — a blocked sender fails closed
+  (`reason:'blocked-by-recipient'`), re-checked every run, so a block takes effect immediately regardless of the
+  owner's config; `listIncomingAutoCheckinStreams(viewer)` enumerates household configs for enabled streams
+  targeting the viewer (name + cadence + intimacy flag + the blocked flag), **strictly scoped to streams aimed at
+  the viewer** and never exposing the owner's private exploration focus. Seam: `autoCheckins:incomingStreams`/
+  `:getBlocks`/`:setBlock` — NOT gated on `questionnaires.autoCheckin` (a person can be targeted without holding
+  it), active-person-scoped in the bridge (a person edits only their OWN blocks). Renderer: a **"Check-ins others
+  send you"** section on the AutoCheckinsPanel (per-sender Receiving/Turned-off `Switch`); the Auto check-ins tab
+  now appears when the viewer has incoming streams even with no own config, so the control is always reachable. A
+  **first-time notice** (`auto-checkin-incoming` notification, one per new sender, per-person). **Insight flow +
+  raw-answer privacy unchanged** (owner-facing insight, private answers never cross). Gate green: typecheck,
+  lint, format, **1467 core + 1307 desktop** unit (+core block-gate/unblock + `listIncomingAutoCheckinStreams`
+  scope; +a coreBridge two-persona trust-boundary test [partner sees + stops, scoped per person, owner never sees
+  another's block]; +panel RTL [renders + toggles with no own config]; +notification RTL), +1 E2E (owner targets
+  a partner → switch to the partner → the toast fires + the "Check-ins others send you" section shows the owner
+  → turn it off → **decrypt** the partner's block file contains the owner). Real-Electron visual QA (the section
+  - the first-time toast). **Lesson: a "no-consent" model softens cleanly into "transparency + a hard opt-out"
+    without an accept-handshake — store the block in the TARGET's own vault (their data, owner can't override),
+    re-check it in the eligibility gate every run (fail-closed), and make the see-and-stop surface reachable even
+    for a targeted person who lacks the feature's own capability (gate the tab on incoming-streams, not just the
+    config).**
+
 - 2026-07-17 — **Build (Your Story R6 — Photos tab redesign + the photo-answers-reach-the-biographer wiring fix;
   SPEC 64 §13.6.2/§13.7; on `feat/story-photos-corpus`, PR pending; part of the approved full-surface redesign).**
   The sixth slice of the §13 rebuild. **The functional fix (§13.6.2 — a working-but-wrong gap the redesign audit

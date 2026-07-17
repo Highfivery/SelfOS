@@ -1,7 +1,7 @@
 import { getGuidancePrefs } from '../conversations/guidanceService';
 import { formatIntakeForGeneration, getIntakeSession } from '../intake/intakeService';
 import { ageFromBirthday } from '../people/buildContext';
-import { getPerson } from '../people/peopleService';
+import { getPerson, listPeople } from '../people/peopleService';
 import { listRelationships } from '../people/relationshipService';
 import {
   getAssignmentSnapshot,
@@ -23,6 +23,7 @@ import type {
   AutoCheckinProvenance,
   AutoCheckinRunResult,
   AutoCheckinTarget,
+  IncomingAutoCheckinStream,
   Person,
   PrivacyMode,
   QuestionnaireInput,
@@ -40,7 +41,7 @@ import {
   shouldRunAutoCheckins,
   type StreamState,
 } from './planner';
-import { getAutoCheckinConfig } from './prefsService';
+import { getAutoCheckinBlocks, getAutoCheckinConfig, isSenderBlocked } from './prefsService';
 
 /**
  * The Auto check-ins orchestrator (63-auto-checkins §5.1) — the AI-bearing top level. Once a day, for each
@@ -323,6 +324,11 @@ async function resolveEligibility(
   if (session?.status !== 'complete') return { ok: false, reason: 'onboarding-incomplete' };
   const age = person.birthday ? ageFromBirthday(person.birthday, now) : null;
   if (age === null || age < 18) return { ok: false, reason: 'not-adult' };
+  // The target's standing opt-out (§3.3a): if they've turned this sender off, generate + deliver nothing —
+  // a hard gate re-checked every run, so a block takes effect immediately regardless of the owner's config.
+  if (await isSenderBlocked(fs, key, recipientId, authorId)) {
+    return { ok: false, reason: 'blocked-by-recipient' };
+  }
 
   const relType = relationshipTypeBetween(await listRelationships(fs, key), authorId, recipientId);
   let canIntimacy = false;
@@ -354,6 +360,46 @@ function relationshipTypeBetween(
   );
   const partner = between.find((r) => r.type === 'partner');
   return partner?.type ?? between[0]?.type;
+}
+
+/**
+ * The enabled auto check-in streams (across all household people) that target `viewerId` (§3.3a/§4.5) — the
+ * data for the viewer's "Check-ins others send you" surface. Scoped STRICTLY to streams aimed at the viewer:
+ * a person can only ever see who is sending THEM check-ins, never streams aimed at anyone else. Skips a
+ * sender whose master toggle or stream is off (nothing actively targeting the viewer). Never exposes the
+ * owner's private per-target exploration focus.
+ */
+export async function listIncomingAutoCheckinStreams(
+  fs: AiDeps['fs'],
+  key: Uint8Array,
+  viewerId: string,
+): Promise<IncomingAutoCheckinStream[]> {
+  const [people, blocks, relationships] = await Promise.all([
+    listPeople(fs, key),
+    getAutoCheckinBlocks(fs, key, viewerId),
+    listRelationships(fs, key),
+  ]);
+  const blocked = new Set(blocks.blockedSenders);
+  const out: IncomingAutoCheckinStream[] = [];
+  for (const owner of people) {
+    if (owner.id === viewerId) continue;
+    const config = await getAutoCheckinConfig(fs, key, owner.id);
+    if (!config.enabled) continue;
+    const stream = config.targets.find(
+      (t) => t.enabled && t.target.kind === 'person' && t.target.personId === viewerId,
+    );
+    if (!stream) continue;
+    const relType = relationshipTypeBetween(relationships, viewerId, owner.id);
+    out.push({
+      senderPersonId: owner.id,
+      senderName: owner.displayName,
+      ...(relType ? { relationshipLabel: relType } : {}),
+      cadence: stream.cadence,
+      includeIntimacy: stream.includeIntimacy,
+      blocked: blocked.has(owner.id),
+    });
+  }
+  return out;
 }
 
 function tailoringFor(

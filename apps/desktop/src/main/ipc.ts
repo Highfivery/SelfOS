@@ -376,6 +376,9 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.autoCheckinsSetConfig, bridge.autoCheckinsSetConfig);
   handle(IpcChannels.autoCheckinsEnsureSeed, bridge.autoCheckinsEnsureSeed);
   handle(IpcChannels.autoCheckinsRun, bridge.autoCheckinsRun);
+  handle(IpcChannels.autoCheckinsIncomingStreams, bridge.autoCheckinsIncomingStreams);
+  handle(IpcChannels.autoCheckinsGetBlocks, bridge.autoCheckinsGetBlocks);
+  handle(IpcChannels.autoCheckinsSetBlock, bridge.autoCheckinsSetBlock);
   handle(IpcChannels.storyBookTypes, bridge.storyBookTypes);
   handle(IpcChannels.storyList, bridge.storyList);
   handle(IpcChannels.storyCreate, bridge.storyCreate);

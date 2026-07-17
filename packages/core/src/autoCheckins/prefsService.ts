@@ -1,7 +1,9 @@
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
 import {
+  AutoCheckinBlocksSchema,
   AutoCheckinConfigSchema,
+  type AutoCheckinBlocks,
   type AutoCheckinConfig,
   type AutoCheckinTarget,
 } from '../schemas';
@@ -55,6 +57,55 @@ export async function setAutoCheckinConfig(
     targets: patch.targets ?? current.targets,
   });
   await writeEncryptedJson(fs, configPath(authorId), next, key);
+  return next;
+}
+
+// --- Target block list (§3.3a/§4.5): a person's standing opt-out for check-ins others send them ------------
+
+const blocksPath = (targetId: string): string =>
+  `people/${targetId}/questionnaires/autoCheckinBlocks.enc`;
+
+const EMPTY_BLOCKS: AutoCheckinBlocks = { schemaVersion: SCHEMA_VERSION, blockedSenders: [] };
+
+/** Read a target's block list — fail-closed to empty (nothing blocked) on absent or corrupt. */
+export async function getAutoCheckinBlocks(
+  fs: FileSystem,
+  key: Uint8Array,
+  targetId: string,
+): Promise<AutoCheckinBlocks> {
+  const raw = await readEncryptedJson(fs, blocksPath(targetId), key);
+  if (!raw) return { ...EMPTY_BLOCKS, blockedSenders: [] };
+  const parsed = AutoCheckinBlocksSchema.safeParse(raw);
+  return parsed.success ? parsed.data : { ...EMPTY_BLOCKS, blockedSenders: [] };
+}
+
+/** True when `targetId` has turned off check-ins from `senderId`. */
+export async function isSenderBlocked(
+  fs: FileSystem,
+  key: Uint8Array,
+  targetId: string,
+  senderId: string,
+): Promise<boolean> {
+  return (await getAutoCheckinBlocks(fs, key, targetId)).blockedSenders.includes(senderId);
+}
+
+/** Add/remove a sender from `targetId`'s block list (idempotent). Only the target ever calls this. */
+export async function setAutoCheckinBlock(
+  fs: FileSystem,
+  key: Uint8Array,
+  targetId: string,
+  senderId: string,
+  blocked: boolean,
+): Promise<AutoCheckinBlocks> {
+  const current = await getAutoCheckinBlocks(fs, key, targetId);
+  const set = new Set(current.blockedSenders);
+  if (blocked) set.add(senderId);
+  else set.delete(senderId);
+  const next = AutoCheckinBlocksSchema.parse({
+    schemaVersion: SCHEMA_VERSION,
+    blockedSenders: [...set],
+  });
+  await writeEncryptedJson(fs, blocksPath(targetId), next, key);
   return next;
 }
 

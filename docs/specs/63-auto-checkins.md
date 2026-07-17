@@ -85,9 +85,13 @@ the questionnaire/assignment engine except an additive-optional provenance field
 
 - **No new answering/generation engine.** Everything routes through `generateQuestions` + the existing
   de-dup + `createAssignment`. If de-dup/generation needs a fix, that's an [`08`](08-questionnaires.md) change.
-- **No recipient consent handshake** (owner's decision, §11): targeting another person does not require that
-  person to opt in. The compensating controls are: **owner-only** to configure other-targets, the partner+
-  18+ intimacy gate, adults-with-data-only targets, and the always-visible auto-generated disclosure on open.
+- **No recipient consent _handshake_** (owner's decision, §11): targeting another person does not require that
+  person to _accept_ before check-ins begin. **But the target is never powerless (amended 2026-07-17, §3.3a):**
+  they always **see** who is sending them recurring check-ins and can **stop** any of them with one tap (a
+  standing opt-out enforced as a hard gate in the send path — not a per-item decline). The compensating
+  controls are therefore: **owner-only** to configure other-targets, the partner+18+ intimacy gate,
+  adults-with-data-only targets, the always-visible auto-generated disclosure on open, **and the target's
+  standing see-and-stop control (§3.3a).**
 - **No author review step, and no "see what's queued" preview, in v1** (owner's decisions): sends are
   **fully automatic** once configured; the Inbox "Auto check-in" tag + rationale are the transparency
   surface. A queued preview may be a fast-follow.
@@ -157,6 +161,43 @@ _sender's_ coaching. Intimacy content only reaches her if she is a partner-type 
 18+ ack **and** intimacy is enabled for that target (§3.5). The **author** sees only status ("Sent · awaiting")
 in **Sent/Results** ([`59`](59-questionnaires-dashboard.md)); the recipient's private data still never crosses
 back to the author (the de-dup boundary, §8.4). Angel can **decline** any check-in.
+
+### 3.3a Target visibility & control — "Check-ins others send you" (amended 2026-07-17)
+
+The original design surfaced an owner-configured stream to its target **only** item-by-item in the Inbox (an
+"Auto check-in" eyebrow + the honest disclosure on open), with a per-item decline. There was **no standing
+place** for the target to see that someone had set up a _recurring_ stream toward them, and **no way to stop
+the stream** — only the individual item. That read as over-exposure (a household owner unilaterally, silently,
+sending a partner recurring check-ins). This amendment adds a **transparency + stop** control for the target
+(the owner-chosen model: not an accept-handshake, but the target is always informed and in control).
+
+**The surface — "Check-ins others send you"** — a section on the target's **Auto check-ins** panel
+([§3.1](#31-the-configuration-surface--auto-check-ins-on-the-questionnaires-page)). For each _other person_ who
+has an **enabled** stream targeting the viewer, one row: the **sender's name + relationship**, the **cadence**,
+whether **unfiltered intimacy is included** (so the target knows before it arrives, §3.5), and a **"Receiving /
+Turned off"** `Switch`. The section self-hides when no one targets the viewer. It shows the sender's _identity
+and settings that affect the target_ — never the owner's private per-target **exploration focus** (that's the
+owner's direction, not the target's business). Because a person can be _targeted_ without holding
+`questionnaires.autoCheckin` themselves (a custom role), the Auto check-ins **tab appears whenever the viewer
+has incoming streams**, even if they can't configure their own — so the see-and-stop control is always reachable.
+
+**The control — a standing per-sender stop.** Toggling a row **off** writes the sender's id into the viewer's
+own **block list** (§4.5); toggling on removes it. It is the **viewer's own data**, editable only by them, and
+the owner **cannot override it**. It is a _hard gate_: `resolveEligibility` (§3.4/§8.2) re-reads the target's
+block list every run and returns **ineligible** (`reason: 'blocked-by-recipient'`) for a blocked sender — so no
+further check-ins from that sender are generated or delivered, effective immediately, no matter what the owner's
+config says. (Already-delivered items remain in the Inbox to answer or decline; the block stops _future_ sends.)
+
+**First-time notice.** The first time a new sender's stream reaches the target (a new incoming stream appears),
+a gentle notification — _"{Sender} set up occasional check-ins for you — see or stop them in Questionnaires →
+Auto check-ins."_ — so the target learns about it without having to go looking. Derived + device-local +
+per-person (the [`35`](35-notification-system.md) pattern; re-surfaces only when a genuinely new sender
+appears).
+
+**What is unchanged (owner's decision):** the derived **insight stays owner-facing** — an owner-configured
+stream's answers still produce an insight assigned to the sender (`subjectPersonId = sender`) that feeds the
+sender's coaching; the target's **raw answers still never cross the bridge** to the sender (the §8.4 private-send
+boundary). This amendment adds _visibility + a stop_, not a change to whose coaching the insight informs.
 
 ### 3.4 The daily loop (cadence mechanics)
 
@@ -289,6 +330,33 @@ per-stream queue/back-off derivation). A questionnaire with `autoCheckin` presen
 `autoCheckinCheckedAt?: z.record(z.string(), z.string())` (per-person id → ISO), mirroring
 `memoryReconcileCheckedAt`/`coachingSynthesizedAt`. **Device-local, does not sync.**
 
+### 4.5 Target block list (new, amended 2026-07-17)
+
+Each person's standing opt-out (§3.3a) lives in **their own** vault, at
+`people/<targetId>/questionnaires/autoCheckinBlocks.enc`:
+
+```ts
+export const AutoCheckinBlocksSchema = z.object({
+  schemaVersion: z.number().int().positive().default(1),
+  blockedSenders: z.array(z.string()).default([]), // owner/sender person ids this person has turned off
+});
+```
+
+Conservative default (absent file ⇒ nothing blocked). Only the target writes it (the bridge scopes the write
+to the active person). `resolveEligibility` reads the recipient's block list every run and fails closed for a
+blocked sender (`reason: 'blocked-by-recipient'`). A derived read-only view for the target's surface:
+
+```ts
+export interface IncomingAutoCheckinStream {
+  senderPersonId: string;
+  senderName: string;
+  relationshipLabel?: string; // e.g. "partner" — from the target↔sender edge
+  cadence: AutoCheckinCadence;
+  includeIntimacy: boolean; // whether this stream can send unfiltered intimacy check-ins
+  blocked: boolean; // the viewer has turned this sender off
+}
+```
+
 ### 4.4 What is reused unchanged
 
 The `Questionnaire`/`Question`, `Assignment`, `ResponseSet`, and `Insight` schemas
@@ -387,6 +455,20 @@ No new model prompt shapes — it calls the existing `suggestQuestionnaires` + `
 `questionnaire.suggest` / `questionnaire.generate` / `questionnaire.dedup` types
 ([`06`](06-ai-usage-and-budgets.md)); admin cost visibility is unchanged (the usage dashboard already breaks
 down by type). Volume is bounded by §3.7, not a new usage type.
+
+### 6.6 Target visibility & control (new, amended 2026-07-17)
+
+- **`autoCheckins:incomingStreams` → `IncomingAutoCheckinStream[]`** — the enabled streams (across all
+  household people) that target the **active person**. Derived in the bridge by enumerating people +
+  reading each's `AutoCheckinConfig`, keeping `config.enabled && target.enabled && target.personId === me`;
+  resolves each sender's name + the me↔sender relationship label + the viewer's `blocked` flag. **Not** gated
+  on `questionnaires.autoCheckin` (a person may be targeted without holding it) — scoped strictly to streams
+  targeting the active person, so it can never reveal streams aimed at someone else.
+- **`autoCheckins:setBlock({ senderPersonId, blocked }) → AutoCheckinBlocks`** — add/remove a sender from the
+  active person's own block list (§4.5). Writes `people/<me>/questionnaires/autoCheckinBlocks.enc`; the bridge
+  scopes the write to the active person (a person edits only their own blocks). Takes effect on the next run.
+- **`autoCheckins:getBlocks` → `AutoCheckinBlocks`** — the active person's own block list (drives the toggle
+  state).
 
 ## 7. States & edge cases
 

@@ -94,8 +94,9 @@ function factText(score: TestSubscaleScore, label: string): string {
  * (kink) test emits only the categories that drew real interest (normalized ≥ 0.5), so the coach gets the
  * signal, not 14 "little pull" lines. Sexuality emits all (orientation is meaningful at any point). A WELLBEING
  * reflection (51) emits a single plain, non-pathologizing fact from the resolved band's NON-diagnostic display
- * copy — never the clinical key, never "you have," always framed as a self-reflection (§5.4/§8.1); it is
- * `shareable: false` with NO `shareableWith`/`shareableTypes` ever (§8.4 — never shared with anyone else). */
+ * copy — never the clinical key, never "you have," always framed as a self-reflection (§5.4/§8.1); like the
+ * other test facts it is `shareable: false` but default-shares with the `partner` relationship type (54 — the
+ * gentle non-diagnostic text only, never the clinical band; the person can un-share any test result). */
 function buildFacts(
   def: TestDefinition,
   scores: TestSubscaleScore[],

@@ -10,18 +10,24 @@ import { generateChapter } from './storyGenerationService';
 import {
   bookMentionsReader,
   grantReader,
+  listReaders,
   listSharedBooks,
   noteOnBook,
   publishBook,
   readOwnBook,
+  readReadReceipt,
   readSharedBook,
   readSharedImage,
+  reapReadReceiptsAbout,
   revokeReader,
+  writeReadReceipt,
 } from './storyPublish';
 import { setImagePlacement } from './storyPlacementService';
 import {
   bookToHtml,
   bookToMarkdown,
+  buildDraftHtml,
+  buildDraftMarkdown,
   buildPublishedHtml,
   buildPublishedMarkdown,
   exportFileStem,
@@ -271,6 +277,61 @@ describe('readers + the read-time re-gate (64 §3.5)', () => {
   });
 });
 
+describe('read receipts — the author sees who has read their shared book (§13.6.8)', () => {
+  it('a reader’s open writes a receipt; the author joins it to read state; a republish makes it "older"', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    await publishBook(fs, key, 'author', bookId, now);
+    await grantReader(fs, key, 'author', bookId, 'reader', now);
+
+    // Before opening → the author sees "hasn't opened it yet" (no receipt).
+    expect((await listReaders(fs, key, 'author', bookId))[0]?.read).toBeUndefined();
+
+    // The reader opens → a receipt is written; the author now sees they read the latest.
+    const openedAt = new Date(now.getTime() + 1000);
+    await writeReadReceipt(fs, key, 'reader', 'author', bookId, openedAt);
+    const afterOpen = (await listReaders(fs, key, 'author', bookId))[0];
+    expect(afterOpen?.read?.upToDate).toBe(true);
+    expect(afterOpen?.read?.openedAt).toBe(openedAt.toISOString());
+
+    // The author republishes (a later publishedAt) → the reader's receipt is now for an OLDER version.
+    await publishBook(fs, key, 'author', bookId, new Date(now.getTime() + 5000));
+    expect((await listReaders(fs, key, 'author', bookId))[0]?.read?.upToDate).toBe(false);
+
+    // The receipt is readable directly, and names the right author/book (the trust check).
+    const receipt = await readReadReceipt(fs, key, 'reader', 'author', bookId);
+    expect(receipt).toMatchObject({ authorPersonId: 'author', bookId });
+  });
+
+  it('no receipt is written when the book isn’t published / not shared with the reader (the re-gate)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    // Not published yet → no-op.
+    await writeReadReceipt(fs, key, 'reader', 'author', bookId, now);
+    expect(await readReadReceipt(fs, key, 'reader', 'author', bookId)).toBeNull();
+    // Published but the reader isn't granted → still no-op.
+    await publishBook(fs, key, 'author', bookId, now);
+    await writeReadReceipt(fs, key, 'reader', 'author', bookId, now);
+    expect(await readReadReceipt(fs, key, 'reader', 'author', bookId)).toBeNull();
+    // An author reading their own book leaves no receipt.
+    await grantReader(fs, key, 'author', bookId, 'reader', now);
+    await writeReadReceipt(fs, key, 'author', 'author', bookId, now);
+    expect(await readReadReceipt(fs, key, 'author', 'author', bookId)).toBeNull();
+  });
+
+  it('reapReadReceiptsAbout removes receipts other readers hold about a deleted author’s book', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    await publishBook(fs, key, 'author', bookId, now);
+    await grantReader(fs, key, 'author', bookId, 'reader', now);
+    await writeReadReceipt(fs, key, 'reader', 'author', bookId, now);
+    expect(await readReadReceipt(fs, key, 'reader', 'author', bookId)).not.toBeNull();
+    // The author is deleted → the reader's receipt about the author's book is reaped.
+    await reapReadReceiptsAbout(fs, key, 'author');
+    expect(await readReadReceipt(fs, key, 'reader', 'author', bookId)).toBeNull();
+  });
+});
+
 describe('readOwnBook — the owner reads their OWN book from the DRAFT head (§13.5)', () => {
   it('reads EVERY written chapter (draft head), carries status + the live honesty note, full projection', async () => {
     const fs = memFileSystem();
@@ -380,6 +441,20 @@ describe('export (64 §3.9)', () => {
     const built = await buildPublishedMarkdown(fs, key, 'author', bookId);
     expect(built?.title).toBe('The Story of Ben');
     expect(built?.markdown).toContain('### The Garage'); // the one Reviewed chapter
+  });
+
+  it('draft export works WITHOUT publishing and includes every written chapter (§13.6.1)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs); // c1 reviewed, c2 written-but-new — never published
+    // The DRAFT head exports both written chapters (the published head would need a publish + has only c1).
+    expect(await buildPublishedMarkdown(fs, key, 'author', bookId)).toBeNull();
+    const md = await buildDraftMarkdown(fs, key, 'author', bookId);
+    expect(md?.title).toBe('The Story of Ben');
+    expect(md?.markdown).toContain('### The Garage'); // c1 (reviewed)
+    expect(md?.markdown).toContain('### The Road'); // c2 (written but not reviewed) — draft includes it
+    expect(md?.markdown).toContain('never invented'); // the live honesty note
+    // The draft HTML builds too (feeds the PDF path).
+    expect((await buildDraftHtml(fs, key, 'author', bookId))?.html).toContain('The Garage');
   });
 
   it('renders the published head as a self-contained, safely-escaped print HTML document', () => {

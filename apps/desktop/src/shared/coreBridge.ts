@@ -168,6 +168,7 @@ import {
   StoryCreateInputSchema,
   StoryBookRefSchema,
   StoryChapterRefSchema,
+  StoryExportInputSchema,
   StoryGenerateImageInputSchema,
   StoryImageRefSchema,
   StoryUploadPhotoInputSchema,
@@ -415,6 +416,8 @@ import {
   markStaleChapters,
   mintStoryCheckInFromTodo,
   bookMentionsReader,
+  buildDraftHtml,
+  buildDraftMarkdown,
   buildPublishedHtml,
   buildPublishedMarkdown,
   addPhotoAnswer,
@@ -438,6 +441,7 @@ import {
   listStructuralProposals,
   pinPassage,
   publishBook,
+  reapReadReceiptsAbout,
   readBookBundle,
   readSharedBook,
   readOwnBook,
@@ -446,6 +450,7 @@ import {
   removeExclusion,
   resolveProposal,
   revokeReader,
+  writeReadReceipt,
   runStoryInterviewCadence,
   removeMark,
   saveChapter,
@@ -1967,6 +1972,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Reap the shared-root Together data the person was in (session folders + pair agreements/reports;
       // their own per-person Together data went with `deletePerson`) — 58 §5.6.
       await reapTogetherForPerson(ctx.fs, ctx.key, personId);
+      // Reap story read receipts OTHER readers hold about the deleted author's books (§13.6.8 both directions;
+      // the deleted person's own receipts went with `deletePerson`). Best-effort cleanup.
+      await reapReadReceiptsAbout(ctx.fs, ctx.key, personId);
     },
     relationshipsList: async (): Promise<Relationship[]> => {
       const ctx = await host.vaultAndKey();
@@ -4952,9 +4960,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       });
     },
     storyMarkSharedRead: async (input): Promise<void> => {
-      // Record that the active viewer opened a shared book (§3.6) — device-local + per-person, never synced.
-      // Clears the one-time `story-shared` notification and the "Updated" marker until the author republishes.
-      const { bookId } = StoryReadSharedInputSchema.parse(input);
+      // Record that the active viewer opened a shared book. TWO records: (1) device-local + per-person read
+      // progress (§3.6) for the reader's own "what's new" badge, never synced; (2) a vault-persisted read
+      // RECEIPT (§13.6.8) under the reader's own space so the AUTHOR can see who has read their book.
+      const { authorPersonId, bookId } = StoryReadSharedInputSchema.parse(input);
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return;
       const personId = await activePersonId();
@@ -4969,6 +4978,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           },
         },
       });
+      // The receipt is re-gated inside (book still published + still shared with this reader).
+      await writeReadReceipt(ctx.fs, ctx.key, personId, authorPersonId, bookId, new Date());
     },
     storyReadSharedImage: async (input): Promise<{ mime: string; dataBase64: string } | null> => {
       const { authorPersonId, bookId, imageId } = StoryReadSharedImageInputSchema.parse(input);
@@ -4987,26 +4998,32 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return image ? { mime: image.mime, dataBase64: toBase64(image.bytes) } : null;
     },
     storyExportMarkdown: async (input): Promise<string | null> => {
-      const { bookId } = StoryBookRefSchema.parse(input);
+      const { bookId, head } = StoryExportInputSchema.parse(input);
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
       const personId = await activePersonId();
       if (!personId) return null;
-      // Export the PUBLISHED head (owner decision) — null when the book has never been published.
-      const built = await buildPublishedMarkdown(ctx.fs, ctx.key, personId, bookId);
+      // Draft head (§13.6.1 — no publish needed) or the published head; null when there's nothing to export.
+      const built =
+        head === 'draft'
+          ? await buildDraftMarkdown(ctx.fs, ctx.key, personId, bookId)
+          : await buildPublishedMarkdown(ctx.fs, ctx.key, personId, bookId);
       if (!built) return null;
       const bytes = new TextEncoder().encode(built.markdown);
       // Reuses the generic file-save host op (the dream-image export precedent) — the bytes leave the vault.
       return host.saveImageFile(`${exportFileStem(built.title)}.md`, bytes, 'text/markdown');
     },
     storyExportPdf: async (input): Promise<string | null> => {
-      const { bookId } = StoryBookRefSchema.parse(input);
+      const { bookId, head } = StoryExportInputSchema.parse(input);
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
       const personId = await activePersonId();
       if (!personId) return null;
-      const built = await buildPublishedHtml(ctx.fs, ctx.key, personId, bookId);
-      if (!built) return null; // not published
+      const built =
+        head === 'draft'
+          ? await buildDraftHtml(ctx.fs, ctx.key, personId, bookId)
+          : await buildPublishedHtml(ctx.fs, ctx.key, personId, bookId);
+      if (!built) return null; // nothing to export (draft: no outline; published: not published)
       const pdf = await host.printToPdf(built.html);
       if (!pdf) return null; // a host that can't render PDF (web/iOS), or a render failure
       return host.saveImageFile(`${exportFileStem(built.title)}.pdf`, pdf, 'application/pdf');

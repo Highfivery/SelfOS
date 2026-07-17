@@ -1183,10 +1183,14 @@ export interface SelfosBridge {
   /** Export the book's PUBLISHED head as a Markdown file OUTSIDE the encrypted vault (§3.9) — a save dialog.
    *  Returns the saved path, or null (book not published yet, or the dialog was cancelled). Gated `story.own`,
    *  author-scoped. */
-  storyExportMarkdown(input: { bookId: string }): Promise<string | null>;
-  /** Export the book's PUBLISHED head as a typeset PDF OUTSIDE the vault (§3.9) — Electron `printToPDF`. Returns
-   *  the saved path, or null (not published, dialog cancelled, or a host that can't render PDF). Gated `story.own`. */
-  storyExportPdf(input: { bookId: string }): Promise<string | null>;
+  storyExportMarkdown(input: {
+    bookId: string;
+    head?: 'draft' | 'published';
+  }): Promise<string | null>;
+  /** Export the book's DRAFT or PUBLISHED head as a typeset PDF OUTSIDE the vault (§3.9/§13.6.1) — Electron
+   *  `printToPDF`. Returns the saved path, or null (nothing to export, dialog cancelled, or a host that can't
+   *  render PDF). Gated `story.own`, author-scoped. */
+  storyExportPdf(input: { bookId: string; head?: 'draft' | 'published' }): Promise<string | null>;
   /** The book's image index (cover + illustrations + uploads), metadata only. Gated `story.own`. */
   storyImages(input: { bookId: string }): Promise<StoryImageEntry[]>;
   /** Generate (or regenerate) a cover or chapter illustration via the spec-13 distill→render flow (§3.8).

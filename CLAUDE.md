@@ -527,6 +527,35 @@ A running log of durable decisions and feedback captured into the project config
     renderer helper from core via a dedicated lean subpath export (`@selfos/core/story-diff`), never the crypto-heavy
     barrel; and keep a moved control's accessible name stable (a decorative ✓ via CSS `::before`, not text) so
     existing `getByText`/role-name matchers don't break.\*\*
+- 2026-07-17 — **Build (Your Story §13 R4 — read receipts, draft export & the export dialog; SPEC 64 §13.7 R4
+  BUILT on `feat/story-sharing-export`, PR pending).** The fourth slice of the redesign, closing two audit-found
+  gaps + adding read receipts. **Read receipts (§13.6.8):** a new additive `StoryReadReceipt` — the READER writes
+  `people/<readerId>/story/receipts/<bookId>.enc` when they open a shared book (piggybacking on the existing
+  `storyMarkSharedRead`, which already carries the author id), **re-gated inside** `writeReadReceipt` (only when
+  the book is still published + still shared with them), storing the `publishedAt` they saw. The AUTHOR joins it:
+  `listReaders` now reads each granted reader's receipt → a `BookReader.read` state (`{openedAt, upToDate}` or
+  absent), surfaced on the Sharing tab as **"Read the latest" / "Opened <date> · older version" / "Hasn't opened
+  it yet"** (`upToDate` = the reader saw the current `publishedAt`; republishing flips a stale reader to "older").
+  Person-delete reaps **both directions**: the deleted person's own receipts go with `deletePerson`, and a new
+  `reapReadReceiptsAbout` (wired into `peopleDelete`) removes receipts OTHER readers hold about the deleted
+  author's books. **Draft export (§13.6.1):** core `buildDraftMarkdown`/`buildDraftHtml` (reuse `readOwnBook`'s
+  draft head + resolve the draft image bytes) + a **`head: 'draft' | 'published'`** param (`StoryExportInputSchema`,
+  default published) on `story:exportMarkdown`/`:exportPdf`, so a **never-published** book exports its live written
+  chapters + the live honesty note — fixing "export trapped behind publishing". **Export dialog:** the two inline
+  export buttons → one **"Export…"** (always available) opening a centered `role="dialog"` — format (Markdown/PDF)
+  · version (Working draft / Published, Published unusable until shared) · the vault-boundary line. Additive schema,
+  no version bump. Gate green: typecheck, lint, format, **1433 core + 1279 desktop** unit (+receipt
+  write/read/derive/reap + draft-export core; +coreBridge two-persona receipt round-trip [reader opens → author
+  sees "read the latest" → republish → "older" → reap] + draft-export-without-publishing; +3 Story RTL [export
+  dialog Markdown-published, PDF-draft-no-publish, the reader read-state row]), **7 story E2E** (the publish/reader
+  walk now exports the DRAFT before publishing + the published PDF via the dialog, and the author's Sharing tab
+  shows "Read the latest" after the reader opens). Real-Electron visual QA (the export dialog + the reader
+  read-state read clean). **Lesson: a cross-person "who read my book" signal is cheapest as a receipt the READER
+  writes in their OWN vault space (author-visible, re-gated on write) + an author-side JOIN in `listReaders` — no
+  new channel, it rides the existing mark-read op; and a "reap both directions" on person-delete means the deleted
+  person's own files go with `deletePerson` while a scan reaps the receipts OTHERS hold ABOUT them. Draft export is
+  free once you have `readOwnBook` — the draft head is already the same shape the published exporter consumes, so
+  it's a `head` param + a `buildDraftHead` that resolves the draft image bytes.**
 - 2026-07-16 — **Build (Your Story chapters redesigned as a cover-backed card grid — mockup approved FIRST;
   SPEC 64 §3.1/§3.3; on `feat/story-chapter-cards`, PR pending; v0.30.0 released alongside).** The user asked to
   redesign the flat part/chapter list into a **grid of modern, sleek cards "like TikTok"** with the **generated

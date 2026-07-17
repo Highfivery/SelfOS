@@ -146,9 +146,9 @@ interface StoryState {
   grantReader: (bookId: string, readerPersonId: string) => Promise<void>;
   revokeReader: (bookId: string, readerPersonId: string) => Promise<void>;
   readerFeatured: (bookId: string, readerPersonId: string) => Promise<boolean>;
-  /** Export the published head as a Markdown file outside the vault (§3.9). Returns the saved path, or null. */
-  exportMarkdown: (bookId: string) => Promise<string | null>;
-  exportPdf: (bookId: string) => Promise<string | null>;
+  /** Export the draft or published head as a file outside the vault (§3.9/§13.6.1). Returns the saved path, or null. */
+  exportMarkdown: (bookId: string, head: 'draft' | 'published') => Promise<string | null>;
+  exportPdf: (bookId: string, head: 'draft' | 'published') => Promise<string | null>;
   /** Images (§3.8) — cover + chapter illustrations. `imageUrls` caches decrypted data URLs by image id. */
   images: StoryImageEntry[];
   imageUrls: Record<string, string>;
@@ -539,8 +539,10 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   },
   readerFeatured: async (bookId, readerPersonId) =>
     (await window.selfos?.storyReaderFeatured({ bookId, readerPersonId })) ?? false,
-  exportMarkdown: async (bookId) => (await window.selfos?.storyExportMarkdown({ bookId })) ?? null,
-  exportPdf: async (bookId) => (await window.selfos?.storyExportPdf({ bookId })) ?? null,
+  exportMarkdown: async (bookId, head) =>
+    (await window.selfos?.storyExportMarkdown({ bookId, head })) ?? null,
+  exportPdf: async (bookId, head) =>
+    (await window.selfos?.storyExportPdf({ bookId, head })) ?? null,
   loadImages: async (bookId) => {
     const images = (await window.selfos?.storyImages({ bookId })) ?? [];
     set({ images });

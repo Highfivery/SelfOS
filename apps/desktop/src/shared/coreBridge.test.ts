@@ -7299,15 +7299,26 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(view?.manifest.noteOnBook).toContain('never invented');
 
     // Recording the open clears the read-progress cues (device-local, per-person) — the notification stops
-    // and the "Updated" marker goes quiet until the author republishes (§3.6).
+    // and the "Updated" marker goes quiet until the author republishes (§3.6). It ALSO writes a vault read
+    // RECEIPT (§13.6.8) so the AUTHOR can see the reader has read their book.
     await bridge.storyMarkSharedRead({ authorPersonId: ownerId, bookId });
     expect((await bridge.storySharedBooks())[0]).toMatchObject({
       neverOpened: false,
       updated: false,
     });
 
-    // Author revokes → the reader loses access at the next read (no stale access).
+    // Back on the author's account, the Sharing tab shows the reader's read state (§13.6.8).
     await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    expect((await bridge.storyReaders({ bookId }))[0]).toMatchObject({
+      personId: reader.id,
+      displayName: 'Angel',
+      read: { upToDate: true },
+    });
+    // Republishing → the reader's receipt is now for an OLDER version (they haven't re-opened).
+    await bridge.storyPublish({ bookId });
+    expect((await bridge.storyReaders({ bookId }))[0]?.read).toMatchObject({ upToDate: false });
+
+    // Author revokes → the reader loses access at the next read (no stale access).
     await bridge.storyRevokeReader({ bookId, readerPersonId: reader.id });
     await bridge.sessionSetActive({ personId: reader.id });
     expect(await bridge.storySharedBooks()).toEqual([]);
@@ -7335,9 +7346,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const chapters = await bridge.storyGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
 
-    // Not published yet → nothing to export.
+    // Not published yet → the PUBLISHED export is nothing…
     expect(await bridge.storyExportMarkdown({ bookId })).toBeNull();
     expect(saved).toHaveLength(0);
+    // …but the DRAFT export works WITHOUT publishing (§13.6.1) — the live written chapters + honesty note.
+    const draftPath = await bridge.storyExportMarkdown({ bookId, head: 'draft' });
+    expect(draftPath).toBe('/exports/The-Story-of-Ben.md');
+    expect(new TextDecoder().decode(saved[0]!.bytes)).toContain('# The Story of Ben');
+    saved.length = 0;
 
     await bridge.storyReviewChapter({ bookId, chapterId: chapters.bundle.chapters[0]!.id });
     await bridge.storyPublish({ bookId });

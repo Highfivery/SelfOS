@@ -650,6 +650,21 @@
   gap: var(--space-3);
 }
 
+/* The export dialog (§13.6.1) — a centered scrim + card (the app's hand-rolled dialog pattern). */
+.exportOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgb(15 12 9 / 0.34);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+.exportCard {
+  width: min(440px, 100%);
+}
+
 /* Danger zone rows + confirm dialogs. */
 .dangerRow {
   display: flex;

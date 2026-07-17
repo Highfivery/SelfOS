@@ -4108,6 +4108,13 @@ export type StoryCreateInput = z.infer<typeof StoryCreateInputSchema>;
 export const StoryBookRefSchema = z.object({ bookId: z.string().min(1) });
 export type StoryBookRef = z.infer<typeof StoryBookRefSchema>;
 
+/** `story:exportMarkdown`/`:exportPdf` — export the DRAFT head or the PUBLISHED head (§13.6.1); draft needs no
+ *  publish, published is unchanged. Defaults to `published`. */
+export const StoryExportInputSchema = StoryBookRefSchema.extend({
+  head: z.enum(['draft', 'published']).default('published'),
+});
+export type StoryExportInput = z.infer<typeof StoryExportInputSchema>;
+
 /** `story:generateImage` — cover or a chapter's illustration, with an optional per-image style override. */
 export const StoryImageTargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('cover') }),
@@ -4490,7 +4497,21 @@ export type StoryPublishResult =
 export interface BookReader {
   personId: string;
   displayName: string;
+  /** The reader's read state, joined from their receipt (§13.6.8): absent = hasn't opened it yet;
+   *  `{ openedAt, upToDate }` where `upToDate` means they saw the latest published version. Author-visible only. */
+  read?: { openedAt: string; upToDate: boolean };
 }
+
+/** A read receipt (§13.6.8) — one writer: the reader, in their own vault space, so the author can see who has
+ *  read their shared book. `lastPublishedAtSeen` is the book's `publishedAt` when the reader last opened it. */
+export const StoryReadReceiptSchema = z.object({
+  schemaVersion: z.literal(1),
+  bookId: z.string().min(1),
+  authorPersonId: z.string().min(1),
+  lastOpenedAt: z.string(),
+  lastPublishedAtSeen: z.string(),
+});
+export type StoryReadReceipt = z.infer<typeof StoryReadReceiptSchema>;
 
 // --- Exclusions IPC (§3.3/§5.1) --------------------------------------------------------------------------
 

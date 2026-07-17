@@ -813,6 +813,12 @@ No open questions remain; the spec is Approved and ready for the Phase A slice (
   end-affordance entering the existing markup editor from the reader. The deeper Shape-surface visual restyle
   (superscript sources, margin-rail marks, the right-hand Review & apply sheet) is a documented R3-polish
   fast-follow into the R7 sweep. See §13.7 R3 for the full build note + test coverage.
+- 2026-07-17 — **§13 R4 (Sharing & export) BUILT** (`feat/story-sharing-export`, PR pending) — read receipts
+  end-to-end + draft export + the export dialog. A `StoryReadReceipt` written by the reader on open (re-gated) and
+  joined author-side into `BookReader.read` (Read-the-latest / older-version / not-yet-opened) on the Sharing tab;
+  person-delete reaps receipts both directions. `buildDraftMarkdown`/`buildDraftHtml` + a `head:'draft'|'published'`
+  export param so a never-published book exports its live draft; the two inline export buttons became one
+  "Export…" dialog (format + version + vault-boundary line). See §13.7 R4 for the full build note + test coverage.
 
 ## 13. The Studio & the Book — the 2026-07-17 full-surface redesign (Approved)
 
@@ -1067,9 +1073,32 @@ lastPublishedAtSeen }` (one writer: the reader; additive schema). The author's S
   margin-based look): numbered **superscript sources**, the **margin-rail marks** at ≥900px, and the right-hand
   **Review & apply sheet** + bottom-sticky pending pill (restyle of the existing, tested apply bar). These are
   visual refinements of the working markup surface; folded into the R7 polish sweep.
-- **R4 — Sharing & export**: read receipts end-to-end (two-persona E2E); published-state derivations;
-  the export dialog + draft export (E2E: a never-published book exports Markdown + PDF outside the
-  vault).
+- **R4 — Sharing & export — BUILT** (2026-07-17, `feat/story-sharing-export`, PR pending): **read receipts
+  end-to-end + draft export + the export dialog**. **Read receipts (§13.6.8):** a new `StoryReadReceipt` schema
+  - core `writeReadReceipt` (the reader writes `people/<readerId>/story/receipts/<bookId>.enc` on open — re-gated
+    inside on published + still-shared, storing the `publishedAt` they saw) / `readReadReceipt` (author-side, trust-
+    checked on `authorPersonId`+`bookId`) / `reapReadReceiptsAbout` (person-delete "both directions" — the deleted
+    person's own receipts go with `deletePerson`, this reaps receipts OTHER readers hold about the deleted author's
+    books); `listReaders` now joins each granted reader to their receipt → a `BookReader.read` state
+    (`{openedAt, upToDate}` or absent), surfaced on the Sharing tab as "Read the latest" / "Opened <date> · older
+    version" / "Hasn't opened it yet". The receipt write piggybacks on the existing `storyMarkSharedRead` (which
+    already carries the author id); the reap is wired into `peopleDelete`. **Draft export (§13.6.1):** core
+    `buildDraftMarkdown`/`buildDraftHtml` (reuse `readOwnBook`'s draft head + resolve the draft image bytes) + a
+    `head: 'draft' | 'published'` param (`StoryExportInputSchema`, default published) on `story:exportMarkdown`/
+    `:exportPdf`, so a **never-published** book exports its live written chapters + the live honesty note. **Export
+    dialog:** the two inline export buttons → one **"Export…"** (always available) opening a centered `role="dialog"`
+    (format Markdown/PDF · version Working-draft/Published [Published unusable until shared] · the vault-boundary
+    line). Additive schema, no bump. Gate green: typecheck, lint, format, **1433 core + 1279 desktop** unit
+    (+receipt write/read/derive/reap [3] + draft-export [1] core; +coreBridge two-persona receipt round-trip
+    [reader opens → author sees "read the latest" → republish → "older" → reap] + draft-export-without-publishing;
+    +3 Story RTL [export dialog Markdown-published, PDF-draft-no-publish, the reader read-state row]), **7 story
+    E2E** (the publish/reader walk now exports the DRAFT before publishing + the published PDF via the dialog, and
+    the author's Sharing tab shows "Read the latest" after the reader opens). Real-Electron visual QA (the export
+    dialog + the reader read-state read clean). code-reviewer **ship** (receipt trust boundary + owner-scoped
+    draft export + both-directions reap all verified sound); applied the one should-fix — the secondary receipt
+    write is now best-effort (`.catch`) so an author-facing convenience can't break the reader's open flow — + the
+    a11y nit (autoFocus the export dialog's primary button). A shared `--color-scrim` token to DRY the 3
+    Story-local overlays is deferred to the R7 polish sweep.
 - **R5 — Interview tab**: persisted gaps + part coverage, `story:gaps`, the life map + text equivalent,
   ask-a-gap, answered history, completeness hero.
 - **R6 — Photos tab**: gallery + inline Q&A + placement affordances + the corpus wiring fix (E2E:

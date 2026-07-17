@@ -11439,29 +11439,38 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     await w.getByRole('button', { name: 'Looks good' }).click();
     await w.getByRole('button', { name: /Back to the book/ }).click();
 
-    // Publish + readers + export live in the Sharing tab (§13.4). Publish the reviewed chapter, grant the
-    // household reader.
+    // Publish + readers + export live in the Sharing tab (§13.4).
     await w.getByRole('tab', { name: 'Sharing' }).click();
+
+    // DRAFT export works WITHOUT publishing first (§13.6.1) — the file lands OUTSIDE the encrypted vault.
+    await w.getByRole('button', { name: 'Export…' }).click();
+    await w.getByRole('button', { name: 'Export', exact: true }).click(); // defaults to the working draft (not published yet)
+    await expect(w.getByText(/leaves your encrypted vault/)).toBeVisible();
+    await expect
+      .poll(async () => {
+        const md = (await readdir(saveDir)).find((f) => f.endsWith('.md'));
+        return md ? readFile(join(saveDir, md), 'utf8') : '';
+      })
+      .toContain('Shared Life');
+    await w.getByRole('button', { name: 'Close' }).click();
+
+    // Publish the reviewed chapter + grant the household reader.
     await w.getByRole('button', { name: /Publish & choose readers/ }).click();
     await expect(w.getByText(/Shared \d+ chapter/)).toBeVisible();
     await w.getByRole('combobox', { name: 'Add a reader' }).selectOption({ label: 'Reader' });
     await w.getByRole('button', { name: 'Add as reader' }).click();
     await expect(w.getByRole('button', { name: 'Remove Reader as a reader' })).toBeVisible();
+    // The reader hasn't opened it yet (§13.6.8).
+    await expect(w.getByText(/Hasn’t opened it yet/)).toBeVisible();
 
-    // Export the published book as Markdown AND PDF — both files land OUTSIDE the encrypted vault.
-    await w.getByRole('button', { name: 'Export as Markdown' }).click();
-    await expect(w.getByText(/leaves your encrypted vault/)).toBeVisible();
+    // Export the PUBLISHED book as PDF too — the dialog's Published version.
+    await w.getByRole('button', { name: 'Export…' }).click();
+    await w.getByRole('button', { name: 'PDF' }).click();
+    await w.getByRole('button', { name: 'Export', exact: true }).click();
     await expect
-      .poll(async () => {
-        const files = await readdir(saveDir);
-        const md = files.find((f) => f.endsWith('.md'));
-        return md ? readFile(join(saveDir, md), 'utf8') : '';
-      })
-      .toContain('Shared Life');
-    await w.getByRole('button', { name: 'Export as PDF' }).click();
-    await expect
-      .poll(async () => (await readdir(saveDir)).some((f) => f.endsWith('.pdf')))
+      .poll(async () => (await readdir(saveDir).catch(() => [])).some((f) => f.endsWith('.pdf')))
       .toBe(true);
+    await w.getByRole('button', { name: 'Close' }).click();
 
     // The reader signs in: the first share raises a one-time notification + a "New" marker on the card (§3.6).
     await switchTogetherPerson(w, 'Reader');
@@ -11485,6 +11494,12 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     // Back → the open was recorded (device-local read progress), so the "New" marker is gone.
     await w.getByRole('button', { name: 'Back', exact: true }).click();
     await expect(w.getByRole('button', { name: /Shared Life/ }).getByText('New')).toHaveCount(0);
+
+    // Back on the author's account, the Sharing tab now shows the reader has read the latest (§13.6.8 receipt).
+    await switchTogetherPerson(w, 'Tester');
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('tab', { name: 'Sharing' }).click();
+    await expect(w.getByText(/Read the latest/)).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

@@ -9,7 +9,10 @@ import type {
   SharedBookSummary,
   StoryPublishResult,
   StoryReaderView,
+  StoryReadReceipt,
 } from '../schemas';
+import { StoryReadReceiptSchema } from '../schemas';
+import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import {
   getBook,
   getOutline,
@@ -148,7 +151,92 @@ export async function publishBook(
   return { ok: true, publishedChapters: reviewed.length };
 }
 
-/** The book's current readers (§3.5), resolved to names. */
+// --- Read receipts (§13.6.8) ------------------------------------------------------------------------------
+// One writer per receipt: the READER, under their own vault space, so the AUTHOR can see who has read their
+// shared book. `people/<readerId>/story/receipts/<bookId>.enc`.
+
+function receiptPath(readerPersonId: string, bookId: string): string {
+  return `people/${readerPersonId}/story/receipts/${bookId}.enc`;
+}
+
+/**
+ * The reader records that they opened a shared book (§13.6.8). Re-gated: only writes when the book is actually
+ * published AND still shared with the reader (a revoked/unpublished book leaves no receipt). Stores the
+ * `publishedAt` the reader saw, so the author can tell "read the latest" from "read an older version".
+ */
+export async function writeReadReceipt(
+  fs: FileSystem,
+  key: Uint8Array,
+  readerPersonId: string,
+  authorPersonId: string,
+  bookId: string,
+  now: Date,
+): Promise<void> {
+  if (readerPersonId === authorPersonId) return; // an author reading their own book leaves no receipt
+  const book = await getBook(fs, key, authorPersonId, bookId);
+  if (!book || !book.publishedAt || !book.sharedWith.includes(readerPersonId)) return; // the re-gate
+  const receipt: StoryReadReceipt = {
+    schemaVersion: 1,
+    bookId,
+    authorPersonId,
+    lastOpenedAt: now.toISOString(),
+    lastPublishedAtSeen: book.publishedAt,
+  };
+  await writeEncryptedJson(fs, receiptPath(readerPersonId, bookId), receipt, key);
+}
+
+/** Read a reader's receipt for one of the author's books (author-side join). Null if none / corrupt / mismatched. */
+export async function readReadReceipt(
+  fs: FileSystem,
+  key: Uint8Array,
+  readerPersonId: string,
+  authorPersonId: string,
+  bookId: string,
+): Promise<StoryReadReceipt | null> {
+  const raw = await readEncryptedJson(fs, receiptPath(readerPersonId, bookId), key).catch(
+    () => null,
+  );
+  if (!raw) return null;
+  const parsed = StoryReadReceiptSchema.safeParse(raw);
+  // Only trust a receipt that actually names this author's book (defense against a stray/wrong file).
+  if (
+    !parsed.success ||
+    parsed.data.authorPersonId !== authorPersonId ||
+    parsed.data.bookId !== bookId
+  ) {
+    return null;
+  }
+  return parsed.data;
+}
+
+/**
+ * Reap read receipts ABOUT a deleted person's books from every OTHER person's receipts (§13.6.8, "both
+ * directions"). A deleted person's OWN receipts go with `deletePerson` (their whole `people/<id>/` folder);
+ * this covers the receipts other readers hold about the deleted AUTHOR's books. Best-effort cleanup.
+ */
+export async function reapReadReceiptsAbout(
+  fs: FileSystem,
+  key: Uint8Array,
+  deletedPersonId: string,
+): Promise<void> {
+  const people = await listPeople(fs, key).catch(() => []);
+  for (const reader of people) {
+    if (reader.id === deletedPersonId) continue;
+    const dir = `people/${reader.id}/story/receipts`;
+    const entries = await fs.list(dir).catch(() => [] as string[]);
+    for (const name of entries) {
+      if (!name.endsWith('.enc')) continue;
+      const path = `${dir}/${name}`;
+      const raw = await readEncryptedJson(fs, path, key).catch(() => null);
+      const parsed = raw ? StoryReadReceiptSchema.safeParse(raw) : null;
+      if (parsed?.success && parsed.data.authorPersonId === deletedPersonId) {
+        await fs.remove(path).catch(() => undefined);
+      }
+    }
+  }
+}
+
+/** The book's current readers (§3.5), resolved to names + each reader's read state joined from their receipt. */
 export async function listReaders(
   fs: FileSystem,
   key: Uint8Array,
@@ -160,7 +248,16 @@ export async function listReaders(
   const out: BookReader[] = [];
   for (const readerId of book.sharedWith) {
     const person = await getPerson(fs, key, readerId);
-    if (person) out.push({ personId: readerId, displayName: person.displayName });
+    if (!person) continue;
+    const receipt = await readReadReceipt(fs, key, readerId, personId, bookId);
+    const read = receipt
+      ? {
+          openedAt: receipt.lastOpenedAt,
+          // "Up to date" = they saw the current published version (nothing republished since they last opened).
+          upToDate: !book.publishedAt || receipt.lastPublishedAtSeen >= book.publishedAt,
+        }
+      : undefined;
+    out.push({ personId: readerId, displayName: person.displayName, ...(read ? { read } : {}) });
   }
   return out;
 }

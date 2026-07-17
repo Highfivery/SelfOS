@@ -1,7 +1,13 @@
 import type { FileSystem } from '../host';
 import { toBase64 } from '../encoding';
 import type { PublishedManifest, ReaderChapter } from '../schemas';
-import { getPublishedChapter, getPublishedImageBytes, getPublishedManifest } from './storyService';
+import {
+  getPublishedChapter,
+  getPublishedImageBytes,
+  getPublishedManifest,
+  getStoryImageBytes,
+} from './storyService';
+import { readOwnBook } from './storyPublish';
 import { chapterParagraphs } from './storyText';
 
 /** A decrypted published image, base64-ready for an inline `data:` URI (self-contained export — no image folder). */
@@ -113,6 +119,60 @@ export async function buildPublishedHtml(
   bookId: string,
 ): Promise<{ title: string; html: string } | null> {
   const head = await readPublishedHead(fs, key, personId, bookId);
+  return head
+    ? { title: head.manifest.title, html: bookToHtml(head.manifest, head.chapters, head.images) }
+    : null;
+}
+
+/**
+ * Read the DRAFT head for export (§13.6.1) — the owner's own live book (every written chapter in order + a live
+ * honesty note + cover + placements), so a never-published book can still be exported. Reuses `readOwnBook`'s
+ * draft manifest/chapters + resolves the draft image bytes. Null before the book/outline exists.
+ */
+async function readDraftHead(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<{
+  manifest: PublishedManifest;
+  chapters: ReaderChapter[];
+  images: ExportImages;
+} | null> {
+  const view = await readOwnBook(fs, key, personId, bookId);
+  if (!view) return null;
+  const images: ExportImages = {};
+  for (const entry of view.manifest.images) {
+    const bytes = await getStoryImageBytes(fs, key, personId, bookId, entry.id);
+    if (bytes) images[entry.id] = { mime: entry.mime, base64: toBase64(bytes) };
+  }
+  return { manifest: view.manifest, chapters: view.chapters, images };
+}
+
+/** Build the DRAFT head's Markdown for export (§13.6.1) — null before the book has an outline. */
+export async function buildDraftMarkdown(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<{ title: string; markdown: string } | null> {
+  const head = await readDraftHead(fs, key, personId, bookId);
+  return head
+    ? {
+        title: head.manifest.title,
+        markdown: bookToMarkdown(head.manifest, head.chapters, head.images),
+      }
+    : null;
+}
+
+/** Build the DRAFT head's print HTML for export (§13.6.1) — null before the book has an outline. */
+export async function buildDraftHtml(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<{ title: string; html: string } | null> {
+  const head = await readDraftHead(fs, key, personId, bookId);
   return head
     ? { title: head.manifest.title, html: bookToHtml(head.manifest, head.chapters, head.images) }
     : null;

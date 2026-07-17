@@ -1283,7 +1283,7 @@ describe('Story (64)', () => {
     expect(await screen.findByText('A kept photo')).toBeInTheDocument();
   });
 
-  it('exports the published book as Markdown, noting it leaves the vault (§3.9)', async () => {
+  it('the export dialog exports the published head as Markdown, noting it leaves the vault (§13.6.1)', async () => {
     const storyExportMarkdown = vi.fn(() => Promise.resolve('/exports/The-Story-of-Ben.md'));
     installMockBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
@@ -1297,15 +1297,36 @@ describe('Story (64)', () => {
     });
     renderStory();
     await openTab('Sharing');
-    await userEvent.click(await screen.findByRole('button', { name: 'Export as Markdown' }));
-    expect(storyExportMarkdown).toHaveBeenCalledWith({ bookId: 'b1' });
+    await userEvent.click(await screen.findByRole('button', { name: 'Export…' }));
+    // A published book → the dialog defaults to the Published version; Export as Markdown (the default format).
+    await userEvent.click(await screen.findByRole('button', { name: 'Export' }));
+    expect(storyExportMarkdown).toHaveBeenCalledWith({ bookId: 'b1', head: 'published' });
     expect(
       await screen.findByText(/Saved to .* — this file leaves your encrypted vault/),
     ).toBeInTheDocument();
   });
 
-  it('exports the published book as PDF, noting it leaves the vault (§3.9)', async () => {
+  it('the export dialog exports the DRAFT head (no publish needed) as PDF (§13.6.1)', async () => {
     const storyExportPdf = vi.fn(() => Promise.resolve('/exports/The-Story-of-Ben.pdf'));
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')), // NEVER published — no publishedAt
+      storyExportPdf,
+    });
+    renderStory();
+    await openTab('Sharing');
+    await userEvent.click(await screen.findByRole('button', { name: 'Export…' }));
+    // Never published → the version defaults to "Working draft" and Published is unusable.
+    await userEvent.click(await screen.findByRole('button', { name: 'PDF' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(storyExportPdf).toHaveBeenCalledWith({ bookId: 'b1', head: 'draft' });
+    expect(
+      await screen.findByText(/Saved to .* — this file leaves your encrypted vault/),
+    ).toBeInTheDocument();
+  });
+
+  it('the Sharing tab shows each reader’s read state, joined from their receipt (§13.6.8)', async () => {
     installMockBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
@@ -1314,15 +1335,22 @@ describe('Story (64)', () => {
           ...writtenBundle('new'),
           manifest: manifest({ status: 'ready', publishedAt: '2026-07-16T00:00:00.000Z' }),
         }),
-      storyExportPdf,
+      storyReaders: () =>
+        Promise.resolve([
+          { personId: 'r1', displayName: 'Angel', read: { openedAt: 'now', upToDate: true } },
+          {
+            personId: 'r2',
+            displayName: 'Sam',
+            read: { openedAt: '2026-07-10T00:00:00.000Z', upToDate: false },
+          },
+          { personId: 'r3', displayName: 'Kai' }, // no receipt → hasn't opened it yet
+        ]),
     });
     renderStory();
     await openTab('Sharing');
-    await userEvent.click(await screen.findByRole('button', { name: 'Export as PDF' }));
-    expect(storyExportPdf).toHaveBeenCalledWith({ bookId: 'b1' });
-    expect(
-      await screen.findByText(/Saved to .* — this file leaves your encrypted vault/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Read the latest/)).toBeInTheDocument();
+    expect(screen.getByText(/older version/)).toBeInTheDocument();
+    expect(screen.getByText(/Hasn’t opened it yet/)).toBeInTheDocument();
   });
 
   it('creates a book cover behind the shared image consent + OpenAI key (§3.8)', async () => {

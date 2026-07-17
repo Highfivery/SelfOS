@@ -1955,6 +1955,124 @@ function DangerZone({ bookId, title }: { bookId: string; title: string }): JSX.E
   );
 }
 
+/** A reader's read state (§13.6.8), joined author-side from their receipt. */
+function readerReadLabel(read?: { openedAt: string; upToDate: boolean }): string {
+  if (!read) return 'Hasn’t opened it yet';
+  if (read.upToDate) return 'Read the latest';
+  return `Opened ${new Date(read.openedAt).toLocaleDateString()} · older version`;
+}
+
+/**
+ * The export dialog (§13.6.1) — a centered `role="dialog"` (the app's hand-rolled pattern): pick a format
+ * (Markdown / PDF) and which head (the live Draft, or the Published version once shared), then export OUTSIDE
+ * the encrypted vault. A never-published book can still export its draft.
+ */
+function ExportDialog({
+  bookId,
+  published,
+  onClose,
+}: {
+  bookId: string;
+  published: boolean;
+  onClose: () => void;
+}): JSX.Element {
+  const exportMarkdown = useStoryStore((s) => s.exportMarkdown);
+  const exportPdf = useStoryStore((s) => s.exportPdf);
+  const [format, setFormat] = useState<'markdown' | 'pdf'>('markdown');
+  const [head, setHead] = useState<'draft' | 'published'>(published ? 'published' : 'draft');
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && !busy) onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [busy, onClose]);
+
+  const doExport = async (): Promise<void> => {
+    setBusy(true);
+    setResult(null);
+    const path =
+      format === 'markdown' ? await exportMarkdown(bookId, head) : await exportPdf(bookId, head);
+    setBusy(false);
+    if (path) setResult(`Saved to ${path} — this file leaves your encrypted vault.`);
+    else setResult('Nothing to export yet, or the save was cancelled.');
+  };
+
+  return (
+    <div
+      className={styles.exportOverlay}
+      onClick={() => {
+        if (!busy) onClose();
+      }}
+    >
+      <Card
+        className={styles.exportCard}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Export your story"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Stack gap={4}>
+          <Heading level={3}>Export your story</Heading>
+          <Stack gap={1}>
+            <Text size="sm" weight={600}>
+              Format
+            </Text>
+            <SegmentedControl
+              value={format}
+              onChange={setFormat}
+              aria-label="Export format"
+              options={[
+                { value: 'markdown', label: 'Markdown' },
+                { value: 'pdf', label: 'PDF' },
+              ]}
+            />
+          </Stack>
+          <Stack gap={1}>
+            <Text size="sm" weight={600}>
+              Which version
+            </Text>
+            <SegmentedControl
+              value={head}
+              onChange={setHead}
+              aria-label="Which version to export"
+              options={[
+                { value: 'draft', label: 'Working draft' },
+                { value: 'published', label: 'Published' },
+              ]}
+            />
+            <Text size="sm" tone="secondary">
+              {head === 'draft'
+                ? 'Every chapter you’ve written so far — no need to share first.'
+                : published
+                  ? 'Exactly what your readers see — the chapters you’ve marked “Looks good”.'
+                  : 'You haven’t shared this book yet, so there’s no published version to export.'}
+            </Text>
+          </Stack>
+          {result ? <Banner tone="info">{result}</Banner> : null}
+          <Inline gap={2} align="center">
+            <Button
+              variant="primary"
+              disabled={busy || (head === 'published' && !published)}
+              aria-busy={busy}
+              autoFocus
+              onClick={() => void doExport()}
+            >
+              {busy ? 'Exporting…' : 'Export'}
+            </Button>
+            <Button variant="ghost" onClick={onClose} disabled={busy}>
+              Close
+            </Button>
+          </Inline>
+        </Stack>
+      </Card>
+    </div>
+  );
+}
+
 /** The "Share & readers" panel (§3.5): publish (Reviewed chapters → the published head) + grant/revoke readers.
  *  Readers never see the working draft — only what's been marked "Looks good". */
 function ShareReadersPanel({
@@ -1967,8 +2085,6 @@ function ShareReadersPanel({
   authorPersonId: string;
 }): JSX.Element {
   const publish = useStoryStore((s) => s.publish);
-  const exportMarkdown = useStoryStore((s) => s.exportMarkdown);
-  const exportPdf = useStoryStore((s) => s.exportPdf);
   const readers = useStoryStore((s) => s.readers);
   const loadReaders = useStoryStore((s) => s.loadReaders);
   const grantReader = useStoryStore((s) => s.grantReader);
@@ -1980,6 +2096,7 @@ function ShareReadersPanel({
   const [busy, setBusy] = useState(false);
   const [candidate, setCandidate] = useState('');
   const [featured, setFeatured] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
     void loadReaders(bookId);
@@ -2016,44 +2133,35 @@ function ShareReadersPanel({
           >
             {busy ? 'Sharing…' : publishedAt ? 'Share updates' : 'Publish & choose readers'}
           </Button>
+          {/* Export is always available (§13.6.1 — the draft head exports without publishing). */}
+          <Button variant="ghost" onClick={() => setExportOpen(true)}>
+            Export…
+          </Button>
           {publishedAt ? (
-            <>
-              <Button
-                variant="ghost"
-                onClick={async () => {
-                  setNotice(null);
-                  const path = await exportMarkdown(bookId);
-                  if (path) setNotice(`Saved to ${path} — this file leaves your encrypted vault.`);
-                }}
-              >
-                Export as Markdown
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={async () => {
-                  setNotice(null);
-                  const path = await exportPdf(bookId);
-                  if (path) setNotice(`Saved to ${path} — this file leaves your encrypted vault.`);
-                }}
-              >
-                Export as PDF
-              </Button>
-              <Text tone="secondary" size="sm">
-                Last shared {new Date(publishedAt).toLocaleDateString()}
-              </Text>
-            </>
-          ) : (
             <Text tone="secondary" size="sm">
-              Share your story to export it.
+              Last shared {new Date(publishedAt).toLocaleDateString()}
             </Text>
-          )}
+          ) : null}
         </Inline>
+        {exportOpen ? (
+          <ExportDialog
+            bookId={bookId}
+            published={Boolean(publishedAt)}
+            onClose={() => setExportOpen(false)}
+          />
+        ) : null}
 
         {readers.length > 0 ? (
           <Stack gap={1}>
             {readers.map((r) => (
               <div key={r.personId} className={styles.markRow}>
-                <Text size="sm">{r.displayName}</Text>
+                <Text size="sm">
+                  {r.displayName}
+                  <Text as="span" tone="tertiary" size="sm">
+                    {' · '}
+                    {readerReadLabel(r.read)}
+                  </Text>
+                </Text>
                 <button
                   type="button"
                   className={styles.sourcesToggle}

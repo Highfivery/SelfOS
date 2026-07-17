@@ -37,6 +37,7 @@ import type {
   StoryBookBundle,
   StoryCompleteness,
   StoryCompletenessStage,
+  StoryPartCoverage,
   StoryDraftProgress,
   StoryReaderView,
   StoryTodoEntry,
@@ -1314,6 +1315,8 @@ function StudioLayout({
 
       {tab === 'interview' ? (
         <InterviewTab
+          bookId={bookId}
+          parts={(bundle.outline?.parts ?? []).map((p) => ({ id: p.id, title: p.title }))}
           completeness={completeness}
           busy={interviewBusy}
           onFind={async () => {
@@ -1515,46 +1518,196 @@ function ChaptersTab({
   );
 }
 
-/** The Interview tab (§13.4): the completeness stage + the metered "find what's missing" gap check. The life
- *  map + gap invitations arrive with the gaps backend (a later slice, §13.6.3/§13.6.4). */
+/** Describe a 0..1 part-coverage score as words (§9 — never colour/height alone). */
+function coverageWord(score: number): string {
+  if (score >= 0.8) return 'richly told';
+  if (score >= 0.5) return 'taking shape';
+  if (score > 0) return 'thin';
+  return 'not yet begun';
+}
+
+/**
+ * The life map (§13.6.4) — one row per outline part (chronological), a coverage bar + a word for how richly
+ * told that era is (the text equivalent, §9), dashed when an open gap targets it.
+ */
+function LifeMap({
+  parts,
+  coverage,
+}: {
+  parts: { id: string; title: string }[];
+  coverage: StoryPartCoverage[];
+}): JSX.Element | null {
+  if (parts.length === 0) return null;
+  const byPart = new Map(coverage.map((c) => [c.partId, c.score]));
+  return (
+    <div
+      className={styles.lifeMap}
+      role="group"
+      aria-label="Life map — how richly told each part is"
+    >
+      {parts.map((part) => {
+        const score = byPart.get(part.id) ?? 0;
+        return (
+          <div key={part.id} className={styles.lifeRow}>
+            <Text size="sm" className={styles.lifeTitle}>
+              {part.title}
+            </Text>
+            <div
+              className={styles.lifeTrack}
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(score * 100)}
+              aria-valuetext={coverageWord(score)}
+              aria-label={`${part.title}: ${coverageWord(score)}`}
+            >
+              <div className={styles.lifeFill} style={{ width: `${Math.max(4, score * 100)}%` }} />
+            </div>
+            <Text size="sm" tone="tertiary" className={styles.lifeWord}>
+              {coverageWord(score)}
+            </Text>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * The Interview tab (§13.4/§13.6) — the completeness stage + the life map + the biographer's gap invitations
+ * ("Ask me about this"), the open check-in, and the answered history. The gaps + coverage render FREE (no AI);
+ * "Find what's missing" runs the metered pass.
+ */
 function InterviewTab({
+  bookId,
+  parts,
   completeness,
   busy,
   onFind,
 }: {
+  bookId: string;
+  parts: { id: string; title: string }[];
   completeness: StoryCompleteness | null;
   busy: boolean;
   onFind: () => Promise<string>;
 }): JSX.Element {
+  const gaps = useStoryStore((s) => s.gaps);
+  const loadGaps = useStoryStore((s) => s.loadGaps);
+  const askGap = useStoryStore((s) => s.askGap);
+  const answered = useStoryStore((s) => s.answeredCheckIns);
+  const loadAnswered = useStoryStore((s) => s.loadAnsweredCheckIns);
   const [notice, setNotice] = useState<string | null>(null);
+  const [asking, setAsking] = useState<string | null>(null);
+
+  useEffect(() => {
+    void loadGaps(bookId);
+    void loadAnswered(bookId);
+  }, [bookId, loadGaps, loadAnswered]);
+
+  const hasOpenCheckin = gaps?.hasOpenCheckin ?? false;
+
   return (
-    <Card>
-      <Stack gap={3}>
-        <Heading level={2}>What’s missing</Heading>
-        {completeness ? (
-          <Text tone="secondary" size="sm">
-            Your story is <strong>{COMPLETENESS_STAGE[completeness.stage].toLowerCase()}</strong>.
-            Your biographer can look for the gaps — the thin eras, the scenes it hasn’t heard — and
-            send you a few questions to fill them.
-          </Text>
-        ) : (
-          <Text tone="secondary" size="sm">
-            Your biographer can look for the gaps in your story and send you a few questions to fill
-            them.
-          </Text>
-        )}
-        {notice ? <Banner tone="info">{notice}</Banner> : null}
-        <Inline>
-          <Button variant="primary" disabled={busy} onClick={async () => setNotice(await onFind())}>
-            {busy ? 'Looking…' : 'Find what’s missing'}
-          </Button>
-        </Inline>
-        <Text tone="tertiary" size="sm">
-          Questions arrive in your Inbox under “Your biographer”. Answering them weaves new material
-          into your story.
-        </Text>
-      </Stack>
-    </Card>
+    <Stack gap={3}>
+      <Card>
+        <Stack gap={3}>
+          <Heading level={2}>What’s missing</Heading>
+          {completeness ? (
+            <Text tone="secondary" size="sm">
+              Your story is <strong>{COMPLETENESS_STAGE[completeness.stage].toLowerCase()}</strong>.
+              Your biographer looks for the thin eras and the scenes it hasn’t heard, and can send
+              you a few questions to fill them.
+            </Text>
+          ) : (
+            <Text tone="secondary" size="sm">
+              Your biographer can look for the gaps in your story and send you a few questions to
+              fill them.
+            </Text>
+          )}
+          <LifeMap parts={parts} coverage={gaps?.partCoverage ?? []} />
+          {notice ? <Banner tone="info">{notice}</Banner> : null}
+          <Inline>
+            <Button
+              variant="primary"
+              disabled={busy}
+              onClick={async () => setNotice(await onFind())}
+            >
+              {busy ? 'Looking…' : 'Find what’s missing'}
+            </Button>
+          </Inline>
+        </Stack>
+      </Card>
+
+      {gaps && gaps.gaps.length > 0 ? (
+        <Card>
+          <Stack gap={3}>
+            <Heading level={3}>Worth telling next</Heading>
+            {hasOpenCheckin ? (
+              <Banner tone="info">
+                A check-in from your biographer is already open — answer it before asking for more.
+              </Banner>
+            ) : null}
+            <Stack gap={2}>
+              {gaps.gaps.map((gap) => (
+                <div key={gap.id} className={styles.gapRow}>
+                  <div className={styles.gapText}>
+                    <Text size="sm" weight={500}>
+                      {gap.label}
+                    </Text>
+                    <Text size="sm" tone="tertiary">
+                      {gap.focus}
+                    </Text>
+                  </div>
+                  <Button
+                    disabled={hasOpenCheckin || asking === gap.id}
+                    onClick={async () => {
+                      setAsking(gap.id);
+                      setNotice(null);
+                      const res = await askGap(bookId, gap.id);
+                      setAsking(null);
+                      setNotice(
+                        res.ok
+                          ? 'Your biographer sent a few questions to your Inbox.'
+                          : res.message,
+                      );
+                    }}
+                  >
+                    {asking === gap.id ? 'Asking…' : 'Ask me about this'}
+                  </Button>
+                </div>
+              ))}
+            </Stack>
+          </Stack>
+        </Card>
+      ) : null}
+
+      {answered.length > 0 ? (
+        <Card>
+          <Stack gap={2}>
+            <Heading level={3}>Answered</Heading>
+            <Text tone="tertiary" size="sm">
+              The biographer questions you’ve answered — each one wove new material into your story.
+            </Text>
+            <Stack gap={1}>
+              {answered.map((c) => (
+                <div key={c.assignmentId} className={styles.markRow}>
+                  <Text size="sm">{c.title}</Text>
+                  <Text size="sm" tone="tertiary">
+                    {c.wroteIntoChapterTitle
+                      ? `wove into “${c.wroteIntoChapterTitle}”`
+                      : new Date(c.answeredAt).toLocaleDateString()}
+                  </Text>
+                </div>
+              ))}
+            </Stack>
+          </Stack>
+        </Card>
+      ) : null}
+
+      <Text tone="tertiary" size="sm">
+        Questions arrive in your Inbox under “Your biographer”. Answering them weaves new material
+        into your story.
+      </Text>
+    </Stack>
   );
 }
 

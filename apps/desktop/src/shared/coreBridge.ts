@@ -166,6 +166,7 @@ import {
   TogetherSetAgreementStatusInputSchema,
   type AgreementSummary,
   StoryCreateInputSchema,
+  StoryAskGapInputSchema,
   StoryBookRefSchema,
   StoryChapterRefSchema,
   StoryExportInputSchema,
@@ -215,6 +216,9 @@ import {
   type StoryPhotoAnswer,
   type StoryPlacementSuggestResult,
   type StoryInterviewCadenceResult,
+  type StoryGapsView,
+  type StoryCheckInResult,
+  type StoryAnsweredCheckIn,
   type StoryPublishResult,
   type StoryReaderView,
   type StoryOwnBookView,
@@ -427,14 +431,17 @@ import {
   setImagePlacement,
   removeImagePlacement,
   computeStoryHomeSignal,
+  askGap,
   deleteStoryImage,
   exportFileStem,
   generateStoryImage,
   getPhotoAnswers,
   getStoryCompleteness,
+  getStoryGaps,
   getStoryImage,
   getStoryImageIndex,
   grantReader,
+  listAnsweredStoryCheckIns,
   listChapters,
   listReaders,
   listSharedBooks,
@@ -4873,6 +4880,42 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         auto: auto ?? false,
         ...(crisis ? { crisis } : {}),
       });
+    },
+    storyGaps: async (input): Promise<StoryGapsView> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const empty: StoryGapsView = { gaps: [], partCoverage: [], hasOpenCheckin: false };
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return empty;
+      const personId = await activePersonId();
+      if (!personId) return empty;
+      return getStoryGaps(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyAskGap: async (input): Promise<StoryCheckInResult> => {
+      const { bookId, gapId } = StoryAskGapInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      // Minting a check-in needs a real key + AI on (the mint runs `generateQuestions`).
+      const deps = await aiDeps('story.own');
+      const aiReady =
+        deps && deps.apiKey && (await readVaultSettingsValues(deps.fs))['ai.enabled'] !== false;
+      if (!deps || !aiReady) {
+        return {
+          ok: false,
+          reason: 'NO_KEY',
+          message: 'Turn on AI in Settings to ask for questions.',
+        };
+      }
+      return askGap(deps, { bookId, gapId });
+    },
+    storyAnsweredCheckIns: async (input): Promise<StoryAnsweredCheckIn[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return listAnsweredStoryCheckIns(ctx.fs, ctx.key, personId, bookId);
     },
     // --- Publishing & readers (§3.5) — the publish gate is the ONE way a book reaches another person. ---
     storyPublish: async (input): Promise<StoryPublishResult> => {

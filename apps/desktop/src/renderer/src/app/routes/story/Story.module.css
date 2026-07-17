@@ -1056,6 +1056,64 @@
   font-weight: 600;
 }
 
+/* The life map (§13.6.4) — a coverage bar per outline part + a text equivalent. */
+.lifeMap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.lifeRow {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.5fr) 1.5fr auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+.lifeTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lifeTrack {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-surface-alt, var(--color-border));
+  overflow: hidden;
+}
+.lifeFill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-accent-solid);
+}
+.lifeWord {
+  white-space: nowrap;
+}
+@media (max-width: 520px) {
+  .lifeRow {
+    grid-template-columns: 1fr auto;
+  }
+  .lifeTrack {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+}
+
+/* A gap invitation row on the Interview tab (§13.6.5). */
+.gapRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+.gapText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 /* The word-level "What changed" diff (§13.5) — added words underlined green, removed struck red. */
 .diff {
   margin: 0;

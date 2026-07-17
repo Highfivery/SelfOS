@@ -1173,6 +1173,65 @@ describe('Story (64)', () => {
     expect(await screen.findByText(/sent a few questions to your Inbox/i)).toBeInTheDocument();
   });
 
+  it('the Interview tab shows the life map, gap invitations (Ask me about this), and answered history (§13.6)', async () => {
+    const storyAskGap = vi.fn(() => Promise.resolve({ ok: true as const, assignmentId: 'a-new' }));
+    let asked = false;
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGaps: () =>
+        Promise.resolve({
+          gaps: asked
+            ? [
+                {
+                  id: 'g1',
+                  dimension: 'lowPoint',
+                  label: 'A hard season',
+                  focus: 'Tell me about a low point.',
+                  priority: 9,
+                },
+              ]
+            : [
+                {
+                  id: 'g1',
+                  dimension: 'lowPoint',
+                  label: 'A hard season',
+                  focus: 'Tell me about a low point.',
+                  priority: 9,
+                },
+              ],
+          partCoverage: [{ partId: 'p1', score: 0.5 }],
+          hasOpenCheckin: asked,
+        }),
+      storyAskGap: (input) => {
+        asked = true;
+        return storyAskGap(input);
+      },
+      storyAnsweredCheckIns: () =>
+        Promise.resolve([
+          {
+            assignmentId: 'a-old',
+            title: 'A few questions for your story',
+            answeredAt: '2026-07-10T00:00:00.000Z',
+          },
+        ]),
+    });
+    renderStory();
+    await openTab('Interview');
+    // Life map: the part title + its coverage word (the §9 text equivalent, never colour alone).
+    expect(await screen.findByText('Roots')).toBeInTheDocument();
+    expect(screen.getByText('taking shape')).toBeInTheDocument(); // 0.5 → "taking shape"
+    // A gap invitation renders with "Ask me about this".
+    expect(screen.getByText('A hard season')).toBeInTheDocument();
+    // The answered history block.
+    expect(screen.getByRole('heading', { name: 'Answered' })).toBeInTheDocument();
+    // Ask → mints a check-in from that gap.
+    await userEvent.click(screen.getByRole('button', { name: 'Ask me about this' }));
+    expect(storyAskGap).toHaveBeenCalledWith({ bookId: 'b1', gapId: 'g1' });
+    expect(await screen.findByText(/sent a few questions to your Inbox/i)).toBeInTheDocument();
+  });
+
   it('the interview cadence fires storyInterviewCheck({auto:true}) on mount', async () => {
     const storyInterviewCheck = vi.fn(() => Promise.resolve({ outcome: 'throttled' as const }));
     installMockBridge({

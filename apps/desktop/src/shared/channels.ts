@@ -33,6 +33,9 @@ import type {
   StoryPlacementSuggestResult,
   StoryInterviewCadenceResult,
   StoryInterviewCheckInput,
+  StoryGapsView,
+  StoryCheckInResult,
+  StoryAnsweredCheckIn,
   StoryPublishResult,
   StoryOwnBookView,
   StoryReadSharedInput,
@@ -343,6 +346,9 @@ export const IpcChannels = {
   storyHomeSignal: 'story:homeSignal',
   storyCompleteness: 'story:completeness',
   storyInterviewCheck: 'story:interviewCheck',
+  storyGaps: 'story:gaps',
+  storyAskGap: 'story:askGap',
+  storyAnsweredCheckIns: 'story:answeredCheckIns',
   storyPublish: 'story:publish',
   storyReaders: 'story:readers',
   storyGrantReader: 'story:grantReader',
@@ -1152,6 +1158,15 @@ export interface SelfosBridge {
    *  into the Inbox. `auto` throttles + host-side-crisis-gates; manual bypasses the interval (still weekly-capped).
    *  Gated `story.own`, active-person-scoped; the key stays host-side. */
   storyInterviewCheck(input: StoryInterviewCheckInput): Promise<StoryInterviewCadenceResult>;
+  /** The persisted gap-pass output (§13.6.3) — gaps + per-part coverage for the life map, rendered with NO AI.
+   *  Gated `story.own`, active-person-scoped. */
+  storyGaps(input: { bookId: string }): Promise<StoryGapsView>;
+  /** "Ask me about this" (§13.6.5) — mint a check-in from a specific persisted gap into the Inbox (honors the
+   *  ≤1-open-check-in rule). Gated `story.own`, AI-gated; the key stays host-side. */
+  storyAskGap(input: { bookId: string; gapId: string }): Promise<StoryCheckInResult>;
+  /** The answered biographer check-ins (§13.6.5) for this book, newest-first — deterministic, no AI.
+   *  Gated `story.own`, active-person-scoped. */
+  storyAnsweredCheckIns(input: { bookId: string }): Promise<StoryAnsweredCheckIn[]>;
   /** Publish (or re-publish) the book (§3.5): snapshot every Reviewed chapter into the published head readers
    *  see. Refuses when nothing is Reviewed. Gated `story.own`, author-scoped. */
   storyPublish(input: { bookId: string }): Promise<StoryPublishResult>;

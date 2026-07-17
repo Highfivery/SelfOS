@@ -26,6 +26,9 @@ import type {
   StoryPhotoAnswer,
   StoryPlacementSuggestResult,
   StoryInterviewCadenceResult,
+  StoryGapsView,
+  StoryCheckInResult,
+  StoryAnsweredCheckIn,
   StoryPublishResult,
   StoryOwnBookView,
   StoryReaderView,
@@ -135,6 +138,14 @@ interface StoryState {
     bookId: string,
     opts?: { auto?: boolean },
   ) => Promise<StoryInterviewCadenceResult>;
+  /** The persisted gap-pass output for the Interview tab (§13.6.3) — gaps + per-part coverage, no AI. */
+  gaps: StoryGapsView | null;
+  loadGaps: (bookId: string) => Promise<void>;
+  /** "Ask me about this" (§13.6.5) — mint a check-in from a persisted gap; refreshes gaps on success. */
+  askGap: (bookId: string, gapId: string) => Promise<StoryCheckInResult>;
+  /** The answered biographer check-ins (§13.6.5), newest-first. */
+  answeredCheckIns: StoryAnsweredCheckIn[];
+  loadAnsweredCheckIns: (bookId: string) => Promise<void>;
   update: (
     bookId: string,
     patch: { title?: string; config?: BookConfig; matter?: BookMatter },
@@ -510,7 +521,27 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     };
     // A run that actually gap-passed refreshed the coverage — adopt the new completeness.
     if (res.completeness) set({ completeness: res.completeness });
+    // A minted check-in means the persisted gaps + the open-check-in flag changed — refresh the tab's read.
+    await get().loadGaps(bookId);
     return res;
+  },
+  gaps: null,
+  loadGaps: async (bookId) => {
+    const gaps = (await window.selfos?.storyGaps({ bookId })) ?? null;
+    set({ gaps });
+  },
+  askGap: async (bookId, gapId) => {
+    const res = (await window.selfos?.storyAskGap({ bookId, gapId })) ?? {
+      ok: false as const,
+      reason: 'ERROR' as const,
+      message: 'SelfOS isn’t ready yet.',
+    };
+    if (res.ok) await get().loadGaps(bookId); // the open-check-in flag flipped
+    return res;
+  },
+  answeredCheckIns: [],
+  loadAnsweredCheckIns: async (bookId) => {
+    set({ answeredCheckIns: (await window.selfos?.storyAnsweredCheckIns({ bookId })) ?? [] });
   },
   update: async (bookId, patch) => {
     await window.selfos?.storyUpdate({ bookId, ...patch });
@@ -671,6 +702,8 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       exclusions: [],
       proposals: [],
       completeness: null,
+      gaps: null,
+      answeredCheckIns: [],
       readers: [],
       images: [],
       imageUrls: {},

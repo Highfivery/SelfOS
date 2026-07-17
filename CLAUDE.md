@@ -581,6 +581,34 @@ A running log of durable decisions and feedback captured into the project config
   person's own files go with `deletePerson` while a scan reaps the receipts OTHERS hold ABOUT them. Draft export is
   free once you have `readOwnBook` — the draft head is already the same shape the published exporter consumes, so
   it's a `head` param + a `buildDraftHead` that resolves the draft image bytes.**
+- 2026-07-17 — **Build (Your Story §13 R5 — the Interview tab: life map + gaps + ask-a-gap + answered history;
+  SPEC 64 §13.7 R5 BUILT on `feat/story-interview-tab`, PR pending).** The fifth slice: the Interview tab goes
+  from a bare "Find what's missing" button to the full experience. **Backend:** the gap pass now **persists** its
+  output so the tab renders with **no AI** — additive `StoryInterviewState.lastGaps` (each gap gets a stable `id`
+  at persist time, so `askGap` can target it) + `lastPartCoverage` (per-part 0..1). The gap-pass prompt/schema
+  gained a **tolerant** per-part `partCoverage` read that falls back to a **deterministic** written/reviewed ratio
+  (`computePartCoverage`: reviewed = 1, written-not-reviewed = 0.5, unwritten = 0). Three reads/ops, all gated
+  `story.own` + active-person-scoped: a **free** `story:gaps` (`getStoryGaps`, no AI), **`story:askGap`**
+  (`askGap` — the explicit user-triggered mint from a specific persisted gap, reusing `mintStoryCheckInFromTodo`'s
+  self-send path + honoring the **≤1-open-check-in** invariant: refuses while one is genuinely open, proceeds once
+  it resolves), and **`story:answeredCheckIns`** (`listAnsweredStoryCheckIns` — submitted story-provenance
+  assignments for the book, newest-first). **Renderer:** the rebuilt `InterviewTab` — the completeness hero + a
+  **`LifeMap`** (one coverage bar per outline part + a **word** for how richly told each era is, the §9 text
+  equivalent, a labelled `progressbar`) + the **"Worth telling next"** gap cards with **"Ask me about this"**
+  (disabled + explained while a check-in is open) + an **"Answered"** history block; the store gained
+  `gaps`/`answeredCheckIns` + `loadGaps`/`askGap`/`loadAnsweredCheckIns` (reset on person switch). The
+  answered-history **chapter linkage** ("wove into <chapter>") is deferred (the field exists; deterministic-only
+  now). Additive schema, no version bump. Gate green: typecheck, lint, format, **1441 core + 1288 desktop** unit
+  (+`computePartCoverage`, +`getStoryGaps` persisted/fallback, +`askGap` mint/≤1-refusal/resolve/unknown-id, +`listAnsweredStoryCheckIns`; +a coreBridge gaps→askGap→answered round-trip + Guest denial; +a Story RTL: life
+  map + gap-card ask + answered history), **7 story E2E** (the living-book walk asserts the life map + a "Worth
+  telling next" gap card after the pass). Real-Electron visual QA (the completeness hero, life-map coverage bars,
+  gap invitations, and open-check-in state all read clean). **Lesson: making an AI-derived surface render FREE is
+  about persisting the pass's output (gaps + per-part coverage) so the tab is a plain read — give each gap a stable
+  id at persist time so an explicit "ask this one" can target it, and pair every model reading (per-part coverage)
+  with a deterministic fallback so the map is never blank; an explicit user-triggered mint (`askGap`) reuses the
+  auto-cadence's self-send path but must re-check the ≤1-open-check-in rule itself (refuse while open, proceed once
+  resolved). Watch text collisions: a new "waiting in your Inbox" banner collided with an existing E2E outcome-notice
+  regex — reword the new copy, don't loosen the assertion.**
 - 2026-07-16 — **Build (Your Story chapters redesigned as a cover-backed card grid — mockup approved FIRST;
   SPEC 64 §3.1/§3.3; on `feat/story-chapter-cards`, PR pending; v0.30.0 released alongside).** The user asked to
   redesign the flat part/chapter list into a **grid of modern, sleek cards "like TikTok"** with the **generated

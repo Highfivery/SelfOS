@@ -20,15 +20,31 @@ function tokenize(text: string): string[] {
 }
 
 /**
+ * The largest LCS table we'll build (rows × cols of word tokens). A chapter is token-bounded, but two very long
+ * texts would still make the O(n·m) table huge; beyond this cap we fall back to a coarse whole-block diff (all of
+ * the old removed, all of the new added) rather than allocate/scan hundreds of MB on the render thread.
+ */
+const MAX_DIFF_CELLS = 1_000_000; // ~1000×1000 words — far above a real chapter, cheap to build.
+
+/**
  * A classic longest-common-subsequence word diff. Returns the tokens in reading order: shared words as `same`,
  * words only in the new text as `added`, words only in the old text as `removed`. Identical inputs yield all
- * `same`; an empty prior yields all `added`. Bounded — operates on words, not characters.
+ * `same`; an empty prior yields all `added`. Operates on words (not characters) and is capped at
+ * `MAX_DIFF_CELLS` — past that it degrades to a coarse whole-block diff instead of a quadratic table.
  */
 export function wordDiff(previous: string, current: string): DiffToken[] {
   const a = tokenize(previous);
   const b = tokenize(current);
   const n = a.length;
   const m = b.length;
+  // Guard the quadratic table: an unusually long pair degrades to "the whole block changed" (still honest —
+  // it shows the old struck + the new added — just without word-level alignment).
+  if (n * m > MAX_DIFF_CELLS) {
+    return [
+      ...a.map((text): DiffToken => ({ op: 'removed', text })),
+      ...b.map((text): DiffToken => ({ op: 'added', text })),
+    ];
+  }
   // Compare the WORD only (ignore surrounding whitespace) so a pure reflow isn't reported as a change; the
   // emitted `text` still carries the real whitespace for readable rendering.
   const eq = (x: string, y: string): boolean => x.trim() === y.trim();

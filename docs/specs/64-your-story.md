@@ -1051,12 +1051,18 @@ lastPublishedAtSeen }` (one writer: the reader; additive schema). The author's S
   calm "✓ Reviewed" once reviewed; and a **Read⇄Shape toggle** — a compact **"Shape"** button in the reader bar
   (owner-only, on a chapter page) + a "Shape this chapter ›" affordance at the chapter's end, both entering the
   existing `ChapterReader` markup editor from the reader (staying on `/story/read`), so editing is a mode of the
-  book rather than a separate screen. Gate green: typecheck, lint, format, **1428 core + 1277 desktop** unit
-  (+`wordDiff` [5]; `previousMarkdown` captured-on-rewrite/apply + no-prior-on-first-draft;
-  +coreBridge review-clears; +2 Story RTL: ribbon+diff reveal/hide + first-draft-no-toggle; the R2 owner-reader
-  RTL/E2E re-pointed to the Shape toggle), **7 story E2E** (the author-spine walk now asserts the ribbon +
-  reveals the word-diff after a revision). Real-Electron visual QA (the ribbon + the red/green word-diff + the
-  reader-bar Shape toggle read clean + book-like). **DEFERRED to an R3-polish fast-follow** (the Shape editing
+  book rather than a separate screen. code-reviewer **fix-first** — one should-fix applied (a **`stale`** chapter
+  now leads with the ribbon too: "New material to fold in" + the spend-free "Looks good ✓" accept action —
+  R3b's removal of the old bottom review button had otherwise left a stale chapter with no status cue AND no way
+  to be reviewed short of a metered rewrite) + two nits (a `MAX_DIFF_CELLS` cap so `wordDiff` degrades to a
+  coarse whole-block diff past ~1M word-cells instead of an unbounded table; `useMemo` on the render + a
+  `role="group"` label on the diff). Gate green: typecheck, lint, format, **1429 core + 1278 desktop** unit
+  (+`wordDiff` [6, incl. the cell-cap fallback]; `previousMarkdown` captured-on-rewrite/apply +
+  no-prior-on-first-draft; +coreBridge review-clears; +3 Story RTL: ribbon+diff reveal/hide +
+  first-draft-no-toggle + stale-keeps-its-review; the R2 owner-reader RTL/E2E re-pointed to the Shape toggle),
+  **7 story E2E** (the author-spine walk now asserts the ribbon + reveals the word-diff after a revision).
+  Real-Electron visual QA (the ribbon + the red/green word-diff + the reader-bar Shape toggle read clean +
+  book-like). **DEFERRED to an R3-polish fast-follow** (the Shape editing
   surface still uses the pre-redesign editor layout — functional + tested, but not yet the immersive
   margin-based look): numbered **superscript sources**, the **margin-rail marks** at ≥900px, and the right-hand
   **Review & apply sheet** + bottom-sticky pending pill (restyle of the existing, tested apply bar). These are

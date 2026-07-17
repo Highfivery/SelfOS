@@ -477,6 +477,24 @@ describe('Story (64)', () => {
     expect(screen.queryByRole('button', { name: 'What changed' })).not.toBeInTheDocument();
   });
 
+  it('a STALE chapter still shows its status cue AND a spend-free "Looks good" review (§13.5)', async () => {
+    const staleBundle = writtenBundle('new');
+    staleBundle.chapters[0] = { ...staleBundle.chapters[0]!, status: 'stale' };
+    const storyReviewChapter = vi.fn(() => Promise.resolve(writtenBundle('reviewed')));
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(staleBundle),
+      storyReviewChapter,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    // The stale cue is shown (not a blank ribbon) and the accept-as-is review action is present.
+    expect(await screen.findByText('New material to fold in')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Looks good' }));
+    expect(storyReviewChapter).toHaveBeenCalledWith({ bookId: 'b1', chapterId: 'c1' });
+  });
+
   it('marks a paragraph for deletion — the suggestion strip + apply bar appear', async () => {
     const storyMark = vi.fn(
       (input: StoryMarkInput): Promise<ChapterMarkup> =>

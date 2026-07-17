@@ -56,4 +56,17 @@ describe('wordDiff (64 §13.5)', () => {
   it('pure whitespace differences are not treated as changes', () => {
     expect(hasChanges('The  garage', 'The garage')).toBe(false);
   });
+
+  it('degrades to a coarse whole-block diff past the cell cap (never builds an unbounded table)', () => {
+    // Two ~1001-word texts → n·m ≈ 1.0M > MAX_DIFF_CELLS → the coarse fallback (all old removed, all new added).
+    const prev = Array.from({ length: 1001 }, (_, i) => `old${i}`).join(' ');
+    const next = Array.from({ length: 1001 }, (_, i) => `new${i}`).join(' ');
+    const tokens = wordDiff(prev, next);
+    expect(tokens.filter((t) => t.op === 'removed')).toHaveLength(1001);
+    expect(tokens.filter((t) => t.op === 'added')).toHaveLength(1001);
+    expect(tokens.some((t) => t.op === 'same')).toBe(false);
+    // Removed (old) precede added (new), so it reads as a full replacement.
+    expect(tokens[0]?.op).toBe('removed');
+    expect(tokens[tokens.length - 1]?.op).toBe('added');
+  });
 });

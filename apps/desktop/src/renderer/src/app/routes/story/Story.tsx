@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { wordDiff } from '@selfos/core/story-diff';
 import {
@@ -2686,9 +2686,10 @@ export function countApplicable(markup: ChapterMarkup | null): number {
 
 /** The word-level "What changed" render — added words as <ins>, removed as <del>, in reading order (§13.5). */
 function WordDiff({ previous, current }: { previous: string; current: string }): JSX.Element {
-  const tokens = wordDiff(previous, current);
+  // Memoize the LCS so an unrelated re-render (while the diff is open) doesn't recompute the whole table.
+  const tokens = useMemo(() => wordDiff(previous, current), [previous, current]);
   return (
-    <p className={styles.diff} aria-label="What changed in this rewrite">
+    <p className={styles.diff} role="group" aria-label="What changed in this rewrite">
       {tokens.map((t, i) =>
         t.op === 'added' ? (
           <ins key={i} className={styles.diffAdd}>
@@ -2727,13 +2728,21 @@ function ChapterRibbon({
       </div>
     );
   }
-  if (chapter.status !== 'new' && chapter.status !== 'updated') return null;
+  // new / updated / stale all lead with the ribbon (so a stale chapter keeps its status cue AND the spend-free
+  // "Looks good ✓" accept action — a `generating` chapter has no review action, so it shows nothing).
+  if (chapter.status !== 'new' && chapter.status !== 'updated' && chapter.status !== 'stale') {
+    return null;
+  }
+  const lead =
+    chapter.status === 'new'
+      ? 'New chapter'
+      : chapter.status === 'updated'
+        ? 'Rewritten from new material'
+        : 'New material to fold in';
   return (
     <div className={styles.ribbon}>
       <div className={styles.ribbonRow}>
-        <span className={styles.ribbonLead}>
-          {chapter.status === 'new' ? 'New chapter' : 'Rewritten from new material'}
-        </span>
+        <span className={styles.ribbonLead}>{lead}</span>
         {canDiff ? (
           <button
             type="button"

@@ -452,6 +452,30 @@ A running log of durable decisions and feedback captured into the project config
   producers must never put `shareableTypes` on a restricted fact; and a seeded E2E fact that a manual-scope test
   relies on being "private" must be seeded `shareableTypes:[]` (explicit) once a backfill exists, or the backfill
   shares it and the test can't find the "private" chip. See [[insights-shared-with-partner-default]].**
+- 2026-07-17 — **Build (Your Story §13 CLOSE-OUT — the two deferred follow-ups, so §13 is 100% complete; SPEC 64
+  §13.6.5; on `feat/story-closeout`, PR pending).** After R1–R7 shipped (v0.35.0), closed the two remaining
+  deferrals so the full-surface redesign has nothing outstanding. **(1) The answered-history chapter linkage
+  (§13.6.5, deferred in R5):** `listAnsweredStoryCheckIns` now populates `wroteIntoChapterTitle` **deterministically
+  (no AI)** — it builds two maps (assignmentId → the analysis Insight id via `insight.provenance.assignmentId`;
+  insightId → the earliest chapter title by `order` whose paragraph `provenance.refs` cite that insight of
+  `kind:'insight'`) and joins the answered story check-in to the chapter its material wove into. The link appears
+  once the answer is analyzed (an approved insight) AND a chapter that draws on it is (re)drafted citing it —
+  absent (falls back to the answered date) otherwise, honestly. The InterviewTab renderer already displayed
+  `wroteIntoChapterTitle` ("wove into <chapter>") when present (R5 built the UI, the field was just never
+  populated), so this is a core-only fill + tests. **(2) The shared `--color-scrim` token (deferred R4-polish):**
+  the three Story-local overlay scrims (to-do sheet, export dialog, delete/rewrite dialog) all used a hardcoded
+  `rgb(15 12 9 / 0.34)` → one `--color-scrim` design-system token in `tokens.css` (byte-identical, a pure DRY
+  refactor). Gate green: typecheck, lint, format, **1469 core + 1313 desktop** unit (+`listAnsweredStoryCheckIns`
+  chapter-linkage core [links via the insight→chapter-provenance chain; absent when not yet woven]; +the Story
+  RTL answered-history now asserts both "wove into <chapter>" AND the date fallback), **7 story E2E** (no
+  regression; the scrim change is validated by the build). **§13 (The Studio & the Book) has NO remaining
+  deferrals — it is 100% complete, R1–R7 + close-out.** (The R3-polish spawn_task the user later started in a
+  separate session is redundant — R3-polish already merged as `7d91d5c`.) **Lesson: a "deferred, deterministic-
+  only" field the renderer already displays is a core-only fill — derive the link from the data chain that
+  already exists (answered check-in → its analysis insight's `provenance.assignmentId` → the chapter whose
+  paragraph provenance cites that insight), keep it best-effort ("where derivable", absent when not yet woven),
+  and no schema/renderer change is needed.**
+
 - 2026-07-17 — **Build (Your Story R7 — the Begin screens: invitation · commission · the writing; SPEC 64 §13.3/
   §13.7; on `feat/story-begin-screens`, PR pending; the FINAL slice of the approved full-surface redesign — §13
   is now BUILT R1–R7).** The three "begin" surfaces redesigned + the one new backend read. **Backend:** a

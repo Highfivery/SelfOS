@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { classifyParseOutcome, extractJsonObject, tolerantArray } from '../ai';
 import { uuid } from '../id';
+import { listInsightsForPerson } from '../insights';
 import type {
   AiFailureReason,
   BookChapter,
@@ -405,7 +406,10 @@ export async function askGap(
 
 /**
  * The answered biographer check-ins (§13.6.5) — submitted/analyzed story-provenance assignments for this book,
- * newest-first. Deterministic, no AI. (The "wove into <chapter>" chapter linkage is left for a later pass.)
+ * newest-first. Deterministic, no AI. Each is joined "wove into <chapter>" WHERE DERIVABLE: the answer's
+ * analysis produces an Insight (`provenance.assignmentId` = the check-in), and a chapter cites that insight in
+ * its paragraph provenance — so the linkage appears once the insight is analyzed + a chapter that draws on it
+ * is (re)drafted. Absent otherwise (a just-answered, not-yet-woven check-in shows no chapter, honestly).
  */
 export async function listAnsweredStoryCheckIns(
   fs: AiDeps['fs'],
@@ -414,6 +418,27 @@ export async function listAnsweredStoryCheckIns(
   bookId: string,
 ): Promise<StoryAnsweredCheckIn[]> {
   const assignments = await listAssignments(fs, key, { senderPersonId: personId });
+
+  // assignmentId → the id of the Insight that analyzing that answer produced (the deterministic link key).
+  const insightForAssignment = new Map<string, string>();
+  for (const insight of await listInsightsForPerson(fs, key, personId)) {
+    const aId = insight.provenance.assignmentId;
+    if (aId) insightForAssignment.set(aId, insight.id);
+  }
+  // insightId → the title of the FIRST chapter (in `listChapters`' canonical order) whose paragraph provenance
+  // cites that insight. Every citing chapter is a correct "wove into" answer, so among the rare multi-citation
+  // case we just take the first the app would list.
+  const chapterForInsight = new Map<string, string>();
+  for (const chapter of await listChapters(fs, key, personId, bookId)) {
+    for (const entry of chapter.provenance) {
+      for (const ref of entry.refs) {
+        if (ref.kind === 'insight' && !chapterForInsight.has(ref.id)) {
+          chapterForInsight.set(ref.id, chapter.title);
+        }
+      }
+    }
+  }
+
   const out: StoryAnsweredCheckIn[] = [];
   for (const a of assignments) {
     if (a.status !== 'submitted' && a.status !== 'analyzed') continue;
@@ -423,10 +448,13 @@ export async function listAnsweredStoryCheckIns(
       const q = await getQuestionnaire(fs, key, a.questionnaireId);
       if (q?.storyProvenance?.bookId !== bookId) continue;
       const response = await getResponse(fs, key, a.id);
+      const insightId = insightForAssignment.get(a.id);
+      const wroteIntoChapterTitle = insightId ? chapterForInsight.get(insightId) : undefined;
       out.push({
         assignmentId: a.id,
         title: q.title,
         answeredAt: response?.submittedAt ?? a.updatedAt,
+        ...(wroteIntoChapterTitle ? { wroteIntoChapterTitle } : {}),
       });
     } catch {
       continue;

@@ -1269,6 +1269,12 @@ describe('Story (64)', () => {
       storyAnsweredCheckIns: () =>
         Promise.resolve([
           {
+            assignmentId: 'a-woven',
+            title: 'The winter you left',
+            answeredAt: '2026-07-11T00:00:00.000Z',
+            wroteIntoChapterTitle: 'First Words',
+          },
+          {
             assignmentId: 'a-old',
             title: 'A few questions for your story',
             answeredAt: '2026-07-10T00:00:00.000Z',
@@ -1282,8 +1288,10 @@ describe('Story (64)', () => {
     expect(screen.getByText('taking shape')).toBeInTheDocument(); // 0.5 → "taking shape"
     // A gap invitation renders with "Ask me about this".
     expect(screen.getByText('A hard season')).toBeInTheDocument();
-    // The answered history block.
+    // The answered history block — a woven check-in names the chapter it wove into (§13.6.5); an un-woven one
+    // falls back to its answered date.
     expect(screen.getByRole('heading', { name: 'Answered' })).toBeInTheDocument();
+    expect(screen.getByText('wove into “First Words”')).toBeInTheDocument();
     // Ask → mints a check-in from that gap.
     await userEvent.click(screen.getByRole('button', { name: 'Ask me about this' }));
     expect(storyAskGap).toHaveBeenCalledWith({ bookId: 'b1', gapId: 'g1' });

@@ -1,6 +1,6 @@
 import type { FileSystem } from '../host';
 import type { Insight, Recipient } from '../schemas';
-import { getAssignment, listAssignments } from './assignmentService';
+import { getAssignment, getAssignmentSnapshot, listAssignments } from './assignmentService';
 
 /**
  * "Who is a sent-questionnaire insight ABOUT?" (issue #129). A questionnaire you send to someone else
@@ -63,4 +63,38 @@ export async function resolveInsightAbout(
     return others.find((o) => o.aboutPersonId) ?? others.find((o) => o.aboutName) ?? null;
   }
   return null;
+}
+
+/** The source questionnaire's as-sent title + live id for a sent-questionnaire insight. */
+export interface InsightSourceRef {
+  sourceTitle?: string;
+  sourceQuestionnaireId?: string;
+}
+
+/**
+ * Resolve the source questionnaire for a questionnaire-sourced Insight, so Memory can render
+ * "From <title>" and link to that questionnaire's Results (62 §context). Reads the immutable snapshot for
+ * the as-sent title (accurate even if the definition was later renamed) + the assignment for the live
+ * questionnaire id (the Results deep-link target). Read-time only — never persisted. Returns `null` for a
+ * non-questionnaire insight, a compatibility insight (no single originating send), or a deleted send.
+ */
+export async function resolveInsightSource(
+  fs: FileSystem,
+  key: Uint8Array,
+  insight: Insight,
+): Promise<InsightSourceRef | null> {
+  if (insight.source !== 'questionnaire') return null;
+  const assignmentId = insight.provenance.assignmentId;
+  if (!assignmentId) return null;
+  const [assignment, snapshot] = await Promise.all([
+    getAssignment(fs, key, assignmentId),
+    getAssignmentSnapshot(fs, key, assignmentId),
+  ]);
+  const sourceTitle = snapshot?.title?.trim();
+  const sourceQuestionnaireId = assignment?.questionnaireId;
+  if (!sourceTitle && !sourceQuestionnaireId) return null;
+  return {
+    ...(sourceTitle ? { sourceTitle } : {}),
+    ...(sourceQuestionnaireId ? { sourceQuestionnaireId } : {}),
+  };
 }

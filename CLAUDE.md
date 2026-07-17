@@ -419,6 +419,39 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-17 — **Build + durable owner decision (Memory insights — context header, card grid, nav badge &
+  ALL-insights-shared-with-partner-by-default; mockup approved FIRST; SPEC 62 §13; on `feat/memory-insights-context`,
+  a worktree off main, PR pending).** Four user-requested Memory improvements; interactive Artifact mockup approved +
+  4 decisions locked (AskUserQuestion) before code. **(1) Nav badge** — the Memory sidebar entry counts drafts +
+  merge/duplicate proposals (the "Needs your review" total), via a pure `memory/navCounts.ts` + AppShell subscribing
+  to `insights`/`proposals` + loading reconcile state on person-change. **(2) Context-rich card header** — a two-row
+  `InsightCard` header (source pill + an **About-you / About-`<name>`** who-chip + the **linked source** + date +
+  confidence), resolving the user's "which questionnaire? who is this about — me or a partner?" confusion; the source
+  link moved into the header so it shows on **draft** cards too (fixing the bare "QUESTIONNAIRE · date · High" review
+  state). A questionnaire card links `From "<title>"` → that questionnaire's **Results** — powered by a read-time
+  `resolveInsightSource` enrichment in `insightsList` (assignment snapshot title + live id) + additive-optional
+  `sourceTitle`/`sourceQuestionnaireId` on `InsightProvenanceSchema` (never persisted, no migration — the aboutName
+  precedent). **(3) Card grid** — life-area sections (+ review drafts + search) render insight cards in a responsive
+  `auto-fill minmax(320px)` grid (portrait spans full-row; 1-up at ≤560px). **(4) THE durable decision — ALL insights
+  default to shared-with-partner** (owner emphatic, "I MEANT ALL"): a central `insights/producedFactShare(restricted)`
+  flips every producer's fact default to `shareableTypes: ['partner']` (session/dream/dream-pattern/Together/challenge/
+  questionnaire-analysis + the compat **report**; self-assessments already did it), and a one-time idempotent
+  `backfillPartnerSharing` (run once-per-person in `insightsList`, persisted) brings **existing** insights up to it.
+  The two hard carve-outs, **not** flipped because they're EXPLICIT choices: break-glass **`restricted`** facts
+  (`factSharedWithViewer` structurally blocks them; onboarding trauma/intimacy opt-outs) + explicit per-send
+  visibility (compat **`contextOnly`** §16.2) / onboarding scopes; the backfill touches only never-configured
+  default-private facts (preserving `restricted`/flagged/`shareableTypes:[]`/`shareableWith`) + skips intake +
+  compatibility. Gate green: typecheck, lint, format, **1475 core + 1308 desktop** unit (+`shareDefaults` [6:
+  producedFactShare + backfill idempotency/preserves-explicit/skips-intake+compat], +`resolveInsightSource` [4], +`memoryReviewCount` [3], +Memory RTL About-you chip + linked source, +the analysis-test partner-default update,
+  +a coreBridge source-enrichment + decrypt-level backfill-persisted test), **16 memory E2E** (the dashboard test
+  extended: nav badge + About chip + `display:grid` + decrypt the partner backfill; #129 re-pointed to the About-chip;
+  the overview test's manual-scope fact seeded `shareableTypes:[]` so the backfill preserves it). Real-Electron visual
+  QA at desktop (2-up grid + Shared:Partner chips) + 360px (the fixed draft review state, no overflow). **Lesson:
+  "share ALL by default" is safe as a flip of the unset DEFAULT + a backfill that preserves every EXPLICIT choice
+  (restricted, empty-array-private, per-person, contextOnly) — the break-glass `restricted` gate is structural, so
+  producers must never put `shareableTypes` on a restricted fact; and a seeded E2E fact that a manual-scope test
+  relies on being "private" must be seeded `shareableTypes:[]` (explicit) once a backfill exists, or the backfill
+  shares it and the test can't find the "private" chip. See [[insights-shared-with-partner-default]].**
 - 2026-07-17 — **Build (Your Story R7 — the Begin screens: invitation · commission · the writing; SPEC 64 §13.3/
   §13.7; on `feat/story-begin-screens`, PR pending; the FINAL slice of the approved full-surface redesign — §13
   is now BUILT R1–R7).** The three "begin" surfaces redesigned + the one new backend read. **Backend:** a
@@ -445,7 +478,6 @@ A running log of durable decisions and feedback captured into the project config
   functions in a `begin.ts` (unit-tested without a DOM), the specimens are static data on the style presets (a
   BookType carries its own, so a future book type is self-contained), and a card-gallery Style picker replacing a
   `<select>` means the RTL/E2E move from `getByRole('option')` to `getByRole('radio')` in a labelled radiogroup.**
-
 - 2026-07-17 — **Build (Your Story R6 — Photos tab redesign + the photo-answers-reach-the-biographer wiring fix;
   SPEC 64 §13.6.2/§13.7; on `feat/story-photos-corpus`, PR pending; part of the approved full-surface redesign).**
   The sixth slice of the §13 rebuild. **The functional fix (§13.6.2 — a working-but-wrong gap the redesign audit

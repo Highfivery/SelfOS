@@ -197,12 +197,14 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  min-width: 0;
   background: none;
   border: none;
   padding: 0;
   cursor: pointer;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   font-size: var(--text-xs);
+  font-weight: 600;
 }
 
 .provLink:hover {
@@ -420,6 +422,27 @@
 .section {
   border-top: 1px solid var(--color-border);
 }
+
+/* Insight cards flow into a responsive grid inside each life-area section, the review callout, and a
+   responses recipient (62 §grid). Ragged heights align to the top; a long portrait spans the full row so
+   it never creates a lopsided column. Collapses to one column on a phone. */
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+.cardGrid > * {
+  min-width: 0;
+}
+.fullSpanCard {
+  grid-column: 1 / -1;
+}
+@media (max-width: 560px) {
+  .cardGrid {
+    grid-template-columns: 1fr;
+  }
+}
 .sectionIcon {
   flex: none;
   width: 26px;
@@ -465,6 +488,57 @@
   background: var(--color-accent-subtle-bg);
   padding: 1px 8px;
   border-radius: var(--radius-sm);
+}
+
+/* Who the insight is about — resolves "is this about me or a partner?" (62 §context). */
+.aboutChip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 1px 9px;
+  border-radius: var(--radius-pill, 999px);
+}
+.aboutSelf {
+  color: var(--color-text-secondary);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+}
+.aboutOther {
+  color: var(--color-accent-solid-text);
+  background: var(--color-accent-solid);
+}
+
+/* Card header row 2: the linked source · date · confidence. Wraps on a narrow grid card (§12). */
+.contextRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-width: 0;
+  margin-top: 1px;
+}
+.metaDot {
+  flex: none;
+  color: var(--color-text-tertiary);
+  opacity: 0.55;
+}
+.provStatic {
+  min-width: 0;
+}
+/* The linked source label truncates so a long questionnaire title never overflows a grid card (§12). */
+.provLabel {
+  min-width: 0;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Inline single-fact edit */

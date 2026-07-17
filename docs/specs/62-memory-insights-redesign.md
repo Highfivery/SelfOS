@@ -288,8 +288,68 @@ _All resolved 2026-07-14._
 3. **"Knows you" read source.** RESOLVED — **reuse** spec 57's existing "how well it knows you"
    derivation (coverage + confidence), just restyled into the new hero. No behaviour change.
 
+## 13. Follow-on — context, card grid, nav badge & shared-by-default (2026-07-17)
+
+A second pass (owner-requested, mockup approved first) makes insights **legible in context**, **scannable as
+a grid**, **surfaced in the nav**, and **shared-with-partner by default**. Renderer + a small read-time
+enrichment + one behavior change to the producers.
+
+### 13.1 A context-rich card header (§context)
+
+The `InsightCard` header answers the user's "which questionnaire? who is this about — me or a partner?"
+confusion. Row 1: the source pill + a **who-chip** — **About you** (own reflection, subtle) or **About
+`<name>`** (a sent-questionnaire response, accent). Row 2: the **linked source** — for a questionnaire,
+`From "<title>"` deep-linking to that questionnaire's **Results** (`/questionnaires?focus=<id>&view=results`);
+for a session/dream, the existing deep-link; intake/related/removed read as plain text — then the date +
+`ConfidenceChip`. The source link moved out of the bottom `metaRow` into the header, so it shows on **draft**
+cards too (fixing the bare "QUESTIONNAIRE · date · High" review state). The as-sent title + live id are
+**read-time enrichment** in `insightsList` (`resolveInsightSource` → the assignment snapshot title +
+`questionnaireId`), on `InsightProvenanceSchema` as additive-optional `sourceTitle`/`sourceQuestionnaireId`
+(never persisted; no migration).
+
+### 13.2 Card grid (§grid)
+
+Each life-area section (and the review-callout drafts + search results) renders its insight cards in a
+responsive **grid** (`auto-fill, minmax(320px, 1fr)`, align-to-top), collapsing to one column at ≤560px. The
+portrait (many grouped facts) spans the full row so it never lopsides a column. The `ResponsesBand` stays a
+stacked list (a narrow panel where a grid resolves to one column anyway).
+
+### 13.3 Memory nav badge (§nav)
+
+The Memory sidebar entry carries a count badge = **draft insights + merge/duplicate proposals** (the same
+total as the in-page "Needs your review" callout; `memory/navCounts.ts` `memoryReviewCount`). `AppShell`
+subscribes to `insights` + `proposals` and loads reconcile state on person change, folding the count into the
+`aria-label`.
+
+### 13.4 Shared-with-partner by default (§sharing)
+
+**Owner decision (2026-07-17, emphatic — "ALL"):** every insight SelfOS produces defaults to
+**shared-with-partner** (`shareableTypes: ['partner']`), so a partner's coaching can draw on what SelfOS
+learns. This generalizes the self-assessment producer, which already did it. Centralized in
+`insights/producedFactShare(restricted)` and applied at every producer's fact-push site (session, dream,
+dream-pattern, Together, challenge, questionnaire analysis + the compatibility **report**).
+
+Two things are **not** flipped, because they are **explicit** choices rather than an unset default: (a)
+break-glass **`restricted`** facts (onboarding trauma/intimacy opt-outs + crisis-adjacent) —
+`factSharedWithViewer` structurally blocks `restricted` from any type share; (b) explicit per-send
+visibility (compatibility **`contextOnly`**, §16.2) and onboarding answer scopes.
+
+**Backfill (owner chose "backfill existing too"):** a one-time, idempotent `backfillPartnerSharing(personId)`
+brings **existing** insights up to the default on the first Memory read (persisted, so a partner's
+`buildContext` picks it up). It touches only **never-configured default-private** facts (`shareable:false`,
+not `restricted`/`flaggedInaccurate`, no `shareableTypes`/`shareableWith`) — every explicit choice (a
+manually-private `shareableTypes: []`, a per-person `shareableWith`, a restricted fact) is preserved — and
+skips `intake` + compatibility insights. The per-fact `RelationshipScopePicker` override is unchanged, so any
+fact can still be made private.
+
 ## 12. Changelog
 
+- 2026-07-17 — **Follow-on (§13) built** on `feat/memory-insights-context`: context-rich card header (source
+  pill + About-you/About-`<name>` chip + linked-source-to-Results + date + confidence, on drafts too), a
+  responsive **card grid** per life-area section, a **Memory nav badge** (drafts + proposals), and
+  **shared-with-partner by default** for all producers + a one-time backfill of existing insights (owner
+  decision, "ALL"; restricted + explicit choices preserved). Read-time source enrichment in `insightsList`;
+  additive-optional `sourceTitle`/`sourceQuestionnaireId` on provenance (no migration). Mockup approved first.
 - 2026-07-14 — created + **Approved**. Redesign from two approved `visualize` mockups (cards + top
   surfaces). Decisions: **flatten** to collapsible edit-in-place life-area sections; **redesign all three
   top surfaces** (portrait/trends/responses); **all sections collapsed by default, sensitive always

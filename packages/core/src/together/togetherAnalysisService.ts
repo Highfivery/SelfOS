@@ -17,7 +17,7 @@ import {
 } from '../schemas';
 import { getPerson } from '../people';
 import { checkBudget, costOf, recordUsage } from '../usage';
-import { deleteInsight, listInsightsForPerson, saveInsight } from '../insights';
+import { deleteInsight, listInsightsForPerson, producedFactShare, saveInsight } from '../insights';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { getSession, listMessages } from './togetherService';
 import {
@@ -355,12 +355,9 @@ export async function runTogetherWrapUp(deps: TogetherWrapUpDeps): Promise<Toget
     );
     const priorMain = priorTwins.find((i) => !i.facts.some((f) => f.restricted));
     const priorIntimacy = priorTwins.find((i) => i.facts.some((f) => f.restricted));
-    const priorShares = new Map(
-      priorTwins
-        .flatMap((i) => i.facts)
-        .filter((f) => f.shareableWith && f.shareableWith.length > 0)
-        .map((f) => [f.text.trim(), f.shareableWith as string[]]),
-    );
+    // Carry each prior twin fact's sharing forward by text — both `shareableWith` AND the user's explicit
+    // `shareableTypes`, so re-running a wrap-up never reverts an un-share back to the partner default.
+    const priorShares = new Map(priorTwins.flatMap((i) => i.facts).map((f) => [f.text.trim(), f]));
     const makeFacts = (items: string[], restricted: boolean): InsightFact[] => {
       const out: InsightFact[] = [];
       for (const item of items) {
@@ -370,9 +367,11 @@ export async function runTogetherWrapUp(deps: TogetherWrapUpDeps): Promise<Toget
         out.push({
           id: uuid(),
           text: t,
-          shareable: false,
-          ...(restricted ? { restricted: true, lifeArea: 'Intimacy' } : {}),
-          ...(carried && carried.length > 0 ? { shareableWith: carried } : {}),
+          // Default to shared-with-partner (owner decision — see producedFactShare); a prior explicit scope
+          // overrides the default; restricted twin facts stay private + intimacy-scoped.
+          ...producedFactShare(restricted, carried?.shareableTypes),
+          ...(restricted ? { lifeArea: 'Intimacy' } : {}),
+          ...(carried?.shareableWith?.length ? { shareableWith: carried.shareableWith } : {}),
         });
       }
       return out;

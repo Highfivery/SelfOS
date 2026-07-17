@@ -13,7 +13,7 @@ import type {
 } from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
-import { deleteInsight, saveInsight } from '../insights';
+import { deleteInsight, producedFactShare, saveInsight } from '../insights';
 import { getAnalysis, getPatternSummary, listDreams, savePatternSummary } from './dreamService';
 
 /**
@@ -379,7 +379,7 @@ export async function approvePatternNarrative(deps: {
     source: 'dream',
     subjectPersonId: personId,
     summary: 'What I’m noticing across recent dreams',
-    facts: [{ id: uuid(), text: summary.narrative, shareable: false }],
+    facts: [{ id: uuid(), text: summary.narrative, ...producedFactShare() }],
     confidence: 'medium',
     categories: ['Emotions & patterns'], // cross-dream patterns map to the emotion/pattern area (20-memory §3.1)
     approved: true,

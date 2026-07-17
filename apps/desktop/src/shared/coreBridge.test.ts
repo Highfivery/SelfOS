@@ -1671,6 +1671,55 @@ describe('createCoreBridge', () => {
     expect(enriched?.subjectPersonId).toBe(ownerId); // unchanged — it still informs the sender's coaching
   });
 
+  it('insightsList links a questionnaire insight to its source + backfills default-private facts to partner (62)', async () => {
+    const { bridge, ownerId, host } = await freshOwner();
+    const partner = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    const ctx = (await host.host.vaultAndKey())!;
+
+    const saved = await bridge.questionnairesSave({
+      title: 'Intimacy check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: partner.id },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we?', required: true }],
+    });
+    const { assignment } = await bridge.assignmentsCreate({ questionnaireId: saved.id });
+
+    const at = new Date().toISOString();
+    // An existing questionnaire insight with a DEFAULT-PRIVATE fact + a break-glass restricted fact.
+    await saveInsight(ctx.fs, ctx.key, {
+      id: 'i-q',
+      schemaVersion: 1,
+      source: 'questionnaire',
+      subjectPersonId: ownerId,
+      summary: 'What Angel shared.',
+      facts: [
+        { id: 'f1', text: 'Prefers slow mornings', shareable: false },
+        { id: 'f2', text: 'break-glass', shareable: false, restricted: true },
+      ],
+      confidence: 'medium',
+      categories: ['Relationships'],
+      approved: true,
+      provenance: { assignmentId: assignment.id, at },
+      createdAt: at,
+      updatedAt: at,
+    });
+
+    const q = (await bridge.insightsList()).find((i) => i.id === 'i-q');
+    // The card can render "From “Intimacy check-in”" and deep-link to that questionnaire's Results.
+    expect(q?.provenance.sourceTitle).toBe('Intimacy check-in');
+    expect(q?.provenance.sourceQuestionnaireId).toBe(saved.id);
+
+    // Decrypt-level: the backfill PERSISTED the partner default on the non-restricted fact (so a partner's
+    // buildContext picks it up) and left the break-glass fact private.
+    const persisted = (await listInsightsForPerson(ctx.fs, ctx.key, ownerId)).find(
+      (i) => i.id === 'i-q',
+    )!;
+    expect(persisted.facts.find((f) => f.id === 'f1')?.shareableTypes).toEqual(['partner']);
+    expect(persisted.facts.find((f) => f.id === 'f2')?.shareableTypes).toBeUndefined();
+    expect(persisted.facts.find((f) => f.id === 'f2')?.restricted).toBe(true);
+  });
+
   it('gates AI authoring on questionnaires.create and runs the metered path for the owner', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

@@ -22,7 +22,7 @@ import {
 } from '../schemas';
 import { buildContext } from '../people';
 import { checkBudget, costOf, recordUsage } from '../usage';
-import { getInsight, normalizeCategories, saveInsight } from '../insights';
+import { getInsight, normalizeCategories, producedFactShare, saveInsight } from '../insights';
 import { extractGoals } from '../goals';
 // The specific file (not the `../challenges` barrel) so this stays off the barrel's
 // `challengeSuggestService → conversations/promptBuilder` edge — keeps the conversations→challenges edge acyclic.
@@ -279,13 +279,11 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
   }
 
   const insightId = conversation.insightId ?? uuid();
-  // Re-run: carry each prior fact's per-person sharing forward, matched by text (robust to reordering).
+  // Re-run: carry each prior fact's sharing forward, matched by text (robust to reordering) — both the
+  // per-person `shareableWith` AND the user's explicit `shareableTypes` choice, so a re-summarize never
+  // silently reverts a fact the person un-shared (or broadened) back to the partner default.
   const prior = conversation.insightId ? await getInsight(fs, key, personId, insightId) : null;
-  const priorShares = new Map(
-    (prior?.facts ?? [])
-      .filter((f) => f.shareableWith && f.shareableWith.length > 0)
-      .map((f) => [f.text.trim(), f.shareableWith as string[]]),
-  );
+  const priorShares = new Map((prior?.facts ?? []).map((f) => [f.text.trim(), f]));
 
   const facts: InsightFact[] = [];
   const addFacts = (prefix: string, items: string[]): void => {
@@ -297,9 +295,10 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
       facts.push({
         id: uuid(),
         text: labelled,
-        shareable: false,
-        ...(restrictFacts ? { restricted: true } : {}),
-        ...(carried && carried.length > 0 ? { shareableWith: carried } : {}),
+        // Default to shared-with-partner (owner decision — see producedFactShare); a prior EXPLICIT scope
+        // overrides the default; restricted facts stay private.
+        ...producedFactShare(restrictFacts, carried?.shareableTypes),
+        ...(carried?.shareableWith?.length ? { shareableWith: carried.shareableWith } : {}),
       });
     }
   };
@@ -316,9 +315,8 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
     facts.unshift({
       id: uuid(),
       text: labelled,
-      shareable: false,
-      ...(restrictFacts ? { restricted: true } : {}),
-      ...(carried && carried.length > 0 ? { shareableWith: carried } : {}),
+      ...producedFactShare(restrictFacts, carried?.shareableTypes),
+      ...(carried?.shareableWith?.length ? { shareableWith: carried.shareableWith } : {}),
     });
   }
 

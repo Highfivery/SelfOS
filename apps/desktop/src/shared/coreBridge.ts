@@ -376,6 +376,7 @@ import {
 } from '@selfos/core/together';
 import { sniffImageMime } from '@selfos/core/media';
 import {
+  backfillPartnerSharing,
   deleteInsight,
   flagInsightFact,
   listAllInsights,
@@ -539,6 +540,7 @@ import {
   gatherRecipientInsightFacts,
   generateQuestions,
   resolveInsightAbout,
+  resolveInsightSource,
   getAssignment,
   getAssignmentSnapshot,
   getQuestionnaire,
@@ -1114,6 +1116,26 @@ async function reshareLink(
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
   const activePersonId = async (): Promise<string | null> =>
     (await host.readDeviceState()).activePersonId ?? null;
+
+  // One-time sharing backfill guard (owner decision, 2026-07-17 — all insights default to shared-with-
+  // partner). Runs the idempotent `backfillPartnerSharing` once per person per process on the first Memory
+  // read; the persisted result makes any later run a no-op, so this just avoids re-scanning each load.
+  const partnerShareBackfilled = new Set<string>();
+
+  const ensurePartnerShareBackfill = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    personId: string,
+  ): Promise<void> => {
+    if (partnerShareBackfilled.has(personId)) return;
+    partnerShareBackfilled.add(personId);
+    try {
+      await backfillPartnerSharing(fs, key, personId);
+    } catch {
+      // A backfill failure must never block reading Memory; drop the guard so a later load retries.
+      partnerShareBackfilled.delete(personId);
+    }
+  };
 
   /** The active person's role (from the access config), or null. */
   const activePersonRole = async (fs: FileSystem, key: Uint8Array): Promise<Role | null> => {
@@ -3849,22 +3871,34 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
+      // Bring existing insights up to the shared-with-partner default once (owner decision, 2026-07-17),
+      // before reading, so both this list AND a partner's context reflect it. Idempotent + non-blocking.
+      await ensurePartnerShareBackfill(ctx.fs, ctx.key, personId);
       // Own insights in full — the user sees ALL their own facts, INCLUDING their own `restricted` intake
       // facts (their own data). Never another member's insights.
       const own = await listInsightsForPerson(ctx.fs, ctx.key, personId);
       // Enrich a sent-questionnaire insight with WHO it's about (#129) so Memory can group it as a "response
-      // to your questionnaire" instead of mislabelling it "about you." New insights carry this in provenance;
-      // pre-#129 ones are resolved read-time from the originating assignment / compatibility group. A self
-      // check-in (recipient === subject) resolves to null and stays a normal "about you" insight.
+      // to your questionnaire" instead of mislabelling it "about you," AND with its source questionnaire's
+      // title + id so the card can link "From <title>" to that questionnaire's Results (62 §context). New
+      // insights carry the `about` in provenance; pre-#129 ones + the source ref are resolved read-time from
+      // the originating assignment. A self check-in (recipient === subject) resolves `about` to null and
+      // stays a normal "about you" insight.
       const ownEnriched = await Promise.all(
         own.map(async (raw) => {
           // Normalize a pre-fix third-person self-assessment summary to "you/your" (matches its facts + the
           // rest of Memory) — read-time, so existing insights read consistently without a rewrite.
-          const insight =
+          const base =
             raw.source === 'test' ? { ...raw, summary: normalizeTestSummary(raw.summary) } : raw;
-          if (insight.provenance.aboutPersonId || insight.provenance.aboutName) return insight;
-          const about = await resolveInsightAbout(ctx.fs, ctx.key, insight);
-          return about ? { ...insight, provenance: { ...insight.provenance, ...about } } : insight;
+          const about =
+            base.provenance.aboutPersonId || base.provenance.aboutName
+              ? null
+              : await resolveInsightAbout(ctx.fs, ctx.key, base);
+          const sourceRef = await resolveInsightSource(ctx.fs, ctx.key, base);
+          if (!about && !sourceRef) return base;
+          return {
+            ...base,
+            provenance: { ...base.provenance, ...(about ?? {}), ...(sourceRef ?? {}) },
+          };
         }),
       );
       // Related people contribute ONLY their shareable, non-restricted facts (the `summarizeForContext`

@@ -5,7 +5,7 @@ import { memFileSystem } from '../host/memFileSystem';
 import type { Conversation, IntakeSession, Person } from '../schemas';
 import { savePerson } from '../people';
 import { buildContext } from '../people';
-import { getInsight, listInsightsForPerson, summarizeForContext } from '../insights';
+import { getInsight, listInsightsForPerson, saveInsight, summarizeForContext } from '../insights';
 import { listProfileSuggestions } from '../profile';
 import { queryUsage, recordUsage, setPersonBudget } from '../usage';
 import { listGoals } from '../goals';
@@ -243,6 +243,35 @@ describe('endAndSummarize', () => {
     expect(conv?.insightId).toBe(result.insight.id);
     expect(conv?.insightStale).toBe(false);
     expect(conv?.endedAt).toBe(now.toISOString());
+  });
+
+  it('facts default to shared-with-partner; a re-summarize preserves an explicit un-share', async () => {
+    // First summarize: every fact defaults to shared-with-partner (owner decision).
+    const first = await endAndSummarize(deps());
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(
+      first.insight.facts.every((f) => !f.shareable && f.shareableTypes?.[0] === 'partner'),
+    ).toBe(true);
+
+    // The person un-shares one fact in Memory (writes an explicit `shareableTypes: []`).
+    const target = first.insight.facts[0];
+    if (!target) throw new Error('no fact');
+    await saveInsight(fs, key, {
+      ...first.insight,
+      facts: first.insight.facts.map((f) =>
+        f.id === target.id ? { ...f, shareableTypes: [] } : f,
+      ),
+    });
+
+    // Re-summarize the same session (reuses the insightId): the un-share is carried forward, NOT reverted.
+    const second = await endAndSummarize(deps());
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    const same = second.insight.facts.find((f) => f.text === target.text);
+    expect(same?.shareableTypes).toEqual([]); // still un-shared, not ['partner']
+    const other = second.insight.facts.find((f) => f.text !== target.text);
+    expect(other?.shareableTypes).toEqual(['partner']); // untouched facts keep the default
   });
 
   it('extracts the session’s goals into tracked Goal entities (39 §4.1, no extra spend)', async () => {

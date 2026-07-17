@@ -280,20 +280,36 @@
   color: var(--color-text-secondary);
 }
 
-/* Received cards lead with the sender chip (which owns the flex-grow), so its eyebrow slot isn't used. */
+/* Received cards lead with a single-line sender chip, clustered tight under the category eyebrow as a
+ * muted header — kept to ONE line (the name ellipsizes) so a long sender never wraps and shoves the
+ * title down out of alignment with its row-mates. */
 .from {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex: 1;
+  max-width: 100%;
   min-width: 0;
+  margin-top: calc(-1 * var(--space-2));
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
+  white-space: nowrap;
 }
 
+.fromName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Clamp the title to 2 lines AND reserve 2 lines of height, so every card's title block is the same
+ * height — the status pills, timing meta, and CTA then line up across a row regardless of whether a
+ * given title is one line or two. */
 .cardTitleButton {
-  display: block;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   width: 100%;
+  min-height: 2.6em;
   padding: 0;
   border: none;
   background: transparent;
@@ -304,6 +320,7 @@
   line-height: 1.3;
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
   overflow-wrap: anywhere;
 }
 
@@ -472,10 +489,13 @@
   box-shadow: 0 0 0 3px var(--color-bg);
 }
 
+/* The timing meta belongs with the status pills above it — pull it up so pill + meta read as one
+ * "status" group, set apart from the title above and the CTA below. */
 .cardMeta {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-1);
+  margin-top: calc(-1 * var(--space-2));
   font-size: var(--text-xs);
   color: var(--color-text-tertiary);
   font-variant-numeric: tabular-nums;
@@ -661,12 +681,14 @@
   font-weight: 500;
 }
 
-/* Received card CTA (Answer / Continue / View). */
+/* Received card CTA (Answer / Continue / View) — pinned to the bottom so it lines up across every card
+ * in a row regardless of body height. */
 .rcta {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   align-self: flex-start;
+  margin-top: auto;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);

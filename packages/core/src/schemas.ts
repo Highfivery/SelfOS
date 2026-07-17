@@ -3527,6 +3527,11 @@ export const BookConfigSchema = z.object({
   style: BookStyleSchema.default('warm'),
   length: BookLengthSchema.default('full'),
   autoRefresh: z.boolean().default(true),
+  // Story-scoped image look (§3.8, owner decision 2026-07-16) — this book's cover + illustrations use it,
+  // independent of the app-wide dream-image style. Additive-optional: when unset, generation falls back to
+  // the global `dreams.imageStyle`/`dreams.imageStyleNotes` so pre-existing books keep working.
+  imageStyle: z.string().optional(),
+  imageStyleNotes: z.string().max(300).optional(),
 });
 export type BookConfig = z.infer<typeof BookConfigSchema>;
 

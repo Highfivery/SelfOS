@@ -3,6 +3,7 @@ import {
   Banner,
   Button,
   Card,
+  Collapsible,
   Field,
   Heading,
   Inline,
@@ -10,11 +11,13 @@ import {
   SegmentedControl,
   Select,
   Stack,
+  Switch,
   Text,
   TextInput,
   Textarea,
   type SegmentOption,
 } from '../../../design-system/components';
+import { ImageStylePicker } from '../../../settings/ImageStyleControl';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryStore } from '../../../stores/storyStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
@@ -23,7 +26,6 @@ import { useStoryInterview } from '../../notifications/useStoryInterview';
 import { useSetting } from '../../../settings/useSetting';
 import { aiKeyResolved } from '../../aiAvailability';
 import { ImageProgress } from './ImageProgress';
-import { ImageStyleControl } from '../../../settings/ImageStyleControl';
 import { downscaleImage } from '../sessions/downscaleImage';
 import { AdminOnlyBadge } from '../../../design-system/components';
 import type {
@@ -605,15 +607,6 @@ function CoverPanel({
                 </Text>
               ) : null}
             </Inline>
-            {/* Surface the ONE global image style right here where images are made (not only buried in
-                Settings) — it drives the cover AND every chapter illustration. Writes the same global
-                `dreams.imageStyle` setting, so it's a single source of truth. */}
-            <Stack gap={1}>
-              <Text size="sm" weight={500}>
-                Image style
-              </Text>
-              <ImageStyleControl />
-            </Stack>
           </Stack>
         ) : loading ? null : (
           <Text tone="secondary" size="sm">
@@ -797,6 +790,155 @@ function PhotosPanel({ bookId }: { bookId: string }): JSX.Element {
   );
 }
 
+/**
+ * Story settings (§3.8) — a collapsible section on the book overview where the person configures THIS book:
+ * its writing (voice, tone, length, auto-refresh) and its own image look (style + direction, independent of
+ * the app-wide dream-image style). All persist to `BookConfig` via `storyUpdate`; writing changes steer
+ * FUTURE rewrites (existing chapters keep their text until re-drafted/refreshed). A `draft` mirror avoids a
+ * stale-closure lost update across quick successive changes; the notes textarea persists on blur.
+ */
+function StorySettingsPanel({
+  bookId,
+  config,
+}: {
+  bookId: string;
+  config: BookConfig;
+}): JSX.Element {
+  const update = useStoryStore((s) => s.update);
+  const [globalStyle] = useSetting('dreams.imageStyle');
+  const [draft, setDraft] = useState<BookConfig>(config);
+  useEffect(() => setDraft(config), [config]);
+  const [notes, setNotes] = useState(config.imageStyleNotes ?? '');
+  useEffect(() => setNotes(config.imageStyleNotes ?? ''), [config.imageStyleNotes]);
+
+  const saveField = (patch: Partial<BookConfig>): void => {
+    const next = { ...draft, ...patch };
+    setDraft(next);
+    void update(bookId, { config: next });
+  };
+  const saveNotes = (): void => {
+    if ((config.imageStyleNotes ?? '') === notes) return;
+    const next = { ...draft, imageStyleNotes: notes };
+    setDraft(next);
+    void update(bookId, { config: next });
+  };
+
+  const styleHint = STYLE_CHOICES.find((s) => s.value === draft.style)?.hint ?? '';
+  // Show what images will actually use: this book's own style, or the global fallback until one is chosen.
+  const effectiveImageStyle = draft.imageStyle ?? globalStyle ?? '';
+
+  return (
+    <Card>
+      <Collapsible header={<Heading level={2}>Story settings</Heading>}>
+        <Stack gap={4}>
+          <Stack gap={3}>
+            <Heading level={3}>Writing</Heading>
+            <Field label="Narrative voice">
+              {(p) => (
+                <Select
+                  {...p}
+                  value={draft.voice}
+                  onChange={(e) => saveField({ voice: e.target.value as Voice })}
+                >
+                  {VOICE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Field label="Tone">
+              {(p) => (
+                <Select
+                  {...p}
+                  value={draft.style}
+                  onChange={(e) => saveField({ style: e.target.value as Style })}
+                >
+                  {STYLE_CHOICES.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            {styleHint ? (
+              <Text size="sm" tone="secondary">
+                {styleHint}
+              </Text>
+            ) : null}
+            <Field label="Length">
+              {(p) => (
+                <Select
+                  {...p}
+                  value={draft.length}
+                  onChange={(e) => saveField({ length: e.target.value as Length })}
+                >
+                  {LENGTH_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Inline justify="space-between" align="start">
+              <Stack gap={1}>
+                <Text size="sm" weight={500}>
+                  Auto-refresh
+                </Text>
+                <Text size="sm" tone="secondary">
+                  Rewrite chapters that fall out of date, on a gentle weekly cadence.
+                </Text>
+              </Stack>
+              <Switch
+                checked={draft.autoRefresh}
+                onChange={(v) => saveField({ autoRefresh: v })}
+                aria-label="Auto-refresh stale chapters"
+              />
+            </Inline>
+            <Text size="sm" tone="tertiary">
+              Writing changes apply to future rewrites — existing chapters keep their text until you
+              re-draft or refresh them.
+            </Text>
+          </Stack>
+
+          <Stack gap={3}>
+            <Heading level={3}>Images</Heading>
+            <Stack gap={1}>
+              <Text size="sm" weight={500}>
+                Image style
+              </Text>
+              <ImageStylePicker
+                value={effectiveImageStyle}
+                onChange={(v) => saveField({ imageStyle: v })}
+              />
+            </Stack>
+            <Field label="Style direction (optional)">
+              {(p) => (
+                <Textarea
+                  {...p}
+                  rows={3}
+                  maxLength={300}
+                  value={notes}
+                  placeholder="muted earth tones, soft focus, golden-hour light…"
+                  onChange={(e) => setNotes(e.target.value)}
+                  onBlur={saveNotes}
+                />
+              )}
+            </Field>
+            <Text size="sm" tone="secondary">
+              The look for this book’s cover and chapter illustrations. Your dream images have their
+              own style in Settings → Images.
+            </Text>
+          </Stack>
+        </Stack>
+      </Collapsible>
+    </Card>
+  );
+}
+
 function BookOverview({
   bundle,
   onOpenChapter,
@@ -905,6 +1047,8 @@ function BookOverview({
       ) : null}
 
       {chapters.length > 0 ? <PhotosPanel bookId={bookId} /> : null}
+
+      <StorySettingsPanel bookId={bookId} config={manifest.config} />
 
       {completeness && chapters.length > 0 ? <CompletenessMeter c={completeness} /> : null}
 

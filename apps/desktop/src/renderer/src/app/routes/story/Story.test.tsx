@@ -236,6 +236,31 @@ describe('Story (64)', () => {
     expect(updatedWith).toEqual({ bookId: 'b1', title: 'The Weight of Quiet' });
   });
 
+  it('Story settings: editing the book’s tone + image style persists to its config (§3.8)', async () => {
+    const configs: unknown[] = [];
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle()),
+      storyUpdate: (input) => {
+        const i = input as { config?: unknown };
+        if (i.config) configs.push(i.config);
+        return Promise.resolve(manifest());
+      },
+    });
+    renderStory();
+    // The settings live in a collapsible section on the overview — open it.
+    await userEvent.click(await screen.findByRole('button', { name: /Story settings/ }));
+    // Writing controls are editable (voice/tone/length) + the book's OWN image style.
+    expect(await screen.findByLabelText('Narrative voice')).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText('Tone'), 'cinematic');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Image style' }), 'ukiyo-e');
+    await waitFor(() => expect(configs.length).toBeGreaterThanOrEqual(2));
+    // The full config is sent each time (updateBook replaces it), carrying the changed field.
+    expect(configs.some((c) => (c as { style?: string }).style === 'cinematic')).toBe(true);
+    expect(configs.some((c) => (c as { imageStyle?: string }).imageStyle === 'ukiyo-e')).toBe(true);
+  });
+
   it('a failed draft surfaces the error + a Try again path (no dead-end)', async () => {
     // The book EXISTS after storyCreate, so on failure the draft opens it (null outline) → NeedsOutline with
     // an error + Try again, never a blank overview.

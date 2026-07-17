@@ -419,6 +419,26 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-16 — **Feedback + Build (a proper Story SETTINGS section — not a control jammed under Cover; story-
+  specific image style + editable writing tone; user FORCEFUL; on `feat/story-settings-section`, PR pending).**
+  The user (angry): jamming the global image-style control **under the Cover card** — when it governs ALL images —
+  "makes any kind of sense"; there should be a **settings section for the story** to configure image, tone, etc.
+  **Right.** Asked the design first (AskUserQuestion, 3 forks): a **collapsible "Story settings"** section on the
+  book overview; a **story-only image style** (independent of dream images — departs from the earlier "one global
+  style", the owner's explicit new choice); **all** of voice/tone/length/auto-refresh editable post-creation. Built:
+  additive-optional `BookConfig.imageStyle`/`imageStyleNotes` (no migration; `generateStoryImage` prefers the book's
+  own style, falling back to the global `dreams.imageStyle`); the writing config (voice/style/length/autoRefresh) is
+  now **editable post-creation** via `storyUpdate` (steers future rewrites; existing chapters keep their text). A
+  new **`StorySettingsPanel`** (collapsible, Writing + Images groups) on the overview; the image-style picker was
+  extracted to a reusable **`ImageStylePicker`** shared by the story panel AND the dream-image `ImageStyleControl`
+  (Settings → Images keeps the OpenAI model + key). Removed the control jammed under Cover. Gate green: typecheck,
+  lint, format, **1414 core + 1265 desktop** unit (+`storyImageService` book-style-wins-over-global, +a Story RTL
+  editing tone+image-style persists), **7 story/dream/images E2E** (the cover walk opens Story settings, asserts
+  voice/tone/image-style, changes the tone). Real-Electron visual QA (a clean "Story settings" collapsible with a
+  Writing group — voice/tone/length/auto-refresh — + an Images group). **Lesson: a control the user configures
+  mid-task needs a COHESIVE settings AREA on the page where the work happens — not tacked under an unrelated card
+  (image style under "Cover" when it's for all images); group related settings (Writing, Images) in a labeled,
+  collapsible section, and make the book's creation-time config editable afterward.**
 - 2026-07-16 — **Feedback + Build (two HARD durable UI rules + image-generation realtime progress + style-on-the-
   Story-page; user FORCEFUL after repeated reminders; on `feat/image-generation-progress`, PR pending).** The user
   (angry, repeat offense): (1) "ANY time AI is generating something like images or anything else, we MUST show

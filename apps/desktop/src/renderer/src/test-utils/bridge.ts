@@ -366,6 +366,10 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     storyCompleteness: () =>
       Promise.resolve({ stage: 'beginning' as const, ratio: 0, covered: 0, total: 12 }),
     storyInterviewCheck: () => Promise.resolve({ outcome: 'noBook' as const }),
+    storyGaps: () => Promise.resolve({ gaps: [], partCoverage: [], hasOpenCheckin: false }),
+    storyAskGap: () =>
+      Promise.resolve({ ok: false as const, reason: 'ERROR' as const, message: 'x' }),
+    storyAnsweredCheckIns: () => Promise.resolve([]),
     storyPublish: () => Promise.resolve({ ok: false as const, message: 'Not available.' }),
     storyReaders: () => Promise.resolve([]),
     storyGrantReader: () => Promise.resolve([]),

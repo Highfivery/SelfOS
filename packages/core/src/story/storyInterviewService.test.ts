@@ -12,6 +12,7 @@ import {
 } from '../questionnaires/assignmentService';
 import type { AiDeps } from '../questionnaires/generationService';
 import type {
+  BookChapter,
   BookOutline,
   Insight,
   LifeTimeline,
@@ -21,8 +22,12 @@ import type {
 import { recordUsage } from '../usage';
 import {
   STORY_INTERVIEW_WEEKLY_CAP,
+  askGap,
+  computePartCoverage,
   computeStoryCompleteness,
   getStoryCompleteness,
+  getStoryGaps,
+  listAnsweredStoryCheckIns,
   mintStoryCheckInFromTodo,
   runGapPass,
   runStoryInterviewCadence,
@@ -302,6 +307,77 @@ describe('runGapPass (64 §3.7)', () => {
     const res = await runGapPass(deps(fs, fakeClient('I could not do that.')), { bookId });
     expect(res.ok).toBe(false);
   });
+
+  it('persists lastGaps (with ids) + per-part coverage so the Interview tab reads free (§13.6.3/§13.6.4)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    await runGapPass(deps(fs, fakeClient(gapJson)), { bookId }); // gapJson carries no partCoverage → the fallback
+    const view = await getStoryGaps(fs, key, 'me', bookId);
+    // Persisted gaps carry stable ids (so askGap can target them) + are sorted priority-desc.
+    expect(view.gaps.map((g) => g.dimension)).toEqual(['lowPoint', 'sensory']);
+    expect(view.gaps.every((g) => g.id.length > 0)).toBe(true);
+    expect(view.lastGapPassAt).toBeTruthy();
+    // Part coverage fell back to the written/reviewed ratio: p1 has one written-not-reviewed chapter → 0.5.
+    expect(view.partCoverage).toEqual([{ partId: 'p1', score: 0.5 }]);
+  });
+
+  it('a model per-part reading wins over the fallback (clamped 0..1)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    const withCoverage = JSON.stringify({
+      ...JSON.parse(gapJson),
+      partCoverage: { p1: 1.4 }, // out of range → clamped to 1
+    });
+    await runGapPass(deps(fs, fakeClient(withCoverage)), { bookId });
+    expect((await getStoryGaps(fs, key, 'me', bookId)).partCoverage).toEqual([
+      { partId: 'p1', score: 1 },
+    ]);
+  });
+});
+
+describe('computePartCoverage (64 §13.6.4)', () => {
+  const chapter = (id: string, status: 'new' | 'reviewed', markdown: string): BookChapter => ({
+    id,
+    schemaVersion: 1,
+    partId: 'p1',
+    order: 0,
+    title: id,
+    markdown,
+    revision: 1,
+    status,
+    sourceSignature: '',
+    provenance: [],
+    protectedBlocks: [],
+    pinnedQuotes: [],
+    imagePlacements: [],
+  });
+  const twoChapterOutline: BookOutline = {
+    schemaVersion: 1,
+    approved: true,
+    parts: [
+      {
+        id: 'p1',
+        title: 'Roots',
+        chapters: [
+          { id: 'a', title: 'A', brief: '', lifeAreas: [], order: 0 },
+          { id: 'b', title: 'B', brief: '', lifeAreas: [], order: 1 },
+        ],
+      },
+    ],
+  };
+
+  it('scores a part reviewed=1, written-not-reviewed=0.5, unwritten=0 (averaged)', () => {
+    // a reviewed (1) + b written-not-reviewed (0.5) → 0.75.
+    const cov = computePartCoverage(twoChapterOutline, [
+      chapter('a', 'reviewed', 'done'),
+      chapter('b', 'new', 'draft'),
+    ]);
+    expect(cov).toEqual([{ partId: 'p1', score: 0.75 }]);
+    // b missing entirely → a(1) + b(0) → 0.5.
+    expect(computePartCoverage(twoChapterOutline, [chapter('a', 'reviewed', 'done')])).toEqual([
+      { partId: 'p1', score: 0.5 },
+    ]);
+  });
 });
 
 describe('runStoryInterviewCadence (64 §3.7 — the autonomous loop)', () => {
@@ -445,5 +521,85 @@ describe('runStoryInterviewCadence (64 §3.7 — the autonomous loop)', () => {
     const state = await getInterviewState(fs, key, 'me', bookId);
     expect(state.lastGapPassAt).toBe(later.toISOString()); // the fresh stamp survives (the fix)
     expect(state.openCheckinAssignmentId).toBeUndefined(); // the resolved flag is cleared
+  });
+});
+
+describe('askGap — "Ask me about this" (64 §13.6.5)', () => {
+  it('mints a check-in from a persisted gap by id + records the open check-in', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    await runGapPass(deps(fs, fakeClient(gapJson)), { bookId }); // persists lastGaps
+    const gap = (await getStoryGaps(fs, key, 'me', bookId)).gaps[0]!;
+    const res = await askGap(deps(fs, fakeClient(validQuestions)), { bookId, gapId: gap.id });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    // A story-provenance self-send landed in the Inbox…
+    const sent = await listAssignments(fs, key, { senderPersonId: 'me' });
+    expect(sent.some((a) => a.id === res.assignmentId)).toBe(true);
+    // …and the open check-in is recorded (drives the ≤1 rule + the "Ask" disabled state).
+    expect((await getStoryGaps(fs, key, 'me', bookId)).hasOpenCheckin).toBe(true);
+  });
+
+  it('refuses while a check-in is already open (the ≤1 invariant)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    await runGapPass(deps(fs, fakeClient(gapJson)), { bookId });
+    const gaps = (await getStoryGaps(fs, key, 'me', bookId)).gaps;
+    await askGap(deps(fs, fakeClient(validQuestions)), { bookId, gapId: gaps[0]!.id });
+    const second = await askGap(deps(fs, fakeClient(validQuestions)), {
+      bookId,
+      gapId: gaps[1]!.id,
+    });
+    expect(second.ok).toBe(false);
+    if (second.ok) return;
+    expect(second.message).toMatch(/already waiting/);
+  });
+
+  it('proceeds again once the open check-in has resolved (submitted)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    await runGapPass(deps(fs, fakeClient(gapJson)), { bookId });
+    const gaps = (await getStoryGaps(fs, key, 'me', bookId)).gaps;
+    const first = await askGap(deps(fs, fakeClient(validQuestions)), {
+      bookId,
+      gapId: gaps[0]!.id,
+    });
+    if (!first.ok) throw new Error('first mint failed');
+    await updateAssignmentStatus(fs, key, first.assignmentId, 'submitted');
+    // The prior check-in resolved → the next ask is free.
+    expect(
+      (await askGap(deps(fs, fakeClient(validQuestions)), { bookId, gapId: gaps[1]!.id })).ok,
+    ).toBe(true);
+  });
+
+  it('refuses an unknown gap id', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    await runGapPass(deps(fs, fakeClient(gapJson)), { bookId });
+    expect((await askGap(deps(fs, fakeClient(validQuestions)), { bookId, gapId: 'nope' })).ok).toBe(
+      false,
+    );
+  });
+});
+
+describe('listAnsweredStoryCheckIns (64 §13.6.5)', () => {
+  it('lists submitted story-provenance check-ins for the book, newest-first', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    await runGapPass(deps(fs, fakeClient(gapJson)), { bookId });
+    const gaps = (await getStoryGaps(fs, key, 'me', bookId)).gaps;
+    const minted = await askGap(deps(fs, fakeClient(validQuestions)), {
+      bookId,
+      gapId: gaps[0]!.id,
+    });
+    if (!minted.ok) throw new Error('mint failed');
+    // Not answered yet → nothing in the answered history.
+    expect(await listAnsweredStoryCheckIns(fs, key, 'me', bookId)).toEqual([]);
+    // Submit it → it appears.
+    await updateAssignmentStatus(fs, key, minted.assignmentId, 'submitted');
+    const answered = await listAnsweredStoryCheckIns(fs, key, 'me', bookId);
+    expect(answered).toHaveLength(1);
+    expect(answered[0]?.assignmentId).toBe(minted.assignmentId);
+    expect(answered[0]?.title.length).toBeGreaterThan(0);
   });
 });

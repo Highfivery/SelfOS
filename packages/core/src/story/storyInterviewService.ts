@@ -1,23 +1,36 @@
 import { z } from 'zod';
 import { classifyParseOutcome, extractJsonObject, tolerantArray } from '../ai';
+import { uuid } from '../id';
 import type {
   AiFailureReason,
+  BookChapter,
+  BookOutline,
   QuestionnaireInput,
+  StoryAnsweredCheckIn,
+  StoryCheckInResult,
   StoryCompleteness,
   StoryCompletenessStage,
   StoryFrameworkCoverage,
   StoryGap,
+  StoryGapsView,
   StoryInterviewCadenceResult,
   StoryInterviewOutcome,
+  StoryPartCoverage,
   UsageEvent,
 } from '../schemas';
 import {
   createAssignment,
   getAssignment,
+  listAssignments,
   updateAssignmentStatus,
 } from '../questionnaires/assignmentService';
 import { type AiDeps, generateQuestions, runClaude } from '../questionnaires/generationService';
-import { saveQuestionnaire, validateQuestionnaire } from '../questionnaires/questionnaireService';
+import {
+  getQuestionnaire,
+  saveQuestionnaire,
+  validateQuestionnaire,
+} from '../questionnaires/questionnaireService';
+import { getResponse } from '../questionnaires/responseService';
 import { queryUsage } from '../usage';
 import { MCADAMS_SCENES, getBookType } from './bookTypes';
 import { buildStoryCorpus, type StoryCorpus } from './storyCorpus';
@@ -43,10 +56,6 @@ import {
  */
 
 const STORY_CHECKIN_COUNT = 4;
-
-export type StoryCheckInResult =
-  | { ok: true; assignmentId: string }
-  | { ok: false; reason: AiFailureReason; message: string };
 
 /**
  * Mint a story check-in whose FOCUS is the given to-do text, delivered as an in-app self-send. Returns the new
@@ -186,6 +195,9 @@ const GapDraftSchema = z.object({
     { dimension: '', label: '', focus: '', priority: 0 },
     (g) => g.focus.trim().length > 0,
   ).catch([]),
+  // Per-part coverage for the life map (§13.6.4): partId → 0..1 how richly told. Tolerant; a missing/invalid
+  // reading falls back to the written/reviewed ratio host-side.
+  partCoverage: z.record(z.string(), z.number()).optional().catch(undefined),
 });
 
 export type GapPassResult =
@@ -261,6 +273,7 @@ export async function runGapPass(
   const gaps: StoryGap[] = (draft.gaps ?? [])
     .filter((g) => g.focus.trim().length > 0)
     .map((g) => ({
+      id: uuid(),
       dimension: g.dimension.trim(),
       label: g.label.trim() || 'Something worth telling',
       focus: g.focus.trim(),
@@ -269,9 +282,15 @@ export async function runGapPass(
     .sort((a, b) => b.priority - a.priority)
     .slice(0, MAX_GAPS);
 
+  // Per-part coverage for the life map (§13.6.4): the model's reading where valid (clamped 0..1), else the
+  // deterministic written/reviewed fallback.
+  const partCoverage = computePartCoverage(outline, chapters, draft.partCoverage);
+
   await saveInterviewState(deps.fs, deps.key, deps.personId, args.bookId, {
     ...interview,
     frameworkCoverage: coverage,
+    lastGaps: gaps,
+    lastPartCoverage: partCoverage,
     lastGapPassAt: deps.now.toISOString(),
   });
 
@@ -281,6 +300,138 @@ export async function runGapPass(
     gaps,
     ...(result.usage ? { usage: result.usage } : {}),
   };
+}
+
+/**
+ * Per-part coverage for the life map (§13.6.4): prefer the model's clamped 0..1 reading per part; fall back to
+ * the deterministic written/reviewed ratio (a reviewed chapter = 1, a written-not-reviewed = 0.5, unwritten = 0).
+ */
+export function computePartCoverage(
+  outline: BookOutline,
+  chapters: BookChapter[],
+  modelReading?: Record<string, number>,
+): StoryPartCoverage[] {
+  const byId = new Map(chapters.map((c) => [c.id, c]));
+  return outline.parts.map((part) => {
+    const model = modelReading?.[part.id];
+    if (typeof model === 'number' && Number.isFinite(model)) {
+      return { partId: part.id, score: Math.max(0, Math.min(1, model)) };
+    }
+    if (part.chapters.length === 0) return { partId: part.id, score: 0 };
+    const total = part.chapters.reduce((sum, oc) => {
+      const chapter = byId.get(oc.id);
+      const written = (chapter?.markdown.trim().length ?? 0) > 0;
+      return sum + (chapter?.status === 'reviewed' ? 1 : written ? 0.5 : 0);
+    }, 0);
+    return { partId: part.id, score: total / part.chapters.length };
+  });
+}
+
+/**
+ * The persisted gap-pass output for the Interview tab (§13.6.3) — FREE, no AI. Reads `interview.enc`; part
+ * coverage falls back to the written/reviewed ratio when a pass hasn't persisted one yet.
+ */
+export async function getStoryGaps(
+  fs: AiDeps['fs'],
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<StoryGapsView> {
+  const interview = await getInterviewState(fs, key, personId, bookId);
+  const outline = await getOutline(fs, key, personId, bookId);
+  const chapters = await listChapters(fs, key, personId, bookId);
+  // The persisted per-part coverage reflects the AI reading AT THE LAST GAP PASS — it doesn't move as chapters
+  // are written/reviewed until the next pass (a model reading can't be recomputed without AI). Before any pass,
+  // the live written/reviewed ratio fills in.
+  const partCoverage =
+    interview.lastPartCoverage ?? (outline ? computePartCoverage(outline, chapters) : []);
+  return {
+    gaps: interview.lastGaps ?? [],
+    partCoverage,
+    ...(interview.lastGapPassAt ? { lastGapPassAt: interview.lastGapPassAt } : {}),
+    hasOpenCheckin: Boolean(interview.openCheckinAssignmentId),
+  };
+}
+
+/** Statuses that mean an open check-in has resolved (so "Ask me about this" is free again). */
+const RESOLVED_CHECKIN_STATUSES = new Set([
+  'submitted',
+  'analyzed',
+  'declined',
+  'expired',
+  'revoked',
+]);
+
+/**
+ * "Ask me about this" (§13.6.5) — the EXPLICIT, user-triggered mint of a check-in from a specific persisted gap,
+ * the same self-send path the auto-cadence + the to-do use. Honors the ≤1-open-check-in invariant: refuses while
+ * one is genuinely still open (answer that one first), but proceeds if the prior one has resolved.
+ */
+export async function askGap(
+  deps: AiDeps,
+  args: { bookId: string; gapId: string },
+): Promise<StoryCheckInResult> {
+  const interview = await getInterviewState(deps.fs, deps.key, deps.personId, args.bookId);
+  if (interview.openCheckinAssignmentId) {
+    const open = await getAssignment(deps.fs, deps.key, interview.openCheckinAssignmentId);
+    if (open && !RESOLVED_CHECKIN_STATUSES.has(open.status)) {
+      return {
+        ok: false,
+        reason: 'ERROR',
+        message: 'A check-in is already waiting in your Inbox — answer that one first.',
+      };
+    }
+  }
+  const gap = (interview.lastGaps ?? []).find((g) => g.id === args.gapId);
+  if (!gap) {
+    return {
+      ok: false,
+      reason: 'ERROR',
+      message: 'That gap is no longer here — try “Find what’s missing” again.',
+    };
+  }
+  const mint = await mintStoryCheckInFromTodo(deps, { bookId: args.bookId, focus: gap.focus });
+  if (!mint.ok) return mint;
+  // Re-read (the assignment write may have touched interview state elsewhere) then stamp the new open check-in.
+  const after = await getInterviewState(deps.fs, deps.key, deps.personId, args.bookId);
+  await saveInterviewState(deps.fs, deps.key, deps.personId, args.bookId, {
+    ...after,
+    askedPrompts: [...after.askedPrompts, gap.focus].slice(-50),
+    openCheckinAssignmentId: mint.assignmentId,
+  });
+  return mint;
+}
+
+/**
+ * The answered biographer check-ins (§13.6.5) — submitted/analyzed story-provenance assignments for this book,
+ * newest-first. Deterministic, no AI. (The "wove into <chapter>" chapter linkage is left for a later pass.)
+ */
+export async function listAnsweredStoryCheckIns(
+  fs: AiDeps['fs'],
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<StoryAnsweredCheckIn[]> {
+  const assignments = await listAssignments(fs, key, { senderPersonId: personId });
+  const out: StoryAnsweredCheckIn[] = [];
+  for (const a of assignments) {
+    if (a.status !== 'submitted' && a.status !== 'analyzed') continue;
+    // Per-item guard: a single corrupt/undecryptable questionnaire or response skips only that entry rather
+    // than blanking the whole history (this join reads three files per assignment).
+    try {
+      const q = await getQuestionnaire(fs, key, a.questionnaireId);
+      if (q?.storyProvenance?.bookId !== bookId) continue;
+      const response = await getResponse(fs, key, a.id);
+      out.push({
+        assignmentId: a.id,
+        title: q.title,
+        answeredAt: response?.submittedAt ?? a.updatedAt,
+      });
+    } catch {
+      continue;
+    }
+  }
+  return out; // listAssignments already sorts newest-first
 }
 
 // --- The autonomous interview cadence (§3.7 — the spec-63 loop) ------------------------------------------

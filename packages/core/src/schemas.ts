@@ -3916,8 +3916,23 @@ export const StoryFrameworkCoverageSchema = z.object({
 });
 export type StoryFrameworkCoverage = z.infer<typeof StoryFrameworkCoverageSchema>;
 
+/** A persisted gap (§13.6.3) — the last gap pass's output, so the Interview tab renders with no AI. */
+export const StoryGapSchema = z.object({
+  id: z.string().min(1),
+  dimension: z.string(),
+  label: z.string(),
+  focus: z.string(),
+  priority: z.number(),
+});
+/** Persisted per-part coverage (§13.6.4) for the life map. */
+export const StoryPartCoverageSchema = z.object({
+  partId: z.string().min(1),
+  score: z.number().min(0).max(1),
+});
+
 /** `interview.enc` — the biography interview engine's state (§5.5). `askedPrompts` feeds de-dup so a gap
- *  question never re-asks what the vault already knows. */
+ *  question never re-asks what the vault already knows. `lastGaps`/`lastPartCoverage` persist the last pass's
+ *  output so the Interview tab renders free (§13.6.3/§13.6.4). */
 export const StoryInterviewStateSchema = z.object({
   schemaVersion: z.literal(1),
   askedPrompts: z.array(z.string()).default([]),
@@ -3929,6 +3944,8 @@ export const StoryInterviewStateSchema = z.object({
     futureScript: false,
   }),
   photoAnswers: z.array(StoryPhotoAnswerSchema).default([]),
+  lastGaps: z.array(StoryGapSchema).optional(),
+  lastPartCoverage: z.array(StoryPartCoverageSchema).optional(),
   lastGapPassAt: z.string().optional(),
   openCheckinAssignmentId: z.string().optional(),
 });
@@ -4114,6 +4131,10 @@ export const StoryExportInputSchema = StoryBookRefSchema.extend({
   head: z.enum(['draft', 'published']).default('published'),
 });
 export type StoryExportInput = z.infer<typeof StoryExportInputSchema>;
+
+/** `story:askGap` — mint a check-in from a specific persisted gap (§13.6.5). */
+export const StoryAskGapInputSchema = StoryBookRefSchema.extend({ gapId: z.string().min(1) });
+export type StoryAskGapInput = z.infer<typeof StoryAskGapInputSchema>;
 
 /** `story:generateImage` — cover or a chapter's illustration, with an optional per-image style override. */
 export const StoryImageTargetSchema = z.discriminatedUnion('kind', [
@@ -4372,6 +4393,8 @@ export interface StoryCompleteness {
 /** One thing the book is missing (§3.7), from the AI gap pass — a McAdams/craft dimension not yet covered, with
  *  a FOCUS brief the interview minter turns into a story check-in. Higher `priority` = ask sooner. */
 export interface StoryGap {
+  /** A stable id for this gap within the current pass — so `story:askGap` can target it. Minted at persist time. */
+  id: string;
   /** The coverage dimension this fills: a McAdams scene key, or `chapters`/`challenges`/`ideology`/`futureScript`,
    *  or a craft dimension (`scene`/`sensory`/`timeline`). Free string — normalized against the framework host-side. */
   dimension: string;
@@ -4381,6 +4404,37 @@ export interface StoryGap {
   focus: string;
   priority: number;
 }
+
+/** Per-part coverage for the life map (§13.6.4) — how richly told each outline part is, 0..1. */
+export interface StoryPartCoverage {
+  partId: string;
+  score: number;
+}
+
+/** `story:gaps` — the persisted gap-pass output, rendered on the Interview tab with NO AI (§13.6.3). */
+export interface StoryGapsView {
+  gaps: StoryGap[];
+  partCoverage: StoryPartCoverage[];
+  lastGapPassAt?: string;
+  /** True when a story check-in is already open (the ≤1 invariant) — "Ask me about this" is disabled then. */
+  hasOpenCheckin: boolean;
+}
+
+/** One answered biographer check-in (§13.6.5) — a submitted story-provenance assignment, joined to the chapter
+ *  its resulting insight wove into where derivable. */
+export interface StoryAnsweredCheckIn {
+  assignmentId: string;
+  title: string;
+  answeredAt: string;
+  /** The chapter this check-in's material wove into ("wove into First Words"), if derivable. */
+  wroteIntoChapterTitle?: string;
+}
+
+/** The result of minting a story check-in (§5.5/§13.6.5) — the new assignment id, or an honest failure. A
+ *  crypto-free view type (the mint path lives in `storyInterviewService`). */
+export type StoryCheckInResult =
+  | { ok: true; assignmentId: string }
+  | { ok: false; reason: AiFailureReason; message: string };
 
 /** The result of a gap pass (§3.7): the refreshed completeness + the prioritized gaps (top-first). Non-persisted
  *  view — the coverage itself is persisted to `interview.enc`. */

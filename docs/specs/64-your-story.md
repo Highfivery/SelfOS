@@ -819,8 +819,8 @@ No open questions remain; the spec is Approved and ready for the Phase A slice (
   person-delete reaps receipts both directions. `buildDraftMarkdown`/`buildDraftHtml` + a `head:'draft'|'published'`
   export param so a never-published book exports its live draft; the two inline export buttons became one
   "Export…" dialog (format + version + vault-boundary line). See §13.7 R4 for the full build note + test coverage.
-- 2026-07-17 — **R3-polish (Shape editing surface, immersive look) BUILT** (`feat/story-shape-r3-polish`, PR
-  pending) — the three deferred visual refinements of the `ChapterReader` markup surface (§13.5), a restyle of the
+- 2026-07-17 — **R3-polish (Shape editing surface, immersive look) BUILT** (`feat/story-shape-r3-polish`, merged) —
+  the three deferred visual refinements of the `ChapterReader` markup surface (§13.5), a restyle of the
   existing/tested machinery with the `applyMarkup` call-count invariant + all markup RTL/E2E green: (1) provenance
   as **numbered `<sup>` footnotes** (keeps the `aria-label="Sources (N)"` popover trigger); (2) the pending-marks
   strip in an **absolute right-margin rail beside the ~70% measure at ≥900px** (a `@container` query over a
@@ -837,6 +837,12 @@ No open questions remain; the spec is Approved and ready for the Phase A slice (
   author-spine walk drives the pill → sheet → Apply, asserts the absolute rail at 1440px, and runs the 360px
   overflow guard with a pending mark on screen). Real-Electron visual QA at desktop + 360px, light + dark. See
   §13.7 R3-polish for the full note.
+- 2026-07-17 — **§13 R5 (Interview tab — life map + gaps) BUILT** (`feat/story-interview-tab`, PR pending) — the
+  gap pass now persists `lastGaps` (ids) + `lastPartCoverage` (a tolerant per-part model reading + a
+  written/reviewed fallback); a free `story:gaps` read + `story:askGap` (explicit mint honoring ≤1) +
+  `story:answeredCheckIns`; the rebuilt `InterviewTab` (completeness hero + a `LifeMap` per-part coverage bar with
+  a word text-equivalent + "Worth telling next" gap cards with "Ask me about this" + an "Answered" history block).
+  The answered-history chapter linkage is deferred (deterministic-only for now). See §13.7 R5 for the full note.
 
 ## 13. The Studio & the Book — the 2026-07-17 full-surface redesign (Approved)
 
@@ -1114,8 +1120,8 @@ lastPublishedAtSeen }` (one writer: the reader; additive schema). The author's S
     write is now best-effort (`.catch`) so an author-facing convenience can't break the reader's open flow — + the
     a11y nit (autoFocus the export dialog's primary button). A shared `--color-scrim` token to DRY the 3
     Story-local overlays is deferred to the R7 polish sweep.
-- **R3-polish — Shape editing surface, immersive look — BUILT** (2026-07-17, `feat/story-shape-r3-polish`, PR
-  pending): the three deferred visual refinements of the `ChapterReader` markup surface (§13.5), a restyle of the
+- **R3-polish — Shape editing surface, immersive look — BUILT** (2026-07-17, `feat/story-shape-r3-polish`, merged):
+  the three deferred visual refinements of the `ChapterReader` markup surface (§13.5), a restyle of the
   existing, tested machinery — the `applyMarkup` call-count invariant + every markup RTL/E2E stay green; the
   ribbon + Read⇄Shape toggle (R3b) are untouched. **(1) Numbered superscript sources** — the per-paragraph
   "Sources (N)" button becomes a footnote-numbered `<sup>` marker trailing the prose (the markdown flows inline so
@@ -1146,8 +1152,33 @@ lastPublishedAtSeen }` (one writer: the reader; additive schema). The author's S
   the pill + stacked rail are exercised at phone width). Real-Electron visual QA at desktop + 360px, light + dark
   (superscript ¹ + right-margin rail + centered sticky pill; the right-hand sheet grouped with its excerpts +
   Apply action; the 360px column fills + marks stack under the paragraph, no overflow).
-- **R5 — Interview tab**: persisted gaps + part coverage, `story:gaps`, the life map + text equivalent,
-  ask-a-gap, answered history, completeness hero.
+- **R5 — Interview tab — BUILT** (2026-07-17, `feat/story-interview-tab`, PR pending): the Interview tab
+  becomes the full life-map + gaps + ask-a-gap + answered-history experience. **Backend:** the gap pass now
+  **persists** its output — additive `StoryInterviewState.lastGaps` (each gap gets a stable `id` at persist time)
+  - `lastPartCoverage` (per-part 0..1), the prompt/schema gaining a tolerant per-part `partCoverage` read that
+    falls back to the deterministic written/reviewed ratio (`computePartCoverage`: reviewed = 1, written-not-
+    reviewed = 0.5, unwritten = 0). Three new reads/ops, all gated `story.own` + active-person-scoped: a **free**
+    `story:gaps` (`getStoryGaps` → `{gaps, partCoverage, lastGapPassAt, hasOpenCheckin}`, no AI); **`story:askGap`**
+    (`askGap` — the explicit, user-triggered mint of a check-in from a specific persisted gap, reusing the
+    `mintStoryCheckInFromTodo` self-send path and honoring the ≤1-open-check-in invariant — refuses while one is
+    genuinely open, proceeds once it resolves); and **`story:answeredCheckIns`** (`listAnsweredStoryCheckIns` —
+    submitted story-provenance assignments for this book, newest-first, deterministic). **Renderer:** the rebuilt
+    `InterviewTab` — the completeness hero, a **`LifeMap`** (one coverage bar per outline part + a **word** for how
+    richly told each era is, the §9 text equivalent, a labelled `progressbar`), the "Worth telling next" gap cards
+    with **"Ask me about this"** (disabled + explained while a check-in is open), and an **"Answered"** history
+    block; the store gained `gaps`/`answeredCheckIns` + `loadGaps`/`askGap`/`loadAnsweredCheckIns` (reset on person
+    switch). The **chapter-linkage** "wove into <chapter>" on the answered history is left for a later pass (the
+    field exists; deterministic-only for now). Additive schema, no version bump. Gate green: typecheck, lint,
+    format, **1441 core + 1288 desktop** unit (+`computePartCoverage`, +`getStoryGaps` persisted/fallback, +`askGap` mint/≤1-refusal/resolve/unknown-id, +`listAnsweredStoryCheckIns`; +a coreBridge gaps→askGap→answered
+    round-trip + Guest denial; +a Story RTL: life map + gap-card ask + answered history), **7 story E2E** (the
+    living-book walk now asserts the life map + a "Worth telling next" gap card after the pass). Real-Electron
+    visual QA (the completeness hero + life-map coverage bars + gap invitations + open-check-in state read clean).
+    code-reviewer **fix-first** — one should-fix applied (the "Ask me about this" UI now **single-flights** every
+    mint affordance: a gap ask / Find button disables while ANY mint is in flight [`busy || asking !== null`], so
+    a fast second click can't mint two open check-ins before the ≤1 flag catches up — the core `askGap` invariant
+    was sound but the UI didn't gate concurrent clicks) + the nits (per-item try/catch in `listAnsweredStoryCheckIns`
+    so a corrupt record skips instead of blanking the list; a life-map-staleness comment; the LifeMap progressbar
+    `aria-label` = the part title alone, the coverage word carried by `aria-valuetext` + the visible word).
 - **R6 — Photos tab**: gallery + inline Q&A + placement affordances + the corpus wiring fix (E2E:
   a photo answer provably reaches a captured generation prompt).
 - **R7 — Begin + polish**: invitation (`story:corpusStats`) + commission (specimens, live preview) +

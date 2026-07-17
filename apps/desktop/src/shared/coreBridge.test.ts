@@ -7219,7 +7219,24 @@ describe('createCoreBridge — Together (58) foundation', () => {
     // A second check while it's open → nothing minted (≤1).
     expect((await bridge.storyInterviewCheck({ bookId })).outcome).toBe('openCheckin');
 
-    // A Guest (no story.own) is denied both reads.
+    // The persisted gaps + per-part coverage render on the Interview tab with NO AI (§13.6.3/§13.6.4).
+    const gapsView = await bridge.storyGaps({ bookId });
+    expect(gapsView.gaps.length).toBeGreaterThan(0);
+    expect(gapsView.gaps[0]?.id.length).toBeGreaterThan(0);
+    expect(gapsView.partCoverage.length).toBeGreaterThan(0);
+    expect(gapsView.hasOpenCheckin).toBe(true);
+    // "Ask me about this" is refused while a check-in is already open (the ≤1 rule, §13.6.5).
+    expect((await bridge.storyAskGap({ bookId, gapId: gapsView.gaps[0]!.id })).ok).toBe(false);
+
+    // Answer the open check-in → it appears in the answered history (§13.6.5).
+    expect(await bridge.storyAnsweredCheckIns({ bookId })).toEqual([]);
+    await bridge.assignmentsSubmit({ assignmentId: first.assignmentId!, answers: [] });
+    const answered = await bridge.storyAnsweredCheckIns({ bookId });
+    expect(answered).toHaveLength(1);
+    expect(answered[0]?.assignmentId).toBe(first.assignmentId);
+    expect(answered[0]?.title.length).toBeGreaterThan(0);
+
+    // A Guest (no story.own) is denied every read.
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
@@ -7228,6 +7245,8 @@ describe('createCoreBridge — Together (58) foundation', () => {
       covered: 0,
     });
     expect((await bridge.storyInterviewCheck({ bookId })).outcome).toBe('noBook');
+    expect(await bridge.storyGaps({ bookId })).toMatchObject({ gaps: [], hasOpenCheckin: false });
+    expect(await bridge.storyAnsweredCheckIns({ bookId })).toEqual([]);
   });
 
   it('story: markup + refresh ops are denied for a person without story.own', async () => {

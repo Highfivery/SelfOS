@@ -60,6 +60,10 @@
   /* Elevation — used sparingly, only for floating surfaces (popovers, menus). */
   --shadow-overlay: 0 8px 24px rgb(0 0 0 / 0.1);
 
+  /* Scrim — the dim behind a centered modal/sheet. A soft warm-dark that reads the same in both themes
+     (a scrim darkens whatever's behind it regardless of theme), so it's defined once here. */
+  --color-scrim: rgb(15 12 9 / 0.34);
+
   /* Motion */
   --motion-fast: 120ms;
   --motion-base: 200ms;

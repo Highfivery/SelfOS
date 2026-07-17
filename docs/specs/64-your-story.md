@@ -842,7 +842,8 @@ No open questions remain; the spec is Approved and ready for the Phase A slice (
   written/reviewed fallback); a free `story:gaps` read + `story:askGap` (explicit mint honoring ≤1) +
   `story:answeredCheckIns`; the rebuilt `InterviewTab` (completeness hero + a `LifeMap` per-part coverage bar with
   a word text-equivalent + "Worth telling next" gap cards with "Ask me about this" + an "Answered" history block).
-  The answered-history chapter linkage is deferred (deterministic-only for now). See §13.7 R5 for the full note.
+  The answered-history chapter linkage was deferred here + BUILT in the §13 close-out (see the close-out entry
+  above). See §13.7 R5 for the full note.
 - 2026-07-17 — **§13 R6 (Photos tab + the corpus wiring fix) BUILT** (`feat/story-photos-corpus`, PR pending) —
   the §13.6.2 functional gap: `buildStoryCorpus` now takes a `bookId` and reads `interview.enc.photoAnswers`, so
   a photo's caption + answered Q&A finally feed the biographer (grouped one `photo`-kind corpus item per photo,
@@ -856,8 +857,16 @@ No open questions remain; the spec is Approved and ready for the Phase A slice (
   a cover mock + a specimen sentence that re-renders per style × voice, style as a card gallery), and the writing
   (essence line + an outline reveal + a "Browse SelfOS ›" exit). See §13.7 R7 for the full note. **§13 (The Studio
   & the Book) is now fully BUILT, R1–R7.**
+- 2026-07-17 — **§13 CLOSE-OUT — the two deferred follow-ups BUILT** (`feat/story-closeout`, PR pending). (1) The
+  **answered-history chapter linkage** (§13.6.5, deferred in R5): `listAnsweredStoryCheckIns` now derives "wove
+  into <chapter>" deterministically — an answered check-in → its analysis Insight (`provenance.assignmentId`) →
+  the earliest chapter whose paragraph provenance cites that insight — so the Interview tab's answered history
+  names the chapter each check-in wove into (absent, honestly, until the answer is analyzed + a citing chapter is
+  drafted). (2) The shared **`--color-scrim` token** (deferred R4-polish): the three Story overlays' hardcoded
+  scrim → one design-system token in `tokens.css`. With this, **§13 has NO remaining deferrals — it is 100%
+  complete.**
 
-## 13. The Studio & the Book — the 2026-07-17 full-surface redesign (BUILT, R1–R7)
+## 13. The Studio & the Book — the 2026-07-17 full-surface redesign (BUILT, R1–R7 — 100% complete)
 
 The approved mockup is the visual contract for this section; where prose and mockup disagree, the mockup
 wins. Everything below reuses the built §3–§5 machinery — this is a re-architecture of the _surface_, plus

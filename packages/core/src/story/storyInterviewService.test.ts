@@ -33,7 +33,13 @@ import {
   runStoryInterviewCadence,
 } from './storyInterviewService';
 import { generateChapter } from './storyGenerationService';
-import { applyFoundations, approveOutline, createBook, getInterviewState } from './storyService';
+import {
+  applyFoundations,
+  approveOutline,
+  createBook,
+  getInterviewState,
+  saveChapter,
+} from './storyService';
 
 const key = generateMasterKey();
 const now = new Date('2026-07-16T00:00:00.000Z');
@@ -601,5 +607,56 @@ describe('listAnsweredStoryCheckIns (64 §13.6.5)', () => {
     expect(answered).toHaveLength(1);
     expect(answered[0]?.assignmentId).toBe(minted.assignmentId);
     expect(answered[0]?.title.length).toBeGreaterThan(0);
+    // Not yet woven into any chapter (no insight/chapter cites it) → no chapter linkage.
+    expect(answered[0]?.wroteIntoChapterTitle).toBeUndefined();
+  });
+
+  it('links a check-in to the chapter it wove into (analysis insight → chapter provenance, §13.6.5)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    await runGapPass(deps(fs, fakeClient(gapJson)), { bookId });
+    const gaps = (await getStoryGaps(fs, key, 'me', bookId)).gaps;
+    const minted = await askGap(deps(fs, fakeClient(validQuestions)), {
+      bookId,
+      gapId: gaps[0]!.id,
+    });
+    if (!minted.ok) throw new Error('mint failed');
+    await updateAssignmentStatus(fs, key, minted.assignmentId, 'analyzed');
+
+    // Analyzing the answer produced this insight (stamped with the check-in's assignment id) …
+    await saveInsight(fs, key, {
+      id: 'ins-checkin',
+      schemaVersion: 1,
+      source: 'questionnaire',
+      subjectPersonId: 'me',
+      summary: 'A memory the check-in drew out.',
+      facts: [],
+      confidence: 'medium',
+      categories: [],
+      approved: true,
+      provenance: { at: '2026-07-16T00:00:00.000Z', assignmentId: minted.assignmentId },
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    // … and a chapter that draws on that insight cites it in its paragraph provenance.
+    await saveChapter(fs, key, 'me', bookId, {
+      id: 'ch-firstwords',
+      schemaVersion: 1,
+      partId: 'p1',
+      order: 0,
+      title: 'First Words',
+      markdown: 'He finally spoke. [[SRC handled]]',
+      revision: 1,
+      status: 'reviewed',
+      sourceSignature: '',
+      provenance: [{ anchor: 'p0', refs: [{ kind: 'insight', id: 'ins-checkin' }] }],
+      protectedBlocks: [],
+      pinnedQuotes: [],
+      imagePlacements: [],
+    });
+
+    const answered = await listAnsweredStoryCheckIns(fs, key, 'me', bookId);
+    expect(answered).toHaveLength(1);
+    expect(answered[0]?.wroteIntoChapterTitle).toBe('First Words');
   });
 });

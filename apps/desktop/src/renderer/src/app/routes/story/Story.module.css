@@ -800,7 +800,7 @@
 .sheetBackdrop {
   position: absolute;
   inset: 0;
-  background: rgb(15 12 9 / 0.34);
+  background: var(--color-scrim);
 }
 .sheetPanel {
   position: absolute;
@@ -871,7 +871,7 @@
   position: fixed;
   inset: 0;
   z-index: 40;
-  background: rgb(15 12 9 / 0.34);
+  background: var(--color-scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -909,7 +909,7 @@
 .dialogBackdrop {
   position: absolute;
   inset: 0;
-  background: rgb(15 12 9 / 0.34);
+  background: var(--color-scrim);
 }
 .dialog {
   position: relative;

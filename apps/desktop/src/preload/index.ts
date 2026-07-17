@@ -193,6 +193,14 @@ const bridge: SelfosBridge = {
       ipcRenderer.removeListener(IpcChannels.storyProgress, handler);
     };
   },
+  onImageProgress: (listener) => {
+    const handler = (_event: unknown, progress: unknown): void =>
+      listener(progress as Parameters<typeof listener>[0]);
+    ipcRenderer.on(IpcChannels.imageProgress, handler);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.imageProgress, handler);
+    };
+  },
   storySaveOutline: (input) => ipcRenderer.invoke(IpcChannels.storySaveOutline, input),
   storyApproveOutline: (input) => ipcRenderer.invoke(IpcChannels.storyApproveOutline, input),
   storyUpdate: (input) => ipcRenderer.invoke(IpcChannels.storyUpdate, input),

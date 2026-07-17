@@ -393,6 +393,21 @@ placing anything. Specifically:
   section, so a person never sees or answers them (the onboarding "Your circle" group hid four questions; the
   shared `@selfos/answering` form now opens all groups). Grouped-content forms get the §7 "full surface
   renders to the bottom" E2E guard.
+- **Realtime progress for EVERY AI generation (non-negotiable, the user has demanded this repeatedly and
+  angrily).** Any time AI generates ANYTHING the user waits on — images (cover/illustration/dream/vision),
+  text, chapters, analysis, dream synthesis, questionnaires — the UI MUST show **realtime progress**: a live
+  **phase** label of what's happening now, an **elapsed timer**, an **estimated time / ETA**, and a
+  determinate-or-phased affordance. A bare spinner, a "Working…" pill, or a static "Creating…" line is
+  UNACCEPTABLE (it reads as broken). Mirror the `story:progress` streaming pattern (bridge `emit*Progress`
+  event bound for the whole op → preload sub → renderer `DraftProgress`-style component with phase + timer +
+  ETA), subscribe at APP level so it survives navigation, and show a global indicator for background work.
+  Wire progress at the SAME time you add the AI call — never a follow-up. (See the memory
+  `ai-generation-realtime-progress`.)
+- **Surface a control WHERE the work happens, not only buried in Settings.** A control the user needs while
+  doing a task must be visible on the page where the task happens. Settings may hold the source-of-truth
+  setting (one synced value), but ALSO surface that same control (reading/writing the SAME setting — single
+  source of truth) inline where it's used (e.g. the global image style on the Your Story overview + the dream
+  panel, next to the generate actions), preferably as a compact inline affordance. (2026-07-16, forceful.)
 - **"Improve" means redesign, not relocate.** When asked to improve or move a component, actually
   redesign it for its new context — fit, density, space-conservation, cohesion with neighbours — don't
   just move the existing component. (E.g. the appearance control became a compact icon→popover in the
@@ -404,6 +419,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-16 — **Feedback + Build (two HARD durable UI rules + image-generation realtime progress + style-on-the-
+  Story-page; user FORCEFUL after repeated reminders; on `feat/image-generation-progress`, PR pending).** The user
+  (angry, repeat offense): (1) "ANY time AI is generating something like images or anything else, we MUST show
+  realtime updates, timer, est time, etc" and (2) "the image style for stories should be visible IN the stories
+  page, not only hidden deep within Settings." Captured BOTH as durable §12 rules + memories
+  ([[ai-generation-realtime-progress]], [[surface-controls-where-work-happens]]). **Built (1):** a generic
+  **`image:progress`** stream mirroring `story:progress` — core `generateStoryImage`/`generateDreamImage` gained an
+  `onPhase('composing'|'rendering')` callback fired around the two-provider flow (Claude distill → OpenAI render);
+  a new `ImageGenProgress` type + `BridgeHost.emitImageProgress`/`onImageProgress` + ipc `imageSender` binding (bound
+  for the whole generation) + preload sub + webHost/test stubs; the bridge handlers emit phases keyed by a surface
+  id (`story:<bookId>:cover` / `:ch:<id>` / `dream:<id>` / `photo:<bookId>:<id>`). A reusable **`ImageProgress`**
+  renderer (self-contained CSS module, `prefers-reduced-motion`-aware) shows the live \*\*phase label + elapsed timer
+  - ETA + an indeterminate bar** — wired into the story CoverPanel, ChapterReader "Illustrate this chapter",
+    DreamImagePanel, and PhotosPanel vision (vision is single-phase, carried by the timer alone). Replaces every bare
+    "Working…"/"Creating…" spinner. **Built (2):** the global `ImageStyleControl` (writing the same `dreams.imageStyle`
+    setting — single source of truth) now also renders **on the Your Story book overview** under Cover, with the "used
+    for every image" note. Gate green: typecheck, lint, format, **1413 core + 1264 desktop** unit (+`ImageProgress`
+    RTL [phase/timer/ETA/event-filtering], +a coreBridge assertion that a cover generation streams
+    `composing→rendering→done`), **7 story/dream/images E2E** (the cover walk asserts the progressbar + live phase +
+    "elapsed" render mid-generation via a new `SELFOS_FAKE_IMAGE_DELAY_MS` hook, + the Image-style control is on the
+    page). Real-Electron visual QA (the cover card shows "Creating your cover — Painting the image… · 0s elapsed ·
+    about 22s left"; the Image style dropdown sits under Cover). **Lesson: realtime progress is PART of building any
+    AI-generation surface, not a follow-up — a single `image:progress` channel + one reusable `ImageProgress`
+    component covers every image/vision surface; and a control the user needs mid-task (the image style) must be
+    surfaced where the work happens, reading/writing the same global setting, not only in Settings.\*\*
 - 2026-07-15 — **Build (Together: the "start a session" flow is now a centered MODAL, not an inline scroll-up bar —
   user-requested UI/UX improvement; SPEC 58 §3.3 amended; on `feat/together-start-modal`, PR pending).** The user:
   clicking a guided-practice card "displays a card section and has the user scroll up — awful UI/UX; a modal or

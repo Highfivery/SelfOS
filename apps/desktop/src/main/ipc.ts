@@ -64,6 +64,7 @@ export function registerIpcHandlers(): void {
   let intakeSender: WebContents | undefined;
   let togetherSender: WebContents | undefined;
   let storySender: WebContents | undefined;
+  let imageSender: WebContents | undefined;
   // E2E/dev: a deterministic in-memory relay (no real Cloudflare account/network), like SELFOS_FAKE_CLAUDE.
   const useFakeRelay = Boolean(process.env['SELFOS_FAKE_RELAY']);
   // E2E/dev: a deterministic update check (no real GitHub call). The env value is the latest version to
@@ -136,6 +137,11 @@ export function registerIpcHandlers(): void {
     emitStoryProgress: (progress) => {
       if (storySender && !storySender.isDestroyed()) {
         storySender.send(IpcChannels.storyProgress, progress);
+      }
+    },
+    emitImageProgress: (progress) => {
+      if (imageSender && !imageSender.isDestroyed()) {
+        imageSender.send(IpcChannels.imageProgress, progress);
       }
     },
     getBootState: currentBootState,
@@ -235,6 +241,7 @@ export function registerIpcHandlers(): void {
     onIntakeChunk: () => () => {},
     onTogetherChunk: () => () => {},
     onStoryProgress: () => () => {},
+    onImageProgress: () => () => {},
   };
 
   const bridge = createCoreBridge(host);
@@ -430,7 +437,21 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyExportMarkdown, bridge.storyExportMarkdown);
   handle(IpcChannels.storyExportPdf, bridge.storyExportPdf);
   handle(IpcChannels.storyImages, bridge.storyImages);
-  handle(IpcChannels.storyGenerateImage, bridge.storyGenerateImage);
+  // storyGenerateImage streams compose→render phase progress via emitImageProgress → IPC event, so the
+  // cover / illustration surface shows realtime status. Bound for the whole generation, reset when it resolves.
+  ipcMain.handle(IpcChannels.storyGenerateImage, async (event, raw: unknown) => {
+    imageSender = event.sender;
+    try {
+      return await bridge.storyGenerateImage(
+        raw as {
+          bookId: string;
+          target: { kind: 'cover' } | { kind: 'illustration'; chapterId: string };
+        },
+      );
+    } finally {
+      imageSender = undefined;
+    }
+  });
   handle(IpcChannels.storyGetImage, bridge.storyGetImage);
   handle(IpcChannels.storyDeleteImage, bridge.storyDeleteImage);
   handle(IpcChannels.storyUploadPhoto, bridge.storyUploadPhoto);
@@ -551,7 +572,15 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.dreamShareTargets, bridge.dreamShareTargets);
   handle(IpcChannels.dreamGetInsight, bridge.dreamGetInsight);
   handle(IpcChannels.dreamSetFactShare, bridge.dreamSetFactShare);
-  handle(IpcChannels.dreamGenerateImage, bridge.dreamGenerateImage);
+  // dreamGenerateImage streams compose→render phase progress via emitImageProgress (like story images).
+  ipcMain.handle(IpcChannels.dreamGenerateImage, async (event, raw: unknown) => {
+    imageSender = event.sender;
+    try {
+      return await bridge.dreamGenerateImage(raw as { dreamId: string });
+    } finally {
+      imageSender = undefined;
+    }
+  });
   handle(IpcChannels.dreamGetImage, bridge.dreamGetImage);
   handle(IpcChannels.dreamDeleteImage, bridge.dreamDeleteImage);
   handle(IpcChannels.dreamExportImage, bridge.dreamExportImage);

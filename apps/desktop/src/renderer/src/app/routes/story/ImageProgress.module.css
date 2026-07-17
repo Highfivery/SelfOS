@@ -1,0 +1,65 @@
+/* Realtime progress for a single AI image / vision generation (CLAUDE.md §12 — no bare spinner for AI work).
+   Self-contained so any route (story, dreams) can render it without dragging another route's styles. */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.spinner {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--color-accent);
+  border-top-color: transparent;
+  animation: image-progress-spin 0.9s linear infinite;
+}
+
+.track {
+  height: 8px;
+  background: var(--color-surface-alt);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.indeterminate {
+  height: 100%;
+  width: 40%;
+  background: var(--color-accent);
+  border-radius: 999px;
+  animation: image-progress-slide 1.3s ease-in-out infinite;
+}
+
+.meta {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  .indeterminate {
+    animation: none;
+  }
+  .indeterminate {
+    width: 100%;
+  }
+}
+
+@keyframes image-progress-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes image-progress-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}

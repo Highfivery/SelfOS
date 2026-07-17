@@ -10,6 +10,7 @@ import type {
   StoryBookTypeView,
   StoryChaptersResult,
   StoryDraftProgress,
+  ImageGenProgress,
   StoryChapterRef,
   StoryCreateInput,
   StoryEditPassageInput,
@@ -313,6 +314,7 @@ export const IpcChannels = {
   storyGenerateFoundations: 'story:generateFoundations',
   storyGenerateFullDraft: 'story:generateFullDraft',
   storyProgress: 'story:progress',
+  imageProgress: 'image:progress',
   storySaveOutline: 'story:saveOutline',
   storyApproveOutline: 'story:approveOutline',
   storyUpdate: 'story:update',
@@ -1073,6 +1075,9 @@ export interface SelfosBridge {
   storyGenerateFullDraft(input: { bookId: string }): Promise<StoryFoundationsResult>;
   /** Subscribe to Your Story draft progress (§3.2); the counterpart to the main-side `emitStoryProgress`. */
   onStoryProgress(listener: (progress: StoryDraftProgress) => void): () => void;
+  /** Subscribe to single-image / vision generation phase updates (compose → render / analyze) so every image
+   *  surface shows realtime progress; the counterpart to the main-side `emitImageProgress`. */
+  onImageProgress(listener: (progress: ImageGenProgress) => void): () => void;
   /** Save an edited outline during review (§3.2). Returns the updated manifest. */
   storySaveOutline(input: StoryOutlineInput): Promise<BookManifest | null>;
   /** Approve the (possibly edited) outline → move the book to `drafting` (§3.2). */

@@ -120,18 +120,21 @@ export function fakeImageClient(mode?: string): ImageClient {
         return Promise.reject(Object.assign(new Error('http'), { status: 401 }));
       return Promise.resolve();
     },
-    generate: (): Promise<ImageGenerateOutcome> => {
+    generate: async (): Promise<ImageGenerateOutcome> => {
       if (mode === 'refuse') {
-        return Promise.resolve({
+        return {
           ok: false,
           reason: 'REFUSED',
           message: 'OpenAI declined this image (content policy).',
-        });
+        };
       }
-      return Promise.resolve({
+      // Optional artificial render delay so an E2E can observe the realtime progress mid-generation.
+      const delayMs = Number(process.env['SELFOS_FAKE_IMAGE_DELAY_MS'] ?? 0);
+      if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+      return {
         ok: true,
         image: { bytes: new Uint8Array(Buffer.from(TINY_PNG_BASE64, 'base64')), mime: 'image/png' },
-      });
+      };
     },
   };
 }

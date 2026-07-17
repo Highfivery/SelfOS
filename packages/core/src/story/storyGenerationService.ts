@@ -122,9 +122,15 @@ export type FoundationsResult =
  */
 export async function generateFoundations(
   deps: AiDeps,
-  opts: { bookType: BookType; config: BookConfig; exclusions?: ExclusionItem[] },
+  opts: { bookId: string; bookType: BookType; config: BookConfig; exclusions?: ExclusionItem[] },
 ): Promise<FoundationsResult> {
-  const corpus = await buildStoryCorpus(deps.fs, deps.key, deps.personId, opts.exclusions ?? []);
+  const corpus = await buildStoryCorpus(
+    deps.fs,
+    deps.key,
+    deps.personId,
+    opts.bookId,
+    opts.exclusions ?? [],
+  );
   const system = buildBiographerSystem(opts.bookType, opts.config, corpus.personName);
   const user = buildFoundationsUserMessage(corpus, opts.bookType);
 
@@ -241,6 +247,7 @@ export async function generateChapter(
       deps.fs,
       deps.key,
       deps.personId,
+      args.bookId,
       await getExclusions(deps.fs, deps.key, deps.personId, args.bookId),
     ));
   const tagged = tagCorpusItems(corpus);
@@ -316,6 +323,7 @@ export async function generateBookChapters(
     deps.fs,
     deps.key,
     deps.personId,
+    bookId,
     await getExclusions(deps.fs, deps.key, deps.personId, bookId),
   );
 
@@ -431,7 +439,7 @@ export async function applyMarkup(
   }
 
   const exclusions = await getExclusions(deps.fs, deps.key, deps.personId, args.bookId);
-  const corpus = await buildStoryCorpus(deps.fs, deps.key, deps.personId, exclusions);
+  const corpus = await buildStoryCorpus(deps.fs, deps.key, deps.personId, args.bookId, exclusions);
   const tagged = tagCorpusItems(corpus);
   const tagToRef = new Map(tagged.map((t) => [t.tag, t.sourceRef]));
   const system = buildBiographerSystem(bookType, book.config, corpus.personName);

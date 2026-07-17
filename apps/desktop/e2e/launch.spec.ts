@@ -11533,8 +11533,9 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
   }
 });
 
-test('story (64): upload a photo, Claude vision proposes a caption + questions, answering feeds the biography', async () => {
+test('story (64): a photo answer feeds the biographer’s corpus — it reaches a captured generation prompt (§13.6.2)', async () => {
   test.setTimeout(60_000);
+  const promptDir = await mkdtemp(join(tmpdir(), 'selfos-e2e-prompt-'));
   const { userData, vault } = await seedReadyVault({
     'ai.enabled': true,
     'dreams.imageGenerationEnabled': true,
@@ -11543,7 +11544,12 @@ test('story (64): upload a photo, Claude vision proposes a caption + questions, 
   await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
   await secrets.set('openai.apiKey', 'sk-openai-e2e');
 
-  const app = await launch(userData);
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    // Disable the autonomous interview cadence so the MANUAL gap pass below runs with the full corpus (the auto
+    // cadence would otherwise mint a check-in on mount that blocks the manual pass via the ≤1-open invariant).
+    env: { ...e2eEnv(), SELFOS_FAKE_PROMPT_DIR: promptDir, SELFOS_FAKE_STORY_NO_CADENCE: '1' },
+  });
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Your Story' }).click();
@@ -11567,10 +11573,45 @@ test('story (64): upload a photo, Claude vision proposes a caption + questions, 
     await w.getByLabel('Who took this photo?').fill('My father did, in his workshop.');
     await w.getByRole('button', { name: 'Save answer' }).first().click();
     await expect(w.getByText(/My father did, in his workshop\./)).toBeVisible();
+
+    // ~360px: the redesigned Photos gallery (the content-heavy surface this slice introduces) renders with no
+    // horizontal overflow / inner scrollbar, WITH a photo card + an open Q&A input row on screen (the second
+    // vision question stays unanswered, so its TextInput + "Save answer" row is live) — CLAUDE.md §12.
+    await expect(w.getByLabel('What do you remember most about that day?')).toBeVisible();
+    await w.setViewportSize({ width: 360, height: 780 });
+    const photoOffenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(photoOffenders).toEqual([]);
+    await w.setViewportSize({ width: 1280, height: 800 });
+
+    // THE §13.6.2 WIRING FIX: the photo answer must now REACH the biographer. Run the gap pass ("Find what's
+    // missing"), which rebuilds the corpus + sends it to the model — and assert the answer is verbatim in the
+    // captured prompt. (Before the fix, `buildStoryCorpus` never read `interview.enc.photoAnswers`, so the
+    // answer persisted but never fed generation despite §3.7's promise.)
+    await w.getByRole('tab', { name: 'Interview' }).click();
+    await w.getByRole('button', { name: /Find what’s missing/ }).click();
+    // Wait until the gap pass actually ran (it writes the captured prompt) — deterministic, not a UI-text race.
+    await expect
+      .poll(async () => (await readdir(promptDir)).includes('story-gap-prompt.txt'), {
+        timeout: 15_000,
+      })
+      .toBe(true);
+    const gapPrompt = await readFile(join(promptDir, 'story-gap-prompt.txt'), 'utf8');
+    expect(gapPrompt).toContain('My father did, in his workshop.'); // the answer reached the corpus
+    expect(gapPrompt).toContain('A quiet afternoon in the workshop.'); // and so did the vision caption
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
     await rm(vault, { recursive: true, force: true });
+    await rm(promptDir, { recursive: true, force: true });
   }
 });
 

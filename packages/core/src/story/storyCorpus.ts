@@ -17,8 +17,10 @@ import {
   factSharedWithViewer,
   type ExclusionItem,
   type InsightSource,
+  type StoryPhotoAnswer,
   type StorySourceRef,
 } from '../schemas';
+import { getPhotoAnswers, getStoryImageIndex } from './storyService';
 
 /**
  * The Your Story corpus builder (64-your-story §5.1) — the deterministic, AI-free "read EVERYTHING about the
@@ -146,13 +148,15 @@ function makeExclusionFilter(
 }
 
 /**
- * Assemble the subject's complete story corpus. `exclusions` is the person's saved exclusion list (read from
- * `exclusions.enc` by the caller — an empty list when none). No AI, no writes.
+ * Assemble the subject's complete story corpus. `bookId` scopes the book-local sources (the photo Q&A in
+ * `interview.enc`); `exclusions` is the person's saved exclusion list (read from `exclusions.enc` by the
+ * caller — an empty list when none). No AI, no writes.
  */
 export async function buildStoryCorpus(
   fs: FileSystem,
   key: Uint8Array,
   personId: string,
+  bookId: string,
   exclusions: ExclusionItem[] = [],
 ): Promise<StoryCorpus> {
   const person = await getPerson(fs, key, personId);
@@ -279,7 +283,36 @@ export async function buildStoryCorpus(
     });
   }
 
-  // 7) Other people as characters — ONLY the facts they SHARE to this viewer (§5.1). The single gate
+  // 7) Photos the person ANSWERED about (§3.7) — one item per photo the person gave ≥1 answer for, holding its
+  //    caption + every answer (the answers are their verbatim, first-person words). This is the §13.6.2 wiring
+  //    gap the redesign audit found: §3.7 promised these feed generation, but the corpus never read them. A
+  //    photo that was only vision-captioned but never answered contributes NOTHING — a bare AI caption is the
+  //    model's guess, not the subject's words, so it's not fed back as "source material". Exclusion-filtered via
+  //    `add()` (a `source` exclusion on the imageId drops the photo). Book-scoped via `bookId`.
+  const photoAnswers = await safely(() => getPhotoAnswers(fs, key, personId, bookId), []);
+  if (photoAnswers.length > 0) {
+    const imageIndex = await safely(() => getStoryImageIndex(fs, key, personId, bookId), null);
+    const captionOf = new Map((imageIndex?.images ?? []).map((img) => [img.id, img.caption ?? '']));
+    const byImage = new Map<string, StoryPhotoAnswer[]>();
+    for (const answer of photoAnswers) {
+      byImage.set(answer.imageId, [...(byImage.get(answer.imageId) ?? []), answer]);
+    }
+    for (const [imageId, answers] of byImage) {
+      const caption = captionOf.get(imageId)?.trim() ?? '';
+      const qa = answers.map((a) => `${a.question} ${a.answer}`.trim()).filter((s) => s.length > 0);
+      const text = [caption ? `Photo — ${caption}` : 'A photo I shared', ...qa].join('. ');
+      const last = answers[answers.length - 1];
+      const at = last?.at;
+      add({
+        sourceRef: { kind: 'photo', id: imageId, ...(at ? { at } : {}) },
+        label: 'From a photo you shared',
+        text,
+        ...(at ? { date: at } : {}),
+      });
+    }
+  }
+
+  // 8) Other people as characters — ONLY the facts they SHARE to this viewer (§5.1). The single gate
   //    `factSharedWithViewer` (broadcast / per-person / relationship-type-scoped) excludes every restricted
   //    or flagged fact and everything not shared, so a related person's private data never enters the corpus.
   const relationships = await safely(() => listRelationships(fs, key), []);

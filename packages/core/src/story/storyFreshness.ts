@@ -69,6 +69,7 @@ export async function markStaleChapters(
     fs,
     key,
     personId,
+    bookId,
     await getExclusions(fs, key, personId, bookId),
   );
   let count = 0;

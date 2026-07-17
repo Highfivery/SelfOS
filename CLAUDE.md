@@ -419,6 +419,33 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-17 — **Build (Your Story R6 — Photos tab redesign + the photo-answers-reach-the-biographer wiring fix;
+  SPEC 64 §13.6.2/§13.7; on `feat/story-photos-corpus`, PR pending; part of the approved full-surface redesign).**
+  The sixth slice of the §13 rebuild. **The functional fix (§13.6.2 — a working-but-wrong gap the redesign audit
+  found):** §3.7 promised a photo's answered Q&A feeds generation, but `buildStoryCorpus` never read
+  `interview.enc.photoAnswers` — the answer persisted and fed nothing. Now `buildStoryCorpus(fs, key, personId,
+bookId, exclusions?)` takes a `bookId` and reads the photo answers + the image index, emitting **one corpus item
+  per photo the person ANSWERED about** (caption + every answered Q&A, `sourceRef.kind:'photo'`, exclusion-filtered
+  via `add()` so a `source` exclusion on the imageId drops it, book-scoped; a caption-only photo feeds nothing —
+  a bare AI caption is the model's guess, not the subject's words). Threaded `bookId` through all **six** callers
+  (generation foundations/chapter/revision, refresh, freshness, structure-pass, gap-pass); `generateFoundations`
+  gained `opts.bookId` (both bridge callers pass it). **No schema change** (`photoAnswers` + the image index
+  already existed). **The Photos tab redesign:** the vertical `photoRow` list → a responsive `.photoGrid` gallery
+  of cards (cover image at 4/3 · caption · a "N memories captured" accent chip · the answered Q&A inline ·
+  Caption-&-ask/Remove actions bottom-aligned), single-column at ≤480px — every accessible name/flow preserved so
+  the answering path is byte-unchanged. Gate green: typecheck, lint, format, **1444 core + 1293 desktop** unit (+3
+  `storyCorpus` [caption+answers feed as a `photo` item; source-exclusion drops it; book-scoped — B never picks up
+  A's answers]; +1 Story RTL [gallery renders caption + captured-memories chip + answer]; every `buildStoryCorpus`/
+  `generateFoundations` caller updated), **7 story E2E** — the photo E2E rewritten to **prove the fix**: upload →
+  vision caption + answer → "Find what's missing" → the captured gap prompt (`SELFOS_FAKE_PROMPT_DIR`) contains
+  the answer verbatim. Real-Electron visual QA at desktop (2-up gallery) + 360px (single column, no overflow).
+  **Lesson: an E2E that captures a generation prompt via the gap pass has to defeat the AUTONOMOUS interview
+  cadence — it fires on Studio mount, mints a check-in, and then the ≤1-open invariant BLOCKS the manual gap pass
+  so it never re-runs with the fresh corpus; the captured file ends up being the auto cadence's early prompt
+  (pre-photo-answer). Gate the auto cadence behind a main-only test hook (`SELFOS_FAKE_STORY_NO_CADENCE`, read via
+  a `globalThis` cast so shared coreBridge still typechecks under the web lib) and POLL the captured file — never
+  wait on a UI-text signal a static always-present description (\"Questions arrive in your Inbox…\") also matches,
+  which resolves the wait before the async pass has written anything.**
 - 2026-07-17 — **Fix (Questionnaires post-release follow-ups: sort/group float + softer attention pill + Received
   sort; user-reported on v0.33.0; SPEC 08 §3.1; on `fix/questionnaire-sort-grouping`, a worktree, PR pending).**
   Three issues after the tabs shipped. **(1) "Recently analyzed" left un-analyzed at the TOP.** Diagnosed (not a

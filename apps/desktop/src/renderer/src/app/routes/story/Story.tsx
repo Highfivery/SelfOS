@@ -771,78 +771,100 @@ function PhotosPanel({ bookId }: { bookId: string }): JSX.Element {
             Add a photo and your biographer can ask about the memory behind it — the answers become
             part of your story. Photos are never used to generate art.
           </Text>
-        ) : null}
-        {photos.map((p) => {
-          const answered = photoAnswers.filter((a) => a.imageId === p.id);
-          const asked = questions[p.id] ?? [];
-          const url = imageUrls[p.id];
-          return (
-            <div key={p.id} className={styles.photoRow}>
-              {url ? (
-                <img className={styles.photoThumb} src={url} alt={p.caption ?? 'Uploaded photo'} />
-              ) : null}
-              <Stack gap={1}>
-                {p.caption ? <Text size="sm">{p.caption}</Text> : null}
-                <Inline>
-                  <Button variant="ghost" disabled={busy} onClick={() => analyze(p.id)}>
-                    {p.caption ? 'Ask more' : 'Caption & ask about this'}
-                  </Button>
-                  <button
-                    type="button"
-                    className={styles.sourcesToggle}
-                    aria-label="Remove this photo"
-                    onClick={() => void deleteImage(bookId, p.id)}
-                  >
-                    Remove
-                  </button>
-                </Inline>
-                {analyzingId === p.id ? (
-                  <ImageProgress id={`photo:${bookId}:${p.id}`} kind="vision" />
-                ) : null}
-                {answered.map((a, i) => (
-                  <Text key={`ans-${i}`} tone="secondary" size="sm">
-                    <strong>{a.question}</strong> {a.answer}
-                  </Text>
-                ))}
-                {asked.map((q) => (
-                  <Field key={q} label={q}>
-                    {(fieldProps) => (
-                      <Inline>
-                        <TextInput
-                          {...fieldProps}
-                          value={drafts[`${p.id}:${q}`] ?? ''}
-                          onChange={(e) =>
-                            setDrafts((d) => ({ ...d, [`${p.id}:${q}`]: e.target.value }))
-                          }
-                          placeholder="Your answer…"
-                        />
-                        <Button
-                          disabled={busy || !(drafts[`${p.id}:${q}`] ?? '').trim()}
-                          onClick={async () => {
-                            const answer = (drafts[`${p.id}:${q}`] ?? '').trim();
-                            if (!answer) return;
-                            await answerPhoto(bookId, p.id, q, answer);
-                            setDrafts((d) => {
-                              const next = { ...d };
-                              delete next[`${p.id}:${q}`];
-                              return next;
-                            });
-                            setQuestions((qs) => ({
-                              ...qs,
-                              [p.id]: (qs[p.id] ?? []).filter((x) => x !== q),
-                            }));
-                          }}
-                        >
-                          Save answer
-                        </Button>
-                      </Inline>
+        ) : (
+          <div className={styles.photoGrid}>
+            {photos.map((p) => {
+              const answered = photoAnswers.filter((a) => a.imageId === p.id);
+              const asked = questions[p.id] ?? [];
+              const url = imageUrls[p.id];
+              return (
+                <div key={p.id} className={styles.photoCard}>
+                  {url ? (
+                    <img
+                      className={styles.photoCardImg}
+                      src={url}
+                      alt={p.caption ?? 'Uploaded photo'}
+                    />
+                  ) : (
+                    <div className={styles.photoCardImgFallback} aria-hidden="true" />
+                  )}
+                  <div className={styles.photoCardBody}>
+                    {p.caption ? (
+                      <Text size="sm" weight={500}>
+                        {p.caption}
+                      </Text>
+                    ) : (
+                      <Text size="sm" tone="tertiary">
+                        No caption yet
+                      </Text>
                     )}
-                  </Field>
-                ))}
-              </Stack>
-            </div>
-          );
-        })}
+                    {answered.length > 0 ? (
+                      <span className={styles.photoAnsweredChip}>
+                        {answered.length} {answered.length === 1 ? 'memory' : 'memories'} captured
+                      </span>
+                    ) : null}
+                    {answered.map((a, i) => (
+                      <Text key={`ans-${i}`} tone="secondary" size="sm">
+                        <strong>{a.question}</strong> {a.answer}
+                      </Text>
+                    ))}
+                    {analyzingId === p.id ? (
+                      <ImageProgress id={`photo:${bookId}:${p.id}`} kind="vision" />
+                    ) : null}
+                    {asked.map((q) => (
+                      <Field key={q} label={q}>
+                        {(fieldProps) => (
+                          <Inline>
+                            <TextInput
+                              {...fieldProps}
+                              value={drafts[`${p.id}:${q}`] ?? ''}
+                              onChange={(e) =>
+                                setDrafts((d) => ({ ...d, [`${p.id}:${q}`]: e.target.value }))
+                              }
+                              placeholder="Your answer…"
+                            />
+                            <Button
+                              disabled={busy || !(drafts[`${p.id}:${q}`] ?? '').trim()}
+                              onClick={async () => {
+                                const answer = (drafts[`${p.id}:${q}`] ?? '').trim();
+                                if (!answer) return;
+                                await answerPhoto(bookId, p.id, q, answer);
+                                setDrafts((d) => {
+                                  const next = { ...d };
+                                  delete next[`${p.id}:${q}`];
+                                  return next;
+                                });
+                                setQuestions((qs) => ({
+                                  ...qs,
+                                  [p.id]: (qs[p.id] ?? []).filter((x) => x !== q),
+                                }));
+                              }}
+                            >
+                              Save answer
+                            </Button>
+                          </Inline>
+                        )}
+                      </Field>
+                    ))}
+                    <Inline gap={2} className={styles.photoCardActions}>
+                      <Button variant="ghost" disabled={busy} onClick={() => analyze(p.id)}>
+                        {p.caption ? 'Ask more' : 'Caption & ask about this'}
+                      </Button>
+                      <button
+                        type="button"
+                        className={styles.sourcesToggle}
+                        aria-label="Remove this photo"
+                        onClick={() => void deleteImage(bookId, p.id)}
+                      >
+                        Remove
+                      </button>
+                    </Inline>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Stack>
     </Card>
   );

@@ -419,6 +419,28 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-17 — **Fix (Questionnaires post-release follow-ups: sort/group float + softer attention pill + Received
+  sort; user-reported on v0.33.0; SPEC 08 §3.1; on `fix/questionnaire-sort-grouping`, a worktree, PR pending).**
+  Three issues after the tabs shipped. **(1) "Recently analyzed" left un-analyzed at the TOP.** Diagnosed (not a
+  comparator bug — `sortSent` already sinks empty-`analyzedAt` entries): the Sent tab keeps fixed-lifecycle
+  status subgroups (Drafts → Awaiting → Answered → **Analyzed** last), and the sort only reorders WITHIN a group,
+  so the Analyzed group stayed pinned at the bottom regardless. **Asked the user** how sort + grouping should
+  interact (flat vs float-group vs toggle) → chose **keep groups, float the relevant group up**. New pure
+  **`orderSentGroups`** ranks each group by the max sort value among its entries (pre-sorted, so `entries[0]`);
+  the group carrying the sort's date floats to the top, groups with no such date sink, "Title" keeps lifecycle
+  order — so "Recently analyzed"/"Recently answered" put the Analyzed/Answered group first. **(2) The amber
+  attention count** (Received tab) was a harsh dark-yellow-on-black pill → new theme-aware
+  `--color-warning-subtle-bg`/`--color-warning-subtle-text` tokens (light + dark), a soft warm pill. **(3) The
+  Received tab had no sort** → added `sortReceived` (Recently received [default] · Recently answered · Title A–Z;
+  favourites pinned, missing-date items sink) + a sort `<select>` in its toolbar. Gate green: typecheck, lint,
+  format, **1423 core + 1299 desktop** unit (+`orderSentGroups` float/title, +`receivedSort` [3], +2 Questionnaires
+  RTL: group-float via `compareDocumentPosition` + the Received sort control), the redesign + author-scoped + 30
+  questionnaire/auto-checkin E2E green. Real-Electron visual QA (the soft amber "Received 1" + the Answered group
+  floated to the top under the default sort). **Lesson: a status-grouped list with a sort dropdown has a hidden
+  conflict — the sort only orders WITHIN groups, so a fixed group order silently overrides it; when the user
+  expects a sort to reorder the whole list, float the matching GROUP (rank groups by their max sort value), don't
+  just sort inside. And a `default`-sort RTL can't assert "lifecycle order" once the default sort itself reorders
+  groups — pick a neutral sort (`recent`) as the before-state to prove the reorder.**
 - 2026-07-17 — **Build (Questionnaires landing → a 3-tab surface + nav badge + toolbar spacing + Recently-analyzed
   sort; mockup approved FIRST; SPEC 08 §3.1; on `feat/questionnaires-tabs-nav`, a worktree, PR pending).** Four
   user-requested improvements, mockup (interactive Artifact in the app's real tokens) shown + 3 decisions locked via

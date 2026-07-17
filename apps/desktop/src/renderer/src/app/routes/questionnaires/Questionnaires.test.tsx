@@ -1701,4 +1701,86 @@ describe('Questionnaires', () => {
     expect(screen.getByRole('tab', { name: /Received/ })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tabpanel', { name: 'Received questionnaires' })).toBeInTheDocument();
   });
+
+  it('sorting by "Recently analyzed" floats the Analyzed group above un-analyzed groups (§3.1)', async () => {
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([sentDef('q1', 'Weekly mood'), sentDef('q2', 'Values recap')]),
+      questionnairesSendStates: () =>
+        Promise.resolve({
+          q1: { lastSentAt: '2026-06-10T00:00:00.000Z', total: 1 },
+          q2: { lastSentAt: '2026-06-09T00:00:00.000Z', total: 1 },
+        }),
+      questionnairesSentOverview: () =>
+        Promise.resolve({
+          q1: {
+            questionnaireId: 'q1',
+            lastSentAt: '2026-06-10T00:00:00.000Z',
+            recipients: [{ name: 'A', status: 'sent', answered: false }],
+            answeredCount: 0,
+            newResponses: 0,
+            analyzed: false,
+          },
+          q2: {
+            questionnaireId: 'q2',
+            lastSentAt: '2026-06-09T00:00:00.000Z',
+            recipients: [{ name: 'A', status: 'analyzed', answered: true }],
+            answeredCount: 1,
+            newResponses: 0,
+            analyzed: true,
+            answeredAt: '2026-06-10T09:00:00.000Z',
+            analyzedAt: '2026-06-11T09:00:00.000Z',
+            insightSummary: 'They value quality time.',
+          },
+        }),
+    });
+    renderApp();
+
+    // "Recently sent" ranks groups by send time — the awaiting one was sent latest, so Awaiting is on top…
+    await screen.findByRole('button', { name: /Awaiting responses/ });
+    await userEvent.selectOptions(screen.getByLabelText('Sort sent questionnaires'), 'recent');
+    const awaiting = screen.getByRole('button', { name: /Awaiting responses/ });
+    const analyzed = screen.getByRole('button', { name: /^Analyzed/ });
+    expect(
+      awaiting.compareDocumentPosition(analyzed) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // …sorting by "Recently analyzed" floats the Analyzed group to the top, above un-analyzed Awaiting.
+    await userEvent.selectOptions(screen.getByLabelText('Sort sent questionnaires'), 'analyzed');
+    const analyzed2 = screen.getByRole('button', { name: /^Analyzed/ });
+    const awaiting2 = screen.getByRole('button', { name: /Awaiting responses/ });
+    expect(
+      analyzed2.compareDocumentPosition(awaiting2) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('the Received tab has a sort control (defaulting to Recently received) (§3.3)', async () => {
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([]),
+      assignmentsInbox: () =>
+        Promise.resolve([
+          {
+            assignmentId: 'a1',
+            title: 'How we handle money',
+            type: 'general',
+            questionCount: 3,
+            status: 'sent',
+            privacy: 'standard',
+            senderName: 'Sam',
+            createdAt: '2026-06-10T00:00:00.000Z',
+            favorite: false,
+            answerable: true,
+            hasDraft: false,
+            fromSelf: false,
+          },
+        ]),
+    });
+    renderApp();
+
+    await userEvent.click(await screen.findByRole('tab', { name: /Received/ }));
+    const sort = (await screen.findByLabelText(
+      'Sort received questionnaires',
+    )) as HTMLSelectElement;
+    expect(sort.value).toBe('received');
+    expect(screen.getByRole('option', { name: 'Recently answered' })).toBeInTheDocument();
+  });
 });

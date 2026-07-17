@@ -63,3 +63,32 @@ export function sortSent(entries: SentEntry[], sort: SentSort): SentEntry[] {
     return sort === 'title' ? av.localeCompare(bv) : bv.localeCompare(av);
   });
 }
+
+/** One status group with its already-sorted entries. */
+export interface SentGroup {
+  status: SentStatus;
+  label: string;
+  entries: SentEntry[];
+}
+
+/**
+ * Order the status GROUPS for a time-based sort so the group whose entries carry that sort value floats up —
+ * e.g. "Recently analyzed" puts the Analyzed group first, un-analyzed groups (whose entries have no analyzed
+ * date) sink to the bottom. Without this the fixed lifecycle order (Drafts → Awaiting → Answered → Analyzed)
+ * would keep the un-analyzed groups on top no matter the sort. Each group's rank is the max sort value among
+ * its entries (they're pre-sorted descending, so `entries[0]`); an empty rank (no such date) sorts last.
+ * "Title" keeps the lifecycle order (a title implies no group ordering). Stable — equal ranks keep the
+ * original (lifecycle) order.
+ */
+export function orderSentGroups(groups: SentGroup[], sort: SentSort): SentGroup[] {
+  if (sort === 'title') return groups;
+  const rankOf = (g: SentGroup): string => (g.entries[0] ? sortValue(g.entries[0], sort) : '');
+  return [...groups].sort((a, b) => {
+    const ra = rankOf(a);
+    const rb = rankOf(b);
+    if (ra === rb) return 0;
+    if (!ra) return 1; // a has no date for this sort → below b
+    if (!rb) return -1; // b has no date → below a
+    return rb.localeCompare(ra); // most recent group first
+  });
+}

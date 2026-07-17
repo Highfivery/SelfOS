@@ -26,6 +26,7 @@ import { SentCard } from './SentCard';
 import { ReceivedCard } from './ReceivedCard';
 import {
   matchesQuery,
+  orderSentGroups,
   SENT_GROUPS,
   sentStatusOf,
   sortSent,
@@ -33,6 +34,7 @@ import {
   type SentSort,
   type SentStatus,
 } from './sentGrouping';
+import { sortReceived, type ReceivedSort } from './receivedSort';
 import styles from './Questionnaires.module.css';
 
 type Selection =
@@ -135,6 +137,7 @@ export function Questionnaires(): JSX.Element {
   const [sentSort, setSentSort] = useState<SentSort>('answered');
   const [recvSearch, setRecvSearch] = useState('');
   const [recvFilter, setRecvFilter] = useState('all');
+  const [recvSort, setRecvSort] = useState<ReceivedSort>('received');
 
   const removeSuggestion = (from?: { recipientPersonId: string; suggestionId: string }): void => {
     if (!from) return;
@@ -220,22 +223,26 @@ export function Questionnaires(): JSX.Element {
       matchesQuery(e.questionnaire, sentSearch) &&
       (sentFilter === 'all' || sentStatusOf(e) === sentFilter),
   );
-  const groups = SENT_GROUPS.map((g) => ({
-    ...g,
-    entries: sortSent(
-      filteredSent.filter((e) => sentStatusOf(e) === g.status),
-      sentSort,
-    ),
-  })).filter((g) => g.entries.length > 0);
+  const groups = orderSentGroups(
+    SENT_GROUPS.map((g) => ({
+      ...g,
+      entries: sortSent(
+        filteredSent.filter((e) => sentStatusOf(e) === g.status),
+        sentSort,
+      ),
+    })).filter((g) => g.entries.length > 0),
+    sentSort,
+  );
 
   const received = inboxItems.filter((i) => !i.fromSelf);
-  const filteredReceived = received
-    .filter(
+  const filteredReceived = sortReceived(
+    received.filter(
       (i) =>
         (i.title.toLowerCase().includes(recvSearch.trim().toLowerCase()) || !recvSearch.trim()) &&
         receivedFilterMatch(i, recvFilter),
-    )
-    .sort((a, b) => (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0));
+    ),
+    recvSort,
+  );
 
   const hasSent = entries.length > 0;
   const hasReceived = received.length > 0;
@@ -521,6 +528,16 @@ export function Questionnaires(): JSX.Element {
                     <option value="new">New</option>
                     <option value="inProgress">In progress</option>
                     <option value="submitted">Submitted</option>
+                  </select>
+                  <select
+                    className={styles.tbSelect}
+                    aria-label="Sort received questionnaires"
+                    value={recvSort}
+                    onChange={(e) => setRecvSort(e.target.value as ReceivedSort)}
+                  >
+                    <option value="received">Recently received</option>
+                    <option value="answered">Recently answered</option>
+                    <option value="title">Title A–Z</option>
                   </select>
                 </div>
               ) : null}

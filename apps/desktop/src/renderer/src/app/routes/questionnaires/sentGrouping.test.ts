@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Questionnaire } from '@shared/channels';
-import { matchesQuery, sentStatusOf, sortSent, type SentEntry } from './sentGrouping';
+import {
+  matchesQuery,
+  orderSentGroups,
+  sentStatusOf,
+  sortSent,
+  type SentEntry,
+  type SentGroup,
+} from './sentGrouping';
 
 function q(over: Partial<Questionnaire> = {}): Questionnaire {
   return {
@@ -127,5 +134,43 @@ describe('sortSent', () => {
     const y = withOverview('Y', '2026-06-03T00:00:00.000Z', '2026-06-08T00:00:00.000Z');
     expect(sortSent([x, y], 'answered').map((e) => e.questionnaire.title)).toEqual(['X', 'Y']);
     expect(sortSent([x, y], 'analyzed').map((e) => e.questionnaire.title)).toEqual(['Y', 'X']);
+  });
+});
+
+describe('orderSentGroups', () => {
+  const group = (status: SentGroup['status'], analyzedAt?: string): SentGroup => ({
+    status,
+    label: status,
+    entries: [
+      {
+        questionnaire: q({ title: status }),
+        isDraft: false,
+        sendState: { lastSentAt: '2026-06-01T00:00:00.000Z', total: 1 },
+        overview: {
+          questionnaireId: status,
+          lastSentAt: '2026-06-01T00:00:00.000Z',
+          recipients: [{ name: 'A', status: 'submitted', answered: true }],
+          answeredCount: 1,
+          newResponses: 0,
+          analyzed: analyzedAt !== undefined,
+          ...(analyzedAt ? { analyzedAt } : {}),
+        },
+      },
+    ],
+  });
+
+  it('floats the group carrying the sort date to the top; groups without it sink to the bottom', () => {
+    // Lifecycle input order: awaiting (no analyzed date) before analyzed.
+    const input = [group('awaiting'), group('analyzed', '2026-06-08T00:00:00.000Z')];
+    // Sorting by "Recently analyzed" floats the Analyzed group up, awaiting (no date) to the bottom.
+    expect(orderSentGroups(input, 'analyzed').map((g) => g.status)).toEqual([
+      'analyzed',
+      'awaiting',
+    ]);
+  });
+
+  it('keeps the lifecycle order for the "title" sort (a title implies no group ordering)', () => {
+    const input = [group('awaiting'), group('analyzed', '2026-06-08T00:00:00.000Z')];
+    expect(orderSentGroups(input, 'title').map((g) => g.status)).toEqual(['awaiting', 'analyzed']);
   });
 });

@@ -88,6 +88,8 @@
   /* Feedback — light */
   --color-success: #5e8c6a;
   --color-warning: #c28a3e;
+  --color-warning-subtle-bg: #f4ead4;
+  --color-warning-subtle-text: #8a6524;
   --color-danger: #c25b4e;
   --color-danger-subtle-bg: #f7e6e3;
   --color-info: #4f7388;
@@ -119,6 +121,8 @@
 
   --color-success: #8fb89a;
   --color-warning: #e0b36b;
+  --color-warning-subtle-bg: #3a3120;
+  --color-warning-subtle-text: #e0b36b;
   --color-danger: #e08c7f;
   --color-danger-subtle-bg: #3a2a27;
   --color-info: #94b2c6;

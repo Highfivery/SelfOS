@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.33.0](https://github.com/Highfivery/SelfOS/compare/v0.32.0...v0.33.0) (2026-07-17)
+
+
+### Features
+
+* **questionnaires:** tabbed landing + nav badge + spaced toolbar + recently-analyzed sort ([#236](https://github.com/Highfivery/SelfOS/issues/236)) ([f4520f2](https://github.com/Highfivery/SelfOS/commit/f4520f2a0375521bc367c0ce8e5f652670c77845))
+* **story:** the Studio & the Book — R1 (Studio IA) redesign (64 §13) ([#231](https://github.com/Highfivery/SelfOS/issues/231)) ([7f391c5](https://github.com/Highfivery/SelfOS/commit/7f391c5de7c78ca508ec7005f5b33a3846956e11))
+* **story:** the Studio & the Book — R2 (immersive Book reader) (64 §13.7) ([#233](https://github.com/Highfivery/SelfOS/issues/233)) ([d17ce69](https://github.com/Highfivery/SelfOS/commit/d17ce69191d3f63bd3977ee5cf5ab91e5de5a641))
+* **story:** the Studio & the Book — R3 (Shape ribbon, What-changed diff, Read⇄Shape toggle) (64 §13.7) ([#234](https://github.com/Highfivery/SelfOS/issues/234)) ([dc7baed](https://github.com/Highfivery/SelfOS/commit/dc7baed4335914e9f9dbb7aeead078b9493cf665))
+
 ## [0.32.0](https://github.com/Highfivery/SelfOS/compare/v0.31.0...v0.32.0) (2026-07-17)
 
 

@@ -60,6 +60,17 @@ describe('BookType registry (64)', () => {
     expect(BIOGRAPHY_BOOK_TYPE.interview.framing).toMatch(/no right or wrong answers/i);
   });
 
+  it('every style preset carries a first- and third-person specimen (§13.3 live preview)', () => {
+    for (const type of BOOK_TYPES) {
+      for (const preset of type.stylePresets) {
+        expect(preset.specimen.first.trim().length).toBeGreaterThan(0);
+        expect(preset.specimen.third.trim().length).toBeGreaterThan(0);
+        // The two voices genuinely differ (so switching voice actually re-renders the preview).
+        expect(preset.specimen.first).not.toBe(preset.specimen.third);
+      }
+    }
+  });
+
   it('the doctrine states the load-bearing craft rules and forbids the AI-prose tells', () => {
     const d = BIOGRAPHY_BOOK_TYPE.doctrine.toLowerCase();
     // Craft anchors

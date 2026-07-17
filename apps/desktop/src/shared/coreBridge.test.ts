@@ -6766,6 +6766,36 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(await bridge.storyReadOwnBook({ bookId: 'x' })).toBeNull();
   });
 
+  it('story: corpusStats is a gated, person-scoped no-AI read (§13.6.10)', async () => {
+    const { bridge } = await freshOwner();
+    // An owner with no material yet gets a valid zeroed shape.
+    expect(await bridge.storyCorpusStats()).toEqual({
+      conversations: 0,
+      reflections: 0,
+      dreams: 0,
+    });
+    // Saving a dream is reflected in the counts.
+    await bridge.dreamSave({
+      narrative: 'A quiet field at dusk.',
+      title: 'The field',
+      lucid: false,
+      nightmare: false,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+    });
+    expect((await bridge.storyCorpusStats()).dreams).toBe(1);
+    // A Guest (no story.own) gets zeros — the read is gated, and it's scoped to the active person's material.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.storyCorpusStats()).toEqual({
+      conversations: 0,
+      reflections: 0,
+      dreams: 0,
+    });
+  });
+
   it('story: markup layer — mark, instant edit/pin, apply the batch revision', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });

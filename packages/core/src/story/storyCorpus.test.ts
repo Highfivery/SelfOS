@@ -16,7 +16,8 @@ import {
   type Relationship,
 } from '../schemas';
 import { writeEncryptedJson } from '../vault';
-import { buildStoryCorpus, corpusText } from './storyCorpus';
+import { saveConversation } from '../conversations/conversationService';
+import { buildStoryCorpus, corpusText, getStoryCorpusStats } from './storyCorpus';
 import { addPhotoAnswer, addUploadedPhoto, setStoryImageAnalysis } from './storyService';
 
 const key = generateMasterKey();
@@ -422,6 +423,47 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
     expect(text).toContain('a commitment I want to keep'); // own Together twin included
     expect(text).not.toContain('a private together fact of angels'); // partner's non-shared fact absent
     expect(text).not.toContain("angel's own together reflection");
+  });
+
+  it('getStoryCorpusStats counts sessions/reflections/dreams + a year span (§13.6.10)', async () => {
+    const fs = fresh();
+    await savePerson(fs, key, person('me', 'Ben'));
+    await saveConversation(fs, key, {
+      id: 'conv-1',
+      schemaVersion: 1,
+      personId: 'me',
+      title: 'A session',
+      createdAt: '2019-03-01T00:00:00.000Z',
+      updatedAt: '2019-03-01T00:00:00.000Z',
+      messages: [],
+    });
+    await saveInsight(
+      fs,
+      key,
+      insight('i-1', 'me', { provenance: { at: '2022-05-01T00:00:00.000Z' } }),
+    );
+    await saveInsight(
+      fs,
+      key,
+      insight('i-2', 'me', { provenance: { at: '2026-07-01T00:00:00.000Z' } }),
+    );
+    // A NON-approved insight is not counted (only approved reflections feed the biographer).
+    await saveInsight(fs, key, insight('i-draft', 'me', { approved: false }));
+    await saveDream(fs, key, dream('d-1', 'me', { dreamDate: '2020-01-01T00:00:00.000Z' }));
+
+    const stats = await getStoryCorpusStats(fs, key, 'me');
+    expect(stats.conversations).toBe(1);
+    expect(stats.reflections).toBe(2); // the two approved, not the draft
+    expect(stats.dreams).toBe(1);
+    expect(stats.yearFrom).toBe(2019); // the session
+    expect(stats.yearTo).toBe(2026); // the latest insight
+  });
+
+  it('getStoryCorpusStats returns zeros + no year span for an empty vault', async () => {
+    const fs = fresh();
+    await savePerson(fs, key, person('me', 'Ben'));
+    const stats = await getStoryCorpusStats(fs, key, 'me');
+    expect(stats).toEqual({ conversations: 0, reflections: 0, dreams: 0 });
   });
 
   it("surfaces the subject's own profile and name", async () => {

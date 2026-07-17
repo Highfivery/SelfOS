@@ -11259,13 +11259,44 @@ test('story (64): setup names the book, outline rename, chapters + sources, mark
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Your Story' }).click();
-    await w.getByRole('button', { name: 'Start your story' }).click();
+    // ~360px: the invitation (book-cover hero + promise cards + chips) stacks with no horizontal overflow (§12).
+    await expect(w.getByRole('button', { name: 'Begin your book' })).toBeVisible();
+    await w.setViewportSize({ width: 360, height: 900 });
+    const invitationOffenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(invitationOffenders).toEqual([]);
+    await w.setViewportSize({ width: 1280, height: 800 });
+    await w.getByRole('button', { name: 'Begin your book' }).click();
 
-    // Feedback changes: the Style control offers more than the original three registers; the title is optional
-    // (Create is enabled with it blank); Full is the default length.
-    const style = w.getByRole('combobox', { name: 'Style' });
-    expect(await style.locator('option').count()).toBeGreaterThan(3);
-    await style.selectOption({ label: 'Cinematic' });
+    // The commission (§13.3): the Style control is a card gallery (radiogroup) offering more than the original
+    // three registers; a live preview rail shows how the biographer will sound; the title is optional (Create is
+    // enabled with it blank); Full is the default length.
+    await expect(w.getByText('How your biographer will sound')).toBeVisible();
+    const styleGroup = w.getByRole('radiogroup', { name: 'Style' });
+    expect(await styleGroup.getByRole('radio').count()).toBeGreaterThan(3);
+    await w.getByRole('radio', { name: 'Cinematic' }).click();
+    // ~360px: the commission (form + preview rail + card galleries) stacks with no horizontal overflow (§12).
+    await w.setViewportSize({ width: 360, height: 900 });
+    const commissionOffenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(commissionOffenders).toEqual([]);
+    await w.setViewportSize({ width: 1280, height: 800 });
     const create = w.getByRole('button', { name: /Create .* draft the outline/ });
     await expect(create).toBeEnabled();
     await create.click();
@@ -11374,7 +11405,7 @@ test('story (64): living book — refresh proposes a structural change, approvin
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Your Story' }).click();
-    await w.getByRole('button', { name: 'Start your story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
     await w.getByRole('textbox', { name: 'Title' }).fill('Living Book');
     await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
     // One-flow draft (no outline gate): read + outline (auto-approved) + every chapter, landing on the book.
@@ -11462,7 +11493,7 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Your Story' }).click();
-    await w.getByRole('button', { name: 'Start your story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
     await w.getByRole('textbox', { name: 'Title' }).fill('Shared Life');
     await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
     // One-flow draft (no outline gate): read + outline (auto-approved) + every chapter, landing on the book.
@@ -11589,7 +11620,7 @@ test('story (64): a photo answer feeds the biographer’s corpus — it reaches 
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Your Story' }).click();
-    await w.getByRole('button', { name: 'Start your story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
     await w.getByRole('textbox', { name: 'Title' }).fill('Photo Book');
     await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
     // One-flow draft (no outline gate): read + outline (auto-approved) + every chapter, landing on the book.
@@ -11664,7 +11695,7 @@ test('story (64): the Studio tabs deep-link, and the Danger zone deletes only af
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Your Story' }).click();
-    await w.getByRole('button', { name: 'Start your story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
     await w.getByRole('textbox', { name: 'Title' }).fill('Studio Book');
     await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
     // Lands on the Studio (Chapters tab default): the hero title + the chapter grid.
@@ -11700,7 +11731,7 @@ test('story (64): the Studio tabs deep-link, and the Danger zone deletes only af
     await del.click();
 
     // The book is gone → back to the empty landing (decrypt-level: no books remain for the owner).
-    await expect(w.getByRole('button', { name: 'Start your story' })).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Begin your book' })).toBeVisible();
     await expect.poll(async () => (await listBooks(fs, key, 'owner-1')).length).toBe(0);
   } finally {
     await app.close();
@@ -11719,7 +11750,7 @@ test('story (64): the owner reads their own book in the immersive reader — fro
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Your Story' }).click();
-    await w.getByRole('button', { name: 'Start your story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
     await w.getByRole('textbox', { name: 'Title' }).fill('The Reading Book');
     await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
 
@@ -11789,7 +11820,7 @@ test('story (64): the draft shows live progress, keeps writing in the background
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Your Story' }).click();
-    await w.getByRole('button', { name: 'Start your story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
     await w.getByRole('textbox', { name: 'Title' }).fill('Background Book');
     await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
 

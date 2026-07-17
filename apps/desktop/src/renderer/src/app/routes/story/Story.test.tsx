@@ -154,13 +154,13 @@ afterEach(() => {
 });
 
 describe('Story (64)', () => {
-  it('shows the empty state with a Start your story action', async () => {
+  it('shows the invitation empty state with a Begin your book action', async () => {
     installMockBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]),
     });
     renderStory();
-    expect(await screen.findByRole('button', { name: 'Start your story' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Begin your book' })).toBeInTheDocument();
   });
 
   it('setup drafts the whole book end-to-end and lands on the overview (no outline-review gate)', async () => {
@@ -172,7 +172,7 @@ describe('Story (64)', () => {
       storyGenerateFullDraft: () => Promise.resolve({ ok: true, bundle: writtenBundle() }),
     });
     renderStory();
-    await userEvent.click(await screen.findByRole('button', { name: 'Start your story' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Begin your book' }));
     expect(await screen.findByLabelText('Title')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Create .* draft the outline/ }));
     // No outline-review gate — it drafts straight through to the finished, editable book.
@@ -186,7 +186,7 @@ describe('Story (64)', () => {
       storyList: () => Promise.resolve([]),
     });
     renderStory();
-    await screen.findByRole('button', { name: 'Start your story' });
+    await screen.findByRole('button', { name: 'Begin your book' });
     act(() =>
       useStoryStore.setState({
         progress: {
@@ -219,9 +219,9 @@ describe('Story (64)', () => {
       storyGenerateFullDraft: () => Promise.resolve({ ok: true, bundle: writtenBundle() }),
     });
     renderStory();
-    await userEvent.click(await screen.findByRole('button', { name: 'Start your story' }));
-    // A new style register is offered in the Style dropdown.
-    expect(await screen.findByRole('option', { name: 'Cinematic' })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Begin your book' }));
+    // A new style register is offered in the Style card gallery.
+    expect(await screen.findByRole('radio', { name: 'Cinematic' })).toBeInTheDocument();
     // The Create button is enabled with NO title typed — blank means the AI names it.
     const create = screen.getByRole('button', { name: /Create .* draft the outline/ });
     expect(create).toBeEnabled();
@@ -229,6 +229,72 @@ describe('Story (64)', () => {
     await waitFor(() => expect(createdWith).not.toBeNull());
     expect(createdWith!.title).toBe(''); // left blank → the biographer proposes one
     expect(createdWith!.config.length).toBe('full'); // Full is the default for a biography
+  });
+
+  it('invitation: shows the three-step promise + a "Drawn from" chip row with real counts (§13.3)', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([]),
+      storyCorpusStats: () =>
+        Promise.resolve({
+          conversations: 3,
+          reflections: 5,
+          dreams: 2,
+          yearFrom: 2019,
+          yearTo: 2026,
+        }),
+    });
+    renderStory();
+    expect(await screen.findByRole('button', { name: 'Begin your book' })).toBeInTheDocument();
+    expect(screen.getByText('It reads')).toBeInTheDocument();
+    expect(screen.getByText('It keeps writing')).toBeInTheDocument();
+    // The "Drawn from" chips reflect the deterministic corpus counts + the year span.
+    expect(await screen.findByText('3 sessions')).toBeInTheDocument();
+    expect(screen.getByText('5 reflections')).toBeInTheDocument();
+    expect(screen.getByText('2019–2026')).toBeInTheDocument();
+  });
+
+  it('commission: the live preview specimen changes with the chosen style (§13.3)', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([]),
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Begin your book' }));
+    // The default (Warm) specimen is on screen; the preview rail is labelled "How your biographer will sound".
+    expect(screen.getByText('How your biographer will sound')).toBeInTheDocument();
+    expect(await screen.findByText(/porch light on/)).toBeInTheDocument();
+    // Picking the Cinematic style card re-renders the specimen.
+    await userEvent.click(screen.getByRole('radio', { name: 'Cinematic' }));
+    expect(await screen.findByText(/Rain on the windshield/)).toBeInTheDocument();
+    expect(screen.queryByText(/porch light on/)).not.toBeInTheDocument();
+  });
+
+  it('writing: the outline reveals itself as a chapter list with a "Browse SelfOS" exit (§13.3)', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([]),
+    });
+    renderStory();
+    await screen.findByRole('button', { name: 'Begin your book' });
+    act(() =>
+      useStoryStore.setState({
+        bundle: bundle(true),
+        progress: {
+          bookId: 'b1',
+          phase: 'writing',
+          chaptersDone: 0,
+          chaptersTotal: 1,
+          currentTitle: 'The Garage',
+          startedAt: Date.now() - 3000,
+          scope: 'create',
+        },
+      }),
+    );
+    // The outline reveal names the chapter (not an anonymous dot) and offers the background-browse exit.
+    const chapters = await screen.findByRole('list', { name: 'Chapters' });
+    expect(within(chapters).getByText('The Garage')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Browse SelfOS ›' })).toBeInTheDocument();
   });
 
   it('renames the book from the overview (title editable in place, no outline gate)', async () => {
@@ -311,7 +377,7 @@ describe('Story (64)', () => {
         Promise.resolve({ ok: false, reason: 'AI_OFF', message: 'Turn on AI in Settings.' }),
     });
     renderStory();
-    await userEvent.click(await screen.findByRole('button', { name: 'Start your story' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Begin your book' }));
     await userEvent.click(
       await screen.findByRole('button', { name: /Create .* draft the outline/ }),
     );

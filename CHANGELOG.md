@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.32.0](https://github.com/Highfivery/SelfOS/compare/v0.31.0...v0.32.0) (2026-07-17)
+
+
+### Features
+
+* **people:** expand relationship types (extended family, in-laws, step & social) ([#229](https://github.com/Highfivery/SelfOS/issues/229)) ([9de916e](https://github.com/Highfivery/SelfOS/commit/9de916ed4af6eeabd5b5f0091719c34f309dd6eb))
+
 ## [0.31.0](https://github.com/Highfivery/SelfOS/compare/v0.30.0...v0.31.0) (2026-07-17)
 
 

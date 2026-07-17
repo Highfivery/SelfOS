@@ -324,3 +324,75 @@ export async function readSharedImage(
   const bytes = await getPublishedImageBytes(fs, key, authorPersonId, bookId, imageId);
   return bytes ? { bytes, mime: entry.mime } : null;
 }
+
+/**
+ * The OWNER reading their OWN book as a book (§13.5) — the same `StoryReaderView` shape the shared reader uses
+ * (so the reader renderer is unified), built from the DRAFT head: a synthetic manifest with a LIVE honesty note
+ * + per-chapter status + pinned quotes. It's the person's own data, so the full projection is safe (unlike the
+ * cross-person minimal projection in `readSharedBook`). Returns null when the book/outline isn't there yet.
+ */
+export async function readOwnBook(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<StoryReaderView | null> {
+  const book = await getBook(fs, key, personId, bookId);
+  if (!book) return null;
+  const outline = await getOutline(fs, key, personId, bookId);
+  if (!outline) return null;
+  const written = new Map(
+    (await listChapters(fs, key, personId, bookId))
+      .filter((c) => c.markdown.trim().length > 0)
+      .map((c) => [c.id, c]),
+  );
+
+  // Parts + order from the OUTLINE, keeping only chapters that are actually written (so an unwritten shell never
+  // shows a blank chapter to the reader).
+  const parts: PublishedPart[] = outline.parts
+    .map((part) => ({
+      id: part.id,
+      title: part.title,
+      chapterIds: part.chapters
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .filter((c) => written.has(c.id))
+        .map((c) => c.id),
+    }))
+    .filter((p) => p.chapterIds.length > 0);
+  const chapterOrder = parts.flatMap((p) => p.chapterIds);
+  const orderedChapters = chapterOrder.map((id) => written.get(id)!).filter(Boolean);
+
+  const chapters: ReaderChapter[] = orderedChapters.map((c) => ({
+    id: c.id,
+    title: c.title,
+    markdown: c.markdown,
+    imagePlacements: c.imagePlacements,
+    status: c.status,
+    pinnedQuotes: c.pinnedQuotes,
+  }));
+
+  const index = await getStoryImageIndex(fs, key, personId, bookId);
+  const manifest: PublishedManifest = {
+    schemaVersion: 1,
+    // Not actually published — the draft's own timestamp so the reader has a stable colophon date.
+    publishedAt: book.updatedAt,
+    title: book.title,
+    ...(book.essence ? { essence: book.essence } : {}),
+    ...(book.coverImageId ? { coverImageId: book.coverImageId } : {}),
+    ...(book.matter ? { matter: book.matter } : {}),
+    noteOnBook: noteOnBook(orderedChapters),
+    parts,
+    chapterOrder,
+    images: index.images,
+  };
+
+  const person = await getPerson(fs, key, personId);
+  return {
+    authorPersonId: personId,
+    authorName: person?.displayName ?? 'You',
+    bookId,
+    manifest,
+    chapters,
+  };
+}

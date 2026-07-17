@@ -799,6 +799,13 @@ No open questions remain; the spec is Approved and ready for the Phase A slice (
   `story/*` splat route for tab deep-links, the to-do sheet, the Danger zone (type-to-confirm delete +
   `rewriteBookFromScratch`), and the `story:rewriteFromScratch` seam. The chapter reader stays the existing
   `ChapterReader` (the immersive Book view is R2/R3). See §13.7 R1 for the full build note + test coverage.
+- 2026-07-17 — **§13 R2 (The Book — immersive reader) BUILT** (`feat/story-book-reader`, PR pending) — the
+  unified `BookReader` (owner + shared, front-matter-first: cover/title page/dedication/epigraph/contents →
+  chapter opener art + drop-cap Lora prose + pull-quotes + prev/next → back matter + colophon), entered from the
+  Studio hero "Read your story" + the `/story/read` deep-link, with aA text-size cycling + a device-local
+  per-person resume position. New core `readOwnBook` (draft head, own-data full projection with per-chapter
+  status) + `story:readOwnBook`/`story:setReadPosition`. The shared reader is unified onto the same component.
+  See §13.7 R2 for the full build note + test coverage.
 
 ## 13. The Studio & the Book — the 2026-07-17 full-surface redesign (Approved)
 
@@ -994,8 +1001,37 @@ lastPublishedAtSeen }` (one writer: the reader; additive schema). The author's S
   tabs), **6 story E2E** (the 3 relocated walks re-pointed through the tabs; +a new Studio-tabs + Danger-zone
   delete walk with a 360px overflow guard). Real-Electron visual QA at desktop + 360px, light + dark (the hero /
   Needs-you / tabs / Settings danger zone / rewrite dialog match the approved mockup).
-- **R2 — The Book (read)**: `/story/read` routes + front matter (factored honesty note) + Read-mode
-  typography + opener art + prev/next + continue-position + aA; the shared-reader view unified onto it.
+- **R2 — The Book (read) — BUILT** (2026-07-17, `feat/story-book-reader`, PR pending): the immersive Book
+  reader. New core **`readOwnBook`** (the owner reads their OWN book from the DRAFT head — the same
+  `StoryReaderView` shape the shared reader uses, so the renderer is unified — built from a synthetic manifest
+  with a LIVE honesty note [reusing `noteOnBook`] + per-chapter `status` + `pinnedQuotes`; parts/order from the
+  outline keeping only written chapters, so an unwritten shell never shows a blank chapter; the person's own
+  data, so the full projection is safe, unlike the cross-person minimal `readSharedBook`). Extended
+  `ReaderChapter` with `status`/`pinnedQuotes` (own-book only). Read-position resume is **device-local +
+  per-person** (`DeviceState.storyReadPosition` = personId → bookId → chapterId) via `story:setReadPosition`;
+  `story:readOwnBook` returns `{ view, lastChapterId }` where `lastChapterId` only resolves to a chapter that
+  still exists (never a dangling resume) — both channels gated `story.own` + active-person-scoped. A unified
+  **`BookReader`** component (owner + shared) renders: a reader bar (‹ Studio/Back · title · Ch. N of M · aA
+  text-size cycling `story.readerFontSize` [a hidden device setting]); front matter (cover book · title page ·
+  dedication · epigraph · contents with per-chapter status marks · Begin/Continue/From-the-beginning); the
+  chapter page (opener art = **the chapter's own illustration → the book cover → a warm dusk-gradient fallback**,
+  the promoted image excluded from the inline figures so it never renders twice · Lora prose with a drop cap on
+  the first paragraph · pinned pull-quotes · placed figures · prev/next) + an owner "Edit this chapter ›" that
+  drops into the existing `ChapterReader` markup editor; back matter (acknowledgments · a-note-on-this-book ·
+  colophon with the not-medical line) on the last chapter. The Studio hero "Read your story" + `/story/read`
+  deep-link both enter it; the **shared reader is unified onto the same component** (front-matter-first). Chapter
+  cards still open the editor (unchanged, R3 wires cards→reader). code-reviewer verdict **ship** — the one
+  applied follow-up was the §13.5 opener precedence (was cover-only; now the chapter's own illustration leads,
+  matching R1's card grid + the mockup). Gate green: typecheck, lint, format, **1423 core + 1274 desktop**
+  unit (+`readOwnBook` draft-head/status/unwritten-shell/null; +a coreBridge readOwnBook + resumable
+  setReadPosition [+ ghost-chapter resolves to null] + Guest denial; +3 Story RTL owner-reader deep-link +
+  hero-navigation + opener-uses-chapter-illustration-not-duplicated-inline, the shared-reader RTL updated to the
+  front-matter→chapter flow), **7 story E2E** (a new
+  owner-reader walk: front matter → Begin reading → chapter prose → aA changes the reader scale → Edit reaches
+  the editor → back to Studio, + a 360px overflow guard; the publish/shared-reader walk updated to Begin-reading
+  first). Real-Electron visual QA at desktop + 360px, light + dark (the cover/title-page front matter, the
+  chapter opener + drop-cap prose + prev/next, the settled 360px column, and the dark theme all read as an
+  intentional, book-like immersive reader).
 - **R3 — Shape & review**: toolbar + margin layer + superscript sources + ribbon + what-changed diff
   (`previousMarkdown`) + the Review & apply sheet (restyling the existing markup machinery; `applyMarkup`
   call-count invariants untouched).

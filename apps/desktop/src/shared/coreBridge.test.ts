@@ -6718,6 +6718,51 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(reviewed?.chapters[0]?.status).toBe('reviewed');
   });
 
+  it('story: the owner reads their OWN book (draft head) + a resumable read position (§13.5)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+
+    // Read the own book from the DRAFT head: the written chapter is there, with its status; no position yet.
+    const first = await bridge.storyReadOwnBook({ bookId });
+    expect(first).not.toBeNull();
+    expect(first!.view.chapters.map((c) => c.id)).toEqual([chapterId]);
+    expect(first!.view.chapters[0]?.status).toBe('new'); // status crosses (owns their own data)
+    expect(first!.view.manifest.noteOnBook).toContain('never invented');
+    expect(first!.lastChapterId).toBeNull();
+
+    // Remember a read position → it resumes on the next read (device-local, per-person).
+    await bridge.storySetReadPosition({ bookId, chapterId });
+    expect((await bridge.storyReadOwnBook({ bookId }))?.lastChapterId).toBe(chapterId);
+
+    // A stored position that no longer maps to a chapter resolves to null (never a dangling resume).
+    await bridge.storySetReadPosition({ bookId, chapterId: 'ghost-chapter' });
+    expect((await bridge.storyReadOwnBook({ bookId }))?.lastChapterId).toBeNull();
+  });
+
+  it('story: readOwnBook + setReadPosition are denied for a person without story.own', async () => {
+    const { bridge } = await freshOwner();
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.storyReadOwnBook({ bookId: 'x' })).toBeNull();
+    // A denied write is a no-op (the gate returns without touching device state).
+    await bridge.storySetReadPosition({ bookId: 'x', chapterId: 'c' });
+    expect(await bridge.storyReadOwnBook({ bookId: 'x' })).toBeNull();
+  });
+
   it('story: markup layer — mark, instant edit/pin, apply the batch revision', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });

@@ -454,6 +454,45 @@ A running log of durable decisions and feedback captured into the project config
   relocated-surface test. Excise a 400-line function deterministically with a Python marker, then author the
   replacement via validated Edits; drive tab state from a splat route mirrored to `useState` so it works both
   under a real Route (deep-link/reload) and rendered bare in RTL.**
+- 2026-07-17 — **Build (Your Story §13 R2 — the immersive Book reader; SPEC 64 §13.7 R2 BUILT on
+  `feat/story-book-reader`, PR pending).** The second slice of the approved redesign: reading the book actually
+  feels like reading a book. A unified **`BookReader`** (one component for the owner AND a granted reader) renders
+  **front matter first** (a cover "book" · a serif title page · dedication · epigraph · a contents page with
+  per-chapter status marks · a Begin/Continue/From-the-beginning affordance) → a **chapter page** (opener art =
+  **the chapter's own illustration → the book cover → a warm dusk-gradient fallback** [§13.5; the promoted image
+  is excluded from the inline figures so it never renders twice] · **Lora prose with a drop cap** on the first
+  paragraph · pinned pull-quotes · placed figures · prev/next) → **back matter** (acknowledgments · a-note-on-this-book · a colophon
+  with the not-medical line) on the last chapter; a slim reader bar carries **‹ Studio/Back · the title · Ch. N of
+  M · an aA text-size toggle** (cycles a hidden `story.readerFontSize` device setting). The Studio hero **"Read
+  your story"** + the `/story/read` deep-link both enter it, and the owner gets an inline **"Edit this chapter ›"**
+  that drops into the existing `ChapterReader` markup editor. **The shared reader was migrated onto the same
+  component** (so household readers get the identical immersive experience). One new backend piece: core
+  **`readOwnBook`** — the owner reads their OWN book from the **DRAFT head** (a synthetic manifest with a **live**
+  honesty note reusing `noteOnBook`, per-chapter `status` + `pinnedQuotes`, parts/order from the outline keeping
+  only **written** chapters so an unwritten shell never shows a blank page); since it's the person's own data the
+  **full projection is safe** — unlike the cross-person minimal `readSharedBook` which still projects the minimal
+  shape with **no provenance** (the R2 `ReaderChapter.status`/`pinnedQuotes` widening is own-book-only, verified
+  it doesn't reach the shared path). **Resume is device-local + per-person** (`DeviceState.storyReadPosition` =
+  personId → bookId → chapterId) via `story:setReadPosition`; `story:readOwnBook` returns `{ view, lastChapterId }`
+  where `lastChapterId` only resolves to a chapter that **still exists** (never a dangling resume) — both channels
+  gated `story.own` + active-person-scoped in the bridge (the trust boundary), the key never crossing IPC. Gate
+  green: typecheck, lint, format, **1423 core + 1274 desktop** unit (+`readOwnBook` draft-head/status/
+  unwritten-shell/null; +a coreBridge readOwnBook + resumable setReadPosition [ghost-chapter → null] + Guest
+  denial; +3 Story RTL owner-reader deep-link + hero navigation + opener-uses-the-chapter-illustration-not-
+  duplicated-inline, the shared-reader RTL updated to the front-matter→chapter flow), **7 story E2E** (a new
+  owner-reader walk: front matter → Begin reading → chapter prose → aA changes the reader scale → Edit reaches the
+  editor → back to Studio + a 360px overflow guard; the publish/shared-reader walk updated to Begin-reading-first).
+  Real-Electron visual QA at desktop + 360px, light + dark (cover/title-page front matter, chapter opener +
+  drop-cap prose + prev/next, the settled 360px column, and the dark theme all read as an intentional, book-like
+  reader). **code-reviewer verdict ship** — the one applied follow-up was the §13.5 opener precedence (was
+  cover-only; now the chapter's own illustration leads, matching R1's card grid + the mockup, excluded from inline
+  figures). **Lesson: the owner's "read my own book" is not a
+  second reader — build ONE `BookReader` and feed it from `readOwnBook` (draft head, own-data full projection) vs
+  `readSharedBook` (published head, cross-person minimal projection); widening the shared `ReaderChapter` view type
+  for the owner's richer needs (status/pinned-quotes) is only safe because the CROSS-person builder keeps emitting
+  the minimal shape — the view type permits the fields, the shared builder still omits them. A device-local resume
+  position must resolve against the CURRENT chapters (a deleted/renamed chapter → resume null), or a stale marker
+  dead-ends the reader.**
 - 2026-07-16 — **Build (Your Story chapters redesigned as a cover-backed card grid — mockup approved FIRST;
   SPEC 64 §3.1/§3.3; on `feat/story-chapter-cards`, PR pending; v0.30.0 released alongside).** The user asked to
   redesign the flat part/chapter list into a **grid of modern, sleek cards "like TikTok"** with the **generated

@@ -233,6 +233,12 @@ export const DeviceStateSchema = z.object({
    */
   storyReadProgress: z.record(z.string(), z.record(z.string(), z.string())).optional(),
   /**
+   * The owner's last-read chapter in their OWN Your Story book (64-your-story §13.6.9) — keyed by subject
+   * person id → bookId → chapterId. Drives "Continue reading" in the immersive reader. Device-local +
+   * per-person (must not sync or leak across personas), additive-optional (the `storyReadProgress` precedent).
+   */
+  storyReadPosition: z.record(z.string(), z.record(z.string(), z.string())).optional(),
+  /**
    * When this device last ran the Your Story freshness check, keyed by subject person id
    * (64-your-story §3.4). The renderer-driven daily cadence throttle marker — device-local +
    * per-person, the `autoCheckinCheckedAt` precedent. Additive-optional (no schemaVersion bump).
@@ -4422,6 +4428,13 @@ export interface ReaderChapter {
   /** Image placements (§3.8) — safe to project: `{imageId, afterAnchor, caption}` carries no private
    *  provenance, and the reader fetches the bytes through the re-gated `story:readSharedImage`. */
   imagePlacements: ImagePlacement[];
+  /** The chapter's draft status — populated ONLY for the OWNER's own-book reader (§13.5, `story:readOwnBook`),
+   *  so the Contents page can show per-chapter state (reviewed / updated / new / writing). Never projected for a
+   *  granted reader (a reader sees only the published head). */
+  status?: ChapterStatus;
+  /** Pinned "in your own words" quotes rendered as pull-quotes (§3.3) — populated ONLY for the owner's own-book
+   *  reader. NOT projected for a granted reader (the minimal cross-person projection rule). */
+  pinnedQuotes?: PinnedQuote[];
 }
 
 /** The published head a granted reader reads (§3.6) — the manifest snapshot + its published chapters, in order.
@@ -4433,6 +4446,21 @@ export interface StoryReaderView {
   manifest: PublishedManifest;
   chapters: ReaderChapter[];
 }
+
+/** The OWNER reading their OWN book as a book (§13.5, `story:readOwnBook`) — the same `StoryReaderView` shape
+ *  (so the reader renderer is unified), but built from the DRAFT head with a LIVE honesty note + per-chapter
+ *  status + pinned quotes, plus the device-local resume position. Own data, so the full projection is safe. */
+export interface StoryOwnBookView {
+  view: StoryReaderView;
+  /** The chapter the owner last read on THIS device (§13.6.9) — drives "Continue reading". Null if never read. */
+  lastChapterId: string | null;
+}
+
+/** `story:setReadPosition` — record the owner's last-read chapter for a book (device-local, per-person). */
+export const StorySetReadPositionInputSchema = StoryBookRefSchema.extend({
+  chapterId: z.string().min(1),
+});
+export type StorySetReadPositionInput = z.infer<typeof StorySetReadPositionInputSchema>;
 
 /** `story:grantReader` / `story:revokeReader` — add/remove a household reader for a book (§3.5). */
 export const StoryReaderGrantInputSchema = StoryBookRefSchema.extend({

@@ -182,6 +182,7 @@ import {
   StoryInterviewCheckInputSchema,
   StoryReadSharedInputSchema,
   StoryReadSharedImageInputSchema,
+  StorySetReadPositionInputSchema,
   StoryReaderGrantInputSchema,
   StoryRefreshInputSchema,
   StoryRemoveMarkInputSchema,
@@ -215,6 +216,7 @@ import {
   type StoryInterviewCadenceResult,
   type StoryPublishResult,
   type StoryReaderView,
+  type StoryOwnBookView,
   type StoryRefreshViewResult,
   type StoryResolveProposalResult,
   type StoryRevisionResult,
@@ -438,6 +440,7 @@ import {
   publishBook,
   readBookBundle,
   readSharedBook,
+  readOwnBook,
   readSharedImage,
   refreshBook,
   removeExclusion,
@@ -4915,6 +4918,35 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return null;
       // The core re-gates on every read (published + still granted) — the viewer is the active person.
       return readSharedBook(ctx.fs, ctx.key, personId, authorPersonId, bookId);
+    },
+    storyReadOwnBook: async (input): Promise<StoryOwnBookView | null> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const view = await readOwnBook(ctx.fs, ctx.key, personId, bookId);
+      if (!view) return null;
+      const device = await host.readDeviceState();
+      const saved = device.storyReadPosition?.[personId]?.[bookId];
+      // Only resume to a chapter that's still in the book (a deleted/renamed chapter shouldn't dead-end).
+      const lastChapterId = saved && view.chapters.some((c) => c.id === saved) ? saved : null;
+      return { view, lastChapterId };
+    },
+    storySetReadPosition: async (input): Promise<void> => {
+      const { bookId, chapterId } = StorySetReadPositionInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return;
+      const personId = await activePersonId();
+      if (!personId) return;
+      if (!(await getBook(ctx.fs, ctx.key, personId, bookId))) return; // only the active person's own book
+      const device = await host.readDeviceState();
+      await host.updateDeviceState({
+        storyReadPosition: {
+          ...device.storyReadPosition,
+          [personId]: { ...device.storyReadPosition?.[personId], [bookId]: chapterId },
+        },
+      });
     },
     storyMarkSharedRead: async (input): Promise<void> => {
       // Record that the active viewer opened a shared book (§3.6) — device-local + per-person, never synced.

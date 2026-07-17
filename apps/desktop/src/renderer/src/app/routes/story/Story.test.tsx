@@ -1054,19 +1054,174 @@ describe('Story (64)', () => {
     renderStory();
     expect(await screen.findByText('Shared with you')).toBeInTheDocument();
     expect(screen.getByText(/By Ben · 1 chapter/)).toBeInTheDocument();
-    // Open it → the reader view renders the published head (prose + front matter + the honesty page).
+    // Open it → the immersive reader (§13.5) opens on the FRONT MATTER (title page + dedication + contents).
     await userEvent.click(screen.getByRole('button', { name: /The Life of Ben/ }));
-    // The cover image (fetched via the re-gated readSharedImage) renders on the cover page.
-    expect(await screen.findByAltText('Cover')).toHaveAttribute(
-      'src',
-      'data:image/png;base64,AAAA',
-    );
-    expect(await screen.findByText('The garage smelled of cut pine.')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'The Life of Ben' })).toBeInTheDocument();
     expect(screen.getByText('For my mother')).toBeInTheDocument();
+    // Begin reading → the chapter page renders the prose; the last chapter carries the honesty note.
+    await userEvent.click(screen.getByRole('button', { name: /Begin reading/ }));
+    expect(await screen.findByText('The garage smelled of cut pine.')).toBeInTheDocument();
     expect(screen.getByText(/never invented/)).toBeInTheDocument();
-    // Back returns to the surface.
-    await userEvent.click(screen.getByRole('button', { name: '‹ Back' }));
+    // Back (the top-bar exit) returns to the Studio surface.
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
     expect(await screen.findByText('Shared with you')).toBeInTheDocument();
+  });
+
+  it('the owner reads their own book (front matter → chapter → prev/next), and Edit reaches the editor (§13.5)', async () => {
+    const ownView = {
+      view: {
+        authorPersonId: 'me',
+        authorName: 'Ben',
+        bookId: 'b1',
+        manifest: {
+          schemaVersion: 1 as const,
+          publishedAt: '2026-07-17T00:00:00.000Z',
+          title: 'The Story of Ben',
+          essence: 'A quiet man learning to speak up.',
+          noteOnBook: 'Written from your own record — never invented.',
+          parts: [{ id: 'p1', title: 'Roots', chapterIds: ['c1', 'c2'] }],
+          chapterOrder: ['c1', 'c2'],
+          images: [],
+        },
+        chapters: [
+          {
+            id: 'c1',
+            title: 'The Garage',
+            markdown: 'The garage smelled of cut pine.',
+            imagePlacements: [],
+            status: 'reviewed' as const,
+            pinnedQuotes: [],
+          },
+          {
+            id: 'c2',
+            title: 'First Words',
+            markdown: 'He learned to speak.',
+            imagePlacements: [],
+            status: 'new' as const,
+            pinnedQuotes: [],
+          },
+        ],
+      },
+      lastChapterId: null,
+    };
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyReadOwnBook: () => Promise.resolve(ownView),
+    });
+    // Deep-link straight into the reader's front matter (§13.2 route).
+    renderStoryAt('/story/read');
+    // Front matter: title page + the essence + a Contents list of both chapters.
+    expect(await screen.findByRole('heading', { name: 'The Story of Ben' })).toBeInTheDocument();
+    expect(screen.getByText(/quiet man learning to speak up/)).toBeInTheDocument();
+    // Begin reading → chapter 1 prose + an "Edit this chapter" affordance (owner only).
+    await userEvent.click(screen.getByRole('button', { name: /Begin reading/ }));
+    expect(await screen.findByText('The garage smelled of cut pine.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Edit this chapter/ })).toBeInTheDocument();
+    // Next → chapter 2 (the last chapter carries the honesty note); Previous returns to chapter 1.
+    await userEvent.click(screen.getByRole('button', { name: /Next/ }));
+    expect(await screen.findByText('He learned to speak.')).toBeInTheDocument();
+    expect(screen.getByText(/never invented/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Previous/ }));
+    expect(await screen.findByText('The garage smelled of cut pine.')).toBeInTheDocument();
+    // Edit this chapter → the chapter editor (the markup surface, still §3.3) opens.
+    await userEvent.click(screen.getByRole('button', { name: /Edit this chapter/ }));
+    expect(await screen.findByRole('button', { name: 'Rewrite this chapter' })).toBeInTheDocument();
+  });
+
+  it('“Read your story” from the Studio opens the immersive reader (§13.5)', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+      storyReadOwnBook: () =>
+        Promise.resolve({
+          view: {
+            authorPersonId: 'me',
+            authorName: 'Ben',
+            bookId: 'b1',
+            manifest: {
+              schemaVersion: 1 as const,
+              publishedAt: '2026-07-17T00:00:00.000Z',
+              title: 'The Story of Ben',
+              parts: [{ id: 'p1', title: 'Roots', chapterIds: ['c1'] }],
+              chapterOrder: ['c1'],
+              images: [],
+            },
+            chapters: [
+              {
+                id: 'c1',
+                title: 'The Garage',
+                markdown: 'The garage smelled of cut pine.',
+                imagePlacements: [],
+                status: 'reviewed' as const,
+                pinnedQuotes: [],
+              },
+            ],
+          },
+          lastChapterId: null,
+        }),
+    });
+    renderStoryAt('/story');
+    // The Studio hero's primary "Read your story" navigates to the reader (front matter).
+    await userEvent.click(await screen.findByRole('button', { name: 'Read your story' }));
+    expect(await screen.findByRole('button', { name: /Begin reading/ })).toBeInTheDocument();
+  });
+
+  it('the chapter opener uses the chapter’s OWN illustration and never duplicates it inline (§13.5)', async () => {
+    const png =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const ownView = {
+      view: {
+        authorPersonId: 'me',
+        authorName: 'Ben',
+        bookId: 'b1',
+        manifest: {
+          schemaVersion: 1 as const,
+          publishedAt: '2026-07-17T00:00:00.000Z',
+          title: 'The Story of Ben',
+          parts: [{ id: 'p1', title: 'Roots', chapterIds: ['c1'] }],
+          chapterOrder: ['c1'],
+          images: [],
+        },
+        chapters: [
+          {
+            id: 'c1',
+            title: 'The Garage',
+            markdown: 'The garage smelled of cut pine.',
+            // Two placements after the first paragraph: the chapter's illustration (first) → the opener;
+            // an uploaded photo (second) → stays inline.
+            imagePlacements: [
+              { imageId: 'ill1', afterAnchor: 'p0', caption: 'Opener art' },
+              { imageId: 'ph1', afterAnchor: 'p0', caption: 'A kept photo' },
+            ],
+            status: 'reviewed' as const,
+            pinnedQuotes: [],
+          },
+        ],
+      },
+      lastChapterId: null,
+    };
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+      storyReadOwnBook: () => Promise.resolve(ownView),
+      storyGetImage: () => Promise.resolve({ mime: 'image/png', dataBase64: png }),
+    });
+    renderStoryAt('/story/read');
+    await userEvent.click(await screen.findByRole('button', { name: /Begin reading/ }));
+    expect(await screen.findByText('The garage smelled of cut pine.')).toBeInTheDocument();
+
+    // The opener background resolves to the chapter's own illustration (its first placement), not the gradient.
+    await waitFor(() => {
+      const opener = screen.getByText('Chapter 1').parentElement;
+      expect(opener?.style.backgroundImage).toContain('data:image/png');
+    });
+    // The illustration is the hero, so its inline figcaption is gone; the SECOND placement (the photo) stays.
+    expect(screen.queryByText('Opener art')).not.toBeInTheDocument();
+    expect(await screen.findByText('A kept photo')).toBeInTheDocument();
   });
 
   it('exports the published book as Markdown, noting it leaves the vault (§3.9)', async () => {

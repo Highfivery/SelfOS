@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.30.0](https://github.com/Highfivery/SelfOS/compare/v0.29.0...v0.30.0) (2026-07-17)
+
+
+### Features
+
+* **images:** one global image style + fix the story "Illustrate this chapter" dead button ([#224](https://github.com/Highfivery/SelfOS/issues/224)) ([23ade99](https://github.com/Highfivery/SelfOS/commit/23ade99a80f220492b526095d620c25d917cd46e))
+* **images:** realtime progress for every AI image + surface the style on the Story page ([#225](https://github.com/Highfivery/SelfOS/issues/225)) ([c7c982c](https://github.com/Highfivery/SelfOS/commit/c7c982c172b1a1f4c3456b8a731ecd7ab551fc4b))
+* **story:** a proper Story settings section (writing + story-specific image style) ([#226](https://github.com/Highfivery/SelfOS/issues/226)) ([944a2dd](https://github.com/Highfivery/SelfOS/commit/944a2dd734a09aef3fb777e96f6c8d5e7e18e10d))
+* **story:** draft in one flow with a live progress screen (no outline gate) ([#221](https://github.com/Highfivery/SelfOS/issues/221)) ([e175903](https://github.com/Highfivery/SelfOS/commit/e17590364c0ba1f81ac0ea75388f6282ca4069d4))
+* **story:** rich real-time progress for writing chapters (inline on the overview) ([#222](https://github.com/Highfivery/SelfOS/issues/222)) ([08d4fed](https://github.com/Highfivery/SelfOS/commit/08d4fed4d2f971e94ea99c163897ea78ddbe11b6))
+* **story:** Your Story — AI-written living biography (spec 64) ([#218](https://github.com/Highfivery/SelfOS/issues/218)) ([ac81878](https://github.com/Highfivery/SelfOS/commit/ac818789cb47b970b97c63d984c097e895b9dbfb))
+
 ## [0.29.0](https://github.com/Highfivery/SelfOS/compare/v0.28.0...v0.29.0) (2026-07-16)
 
 

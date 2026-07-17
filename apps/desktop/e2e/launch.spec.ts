@@ -4582,18 +4582,19 @@ test('questionnaires: a questionnaire sent TO you is in your Inbox, NOT your edi
 
     // The authoring "Sent" section shows the owner's OWN, NOT the friend's send-to-them (which now appears
     // in the page's "Received" section instead — scoped assertion so the two don't get conflated).
-    await w.getByRole('link', { name: 'Questionnaires' }).click();
-    const sentSection = w.getByRole('region', { name: 'Sent questionnaires' });
+    await w.getByRole('link', { name: /Questionnaires/ }).click();
+    const sentSection = w.getByRole('tabpanel', { name: 'Sent questionnaires' });
     await expect(
       sentSection.getByRole('button', { name: 'My own questionnaire', exact: true }),
     ).toBeVisible();
     await expect(
       sentSection.getByRole('button', { name: 'A friend’s questionnaire', exact: true }),
     ).toHaveCount(0);
-    // The friend's questionnaire shows in the page's Received section…
+    // The friend's questionnaire shows in the page's Received tab…
+    await w.getByRole('tab', { name: /Received/ }).click();
     await expect(
       w
-        .getByRole('region', { name: 'Received questionnaires' })
+        .getByRole('tabpanel', { name: 'Received questionnaires' })
         .getByRole('button', { name: 'A friend’s questionnaire', exact: true }),
     ).toBeVisible();
 
@@ -4839,11 +4840,17 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('link', { name: /Questionnaires/ }).click();
 
-    // Sent section: grouped by status, with rich per-recipient status + date·time + an Analyze affordance.
-    const sent = w.getByRole('region', { name: 'Sent questionnaires' });
-    await expect(w.getByRole('heading', { name: 'Sent' })).toBeVisible();
+    // The three tabs (§3.1 redesign): Sent (default) · Received · Auto check-ins.
+    await expect(w.getByRole('tab', { name: /Sent/ })).toBeVisible();
+    await expect(w.getByRole('tab', { name: /Received/ })).toBeVisible();
+    await expect(w.getByRole('tab', { name: /Auto check-ins/ })).toBeVisible();
+    // The sidebar nav badge counts things needing YOU: 1 ready-to-analyze + 1 received-to-answer = 2.
+    await expect(w.getByRole('link', { name: /Questionnaires, 2 need you/ })).toBeVisible();
+
+    // Sent tab (default): grouped by status, with rich per-recipient status + date·time + an Analyze affordance.
+    const sent = w.getByRole('tabpanel', { name: 'Sent questionnaires' });
     await expect(sent.getByRole('button', { name: /Awaiting responses/ })).toBeVisible();
     await expect(sent.getByRole('button', { name: /Answered · ready to analyze/ })).toBeVisible();
     await expect(sent.getByRole('button', { name: /^Weekly mood/ })).toBeVisible();
@@ -4855,33 +4862,14 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
     // Privacy chips (§3.1 card privacy badges): the standard send reads visible, the private one protected.
     await expect(sent.getByText('Answers visible')).toBeVisible();
     await expect(sent.getByText('Private · insights only')).toBeVisible();
-
-    // Received section: the friend's send — with its category eyebrow + a favourite pin — but NOT the owner's
-    // own self-sends (filtered so nothing double-renders across the two sections, §3.3).
-    const received = w.getByRole('region', { name: 'Received questionnaires' });
-    await expect(w.getByRole('heading', { name: 'Received' })).toBeVisible();
+    // The sort defaults to "Recently answered" and offers "Recently analyzed" (§3.1).
+    await expect(w.getByLabel('Sort sent questionnaires')).toHaveValue('answered');
     await expect(
-      received.getByRole('button', { name: 'A friend’s check-in', exact: true }),
-    ).toBeVisible();
-    // A New item leads with the "Answer" CTA — and its privacy chip shows BEFORE the recipient opens it,
-    // so they know what the sender will (and won't) see (§3.1 card privacy badges).
-    await expect(received.getByRole('button', { name: 'Answer' })).toBeVisible();
-    await expect(received.getByText('Your answers stay private')).toBeVisible();
-    await expect(received.getByText(/How am I doing in this role/)).toBeVisible();
-    await expect(received.getByText(/Received .*2026 · /)).toBeVisible();
-    await expect(received.getByRole('button', { name: /Weekly mood/ })).toHaveCount(0);
-    // Favourite the received one → the pin flips to "Unpin".
-    await received.getByRole('button', { name: /^Pin / }).click();
-    await expect(received.getByRole('button', { name: /^Unpin / })).toBeVisible();
+      w.getByLabel('Sort sent questionnaires').getByRole('option', { name: 'Recently analyzed' }),
+    ).toHaveCount(1);
 
-    // Collapsing the Sent section hides its cards; expanding restores them.
-    await w.getByRole('button', { name: 'Sent', exact: true }).click();
-    await expect(sent.getByRole('button', { name: /^Weekly mood/ })).toHaveCount(0);
-    await w.getByRole('button', { name: 'Sent', exact: true }).click();
-    await expect(sent.getByRole('button', { name: /^Weekly mood/ })).toBeVisible();
-
-    // 360px on the populated landing: no horizontal overflow anywhere — page-level OR an inner scroller
-    // (§7/§12) — then back to desktop width for the answering interaction.
+    // 360px on the populated Sent tab: no horizontal overflow anywhere — page-level OR an inner scroller
+    // (§7/§12) — then back to desktop width.
     await w.setViewportSize({ width: 360, height: 900 });
     const overflow = await w.evaluate(() => {
       const main = document.querySelector('main');
@@ -4897,6 +4885,30 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
     expect(overflow.main).toBeLessThanOrEqual(1);
     expect(overflow.inner).toBe(0);
     await w.setViewportSize({ width: 1280, height: 900 });
+
+    // Received tab: the friend's send — with its category eyebrow + a favourite pin — but NOT the owner's
+    // own self-sends (filtered so nothing double-renders, §3.3).
+    await w.getByRole('tab', { name: /Received/ }).click();
+    const received = w.getByRole('tabpanel', { name: 'Received questionnaires' });
+    await expect(
+      received.getByRole('button', { name: 'A friend’s check-in', exact: true }),
+    ).toBeVisible();
+    // A New item leads with the "Answer" CTA — and its privacy chip shows BEFORE the recipient opens it,
+    // so they know what the sender will (and won't) see (§3.1 card privacy badges).
+    await expect(received.getByRole('button', { name: 'Answer' })).toBeVisible();
+    await expect(received.getByText('Your answers stay private')).toBeVisible();
+    await expect(received.getByText(/How am I doing in this role/)).toBeVisible();
+    await expect(received.getByText(/Received .*2026 · /)).toBeVisible();
+    await expect(received.getByRole('button', { name: /Weekly mood/ })).toHaveCount(0);
+    // Favourite the received one → the pin flips to "Unpin".
+    await received.getByRole('button', { name: /^Pin / }).click();
+    await expect(received.getByRole('button', { name: /^Unpin / })).toBeVisible();
+
+    // Switching to another tab hides the Sent cards (they live under the Sent tab); switching back restores.
+    await expect(sent.getByRole('button', { name: /^Weekly mood/ })).toHaveCount(0);
+    await w.getByRole('tab', { name: /Sent/ }).click();
+    await expect(sent.getByRole('button', { name: /^Weekly mood/ })).toBeVisible();
+    await w.getByRole('tab', { name: /Received/ }).click();
 
     // Answer the received one straight from its card → submit → back on the landing its CTA flips to "View".
     await received.getByRole('button', { name: 'Answer' }).click();
@@ -10979,8 +10991,10 @@ test('auto check-ins (63): a completed onboarding seeds an on self stream that g
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Home' }).waitFor();
-    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('link', { name: /Questionnaires/ }).click();
 
+    // Auto check-ins is its own tab now (§3.1) — open it.
+    await w.getByRole('tab', { name: /Auto check-ins/ }).click();
     // The launch cadence hook seeded the default-on self stream (onboarding complete) — the panel reflects it.
     await expect(w.getByRole('heading', { name: 'Auto check-ins' })).toBeVisible();
     await expect(w.getByText('Yourself')).toBeVisible();
@@ -11092,7 +11106,9 @@ test('auto check-ins (63): an owner streams check-ins to a partner, including un
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Home' }).waitFor();
-    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('link', { name: /Questionnaires/ }).click();
+    // Auto check-ins is its own tab now (§3.1) — open it.
+    await w.getByRole('tab', { name: /Auto check-ins/ }).click();
     await expect(w.getByRole('heading', { name: 'Auto check-ins' })).toBeVisible();
     // The owner sees the partner target row with the resolved name (not "Someone"). Scope to the panel —
     // "Angel" also appears in recipient chips elsewhere on the Questionnaires page.
@@ -11158,7 +11174,9 @@ test('auto check-ins (63): a recurring crisis signal pauses generation entirely'
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Home' }).waitFor();
-    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('link', { name: /Questionnaires/ }).click();
+    // Auto check-ins is its own tab now (§3.1) — open it.
+    await w.getByRole('tab', { name: /Auto check-ins/ }).click();
     await expect(w.getByText('Yourself')).toBeVisible();
     await w.getByRole('button', { name: /Run now/ }).click();
     // Crisis suppresses everything — the run generates nothing; the panel leads with support.

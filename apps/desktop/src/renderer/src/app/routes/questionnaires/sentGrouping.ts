@@ -32,7 +32,7 @@ export const SENT_GROUPS: { status: SentStatus; label: string }[] = [
   { status: 'analyzed', label: 'Analyzed' },
 ];
 
-export type SentSort = 'recent' | 'answered' | 'title';
+export type SentSort = 'answered' | 'analyzed' | 'recent' | 'title';
 
 /** True when the questionnaire matches the (case-insensitive) search query — by title or type. */
 export function matchesQuery(q: Questionnaire, query: string): boolean {
@@ -45,6 +45,7 @@ export function matchesQuery(q: Questionnaire, query: string): boolean {
 function sortValue(e: SentEntry, sort: SentSort): string {
   if (sort === 'title') return e.questionnaire.title.toLowerCase();
   if (sort === 'answered') return e.overview?.answeredAt ?? '';
+  if (sort === 'analyzed') return e.overview?.analyzedAt ?? '';
   return e.sendState?.lastSentAt ?? e.questionnaire.updatedAt ?? '';
 }
 

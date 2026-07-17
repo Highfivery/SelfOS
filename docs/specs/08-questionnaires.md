@@ -216,6 +216,21 @@ CompatibilityVisibility` (read from the frozen snapshot). The Sent chip therefor
 compatibility Sent card reads the mode from the definition (`questionnaire.compatibility.visibility`), so it
 shows even without `viewResults`.
 
+**Tabbed landing + nav badge + Recently-analyzed sort (2026-07-17).** The two stacked sections became a
+**three-tab surface** — **Sent** · **Received** · **Auto check-ins** (63) — so the auto check-ins config is a
+first-class destination instead of being appended at the bottom of the scroll. The **Auto check-ins** tab
+shows only when auto check-ins is available (the bridge returns a non-null config); each tab carries a light
+count — Sent = its total, Received = its total (amber when any are still to answer), Auto = an on/off dot.
+Within Sent the status subgroups + toolbar + pagination are unchanged; the per-tab **toolbar** now spaces the
+search / filter / sort as distinct bordered controls (the two selects were 2px apart). The **sort** adds
+**"Recently analyzed"** and **defaults to "Recently answered"** (was "Recently sent"); "Recently analyzed" is
+backed by an additive **`QuestionnaireSentOverview.analyzedAt`** (the latest analysed send's Insight
+`updatedAt`, derived in the bridge). The **Questionnaires sidebar nav link** gains an aggregate badge (a pure
+`questionnaireNavCount` = **responses ready to analyze** + **received questionnaires still to answer**; passive
+"awaiting their response" is excluded); the shell loads `sentOverview` on person-change so the badge has data
+everywhere. Tabs are `role="tab"`/`tablist` with `aria-selected`; at ≤480px they tighten so all three fit with
+no horizontal scroll (§12).
+
 ### 3.2 Sending
 
 1. **Choose recipient** — a household **subject** (delivered in-app) or an **external person** (relay

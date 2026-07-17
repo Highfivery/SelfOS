@@ -29,6 +29,7 @@ import { useConversationStore } from '../stores/conversationStore';
 import { useBudgetStore } from '../stores/budgetStore';
 import { useUsageStore } from '../stores/usageStore';
 import { unansweredCount, useInboxStore } from '../stores/inboxStore';
+import { questionnaireNavCount } from './routes/questionnaires/navCounts';
 import { useDreamStore } from '../stores/dreamStore';
 import { useInsightStore } from '../stores/insightStore';
 import { useGoalStore } from '../stores/goalStore';
@@ -76,6 +77,10 @@ export function AppShell(): JSX.Element {
   const canViewMemory = useSessionStore((s) => s.can('memory.own'));
   const inboxItems = useInboxStore((s) => s.items);
   const inboxCount = unansweredCount(inboxItems);
+  // The Questionnaires nav badge (08 §3.1): one aggregate of things needing YOU — responses ready to
+  // analyze + received questionnaires still to answer (never passive "awaiting their response").
+  const sentOverview = useQuestionnaireStore((s) => s.sentOverview);
+  const questionnaireCount = questionnaireNavCount(sentOverview, inboxItems);
   const canOwnDreams = useSessionStore((s) => s.can('dreams.own'));
   const canTakeTests = useSessionStore((s) => s.can('tests.own'));
   // Together (58 §3.1): the nav shows only with `together.own` AND a live partner edge; the badge counts
@@ -158,6 +163,7 @@ export function AppShell(): JSX.Element {
     void useConversationStore.getState().load();
     void useBudgetStore.getState().refresh();
     void useInboxStore.getState().load();
+    void useQuestionnaireStore.getState().load(); // sent-overview feeds the nav badge everywhere (08 §3.1)
     void useDreamStore.getState().load();
     void useGuidanceStore.getState().load();
     void useIntakeStore.getState().load();
@@ -328,12 +334,21 @@ export function AppShell(): JSX.Element {
               <NavLink
                 to="/questionnaires"
                 className={navClass}
-                aria-label="Questionnaires"
+                aria-label={
+                  questionnaireCount > 0
+                    ? `Questionnaires, ${questionnaireCount} need you`
+                    : 'Questionnaires'
+                }
                 title={tip('Questionnaires')}
                 onClick={closeDrawer}
               >
                 <ClipboardList size={18} aria-hidden="true" />
                 <span className={styles.label}>Questionnaires</span>
+                {questionnaireCount > 0 ? (
+                  <span className={styles.navBadge} aria-hidden="true">
+                    {questionnaireCount}
+                  </span>
+                ) : null}
               </NavLink>
             ) : null}
             {canViewMemory ? (

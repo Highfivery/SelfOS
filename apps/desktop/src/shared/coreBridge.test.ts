@@ -4221,6 +4221,7 @@ describe('createCoreBridge', () => {
     expect(typeof overview[q.id]?.answeredAt).toBe('string');
     expect(overview[q.id]?.analyzed).toBe(false);
     expect(overview[q.id]?.analyzableAssignmentId).toBe(latest.id);
+    expect(overview[q.id]?.analyzedAt).toBeUndefined(); // nothing analysed yet
     expect(overview[q.id]?.insightSummary).toBeUndefined();
 
     // Analysing it clears the "new" badge (the sender has reviewed it) but it's still answered.
@@ -4247,6 +4248,8 @@ describe('createCoreBridge', () => {
     expect(overview[q.id]?.analyzed).toBe(true);
     expect(overview[q.id]?.insightSummary).toBe('Going well.');
     expect(overview[q.id]?.analyzableAssignmentId).toBeUndefined();
+    // …and it carries an analysis timestamp (the "Recently analyzed" sort key), distinct from answeredAt.
+    expect(typeof overview[q.id]?.analyzedAt).toBe('string');
     // The deep-link id names the derived Insight itself, so "View in Memory" can open it directly.
     const derived = (await bridge.insightsList()).find(
       (i) => i.provenance.assignmentId === latest.id,

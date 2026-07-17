@@ -5,6 +5,8 @@ import type { RelationshipType } from '@shared/schemas';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { Button, Field, Select, TextInput } from '../../../design-system/components';
+// Shared source of truth so the quick-add options can't drift from the People editor / enum (12 §15.6).
+import { RELATIONSHIP_TYPE_LABELS, RELATIONSHIP_TYPE_ORDER } from '@selfos/core/sharing';
 import styles from './DreamPeopleEditor.module.css';
 
 interface DreamPeopleEditorProps {
@@ -15,16 +17,9 @@ interface DreamPeopleEditorProps {
 }
 
 /** Relationship options, mirroring the People editor (12 §15.6 quick-add). */
-const REL_TYPES: { value: RelationshipType; label: string }[] = [
-  { value: 'partner', label: 'Partner' },
-  { value: 'parent', label: 'Parent' },
-  { value: 'child', label: 'Child' },
-  { value: 'sibling', label: 'Sibling' },
-  { value: 'friend', label: 'Friend' },
-  { value: 'coworker', label: 'Coworker' },
-  { value: 'ex', label: 'Ex' },
-  { value: 'other', label: 'Other' },
-];
+const REL_TYPES: { value: RelationshipType; label: string }[] = RELATIONSHIP_TYPE_ORDER.map(
+  (value) => ({ value, label: RELATIONSHIP_TYPE_LABELS[value] }),
+);
 
 /**
  * The "people in the dream" editor (12-dreams §3.1): link a known person from the People graph **or** type

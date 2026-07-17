@@ -358,14 +358,48 @@ export function isPersonFieldShared(
   return !(person.privateFields?.includes(key) ?? false);
 }
 
+// Structural relationship types (04 §4.2). Gender-neutral by design: a person's gender lives on their own
+// `Person` record and specifics (e.g. "Maternal grandmother") go in the free-text `Relationship.label` — so the
+// type stays a clean semantic key with a well-defined inverse (see INVERSE_RELATIONSHIP_TYPE in `sharing.ts`).
+// Adding a value here is purely additive (existing stored relationships keep validating — no migration), but it
+// MUST be handled in every exhaustive `Record<RelationshipType, …>` map (labels/inverse/order in `sharing.ts`,
+// the AI register in `aiPrompts.ts`, the dream life-areas in `dreamTopic.ts`) — the compiler enforces this.
 export const RelationshipTypeSchema = z.enum([
+  // Partners
   'partner',
+  'ex',
+  // Parents & guardians
   'parent',
   'child',
+  'stepParent',
+  'stepChild',
+  'guardian',
+  'ward',
+  // Grandparents & beyond
+  'grandparent',
+  'grandchild',
+  'greatGrandparent',
+  'greatGrandchild',
+  // Siblings
   'sibling',
+  'stepSibling',
+  'halfSibling',
+  // Extended blood family
+  'auntUncle',
+  'nieceNephew',
+  'cousin',
+  // In-laws
+  'parentInLaw',
+  'childInLaw',
+  'siblingInLaw',
+  // Social
   'friend',
+  'roommate',
+  'neighbor',
+  'acquaintance',
   'coworker',
-  'ex',
+  'mentor',
+  'mentee',
   'other',
 ]);
 export type RelationshipType = z.infer<typeof RelationshipTypeSchema>;

@@ -1174,7 +1174,9 @@ describe('Story (64)', () => {
   });
 
   it('the Interview tab shows the life map, gap invitations (Ask me about this), and answered history (§13.6)', async () => {
-    const storyAskGap = vi.fn(() => Promise.resolve({ ok: true as const, assignmentId: 'a-new' }));
+    const storyAskGap = vi.fn((_input: { bookId: string; gapId: string }) =>
+      Promise.resolve({ ok: true as const, assignmentId: 'a-new' }),
+    );
     let asked = false;
     installMockBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),

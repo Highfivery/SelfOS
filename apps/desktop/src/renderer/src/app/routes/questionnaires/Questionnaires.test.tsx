@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { InboxItem, Questionnaire, QuestionnaireSentOverview } from '@shared/channels';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { Questionnaires } from './Questionnaires';
@@ -1506,6 +1506,48 @@ describe('Questionnaires', () => {
     questions: [{ id: 'qq1', type: 'shortText' as const, prompt: 'How?', required: true }],
     createdAt: 'now',
     updatedAt: 'now',
+  });
+
+  it('Sent cards label SelfOS-generated questionnaires as auto check-in / biographer, so they never read as hand-authored (§3.1)', async () => {
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([
+          {
+            ...sentDef('q1', 'Auto one'),
+            type: 'Partner Discovery',
+            autoCheckin: {
+              targetId: 't1',
+              intent: 'deepen' as const,
+              rationale: 'Getting to know you',
+              generatedAt: '2026-07-16T00:00:00.000Z',
+            },
+          },
+          {
+            ...sentDef('q2', 'Story one'),
+            storyProvenance: {
+              bookId: 'b1',
+              gapBrief: 'Your early years',
+              generatedAt: '2026-07-16T00:00:00.000Z',
+            },
+          },
+          sentDef('q3', 'Hand-authored one'),
+        ]),
+      questionnairesSendStates: () =>
+        Promise.resolve({
+          q1: { lastSentAt: '2026-07-16T00:00:00.000Z', total: 1 },
+          q2: { lastSentAt: '2026-07-16T00:00:00.000Z', total: 1 },
+          q3: { lastSentAt: '2026-07-16T00:00:00.000Z', total: 1 },
+        }),
+    });
+    renderApp();
+
+    // The generated ones carry a clear provenance pill; the hand-authored one carries none. Scope to the
+    // Sent panel so the "Auto check-ins" TAB button doesn't count.
+    const panel = within(await screen.findByRole('tabpanel', { name: 'Sent questionnaires' }));
+    expect(panel.getByText('Auto check-in')).toBeInTheDocument();
+    expect(panel.getByText('From your biographer')).toBeInTheDocument();
+    // Exactly the two generated cards are labelled — the hand-authored one shows neither.
+    expect(panel.getAllByText(/Auto check-in|From your biographer/)).toHaveLength(2);
   });
 
   it('a sent card offers Analyze when answered-not-analysed, and shows the Insight excerpt once analysed (§3.1)', async () => {

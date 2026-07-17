@@ -502,6 +502,13 @@
   border: 1px solid var(--color-border);
 }
 
+/* Provenance: SelfOS generated this (biographer / auto check-in) — a distinct accent tint so it never reads
+   as a hand-authored send (08 §3.1). */
+.pillAuto {
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+}
+
 /* The privacy chip (08 §3.1 card privacy badges) — accent tint for the "protected" family, a neutral
    outline for "answers visible"; icon + text carry the meaning (never colour-only, §9). Ellipsizes so a
    long external name can't overflow a narrow card. */

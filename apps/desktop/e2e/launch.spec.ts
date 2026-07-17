@@ -11301,21 +11301,26 @@ test('story (64): living book — refresh proposes a structural change, approvin
     // Back on the overview once the chapters are written.
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
 
-    // A manual refresh runs the structural pass → the "Suggested changes" panel with a proposal to review
-    // (the auto-cadence hook may file it first; either way the panel appears after the refresh reloads it).
+    // A manual refresh (hero) runs the structural pass → a "Suggested change" card appears in the Needs-you
+    // strip (§13.4) with a proposal to review (the auto-cadence hook may file it first; either way it appears
+    // after the refresh reloads it).
     await w.getByRole('button', { name: /Refresh from what’s new/ }).click();
-    await expect(w.getByRole('heading', { name: 'Suggested changes' })).toBeVisible();
+    await expect(w.getByText('Needs you')).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Approve' }).first()).toBeVisible();
     // Approving restructures the outline: a new, not-yet-written chapter shell appears.
     await w.getByRole('button', { name: 'Approve' }).first().click();
     await expect(w.getByText('The Move West')).toBeVisible();
 
-    // The completeness meter shows a warm stage (never a bare %), and "Find what’s missing" runs the gap pass.
+    // The completeness meter (hero) shows a warm stage (never a bare %); "Find what’s missing" (Interview tab)
+    // runs the gap pass.
     await expect(
       w.getByText(/Just beginning|Taking shape|Coming together|Richly told/),
     ).toBeVisible();
+    await w.getByRole('tab', { name: 'Interview' }).click();
     await w.getByRole('button', { name: /Find what’s missing/ }).click();
-    // Either the pass just minted a check-in or one is already waiting — both point at the Inbox.
-    await expect(w.getByText(/Inbox/)).toBeVisible();
+    // The outcome notice: either the pass just minted a check-in or one is already waiting — both point at the
+    // Inbox (scoped to the outcome phrasing so it doesn't collide with the tab's always-present Inbox footer).
+    await expect(w.getByText(/your Inbox to fill a gap|waiting in your Inbox/)).toBeVisible();
 
     // A story-provenance questionnaire was minted end-to-end (the interview engine → the Inbox).
     await expect
@@ -11376,16 +11381,19 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     // One-flow draft (no outline gate): read + outline (auto-approved) + every chapter, landing on the book.
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
 
-    // Story settings live ON the Story page (§3.8): a collapsible section lets the person set this book's
-    // writing (voice/tone/length/auto-refresh) AND its own image style — not buried in Settings.
-    await w.getByRole('button', { name: /Story settings/ }).click();
+    // Story settings live in the Settings tab (§13.4): the Writing + Images groups let the person set this
+    // book's writing (voice/tone/length/auto-refresh) AND its own image style — on the Story page, not buried
+    // in app Settings.
+    await w.getByRole('tab', { name: 'Settings' }).click();
     await expect(w.getByLabel('Narrative voice')).toBeVisible();
     await expect(w.getByLabel('Tone')).toBeVisible();
     await expect(w.getByRole('combobox', { name: 'Image style' })).toBeVisible();
     // Change the book's tone → persists to its config.
     await w.getByLabel('Tone').selectOption({ label: 'Cinematic' });
 
-    // Create a symbolic cover (H1): the distill → render flow behind the shared image consent.
+    // Create a symbolic cover (H1) from the hero (always visible): the distill → render flow behind the shared
+    // image consent.
+    await w.getByRole('tab', { name: 'Chapters' }).click();
     await w.getByRole('button', { name: 'Create a cover' }).click();
     // Realtime progress (§12): while generating, a live phase + elapsed timer + progressbar show — NOT a
     // bare spinner. (The fake render is delayed via SELFOS_FAKE_IMAGE_DELAY_MS so this is observable.)
@@ -11405,7 +11413,9 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     await w.getByRole('button', { name: 'Looks good' }).click();
     await w.getByRole('button', { name: /Back to the book/ }).click();
 
-    // Publish the reviewed chapter, then grant the household reader.
+    // Publish + readers + export live in the Sharing tab (§13.4). Publish the reviewed chapter, grant the
+    // household reader.
+    await w.getByRole('tab', { name: 'Sharing' }).click();
     await w.getByRole('button', { name: /Publish & choose readers/ }).click();
     await expect(w.getByText(/Shared \d+ chapter/)).toBeVisible();
     await w.getByRole('combobox', { name: 'Add a reader' }).selectOption({ label: 'Reader' });
@@ -11475,8 +11485,9 @@ test('story (64): upload a photo, Claude vision proposes a caption + questions, 
     // One-flow draft (no outline gate): read + outline (auto-approved) + every chapter, landing on the book.
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
 
-    // Upload a personal photo (downscaled + EXIF-stripped in the renderer). A photo is vision-only — never an
-    // image-generation input (§3.7).
+    // Photos live in the Photos tab (§13.4). Upload a personal photo (downscaled + EXIF-stripped in the
+    // renderer). A photo is vision-only — never an image-generation input (§3.7).
+    await w.getByRole('tab', { name: 'Photos' }).click();
     await w
       .locator('input[type="file"]')
       .setInputFiles({ name: 'dad-shop.png', mimeType: 'image/png', buffer: makePng() });
@@ -11488,6 +11499,64 @@ test('story (64): upload a photo, Claude vision proposes a caption + questions, 
     await w.getByLabel('Who took this photo?').fill('My father did, in his workshop.');
     await w.getByRole('button', { name: 'Save answer' }).first().click();
     await expect(w.getByText(/My father did, in his workshop\./)).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('story (64): the Studio tabs deep-link, and the Danger zone deletes only after typing the title (§13)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Start your story' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Studio Book');
+    await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
+    // Lands on the Studio (Chapters tab default): the hero title + the chapter grid.
+    await expect(w.getByRole('heading', { name: 'Studio Book', level: 1 })).toBeVisible();
+    await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
+
+    // The five tabs exist; deep-linking is real (the URL carries the tab). Switch to Settings → the danger zone.
+    await w.getByRole('tab', { name: 'Settings' }).click();
+    await expect(w.getByRole('heading', { name: 'Danger zone' })).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Rewrite from scratch…' })).toBeVisible();
+
+    // 360px (phone): the tabbed Studio scrolls vertically only — no horizontal scrollbar (CLAUDE.md §12).
+    await w.setViewportSize({ width: 360, height: 780 });
+    const offenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(offenders).toEqual([]);
+    await w.setViewportSize({ width: 1100, height: 800 });
+
+    // Delete arms only when the exact title is typed (§13.6.7).
+    await w.getByRole('button', { name: 'Delete this book…' }).click();
+    const del = w.getByRole('button', { name: 'Delete forever' });
+    await expect(del).toBeDisabled();
+    await w.getByLabel(/Type the book’s title/).fill('Studio Book');
+    await expect(del).toBeEnabled();
+    await del.click();
+
+    // The book is gone → back to the empty landing (decrypt-level: no books remain for the owner).
+    await expect(w.getByRole('button', { name: 'Start your story' })).toBeVisible();
+    await expect.poll(async () => (await listBooks(fs, key, 'owner-1')).length).toBe(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

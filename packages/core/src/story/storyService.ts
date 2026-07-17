@@ -223,6 +223,56 @@ export async function deleteBook(fs: FileSystem, personId: string, bookId: strin
   await fs.remove(bookDir(personId, bookId));
 }
 
+/**
+ * Rewrite a book from scratch (64 §13.6.6) — reset it to the pre-draft state so the standard full-draft flow
+ * writes a fresh outline + fresh chapters. Returns the reset manifest, or null if the book is gone.
+ *
+ * KEEPS the person's investments: `config`, `title` (+ `titleAuto` — a never-renamed book may be re-titled by
+ * the fresh foundations, exactly as at first draft), `matter`, uploaded photos + their captions + answers, the
+ * cover, `exclusions`, and the interview state; the PUBLISHED head stays until they share again (readers keep
+ * their copy). DISCARDS every chapter (and, with it, that chapter's protected blocks, pinned quotes, and image
+ * placements — all chapter-bound), pending structural proposals, the essence, the outline + timeline, and every
+ * AI-GENERATED illustration (uploaded photos and the cover are `kind:'uploaded'`/`'cover'`, so they survive).
+ * No AI here — the caller re-runs the draft (the create-and-draft flow) afterwards.
+ */
+export async function rewriteBookFromScratch(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  now: Date,
+): Promise<BookManifest | null> {
+  const existing = await getBook(fs, key, personId, bookId);
+  if (!existing) return null;
+
+  // Everything that describes the DRAFTED book. Removing the chapters folder also discards each chapter's
+  // protected blocks / pinned quotes / image placements (they live on the chapter). `fs.remove` is a
+  // recursive, force delete — tolerant of a path that isn't there.
+  await fs.remove(chaptersDir(personId, bookId));
+  await fs.remove(`${bookDir(personId, bookId)}/markup`);
+  await fs.remove(proposalsPath(personId, bookId));
+  await fs.remove(outlinePath(personId, bookId));
+  await fs.remove(timelinePath(personId, bookId));
+  // `todos.enc` is a DENORMALIZED roll-up keyed by chapterId (syncChapterTodos maintains it per chapter); the
+  // fresh redraft makes new chapter ids with no marks, so without clearing it the roll-up would keep every
+  // pre-rewrite to-do forever, each pointing at a deleted chapter (a phantom "Needs you" entry). To-dos are
+  // markup, which we're discarding — so drop the roll-up too.
+  await fs.remove(todosPath(personId, bookId));
+
+  // Reap only AI-generated illustrations; keep uploaded photos + the cover.
+  const index = await getStoryImageIndex(fs, key, personId, bookId);
+  for (const img of index.images) {
+    if (img.kind === 'generated') await removeStoryImage(fs, key, personId, bookId, img.id);
+  }
+
+  // Reset the manifest to the pre-draft state: no essence, status back to `outlining`. Cover / matter / config /
+  // title (+ titleAuto) / sharedWith / publishedAt are untouched.
+  const reset: BookManifest = { ...existing, status: 'outlining', updatedAt: now.toISOString() };
+  delete reset.essence;
+  await saveManifest(fs, key, reset);
+  return reset;
+}
+
 // --- Outline / timeline / exclusions ---------------------------------------------------------------------
 
 export async function saveOutline(

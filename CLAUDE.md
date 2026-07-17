@@ -419,6 +419,41 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-17 — **Build (Your Story — the FULL-SURFACE redesign; mockup of EVERY screen approved FIRST; SPEC 64
+  §13 written + approved; R1 "Studio IA" BUILT on `feat/story-studio-ia`, PR pending).** The user rejected the
+  shipped Your Story surface as thrown-together ("completely REDESIGN FROM SCRATCH… generate mockup for ALL the
+  screens I can review first… EVERY SCREEN"). Process: mapped the whole feature (2 explore agents: renderer +
+  core/capabilities), captured **real screenshots** of the current UI, then built a **16-screen interactive
+  Artifact mockup** in the app's real tokens + embedded Lora/Mulish (invitation · commission · writing · Studio
+  ×5 tabs · reader front-matter/read/shape/review · reader-view · export · danger · edge states), verified it in
+  a headless browser (no console errors, no 360px overflow, dark + phone toggles), and got it **approved as the
+  visual contract** before any code. One product decision asked + locked: reader **read receipts = yes**. Wrote
+  spec **64 §13** (the Studio & the Book) + a 7-slice build plan (R1 Studio IA → R2 read → R3 shape → R4
+  sharing/export → R5 interview → R6 photos → R7 begin/polish), superseding §3.1–§3.6's _layouts_ while every §3
+  _mechanic_ (markup, batch apply, publish gate, interview engine, exclusions, freshness) is reused unchanged.
+  **R1 BUILT:** the old one-page card stack → a **Studio** — a hero (cover + title/Rename + essence + config
+  chips + freshness + completeness + Read/Refresh/⋯ kebab), a **"Needs you"** strip (proposals · to-review ·
+  to-dos, self-hiding to a calm "all caught up"), and **five tabs** (Chapters · Photos · Interview · Sharing ·
+  Settings) with the existing panels relocated (Settings = matter + Writing/Images [collapsible dropped for open
+  groups] + exclusions + **Danger zone**); a book-level **to-do sheet**; a `story/*` **splat route** so tabs
+  deep-link + survive reload (mirrored to `useState` so it also works with no Route in RTL). The **chapter reader
+  stays the existing `ChapterReader`** (the immersive Book view is R2/R3 — R1 doesn't touch the markup surface, so
+  its whole test suite stayed green). One new backend op: core **`rewriteBookFromScratch`** (keeps config/title/
+  matter/cover/uploaded-photos/exclusions/interview + the published head; discards chapters/markup/proposals/
+  outline/timeline/essence + only AI-generated illustrations) + the `story:rewriteFromScratch` channel through the
+  whole seam (gated `story.own` + active-person-scoped); the store's `rewriteFromScratch` resets then re-runs the
+  standard streamed draft (mirroring `createAndDraft`). Danger zone: type-to-confirm delete (arms only on the
+  exact title) + the rewrite dialog (honest keeps/discards). Gate green: typecheck, lint, format, **1420 core +
+  1270 desktop** unit (+core rewrite keeps/discards + missing-book null; +coreBridge rewrite round-trip + Guest
+  denial; +Story RTL: tab deep-link, type-to-confirm delete, rewrite-then-redraft; the 10 relocated-surface RTL
+  updated to switch tabs), **6 story E2E** (the 3 relocated walks re-pointed through the tabs; +a Studio-tabs +
+  Danger-zone delete walk with a 360px overflow guard). Real-Electron visual QA at desktop + 360px, light + dark.
+  **Lesson: a huge single-page → multi-tab re-architecture is low-risk if you PRESERVE the deep interactive
+  surface (the chapter reader/markup) untouched behind a still-reachable card — its whole test suite stays green,
+  and the churn collapses to (a) the container rebuild + (b) inserting a "switch to tab X" click in each
+  relocated-surface test. Excise a 400-line function deterministically with a Python marker, then author the
+  replacement via validated Edits; drive tab state from a splat route mirrored to `useState` so it works both
+  under a real Route (deep-link/reload) and rendered bare in RTL.**
 - 2026-07-16 — **Build (Your Story chapters redesigned as a cover-backed card grid — mockup approved FIRST;
   SPEC 64 §3.1/§3.3; on `feat/story-chapter-cards`, PR pending; v0.30.0 released alongside).** The user asked to
   redesign the flat part/chapter list into a **grid of modern, sleek cards "like TikTok"** with the **generated

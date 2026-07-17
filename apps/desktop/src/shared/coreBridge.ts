@@ -397,6 +397,7 @@ import {
   approveOutline,
   createBook,
   deleteBook,
+  rewriteBookFromScratch,
   editPassage,
   generateBookChapters,
   generateChapter,
@@ -4448,6 +4449,18 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const { bookId } = StoryBookRefSchema.parse(input);
       if (!(await getBook(ctx.fs, ctx.key, personId, bookId))) return; // only the active person's own book
       await deleteBook(ctx.fs, personId, bookId);
+    },
+    storyRewriteFromScratch: async (input): Promise<StoryBookBundle | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const { bookId } = StoryBookRefSchema.parse(input);
+      if (!(await getBook(ctx.fs, ctx.key, personId, bookId))) return null; // only the active person's own book
+      // Reset to the pre-draft state (no AI here) — the renderer re-runs the streamed full-draft afterwards.
+      const reset = await rewriteBookFromScratch(ctx.fs, ctx.key, personId, bookId, new Date());
+      if (!reset) return null;
+      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
     },
     storyGenerateChapters: async (input): Promise<StoryChaptersResult> => {
       const { bookId } = StoryBookRefSchema.parse(input);

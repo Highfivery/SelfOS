@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Banner,
   Button,
   Card,
-  Collapsible,
   Field,
   Heading,
   Inline,
@@ -38,6 +38,7 @@ import type {
   StoryCompletenessStage,
   StoryDraftProgress,
   StoryReaderView,
+  StoryTodoEntry,
   StructuralProposal,
   TextAnchor,
 } from '@shared/schemas';
@@ -172,7 +173,7 @@ export function Story(): JSX.Element {
       }
       return (
         <div className={styles.page}>
-          <BookOverview bundle={bundle} onOpenChapter={setReading} />
+          <StudioLayout bundle={bundle} onOpenChapter={setReading} />
         </div>
       );
     }
@@ -791,9 +792,9 @@ function PhotosPanel({ bookId }: { bookId: string }): JSX.Element {
 }
 
 /**
- * Story settings (§3.8) — a collapsible section on the book overview where the person configures THIS book:
- * its writing (voice, tone, length, auto-refresh) and its own image look (style + direction, independent of
- * the app-wide dream-image style). All persist to `BookConfig` via `storyUpdate`; writing changes steer
+ * Story settings (§3.8/§13.4) — the Settings tab's Writing + Images groups, where the person configures THIS
+ * book: its writing (voice, tone, length, auto-refresh) and its own image look (style + direction, independent
+ * of the app-wide dream-image style). All persist to `BookConfig` via `storyUpdate`; writing changes steer
  * FUTURE rewrites (existing chapters keep their text until re-drafted/refreshed). A `draft` mirror avoids a
  * stale-closure lost update across quick successive changes; the notes textarea persists on blur.
  */
@@ -828,114 +829,114 @@ function StorySettingsPanel({
   const effectiveImageStyle = draft.imageStyle ?? globalStyle ?? '';
 
   return (
-    <Card>
-      <Collapsible header={<Heading level={2}>Story settings</Heading>}>
-        <Stack gap={4}>
-          <Stack gap={3}>
-            <Heading level={3}>Writing</Heading>
-            <Field label="Narrative voice">
-              {(p) => (
-                <Select
-                  {...p}
-                  value={draft.voice}
-                  onChange={(e) => saveField({ voice: e.target.value as Voice })}
-                >
-                  {VOICE_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-            <Field label="Tone">
-              {(p) => (
-                <Select
-                  {...p}
-                  value={draft.style}
-                  onChange={(e) => saveField({ style: e.target.value as Style })}
-                >
-                  {STYLE_CHOICES.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-            {styleHint ? (
-              <Text size="sm" tone="secondary">
-                {styleHint}
-              </Text>
-            ) : null}
-            <Field label="Length">
-              {(p) => (
-                <Select
-                  {...p}
-                  value={draft.length}
-                  onChange={(e) => saveField({ length: e.target.value as Length })}
-                >
-                  {LENGTH_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-            <Inline justify="space-between" align="start">
-              <Stack gap={1}>
-                <Text size="sm" weight={500}>
-                  Auto-refresh
-                </Text>
-                <Text size="sm" tone="secondary">
-                  Rewrite chapters that fall out of date, on a gentle weekly cadence.
-                </Text>
-              </Stack>
-              <Switch
-                checked={draft.autoRefresh}
-                onChange={(v) => saveField({ autoRefresh: v })}
-                aria-label="Auto-refresh stale chapters"
-              />
-            </Inline>
-            <Text size="sm" tone="tertiary">
-              Writing changes apply to future rewrites — existing chapters keep their text until you
-              re-draft or refresh them.
+    <>
+      <Card>
+        <Stack gap={3}>
+          <Heading level={2}>Writing</Heading>
+          <Text size="sm" tone="secondary">
+            Steers every future rewrite — existing chapters keep their text until they’re re-drafted
+            or refreshed.
+          </Text>
+          <Field label="Narrative voice">
+            {(p) => (
+              <Select
+                {...p}
+                value={draft.voice}
+                onChange={(e) => saveField({ voice: e.target.value as Voice })}
+              >
+                {VOICE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          <Field label="Tone">
+            {(p) => (
+              <Select
+                {...p}
+                value={draft.style}
+                onChange={(e) => saveField({ style: e.target.value as Style })}
+              >
+                {STYLE_CHOICES.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          {styleHint ? (
+            <Text size="sm" tone="secondary">
+              {styleHint}
             </Text>
-          </Stack>
-
-          <Stack gap={3}>
-            <Heading level={3}>Images</Heading>
+          ) : null}
+          <Field label="Length">
+            {(p) => (
+              <Select
+                {...p}
+                value={draft.length}
+                onChange={(e) => saveField({ length: e.target.value as Length })}
+              >
+                {LENGTH_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          <Inline justify="space-between" align="start">
             <Stack gap={1}>
               <Text size="sm" weight={500}>
-                Image style
+                Auto-refresh
               </Text>
-              <ImageStylePicker
-                value={effectiveImageStyle}
-                onChange={(v) => saveField({ imageStyle: v })}
-              />
+              <Text size="sm" tone="secondary">
+                Rewrite chapters that fall out of date, on a gentle weekly cadence.
+              </Text>
             </Stack>
-            <Field label="Style direction (optional)">
-              {(p) => (
-                <Textarea
-                  {...p}
-                  rows={3}
-                  maxLength={300}
-                  value={notes}
-                  placeholder="muted earth tones, soft focus, golden-hour light…"
-                  onChange={(e) => setNotes(e.target.value)}
-                  onBlur={saveNotes}
-                />
-              )}
-            </Field>
-            <Text size="sm" tone="secondary">
-              The look for this book’s cover and chapter illustrations. Your dream images have their
-              own style in Settings → Images.
-            </Text>
-          </Stack>
+            <Switch
+              checked={draft.autoRefresh}
+              onChange={(v) => saveField({ autoRefresh: v })}
+              aria-label="Auto-refresh stale chapters"
+            />
+          </Inline>
         </Stack>
-      </Collapsible>
-    </Card>
+      </Card>
+
+      <Card>
+        <Stack gap={3}>
+          <Heading level={2}>Images</Heading>
+          <Text size="sm" tone="secondary">
+            The look for this book’s cover and chapter illustrations — independent of your dream
+            images (which have their own style in Settings → Images).
+          </Text>
+          <Stack gap={1}>
+            <Text size="sm" weight={500}>
+              Image style
+            </Text>
+            <ImageStylePicker
+              value={effectiveImageStyle}
+              onChange={(v) => saveField({ imageStyle: v })}
+            />
+          </Stack>
+          <Field label="Style direction (optional)">
+            {(p) => (
+              <Textarea
+                {...p}
+                rows={3}
+                maxLength={300}
+                value={notes}
+                placeholder="muted earth tones, soft focus, golden-hour light…"
+                onChange={(e) => setNotes(e.target.value)}
+                onBlur={saveNotes}
+              />
+            )}
+          </Field>
+        </Stack>
+      </Card>
+    </>
   );
 }
 
@@ -974,22 +975,37 @@ function coverPosition(seed: number): string {
   return `${x}% ${y}%`;
 }
 
-function BookOverview({
+// The Studio's five tabs (§13.2). `chapters` is the default; each is a real sub-route (`/story/<tab>`), so a
+// tab deep-links + survives reload, while an internal mirror drives rendering (works with no Route, e.g. RTL).
+const STUDIO_TABS = ['chapters', 'photos', 'interview', 'sharing', 'settings'] as const;
+type StudioTab = (typeof STUDIO_TABS)[number];
+const TAB_LABEL: Record<StudioTab, string> = {
+  chapters: 'Chapters',
+  photos: 'Photos',
+  interview: 'Interview',
+  sharing: 'Sharing',
+  settings: 'Settings',
+};
+function isStudioTab(v: string): v is StudioTab {
+  return (STUDIO_TABS as readonly string[]).includes(v);
+}
+
+/**
+ * The Studio (§13.2/§13.4) — the control room for a living book: one hero owning the book's identity, a
+ * "Needs you" strip that gathers every pending decision (and vanishes when you're caught up), and five tabs
+ * for everything else. Reuses the existing panels (cover, photos, settings, share, matter, exclusions) — this
+ * is a re-architecture of the surface, not the mechanics (§3 is unchanged). The chapter reader (§3.3) is still
+ * reached by opening a chapter card; the immersive Book view is a later slice (R2/R3).
+ */
+function StudioLayout({
   bundle,
   onOpenChapter,
 }: {
   bundle: StoryBookBundle;
   onOpenChapter: (chapterId: string) => void;
 }): JSX.Element {
-  const remove = useStoryStore((s) => s.remove);
   const generateChapters = useStoryStore((s) => s.generateChapters);
   const refreshBook = useStoryStore((s) => s.refreshBook);
-  const todos = useStoryStore((s) => s.todos);
-  const loadTodos = useStoryStore((s) => s.loadTodos);
-  const updateMark = useStoryStore((s) => s.updateMark);
-  const exclusions = useStoryStore((s) => s.exclusions);
-  const loadExclusions = useStoryStore((s) => s.loadExclusions);
-  const unexclude = useStoryStore((s) => s.unexclude);
   const proposals = useStoryStore((s) => s.proposals);
   const loadProposals = useStoryStore((s) => s.loadProposals);
   const resolveProposal = useStoryStore((s) => s.resolveProposal);
@@ -997,29 +1013,48 @@ function BookOverview({
   const loadCompleteness = useStoryStore((s) => s.loadCompleteness);
   const runInterviewCheck = useStoryStore((s) => s.runInterviewCheck);
   const update = useStoryStore((s) => s.update);
+  const todos = useStoryStore((s) => s.todos);
+  const loadTodos = useStoryStore((s) => s.loadTodos);
+  const exclusions = useStoryStore((s) => s.exclusions);
+  const loadExclusions = useStoryStore((s) => s.loadExclusions);
   const progress = useStoryStore((s) => s.progress);
   const busy = useStoryStore((s) => s.chaptersGenerating);
   const imageUrls = useStoryStore((s) => s.imageUrls);
   const getImageUrl = useStoryStore((s) => s.getImageUrl);
   const loadImages = useStoryStore((s) => s.loadImages);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const { manifest, outline, chapters } = bundle;
+  const bookId = manifest.id;
+
+  // Tab routing: the URL is the deep-linkable source of truth, mirrored into state so it also works with no
+  // Route context (RTL renders <Story/> directly). Clicking a tab updates both.
+  const routeTab = (useParams()['*'] ?? '').split('/')[0] ?? '';
+  const navigate = useNavigate();
+  const [tab, setTab] = useState<StudioTab>(isStudioTab(routeTab) ? routeTab : 'chapters');
+  useEffect(() => {
+    if (isStudioTab(routeTab)) setTab(routeTab);
+  }, [routeTab]);
+  const goTab = (t: StudioTab): void => {
+    setTab(t);
+    navigate(t === 'chapters' ? '/story' : `/story/${t}`);
+  };
+
   const [error, setError] = useState<string | null>(null);
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
   const [interviewBusy, setInterviewBusy] = useState(false);
-  const { manifest, outline, chapters } = bundle;
-  const bookId = manifest.id;
   const [titleDraft, setTitleDraft] = useState<string | null>(null); // non-null while renaming
+  const [todoSheetOpen, setTodoSheetOpen] = useState(false);
 
   useEffect(() => {
-    void loadExclusions(bookId);
-    void loadTodos(bookId);
     void loadProposals(bookId);
     void loadCompleteness(bookId);
+    void loadTodos(bookId);
+    void loadExclusions(bookId);
     void loadImages(bookId);
-  }, [bookId, loadExclusions, loadTodos, loadProposals, loadCompleteness, loadImages]);
+  }, [bookId, loadProposals, loadCompleteness, loadTodos, loadExclusions, loadImages]);
 
-  // Resolve the data URLs the chapter cards use as their background: each chapter's own illustration (§3.8)
-  // where it has one, otherwise the book cover — so the grid gets richer as art is added.
+  // Resolve the data URLs the chapter cards use as their background: each chapter's own illustration where it
+  // has one, otherwise the book cover — so the grid gets richer as art is added (§3.1 redesign).
   useEffect(() => {
     const ids = new Set<string>();
     if (manifest.coverImageId) ids.add(manifest.coverImageId);
@@ -1030,366 +1065,835 @@ function BookOverview({
     for (const id of ids) if (!imageUrls[id]) void getImageUrl(bookId, id);
   }, [bookId, manifest.coverImageId, chapters, imageUrls, getImageUrl]);
 
-  const openTodos = todos.filter((t) => t.status === 'open' || t.status === 'questionsSent');
-
   const outlineChapters = outline ? outline.parts.flatMap((p) => p.chapters) : [];
-  const writtenIds = new Set(chapters.map((c) => c.id));
-  const pending = outlineChapters.filter((c) => !writtenIds.has(c.id)).length;
-  // A chapter-write in progress for THIS book → show the rich progress inline (narrowed non-null for the JSX).
+  const writtenById = new Map(
+    chapters.filter((c) => c.markdown.trim().length > 0).map((c) => [c.id, c]),
+  );
+  const writtenInOrder = outlineChapters
+    .map((c) => writtenById.get(c.id))
+    .filter((c): c is (typeof chapters)[number] => Boolean(c));
+  const pending = outlineChapters.filter((c) => !writtenById.has(c.id)).length;
+  const staleCount = chapters.filter((c) => c.status === 'stale').length;
+  const toReview = writtenInOrder.filter((c) => c.status === 'new' || c.status === 'updated');
+  const openTodos = todos.filter((t) => t.status === 'open' || t.status === 'questionsSent');
+  const firstWritten = writtenInOrder[0];
+
+  // A chapter-write in progress for THIS book → show the rich progress inline in the Chapters tab.
   const chapterProgress =
     progress && progress.scope === 'chapters' && progress.bookId === bookId ? progress : null;
 
+  const doRefresh = async (): Promise<void> => {
+    setError(null);
+    setRefreshNotice(null);
+    const res = await refreshBook(bookId, { auto: false });
+    await loadProposals(bookId);
+    const bits: string[] = [];
+    if (res.rewritten > 0)
+      bits.push(
+        `Brought ${res.rewritten} chapter${res.rewritten === 1 ? '' : 's'} up to date with what’s new.`,
+      );
+    else if (res.staled > 0)
+      bits.push(
+        `${res.staled} chapter${res.staled === 1 ? ' has' : 's have'} new material to fold in — turn on AI to update ${res.staled === 1 ? 'it' : 'them'}.`,
+      );
+    if (res.proposalsAdded)
+      bits.push(
+        `${res.proposalsAdded} suggested change${res.proposalsAdded === 1 ? '' : 's'} to review below.`,
+      );
+    setRefreshNotice(bits.length > 0 ? bits.join(' ') : 'Your story is up to date.');
+  };
+
+  const chips = [
+    manifest.config.voice === 'first' ? 'First person' : 'Third person',
+    STYLE_CHOICES.find((s) => s.value === manifest.config.style)?.label ?? manifest.config.style,
+    `${LENGTH_OPTIONS.find((l) => l.value === manifest.config.length)?.label ?? manifest.config.length} length`,
+    `${chapters.length} chapter${chapters.length === 1 ? '' : 's'}`,
+  ];
+
   return (
-    <Stack gap={4}>
-      <Inline justify="space-between">
-        {titleDraft === null ? (
-          <Inline gap={2}>
-            <Heading level={1}>{manifest.title}</Heading>
-            <button
-              type="button"
-              className={styles.sourcesToggle}
-              aria-label="Rename this book"
-              onClick={() => setTitleDraft(manifest.title)}
-            >
-              Rename
-            </button>
-          </Inline>
-        ) : (
-          <Inline gap={2}>
-            <div className={styles.grow}>
-              <TextInput
-                value={titleDraft}
-                aria-label="Book title"
-                onChange={(e) => setTitleDraft(e.target.value)}
+    <div className={styles.studio}>
+      {/* ---- Hero: the book's identity ---- */}
+      <div className={styles.hero}>
+        <div className={styles.heroCover}>
+          <CoverPanel
+            bookId={bookId}
+            {...(manifest.coverImageId ? { coverImageId: manifest.coverImageId } : {})}
+          />
+        </div>
+        <div className={styles.heroBody}>
+          <span className={styles.partEyebrow}>Your story · Biography</span>
+          {titleDraft === null ? (
+            <div className={styles.heroTitleRow}>
+              <Heading level={1}>{manifest.title}</Heading>
+              <button
+                type="button"
+                className={styles.sourcesToggle}
+                aria-label="Rename this book"
+                onClick={() => setTitleDraft(manifest.title)}
+              >
+                Rename
+              </button>
+            </div>
+          ) : (
+            <Inline gap={2}>
+              <div className={styles.grow}>
+                <TextInput
+                  value={titleDraft}
+                  aria-label="Book title"
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                />
+              </div>
+              <Button
+                variant="primary"
+                disabled={titleDraft.trim().length === 0}
+                onClick={async () => {
+                  const next = titleDraft.trim();
+                  if (next && next !== manifest.title) await update(bookId, { title: next });
+                  setTitleDraft(null);
+                }}
+              >
+                Save
+              </Button>
+              <Button variant="ghost" onClick={() => setTitleDraft(null)}>
+                Cancel
+              </Button>
+            </Inline>
+          )}
+          {manifest.essence ? (
+            <div className={styles.heroEssence}>
+              <Markdown>{manifest.essence}</Markdown>
+            </div>
+          ) : null}
+          <div className={styles.heroChips}>
+            {chips.map((c) => (
+              <span key={c} className={styles.chip}>
+                {c}
+              </span>
+            ))}
+          </div>
+          {staleCount > 0 ? (
+            <Text size="sm" tone="tertiary">
+              {staleCount} chapter{staleCount === 1 ? ' has' : 's have'} new material to fold in.
+            </Text>
+          ) : null}
+          {completeness && chapters.length > 0 ? <CompletenessMeter c={completeness} /> : null}
+
+          {error ? <Banner tone="danger">{error}</Banner> : null}
+          {refreshNotice ? <Banner tone="info">{refreshNotice}</Banner> : null}
+
+          {chapters.length > 0 ? (
+            <div className={styles.heroActions}>
+              {firstWritten ? (
+                <Button variant="primary" onClick={() => onOpenChapter(firstWritten.id)}>
+                  Read your story
+                </Button>
+              ) : null}
+              <Button disabled={busy} onClick={() => void doRefresh()}>
+                {busy ? 'Checking…' : 'Refresh from what’s new'}
+                {staleCount > 0 ? <span className={styles.actionBadge}>{staleCount}</span> : null}
+              </Button>
+              <StudioKebab
+                onExport={() => goTab('sharing')}
+                onShare={() => goTab('sharing')}
+                onRename={() => setTitleDraft(manifest.title)}
+                onSettings={() => goTab('settings')}
               />
             </div>
-            <Button
-              variant="primary"
-              disabled={titleDraft.trim().length === 0}
-              onClick={async () => {
-                const next = titleDraft.trim();
-                if (next && next !== manifest.title) await update(bookId, { title: next });
-                setTitleDraft(null);
-              }}
-            >
-              Save
-            </Button>
-            <Button variant="ghost" onClick={() => setTitleDraft(null)}>
-              Cancel
-            </Button>
-          </Inline>
-        )}
-        <Text tone="secondary" size="sm">
-          Biography · {manifest.config.voice === 'first' ? 'first person' : 'third person'}
-        </Text>
-      </Inline>
+          ) : null}
+        </div>
+      </div>
 
-      {manifest.essence ? (
-        <Card>
-          <Markdown>{manifest.essence}</Markdown>
-        </Card>
-      ) : null}
+      {/* ---- Needs you: pending decisions, gathered (hidden when caught up) ---- */}
+      <NeedsYou
+        proposals={proposals}
+        toReviewCount={toReview.length}
+        openTodoCount={openTodos.length}
+        onReview={() => {
+          if (toReview[0]) onOpenChapter(toReview[0].id);
+        }}
+        onOpenTodos={() => setTodoSheetOpen(true)}
+        onApprove={async (id) => {
+          setError(null);
+          const r = await resolveProposal(bookId, id, 'approve');
+          if (!r.ok && r.message) setError(r.message);
+        }}
+        onDismiss={(id) => void resolveProposal(bookId, id, 'dismiss')}
+      />
 
-      {chapters.length > 0 ? (
-        <CoverPanel
-          bookId={bookId}
-          {...(manifest.coverImageId ? { coverImageId: manifest.coverImageId } : {})}
+      {/* ---- Tabs ---- */}
+      <div className={styles.tabs} role="tablist" aria-label="Your story">
+        {STUDIO_TABS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={tab === t}
+            className={`${styles.tab} ${tab === t ? styles.tabActive : ''}`}
+            onClick={() => goTab(t)}
+          >
+            {TAB_LABEL[t]}
+            {t === 'photos' ? <TabCount bookId={bookId} kind="photos" /> : null}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'chapters' ? (
+        <ChaptersTab
+          bundle={bundle}
+          chapterProgress={chapterProgress}
+          pending={pending}
+          onOpenChapter={onOpenChapter}
+          onWrite={async () => {
+            setError(null);
+            const res = await generateChapters(bookId);
+            if (!res.ok) setError(res.message);
+            else if (res.budgetReached && res.message) setError(res.message);
+          }}
         />
       ) : null}
 
-      {chapters.length > 0 ? <PhotosPanel bookId={bookId} /> : null}
+      {tab === 'photos' ? <PhotosPanel bookId={bookId} /> : null}
 
-      <StorySettingsPanel bookId={bookId} config={manifest.config} />
-
-      {completeness && chapters.length > 0 ? <CompletenessMeter c={completeness} /> : null}
-
-      {error ? <Banner tone="danger">{error}</Banner> : null}
-      {refreshNotice ? <Banner tone="info">{refreshNotice}</Banner> : null}
-
-      {chapters.length > 0 ? (
-        <Inline>
-          <Button
-            disabled={busy}
-            onClick={async () => {
-              setError(null);
-              setRefreshNotice(null);
-              const res = await refreshBook(manifest.id, { auto: false });
-              // The pass may have filed structural proposals — reload the panel so they appear.
-              await loadProposals(manifest.id);
-              const bits: string[] = [];
-              if (res.rewritten > 0)
-                bits.push(
-                  `Brought ${res.rewritten} chapter${res.rewritten === 1 ? '' : 's'} up to date with what’s new.`,
-                );
-              else if (res.staled > 0)
-                bits.push(
-                  `${res.staled} chapter${res.staled === 1 ? ' has' : 's have'} new material to fold in — turn on AI to update ${res.staled === 1 ? 'it' : 'them'}.`,
-                );
-              if (res.proposalsAdded)
-                bits.push(
-                  `${res.proposalsAdded} suggested change${res.proposalsAdded === 1 ? '' : 's'} to review below.`,
-                );
-              setRefreshNotice(bits.length > 0 ? bits.join(' ') : 'Your story is up to date.');
-            }}
-          >
-            {busy ? 'Checking…' : 'Refresh from what’s new'}
-          </Button>
-          <Button
-            variant="ghost"
-            disabled={interviewBusy}
-            onClick={async () => {
-              setError(null);
-              setRefreshNotice(null);
-              setInterviewBusy(true);
-              try {
-                const res = await runInterviewCheck(manifest.id);
-                setRefreshNotice(
-                  res.outcome === 'minted'
-                    ? 'Your biographer sent a few questions to your Inbox to fill a gap.'
-                    : res.outcome === 'openCheckin'
-                      ? 'You already have questions from your biographer waiting in your Inbox.'
-                      : res.outcome === 'noGaps'
-                        ? 'Nothing new to ask right now — your story is well covered.'
-                        : 'No new questions right now — check back later.',
-                );
-              } finally {
-                setInterviewBusy(false);
-              }
-            }}
-          >
-            {interviewBusy ? 'Looking…' : 'Find what’s missing'}
-          </Button>
-        </Inline>
+      {tab === 'interview' ? (
+        <InterviewTab
+          completeness={completeness}
+          busy={interviewBusy}
+          onFind={async () => {
+            setInterviewBusy(true);
+            try {
+              const res = await runInterviewCheck(bookId);
+              return res.outcome === 'minted'
+                ? 'Your biographer sent a few questions to your Inbox to fill a gap.'
+                : res.outcome === 'openCheckin'
+                  ? 'You already have questions from your biographer waiting in your Inbox.'
+                  : res.outcome === 'noGaps'
+                    ? 'Nothing new to ask right now — your story is well covered.'
+                    : 'No new questions right now — check back later.';
+            } finally {
+              setInterviewBusy(false);
+            }
+          }}
+        />
       ) : null}
 
-      {proposals.length > 0 ? (
-        <Card>
-          <Stack gap={2}>
-            <Heading level={2}>Suggested changes</Heading>
-            <Text tone="secondary" size="sm">
-              Your biographer thinks the book’s shape could change. Nothing happens until you
-              approve — a new or split chapter is written on your next refresh.
-            </Text>
-            {proposals.map((p) => (
-              <div key={p.id} className={styles.markRow}>
-                <Stack gap={1}>
-                  <Text size="sm" className={styles.rowTitle}>
-                    {proposalSummary(p)}
-                  </Text>
-                  {p.rationale ? (
-                    <Text size="sm" tone="secondary">
-                      {p.rationale}
-                    </Text>
-                  ) : null}
-                </Stack>
-                <Inline gap={1}>
-                  <button
-                    type="button"
-                    className={styles.sourcesToggle}
-                    onClick={async () => {
-                      setError(null);
-                      const r = await resolveProposal(bookId, p.id, 'approve');
-                      if (!r.ok && r.message) setError(r.message);
-                    }}
-                  >
-                    Approve
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.sourcesToggle}
-                    aria-label="Dismiss this suggestion"
-                    onClick={() => void resolveProposal(bookId, p.id, 'dismiss')}
-                  >
-                    Dismiss
-                  </button>
-                </Inline>
-              </div>
-            ))}
-          </Stack>
-        </Card>
+      {tab === 'sharing' ? (
+        <ShareReadersPanel
+          bookId={bookId}
+          authorPersonId={manifest.personId}
+          {...(manifest.publishedAt ? { publishedAt: manifest.publishedAt } : {})}
+        />
       ) : null}
 
-      {chapterProgress ? (
-        // The same rich, real-time progress as create-and-draft, shown INLINE here (keeps the overview in
-        // view; §3.2). Driven by the store's `progress`, streamed from main, so it continues if you leave.
-        <DraftProgress p={chapterProgress} />
-      ) : pending > 0 ? (
-        <Inline>
-          <Button
-            variant="primary"
-            onClick={async () => {
-              setError(null);
-              const res = await generateChapters(manifest.id);
-              if (!res.ok) setError(res.message);
-              else if (res.budgetReached && res.message) setError(res.message);
-            }}
-          >
-            {chapters.length > 0
-              ? `Write the remaining ${pending} chapter${pending === 1 ? '' : 's'}`
-              : 'Write your chapters'}
-          </Button>
-        </Inline>
-      ) : null}
-
-      {outline
-        ? outline.parts.map((part, pi) => (
-            <section className={styles.partSection} key={part.id}>
-              <div className={styles.partHead}>
-                <span className={styles.partEyebrow}>{partLabel(pi)}</span>
-                <Heading level={2}>{part.title}</Heading>
-                <span className={styles.partCount}>
-                  {part.chapters.length} {part.chapters.length === 1 ? 'chapter' : 'chapters'}
-                </span>
-              </div>
-              <div className={styles.chapterGrid}>
-                {part.chapters.map((chapter) => {
-                  // An approved structural proposal leaves an un-written shell (empty markdown, status stale)
-                  // that the next refresh drafts — show it as a calm "Not yet written" card, not a blank.
-                  const written = chapters.find(
-                    (c) => c.id === chapter.id && c.markdown.trim().length > 0,
-                  );
-                  const num = outlineChapters.findIndex((c) => c.id === chapter.id) + 1;
-                  const numLabel = num > 0 ? `Chapter ${num}` : 'Chapter';
-                  if (!written) {
-                    return (
-                      <div key={chapter.id} className={styles.notYetCard}>
-                        <span className={styles.chNum}>{numLabel}</span>
-                        <span className={styles.notYetTitle}>{chapter.title}</span>
-                        <span>Not yet written</span>
-                      </div>
-                    );
-                  }
-                  // The card background: the chapter's own illustration if it has one, else the book cover.
-                  const ownIllustration = written.imagePlacements[0]?.imageId;
-                  const imageId = ownIllustration ?? manifest.coverImageId;
-                  const url = imageId ? imageUrls[imageId] : undefined;
-                  const badge = chapterBadge(written.status);
+      {tab === 'settings' ? (
+        <div className={styles.settingsTab}>
+          <MatterEditor bookId={bookId} {...(manifest.matter ? { matter: manifest.matter } : {})} />
+          <StorySettingsPanel bookId={bookId} config={manifest.config} />
+          {exclusions.length > 0 ? (
+            <Card>
+              <Stack gap={2}>
+                <Heading level={2}>Never written about</Heading>
+                <Text tone="secondary" size="sm">
+                  Excluded everywhere, forever — until you allow it again.
+                </Text>
+                {exclusions.map((item) => {
+                  const label = item.note ?? item.value;
                   return (
-                    <button
-                      key={chapter.id}
-                      type="button"
-                      className={`${styles.chapterCard} ${url ? '' : styles.chapterCardFallback}`}
-                      style={
-                        url
-                          ? {
-                              backgroundImage: `url("${url}")`,
-                              // A unique illustration is centered; the shared cover gets a varied crop.
-                              backgroundPosition: ownIllustration ? 'center' : coverPosition(num),
-                            }
-                          : undefined
-                      }
-                      onClick={() => onOpenChapter(chapter.id)}
-                    >
-                      <span className={`${styles.chBadge} ${badge.cls}`}>
-                        <span className={styles.chDot} aria-hidden="true" />
-                        {badge.label}
-                      </span>
-                      <span className={styles.chapterCardBody}>
-                        <span className={styles.chNum}>{numLabel}</span>
-                        <span className={styles.chTitle}>{chapter.title}</span>
-                        <span className={styles.chReveal}>Read ›</span>
-                      </span>
-                    </button>
+                    <div key={item.id} className={styles.markRow}>
+                      <Text size="sm">{label}</Text>
+                      <button
+                        type="button"
+                        className={styles.sourcesToggle}
+                        aria-label={`Allow writing about ${label} again`}
+                        onClick={() => void useStoryStore.getState().unexclude(bookId, item.id)}
+                      >
+                        Allow again
+                      </button>
+                    </div>
                   );
                 })}
-              </div>
-            </section>
-          ))
-        : null}
-
-      {openTodos.length > 0 ? (
-        <Card>
-          <Stack gap={2}>
-            <Heading level={2}>To do</Heading>
-            {openTodos.map((t) => (
-              <div key={t.id} className={styles.markRow}>
-                <Text size="sm">
-                  {TODO_KIND_LABEL[t.kind] ?? 'To-do'}: {t.text}
-                </Text>
-                {t.kind === 'remind' && t.status === 'open' ? (
-                  <button
-                    type="button"
-                    className={styles.sourcesToggle}
-                    onClick={async () => {
-                      await updateMark(bookId, t.chapterId, t.id, { status: 'done' });
-                      await loadTodos(bookId);
-                    }}
-                  >
-                    Mark done
-                  </button>
-                ) : (
-                  <Text size="sm" tone="secondary">
-                    {t.status === 'questionsSent'
-                      ? 'Questions sent'
-                      : 'Folds into your next revision'}
-                  </Text>
-                )}
-              </div>
-            ))}
-          </Stack>
-        </Card>
-      ) : null}
-
-      {exclusions.length > 0 ? (
-        <Card>
-          <Stack gap={2}>
-            <Heading level={2}>Never written about</Heading>
-            <Text tone="secondary" size="sm">
-              Things you’ve asked your biographer to leave out. They won’t appear in future
-              chapters.
-            </Text>
-            {exclusions.map((item) => {
-              // A `source` exclusion's `value` is a cryptic ref id; show its friendly `note` label instead.
-              const label = item.note ?? item.value;
-              return (
-                <div key={item.id} className={styles.markRow}>
-                  <Text size="sm">{label}</Text>
-                  <button
-                    type="button"
-                    className={styles.sourcesToggle}
-                    aria-label={`Allow writing about ${label} again`}
-                    onClick={() => void unexclude(bookId, item.id)}
-                  >
-                    Allow again
-                  </button>
-                </div>
-              );
-            })}
-          </Stack>
-        </Card>
-      ) : null}
-
-      {chapters.length > 0 ? (
-        <>
-          <MatterEditor bookId={bookId} {...(manifest.matter ? { matter: manifest.matter } : {})} />
-          <ShareReadersPanel
-            bookId={bookId}
-            authorPersonId={manifest.personId}
-            {...(manifest.publishedAt ? { publishedAt: manifest.publishedAt } : {})}
-          />
-        </>
+              </Stack>
+            </Card>
+          ) : null}
+          <DangerZone bookId={bookId} title={manifest.title} />
+        </div>
       ) : null}
 
       <SharedWithYou />
 
-      <Inline>
-        {confirmDelete ? (
-          <Inline>
-            <Text tone="secondary" size="sm">
-              Delete this book?
-            </Text>
-            <Button variant="danger" onClick={() => void remove(manifest.id)}>
-              Delete
-            </Button>
-            <Button onClick={() => setConfirmDelete(false)}>Cancel</Button>
-          </Inline>
-        ) : (
-          <Button variant="ghost" onClick={() => setConfirmDelete(true)}>
-            Delete book
-          </Button>
-        )}
-      </Inline>
+      {todoSheetOpen ? (
+        <TodoSheet bookId={bookId} todos={openTodos} onClose={() => setTodoSheetOpen(false)} />
+      ) : null}
+    </div>
+  );
+}
+
+/** A small live count next to a tab label (currently only Photos). Reads the store's images index. */
+function TabCount({ bookId, kind }: { bookId: string; kind: 'photos' }): JSX.Element | null {
+  const images = useStoryStore((s) => s.images);
+  const loadImages = useStoryStore((s) => s.loadImages);
+  useEffect(() => {
+    void loadImages(bookId);
+  }, [bookId, loadImages]);
+  const n = images.filter((i) => i.kind === 'uploaded').length;
+  if (kind === 'photos' && n > 0) return <span className={styles.tabBadge}>{n}</span>;
+  return null;
+}
+
+/** The Chapters tab: the cover-backed card grid grouped by part, the "write the remaining N" bar rendered
+ *  inside the part that owns the unwritten shells, and the inline write-progress. */
+function ChaptersTab({
+  bundle,
+  chapterProgress,
+  pending,
+  onOpenChapter,
+  onWrite,
+}: {
+  bundle: StoryBookBundle;
+  chapterProgress: (StoryDraftProgress & { startedAt: number }) | null;
+  pending: number;
+  onOpenChapter: (chapterId: string) => void;
+  onWrite: () => void | Promise<void>;
+}): JSX.Element {
+  const imageUrls = useStoryStore((s) => s.imageUrls);
+  const { manifest, outline, chapters } = bundle;
+  const outlineChapters = outline ? outline.parts.flatMap((p) => p.chapters) : [];
+
+  if (!outline) return <div />;
+  const firstUnwrittenPart = outline.parts.findIndex((p) =>
+    p.chapters.some((c) => !chapters.some((w) => w.id === c.id && w.markdown.trim().length > 0)),
+  );
+
+  return (
+    <Stack gap={5}>
+      {outline.parts.map((part, pi) => {
+        const partWritten = part.chapters.filter((c) =>
+          chapters.some((w) => w.id === c.id && w.markdown.trim().length > 0),
+        ).length;
+        const partReviewed = part.chapters.filter((c) =>
+          chapters.some((w) => w.id === c.id && w.status === 'reviewed'),
+        ).length;
+        const partUnwritten = part.chapters.length - partWritten;
+        const progressLabel =
+          partUnwritten > 0
+            ? `${partReviewed} of ${part.chapters.length} reviewed · ${partUnwritten} unwritten`
+            : `${partReviewed} of ${part.chapters.length} reviewed`;
+        return (
+          <section className={styles.partSection} key={part.id}>
+            <div className={styles.partHead}>
+              <span className={styles.partEyebrow}>{partLabel(pi)}</span>
+              <Heading level={2}>{part.title}</Heading>
+              <span className={styles.partCount}>{progressLabel}</span>
+            </div>
+            {/* The write action / live write-progress lives inside the FIRST part that still has unwritten
+                shells (§13.3) — so it sits where the work is, not floating above the whole grid. */}
+            {firstUnwrittenPart === pi && chapterProgress ? (
+              <DraftProgress p={chapterProgress} />
+            ) : firstUnwrittenPart === pi && pending > 0 ? (
+              <div className={styles.writeBar}>
+                <Text size="sm">
+                  {chapters.length > 0
+                    ? `${pending} approved chapter${pending === 1 ? " isn't" : "s aren't"} written yet.`
+                    : 'Your outline is ready.'}
+                </Text>
+                <Button variant="primary" onClick={() => void onWrite()}>
+                  {chapters.length > 0
+                    ? `Write the remaining ${pending} chapter${pending === 1 ? '' : 's'}`
+                    : 'Write your chapters'}
+                </Button>
+              </div>
+            ) : null}
+            <div className={styles.chapterGrid}>
+              {part.chapters.map((chapter) => {
+                const written = chapters.find(
+                  (c) => c.id === chapter.id && c.markdown.trim().length > 0,
+                );
+                const num = outlineChapters.findIndex((c) => c.id === chapter.id) + 1;
+                const numLabel = num > 0 ? `Chapter ${num}` : 'Chapter';
+                if (!written) {
+                  return (
+                    <div key={chapter.id} className={styles.notYetCard}>
+                      <span className={styles.chNum}>{numLabel}</span>
+                      <span className={styles.notYetTitle}>{chapter.title}</span>
+                      <span>Not yet written</span>
+                    </div>
+                  );
+                }
+                const ownIllustration = written.imagePlacements[0]?.imageId;
+                const imageId = ownIllustration ?? manifest.coverImageId;
+                const url = imageId ? imageUrls[imageId] : undefined;
+                const badge = chapterBadge(written.status);
+                return (
+                  <button
+                    key={chapter.id}
+                    type="button"
+                    className={`${styles.chapterCard} ${url ? '' : styles.chapterCardFallback}`}
+                    style={
+                      url
+                        ? {
+                            backgroundImage: `url("${url}")`,
+                            backgroundPosition: ownIllustration ? 'center' : coverPosition(num),
+                          }
+                        : undefined
+                    }
+                    onClick={() => onOpenChapter(chapter.id)}
+                  >
+                    <span className={`${styles.chBadge} ${badge.cls}`}>
+                      <span className={styles.chDot} aria-hidden="true" />
+                      {badge.label}
+                    </span>
+                    <span className={styles.chapterCardBody}>
+                      <span className={styles.chNum}>{numLabel}</span>
+                      <span className={styles.chTitle}>{chapter.title}</span>
+                      <span className={styles.chReveal}>Read ›</span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
     </Stack>
+  );
+}
+
+/** The Interview tab (§13.4): the completeness stage + the metered "find what's missing" gap check. The life
+ *  map + gap invitations arrive with the gaps backend (a later slice, §13.6.3/§13.6.4). */
+function InterviewTab({
+  completeness,
+  busy,
+  onFind,
+}: {
+  completeness: StoryCompleteness | null;
+  busy: boolean;
+  onFind: () => Promise<string>;
+}): JSX.Element {
+  const [notice, setNotice] = useState<string | null>(null);
+  return (
+    <Card>
+      <Stack gap={3}>
+        <Heading level={2}>What’s missing</Heading>
+        {completeness ? (
+          <Text tone="secondary" size="sm">
+            Your story is <strong>{COMPLETENESS_STAGE[completeness.stage].toLowerCase()}</strong>.
+            Your biographer can look for the gaps — the thin eras, the scenes it hasn’t heard — and
+            send you a few questions to fill them.
+          </Text>
+        ) : (
+          <Text tone="secondary" size="sm">
+            Your biographer can look for the gaps in your story and send you a few questions to fill
+            them.
+          </Text>
+        )}
+        {notice ? <Banner tone="info">{notice}</Banner> : null}
+        <Inline>
+          <Button variant="primary" disabled={busy} onClick={async () => setNotice(await onFind())}>
+            {busy ? 'Looking…' : 'Find what’s missing'}
+          </Button>
+        </Inline>
+        <Text tone="tertiary" size="sm">
+          Questions arrive in your Inbox under “Your biographer”. Answering them weaves new material
+          into your story.
+        </Text>
+      </Stack>
+    </Card>
+  );
+}
+
+/** The "Needs you" strip (§13.4) — one card per pending decision. Self-hides entirely when you're caught up
+ *  (replaced by a calm "all caught up" line). */
+function NeedsYou({
+  proposals,
+  toReviewCount,
+  openTodoCount,
+  onReview,
+  onOpenTodos,
+  onApprove,
+  onDismiss,
+}: {
+  proposals: StructuralProposal[];
+  toReviewCount: number;
+  openTodoCount: number;
+  onReview: () => void;
+  onOpenTodos: () => void;
+  onApprove: (proposalId: string) => void | Promise<void>;
+  onDismiss: (proposalId: string) => void;
+}): JSX.Element {
+  const nothing = proposals.length === 0 && toReviewCount === 0 && openTodoCount === 0;
+  if (nothing) {
+    return (
+      <div className={styles.caughtUp}>
+        <Text size="sm" tone="secondary">
+          ✓ Nothing needs you — your story is up to date.
+        </Text>
+      </div>
+    );
+  }
+  const count = proposals.length + (toReviewCount > 0 ? 1 : 0) + (openTodoCount > 0 ? 1 : 0);
+  return (
+    <div className={styles.needs}>
+      <div className={styles.needsHead}>
+        <span className={styles.partEyebrow}>Needs you</span>
+        <Text size="sm" tone="tertiary">
+          {count} thing{count === 1 ? '' : 's'} · this clears as you go
+        </Text>
+      </div>
+      <div className={styles.needsGrid}>
+        {proposals.map((p) => (
+          <div key={p.id} className={styles.needCard}>
+            <span className={styles.needKindWarn}>Suggested change</span>
+            <Text size="sm" className={styles.needTitle}>
+              {proposalSummary(p)}
+            </Text>
+            {p.rationale ? (
+              <Text size="sm" tone="tertiary">
+                {p.rationale}
+              </Text>
+            ) : null}
+            <Inline gap={2}>
+              <Button variant="primary" onClick={() => void onApprove(p.id)}>
+                Approve
+              </Button>
+              <button
+                type="button"
+                className={styles.sourcesToggle}
+                aria-label="Dismiss this suggestion"
+                onClick={() => onDismiss(p.id)}
+              >
+                Later
+              </button>
+            </Inline>
+          </div>
+        ))}
+        {toReviewCount > 0 ? (
+          <div className={styles.needCard}>
+            <span className={styles.needKind}>To review</span>
+            <Text size="sm" className={styles.needTitle}>
+              {toReviewCount} newly written chapter{toReviewCount === 1 ? '' : 's'}
+            </Text>
+            <Text size="sm" tone="tertiary">
+              Read {toReviewCount === 1 ? 'it' : 'them'} and mark “Looks good” to share.
+            </Text>
+            <Inline>
+              <Button onClick={onReview}>Review ›</Button>
+            </Inline>
+          </div>
+        ) : null}
+        {openTodoCount > 0 ? (
+          <div className={styles.needCard}>
+            <span className={styles.needKind}>To-dos</span>
+            <Text size="sm" className={styles.needTitle}>
+              {openTodoCount} open
+            </Text>
+            <Text size="sm" tone="tertiary">
+              Your reminders and the notes you’ve handed your biographer.
+            </Text>
+            <Inline>
+              <button type="button" className={styles.sourcesToggle} onClick={onOpenTodos}>
+                View ›
+              </button>
+            </Inline>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** The book-level "To do" roll-up (§3.3.2), in a right-hand sheet opened from the Needs-you strip. */
+function TodoSheet({
+  bookId,
+  todos,
+  onClose,
+}: {
+  bookId: string;
+  todos: StoryTodoEntry[];
+  onClose: () => void;
+}): JSX.Element {
+  const updateMark = useStoryStore((s) => s.updateMark);
+  const loadTodos = useStoryStore((s) => s.loadTodos);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className={styles.sheetWrap}>
+      <div className={styles.sheetBackdrop} onClick={onClose} aria-hidden="true" />
+      <aside className={styles.sheetPanel} role="dialog" aria-label="To do">
+        <div className={styles.sheetHead}>
+          <Heading level={2}>To do</Heading>
+          <button
+            type="button"
+            className={styles.sourcesToggle}
+            aria-label="Close"
+            onClick={onClose}
+          >
+            ✕ Close
+          </button>
+        </div>
+        <div className={styles.sheetBody}>
+          {todos.map((t) => (
+            <div key={t.id} className={styles.markRow}>
+              <Text size="sm">
+                {TODO_KIND_LABEL[t.kind] ?? 'To-do'}: {t.text}
+              </Text>
+              {t.kind === 'remind' && t.status === 'open' ? (
+                <button
+                  type="button"
+                  className={styles.sourcesToggle}
+                  onClick={async () => {
+                    await updateMark(bookId, t.chapterId, t.id, { status: 'done' });
+                    await loadTodos(bookId);
+                  }}
+                >
+                  Mark done
+                </button>
+              ) : (
+                <Text size="sm" tone="secondary">
+                  {t.status === 'questionsSent'
+                    ? 'Questions sent'
+                    : 'Folds into your next revision'}
+                </Text>
+              )}
+            </div>
+          ))}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+/** The hero's "more" menu (§13.4) — a compact popover with a backdrop catcher (no clipping). */
+function StudioKebab({
+  onExport,
+  onShare,
+  onRename,
+  onSettings,
+}: {
+  onExport: () => void;
+  onShare: () => void;
+  onRename: () => void;
+  onSettings: () => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const pick = (fn: () => void) => () => {
+    setOpen(false);
+    fn();
+  };
+  return (
+    <div className={styles.kebabWrap}>
+      <button
+        type="button"
+        className={styles.kebabButton}
+        aria-label="More actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        ⋯
+      </button>
+      {open ? (
+        <>
+          <div className={styles.kebabBackdrop} onClick={() => setOpen(false)} aria-hidden="true" />
+          <div className={styles.kebabMenu} role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.kebabItem}
+              onClick={pick(onShare)}
+            >
+              Share &amp; readers
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.kebabItem}
+              onClick={pick(onExport)}
+            >
+              Export…
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.kebabItem}
+              onClick={pick(onRename)}
+            >
+              Rename
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.kebabItem}
+              onClick={pick(onSettings)}
+            >
+              Book settings…
+            </button>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/** The Settings tab's Danger zone (§13.6.6/§13.6.7): rewrite-from-scratch + delete, each behind an honest
+ *  consequences dialog; delete arms only when the book's title is typed. */
+function DangerZone({ bookId, title }: { bookId: string; title: string }): JSX.Element {
+  const remove = useStoryStore((s) => s.remove);
+  const rewriteFromScratch = useStoryStore((s) => s.rewriteFromScratch);
+  const [dialog, setDialog] = useState<'rewrite' | 'delete' | null>(null);
+  const [confirmText, setConfirmText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const close = (): void => {
+    setDialog(null);
+    setConfirmText('');
+  };
+
+  // Esc closes the open dialog (the app's ChangeVaultDialog/TogetherStartDialog convention).
+  useEffect(() => {
+    if (!dialog) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') close();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [dialog]);
+
+  return (
+    <Card>
+      <Stack gap={3}>
+        <Heading level={2}>Danger zone</Heading>
+        {error ? <Banner tone="danger">{error}</Banner> : null}
+        <div className={styles.dangerRow}>
+          <Stack gap={1}>
+            <Text size="sm" weight={500}>
+              Rewrite from scratch
+            </Text>
+            <Text size="sm" tone="secondary">
+              A fresh outline and fresh chapters from everything you’ve shared since. Keeps your
+              photos, exclusions and interview answers; discards your edits, pins and marks.
+            </Text>
+          </Stack>
+          <Button variant="ghost" onClick={() => setDialog('rewrite')}>
+            Rewrite from scratch…
+          </Button>
+        </div>
+        <div className={styles.dangerRow}>
+          <Stack gap={1}>
+            <Text size="sm" weight={500}>
+              Delete this book
+            </Text>
+            <Text size="sm" tone="secondary">
+              Removes the book, its images and its published copies. Readers lose access
+              immediately. This cannot be undone.
+            </Text>
+          </Stack>
+          <Button variant="ghost" onClick={() => setDialog('delete')}>
+            Delete this book…
+          </Button>
+        </div>
+      </Stack>
+
+      {dialog ? (
+        <div className={styles.dialogWrap}>
+          <div className={styles.dialogBackdrop} onClick={close} aria-hidden="true" />
+          <div
+            className={styles.dialog}
+            role="dialog"
+            aria-label={dialog === 'rewrite' ? 'Rewrite from scratch' : 'Delete this book'}
+          >
+            {dialog === 'rewrite' ? (
+              <Stack gap={3}>
+                <Heading level={3}>Rewrite “{title}” from scratch?</Heading>
+                <Text size="sm" tone="secondary">
+                  Your biographer re-reads everything and writes a fresh outline and fresh chapters.
+                </Text>
+                <ul className={styles.dzList}>
+                  <li>
+                    <span className={styles.dzKeep}>Keeps</span> your photos, captions and answers
+                  </li>
+                  <li>
+                    <span className={styles.dzKeep}>Keeps</span> your exclusions, title, voice &amp;
+                    style
+                  </li>
+                  <li>
+                    <span className={styles.dzLose}>Discards</span> every chapter, edit, pin and
+                    pending mark
+                  </li>
+                  <li>
+                    <span className={styles.dzLose}>Readers</span> keep the published copy until you
+                    share again
+                  </li>
+                </ul>
+                <Inline justify="flex-end">
+                  <Button variant="ghost" autoFocus onClick={close}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      setError(null);
+                      close();
+                      const res = await rewriteFromScratch(bookId);
+                      if (!res.ok && res.message) setError(res.message);
+                      setBusy(false);
+                    }}
+                  >
+                    Rewrite from scratch
+                  </Button>
+                </Inline>
+              </Stack>
+            ) : (
+              <Stack gap={3}>
+                <Heading level={3}>Delete “{title}”?</Heading>
+                <ul className={styles.dzList}>
+                  <li>
+                    <span className={styles.dzLose}>Deletes</span> every chapter, image, photo,
+                    answer and mark
+                  </li>
+                  <li>
+                    <span className={styles.dzLose}>Readers</span> lose access to the published copy
+                    now
+                  </li>
+                  <li>
+                    <span className={styles.dzLose}>Cannot</span> be undone
+                  </li>
+                </ul>
+                <Field label={`Type the book’s title to confirm`}>
+                  {(p) => (
+                    <TextInput
+                      {...p}
+                      autoFocus
+                      value={confirmText}
+                      onChange={(e) => setConfirmText(e.target.value)}
+                      placeholder={title}
+                    />
+                  )}
+                </Field>
+                <Inline justify="flex-end">
+                  <Button variant="ghost" onClick={close}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    disabled={confirmText.trim() !== title.trim()}
+                    onClick={() => void remove(bookId)}
+                  >
+                    Delete forever
+                  </Button>
+                </Inline>
+              </Stack>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </Card>
   );
 }
 

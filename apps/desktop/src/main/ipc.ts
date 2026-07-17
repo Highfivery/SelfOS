@@ -385,6 +385,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyApproveOutline, bridge.storyApproveOutline);
   handle(IpcChannels.storyUpdate, bridge.storyUpdate);
   handle(IpcChannels.storyDelete, bridge.storyDelete);
+  handle(IpcChannels.storyRewriteFromScratch, bridge.storyRewriteFromScratch);
   // storyGenerateChapters streams per-chapter progress via emitStoryProgress → IPC event (like the full
   // draft, 64 §3.2). Bound for the whole run so progress keeps reaching the renderer across navigation.
   ipcMain.handle(IpcChannels.storyGenerateChapters, async (event, raw: unknown) => {

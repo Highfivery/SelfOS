@@ -59,6 +59,9 @@ interface StoryState {
   createAndDraft: (input: StoryCreateInput) => Promise<{ ok: boolean; message?: string }>;
   /** Draft an existing book end-to-end (foundations → auto-approve → chapters), streaming progress. */
   draftBook: (bookId: string) => Promise<{ ok: boolean; message?: string }>;
+  /** Rewrite from scratch (§13.6.6): reset the book (keeping photos/exclusions/answers/config/cover), then run
+   *  the standard streamed full draft. Mirrors createAndDraft (reset → draftBook). */
+  rewriteFromScratch: (bookId: string) => Promise<{ ok: boolean; message?: string }>;
   /** Subscribe to the main-side draft-progress stream (wired once at app level). Returns an unsubscribe. */
   subscribeProgress: () => () => void;
   open: (bookId: string) => Promise<StoryBookBundle | null>;
@@ -266,6 +269,12 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     if (!book) return { ok: false, message: 'Couldn’t start your story. Try again.' };
     await get().load();
     return get().draftBook(book.id);
+  },
+  rewriteFromScratch: async (bookId) => {
+    const reset = (await window.selfos?.storyRewriteFromScratch({ bookId })) ?? null;
+    if (!reset) return { ok: false, message: 'Couldn’t rewrite your book. Try again.' };
+    set({ bundle: reset });
+    return get().draftBook(bookId);
   },
   draftBook: async (bookId) => {
     // Seed the progress immediately so the loading screen shows before the first event lands.

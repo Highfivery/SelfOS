@@ -6554,6 +6554,37 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(await bridge.storyGet({ bookId })).toBeNull();
   });
 
+  it('story: rewrite from scratch resets the book to a fresh pre-draft state, keeping the manifest (§13.6.6)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+
+    // Draft the whole book so there's an essence, outline, and chapters to discard.
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'cinematic', length: 'full', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const drafted = await bridge.storyGenerateFullDraft({ bookId });
+    if (!drafted.ok) throw new Error('draft failed');
+    expect(drafted.bundle.chapters.length).toBeGreaterThanOrEqual(1);
+
+    // Rewrite from scratch → a fresh pre-draft bundle: no chapters, no outline, no essence, status outlining.
+    const reset = await bridge.storyRewriteFromScratch({ bookId });
+    expect(reset?.manifest.status).toBe('outlining');
+    expect(reset?.manifest.essence).toBeUndefined();
+    expect(reset?.manifest.config.style).toBe('cinematic'); // config kept
+    expect(reset?.manifest.title).toBe('The Story of Ben'); // title kept
+    expect(reset?.outline).toBeNull();
+    expect(reset?.chapters).toEqual([]);
+    // The book still lists (it was reset, not deleted) and re-drafts cleanly.
+    expect((await bridge.storyList()).map((b) => b.id)).toEqual([bookId]);
+    const redrafted = await bridge.storyGenerateFullDraft({ bookId });
+    expect(redrafted.ok).toBe(true);
+    if (redrafted.ok) expect(redrafted.bundle.chapters.length).toBeGreaterThanOrEqual(1);
+  });
+
   it('story: create-and-draft writes the whole book in one flow (auto-approve, no gate) + streams progress (§3.2)', async () => {
     const { bridge, host } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
@@ -7164,6 +7195,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(resolved.ok).toBe(false);
     const refreshed = await bridge.storyRefreshCheck({ bookId: 'x' });
     expect(refreshed).toEqual({ staled: 0, rewritten: 0, bundle: null });
+    expect(await bridge.storyRewriteFromScratch({ bookId: 'x' })).toBeNull();
   });
 
   it('story: publish → grant → a reader reads the published head; revoke re-gates at the next read (§3.5)', async () => {

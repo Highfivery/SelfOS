@@ -81,6 +81,11 @@ projections), 20/44/62 (Memory, flag-inaccurate loop).
 
 ## 3. UX & flows
 
+> **2026-07-17:** the _surface layouts_ in §3.1–§3.6 are superseded by the approved full-surface
+> redesign in **§13 (the Studio & the Book)**. Every _mechanic_ defined here — the markup model,
+> batch Review & apply, the publish gate, the interview engine, exclusions, freshness — is unchanged
+> and referenced from §13.
+
 ### 3.1 Entry & navigation
 
 - New top-level nav entry **"Your Story"** (book icon), route `/story`, gated on `story.own`
@@ -508,6 +513,9 @@ different FOCUS.
   re-gate), `story:publish`, `story:export`, `story:delete`.
 - New host op **`saveFile(suggestedName, bytes, mime)`** generalizing `saveImageFile`
   (+ `SELFOS_FAKE_SAVE_DIR`); PDF via a hidden window + `webContents.printToPDF` in main.
+- **2026-07-17:** the §13 redesign adds `story:gaps`, `story:askGap`, `story:corpusStats`, a
+  `head: 'draft' | 'published'` input on both exports, `rewriteBookFromScratch`, and the read-receipt
+  read/write — see §13.6.
 
 ### 5.7 Renderer
 
@@ -778,3 +786,237 @@ No open questions remain; the spec is Approved and ready for the Phase A slice (
   seeds/clears `progress` (counts from the current bundle so no "0 of 0" flicker), and it renders **inline** in
   the overview (a renderer-only `progress.scope: 'create' | 'chapters'` — `create` = full-screen, `chapters` =
   inline so the overview stays in view and its error handling survives). Real-Electron visual QA confirms it.
+- 2026-07-17 — **§13 added (Approved): the Studio & the Book — a ground-up full-surface UX redesign**, after
+  the owner rejected the shipped surface as thrown-together ("completely REDESIGN FROM SCRATCH") and approved
+  a 16-screen interactive mockup of every screen (the standard mockup-first process; artifact
+  `story-redesign`, first-proposal). §3.1–§3.6's _surface layouts_ are superseded by §13; every §3 _mechanic_
+  (markup model, batch apply, publish gate, interview engine, exclusions, freshness) is unchanged and reused.
+  New owner decisions this date: reader **read receipts** (yes); check-in answering stays in the Inbox
+  (inline answering = fast-follow); the single-book UI stays (a bookshelf = fast-follow); "Rewrite from
+  scratch" keeps photos/exclusions/answers/config and discards chapters/edits/pins/marks.
+- 2026-07-17 — **§13 R1 (Studio IA) BUILT** (`feat/story-studio-ia`, PR pending) — the Studio hero + Needs-you
+  strip + five tabs (Chapters/Photos/Interview/Sharing/Settings) replacing the old one-page card stack, the
+  `story/*` splat route for tab deep-links, the to-do sheet, the Danger zone (type-to-confirm delete +
+  `rewriteBookFromScratch`), and the `story:rewriteFromScratch` seam. The chapter reader stays the existing
+  `ChapterReader` (the immersive Book view is R2/R3). See §13.7 R1 for the full build note + test coverage.
+
+## 13. The Studio & the Book — the 2026-07-17 full-surface redesign (Approved)
+
+The approved mockup is the visual contract for this section; where prose and mockup disagree, the mockup
+wins. Everything below reuses the built §3–§5 machinery — this is a re-architecture of the _surface_, plus
+the small backend additions the new surface needs and four working-but-wrong gaps the redesign audit found.
+
+### 13.1 Why
+
+The shipped surface was one 2,600-line stack of flat cards: settings above the chapters, photos above the
+book, delete a ghost link at the bottom of a scroll, prose rendered as UI text with "Mark up · Sources"
+links under every paragraph. The audit also found real functional gaps: **export trapped behind publishing**
+(§3.9 promised a draft export), **photo answers never reach the corpus** (§3.7 promised they do), the gap
+pass **computes a prioritized gap list no surface ever shows**, **no prev/next** while reading, and the
+owner **can never see their own book as a book** (front matter renders only for readers). §13 fixes all of
+these as part of the rebuild.
+
+### 13.2 Information architecture — two places, not one page
+
+- **The Studio** (`/story`) — managing a living book. One hero owns the book's identity; a "Needs you"
+  strip gathers every pending decision; five tabs hold everything else: **Chapters · Photos · Interview ·
+  Sharing · Settings**. Real sub-routes (`/story`, `/story/photos`, `/story/interview`, `/story/sharing`,
+  `/story/settings`) so tabs deep-link and survive reload.
+- **The Book** (`/story/read`, `/story/read/:chapterId`) — an immersive reading surface for the owner's
+  **draft head** (front matter included), with a **Read ⇄ Shape** toggle; a shared book opens the same
+  surface at `/story/shared/:bookId` rendering the **published head**, read-only (no Shape, no statuses,
+  no sources). Chapter routes make chapters deep-linkable for provenance links and notifications.
+- The UI remains **single-book** (`books[0]`); the hero title area is built as a switcher-ready slot
+  (bookshelf = post-v1 fast-follow, backend already N-book).
+- The store keeps its per-person reset and app-level `story:progress` subscription unchanged.
+
+### 13.3 Begin — invitation, commission, the writing
+
+- **Invitation** (no-book empty state): the book as hero (cover placeholder art), the three-step promise
+  (It reads · It writes · It keeps writing), a **"Drawn from"** chip row with real counts (a new
+  crypto-free `story:corpusStats` read — conversations / reflections / dreams counts + year span, no AI),
+  the privacy line, "Begin your book". The **"Shared with you" shelf** renders below (and is the whole
+  surface for a person with no book of their own).
+- **Commission** (setup): title (optional, unchanged) · voice · style · length — with a **live preview
+  rail**: a cover mock that takes the typed title, and a **specimen sentence** re-rendered per
+  voice × style ("How your biographer will sound"). Specimens are **static strings on the BookType's
+  style presets** (7 styles × 2 voices, so future BookTypes carry their own). Style renders as a card
+  gallery (auto-fill grid, §12-safe), length as three cards with reading-terms sublabels. A footer line
+  sets the time expectation ("Roughly 10–20 minutes… you can keep using SelfOS"). `autoRefresh` stays
+  hard-coded on at create (Settings owns it afterwards).
+- **The writing** (full-surface, `scope:'create'`): the cover breathes; the **essence line appears when
+  the foundations pass lands** (bundle refetch on phase change); the **outline reveals itself** as a
+  two-column chapter list with done/current/upcoming markers driven by the existing progress stream;
+  elapsed + improving ETA unchanged; the "you don't have to watch" note gains a real **"Browse SelfOS ›"**
+  exit (progress persists; sidebar chip unchanged). The inline `scope:'chapters'` variant keeps its
+  compact bar, restyled to match.
+
+### 13.4 The Studio
+
+- **Hero**: cover (art or "Create a cover" placeholder when image generation is ready) · eyebrow
+  (`Your story · Biography`) · title + rename pencil · essence in italic serif · config chips (voice ·
+  style · length · N chapters) · a freshness line ("3 chapters have new material · refreshed 2 h ago" —
+  stale count from bundle statuses, free) · the completeness meter ("~64% told · See what's missing ›" →
+  Interview tab) · actions: **Continue reading · Ch. N** (primary; opens the Book at the device-local
+  own-book read position — `storyReadProgress` gains `chapterId` for the owner's book), **Refresh from
+  what's new** (badge = stale count), and a **⋯ menu** (Export… · Share… · Rename · Rewrite from
+  scratch… · Delete…).
+- **Needs you** (hidden when empty; replaced by a quiet "All caught up — next gentle refresh Sunday"
+  line): one card per pending decision — **Suggested change** (proposal rationale + Approve/Later
+  inline), **To review** (count of `new`/`updated` chapters → opens the first in the Book), **Check-in
+  waiting** (open story check-in → its Inbox item), **To-dos** (open count → a right-hand **to-do
+  sheet**, the Review-&-apply sheet primitive: the book roll-up with kind chips, Mark done, and
+  open-in-chapter links).
+- **Chapters tab**: the approved cover-backed card grid, unchanged in DNA, plus a per-part review
+  progress line ("3 of 4 reviewed"), the "write the remaining N" bar rendered **inside the part that
+  owns the unwritten shells**, and the dashed not-yet-written cards. The "Shared with you" shelf sits
+  compactly at the bottom of this tab for book-owners.
+- **Photos tab** (§13.7-F): drop zone + gallery cards (caption in the book serif, placement chip:
+  "In Chapter 4 · after ¶4" / "Not placed yet" + AI-suggest), the **vision Q&A inline on the card**
+  (question rows with answer inputs + Save; answered rows editable), Remove.
+- **Interview tab** (§13.6): completeness stage + ratio, the **life map**, gap cards with **"Ask me
+  about this"**, the open check-in card, and an answered-history block.
+- **Sharing tab**: a "What readers see" card — published date, shared-chapter count, and an honest
+  "N newer chapters aren't included yet" derivation (draft chapters absent from the published head or
+  regenerated since `publishedAt`) with a "Review them ›" link; **Share updates** primary; first-publish
+  copy explains the gate. A **readers card**: per-reader row (avatar · name · "Reader since \<date>" ·
+  **read state from receipts**, §13.6) + kebab (Remove) + add-reader select with the featured-person
+  awareness note. An **Export card** (also in the hero ⋯) opens the export dialog.
+- **Settings tab** — four groups + the danger zone, replacing the mid-page collapsible:
+  - **Book details**: title · dedication · epigraph · acknowledgments (the `BookMatter` editor, inline
+    row editing).
+  - **Writing**: voice · style · length · auto-refresh, with the "steers future rewrites" note.
+  - **Images**: this book's image style + style direction (the shared `ImageStylePicker`), and the
+    cover controls (Create/Regenerate/Remove).
+  - **Never written about**: the exclusions list with kind chips + "Allow again".
+  - **Danger zone** (its own bordered card): **Rewrite from scratch…** and **Delete this book…**
+    (§13.6). Delete leaves the bottom of the page forever.
+- **Edge states** (per the mockup, all calm, never a dead control): role-aware AI-off banners; over
+  budget ("rests now, resumes Sunday — N chapters wait in the queue"); background writing (hero inline
+  bar + the existing sidebar chip); thin corpus (short-book promise + "See the N questions ›"); a
+  failed chapter card with Try again; crisis quiet ("Your biographer rests while things are heavy" —
+  the existing §8.2 gates, surfaced honestly).
+
+### 13.5 The Book
+
+- **Front matter** (owner draft head at `/story/read`; published head for readers): cover page → title
+  page (title, "The story of \<name>", essence) → dedication → epigraph → **Contents** (dotted leaders;
+  per-chapter state marks for the owner — ✓ reviewed / updated / new / reading; the reader instead gets
+  the "new since you last read" cues) → back matter line. **"A note on this book" renders for the owner
+  too**: the deterministic builder is factored out of `storyPublish` and rendered live from the draft
+  corpus counts.
+- **Read mode**: a sticky translucent bar (‹ Studio · running book title · Ch. N of M · **aA** ·
+  Read ⇄ Shape · thin progress rule). Chapter opener = the chapter's illustration, else a deterministic
+  cover crop, else the gradient fallback, with `CHAPTER N` + title overlaid. Prose in Lora at the §11.1
+  approved measure, first-paragraph drop cap, pinned quotes rendered as pull-quotes, `imagePlacements`
+  interleaved as figures with captions. Provenance markers and the suggestion layer are **invisible in
+  Read**. Footer: ‹ previous / next › chapter + Contents. **aA** = a three-step reader text size,
+  device-local. Keyboard: ←/→ chapters, Esc → Studio.
+- **Shape mode** (same page, same typography — the §3.3 machinery restyled): selecting a span raises the
+  contextual toolbar (Cut · Edit · Comment · To-do · Pin · Exclude · Sources); a focusable ¶ handle per
+  paragraph keeps it keyboard/touch-reachable (§9). Marks live **in the margin** on wide containers
+  (≥900px: an absolute rail beside the measure) and under the paragraph below that; cuts strike inline,
+  instant edits show a dotted underline, pins a warm highlight; provenance becomes numbered superscripts
+  (popover on tap = today's Sources content, incl. "Don't draw on this again"). A `new`/`updated`
+  chapter leads with a ribbon: "**rewritten from new material** · **What changed** · **Looks good ✓**".
+  **What changed is now a real diff**: an additive `BookChapter.previousMarkdown?` keeps the prior text
+  on rewrite/apply (cleared when the chapter is marked Reviewed) and the ribbon toggles an inline
+  word-diff render. A bottom-sticky pill counts pending marks ("3 changes ready · 1 cut · 1 comment ·
+  1 to-do — your inline edit and pin are already in") → **Review & apply**.
+- **Review & apply**: a right-hand sheet over the dimmed chapter — pending marks grouped (Cuts /
+  Comments / For your biographer) each with its anchor excerpt and "Remove from this batch" (= the
+  existing mark undo), an "Already yours — applied instantly" note for edits/pins, and **Apply with
+  your biographer** (the one metered revision, unchanged).
+- **Reader variant**: same surface, published head, no Shape toggle, no statuses/sources/diffs; back
+  matter carries acknowledgments, the honesty note, and the colophon with the wellness boundary line.
+  Opening writes the read receipt (§13.6) in addition to the existing device-local mark-read.
+
+### 13.6 New backend + wiring fixes
+
+All additive; no `schemaVersion` bumps; every channel gated `story.own` + person-scoped as today.
+
+1. **Draft export** (fixes the trapped export): `buildDraftMarkdown`/`buildDraftHtml` render the live
+   draft head (every written chapter in outline order + matter + cover + placements; the live honesty
+   note). `story:exportMarkdown`/`story:exportPdf` gain a `head: 'draft' | 'published'` input
+   (published unchanged; draft needs no publish). The export dialog (format cards + head toggle +
+   vault-boundary line) fronts both.
+2. **Photo answers reach the biographer** (fixes the §3.7 gap): `storyCorpus` reads
+   `interview.enc.photoAnswers` (caption + Q/A lines as corpus slices, exclusion-filtered like
+   everything else).
+3. **The gap list reaches the screen**: the gap pass persists its output — additive
+   `StoryInterviewState.lastGaps?: StoryGap[]` and `lastPartCoverage?: { partId, score }[]` (the pass's
+   prompt/schema gains a per-part 0–1 coverage read, tolerant-parsed; fallback when absent = each
+   part's written/reviewed ratio). A crypto-free **`story:gaps`** read returns
+   `{ gaps, partCoverage, lastGapPassAt }` — rendering the Interview tab is **free** (no AI on view);
+   "Find what's missing" re-runs the metered pass as today.
+4. **The life map**: one segment per outline part (chronological by construction), labeled from the
+   part title/era, height = its coverage score, dashed when an open gap targets it; a text equivalent
+   (per-part "richly told / thin" list) renders alongside per §9 — never color/height-only.
+5. **"Ask me about this"**: `story:askGap(gapId)` mints a check-in from that gap's FOCUS through the
+   existing mint path; disabled (with the hint) while a check-in is already open (the ≤1 invariant).
+   The **answered history** derives deterministically: submitted story-provenance assignments joined to
+   the chapters whose provenance cites the insights that analysis produced ("wove into _First Words_").
+6. **Rewrite from scratch**: core `rewriteBookFromScratch(bookId)` — deletes `chapters/`, `markup/`,
+   `proposals.enc`; clears `essence`, chapter-bound generated illustrations, and (implicitly) all
+   protected blocks/pins/placements; **keeps** config, title (`titleAuto` semantics unchanged — a
+   never-renamed book may be re-titled by the fresh foundations), matter, uploaded photos + captions +
+   answers, the cover, exclusions, and interview state; the **published head stays** until the person
+   shares again. Then runs the standard full-draft flow with the standard progress stream. Confirm
+   dialog lists keeps/discards exactly as the mockup.
+7. **Delete, armed properly**: `story:delete` unchanged; the dialog requires typing the book's title
+   to enable "Delete forever" and names the consequences (readers lose access now).
+8. **Read receipts** (owner decision 2026-07-17): when a reader opens a shared book, their app writes
+   `people/<readerId>/story/receipts/<bookId>.enc` — `{ bookId, authorPersonId, lastOpenedAt,
+lastPublishedAtSeen }` (one writer: the reader; additive schema). The author's Sharing tab joins
+   grants to receipts: no file → "hasn't opened it yet"; `lastPublishedAtSeen >= publishedAt` → "has
+   read the latest"; else "opened \<date>". Person-delete reaps receipts both directions.
+9. **Continue reading**: device-local `storyReadProgress` (existing) gains the owner's own-book
+   `{ chapterId, at }`; the hero's primary action resumes there (falls back to chapter 1 / front
+   matter).
+10. **Corpus stats**: `story:corpusStats` — deterministic counts for the invitation (no AI, no spend).
+
+### 13.7 Build slices (each PR-gated, standard §6/§7 cadence + the §10 E2E discipline)
+
+- **R1 — Studio IA — BUILT** (2026-07-17, `feat/story-studio-ia`, PR pending): `story/*` splat route so the
+  tabs deep-link; the `StudioLayout` hero (cover + title/Rename + essence + config chips + freshness +
+  completeness + Read/Refresh/⋯ kebab) + the `NeedsYou` strip (proposals · to-review · to-dos, self-hiding to a
+  calm "all caught up" line) + five tabs (Chapters · Photos · Interview · Sharing · Settings) with the existing
+  panels relocated (Settings holds matter + Writing/Images [the collapsible dropped for open groups] +
+  exclusions + Danger zone); the book-level `TodoSheet`; the `DangerZone` (type-to-confirm delete + rewrite).
+  New core **`rewriteBookFromScratch`** (keeps config/title/matter/cover/uploaded-photos/exclusions/interview +
+  the published head; discards chapters/markup/proposals/outline/timeline/essence + only AI-generated
+  illustrations) + the `story:rewriteFromScratch` channel through the whole seam, gated `story.own` +
+  active-person-scoped; the store's `rewriteFromScratch` resets then re-runs the standard streamed draft
+  (mirroring `createAndDraft`). The **chapter reader stays the existing `ChapterReader`** (the immersive Book
+  view is R2/R3). Gate green: typecheck, lint, format, **1420 core + 1270 desktop** unit (+`rewriteBookFromScratch`
+  keeps/discards + missing-book null; +a coreBridge rewrite round-trip + Guest denial; +Story RTL for the tab
+  deep-link, the type-to-confirm delete, and rewrite-then-redraft; the 10 relocated-surface RTL updated to switch
+  tabs), **6 story E2E** (the 3 relocated walks re-pointed through the tabs; +a new Studio-tabs + Danger-zone
+  delete walk with a 360px overflow guard). Real-Electron visual QA at desktop + 360px, light + dark (the hero /
+  Needs-you / tabs / Settings danger zone / rewrite dialog match the approved mockup).
+- **R2 — The Book (read)**: `/story/read` routes + front matter (factored honesty note) + Read-mode
+  typography + opener art + prev/next + continue-position + aA; the shared-reader view unified onto it.
+- **R3 — Shape & review**: toolbar + margin layer + superscript sources + ribbon + what-changed diff
+  (`previousMarkdown`) + the Review & apply sheet (restyling the existing markup machinery; `applyMarkup`
+  call-count invariants untouched).
+- **R4 — Sharing & export**: read receipts end-to-end (two-persona E2E); published-state derivations;
+  the export dialog + draft export (E2E: a never-published book exports Markdown + PDF outside the
+  vault).
+- **R5 — Interview tab**: persisted gaps + part coverage, `story:gaps`, the life map + text equivalent,
+  ask-a-gap, answered history, completeness hero.
+- **R6 — Photos tab**: gallery + inline Q&A + placement affordances + the corpus wiring fix (E2E:
+  a photo answer provably reaches a captured generation prompt).
+- **R7 — Begin + polish**: invitation (`story:corpusStats`) + commission (specimens, live preview) +
+  the writing experience (outline reveal); then the whole-flow coherence walk, the full-screen 360px
+  sweep, dark-mode visual QA, and the §7 DoD checklist across every touched surface.
+
+### 13.8 Decisions locked 2026-07-17
+
+1. The 16-screen mockup is **approved as the visual contract** (studio tabs; immersive reader;
+   margin-based shaping; the chapter-card grid retained).
+2. **Read receipts: yes** — reader-written, author-visible, per §13.6.8.
+3. **Check-in answering stays in the Inbox** for this redesign; inline answering on the Interview tab
+   is a named fast-follow.
+4. **Single-book UI stays**; the bookshelf over the N-book backend is a named fast-follow.
+5. **Rewrite from scratch** semantics per §13.6.6.
+6. Reader typography details (drop cap, pull-quotes, three-step aA) ship as mocked.

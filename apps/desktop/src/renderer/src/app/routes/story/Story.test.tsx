@@ -436,6 +436,47 @@ describe('Story (64)', () => {
     expect(screen.getAllByText('Reviewed').length).toBeGreaterThan(0);
   });
 
+  it('an updated chapter leads with a Shape ribbon whose "What changed" reveals the word diff (§13.5)', async () => {
+    const updated = writtenBundle('new');
+    updated.chapters[0] = {
+      ...updated.chapters[0]!,
+      status: 'updated',
+      markdown: 'The garage smelled of cedar.',
+      previousMarkdown: 'The garage smelled of pine.',
+    };
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(updated),
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    // The ribbon leads with the rewrite eyebrow + the review action; the diff is hidden until asked for.
+    expect(await screen.findByText('Rewritten from new material')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Looks good' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('What changed in this rewrite')).not.toBeInTheDocument();
+    // Reveal the word diff → the removed old word + the added new word both render.
+    await userEvent.click(screen.getByRole('button', { name: 'What changed' }));
+    const diff = await screen.findByLabelText('What changed in this rewrite');
+    expect(diff.querySelector('del')?.textContent).toContain('pine.');
+    expect(diff.querySelector('ins')?.textContent).toContain('cedar.');
+    // Toggling again hides it.
+    await userEvent.click(screen.getByRole('button', { name: 'Hide changes' }));
+    expect(screen.queryByLabelText('What changed in this rewrite')).not.toBeInTheDocument();
+  });
+
+  it('a first-draft (new) chapter with no prior text offers no "What changed" toggle (§13.5)', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')), // status 'new', no previousMarkdown
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    expect(await screen.findByText('New chapter')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'What changed' })).not.toBeInTheDocument();
+  });
+
   it('marks a paragraph for deletion — the suggestion strip + apply bar appear', async () => {
     const storyMark = vi.fn(
       (input: StoryMarkInput): Promise<ChapterMarkup> =>
@@ -1115,18 +1156,18 @@ describe('Story (64)', () => {
     // Front matter: title page + the essence + a Contents list of both chapters.
     expect(await screen.findByRole('heading', { name: 'The Story of Ben' })).toBeInTheDocument();
     expect(screen.getByText(/quiet man learning to speak up/)).toBeInTheDocument();
-    // Begin reading → chapter 1 prose + an "Edit this chapter" affordance (owner only).
+    // Begin reading → chapter 1 prose + the Read⇄Shape toggle in the reader bar (owner only, §13.5).
     await userEvent.click(screen.getByRole('button', { name: /Begin reading/ }));
     expect(await screen.findByText('The garage smelled of cut pine.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Edit this chapter/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Shape this chapter' })).toBeInTheDocument();
     // Next → chapter 2 (the last chapter carries the honesty note); Previous returns to chapter 1.
     await userEvent.click(screen.getByRole('button', { name: /Next/ }));
     expect(await screen.findByText('He learned to speak.')).toBeInTheDocument();
     expect(screen.getByText(/never invented/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Previous/ }));
     expect(await screen.findByText('The garage smelled of cut pine.')).toBeInTheDocument();
-    // Edit this chapter → the chapter editor (the markup surface, still §3.3) opens.
-    await userEvent.click(screen.getByRole('button', { name: /Edit this chapter/ }));
+    // Shape → the chapter editor (the markup surface, still §3.3) opens.
+    await userEvent.click(screen.getByRole('button', { name: 'Shape this chapter' }));
     expect(await screen.findByRole('button', { name: 'Rewrite this chapter' })).toBeInTheDocument();
   });
 

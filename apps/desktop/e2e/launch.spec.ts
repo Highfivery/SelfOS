@@ -11246,6 +11246,14 @@ test('story (64): setup names the book, outline rename, chapters + sources, mark
     await w.getByRole('button', { name: 'Review & apply' }).click();
     await expect(w.getByText(/for once he spoke up/)).toBeVisible();
 
+    // The revised chapter now leads with the Shape ribbon (§13.5); "What changed" reveals a real word diff.
+    await expect(w.getByText('Rewritten from new material')).toBeVisible();
+    await w.getByRole('button', { name: 'What changed' }).click();
+    const diff = w.getByLabel('What changed in this rewrite');
+    await expect(diff).toBeVisible();
+    await expect(diff.locator('ins').first()).toBeVisible(); // an added word is highlighted
+    await w.getByRole('button', { name: 'Hide changes' }).click();
+
     // Exclude a topic — "never write about this again".
     await w.getByRole('button', { name: 'Mark up' }).first().click();
     await w.getByRole('button', { name: 'Exclude' }).click();
@@ -11615,9 +11623,9 @@ test('story (64): the owner reads their own book in the immersive reader — fro
     expect(offenders).toEqual([]);
     await w.setViewportSize({ width: 1100, height: 800 });
 
-    // Edit this chapter → the owner drops into the chapter editor (the Shape/markup surface, §13.5), then
-    // back to the book and out to the Studio (the reader is a mode, not a dead end).
-    await w.getByRole('button', { name: /Edit this chapter/ }).click();
+    // The Read⇄Shape toggle in the reader bar → the owner drops into the chapter editor (the Shape/markup
+    // surface, §13.5), then back to the book and out to the Studio (the reader is a mode, not a dead end).
+    await w.getByRole('button', { name: 'Shape this chapter', exact: true }).click();
     await expect(w.getByRole('button', { name: 'Rewrite this chapter' })).toBeVisible();
     await w.getByRole('button', { name: 'Back to the book' }).click();
     await w.getByRole('button', { name: 'Back to the studio' }).click();

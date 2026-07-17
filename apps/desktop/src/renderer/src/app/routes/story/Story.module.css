@@ -53,6 +53,25 @@
 .aaButton:hover {
   color: var(--color-accent-text);
 }
+/* The Read ⇄ Shape entry (§13.5) — a compact reader-bar toggle into the chapter markup surface (owner only). */
+.shapeButton {
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-md);
+  padding: 4px 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.shapeButton:hover {
+  color: var(--color-accent-text);
+  border-color: var(--color-accent);
+}
+.shapeButton:focus-visible,
+.aaButton:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
 .readerScroll {
   padding: 0 clamp(16px, 4cqw, 40px) var(--space-16);
 }
@@ -833,6 +852,83 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-accent-subtle-bg);
+}
+
+/* The Shape-mode ribbon a new/updated chapter leads with (§13.5). */
+.ribbon {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle-bg);
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.ribbon[data-reviewed] {
+  background: transparent;
+  border-style: dashed;
+}
+.ribbon[data-reviewed] .ribbonLead {
+  color: var(--color-success);
+}
+.ribbon[data-reviewed] .ribbonLead::before {
+  content: '✓ ';
+}
+.ribbonRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.ribbonLead {
+  font-weight: 600;
+  color: var(--color-text-heading);
+  margin-right: auto;
+}
+.ribbonLink {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--color-accent-text);
+  text-decoration: underline;
+  font: inherit;
+}
+.ribbonLink:focus-visible,
+.ribbonPrimary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.ribbonPrimary {
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  background: var(--color-accent-solid);
+  color: var(--color-accent-solid-text);
+  font: inherit;
+  font-weight: 600;
+}
+
+/* The word-level "What changed" diff (§13.5) — added words underlined green, removed struck red. */
+.diff {
+  margin: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+  line-height: 1.7;
+  color: var(--color-text-secondary);
+}
+.diffAdd {
+  text-decoration: none;
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
+  border-radius: 2px;
+}
+.diffRemove {
+  color: var(--color-danger);
+  background: var(--color-danger-subtle-bg);
+  text-decoration: line-through;
+  border-radius: 2px;
 }
 
 /* The create-and-draft progress screen (§3.2). */

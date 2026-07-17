@@ -806,6 +806,13 @@ No open questions remain; the spec is Approved and ready for the Phase A slice (
   per-person resume position. New core `readOwnBook` (draft head, own-data full projection with per-chapter
   status) + `story:readOwnBook`/`story:setReadPosition`. The shared reader is unified onto the same component.
   See §13.7 R2 for the full build note + test coverage.
+- 2026-07-17 — **§13 R3 (Shape & review — core) BUILT** (`feat/story-shape-review`, PR pending) — the
+  what-changed diff + the Shape ribbon + the Read⇄Shape toggle. Additive `BookChapter.previousMarkdown` +
+  a pure `wordDiff` (`@selfos/core/story-diff`); a `ChapterRibbon` (New/Rewritten · What changed [word-diff] ·
+  Looks good ✓) on new/updated chapters; a compact "Shape" toggle in the reader bar + a "Shape this chapter ›"
+  end-affordance entering the existing markup editor from the reader. The deeper Shape-surface visual restyle
+  (superscript sources, margin-rail marks, the right-hand Review & apply sheet) is a documented R3-polish
+  fast-follow into the R7 sweep. See §13.7 R3 for the full build note + test coverage.
 
 ## 13. The Studio & the Book — the 2026-07-17 full-surface redesign (Approved)
 
@@ -1032,9 +1039,28 @@ lastPublishedAtSeen }` (one writer: the reader; additive schema). The author's S
   first). Real-Electron visual QA at desktop + 360px, light + dark (the cover/title-page front matter, the
   chapter opener + drop-cap prose + prev/next, the settled 360px column, and the dark theme all read as an
   intentional, book-like immersive reader).
-- **R3 — Shape & review**: toolbar + margin layer + superscript sources + ribbon + what-changed diff
-  (`previousMarkdown`) + the Review & apply sheet (restyling the existing markup machinery; `applyMarkup`
-  call-count invariants untouched).
+- **R3 — Shape & review — BUILT (core)** (2026-07-17, `feat/story-shape-review`, PR pending): the
+  **what-changed diff + the Shape ribbon + the Read⇄Shape toggle**, restyling the existing markup machinery
+  with the `applyMarkup` call-count invariants untouched. **R3a** — an additive `BookChapter.previousMarkdown`
+  keeps the pre-rewrite text (captured in `generateChapter` [rewrite path only — a first draft carries none] +
+  `applyMarkup`, cleared when a chapter is marked Reviewed) + a pure, dependency-free **`wordDiff`**/`hasChanges`
+  (LCS over words, whitespace-insensitive) in `@selfos/core/story` (exposed to the renderer via a lean
+  `@selfos/core/story-diff` subpath). **R3b** — a new/updated chapter leads with a **`ChapterRibbon`**
+  ("New chapter" / "Rewritten from new material" · a **"What changed"** toggle that reveals a real inline
+  word-diff [added `<ins>` green, removed `<del>` struck red] · **"Looks good ✓"** review) that collapses to a
+  calm "✓ Reviewed" once reviewed; and a **Read⇄Shape toggle** — a compact **"Shape"** button in the reader bar
+  (owner-only, on a chapter page) + a "Shape this chapter ›" affordance at the chapter's end, both entering the
+  existing `ChapterReader` markup editor from the reader (staying on `/story/read`), so editing is a mode of the
+  book rather than a separate screen. Gate green: typecheck, lint, format, **1428 core + 1277 desktop** unit
+  (+`wordDiff` [5]; `previousMarkdown` captured-on-rewrite/apply + no-prior-on-first-draft;
+  +coreBridge review-clears; +2 Story RTL: ribbon+diff reveal/hide + first-draft-no-toggle; the R2 owner-reader
+  RTL/E2E re-pointed to the Shape toggle), **7 story E2E** (the author-spine walk now asserts the ribbon +
+  reveals the word-diff after a revision). Real-Electron visual QA (the ribbon + the red/green word-diff + the
+  reader-bar Shape toggle read clean + book-like). **DEFERRED to an R3-polish fast-follow** (the Shape editing
+  surface still uses the pre-redesign editor layout — functional + tested, but not yet the immersive
+  margin-based look): numbered **superscript sources**, the **margin-rail marks** at ≥900px, and the right-hand
+  **Review & apply sheet** + bottom-sticky pending pill (restyle of the existing, tested apply bar). These are
+  visual refinements of the working markup surface; folded into the R7 polish sweep.
 - **R4 — Sharing & export**: read receipts end-to-end (two-persona E2E); published-state derivations;
   the export dialog + draft export (E2E: a never-published book exports Markdown + PDF outside the
   vault).

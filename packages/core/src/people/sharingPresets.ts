@@ -21,15 +21,50 @@ export type SharingCategory =
   | 'intimacy'
   | 'trauma';
 
+/**
+ * Close (blood + step) family — treated like parent/child/sibling for non-sensitive defaults (family-like
+ * defaults, resolved 2026-07-17). Gender-neutral structural types; never included in intimacy/trauma.
+ */
+const CLOSE_FAMILY: RelationshipType[] = [
+  'parent',
+  'child',
+  'stepParent',
+  'stepChild',
+  'guardian',
+  'ward',
+  'grandparent',
+  'grandchild',
+  'greatGrandparent',
+  'greatGrandchild',
+  'sibling',
+  'stepSibling',
+  'halfSibling',
+  'auntUncle',
+  'nieceNephew',
+  'cousin',
+];
+
+/** Family by marriage — family-facing info, but leaner than blood family (no goals/joy/work by default). */
+const IN_LAWS: RelationshipType[] = ['parentInLaw', 'childInLaw', 'siblingInLaw'];
+
+/** Extended social ties — lean private: only the lightest categories (basics/values) by default. */
+const EXTENDED_SOCIAL: RelationshipType[] = [
+  'roommate',
+  'neighbor',
+  'acquaintance',
+  'mentor',
+  'mentee',
+];
+
 export const SHARING_PRESETS: Record<SharingCategory, RelationshipType[]> = {
-  basics: ['partner', 'parent', 'child', 'sibling', 'friend', 'coworker'],
-  values: ['partner', 'parent', 'child', 'sibling', 'friend', 'coworker'],
-  goals: ['partner', 'parent', 'child', 'sibling', 'friend'],
-  work: ['partner', 'parent', 'child', 'sibling', 'friend', 'coworker'],
-  joy: ['partner', 'parent', 'child', 'sibling', 'friend'],
+  basics: ['partner', ...CLOSE_FAMILY, ...IN_LAWS, 'friend', 'coworker', ...EXTENDED_SOCIAL],
+  values: ['partner', ...CLOSE_FAMILY, ...IN_LAWS, 'friend', 'coworker', ...EXTENDED_SOCIAL],
+  goals: ['partner', ...CLOSE_FAMILY, 'friend', 'mentor'],
+  work: ['partner', ...CLOSE_FAMILY, 'friend', 'coworker', 'mentor'],
+  joy: ['partner', ...CLOSE_FAMILY, 'friend'],
   health: ['partner'], // private-leaning; partner by default
   relationships: ['partner', 'friend'],
-  family: ['partner', 'parent', 'child', 'sibling'],
+  family: ['partner', ...CLOSE_FAMILY, ...IN_LAWS],
   story: ['partner', 'friend'],
   intimacy: ['partner'], // restricted: partner ONLY by default
   trauma: ['partner'], // restricted: partner ONLY by default

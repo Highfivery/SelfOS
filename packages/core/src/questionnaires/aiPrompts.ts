@@ -14,17 +14,58 @@ import {
 const RELATIONSHIP_REGISTER: Record<RelationshipType, string> = {
   partner:
     'This is for their romantic PARTNER — warm, intimate, and "us"-oriented; it is safe to go deep on connection, desire, and the relationship.',
+  ex: 'This is for an EX — careful, respectful, and low-pressure; avoid reopening wounds or presuming closeness.',
   parent:
     'This is for their PARENT — reflective and respectful; welcome history, legacy, gratitude, and the evolving adult relationship.',
   child:
     "This is for their CHILD — warm, curious about the child's inner world and interests, and age-appropriate; never intrusive or heavy.",
+  stepParent:
+    'This is for their STEP-PARENT — respectful and warm about a bond that grew over time; welcome the relationship as it is now without presuming lifelong closeness.',
+  stepChild:
+    "This is for their STEP-CHILD — warm, curious about the child's world, and age-appropriate; respect an evolving bond and never presume depth.",
+  guardian:
+    'This is for the person who RAISED or is GUARDIAN to them — reflective, respectful, and gratitude-aware; welcome history and the caring bond.',
+  ward: 'This is for someone in their CARE — warm, protective, encouraging, and age-appropriate; supportive without being heavy.',
+  grandparent:
+    'This is for their GRANDPARENT — warm, reflective, and unhurried; welcome family history, legacy, stories, and gratitude across generations.',
+  grandchild:
+    'This is for their GRANDCHILD — warm, playful, curious about their world, and age-appropriate; nurturing and never intrusive.',
+  greatGrandparent:
+    'This is for their GREAT-GRANDPARENT — gentle, reverent, and reflective; welcome long family history, legacy, and gratitude.',
+  greatGrandchild:
+    'This is for their GREAT-GRANDCHILD — warm, gentle, playful, and age-appropriate; keep it light and loving.',
   sibling:
     'This is for their SIBLING — candid and familiar; shared history, growing up together, and how the bond is now.',
+  stepSibling:
+    'This is for their STEP-SIBLING — familiar and candid about a bond that formed later; relaxed, honest, and unforced.',
+  halfSibling:
+    'This is for their HALF-SIBLING — candid and familiar; shared family, honest check-ins, and the bond as it is.',
+  auntUncle:
+    'This is for their AUNT or UNCLE — warm, familial, and supportive; a touch more relaxed than a parent, welcoming shared family and care.',
+  nieceNephew:
+    'This is for their NIECE or NEPHEW — warm, curious, encouraging, and age-appropriate; supportive and never heavy.',
+  cousin:
+    'This is for their COUSIN — familiar and peer-like; shared family history, candid and easygoing.',
+  parentInLaw:
+    'This is for their PARENT-IN-LAW — respectful, warm, and boundaried; family by marriage — do not presume intimacy or reopen sensitive family matters.',
+  childInLaw:
+    'This is for their CHILD-IN-LAW — warm and welcoming, respectful of their own family and boundaries; supportive without presuming closeness.',
+  siblingInLaw:
+    'This is for their SIBLING-IN-LAW — friendly, familiar, and relaxed; family by marriage, warm but unforced.',
   friend:
     'This is for their FRIEND — candid, playful, and genuine; what the friendship means, shared fun, and honest check-ins.',
+  roommate:
+    'This is for their ROOMMATE — friendly, practical, and everyday; shared space and daily life; keep it light and boundaried.',
+  neighbor:
+    'This is for their NEIGHBOR — friendly and neighborly; light, warm, and boundaried; do NOT ask intrusive personal questions.',
+  acquaintance:
+    'This is for an ACQUAINTANCE — light, warm, and low-pressure; keep it fairly surface-level unless the connection is clearly deepening.',
   coworker:
     'This is for a COWORKER — professional and boundaried; stay on work, collaboration, and rapport; do NOT ask intrusive personal, family, or intimate questions.',
-  ex: 'This is for an EX — careful, respectful, and low-pressure; avoid reopening wounds or presuming closeness.',
+  mentor:
+    'This is for their MENTOR — respectful and growth-oriented; gratitude for guidance, learning, and the evolving professional-personal bond.',
+  mentee:
+    'This is for their MENTEE — encouraging, supportive, and growth-oriented; be a steady, generous guide without being heavy.',
   other:
     'Keep the tone warm and adaptable; match the depth to how close they seem from the context.',
 };

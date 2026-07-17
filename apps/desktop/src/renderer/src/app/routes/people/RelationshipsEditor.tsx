@@ -16,17 +16,16 @@ import {
 } from '../../../design-system/components';
 import type { Person, Relationship, RelationshipInput } from '@shared/channels';
 import type { RelationshipType } from '@shared/schemas';
+// Derived from the single source of truth in `@selfos/core/sharing` so this picker can never drift from the
+// enum, the inverse map, or the sharing surfaces (they all share the same order + labels).
+import { RELATIONSHIP_TYPE_LABELS, RELATIONSHIP_TYPE_ORDER } from '@selfos/core/sharing';
 
-const TYPES: { value: RelationshipType; label: string }[] = [
-  { value: 'partner', label: 'Partner' },
-  { value: 'parent', label: 'Parent' },
-  { value: 'child', label: 'Child' },
-  { value: 'sibling', label: 'Sibling' },
-  { value: 'friend', label: 'Friend' },
-  { value: 'coworker', label: 'Coworker' },
-  { value: 'ex', label: 'Ex' },
-  { value: 'other', label: 'Other' },
-];
+const TYPES: { value: RelationshipType; label: string }[] = RELATIONSHIP_TYPE_ORDER.map(
+  (value) => ({
+    value,
+    label: RELATIONSHIP_TYPE_LABELS[value],
+  }),
+);
 
 const LABELS = new Map(TYPES.map((t) => [t.value, t.label]));
 

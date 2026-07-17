@@ -52,7 +52,7 @@ interface StoryState {
   /** Live create-and-draft progress (§3.2), streamed from main. Non-null while a book is being drafted — it
    *  drives the loading screen AND the sidebar indicator, and survives navigation (the draft runs in main).
    *  `startedAt` is the renderer clock at kickoff, for the elapsed timer + the improving time estimate. */
-  progress: (StoryDraftProgress & { startedAt: number }) | null;
+  progress: (StoryDraftProgress & { startedAt: number; scope: 'create' | 'chapters' }) | null;
   load: () => Promise<void>;
   create: (input: StoryCreateInput) => Promise<BookManifest | null>;
   /** Create a book AND draft it end-to-end (§3.2) — the new one-tap flow (no outline-review gate). */
@@ -253,7 +253,15 @@ export const useStoryStore = create<StoryState>((set, get) => ({
         set({ progress: null });
         return;
       }
-      set((s) => ({ progress: { ...p, startedAt: s.progress?.startedAt ?? Date.now() } }));
+      // Merge over the seeded progress, keeping the renderer-only `startedAt` + `scope` (which UI shows it).
+      set((s) => ({
+        progress: {
+          ...s.progress,
+          ...p,
+          startedAt: s.progress?.startedAt ?? Date.now(),
+          scope: s.progress?.scope ?? 'create',
+        },
+      }));
     });
     return unsub ?? (() => {});
   },
@@ -272,6 +280,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
         chaptersDone: 0,
         chaptersTotal: 0,
         startedAt: Date.now(),
+        scope: 'create',
       },
     });
     try {
@@ -316,7 +325,24 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     return manifest;
   },
   generateChapters: async (bookId) => {
-    set({ chaptersGenerating: true });
+    // Show the rich progress screen (§3.2), same as create-and-draft. Seed the counts from the current bundle
+    // (chapters already written / total in the outline) so it opens on real numbers, not a "0 of 0" flicker;
+    // the per-chapter stream then keeps it live. Runs in main, so it continues if the person navigates away.
+    const b = get().bundle;
+    const total = b?.outline
+      ? b.outline.parts.reduce((n, p) => n + p.chapters.length, 0)
+      : (b?.chapters.length ?? 0);
+    const written = b ? b.chapters.filter((c) => c.markdown.trim().length > 0).length : 0;
+    set({
+      progress: {
+        bookId,
+        phase: 'writing',
+        chaptersDone: written,
+        chaptersTotal: total,
+        startedAt: Date.now(),
+        scope: 'chapters',
+      },
+    });
     try {
       const result =
         (await window.selfos?.storyGenerateChapters({ bookId })) ?? CHAPTERS_NOT_AVAILABLE;
@@ -324,7 +350,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       await get().load();
       return result;
     } finally {
-      set({ chaptersGenerating: false });
+      set({ progress: null });
     }
   },
   regenerateChapter: async (bookId, chapterId) => {

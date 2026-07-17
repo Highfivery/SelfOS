@@ -378,7 +378,16 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyApproveOutline, bridge.storyApproveOutline);
   handle(IpcChannels.storyUpdate, bridge.storyUpdate);
   handle(IpcChannels.storyDelete, bridge.storyDelete);
-  handle(IpcChannels.storyGenerateChapters, bridge.storyGenerateChapters);
+  // storyGenerateChapters streams per-chapter progress via emitStoryProgress → IPC event (like the full
+  // draft, 64 §3.2). Bound for the whole run so progress keeps reaching the renderer across navigation.
+  ipcMain.handle(IpcChannels.storyGenerateChapters, async (event, raw: unknown) => {
+    storySender = event.sender;
+    try {
+      return await bridge.storyGenerateChapters(raw as { bookId: string });
+    } finally {
+      storySender = undefined;
+    }
+  });
   handle(IpcChannels.storyRegenerateChapter, bridge.storyRegenerateChapter);
   handle(IpcChannels.storyReviewChapter, bridge.storyReviewChapter);
   handle(IpcChannels.storyGetMarkup, bridge.storyGetMarkup);

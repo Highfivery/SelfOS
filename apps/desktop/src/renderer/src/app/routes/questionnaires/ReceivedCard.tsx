@@ -63,7 +63,7 @@ export function ReceivedCard({
 
       <span className={styles.from}>
         <Avatar name={sender} />
-        From {sender}
+        <span className={styles.fromName}>From {sender}</span>
       </span>
 
       <button type="button" className={styles.cardTitleButton} onClick={onOpen}>

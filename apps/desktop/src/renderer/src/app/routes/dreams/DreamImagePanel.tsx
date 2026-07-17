@@ -10,15 +10,12 @@ import {
   AdminOnlyBadge,
   Banner,
   Button,
-  Field,
   Heading,
   Inline,
-  Select,
   Stack,
   Switch,
   Text,
 } from '../../../design-system/components';
-import { DEFAULT_IMAGE_STYLE, IMAGE_STYLE_PRESETS, isKnownStyle, styleLabel } from './imageStyles';
 import styles from './Dreams.module.css';
 
 interface DreamImagePanelProps {
@@ -47,7 +44,6 @@ export function DreamImagePanel({ dream, hero = false }: DreamImagePanelProps): 
   const canManageAi = useSessionStore((s) => s.can('settings.manage'));
   const [consent] = useSetting('dreams.imageGenerationEnabled');
   const [aiEnabled] = useSetting('ai.enabled');
-  const [defaultStyle] = useSetting('dreams.imageStyle');
   const navigate = useNavigate();
   // Generating/deleting an image changes `Dream.image`, which now drives the dashboard grid thumbnail AND
   // the detail's hero-vs-lower placement (12 §16) — so refresh the store after either, or the grid keeps a
@@ -60,8 +56,6 @@ export function DreamImagePanel({ dream, hero = false }: DreamImagePanelProps): 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<Confirm>(null);
-  // Seeds from the Settings default (synchronously hydrated here); the user can override per image.
-  const [style, setStyle] = useState<string>(defaultStyle ?? DEFAULT_IMAGE_STYLE);
   const [shareTargets, setShareTargets] = useState<DreamShareTarget[]>([]);
   const [sharedWith, setSharedWith] = useState<string[]>([]);
   const [showShare, setShowShare] = useState(false);
@@ -120,7 +114,8 @@ export function DreamImagePanel({ dream, hero = false }: DreamImagePanelProps): 
     setBusy(true);
     setError(null);
     const id = ++reqId.current;
-    const result = await window.selfos?.dreamGenerateImage({ dreamId: dream.id, style });
+    // No per-image style — every image uses the single global style (Settings → Images, §3.8).
+    const result = await window.selfos?.dreamGenerateImage({ dreamId: dream.id });
     if (id !== reqId.current) return;
     if (!result) {
       setError('Something went wrong. Please try again.');
@@ -216,26 +211,6 @@ export function DreamImagePanel({ dream, hero = false }: DreamImagePanelProps): 
     return settingsNote('Add your OpenAI key in Settings to visualize dreams.');
   }
 
-  const stylePicker = (
-    <Field label="Style">
-      {(p) => (
-        <Select {...p} value={style} disabled={busy} onChange={(e) => setStyle(e.target.value)}>
-          {/* A legacy/custom value not in the current presets still renders (§15.4). */}
-          {isKnownStyle(style) ? null : <option value={style}>{styleLabel(style)}</option>}
-          {IMAGE_STYLE_PRESETS.map((group) => (
-            <optgroup key={group.label} label={group.label}>
-              {group.options.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </Select>
-      )}
-    </Field>
-  );
-
   return (
     <div className={hero ? `${styles.imagePanel} ${styles.imagePanelHero}` : styles.imagePanel}>
       {hero ? null : heading}
@@ -306,7 +281,7 @@ export function DreamImagePanel({ dream, hero = false }: DreamImagePanelProps): 
           <img
             className={hero ? styles.dreamHeroImage : styles.dreamImage}
             src={`data:${image.mime};base64,${image.dataBase64}`}
-            alt={`AI-generated ${style} image of ${dream.title?.trim() || 'this dream'}`}
+            alt={`AI-generated image of ${dream.title?.trim() || 'this dream'}`}
           />
           {image.costUsd !== undefined && isAdmin ? (
             <Inline gap={2}>
@@ -319,7 +294,6 @@ export function DreamImagePanel({ dream, hero = false }: DreamImagePanelProps): 
           {/* Hide the triggers while a confirm banner is open (avoids a duplicate action). */}
           {confirm ? null : (
             <>
-              {stylePicker}
               <Inline gap={2} wrap>
                 <Button variant="secondary" onClick={() => setConfirm('regen')} disabled={busy}>
                   <RefreshCw size={16} aria-hidden="true" />
@@ -374,7 +348,6 @@ export function DreamImagePanel({ dream, hero = false }: DreamImagePanelProps): 
               No image yet — bring this dream to life as a dreamlike picture whenever you like.
             </Text>
           )}
-          {stylePicker}
           <Inline>
             <Button variant="primary" onClick={onVisualize} disabled={busy}>
               <Sparkles size={16} aria-hidden="true" />

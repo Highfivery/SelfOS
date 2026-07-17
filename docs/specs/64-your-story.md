@@ -259,12 +259,19 @@ sent).
 
 ### 3.8 Images
 
-- **Cover**: "Create a cover" on the book overview — style preset picker (book-cover preset group)
-  - optional direction notes → the spec-13 two-call flow (Claude distills a **name-free, symbolic**
-    cover brief; OpenAI renders; never a photoreal likeness) → cover stored encrypted; regenerate at
-    will; admin-only cost shown (13 §-precedent).
+- **One global style (owner decision, 2026-07-16)**: there is **no per-image / per-surface style
+  picker**. A single setting — **Settings → Images** (`dreams.imageStyle`, shared by dream images AND
+  story cover/illustrations) — is the one style every AI image uses, so they all look consistent. It's a
+  grouped **preset select** plus a **Custom…** free-text option, refined by an optional **style
+  direction** note (`dreams.imageStyleNotes`). The Settings section is a dedicated, owner-only **Images**
+  section (image generation consent, model, the global style, the direction note, and the OpenAI key).
+- **Cover**: "Create a cover" on the book overview → the spec-13 two-call flow (Claude distills a
+  **name-free, symbolic** cover brief in the global style; OpenAI renders; never a photoreal likeness) →
+  cover stored encrypted; regenerate at will; admin-only cost shown (13 §-precedent).
 - **Chapter illustrations**: "Illustrate this chapter" — same flow seeded from the chapter's
-  distilled themes. On-demand only (no auto image spend).
+  distilled themes. On-demand only (no auto image spend). The button appears **only when image
+  generation is set up** (consent on + AI on + an OpenAI key); otherwise the Images card shows a calm
+  role-aware setup note (never a dead control), and generation errors surface **in the card**.
 - **Uploads**: file picker/drag-drop on a chapter or the book's photo tray → client `downscaleImage`
   (reuses spec 45: ≤1568px, EXIF stripped) → encrypted media in the book's images dir → vision
   analysis (caption suggestion + questions, §3.7). Placement: the user (or an AI suggestion)

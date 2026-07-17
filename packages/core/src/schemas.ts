@@ -4066,7 +4066,6 @@ export type StoryImageTarget = z.infer<typeof StoryImageTargetSchema>;
 export const StoryGenerateImageInputSchema = z.object({
   bookId: z.string().min(1),
   target: StoryImageTargetSchema,
-  style: z.string().optional(),
 });
 export type StoryGenerateImageInput = z.infer<typeof StoryGenerateImageInputSchema>;
 

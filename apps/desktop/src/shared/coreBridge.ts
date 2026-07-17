@@ -848,7 +848,6 @@ const DreamSetFactShareSchema = z.object({
 });
 const DreamGenerateImageSchema = z.object({
   dreamId: z.string().min(1),
-  style: z.string().min(1).optional(), // per-image override; falls back to the Settings default
 });
 const DreamSetImageShareSchema = z.object({
   dreamId: z.string().min(1),
@@ -4967,7 +4966,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return (await getStoryImageIndex(ctx.fs, ctx.key, personId, bookId)).images;
     },
     storyGenerateImage: async (input): Promise<StoryImageResult> => {
-      const { bookId, target, style } = StoryGenerateImageInputSchema.parse(input);
+      const { bookId, target } = StoryGenerateImageInputSchema.parse(input);
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
@@ -4980,10 +4979,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         typeof settings['dreams.imageModel'] === 'string'
           ? settings['dreams.imageModel']
           : 'gpt-image-2';
-      const defaultStyle =
+      // The single global image style (§3.8) — every AI image across SelfOS uses it, so they share one look.
+      const style =
         typeof settings['dreams.imageStyle'] === 'string'
           ? settings['dreams.imageStyle']
           : 'oil painting';
+      // The global style DIRECTION note (Settings → Images) refines every image — dream + story alike.
+      const styleNotes =
+        typeof settings['dreams.imageStyleNotes'] === 'string'
+          ? settings['dreams.imageStyleNotes'].trim()
+          : '';
       const result = await generateStoryImage({
         fs: ctx.fs,
         key: ctx.key,
@@ -4994,7 +4999,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         consent: settings['dreams.imageGenerationEnabled'] === true,
         claudeModel: await host.activeModel(),
         imageModel,
-        style: style ?? defaultStyle,
+        style,
+        ...(styleNotes ? { styleNotes } : {}),
         personId,
         bookId,
         target,
@@ -6812,7 +6818,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       });
     },
     dreamGenerateImage: async (input): Promise<DreamImageResult> => {
-      const { dreamId, style } = DreamGenerateImageSchema.parse(input);
+      const { dreamId } = DreamGenerateImageSchema.parse(input);
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.generateImage'))) {
@@ -6825,7 +6831,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         typeof settings['dreams.imageModel'] === 'string'
           ? settings['dreams.imageModel']
           : 'gpt-image-2';
-      const defaultStyle =
+      // The single global image style (§3.8) — every AI image across SelfOS uses it, so they share one look.
+      const style =
         typeof settings['dreams.imageStyle'] === 'string'
           ? settings['dreams.imageStyle']
           : 'dreamlike';
@@ -6844,7 +6851,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         consent: settings['dreams.imageGenerationEnabled'] === true,
         claudeModel: await host.activeModel(),
         imageModel,
-        style: style ?? defaultStyle,
+        style,
         ...(styleNotes ? { styleNotes } : {}),
         personId,
         dreamId,

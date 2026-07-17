@@ -1094,7 +1094,11 @@ lastPublishedAtSeen }` (one writer: the reader; additive schema). The author's S
     +3 Story RTL [export dialog Markdown-published, PDF-draft-no-publish, the reader read-state row]), **7 story
     E2E** (the publish/reader walk now exports the DRAFT before publishing + the published PDF via the dialog, and
     the author's Sharing tab shows "Read the latest" after the reader opens). Real-Electron visual QA (the export
-    dialog + the reader read-state read clean).
+    dialog + the reader read-state read clean). code-reviewer **ship** (receipt trust boundary + owner-scoped
+    draft export + both-directions reap all verified sound); applied the one should-fix — the secondary receipt
+    write is now best-effort (`.catch`) so an author-facing convenience can't break the reader's open flow — + the
+    a11y nit (autoFocus the export dialog's primary button). A shared `--color-scrim` token to DRY the 3
+    Story-local overlays is deferred to the R7 polish sweep.
 - **R5 — Interview tab**: persisted gaps + part coverage, `story:gaps`, the life map + text equivalent,
   ask-a-gap, answered history, completeness hero.
 - **R6 — Photos tab**: gallery + inline Q&A + placement affordances + the corpus wiring fix (E2E:

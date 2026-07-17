@@ -4978,8 +4978,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           },
         },
       });
-      // The receipt is re-gated inside (book still published + still shared with this reader).
-      await writeReadReceipt(ctx.fs, ctx.key, personId, authorPersonId, bookId, new Date());
+      // The receipt is re-gated inside (book still published + still shared with this reader). Best-effort —
+      // an author-facing convenience must never break the reader's primary "open" flow (matches the sibling reaps).
+      await writeReadReceipt(ctx.fs, ctx.key, personId, authorPersonId, bookId, new Date()).catch(
+        () => undefined,
+      );
     },
     storyReadSharedImage: async (input): Promise<{ mime: string; dataBase64: string } | null> => {
       const { authorPersonId, bookId, imageId } = StoryReadSharedImageInputSchema.parse(input);

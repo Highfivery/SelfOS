@@ -2058,6 +2058,7 @@ function ExportDialog({
               variant="primary"
               disabled={busy || (head === 'published' && !published)}
               aria-busy={busy}
+              autoFocus
               onClick={() => void doExport()}
             >
               {busy ? 'Exporting…' : 'Export'}

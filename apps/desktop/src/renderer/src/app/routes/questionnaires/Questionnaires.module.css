@@ -402,7 +402,15 @@
 .recips {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: var(--space-2);
+}
+
+/* Labels the recipient chips so it's clear the names are who the questionnaire was SENT TO (not the author
+   or subject) — §3.1 card clarity. */
+.recipsLabel {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
 }
 
 .rchip {
@@ -500,6 +508,13 @@
   background: var(--color-surface-alt);
   color: var(--color-text-tertiary);
   border: 1px solid var(--color-border);
+}
+
+/* Provenance: SelfOS generated this (biographer / auto check-in) — a distinct accent tint so it never reads
+   as a hand-authored send (08 §3.1). */
+.pillAuto {
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
 }
 
 /* The privacy chip (08 §3.1 card privacy badges) — accent tint for the "protected" family, a neutral

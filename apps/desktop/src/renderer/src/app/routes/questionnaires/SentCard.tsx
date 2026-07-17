@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Check, Clock, Eye, Link2, RefreshCw, Sparkles, Star } from 'lucide-react';
+import { BookOpen, Bot, Check, Clock, Eye, Link2, RefreshCw, Sparkles, Star } from 'lucide-react';
 import type {
   Questionnaire,
   QuestionnaireSendState,
@@ -25,8 +25,9 @@ function typeLabel(type: string): string {
 const MAX_CHIPS = 3;
 
 function RecipientChip({ recipient }: { recipient: SentRecipientSummary }): JSX.Element {
+  const state = recipient.answered ? 'answered' : 'awaiting a response';
   return (
-    <span className={styles.rchip}>
+    <span className={styles.rchip} title={`${recipient.name} — ${state}`}>
       <Avatar name={recipient.name} />
       <span className={styles.rchipName}>{recipient.name}</span>
       {recipient.answered ? (
@@ -41,7 +42,7 @@ function RecipientChip({ recipient }: { recipient: SentRecipientSummary }): JSX.
           size={13}
           role="img"
           className={`${styles.stateDot} ${styles.stateWait}`}
-          aria-label="awaiting"
+          aria-label="awaiting a response"
         />
       )}
     </span>
@@ -87,6 +88,14 @@ export function SentCard({
   onCancelDelete: () => void;
 }): JSX.Element {
   const navigate = useNavigate();
+  // Provenance (08 §3.1): a questionnaire SelfOS generated for you — from the biographer (Your Story) or the
+  // auto check-in engine — is stamped, so the Sent card can say so and never read as a hand-authored send you
+  // don't recognise (the "why is this in my Sent list?" confusion). Recipient side already labels these.
+  const provenance: 'biographer' | 'auto' | null = questionnaire.storyProvenance
+    ? 'biographer'
+    : questionnaire.autoCheckin
+      ? 'auto'
+      : null;
   const sent = Boolean(sendState);
   const recipients = overview?.recipients ?? [];
   const shown = recipients.slice(0, MAX_CHIPS);
@@ -172,6 +181,7 @@ export function SentCard({
 
       {shown.length > 0 ? (
         <div className={styles.recips}>
+          <span className={styles.recipsLabel}>Sent to</span>
           {shown.map((r, i) => (
             <RecipientChip key={`${r.name}-${i}`} recipient={r} />
           ))}
@@ -242,6 +252,23 @@ export function SentCard({
         ) : (
           <span className={`${styles.pill} ${styles.pillDraft}`}>Not sent yet</span>
         )}
+        {provenance ? (
+          <span
+            className={`${styles.pill} ${styles.pillAuto}`}
+            title={
+              provenance === 'biographer'
+                ? 'SelfOS created this for your story — you didn’t send it by hand.'
+                : 'SelfOS created this from your Auto check-ins — you didn’t send it by hand.'
+            }
+          >
+            {provenance === 'biographer' ? (
+              <BookOpen size={12} aria-hidden="true" />
+            ) : (
+              <Bot size={12} aria-hidden="true" />
+            )}
+            {provenance === 'biographer' ? 'From your biographer' : 'Auto check-in'}
+          </span>
+        ) : null}
         {privacyBadge ? <PrivacyChip badge={privacyBadge} /> : null}
       </div>
 

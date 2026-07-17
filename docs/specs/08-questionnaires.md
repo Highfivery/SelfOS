@@ -241,6 +241,18 @@ Analyzed/Answered group first. The **Received** tab gained its own **sort** (`so
 the Received tab uses a soft `--color-warning-subtle-bg`/`-text` pill (both themes) rather than a harsh
 dark-yellow-on-black.
 
+**Sent-card provenance badge (2026-07-17c).** A questionnaire SelfOS generated for you — from the **auto
+check-in** engine (63; `questionnaire.autoCheckin`) or the **biographer** (64; `questionnaire.storyProvenance`)
+— now carries a distinct **"Auto check-in" / "From your biographer"** pill on its Sent card, mirroring the
+recipient-side labels. Auto check-ins the owner configures for **another** household member are correctly
+attributed to the owner (creator + sender), so they legitimately appear in the owner's Sent list; without the
+badge a partner-named "Analyzed" card read as a leak. The trust boundary is unchanged: the Sent list is
+strictly the active person's own sends (`senderPersonId === you`) and a partner-targeted send is `private`, so
+its **raw answers never cross the bridge** to the owner. (A separate consent-model amendment for
+owner-configured partner streams is tracked in spec 63.) The Sent card also labels its recipient chips
+**"Sent to …"** (with a per-person answered/awaiting tooltip) so the names read unambiguously as the
+recipients, not the author or subject.
+
 ### 3.2 Sending
 
 1. **Choose recipient** — a household **subject** (delivered in-app) or an **external person** (relay

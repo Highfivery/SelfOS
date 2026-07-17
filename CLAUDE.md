@@ -468,6 +468,35 @@ bookId, exclusions?)` takes a `bookId` and reads the photo answers + the image i
   expects a sort to reorder the whole list, float the matching GROUP (rank groups by their max sort value), don't
   just sort inside. And a `default`-sort RTL can't assert "lifecycle order" once the default sort itself reorders
   groups — pick a neutral sort (`recent`) as the before-state to prove the reorder.**
+- 2026-07-17 — **Audit + Fix (user reported a suspected privacy leak: partner-named questionnaires in their Sent
+  list; deep audit → NOT a leak, but a real labeling gap; SPEC 08 §3.1; on `fix/sent-provenance-badges`, a
+  worktree, PR pending).** User saw questionnaires (recipients both "Angel" + "Ben") under one Sent page and
+  feared user questionnaires were being revealed to others. **Deep audit (2 parallel trace agents + the trust
+  boundary read; NOT assumed):** (1) the **biographer never sends to anyone but the story owner** (self-send,
+  `type:'general'`, `storyProvenance`); (2) the cards were **auto check-ins** (their AI-generated `type`s —
+  "Partner Discovery", "Money & Roots" — come from the gap-finder via `topicalSpec`; intimacy slot →
+  `type:'intimacy'`); (3) auto check-ins attribute to the **config owner** (creator+sender), self→`standard`
+  ("Answers visible"), partner→`private` ("Private · insights only"), all landing in the owner's Sent list. The
+  screenshot's pattern (partner=visible, self=private) matched the config owner having a self stream + a
+  partner-targeted stream — **user CONFIRMED** (self + partner streams). **Verdict: NOT a cross-user leak** — Sent
+  is strictly `senderPersonId === you`, and a partner-targeted send is `private` so its **raw answers never cross
+  the bridge** to the owner. **Root cause of the alarm: auto/biographer questionnaires were indistinguishable
+  from hand-authored ones on the Sent card** (the recipient's Inbox labels them; the sender's Sent side didn't).
+  **Fix A (this PR):** a distinct **"Auto check-in" / "From your biographer"** provenance pill on the SentCard
+  (reads `questionnaire.autoCheckin`/`storyProvenance`; renderer-only, no schema/IPC/trust-boundary change).
+  Gate green: typecheck, lint, format, **1293 desktop** unit (+a SentCard provenance RTL: exactly the two
+  generated cards labelled, hand-authored none — scoped with `within(tabpanel)` since `/Auto check-in/` also
+  matches the "Auto check-ins" TAB), redesign + author-scoped + home E2E green; real-Electron visual QA (the
+  "Auto check-in" pill next to the status + privacy chips). **Fix B (deferred, user chose "design a fix"):** a
+  spec-63 consent-model amendment — an owner can currently configure RECURRING partner check-ins unilaterally,
+  and from the partner's PRIVATE answers an AI insight ABOUT them is derived + fed into the OWNER's coaching
+  context (`subjectPersonId = senderPersonId`) with no partner consent; to be written up + approved before
+  building. **Lesson: a "revealing others' data?!" report is often a LABELING gap, not a boundary breach —
+  audit the trust boundary FIRST (sender-scoping + the private-answer gate held), then fix the missing provenance
+  signal so owner-configured/auto/biographer sends never read as a hand-authored leak; the privacy PATTERN in a
+  screenshot (self=visible vs partner=private) is enough to identify the config owner without decrypting the
+  vault.**
+
 - 2026-07-17 — **Build (Questionnaires landing → a 3-tab surface + nav badge + toolbar spacing + Recently-analyzed
   sort; mockup approved FIRST; SPEC 08 §3.1; on `feat/questionnaires-tabs-nav`, a worktree, PR pending).** Four
   user-requested improvements, mockup (interactive Artifact in the app's real tokens) shown + 3 decisions locked via

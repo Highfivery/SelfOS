@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type {
   BookManifest,
   BookOutline,
@@ -119,6 +119,22 @@ function renderStory(): void {
   render(
     <MemoryRouter>
       <Story />
+    </MemoryRouter>,
+  );
+}
+
+/** The Studio's panels live in tabs (§13.2). Wait for the tab bar, then switch. */
+async function openTab(name: string): Promise<void> {
+  await userEvent.click(await screen.findByRole('tab', { name }));
+}
+
+/** Render under a real `story/*` route so a deep-linked tab is read from the URL (§13.2). */
+function renderStoryAt(path: string): void {
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path="story/*" element={<Story />} />
+      </Routes>
     </MemoryRouter>,
   );
 }
@@ -265,8 +281,8 @@ describe('Story (64)', () => {
       },
     });
     renderStory();
-    // The settings live in a collapsible section on the overview — open it.
-    await userEvent.click(await screen.findByRole('button', { name: /Story settings/ }));
+    // The settings live in the Settings tab (§13.4) — writing + images groups, open (no collapsible).
+    await openTab('Settings');
     // Writing controls are editable (voice/tone/length) + the book's OWN image style.
     expect(await screen.findByLabelText('Narrative voice')).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText('Tone'), 'cinematic');
@@ -891,6 +907,7 @@ describe('Story (64)', () => {
       storyInterviewCheck,
     });
     renderStory();
+    await openTab('Interview');
     await userEvent.click(await screen.findByRole('button', { name: 'Find what’s missing' }));
     // Manual = the plain `{ bookId }` call (no `auto` flag).
     expect(storyInterviewCheck).toHaveBeenCalledWith({ bookId: 'b1' });
@@ -921,6 +938,7 @@ describe('Story (64)', () => {
       storyPublish,
     });
     renderStory();
+    await openTab('Sharing');
     await userEvent.click(await screen.findByRole('button', { name: 'Publish & choose readers' }));
     expect(storyPublish).toHaveBeenCalledWith({ bookId: 'b1' });
     expect(await screen.findByText(/Shared 1 chapter with your readers/)).toBeInTheDocument();
@@ -951,6 +969,7 @@ describe('Story (64)', () => {
       storyGrantReader,
     });
     renderStory();
+    await openTab('Sharing');
     const select = await screen.findByRole('combobox', { name: 'Add a reader' });
     await userEvent.selectOptions(select, 'r1');
     expect(await screen.findByText(/Angel appears in this book/)).toBeInTheDocument();
@@ -967,6 +986,7 @@ describe('Story (64)', () => {
       storyUpdate,
     });
     renderStory();
+    await openTab('Settings');
     await userEvent.type(await screen.findByLabelText('Dedication'), 'For my mother');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(storyUpdate).toHaveBeenCalledWith(
@@ -1062,6 +1082,7 @@ describe('Story (64)', () => {
       storyExportMarkdown,
     });
     renderStory();
+    await openTab('Sharing');
     await userEvent.click(await screen.findByRole('button', { name: 'Export as Markdown' }));
     expect(storyExportMarkdown).toHaveBeenCalledWith({ bookId: 'b1' });
     expect(
@@ -1082,6 +1103,7 @@ describe('Story (64)', () => {
       storyExportPdf,
     });
     renderStory();
+    await openTab('Sharing');
     await userEvent.click(await screen.findByRole('button', { name: 'Export as PDF' }));
     expect(storyExportPdf).toHaveBeenCalledWith({ bookId: 'b1' });
     expect(
@@ -1179,6 +1201,7 @@ describe('Story (64)', () => {
     });
     renderStory();
     // The Photos panel shows the uploaded thumbnail; analyze → caption + a question to answer.
+    await openTab('Photos');
     await userEvent.click(await screen.findByRole('button', { name: /Caption & ask about this/ }));
     expect(storyAnalyzePhoto).toHaveBeenCalledWith({ bookId: 'b1', imageId: 'ph1' });
     expect(await screen.findByText('A garage in winter')).toBeInTheDocument();
@@ -1241,7 +1264,7 @@ describe('Story (64)', () => {
     expect(await screen.findByLabelText('Move image after paragraph')).toBeInTheDocument();
   });
 
-  it('lists to-dos on the overview and marks a reminder done', async () => {
+  it('surfaces to-dos in the Needs-you strip and marks a reminder done in the sheet (§13.4)', async () => {
     const storyUpdateMark = vi.fn(
       (): Promise<ChapterMarkup> =>
         Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
@@ -1267,6 +1290,8 @@ describe('Story (64)', () => {
       storyUpdateMark,
     });
     renderStory();
+    // The Needs-you strip shows a "To-dos" card; opening it raises the book-level to-do sheet.
+    await userEvent.click(await screen.findByRole('button', { name: 'View ›' }));
     expect(await screen.findByRole('heading', { name: 'To do' })).toBeInTheDocument();
     expect(screen.getByText(/call my sister/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Mark done' }));
@@ -1349,7 +1374,8 @@ describe('Story (64)', () => {
       storyUnexclude,
     });
     renderStory();
-    // The overview shows the "Never written about" panel.
+    // The "Never written about" panel lives in the Settings tab (§13.4).
+    await openTab('Settings');
     expect(await screen.findByRole('heading', { name: 'Never written about' })).toBeInTheDocument();
     expect(screen.getByText('the divorce')).toBeInTheDocument();
     // The source exclusion shows its friendly label, never the raw ref id.
@@ -1359,6 +1385,72 @@ describe('Story (64)', () => {
       screen.getByRole('button', { name: /Allow writing about the divorce again/ }),
     );
     expect(storyUnexclude).toHaveBeenCalledWith({ bookId: 'b1', itemId: 'x1' });
+  });
+
+  it('deep-links a tab from the URL and switches tabs from the tab bar (§13.2)', async () => {
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+    });
+    // Deep-link: /story/settings opens on the Settings tab (the danger zone shows).
+    renderStoryAt('/story/settings');
+    expect(
+      await screen.findByRole('tab', { name: 'Settings', selected: true }),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Danger zone' })).toBeInTheDocument();
+    // Switching to Chapters from the tab bar shows the grid.
+    await userEvent.click(screen.getByRole('tab', { name: 'Chapters' }));
+    expect(await screen.findByRole('button', { name: /The Garage/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Chapters', selected: true })).toBeInTheDocument();
+  });
+
+  it('the Danger zone deletes only after typing the book’s title (§13.6.7)', async () => {
+    const storyDelete = vi.fn(() => Promise.resolve());
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyDelete,
+    });
+    renderStory();
+    await openTab('Settings');
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete this book…' }));
+    const del = await screen.findByRole('button', { name: 'Delete forever' });
+    expect(del).toBeDisabled(); // armed only by typing the exact title
+    const confirm = screen.getByLabelText(/Type the book’s title/);
+    await userEvent.type(confirm, 'wrong');
+    expect(del).toBeDisabled();
+    await userEvent.clear(confirm);
+    await userEvent.type(confirm, 'The Story of Ben');
+    expect(del).toBeEnabled();
+    await userEvent.click(del);
+    expect(storyDelete).toHaveBeenCalledWith({ bookId: 'b1' });
+  });
+
+  it('the Danger zone rewrites from scratch (resets, then re-drafts) (§13.6.6)', async () => {
+    const storyRewriteFromScratch = vi.fn(() => Promise.resolve(bundle(false)));
+    const storyGenerateFullDraft = vi.fn(() =>
+      Promise.resolve({ ok: true as const, bundle: writtenBundle('new') }),
+    );
+    installMockBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyRewriteFromScratch,
+      storyGenerateFullDraft,
+    });
+    renderStory();
+    await openTab('Settings');
+    await userEvent.click(await screen.findByRole('button', { name: 'Rewrite from scratch…' }));
+    // The confirmation dialog opens (names the keeps/discards), then confirms.
+    expect(
+      await screen.findByRole('heading', { name: /Rewrite .* from scratch\?/ }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Rewrite from scratch' }));
+    await waitFor(() => expect(storyRewriteFromScratch).toHaveBeenCalledWith({ bookId: 'b1' }));
+    // …then re-runs the standard streamed draft.
+    await waitFor(() => expect(storyGenerateFullDraft).toHaveBeenCalledWith({ bookId: 'b1' }));
   });
 
   it('opens a book with an outline straight into the overview (no approval gate)', async () => {

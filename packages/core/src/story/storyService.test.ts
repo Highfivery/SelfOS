@@ -3,6 +3,7 @@ import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import { BookConfigSchema, type BookOutline, type LifeTimeline } from '../schemas';
 import {
+  addUploadedPhoto,
   applyFoundations,
   approveOutline,
   createBook,
@@ -10,11 +11,22 @@ import {
   getBook,
   getExclusions,
   getOutline,
+  getInterviewState,
+  getPublishedManifest,
+  getStoryImageIndex,
   getTimeline,
+  getTodos,
   listBooks,
+  listChapters,
   readBookBundle,
+  rewriteBookFromScratch,
   saveChapter,
   saveExclusions,
+  saveInterviewState,
+  savePublishedManifest,
+  saveStoryImageBytes,
+  saveStoryImageIndex,
+  saveTodos,
   updateBook,
 } from './storyService';
 
@@ -219,5 +231,137 @@ describe('storyService — persistence (64 §5.7)', () => {
     expect(await updateBook(fs, key, 'me', 'nope', { title: 'x' }, now)).toBeNull();
     expect(await approveOutline(fs, key, 'me', 'nope', outline, now)).toBeNull();
     expect(await readBookBundle(fs, key, 'me', 'nope')).toBeNull();
+  });
+
+  it('rewriteBookFromScratch resets the draft but keeps the person’s investments (§13.6.6)', async () => {
+    const fs = memFileSystem();
+    const book = await newBook(fs); // title supplied → not auto
+    // Draft it: essence + outline + timeline + a chapter, plus matter/cover, exclusions, an uploaded photo,
+    // and an AI-generated illustration.
+    await applyFoundations(
+      fs,
+      key,
+      'me',
+      book.id,
+      { essence: 'a quiet man', outline, timeline },
+      now,
+    );
+    await saveChapter(fs, key, 'me', book.id, {
+      id: 'c1',
+      schemaVersion: 1,
+      partId: 'p1',
+      order: 0,
+      title: 'The Garage',
+      markdown: 'Once...',
+      revision: 1,
+      status: 'reviewed',
+      sourceSignature: '',
+      provenance: [],
+      protectedBlocks: [{ anchor: { paragraphId: 'p0' }, text: 'my own words' }],
+      pinnedQuotes: [],
+      imagePlacements: [{ imageId: 'ill1', afterAnchor: 'p0', caption: '' }],
+    });
+    await saveExclusions(fs, key, 'me', book.id, [
+      { id: 'x1', kind: 'topic', value: 'the lake house', createdAt: now.toISOString() },
+    ]);
+    // A denormalized to-do roll-up (keyed by chapterId) + interview state + a published head.
+    await saveTodos(fs, key, 'me', book.id, {
+      schemaVersion: 1,
+      todos: [
+        {
+          id: 'td1',
+          chapterId: 'c1',
+          kind: 'remind',
+          text: 'upload the shop photo',
+          status: 'open',
+          createdAt: now.toISOString(),
+        },
+      ],
+    });
+    await saveInterviewState(fs, key, 'me', book.id, {
+      schemaVersion: 1,
+      askedPrompts: ['what did the garage smell like?'],
+      frameworkCoverage: {
+        chapters: true,
+        scenes: {},
+        challenges: false,
+        ideology: false,
+        futureScript: false,
+      },
+      photoAnswers: [
+        { imageId: 'ph1', question: 'who took it?', answer: 'my father', at: now.toISOString() },
+      ],
+    });
+    await savePublishedManifest(fs, key, 'me', book.id, {
+      schemaVersion: 1,
+      publishedAt: now.toISOString(),
+      title: 'The Story of Ben',
+      parts: [],
+      chapterOrder: [],
+      images: [],
+    });
+    await updateBook(
+      fs,
+      key,
+      'me',
+      book.id,
+      { matter: { dedication: 'For Angel' }, coverImageId: 'cov1' },
+      now,
+    );
+    const photo = await addUploadedPhoto(
+      fs,
+      key,
+      'me',
+      book.id,
+      { bytes: new Uint8Array([1, 2, 3]), mime: 'image/png' },
+      now,
+    );
+    // A cover + a generated illustration in the index (+ their bytes).
+    await saveStoryImageBytes(fs, key, 'me', book.id, 'cov1', new Uint8Array([9]));
+    await saveStoryImageBytes(fs, key, 'me', book.id, 'ill1', new Uint8Array([8]));
+    const idx = await getStoryImageIndex(fs, key, 'me', book.id);
+    await saveStoryImageIndex(fs, key, 'me', book.id, {
+      ...idx,
+      images: [
+        ...idx.images,
+        { id: 'cov1', kind: 'cover', mime: 'image/png', createdAt: now.toISOString() },
+        { id: 'ill1', kind: 'generated', mime: 'image/png', createdAt: now.toISOString() },
+      ],
+    });
+
+    const later = new Date('2026-08-01T00:00:00.000Z');
+    const reset = await rewriteBookFromScratch(fs, key, 'me', book.id, later);
+
+    // DISCARDS: chapters, outline, timeline, essence; status back to outlining.
+    expect(reset?.status).toBe('outlining');
+    expect(reset?.essence).toBeUndefined();
+    expect(await listChapters(fs, key, 'me', book.id)).toEqual([]);
+    expect(await getOutline(fs, key, 'me', book.id)).toBeNull();
+    expect(await getTimeline(fs, key, 'me', book.id)).toBeNull();
+    // KEEPS: title, config, matter, cover pointer.
+    expect(reset?.title).toBe('The Story of Ben');
+    expect(reset?.config.style).toBe(config.style);
+    expect(reset?.matter?.dedication).toBe('For Angel');
+    expect(reset?.coverImageId).toBe('cov1');
+    // KEEPS: exclusions + the uploaded photo; DISCARDS the generated illustration (cover survives).
+    const excl = await getExclusions(fs, key, 'me', book.id);
+    expect(excl.map((e) => e.value)).toEqual(['the lake house']);
+    const images = (await getStoryImageIndex(fs, key, 'me', book.id)).images;
+    const kinds = images.map((i) => `${i.kind}:${i.id}`).sort();
+    expect(kinds).toContain('cover:cov1');
+    expect(kinds).toContain(`uploaded:${photo.id}`);
+    expect(kinds).not.toContain('generated:ill1');
+    // DISCARDS the denormalized to-do roll-up (else phantom "Needs you" to-dos point at deleted chapters).
+    expect((await getTodos(fs, key, 'me', book.id)).todos).toEqual([]);
+    // KEEPS: the interview state (asked prompts + photo answers) and the published head (readers keep it).
+    const interview = await getInterviewState(fs, key, 'me', book.id);
+    expect(interview?.askedPrompts).toEqual(['what did the garage smell like?']);
+    expect(interview?.photoAnswers).toHaveLength(1);
+    expect((await getPublishedManifest(fs, key, 'me', book.id))?.title).toBe('The Story of Ben');
+  });
+
+  it('rewriteBookFromScratch returns null for a missing book (never crashes)', async () => {
+    const fs = memFileSystem();
+    expect(await rewriteBookFromScratch(fs, key, 'me', 'nope', now)).toBeNull();
   });
 });

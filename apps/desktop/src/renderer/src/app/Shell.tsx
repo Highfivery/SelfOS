@@ -55,7 +55,8 @@ const GUARDED_ROUTES: { path: string; capability: CapabilityKey; element: JSX.El
   // screen + the bridge (the surface self-hides without a partner, and a direct route shows a calm state).
   { path: 'together', capability: 'together.own', element: <Together /> },
   { path: 'together/session/:id', capability: 'together.own', element: <TogetherSession /> },
-  { path: 'story', capability: 'story.own', element: <Story /> },
+  // A splat so the Studio's tabs deep-link (`/story/photos`, …) without remounting on tab change (64 §13.2).
+  { path: 'story/*', capability: 'story.own', element: <Story /> },
   // Usage is reachable with `sessions.own`; it filters cost/the Everyone scope internally via
   // `budgets.manage` (02-app-shell §13.4) — that finer gating stays in the screen, not here.
   { path: 'usage', capability: 'sessions.own', element: <Usage /> },

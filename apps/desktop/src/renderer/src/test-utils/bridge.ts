@@ -308,6 +308,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     storyApproveOutline: () => Promise.resolve(null),
     storyUpdate: () => Promise.resolve(null),
     storyDelete: () => Promise.resolve(),
+    storyRewriteFromScratch: () => Promise.resolve(null),
     storyGenerateChapters: () =>
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
     storyRegenerateChapter: () =>

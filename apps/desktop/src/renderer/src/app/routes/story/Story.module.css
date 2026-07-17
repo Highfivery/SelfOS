@@ -5,9 +5,342 @@
   gap: var(--space-6);
 }
 
-.chapterRow {
-  padding: var(--space-2) 0;
+/* ============ The Studio (§13.4) ============ */
+.studio {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* Hero — the book's identity: cover on the left, title/essence/chips/actions on the right. */
+.hero {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+@media (max-width: 768px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+}
+.heroCover {
+  min-width: 0;
+}
+.heroBody {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.heroTitleRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.heroEssence {
+  font-style: italic;
+  color: var(--color-text-secondary);
+}
+.heroChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.chip {
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+.actionBadge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: var(--radius-pill);
+  background: var(--color-warning);
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 700;
+}
+
+/* Needs you — pending decisions, gathered. */
+.needs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-alt);
+}
+.needsHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.needsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+  gap: var(--space-3);
+}
+.needCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.needKind,
+.needKindWarn {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-accent-text);
+}
+.needKindWarn {
+  color: var(--color-warning);
+}
+.needTitle {
+  color: var(--color-text-heading);
+  font-weight: 600;
+}
+.caughtUp {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+}
+
+/* Tabs. */
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: none;
+  background: none;
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: -1px;
+  border-bottom: 2px solid transparent;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.tab:hover {
+  color: var(--color-accent-text);
+}
+.tabActive {
+  color: var(--color-accent-text);
+  border-bottom-color: var(--color-accent-solid);
+}
+.tabBadge {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--color-text-tertiary);
+}
+.settingsTab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* The "write the remaining N chapters" bar, inside the part that owns the unwritten shells. */
+.writeBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  margin-bottom: var(--space-4);
+}
+
+/* The hero "more" menu — a compact popover with a full-screen backdrop catcher (no clipping, §12). */
+.kebabWrap {
+  position: relative;
+  display: inline-flex;
+}
+.kebabButton {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-weight: 700;
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+.kebabButton:hover {
+  color: var(--color-accent-text);
+}
+.kebabBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+.kebabMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 31;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-1);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+}
+.kebabItem {
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+.kebabItem:hover {
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+}
+
+/* The to-do sheet — a right-hand overlay panel (the questionnaire/together sheet precedent). */
+.sheetWrap {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.sheetBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(15 12 9 / 0.34);
+}
+.sheetPanel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 92%);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border-strong);
+  box-shadow: var(--shadow-overlay);
+}
+.sheetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+.sheetBody {
+  flex: 1;
+  overflow: auto;
+  padding: var(--space-4) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Danger zone rows + confirm dialogs. */
+.dangerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-3) 0;
   border-top: 1px solid var(--color-border);
+}
+.dangerRow:first-of-type {
+  border-top: none;
+}
+.dangerRow > :first-child {
+  min-width: 0;
+  flex: 1 1 260px;
+}
+.dialogWrap {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+}
+.dialogBackdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(15 12 9 / 0.34);
+}
+.dialog {
+  position: relative;
+  z-index: 1;
+  width: min(440px, 100%);
+  padding: var(--space-6);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+}
+.dzList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+.dzList li {
+  display: flex;
+  gap: 8px;
+  line-height: 1.5;
+}
+.dzKeep {
+  color: var(--color-success);
+  font-weight: 700;
+  flex: none;
+}
+.dzLose {
+  color: var(--color-danger);
+  font-weight: 700;
+  flex: none;
 }
 
 /* A generated cover — a symbolic square, capped so it reads as a book cover, never full-bleed (§12: a

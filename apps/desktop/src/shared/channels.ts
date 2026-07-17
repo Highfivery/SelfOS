@@ -319,6 +319,7 @@ export const IpcChannels = {
   storyApproveOutline: 'story:approveOutline',
   storyUpdate: 'story:update',
   storyDelete: 'story:delete',
+  storyRewriteFromScratch: 'story:rewriteFromScratch',
   storyGenerateChapters: 'story:generateChapters',
   storyRegenerateChapter: 'story:regenerateChapter',
   storyReviewChapter: 'story:reviewChapter',
@@ -1086,6 +1087,13 @@ export interface SelfosBridge {
   storyUpdate(input: StoryUpdateInput): Promise<BookManifest | null>;
   /** Delete a book and all its files. */
   storyDelete(input: { bookId: string }): Promise<void>;
+  /**
+   * Rewrite a book from scratch (64 §13.6.6) — reset it to the pre-draft state (discard chapters, markup,
+   * proposals, essence, outline/timeline, and AI-generated illustrations; keep config/title/matter/cover/
+   * photos/exclusions/interview; the published head stays). Returns the reset bundle; the caller re-runs the
+   * draft (`storyGenerateFullDraft`). No-op (null) if the book is gone or the person can't `story.own` it.
+   */
+  storyRewriteFromScratch(input: { bookId: string }): Promise<StoryBookBundle | null>;
   /**
    * Write every not-yet-written (or stale) chapter of an approved book (§5.3) — a queue of metered
    * `story.chapter` passes, budget-gated + resumable. Returns the fresh bundle + how many were written.

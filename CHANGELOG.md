@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.34.0](https://github.com/Highfivery/SelfOS/compare/v0.33.0...v0.34.0) (2026-07-17)
+
+
+### Features
+
+* **questionnaires:** answering redesign — per-question skip/decline + unlocked wizard (08 §25) ([#241](https://github.com/Highfivery/SelfOS/issues/241)) ([afc3fd8](https://github.com/Highfivery/SelfOS/commit/afc3fd82b5dcf1600088e2d0c3aca9489b25d7f5))
+* **story:** immersive margin-based Shape editing surface (64 §13.5 R3-polish) ([7d91d5c](https://github.com/Highfivery/SelfOS/commit/7d91d5ceaa2040a6d66c726859314a254aeebc47))
+* **story:** the Photos gallery + photo-answers→corpus wiring fix (64 §13.6.2 R6) ([#243](https://github.com/Highfivery/SelfOS/issues/243)) ([adcf7a9](https://github.com/Highfivery/SelfOS/commit/adcf7a98a8c353ed26c7f03027133662a0a5e63a))
+* **story:** the Studio & the Book — R4 (read receipts, draft export, export dialog) (64 §13.7) ([#237](https://github.com/Highfivery/SelfOS/issues/237)) ([3105743](https://github.com/Highfivery/SelfOS/commit/31057430a27e4d15c082ffd9068f2c47a3b91fb6))
+* **story:** the Studio & the Book — R5 (Interview tab: life map, gaps, ask-a-gap) (64 §13.7) ([#240](https://github.com/Highfivery/SelfOS/issues/240)) ([ca0c9d8](https://github.com/Highfivery/SelfOS/commit/ca0c9d8911dd1c68503da7db41f9e8d1e7f70739))
+
+
+### Bug Fixes
+
+* **questionnaires:** align landing card titles + tighten spacing rhythm ([#235](https://github.com/Highfivery/SelfOS/issues/235)) ([3f486bd](https://github.com/Highfivery/SelfOS/commit/3f486bd6668b9637002d1cf1a5f5235bf6f4d4cf))
+* **questionnaires:** float the sorted status group, soften the attention pill, add Received sort ([#242](https://github.com/Highfivery/SelfOS/issues/242)) ([247d20e](https://github.com/Highfivery/SelfOS/commit/247d20e655d659167532f68e9d98f70ec094fd65))
+
 ## [0.33.0](https://github.com/Highfivery/SelfOS/compare/v0.32.0...v0.33.0) (2026-07-17)
 
 

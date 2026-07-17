@@ -21,6 +21,112 @@
   flex-shrink: 0;
 }
 
+/* --- Tab bar (§3.1 redesign): Sent · Received · Auto check-ins ---
+   The three tab labels are fixed + short, and the ≤480px compact rule keeps them fitting at 360px (§12), so
+   `overflow-x: auto` here is inert insurance, never a scroll-to-fit affordance. KEEP THE LABELS SHORT — if a
+   future/localized label makes them overflow, tighten sizing rather than letting this scroll silently. */
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px var(--space-4) 12px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--text-md);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.tab:hover {
+  color: var(--color-text-primary);
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+
+.tabActive {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  border-bottom-color: var(--color-accent-solid);
+}
+
+.tabCount {
+  flex: none;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.tabActive .tabCount {
+  background: var(--color-accent-subtle-bg);
+  border-color: transparent;
+  color: var(--color-accent-text);
+}
+
+/* Something needs the person's action (a received questionnaire to answer) — warm accent. */
+.tabCountAttn,
+.tabActive .tabCountAttn {
+  background: var(--color-warning);
+  border-color: transparent;
+  color: #2e2a25;
+}
+
+/* The Auto check-ins on/off indicator — a small dot instead of a count (it's a config surface). */
+.autoDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border-strong);
+}
+
+.autoDotOn {
+  background: var(--color-success);
+}
+
+/* Phone width: tighten the three fixed tabs so they FIT the ~312px content — never scroll or wrap (§12). */
+@media (max-width: 480px) {
+  .tab {
+    padding: 9px var(--space-2) 11px;
+    gap: var(--space-1);
+    font-size: var(--text-sm);
+  }
+  .tabCount {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+  }
+}
+
 /* --- Two sections (Sent / Received) of cards --- */
 .section {
   display: flex;
@@ -29,55 +135,7 @@
   min-width: 0;
 }
 
-.sectionHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.sectionIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  flex: none;
-  color: var(--color-accent-text);
-}
-
-.sectionCount {
-  font-size: var(--text-xs);
-  color: var(--color-text-secondary);
-  background: var(--color-surface-alt);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  padding: 1px var(--space-2);
-}
-
-.sectionSub {
-  font-size: var(--text-sm);
-  color: var(--color-text-tertiary);
-}
-
 /* The collapse toggle on a section/group header — a borderless button carrying a rotating chevron. */
-.collapseToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 2px 0;
-  border: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-
-.collapseToggle:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 2px;
-}
-
 .chev {
   color: var(--color-text-tertiary);
   transition: transform var(--motion-fast) var(--ease-standard);
@@ -88,33 +146,38 @@
   transform: rotate(-90deg);
 }
 
-/* Per-section toolbar (search + filter + sort) — quiet ghost controls, not heavy pills (calm aesthetic). */
+/* Per-tab toolbar (search on the left, filter + sort pushed right). The selects sit apart with real
+   breathing room — never crammed edge-to-edge (§3.1). */
 .toolbar {
-  margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+/* Pushes the filter/sort selects to the right of the search field; collapses when the row wraps. */
+.tbSpacer {
+  flex: 1 1 var(--space-4);
+  min-width: 0;
 }
 
 .tbSearch {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  border: 1px solid transparent;
-  background: transparent;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
   border-radius: var(--radius-pill);
-  padding: 5px var(--space-2);
+  padding: 6px var(--space-3);
   color: var(--color-text-tertiary);
 }
 
 .tbSearch:hover {
-  background: var(--color-surface-alt);
+  border-color: var(--color-border-strong);
 }
 
 .tbSearch:focus-within {
-  background: var(--color-surface);
-  border-color: var(--color-border);
+  border-color: var(--color-border-strong);
 }
 
 .tbSearch input {
@@ -128,10 +191,10 @@
 }
 
 .tbSelect {
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-sm);
-  padding: 5px var(--space-2);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: 6px var(--space-2);
   font: inherit;
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
@@ -139,7 +202,7 @@
 }
 
 .tbSelect:hover {
-  background: var(--color-surface-alt);
+  border-color: var(--color-border-strong);
 }
 
 .tbSelect:focus-visible {

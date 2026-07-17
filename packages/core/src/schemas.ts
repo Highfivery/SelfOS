@@ -2757,6 +2757,9 @@ export interface QuestionnaireSentOverview {
   newResponses: number;
   /** The most recent submission time across all sends (ISO) — the card's "Answered <date·time>". */
   answeredAt?: string;
+  /** The most recent analysis time across all sends (ISO) — the latest analysed send's Insight `updatedAt`.
+   *  Drives the "Recently analyzed" sort; absent until something has been analysed. */
+  analyzedAt?: string;
   /** True once every submitted send has been analysed (≥1 submitted, none left un-analysed). */
   analyzed: boolean;
   /** The derived Insight's full summary (the latest analysed send) — the card clamps it for display. */

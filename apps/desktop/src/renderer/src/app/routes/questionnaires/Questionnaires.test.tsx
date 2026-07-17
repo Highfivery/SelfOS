@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { InboxItem, Questionnaire, QuestionnaireSentOverview } from '@shared/channels';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { Questionnaires } from './Questionnaires';
@@ -9,6 +9,7 @@ import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
 import { useInboxStore } from '../../../stores/inboxStore';
+import { useAutoCheckinStore } from '../../../stores/autoCheckinStore';
 import { clearMockBridge, elevateToOwner, installMockBridge } from '../../../test-utils/bridge';
 
 /** A minimal household Person for the recipient picker (08 §17.3: a questionnaire is bound to one). */
@@ -50,6 +51,7 @@ afterEach(() => {
     customTypes: [],
   });
   useInboxStore.setState({ items: [], loaded: false });
+  useAutoCheckinStore.setState({ config: null, loaded: false });
   usePeopleStore.setState({ people: [], loaded: false });
   useSettingsStore.setState({ values: {} });
   useSessionStore.setState({});
@@ -1431,7 +1433,8 @@ describe('Questionnaires', () => {
     });
     renderApp();
 
-    await screen.findByRole('heading', { name: 'Received' });
+    // Received questionnaires live under their own tab (§3.1 redesign).
+    await userEvent.click(await screen.findByRole('tab', { name: /Received/ }));
     // A brand-new private item announces the promise BEFORE the recipient opens it.
     expect(screen.getByText('Your answers stay private')).toBeInTheDocument();
     // A standard item names who sees the answers; the tooltip is the derived disclosure verbatim.
@@ -1466,14 +1469,14 @@ describe('Questionnaires', () => {
     });
     renderApp();
 
-    expect(await screen.findByRole('heading', { name: 'Received' })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('tab', { name: /Received/ }));
     expect(screen.getByText('How we handle money')).toBeInTheDocument();
     expect(screen.getByText(/From Sam/)).toBeInTheDocument();
     // A new item leads with the "Answer" CTA; opening it enters the answering detail (back link appears,
-    // the landing sections are replaced).
+    // the tab bar is replaced).
     await userEvent.click(screen.getByRole('button', { name: 'Answer' }));
     expect(await screen.findByRole('button', { name: 'Questionnaires' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Received' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /Received/ })).not.toBeInTheDocument();
   });
 
   // --- 2026-07 enhancements: analyze/excerpt, favourites, grouping, collapse, filter ---
@@ -1604,6 +1607,7 @@ describe('Questionnaires', () => {
     });
     renderApp();
 
+    await userEvent.click(await screen.findByRole('tab', { name: /Received/ }));
     // The category eyebrow ("General") is shown on the received card…
     expect(await screen.findByText('General')).toBeInTheDocument();
     // …and it carries a favourite pin.
@@ -1611,7 +1615,7 @@ describe('Questionnaires', () => {
     expect(assignmentsSetFavorite).toHaveBeenCalledWith({ assignmentId: 'a1', favorite: true });
   });
 
-  it('groups sent questionnaires by status, and collapsing the section hides them (§3.1)', async () => {
+  it('groups sent questionnaires by status; filtering + switching tabs hides them (§3.1)', async () => {
     installMockBridge({
       questionnairesList: () =>
         Promise.resolve([
@@ -1635,9 +1639,66 @@ describe('Questionnaires', () => {
     expect(screen.queryByText('Awaiting responses')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Drafts/ })).toBeInTheDocument();
 
-    // Collapsing the Sent section hides its groups + cards.
-    await userEvent.click(screen.getByRole('button', { name: 'Sent' }));
+    // Switching to another tab hides the Sent groups + cards (they live under the Sent tab).
+    await userEvent.click(screen.getByRole('tab', { name: /Received/ }));
     expect(screen.queryByRole('button', { name: /Drafts/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^Weekly mood/ })).not.toBeInTheDocument();
+  });
+
+  it('shows Sent / Received / Auto check-ins tabs; sort defaults to Recently answered with a Recently analyzed option (§3.1)', async () => {
+    installMockBridge({ questionnairesList: () => Promise.resolve([]) });
+    renderApp();
+
+    expect(await screen.findByRole('tab', { name: /Sent/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Received/ })).toBeInTheDocument();
+    // The Auto check-ins config is a first-class tab now (no longer appended at the bottom).
+    expect(await screen.findByRole('tab', { name: /Auto check-ins/ })).toBeInTheDocument();
+
+    const sort = screen.getByLabelText('Sort sent questionnaires') as HTMLSelectElement;
+    expect(sort.value).toBe('answered');
+    expect(screen.getByRole('option', { name: 'Recently analyzed' })).toBeInTheDocument();
+  });
+
+  it('opens the Auto check-ins config from its tab, not the Sent tab (§3.1)', async () => {
+    installMockBridge({ questionnairesList: () => Promise.resolve([]) });
+    renderApp();
+
+    // Not on the default (Sent) tab…
+    await screen.findByRole('tab', { name: /Sent/ });
+    expect(screen.queryByRole('heading', { name: 'Auto check-ins' })).not.toBeInTheDocument();
+    // …behind its own tab.
+    await userEvent.click(await screen.findByRole('tab', { name: /Auto check-ins/ }));
+    expect(await screen.findByRole('heading', { name: 'Auto check-ins' })).toBeInTheDocument();
+  });
+
+  it('falls back to Sent when auto check-ins stops being available while its tab is open (§3.1)', async () => {
+    installMockBridge({ questionnairesList: () => Promise.resolve([]) });
+    renderApp();
+
+    // Open the Auto tab.
+    await userEvent.click(await screen.findByRole('tab', { name: /Auto check-ins/ }));
+    expect(await screen.findByRole('heading', { name: 'Auto check-ins' })).toBeInTheDocument();
+
+    // Simulate a person switch to someone without auto check-ins (the component doesn't remount): the config
+    // drops to null → the tab vanishes and the view falls back to Sent, never a blank content area.
+    act(() => useAutoCheckinStore.setState({ config: null, loaded: true }));
+    expect(screen.queryByRole('tab', { name: /Auto check-ins/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Sent/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: 'Sent questionnaires' })).toBeInTheDocument();
+  });
+
+  it('the tab strip supports arrow-key navigation with a roving tabindex (a11y)', async () => {
+    installMockBridge({ questionnairesList: () => Promise.resolve([]) });
+    renderApp();
+
+    const sentTab = await screen.findByRole('tab', { name: /Sent/ });
+    // Roving tabindex: only the active tab is in the tab order.
+    expect(sentTab).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('tab', { name: /Received/ })).toHaveAttribute('tabindex', '-1');
+    // ArrowRight moves + activates the next tab.
+    sentTab.focus();
+    await userEvent.keyboard('{ArrowRight}');
+    expect(screen.getByRole('tab', { name: /Received/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: 'Received questionnaires' })).toBeInTheDocument();
   });
 });

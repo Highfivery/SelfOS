@@ -3317,6 +3317,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         latestByRecipient: Map<string, Recip>;
         newResponses: number;
         answeredAt?: string; // most recent submission across sends
+        analyzedAt?: string; // most recent analysis time across sends (latest analysed insight's updatedAt)
         analyzable?: { at: string; id: string }; // latest submitted-but-un-analysed send
         latestInsight?: { at: string; id: string; summary: string }; // latest analysed send's insight
       }
@@ -3373,6 +3374,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             if (!agg.latestInsight || submittedAt > agg.latestInsight.at) {
               agg.latestInsight = { at: submittedAt, id: insight.id, summary: insight.summary };
             }
+            // The most recent ANALYSIS time (when the insight was written/updated), for the "Recently
+            // analyzed" sort — distinct from `answeredAt` (when the recipient submitted).
+            agg.analyzedAt =
+              !agg.analyzedAt || insight.updatedAt > agg.analyzedAt
+                ? insight.updatedAt
+                : agg.analyzedAt;
           } else if (a.status === 'submitted') {
             // Un-analysed → a "new response" (tallied over sends) + a candidate for one-tap Analyze.
             agg.newResponses += 1;
@@ -3412,6 +3419,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           analyzed,
           ...(privacy ? { privacy } : {}),
           ...(agg.answeredAt ? { answeredAt: agg.answeredAt } : {}),
+          ...(agg.analyzedAt ? { analyzedAt: agg.analyzedAt } : {}),
           ...(analyzed && agg.latestInsight
             ? { insightSummary: agg.latestInsight.summary, insightId: agg.latestInsight.id }
             : {}),

@@ -105,4 +105,27 @@ describe('sortSent', () => {
       'Charlie',
     ]);
   });
+
+  it('sorts by "answered" and by "analyzed" using the overview timestamps (newest first)', () => {
+    const withOverview = (title: string, answeredAt: string, analyzedAt?: string): SentEntry => ({
+      questionnaire: q({ title }),
+      isDraft: false,
+      sendState: { lastSentAt: '2026-06-01T00:00:00.000Z', total: 1 },
+      overview: {
+        questionnaireId: title,
+        lastSentAt: '2026-06-01T00:00:00.000Z',
+        recipients: [{ name: 'A', status: 'submitted', answered: true }],
+        answeredCount: 1,
+        newResponses: 0,
+        analyzed: analyzedAt !== undefined,
+        answeredAt,
+        ...(analyzedAt ? { analyzedAt } : {}),
+      },
+    });
+    // Answered later, analyzed earlier — the two sorts disagree, proving they read different fields.
+    const x = withOverview('X', '2026-06-05T00:00:00.000Z', '2026-06-02T00:00:00.000Z');
+    const y = withOverview('Y', '2026-06-03T00:00:00.000Z', '2026-06-08T00:00:00.000Z');
+    expect(sortSent([x, y], 'answered').map((e) => e.questionnaire.title)).toEqual(['X', 'Y']);
+    expect(sortSent([x, y], 'analyzed').map((e) => e.questionnaire.title)).toEqual(['Y', 'X']);
+  });
 });

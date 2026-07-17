@@ -419,6 +419,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-17 — **Build (Questionnaires landing → a 3-tab surface + nav badge + toolbar spacing + Recently-analyzed
+  sort; mockup approved FIRST; SPEC 08 §3.1; on `feat/questionnaires-tabs-nav`, a worktree, PR pending).** Four
+  user-requested improvements, mockup (interactive Artifact in the app's real tokens) shown + 3 decisions locked via
+  AskUserQuestion BEFORE code: 3 tabs as-shown, ONE aggregate sidebar badge, add `analyzedAt` to the backend. **(1)**
+  The two stacked collapsible sections (Sent / Received) + an `AutoCheckinsPanel` appended at the bottom → a
+  **three-tab** surface **Sent · Received · Auto check-ins** (63) so auto check-ins is a first-class destination, no
+  longer lost at the scroll bottom; the Auto tab shows only when `autoAvailable` (config !== null), each tab carries a
+  light count (Sent total · Received total, amber when any to-answer · Auto on/off dot), `role="tab"`/`tablist` +
+  `aria-selected`; within Sent the status subgroups/toolbar/pagination are unchanged. **(2)** Fixed the toolbar's two
+  `<select>`s being 2px apart — `.toolbar` gap + bordered controls + a `.tbSpacer` pushing filter/sort right of search.
+  **(3)** A **Questionnaires sidebar nav badge** = a pure `questionnaireNavCount` (**ready-to-analyze** +
+  **received-to-answer**; passive "awaiting their response" excluded), aggregate per the owner's choice (knowingly
+  double-counts received-to-answer with the Inbox badge); AppShell now loads `sentOverview` on person-change so the
+  badge has data everywhere. **(4)** Sort adds **"Recently analyzed"** + **defaults to "Recently answered"** (was
+  "Recently sent"), backed by an additive **`QuestionnaireSentOverview.analyzedAt`** (the latest analysed send's
+  Insight `updatedAt`, derived in the bridge). **§12 fit:** the `.tabs` strip tightens at ≤480px so all 3 fixed tabs
+  fit at 360px with **no horizontal scroll** (the E2E overflow guard's `inner===0` proved it). Gate green: typecheck,
+  lint, format, **1423 core + 1281 desktop** unit (+navCounts, +sentGrouping analyzed/answered sort, +coreBridge
+  `analyzedAt`, +Questionnaires RTL tabs/sort/auto-tab; the 4 section-collapse RTL re-pointed through the tabs), the
+  redesign + author-scoped + 3 auto-checkin E2E re-pointed through the tabs (+28 questionnaire E2E green). Real-Electron
+  visual QA at desktop + 360px (clean tab bar, spaced toolbar, sidebar badge; tabs fit at phone width). **Lesson: a
+  §12 overflow guard flags any `overflow-x:auto` element whose content exceeds it — a fixed-N tab strip must be sized
+  to FIT (tighten padding/font at ≤480px) rather than relying on scroll; the `overflow-x:auto` then only ever acts as
+  inert insurance. And restructuring stacked sections → tabs breaks only the section-collapse tests: re-point each to
+  a `getByRole('tab')` click, since the card rendering itself is unchanged.**
 - 2026-07-17 — **Build (Your Story — the FULL-SURFACE redesign; mockup of EVERY screen approved FIRST; SPEC 64
   §13 written + approved; R1 "Studio IA" BUILT on `feat/story-studio-ia`, PR pending).** The user rejected the
   shipped Your Story surface as thrown-together ("completely REDESIGN FROM SCRATCH… generate mockup for ALL the

@@ -27,6 +27,7 @@ import { useStoryInterview } from '../../notifications/useStoryInterview';
 import { useSetting } from '../../../settings/useSetting';
 import { aiKeyResolved } from '../../aiAvailability';
 import { ImageProgress } from './ImageProgress';
+import { drawnFromChips, specimenFor } from './begin';
 import { downscaleImage } from '../sessions/downscaleImage';
 import { AdminOnlyBadge } from '../../../design-system/components';
 import type {
@@ -81,6 +82,12 @@ const LENGTH_OPTIONS: SegmentOption<Length>[] = [
   { value: 'concise', label: 'Concise' },
   { value: 'standard', label: 'Standard' },
   { value: 'full', label: 'Full' },
+];
+// The commission (§13.3) renders length as three cards with reading-terms sublabels.
+const LENGTH_CARDS: { value: Length; label: string; sub: string }[] = [
+  { value: 'concise', label: 'Concise', sub: 'A short read — a handful of focused chapters.' },
+  { value: 'standard', label: 'Standard', sub: 'A full evening — a dozen or so chapters.' },
+  { value: 'full', label: 'Full', sub: 'The whole story — as many chapters as it takes.' },
 ];
 
 function Labeled({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
@@ -196,7 +203,12 @@ export function Story(): JSX.Element {
   if (progress && progress.scope === 'create') {
     return (
       <div className={styles.page}>
-        <DraftProgress p={progress} />
+        <DraftProgress
+          p={progress}
+          outline={bundle?.outline ?? null}
+          {...(bundle?.manifest.essence ? { essence: bundle.manifest.essence } : {})}
+          onBrowse={() => navigate('/')}
+        />
       </div>
     );
   }
@@ -264,6 +276,7 @@ export function Story(): JSX.Element {
       <div className={styles.page}>
         <StorySetup
           titleHint={personName ? `e.g. The Story of ${personName}` : 'e.g. The Story of a Life'}
+          personNameForPreview={personName}
           onCancel={() => setMode('idle')}
           onCreate={async (title, config) => {
             setError(null);
@@ -281,35 +294,103 @@ export function Story(): JSX.Element {
 
   return (
     <div className={styles.page}>
-      <Card>
-        <Stack gap={4}>
-          <Stack gap={2}>
-            <Heading level={1}>Your Story</Heading>
-            <Text tone="secondary">
-              An evolving biography, written for you from everything SelfOS knows — your
-              reflections, sessions, and the answers you’ve given. It’s written from your private
-              vault, and nobody sees it until you choose to share.
-            </Text>
-          </Stack>
-          {error ? <Banner tone="danger">{error}</Banner> : null}
-          <Inline>
-            <Button variant="primary" onClick={() => setMode('setup')}>
-              Start your story
-            </Button>
-          </Inline>
-        </Stack>
-      </Card>
+      <StoryInvitation onBegin={() => setMode('setup')} error={error} />
       <SharedWithYou />
     </div>
   );
 }
 
+/**
+ * The invitation (§13.3) — the no-book empty state: the book as hero, the three-step promise, a "Drawn from"
+ * chip row with real (deterministic, no-AI) counts of the material the biographer will draw from, the privacy
+ * line, and "Begin your book". The "Shared with you" shelf renders below (the whole surface for a person who
+ * only has books shared with them).
+ */
+function StoryInvitation({
+  onBegin,
+  error,
+}: {
+  onBegin: () => void;
+  error: string | null;
+}): JSX.Element {
+  const corpusStats = useStoryStore((s) => s.corpusStats);
+  const loadCorpusStats = useStoryStore((s) => s.loadCorpusStats);
+  useEffect(() => {
+    void loadCorpusStats();
+  }, [loadCorpusStats]);
+
+  const chips = corpusStats ? drawnFromChips(corpusStats) : [];
+
+  return (
+    <Card>
+      <div className={styles.invitation}>
+        <div className={styles.invitationCover} aria-hidden="true">
+          <span className={styles.invitationCoverKicker}>A Biography</span>
+          <span className={styles.invitationCoverTitle}>Your Story</span>
+        </div>
+        <div className={styles.invitationBody}>
+          <Heading level={1}>Your life, written as a book</Heading>
+          <Text tone="secondary">
+            A biographer that reads everything you’ve shared with SelfOS and writes your story —
+            chapter by chapter, in your voice. It keeps writing as your life grows.
+          </Text>
+          <div className={styles.promiseRow}>
+            <div className={styles.promiseStep}>
+              <span className={styles.promiseTitle}>It reads</span>
+              <Text size="sm" tone="secondary">
+                everything you’ve shared — nothing you haven’t.
+              </Text>
+            </div>
+            <div className={styles.promiseStep}>
+              <span className={styles.promiseTitle}>It writes</span>
+              <Text size="sm" tone="secondary">
+                a true, book-length life story from it.
+              </Text>
+            </div>
+            <div className={styles.promiseStep}>
+              <span className={styles.promiseTitle}>It keeps writing</span>
+              <Text size="sm" tone="secondary">
+                folding in new chapters as you go.
+              </Text>
+            </div>
+          </div>
+          {chips.length > 0 ? (
+            <div className={styles.drawnFrom}>
+              <Text size="sm" tone="tertiary">
+                Drawn from
+              </Text>
+              <div className={styles.drawnChipRow}>
+                {chips.map((chip) => (
+                  <span key={chip} className={styles.drawnChip}>
+                    {chip}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <Text size="sm" tone="secondary">
+            Written from your private vault — nobody sees it until you choose to share.
+          </Text>
+          {error ? <Banner tone="danger">{error}</Banner> : null}
+          <Inline>
+            <Button variant="primary" onClick={onBegin}>
+              Begin your book
+            </Button>
+          </Inline>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function StorySetup({
   titleHint,
+  personNameForPreview,
   onCreate,
   onCancel,
 }: {
   titleHint: string;
+  personNameForPreview: string;
   onCreate: (title: string, config: BookConfig) => void | Promise<void>;
   onCancel: () => void;
 }): JSX.Element {
@@ -317,68 +398,111 @@ function StorySetup({
   const [voice, setVoice] = useState<Voice>('third');
   const [style, setStyle] = useState<Style>('warm');
   const [length, setLength] = useState<Length>('full');
-  const styleHint = STYLE_CHOICES.find((s) => s.value === style)?.hint ?? '';
+
+  // "How your biographer will sound" — the specimen re-renders per style × voice (§13.3).
+  const specimen = specimenFor('biography', { style, voice });
 
   return (
     <Card>
       <Stack gap={4}>
         <Stack gap={2}>
-          <Heading level={2}>Start your story</Heading>
+          <Heading level={2}>Commission your book</Heading>
           <Text tone="secondary">
             Your biographer reads everything it knows about you unless you exclude it later. Choose
-            how it should read — you can leave the title to your biographer.
+            how it should read — and see how it will sound.
           </Text>
         </Stack>
-        <Labeled label="Title (optional)">
-          <Stack gap={1}>
-            <TextInput
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              aria-label="Title"
-              placeholder={titleHint}
-            />
-            <Text size="sm" tone="secondary">
-              Leave blank and your biographer will suggest a title from your story — you can rename
-              it before it starts writing.
-            </Text>
-          </Stack>
-        </Labeled>
-        <Labeled label="Narrative voice">
-          <SegmentedControl
-            options={VOICE_OPTIONS}
-            value={voice}
-            onChange={setVoice}
-            aria-label="Narrative voice"
-          />
-        </Labeled>
-        <Labeled label="Style">
-          <Stack gap={1}>
-            <Select
-              value={style}
-              aria-label="Style"
-              onChange={(e) => setStyle(e.target.value as Style)}
-            >
-              {STYLE_CHOICES.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </Select>
-            {styleHint ? (
-              <Text size="sm" tone="secondary">
-                {styleHint}
+
+        <div className={styles.commission}>
+          {/* The form. */}
+          <div className={styles.commissionForm}>
+            <Labeled label="Title (optional)">
+              <Stack gap={1}>
+                <TextInput
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  aria-label="Title"
+                  placeholder={titleHint}
+                />
+                <Text size="sm" tone="secondary">
+                  Leave blank and your biographer will suggest a title from your story — you can
+                  rename it before it starts writing.
+                </Text>
+              </Stack>
+            </Labeled>
+            <Labeled label="Narrative voice">
+              <SegmentedControl
+                options={VOICE_OPTIONS}
+                value={voice}
+                onChange={setVoice}
+                aria-label="Narrative voice"
+              />
+            </Labeled>
+            <Labeled label="Style">
+              <div className={styles.styleGallery} role="radiogroup" aria-label="Style">
+                {STYLE_CHOICES.map((s) => (
+                  <button
+                    key={s.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={style === s.value}
+                    aria-label={s.label}
+                    aria-describedby={`style-hint-${s.value}`}
+                    className={`${styles.styleCard} ${style === s.value ? styles.styleCardOn : ''}`}
+                    onClick={() => setStyle(s.value)}
+                  >
+                    <span className={styles.styleCardName}>{s.label}</span>
+                    <span id={`style-hint-${s.value}`} className={styles.styleCardHint}>
+                      {s.hint}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </Labeled>
+            <Labeled label="Length">
+              <div className={styles.lengthCards} role="radiogroup" aria-label="Length">
+                {LENGTH_CARDS.map((l) => (
+                  <button
+                    key={l.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={length === l.value}
+                    aria-label={l.label}
+                    aria-describedby={`length-hint-${l.value}`}
+                    className={`${styles.lengthCard} ${length === l.value ? styles.lengthCardOn : ''}`}
+                    onClick={() => setLength(l.value)}
+                  >
+                    <span className={styles.styleCardName}>{l.label}</span>
+                    <span id={`length-hint-${l.value}`} className={styles.styleCardHint}>
+                      {l.sub}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </Labeled>
+          </div>
+
+          {/* The live preview rail. */}
+          <aside className={styles.commissionPreview} aria-label="Preview">
+            <div className={styles.previewCover} aria-hidden="true">
+              <span className={styles.previewCoverKicker}>A Biography</span>
+              <span className={styles.previewCoverTitle}>{title.trim() || titleHint}</span>
+              {personNameForPreview ? (
+                <span className={styles.previewCoverBy}>{personNameForPreview}</span>
+              ) : null}
+            </div>
+            <div className={styles.previewSpecimen}>
+              <Text size="sm" tone="tertiary">
+                How your biographer will sound
               </Text>
-            ) : null}
-          </Stack>
-        </Labeled>
-        <Labeled label="Length">
-          <SegmentedControl
-            options={LENGTH_OPTIONS}
-            value={length}
-            onChange={setLength}
-            aria-label="Length"
-          />
-        </Labeled>
+              {specimen ? <p className={styles.previewSpecimenText}>{specimen}</p> : null}
+            </div>
+          </aside>
+        </div>
+
+        <Text size="sm" tone="secondary">
+          Roughly 10–20 minutes to write the first draft — you can keep using SelfOS while it works.
+        </Text>
         <Inline justify="flex-end">
           <Button onClick={onCancel}>Cancel</Button>
           <Button
@@ -464,7 +588,17 @@ function estimateRemaining(elapsedMs: number, done: number, total: number): stri
  * clear "you can keep working, this continues in the background" note. Driven by the store's `progress` (which
  * is fed by the main-side stream and survives navigation), so returning to /story mid-draft shows live status.
  */
-function DraftProgress({ p }: { p: StoryDraftProgress & { startedAt: number } }): JSX.Element {
+function DraftProgress({
+  p,
+  outline = null,
+  essence,
+  onBrowse,
+}: {
+  p: StoryDraftProgress & { startedAt: number };
+  outline?: StoryBookBundle['outline'] | null;
+  essence?: string;
+  onBrowse?: () => void;
+}): JSX.Element {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -483,6 +617,12 @@ function DraftProgress({ p }: { p: StoryDraftProgress & { startedAt: number } })
       : `Writing your chapters — ${done} of ${total}`
     : 'Reading everything you’ve shared, and shaping the outline…';
 
+  // The outline reveals itself as it lands (the foundations pass) — chapters in order, marked done/current/
+  // upcoming from the progress stream. A calm two-column list; falls back to anonymous dots before it lands.
+  const chapters = outline
+    ? outline.parts.flatMap((part) => part.chapters).sort((a, b) => a.order - b.order)
+    : [];
+
   return (
     <Card>
       <Stack gap={4}>
@@ -497,6 +637,8 @@ function DraftProgress({ p }: { p: StoryDraftProgress & { startedAt: number } })
             </Text>
           </Stack>
         </Inline>
+
+        {essence ? <p className={styles.draftEssence}>{essence}</p> : null}
 
         <Stack gap={2}>
           <div
@@ -520,29 +662,49 @@ function DraftProgress({ p }: { p: StoryDraftProgress & { startedAt: number } })
               {eta ?? (writing ? 'estimating…' : 'this takes a moment')}
             </Text>
           </Inline>
-          {writing && total > 0 ? (
-            <div className={styles.progressDots} aria-hidden="true">
-              {Array.from({ length: total }, (_, i) => (
-                <span
-                  key={i}
-                  className={
-                    i < done
-                      ? `${styles.dot} ${styles.dotDone}`
-                      : i === done
-                        ? `${styles.dot} ${styles.dotCurrent}`
-                        : styles.dot
-                  }
-                />
-              ))}
-            </div>
-          ) : null}
         </Stack>
+
+        {chapters.length > 0 ? (
+          <ol className={styles.draftOutline} aria-label="Chapters">
+            {chapters.map((chapter, i) => {
+              const state = i < done ? 'done' : i === done && writing ? 'current' : 'upcoming';
+              return (
+                <li key={chapter.id} className={styles.draftOutlineItem} data-state={state}>
+                  <span className={styles.draftOutlineMark} aria-hidden="true">
+                    {state === 'done' ? '✓' : state === 'current' ? '✎' : '·'}
+                  </span>
+                  <span className={styles.draftOutlineTitle}>{chapter.title}</span>
+                </li>
+              );
+            })}
+          </ol>
+        ) : writing && total > 0 ? (
+          <div className={styles.progressDots} aria-hidden="true">
+            {Array.from({ length: total }, (_, i) => (
+              <span
+                key={i}
+                className={
+                  i < done
+                    ? `${styles.dot} ${styles.dotDone}`
+                    : i === done
+                      ? `${styles.dot} ${styles.dotCurrent}`
+                      : styles.dot
+                }
+              />
+            ))}
+          </div>
+        ) : null}
 
         <div className={styles.draftNote}>
           <Text size="sm">
-            You can keep using SelfOS — your biographer keeps writing in the background. We’ll have
+            You don’t have to watch — your biographer keeps writing in the background. We’ll have
             your book ready when you come back.
           </Text>
+          {onBrowse ? (
+            <button type="button" className={styles.draftBrowse} onClick={onBrowse}>
+              Browse SelfOS ›
+            </button>
+          ) : null}
         </div>
       </Stack>
     </Card>

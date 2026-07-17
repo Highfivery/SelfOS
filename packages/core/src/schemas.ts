@@ -4437,6 +4437,20 @@ export interface StoryPartCoverage {
   score: number;
 }
 
+/** `story:corpusStats` — deterministic, no-AI counts for the "before you begin" invitation (§13.6.10): how much
+ *  material the biographer will draw from. Crypto-free (a plain projection); never any content, just counts. */
+export interface StoryCorpusStats {
+  /** Coaching sessions on record. */
+  conversations: number;
+  /** Distilled reflections (approved insights from sessions/dreams/tests/questionnaires/Together/onboarding). */
+  reflections: number;
+  /** Dreams recorded. */
+  dreams: number;
+  /** The span of years the material touches, when derivable (earliest → latest dated item). */
+  yearFrom?: number;
+  yearTo?: number;
+}
+
 /** `story:gaps` — the persisted gap-pass output, rendered on the Interview tab with NO AI (§13.6.3). */
 export interface StoryGapsView {
   gaps: StoryGap[];

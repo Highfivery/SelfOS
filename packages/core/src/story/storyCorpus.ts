@@ -1,4 +1,5 @@
 import { listChallenges } from '../challenges';
+import { listConversations } from '../conversations/conversationService';
 import { listDreams } from '../dreams';
 import { listGoals } from '../goals';
 import type { FileSystem } from '../host';
@@ -17,6 +18,7 @@ import {
   factSharedWithViewer,
   type ExclusionItem,
   type InsightSource,
+  type StoryCorpusStats,
   type StoryPhotoAnswer,
   type StorySourceRef,
 } from '../schemas';
@@ -347,6 +349,48 @@ export async function buildStoryCorpus(
     profile: profileLines(person, 'self').filter(keepProfileLine),
     items,
   };
+}
+
+/**
+ * Deterministic, no-AI counts for the "before you begin" invitation (§13.6.10) — how much material the
+ * biographer will draw from, with the span of years it touches. Never any content, just counts + a year range,
+ * so it's cheap + safe to show before a book exists. Each source is read behind its own guard (§7 resilience).
+ */
+export async function getStoryCorpusStats(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+): Promise<StoryCorpusStats> {
+  const conversations = await safely(() => listConversations(fs, key, personId), []);
+  const insights = (await safely(() => listInsightsForPerson(fs, key, personId), [])).filter(
+    (insight) => insight.approved,
+  );
+  const dreams = await safely(() => listDreams(fs, key, personId), []);
+
+  // The year span across everything dated — a conversation's createdAt, a dream's dreamDate/createdAt, an
+  // insight's provenance timestamp. A malformed/absent date just doesn't widen the span.
+  const years: number[] = [];
+  const addYear = (iso: string | undefined): void => {
+    if (!iso) return;
+    // UTC year, so a stored `...T00:00:00.000Z` date resolves to the year it was stored as (not the local
+    // year, which would slip to the prior year in any timezone behind UTC).
+    const y = new Date(iso).getUTCFullYear();
+    if (Number.isFinite(y)) years.push(y);
+  };
+  for (const c of conversations) addYear(c.createdAt);
+  for (const d of dreams) addYear(d.dreamDate ?? d.createdAt);
+  for (const i of insights) addYear(i.provenance.at);
+
+  const stats: StoryCorpusStats = {
+    conversations: conversations.length,
+    reflections: insights.length,
+    dreams: dreams.length,
+  };
+  if (years.length > 0) {
+    stats.yearFrom = Math.min(...years);
+    stats.yearTo = Math.max(...years);
+  }
+  return stats;
 }
 
 /** Flatten a corpus to a single string (profile + every item) — used by the prompt builder (§5.2) and by

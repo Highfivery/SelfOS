@@ -5,6 +5,187 @@
   gap: var(--space-6);
 }
 
+/* ============ Begin — invitation & commission (§13.3) ============ */
+
+/* A book-cover mock used by the invitation + the commission preview — a spine-hinged "book" with serif title. */
+.invitationCover,
+.previewCover {
+  aspect-ratio: 2 / 3;
+  border-radius: 5px 12px 12px 5px;
+  box-shadow: 0 22px 44px rgb(30 20 8 / 0.28);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 20px 18px;
+  background-image: linear-gradient(155deg, #33475a 0%, #4f7388 45%, #8aa4b4 70%, #c9a26b 100%);
+}
+.invitationCover .invitationCoverTitle,
+.previewCover .previewCoverTitle {
+  font-family: var(--font-serif);
+  font-size: 1.4rem;
+  line-height: 1.2;
+  color: #fdf6ea;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.35);
+  overflow-wrap: anywhere;
+}
+.invitationCover .invitationCoverKicker,
+.previewCover .previewCoverKicker {
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgb(253 246 234 / 0.75);
+}
+.previewCover .previewCoverBy {
+  font-size: 0.66rem;
+  color: rgb(253 246 234 / 0.85);
+  font-style: italic;
+}
+
+/* The invitation: cover left, promise + chips right; stacks below --bp-md. */
+.invitation {
+  display: grid;
+  grid-template-columns: minmax(150px, 200px) 1fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+.invitationBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.promiseRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3);
+}
+.promiseStep {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.promiseTitle {
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+.drawnFrom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.drawnChipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.drawnChip {
+  font-size: var(--text-sm);
+  color: var(--color-accent-text);
+  background: var(--color-accent-subtle-bg);
+  border-radius: var(--radius-sm);
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+/* The commission: form left, live-preview rail right; stacks below --bp-md. */
+.commission {
+  display: grid;
+  grid-template-columns: 1fr minmax(180px, 260px);
+  gap: var(--space-6);
+  align-items: start;
+}
+.commissionForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.commissionPreview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  position: sticky;
+  top: var(--space-4);
+}
+.previewSpecimen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.previewSpecimenText {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--text-md);
+  line-height: 1.55;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+/* The style card gallery + length cards (radiogroups of selectable cards). */
+.styleGallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-2);
+}
+.lengthCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-2);
+}
+.styleCard,
+.lengthCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  cursor: pointer;
+  min-width: 0;
+}
+.styleCard:hover,
+.lengthCard:hover {
+  border-color: var(--color-border-strong);
+}
+.styleCardOn,
+.lengthCardOn {
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle-bg);
+}
+.styleCard:focus-visible,
+.lengthCard:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.styleCardName {
+  font-weight: 600;
+  color: var(--color-text-heading);
+}
+.styleCardHint {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+@media (max-width: 767px) {
+  .invitation,
+  .commission {
+    grid-template-columns: 1fr;
+  }
+  .invitationCover,
+  .previewCover {
+    max-width: 200px;
+  }
+  .commissionPreview {
+    position: static;
+  }
+}
+
 /* ============ The Book — the immersive reader (§13.5) ============ */
 /* The reader owns its own text-size scale via --reader-scale (the aA control); prose sizes derive from it. */
 .reader {
@@ -1220,10 +1401,82 @@
   animation: story-pulse 1s ease-in-out infinite;
 }
 .draftNote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
   background: var(--color-accent-subtle-bg);
   border-radius: var(--radius-md);
   padding: var(--space-3);
   color: var(--color-accent);
+}
+.draftNote > :first-child {
+  min-width: 0;
+  flex: 1 1 240px;
+}
+.draftBrowse {
+  flex: none;
+  border: 1px solid var(--color-accent);
+  background: var(--color-surface);
+  color: var(--color-accent-text);
+  border-radius: var(--radius-md);
+  padding: 6px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.draftBrowse:hover {
+  background: var(--color-accent-subtle-bg);
+}
+.draftBrowse:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+/* The essence line, once the foundations pass lands. */
+.draftEssence {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--text-md);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+/* The outline reveal — a two-column chapter list with done/current/upcoming markers. */
+.draftOutline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 2px var(--space-4);
+}
+.draftOutlineItem {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 4px 0;
+  color: var(--color-text-tertiary);
+}
+.draftOutlineItem[data-state='done'] {
+  color: var(--color-text-secondary);
+}
+.draftOutlineItem[data-state='current'] {
+  color: var(--color-text-heading);
+  font-weight: 600;
+}
+.draftOutlineMark {
+  flex: none;
+  width: 1em;
+  text-align: center;
+}
+.draftOutlineItem[data-state='done'] .draftOutlineMark {
+  color: var(--color-accent-text);
+}
+.draftOutlineTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 @keyframes story-spin {
   to {

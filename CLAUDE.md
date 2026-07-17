@@ -419,6 +419,33 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-17 — **Build (Your Story R7 — the Begin screens: invitation · commission · the writing; SPEC 64 §13.3/
+  §13.7; on `feat/story-begin-screens`, PR pending; the FINAL slice of the approved full-surface redesign — §13
+  is now BUILT R1–R7).** The three "begin" surfaces redesigned + the one new backend read. **Backend:** a
+  deterministic, crypto-free **`story:corpusStats`** (`getStoryCorpusStats` — session/reflection/dream counts + a
+  year span from the dated material; no AI; gated `story.own` + active-person-scoped; zeroed when denied) through
+  the whole seam, + a static **`specimen: { first, third }`** on every `BookType` style preset (a sample sentence
+  per register × voice — demonstration prose, never a real fact). **Invitation** (no-book empty state): a
+  book-cover hero + the three-step promise (It reads · It writes · It keeps writing) + a **"Drawn from"** chip row
+  with the real counts (pure `drawnFromChips`) + the privacy line + "Begin your book"; the "Shared with you" shelf
+  below. **Commission** (setup): a **live-preview rail** — a cover mock taking the typed title + a **specimen
+  sentence** ("How your biographer will sound", pure `specimenFor`, re-rendered per style × voice) — with style as
+  a **card gallery** (`role="radiogroup"` radio cards, §12-safe auto-fill grid) + length as three cards with
+  reading-terms sublabels + a time-expectation footer. **The writing** (draft progress): the **essence line**
+  appears when foundations land, the **outline reveals itself** (a two-column chapter list with
+  done/current/upcoming markers from the progress stream), and the note gains a real **"Browse SelfOS ›"** exit
+  (progress persists in the background). Gate green: typecheck, lint, format, **1468 core + 1313 desktop** unit
+  (+`getStoryCorpusStats` [counts/year-span/empty], +every-preset-has-both-specimens, +`drawnFromChips`/`specimenFor`
+  [6 pure helper tests], +3 Story RTL [invitation chips+promise, commission specimen changes with style, the
+  writing outline reveal + Browse], +a coreBridge corpusStats gate/scope test), **7 story E2E** (the setup walk
+  drives the commission card gallery + specimen + a 360px overflow guard). Real-Electron visual QA of all three
+  screens at desktop + 360px, light + dark; the whole-flow coherence walk (invitation → commission → writing →
+  Studio) — no redundant asks, colliding labels, or dead controls. **Lesson: the begin screens are the last
+  mile of a big redesign, so keep the pure logic testable in ISOLATION — `drawnFromChips`/`specimenFor` are pure
+  functions in a `begin.ts` (unit-tested without a DOM), the specimens are static data on the style presets (a
+  BookType carries its own, so a future book type is self-contained), and a card-gallery Style picker replacing a
+  `<select>` means the RTL/E2E move from `getByRole('option')` to `getByRole('radio')` in a labelled radiogroup.**
+
 - 2026-07-17 — **Build (Your Story R6 — Photos tab redesign + the photo-answers-reach-the-biographer wiring fix;
   SPEC 64 §13.6.2/§13.7; on `feat/story-photos-corpus`, PR pending; part of the approved full-surface redesign).**
   The sixth slice of the §13 rebuild. **The functional fix (§13.6.2 — a working-but-wrong gap the redesign audit

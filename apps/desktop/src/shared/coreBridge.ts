@@ -209,6 +209,7 @@ import {
   type StoryFoundationsResult,
   type StoryQuestionsResult,
   type StoryCompleteness,
+  type StoryCorpusStats,
   type StoryHomeSignal,
   type StoryImageEntry,
   type StoryImageResult,
@@ -437,6 +438,7 @@ import {
   generateStoryImage,
   getPhotoAnswers,
   getStoryCompleteness,
+  getStoryCorpusStats,
   getStoryGaps,
   getStoryImage,
   getStoryImageIndex,
@@ -4849,6 +4851,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return empty;
       return computeStoryHomeSignal(ctx.fs, ctx.key, personId);
+    },
+    storyCorpusStats: async (): Promise<StoryCorpusStats> => {
+      const empty: StoryCorpusStats = { conversations: 0, reflections: 0, dreams: 0 };
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return empty;
+      const personId = await activePersonId();
+      if (!personId) return empty;
+      return getStoryCorpusStats(ctx.fs, ctx.key, personId);
     },
     storyCompleteness: async (input): Promise<StoryCompleteness> => {
       const { bookId } = StoryBookRefSchema.parse(input);

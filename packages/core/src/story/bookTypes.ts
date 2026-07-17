@@ -75,6 +75,9 @@ export interface BookStylePresetInfo {
   id: BookStyle;
   label: string;
   directive: string;
+  /** A one-sentence taste of this register, in each voice — "how your biographer will sound" (§13.3). Static
+   *  demonstration prose (never a real fact), so a future BookType carries its own specimens. */
+  specimen: { first: string; third: string };
 }
 
 /** An interview question category (research appendix Part III C4) with a few example prompts. */
@@ -175,42 +178,84 @@ export const BIOGRAPHY_BOOK_TYPE: BookType = {
       label: 'Literary',
       directive:
         'Literary register: vivid, image-led prose with deliberate rhythm; earn every reflection in scene.',
+      specimen: {
+        first:
+          'The kitchen held the last of the evening light, and I understood, for the first time, that leaving would cost me more than staying ever had.',
+        third:
+          'The kitchen held the last of the evening light, and she understood, for the first time, that leaving would cost her more than staying ever had.',
+      },
     },
     {
       id: 'warm',
       label: 'Warm',
       directive:
         'Warm, intimate register: plain, tender, dinner-table narration; clear over ornate.',
+      specimen: {
+        first:
+          'I never told anyone how frightened I was that year — but my grandmother knew, and she left the porch light on for me every single night.',
+        third:
+          'He never told anyone how frightened he was that year — but his grandmother knew, and she left the porch light on for him every single night.',
+      },
     },
     {
       id: 'plain',
       label: 'Plain',
       directive:
         'Plain register: direct, unadorned, concrete; short sentences; no literary flourish.',
+      specimen: {
+        first:
+          'I took the job because it paid the rent. I stayed eleven years. It was not what I wanted, and I knew it the whole time.',
+        third:
+          'He took the job because it paid the rent. He stayed eleven years. It was not what he wanted, and he knew it the whole time.',
+      },
     },
     {
       id: 'journalistic',
       label: 'Journalistic',
       directive:
         'Journalistic register: reportorial and evidence-led; clear, propulsive, fact-forward narration that lets the record speak; attribute what is not certain.',
+      specimen: {
+        first:
+          'By the spring of that year I had moved three times in eighteen months. The pattern, I would only later admit, was not the cities. It was me.',
+        third:
+          'By the spring of that year she had moved three times in eighteen months. The pattern, she would only later admit, was not the cities. It was her.',
+      },
     },
     {
       id: 'reflective',
       label: 'Reflective',
       directive:
         'Reflective register: essayistic and meditative; interior and thoughtful, braiding scene with the narrator’s considered understanding — reflection always earned in a concrete moment.',
+      specimen: {
+        first:
+          'I have thought often about that closed door, and what it taught me: that some silences are not absence but a kind of question, waiting years for an answer.',
+        third:
+          'She has thought often about that closed door, and what it taught her: that some silences are not absence but a kind of question, waiting years for an answer.',
+      },
     },
     {
       id: 'cinematic',
       label: 'Cinematic',
       directive:
         'Cinematic register: scene-forward and dramatic; vivid, sensory set-pieces with momentum; render in scene far more than you summarize, cutting between moments like film.',
+      specimen: {
+        first:
+          'Rain on the windshield. The engine ticking as it cooled. I sat in the dark lot for an hour before I could make myself walk in and say goodbye.',
+        third:
+          'Rain on the windshield. The engine ticking as it cooled. He sat in the dark lot for an hour before he could make himself walk in and say goodbye.',
+      },
     },
     {
       id: 'poetic',
       label: 'Poetic',
       directive:
         'Poetic register: lyrical and image-dense; heightened, musical rhythm and figurative language — more ornate than the literary register, but never purple or vague.',
+      specimen: {
+        first:
+          'Memory keeps the house I grew up in the way water keeps light — trembling, never quite still, and mine only in the moment I stop to look.',
+        third:
+          'Memory keeps the house she grew up in the way water keeps light — trembling, never quite still, and hers only in the moment she stops to look.',
+      },
     },
   ],
   interview: {

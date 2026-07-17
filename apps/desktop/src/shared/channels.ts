@@ -25,6 +25,7 @@ import type {
   BookReader,
   SharedBookSummary,
   StoryCompleteness,
+  StoryCorpusStats,
   StoryHomeSignal,
   StoryImageEntry,
   StoryImageResult,
@@ -344,6 +345,7 @@ export const IpcChannels = {
   storyProposals: 'story:proposals',
   storyResolveProposal: 'story:resolveProposal',
   storyHomeSignal: 'story:homeSignal',
+  storyCorpusStats: 'story:corpusStats',
   storyCompleteness: 'story:completeness',
   storyInterviewCheck: 'story:interviewCheck',
   storyGaps: 'story:gaps',
@@ -1151,6 +1153,10 @@ export interface SelfosBridge {
   /** The living-book Home signal (§5.6) for the active person's book — computed host-side, no AI. Feeds the
    *  `story-living` "For you" card. Gated `story.own`; `hasBook:false` when denied or there's no book. */
   storyHomeSignal(): Promise<StoryHomeSignal>;
+  /** Deterministic, no-AI counts for the "before you begin" invitation (§13.6.10): how much material the
+   *  biographer will draw from + the year span. No content, just counts. Gated `story.own`, active-person-scoped;
+   *  zeroed when denied. */
+  storyCorpusStats(): Promise<StoryCorpusStats>;
   /** How far along the book is (§3.6) — a qualitative stage + a subtle ratio, from the stored coverage. A cheap
    *  no-AI read. Gated `story.own`, active-person-scoped. */
   storyCompleteness(input: { bookId: string }): Promise<StoryCompleteness>;

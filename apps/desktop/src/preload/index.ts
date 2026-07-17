@@ -226,6 +226,7 @@ const bridge: SelfosBridge = {
   storyProposals: (input) => ipcRenderer.invoke(IpcChannels.storyProposals, input),
   storyResolveProposal: (input) => ipcRenderer.invoke(IpcChannels.storyResolveProposal, input),
   storyHomeSignal: () => ipcRenderer.invoke(IpcChannels.storyHomeSignal),
+  storyCorpusStats: () => ipcRenderer.invoke(IpcChannels.storyCorpusStats),
   storyCompleteness: (input) => ipcRenderer.invoke(IpcChannels.storyCompleteness, input),
   storyInterviewCheck: (input) => ipcRenderer.invoke(IpcChannels.storyInterviewCheck, input),
   storyGaps: (input) => ipcRenderer.invoke(IpcChannels.storyGaps, input),

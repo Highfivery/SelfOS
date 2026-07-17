@@ -6,7 +6,12 @@ import {
   tolerantArray,
 } from '../ai/jsonSalvage';
 import { uuid } from '../id';
-import { listInsightsForPerson, normalizeCategories, saveInsight } from '../insights';
+import {
+  listInsightsForPerson,
+  normalizeCategories,
+  producedFactShare,
+  saveInsight,
+} from '../insights';
 import { isDeclined, visibleQuestions, type AnswerMap, type AnswerValue } from './answering';
 import type { Insight, QuestionnaireAnalyzeResult, ResponseSet } from '../schemas';
 import { ANALYSIS_SYSTEM, buildAnalysisUserMessage } from './aiPrompts';
@@ -153,7 +158,9 @@ export async function analyzeAssignment(
     source: 'questionnaire',
     subjectPersonId: assignment.senderPersonId, // the Insight informs the SENDER's coaching (§1)
     summary: validated.data.summary,
-    facts: validated.data.facts.map((f) => ({ id: uuid(), text: f.text, shareable: f.shareable })),
+    // Default to shared-with-partner (owner decision — see producedFactShare), overriding the model's
+    // per-fact broadcast guess: the default is partner-scoped, not broadcast-to-everyone.
+    facts: validated.data.facts.map((f) => ({ id: uuid(), text: f.text, ...producedFactShare() })),
     confidence: validated.data.confidence ?? 'medium',
     categories: normalizeCategories(validated.data.categories ?? []),
     approved: false, // requires the approve-step before it feeds buildContext (§3.7)

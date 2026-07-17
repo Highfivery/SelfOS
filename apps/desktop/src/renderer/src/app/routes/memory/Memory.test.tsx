@@ -100,6 +100,21 @@ describe('Memory (flattened, edit-in-place — spec 62)', () => {
     expect(screen.getByText('Values steady routines')).toBeInTheDocument();
   });
 
+  it('an own AI insight carries an "About you" chip + a linked source (62 §context)', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    installMockBridge({
+      insightsList: () =>
+        Promise.resolve([
+          insight({ id: 'i1', summary: 'Values steady routines', categories: ['Health & body'] }),
+        ]),
+    });
+    renderMemory();
+    await userEvent.click(await screen.findByRole('button', { name: /Health & body/ }));
+    expect(screen.getByText('About you')).toBeInTheDocument();
+    // The source is shown in the header (a "From a session" link → the session; plain when the source is gone).
+    expect(screen.getByText(/From a session/)).toBeInTheDocument();
+  });
+
   it('keeps a sensitive (Intimacy) section collapsed until opened; it carries a count', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     installMockBridge({
@@ -320,7 +335,8 @@ describe('Memory (flattened, edit-in-place — spec 62)', () => {
     const recipient = await screen.findByRole('button', { name: /Angel/ });
     await userEvent.click(recipient);
     expect(screen.getByText('Angel wants more protected time together')).toBeInTheDocument();
-    // The eyebrow reads "From Angel’s answers", never "About you".
-    expect(screen.getByText(/From Angel’s answers/)).toBeInTheDocument();
+    // The header names who it's about — an "About Angel" chip, never "About you" (62 §context).
+    expect(screen.getByText('About Angel')).toBeInTheDocument();
+    expect(screen.queryByText('About you')).not.toBeInTheDocument();
   });
 });

@@ -92,7 +92,10 @@ describe('analyzeAssignment', () => {
     // response, never mislabels it "about you."
     expect(result.insight?.provenance.aboutPersonId).toBe('p2');
     expect(result.insight?.provenance.aboutName).toBeUndefined();
-    expect(result.insight?.facts.map((f) => f.shareable)).toEqual([true, false]);
+    // Facts now default to shared-with-partner (owner decision, 2026-07-17) rather than the model's per-fact
+    // broadcast guess: none broadcast (`shareable:false`), each scoped to the `partner` relationship type.
+    expect(result.insight?.facts.every((f) => f.shareable === false)).toBe(true);
+    expect(result.insight?.facts.map((f) => f.shareableTypes)).toEqual([['partner'], ['partner']]);
     expect(result.usage?.type).toBe('questionnaire.analyze');
 
     // It's persisted and shows up in the Memory surface (listAllInsights).

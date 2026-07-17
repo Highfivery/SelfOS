@@ -6,14 +6,16 @@ import type { Insight, InsightSource } from '@shared/schemas';
  * Results, onboarding opens the intake surface. A merged insight names how many moments it folds in.
  */
 export interface ProvenanceTarget {
-  /** Human label, e.g. "From a session" / "From onboarding" / "From 3 moments". */
+  /** Human label, e.g. "From a session" / "From onboarding" / "From “Intimacy check-in”" / "From 3 moments". */
   label: string;
-  /** The route to navigate to. */
+  /** The route (with query for a questionnaire Results deep-link) to navigate to. */
   to: string;
   /** Router state the target screen reads to open the exact item (sessions/dreams/onboarding section). */
   state?: { focusConversationId?: string; focusDreamId?: string; openSection?: string };
   /** The originating id, if any — used to detect "source removed" against the loaded per-person stores. */
   source: { kind: 'session'; id: string } | { kind: 'dream'; id: string } | { kind: 'other' };
+  /** The source questionnaire's title, when known — lets the card render the linked "From “<title>”". */
+  sourceTitle?: string;
 }
 
 const SOURCE_NOUN: Record<InsightSource, string> = {
@@ -67,6 +69,18 @@ export function provenanceTarget(insight: Insight): ProvenanceTarget {
       source: { kind: 'other' },
     };
   }
-  // questionnaire + compatibility → the questionnaire Results surface.
+  // questionnaire + compatibility → the specific questionnaire's Results (62 §context). `insightsList`
+  // enriches provenance with the as-sent title + live id (read-time); the Questionnaires route reads
+  // `?focus=<id>&view=results`. Falls back to the generic Results list when the send/def is gone.
+  if (insight.source === 'questionnaire') {
+    const title = insight.provenance.sourceTitle?.trim();
+    const qid = insight.provenance.sourceQuestionnaireId;
+    return {
+      label: title ? `From “${title}”` : label,
+      to: qid ? `/questionnaires?focus=${encodeURIComponent(qid)}&view=results` : '/questionnaires',
+      ...(title ? { sourceTitle: title } : {}),
+      source: { kind: 'other' },
+    };
+  }
   return { label, to: '/questionnaires', source: { kind: 'other' } };
 }

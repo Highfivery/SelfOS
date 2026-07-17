@@ -224,7 +224,12 @@ export function Memory(): JSX.Element {
   const renderInsightCard = (insight: Insight): JSX.Element => {
     const about = responseAbout(insight);
     return (
-      <div key={insight.id} id={`insight-${insight.id}`}>
+      <div
+        key={insight.id}
+        id={`insight-${insight.id}`}
+        // The portrait (many grouped facts) spans the full grid row so it never lopsides a column.
+        className={insight.source === 'intake' ? styles.fullSpanCard : undefined}
+      >
         <InsightCard
           insight={insight}
           subjectName="you"
@@ -324,7 +329,9 @@ export function Memory(): JSX.Element {
                   </Stack>
                 </Card>
               ))}
-              {drafts.map(renderInsightCard)}
+              {drafts.length > 0 ? (
+                <div className={styles.cardGrid}>{drafts.map(renderInsightCard)}</div>
+              ) : null}
             </Collapsible>
           ) : null}
 
@@ -351,7 +358,7 @@ export function Memory(): JSX.Element {
                 {searchResults.length} {searchResults.length === 1 ? 'result' : 'results'}
               </Text>
               {searchResults.length > 0 ? (
-                searchResults.map(renderInsightCard)
+                <div className={styles.cardGrid}>{searchResults.map(renderInsightCard)}</div>
               ) : (
                 <Text tone="secondary">Nothing matches “{query.trim()}”.</Text>
               )}
@@ -395,7 +402,9 @@ export function Memory(): JSX.Element {
                       open={openAreas.has(section.area)}
                       onOpenChange={(open) => toggle(setOpenAreas, section.area, open)}
                     >
-                      <Stack gap={3}>{section.insights.map(renderInsightCard)}</Stack>
+                      <div className={styles.cardGrid}>
+                        {section.insights.map(renderInsightCard)}
+                      </div>
                     </LifeAreaSection>
                   ))}
                 </Stack>

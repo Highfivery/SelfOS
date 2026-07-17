@@ -1,4 +1,6 @@
 export * from './insightStore';
+export * from './shareDefaults';
+export * from './backfillSharing';
 export * from './categories';
 export * from './reconcileService';
 export * from './lifeAreaKeywords';

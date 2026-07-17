@@ -3437,8 +3437,8 @@ test('memory (#129): a questionnaire you sent a partner is grouped under "Respon
     await expect(w.getByText('From questionnaires you sent')).toBeVisible();
     await w.getByRole('button', { name: /Angel/ }).click();
     await expect(w.getByText('Angel wants more protected time together')).toBeVisible();
-    // …with the honest "From Angel's answers" eyebrow (never "About you"), resolved read-time.
-    await expect(w.getByText(/From Angel.s answers/)).toBeVisible();
+    // …carrying an honest "About Angel" chip — the response is not mislabelled about the viewer (62 §context).
+    await expect(w.getByText('About Angel')).toBeVisible();
 
     // No horizontal overflow / inner scrollbars at phone width (CLAUDE.md §7/§12).
     await w.setViewportSize({ width: 360, height: 800 });
@@ -3652,6 +3652,9 @@ test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted
     await expect(w.getByRole('button', { name: /^Relationships/ })).toBeVisible();
     await expect(w.getByText(/How you.ve been/)).toBeVisible();
 
+    // The Memory nav badge counts the one draft awaiting review (62 §nav).
+    await expect(w.getByRole('link', { name: /Memory, 1 to review/ })).toBeVisible();
+
     // Search narrows to matching cards.
     await w.getByLabel('Search memory').fill('routine');
     await expect(w.getByText('Sleeps better with a wind-down routine')).toBeVisible();
@@ -3666,6 +3669,14 @@ test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted
     // Expand the Health section → "source removed" + mark the inaccurate fact not right (persists encrypted).
     await w.getByRole('button', { name: /^Health & body/ }).click();
     await expect(w.getByText(/original source removed/i)).toBeVisible();
+    // The card names who it's about (62 §context) — this own session insight reads "About you".
+    await expect(w.locator('#insight-ins-health').getByText('About you')).toBeVisible();
+    // Cards lay out in a responsive grid inside the section (62 §grid).
+    const gridDisplay = await w.evaluate(() => {
+      const card = document.getElementById('insight-ins-health');
+      return card?.parentElement ? getComputedStyle(card.parentElement).display : '';
+    });
+    expect(gridDisplay).toBe('grid');
     await w.getByRole('button', { name: /This isn.t right about me: This one is wrong/ }).click();
     await expect(w.getByText('marked not right')).toBeVisible();
     await expect
@@ -3675,6 +3686,15 @@ test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted
       })
       .toBe(true);
     await w.getByRole('link', { name: 'Memory' }).click();
+
+    // Shared-by-default (owner decision, 62 §sharing): the one-time backfill flipped a default-private
+    // fact to partner-scoped — persisted to the vault so a partner's coaching picks it up.
+    await expect
+      .poll(async () => {
+        const insight = await getInsight(fs, key, 'owner-1', 'ins-health');
+        return insight?.facts.find((f) => f.id === 'f1')?.shareableTypes ?? null;
+      })
+      .toEqual(['partner']);
 
     // No horizontal overflow at phone width.
     await w.setViewportSize({ width: 390, height: 800 });
@@ -3747,8 +3767,10 @@ test('memory overview: portrait hero, drill in to type-scope a fact to partner (
     subjectPersonId: 'owner-1',
     summary: 'From a recent session',
     facts: [
-      { id: 'sf1', text: 'Enjoys rock climbing', shareable: false },
-      { id: 'sf2', text: 'WRONGLY-INFERRED-CLAIM', shareable: false },
+      // Explicitly private (`shareableTypes: []`) so the shared-with-partner backfill preserves the choice
+      // and this test can still exercise the MANUAL type-scope picker (62 §sharing keeps explicit choices).
+      { id: 'sf1', text: 'Enjoys rock climbing', shareable: false, shareableTypes: [] },
+      { id: 'sf2', text: 'WRONGLY-INFERRED-CLAIM', shareable: false, shareableTypes: [] },
     ],
     confidence: 'medium',
     categories: ['Emotions & patterns'],

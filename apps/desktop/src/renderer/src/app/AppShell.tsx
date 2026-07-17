@@ -30,6 +30,7 @@ import { useBudgetStore } from '../stores/budgetStore';
 import { useUsageStore } from '../stores/usageStore';
 import { unansweredCount, useInboxStore } from '../stores/inboxStore';
 import { questionnaireNavCount } from './routes/questionnaires/navCounts';
+import { memoryReviewCount } from './routes/memory/navCounts';
 import { useDreamStore } from '../stores/dreamStore';
 import { useInsightStore } from '../stores/insightStore';
 import { useGoalStore } from '../stores/goalStore';
@@ -75,6 +76,10 @@ export function AppShell(): JSX.Element {
   const canCreateQuestionnaires = useSessionStore((s) => s.can('questionnaires.create'));
   const canAnswerQuestionnaires = useSessionStore((s) => s.can('questionnaires.answer'));
   const canViewMemory = useSessionStore((s) => s.can('memory.own'));
+  // The Memory nav badge (62 §nav): draft insights awaiting review + merge/duplicate proposals — the same
+  // total as the in-page "Needs your review" callout. Subscribed reactively so it live-updates.
+  const memoryInsights = useInsightStore((s) => s.insights);
+  const memoryProposals = useInsightStore((s) => s.proposals);
   const inboxItems = useInboxStore((s) => s.items);
   const inboxCount = unansweredCount(inboxItems);
   // The Questionnaires nav badge (08 §3.1): one aggregate of things needing YOU — responses ready to
@@ -113,6 +118,7 @@ export function AppShell(): JSX.Element {
   const locked = useSessionStore((s) => s.locked);
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
   const togetherWaiting = togetherWaitingCount(togetherSessions, activePersonId);
+  const memoryCount = memoryReviewCount(memoryInsights, memoryProposals, activePersonId);
   const collapsed = useNavStore((s) => s.collapsed);
   const toggleSidebar = useNavStore((s) => s.toggle);
   const [switching, setSwitching] = useState(false);
@@ -168,6 +174,7 @@ export function AppShell(): JSX.Element {
     void useGuidanceStore.getState().load();
     void useIntakeStore.getState().load();
     void useInsightStore.getState().load();
+    void useInsightStore.getState().loadReconcileState(); // merge proposals feed the Memory nav badge (62 §nav)
     void useGoalStore.getState().load();
     void useChallengeStore.getState().load();
     if (canTogether) void useTogetherStore.getState().load(); // drives the nav visibility + badge (58 §3.1)
@@ -355,12 +362,17 @@ export function AppShell(): JSX.Element {
               <NavLink
                 to="/memory"
                 className={navClass}
-                aria-label="Memory"
+                aria-label={memoryCount > 0 ? `Memory, ${memoryCount} to review` : 'Memory'}
                 title={tip('Memory')}
                 onClick={closeDrawer}
               >
                 <Brain size={18} aria-hidden="true" />
                 <span className={styles.label}>Memory</span>
+                {memoryCount > 0 ? (
+                  <span className={styles.navBadge} aria-hidden="true">
+                    {memoryCount}
+                  </span>
+                ) : null}
               </NavLink>
             ) : null}
             {canViewMemory ? (

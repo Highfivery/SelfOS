@@ -185,11 +185,27 @@ export function InsightCard({
   const factGroups = groupFactsByArea(insight.facts, isOwn);
   const grouped = factGroups.length > 1 || factGroups[0]?.area !== null;
 
-  const eyebrowContext = aboutName
-    ? `From ${aboutName}’s answers`
-    : isOwn
-      ? formatDate(insight.provenance.at)
-      : `About ${subjectName}`;
+  // Who this insight is about — resolves the user's "who is this about, me or a partner?" confusion
+  // (62 §context). A sent-questionnaire response is About the recipient; an own reflection is About you; a
+  // related person's shared fact is About them.
+  const aboutIsOther = Boolean(aboutName) || !isOwn;
+  const aboutWhom = aboutName ?? (isOwn ? 'you' : subjectName);
+
+  // The linked source, shown in the header (62 §context): an own AI insight links to the exact source
+  // (a questionnaire's Results, the session, the dream); intake / related / removed-source read as plain
+  // text. `prov.label` already reads "From “<questionnaire title>”" when the title resolved.
+  const sourceEl =
+    isOwn && !isIntake && !sourceRemoved ? (
+      <button type="button" className={styles.provLink} onClick={goToSource} title={prov.label}>
+        <span className={styles.provLabel}>{prov.label}</span>
+        <ArrowUpRight size={12} aria-hidden="true" />
+      </button>
+    ) : (
+      <Text size="xs" tone="tertiary" className={styles.provStatic}>
+        {prov.label}
+        {sourceRemoved ? ' · original source removed' : ''}
+      </Text>
+    );
 
   /** One fact as a read row: text + inline tags + (AI-inferred) the scope chip + a per-line edit pencil; or,
    * when it's the fact being edited, an inline textarea with Save / Cancel (62 §3.3). */
@@ -310,11 +326,28 @@ export function InsightCard({
 
         <div className={styles.head}>
           <div className={styles.headMain}>
+            {/* Row 1 — what produced this + who it's about (62 §context). */}
             <div className={styles.eyebrowRow}>
               <span className={styles.sourcePill}>{SOURCE_EYEBROW[insight.source]}</span>
+              <span
+                className={`${styles.aboutChip} ${aboutIsOther ? styles.aboutOther : styles.aboutSelf}`}
+                title={`About ${aboutWhom}`}
+              >
+                About {aboutWhom}
+              </span>
+            </div>
+            {/* Row 2 — the linked source, when it was learned, and confidence. */}
+            <div className={styles.contextRow}>
+              {sourceEl}
+              <span className={styles.metaDot} aria-hidden="true">
+                ·
+              </span>
               <Text size="xs" tone="tertiary">
-                {eyebrowContext}
+                {formatDate(insight.provenance.at)}
               </Text>
+              <span className={styles.metaDot} aria-hidden="true">
+                ·
+              </span>
               <ConfidenceChip
                 level={insight.confidence}
                 {...(insight.confidenceRationale ? { rationale: insight.confidenceRationale } : {})}
@@ -427,29 +460,15 @@ export function InsightCard({
               </Stack>
             )}
 
-            <div className={styles.metaRow}>
-              {insight.categories.map((c) => (
-                <span key={c} className={styles.categoryTag}>
-                  {c}
-                </span>
-              ))}
-              <span className={styles.provenance}>
-                {!isOwn ? (
-                  <Text size="xs" tone="tertiary">
-                    {prov.label}
-                  </Text>
-                ) : sourceRemoved ? (
-                  <Text size="xs" tone="tertiary">
-                    {prov.label} · original source removed
-                  </Text>
-                ) : (
-                  <button type="button" className={styles.provLink} onClick={goToSource}>
-                    {prov.label} · {formatDate(insight.provenance.at)}{' '}
-                    <ArrowUpRight size={12} aria-hidden="true" />
-                  </button>
-                )}
-              </span>
-            </div>
+            {insight.categories.length > 0 ? (
+              <div className={styles.metaRow}>
+                {insight.categories.map((c) => (
+                  <span key={c} className={styles.categoryTag}>
+                    {c}
+                  </span>
+                ))}
+              </div>
+            ) : null}
 
             {isOwn && isIntake ? (
               <div className={styles.actions}>

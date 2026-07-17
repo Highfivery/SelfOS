@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { classifyParseOutcome, salvageJsonObjectField, tolerantArray } from '../ai/jsonSalvage';
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
-import { listInsightsForPerson, saveInsight } from '../insights';
+import { listInsightsForPerson, producedFactShare, saveInsight } from '../insights';
 import { getPerson } from '../people/peopleService';
 import {
   AlignmentReportSchema,
@@ -214,7 +214,8 @@ export async function generateAlignment(
     source: 'questionnaire',
     subjectPersonId: deps.personId,
     summary: validated.data.summary,
-    facts: validated.data.facts.map((f) => ({ id: uuid(), text: f.text, shareable: f.shareable })),
+    // The alignment report defaults to shared-with-partner (owner decision — see producedFactShare).
+    facts: validated.data.facts.map((f) => ({ id: uuid(), text: f.text, ...producedFactShare() })),
     confidence: 'medium',
     categories: ['Relationships'], // a compatibility report is inherently relational (20-memory §3.1)
     approved: false,

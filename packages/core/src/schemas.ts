@@ -774,6 +774,12 @@ export const InsightProvenanceSchema = z.object({
   // best-effort live edge). Additive-optional (the `aboutPersonId` precedent), no migration.
   togetherSessionId: z.string().optional().catch(undefined),
   pairKey: z.string().optional().catch(undefined),
+  // READ-TIME ENRICHMENT ONLY (never persisted): the source questionnaire's as-sent title +
+  // live id, resolved by `insightsList` for a sent-questionnaire insight so Memory can render
+  // "From <title>" and link straight to that questionnaire's Results (62 §context). On the schema so
+  // an enriched `Insight` typechecks; the producers don't set these. Additive-optional, no migration.
+  sourceTitle: z.string().optional().catch(undefined),
+  sourceQuestionnaireId: z.string().optional().catch(undefined),
   at: z.string(),
 });
 export type InsightProvenance = z.infer<typeof InsightProvenanceSchema>;

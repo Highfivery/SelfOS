@@ -21,7 +21,7 @@ import { checkBudget, costOf, recordUsage } from '../usage';
 import { buildContext, buildLinkedPeopleContext, listRelationships } from '../people';
 import type { RelationshipType } from '../schemas';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
-import { deleteInsight, getInsight, saveInsight } from '../insights';
+import { deleteInsight, getInsight, producedFactShare, saveInsight } from '../insights';
 import {
   getAnalysis,
   getDream,
@@ -560,11 +560,12 @@ export async function approveAnalysis(deps: {
   const at = now.toISOString();
   const insightId = analysis.insightId ?? uuid();
 
-  // Re-approving an edited analysis must KEEP who each fact was shared with (12 §3.4) — so facts use a
-  // stable per-field id and carry their prior `shareableWith` forward (re-wording a section keeps its
-  // shares). A fresh approval (no prior insight) starts unshared.
+  // Re-approving an edited analysis must KEEP each fact's sharing (12 §3.4) — so facts use a stable
+  // per-field id and carry their prior `shareableWith` AND explicit `shareableTypes` forward (re-wording a
+  // section keeps its shares, and a re-approve never reverts an un-share). A fresh approval defaults to
+  // shared-with-partner (owner decision — see producedFactShare).
   const prior = analysis.insightId ? await getInsight(fs, key, personId, insightId) : null;
-  const priorShares = new Map((prior?.facts ?? []).map((fact) => [fact.id, fact.shareableWith]));
+  const priorShares = new Map((prior?.facts ?? []).map((fact) => [fact.id, fact]));
   const facts: InsightFact[] = [];
   const addFact = (suffix: string, text: string): void => {
     if (!text.trim()) return;
@@ -573,8 +574,8 @@ export async function approveAnalysis(deps: {
     facts.push({
       id,
       text,
-      shareable: false,
-      ...(carried && carried.length > 0 ? { shareableWith: carried } : {}),
+      ...producedFactShare(undefined, carried?.shareableTypes),
+      ...(carried?.shareableWith?.length ? { shareableWith: carried.shareableWith } : {}),
     });
   };
   addFact('waking', analysis.wakingLifeConnections);

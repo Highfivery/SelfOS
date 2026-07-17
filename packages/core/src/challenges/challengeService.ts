@@ -12,7 +12,7 @@ import {
   type Insight,
   type InsightFact,
 } from '../schemas';
-import { getInsight, saveInsight } from '../insights';
+import { getInsight, producedFactShare, saveInsight } from '../insights';
 import { extractGoals } from '../goals';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import type { ChallengeMarker } from '../conversations/guidedSteps';
@@ -299,14 +299,21 @@ export async function recordCheckIn(input: RecordCheckInInput): Promise<Challeng
   const prior = challenge.insightId
     ? await getInsight(fs, key, personId, challenge.insightId)
     : null;
+  // Carry a prior fact's explicit sharing forward by text, so re-capturing a challenge never reverts an
+  // un-share (or per-person share) back to the partner default (owner decision — see producedFactShare).
+  const priorShares = new Map((prior?.facts ?? []).map((f) => [f.text.trim(), f]));
 
-  const fact = (text: string): InsightFact => ({
-    id: uuid(),
-    text,
-    shareable: false, // a challenge reflection is own-context-only; never broadcast
-    ...(restricted ? { restricted: true } : {}),
-    ...(lifeArea ? { lifeArea } : {}),
-  });
+  const fact = (text: string): InsightFact => {
+    const carried = priorShares.get(text.trim());
+    return {
+      id: uuid(),
+      text,
+      // Default to shared-with-partner; a prior explicit scope overrides it; restricted reflections stay private.
+      ...producedFactShare(restricted, carried?.shareableTypes),
+      ...(lifeArea ? { lifeArea } : {}),
+      ...(carried?.shareableWith?.length ? { shareableWith: carried.shareableWith } : {}),
+    };
+  };
   const facts: InsightFact[] = [
     fact(`Challenge: ${challenge.action}`),
     fact(`Outcome: ${OUTCOME_SENTENCE[outcome]}`),

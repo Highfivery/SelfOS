@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import type { Insight } from '../schemas';
-import { aboutFromRecipient, resolveInsightAbout } from './aboutResolver';
+import { aboutFromRecipient, resolveInsightAbout, resolveInsightSource } from './aboutResolver';
 import { createAssignment } from './assignmentService';
 import { writeCompatibilityMember } from './compatibilityService';
 import { getQuestionnaire, saveQuestionnaire } from './questionnaireService';
@@ -132,5 +132,57 @@ describe('resolveInsightAbout', () => {
       insight({ provenance: { compatibilityGroupId: 'g1', at } }),
     );
     expect(about).toEqual({ aboutPersonId: 'p2' });
+  });
+});
+
+describe('resolveInsightSource', () => {
+  it('returns null for a non-questionnaire insight', async () => {
+    const fs = memFileSystem();
+    expect(
+      await resolveInsightSource(
+        fs,
+        key,
+        insight({ source: 'session', provenance: { conversationId: 'c1', at } }),
+      ),
+    ).toBeNull();
+  });
+
+  it('returns null when there is no originating assignment (e.g. a compatibility insight)', async () => {
+    const fs = memFileSystem();
+    expect(
+      await resolveInsightSource(
+        fs,
+        key,
+        insight({ provenance: { compatibilityGroupId: 'g1', at } }),
+      ),
+    ).toBeNull();
+  });
+
+  it('resolves the source questionnaire title + live id from the assignment', async () => {
+    const fs = memFileSystem();
+    const q = await saveQuestionnaire(fs, key, {
+      title: 'Intimacy check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'Hi?', required: true }],
+    });
+    const a = await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'p1',
+      recipient: { kind: 'person', personId: 'p2' },
+      channel: 'inApp',
+      privacy: 'standard',
+      senderVisibleToRecipient: true,
+    });
+    expect(
+      await resolveInsightSource(fs, key, insight({ provenance: { assignmentId: a.id, at } })),
+    ).toEqual({ sourceTitle: 'Intimacy check-in', sourceQuestionnaireId: q.id });
+  });
+
+  it('returns null when the originating send was deleted', async () => {
+    const fs = memFileSystem();
+    expect(
+      await resolveInsightSource(fs, key, insight({ provenance: { assignmentId: 'gone', at } })),
+    ).toBeNull();
   });
 });

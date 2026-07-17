@@ -149,11 +149,7 @@ interface StoryState {
   images: StoryImageEntry[];
   imageUrls: Record<string, string>;
   loadImages: (bookId: string) => Promise<void>;
-  generateImage: (
-    bookId: string,
-    target: StoryImageTarget,
-    style?: string,
-  ) => Promise<StoryImageResult>;
+  generateImage: (bookId: string, target: StoryImageTarget) => Promise<StoryImageResult>;
   getImageUrl: (bookId: string, imageId: string) => Promise<string | null>;
   deleteImage: (bookId: string, imageId: string) => Promise<void>;
   /** Photos (§3.7) — uploads + vision Q&A. `photoAnswers` is the answered Q&A corpus. */
@@ -533,11 +529,10 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     const images = (await window.selfos?.storyImages({ bookId })) ?? [];
     set({ images });
   },
-  generateImage: async (bookId, target, style) => {
+  generateImage: async (bookId, target) => {
     const res = (await window.selfos?.storyGenerateImage({
       bookId,
       target,
-      ...(style ? { style } : {}),
     })) ?? { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
     if (res.ok) {
       // Refresh the index + the book (a cover updates the manifest's coverImageId), then cache the new bytes.

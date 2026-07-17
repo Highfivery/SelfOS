@@ -1,10 +1,16 @@
 # 13 — Dream images (AI image generation of a dream)
 
-> **Status:** **Built** (all 5 slices shipped to `main`) · **Approved** (2026-06 style amendment, §15) · _last updated 2026-06-14_
+> **Status:** **Built** (all 5 slices shipped to `main`) · **Approved** (2026-06 style amendment, §15;
+> 2026-07-16 single-global-style change, §15.3) · _last updated 2026-07-16_
+>
+> **2026-07-16 change (§15.3, owner decision, spec 64 §3.8):** the per-image style picker is **removed** —
+> SelfOS now uses **one global image style** (`dreams.imageStyle` + `dreams.imageStyleNotes`) for **every** AI
+> image (dream + story), set in a dedicated owner-only **Settings → Images** section. `dreams:generateImage`
+> and `story:generateImage` no longer take a `style` param. Read §15.3.
 >
 > **2026-06 amendment (§15, package F of the app refresh):** a richer **default image style** picker (more
-> presets) plus a **free-text style description** so the dreamer can refine the look in their own words — both in
-> Settings → Dreams (defaults) and optionally per image. Read §15 with §5.3/§6.
+> presets) plus a **free-text style description** so the dreamer can refine the look in their own words — set in
+> Settings (the §15.3 per-image override was later removed; see the 2026-07-16 change). Read §15 with §5.3/§6.
 >
 > The deferred companion to [`12-dreams.md`](12-dreams.md): a dreamer can **visualize a dream** as a single
 > AI-generated image. It introduces SelfOS's **second AI provider** (OpenAI, for image generation only — text
@@ -1001,13 +1007,21 @@ visual direction only and are passed through the same distillation. `dreamGenera
 control; this adds a **`textarea`** control type (multiline, reusing the design-system `Textarea`) — generally
 useful, not dream-specific. `dreams.imageStyleNotes` uses it.
 
-### 15.3 Per-image override (panel)
+### 15.3 Per-image override (panel) — **SUPERSEDED 2026-07-16: one global style, no per-image picker**
 
-The `DreamImagePanel` (§3.2/§5.5) per-image **style picker** uses the expanded, grouped `IMAGE_STYLE_PRESETS`
-(same constant as Settings). **Style notes are Settings-only** (resolved) — they apply to all dream images and
-are not editable per image; the existing `dreams:generateImage({ dreamId, style? })` IPC is **unchanged** (no
-`styleNotes?` param). So a single image can still switch _preset_ on the panel; the free-text direction is a
-single default you set once in Settings.
+> **2026-07-16 (owner decision, spec 64 §3.8):** SelfOS moved to a **single global image style** used by
+> **every** AI image — dream images AND your story's cover/illustrations — so they all look consistent. The
+> per-image style picker was **removed** from the `DreamImagePanel` (and there was never one on the story
+> surfaces beyond the cover, which also dropped it). The one style now lives in a dedicated owner-only
+> **Settings → Images** section (moved out of Settings → Dreams): image-generation consent, model, the global
+> **`dreams.imageStyle`** (grouped presets + a **Custom…** free-text option, via `ImageStyleControl`), the
+> **`dreams.imageStyleNotes`** direction, and the OpenAI key. Both `dreams:generateImage({ dreamId })` and
+> `story:generateImage({ bookId, target })` **no longer accept a `style` param** — the bridge reads the global
+> style + direction from settings and applies both host-side (the name-free distillation boundary is
+> unchanged). The `dreams.imageStyle` key names are kept (no migration; the section is just relabeled).
+
+_Original (historical):_ The `DreamImagePanel` per-image **style picker** used the expanded, grouped
+`IMAGE_STYLE_PRESETS`; style notes were Settings-only. This per-image picker is gone (see the note above).
 
 ### 15.4 Edge cases, a11y & testing
 

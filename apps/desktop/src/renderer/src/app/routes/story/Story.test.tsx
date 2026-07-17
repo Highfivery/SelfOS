@@ -1078,10 +1078,10 @@ describe('Story (64)', () => {
     });
     renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Create a cover' }));
+    // No per-image style — every image uses the single global style (Settings → Images, §3.8).
     expect(storyGenerateImage).toHaveBeenCalledWith({
       bookId: 'b1',
       target: { kind: 'cover' },
-      style: expect.any(String),
     });
     // The generated cover renders + the admin cost figure appears.
     const cover = await screen.findByAltText(/Cover for this book/);

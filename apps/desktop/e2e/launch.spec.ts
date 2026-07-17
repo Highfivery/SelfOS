@@ -5868,6 +5868,8 @@ test('dreams: visualize a dream — sensitive warning, generate, encrypted round
   const { userData, vault } = await seedReadyVault({
     'ai.enabled': true,
     'dreams.imageGenerationEnabled': true,
+    // The SINGLE global image style (§3.8) — no per-image picker; every image uses this.
+    'dreams.imageStyle': 'watercolor',
   });
   const secrets = createNodeSecretStore(userData, passthrough);
   await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
@@ -5882,11 +5884,9 @@ test('dreams: visualize a dream — sensitive warning, generate, encrypted round
     await w.getByLabel('Sensitivity').selectOption({ label: 'Explicit' });
     await w.getByRole('button', { name: 'Just save' }).click();
 
-    // Reopen the saved dream → the image panel sits on the read-first detail (12 §15.3).
+    // Reopen the saved dream → the image panel sits on the read-first detail (12 §15.3). There is no
+    // per-image style picker — the single global style (Settings → Images) applies to every image (§3.8).
     await w.getByRole('button', { name: /Visualize me/ }).click();
-
-    // Pick an expanded, family-grouped preset (beyond the original four) for this image.
-    await w.getByRole('combobox', { name: 'Style' }).selectOption({ label: 'Watercolor' });
 
     // A non-standard tier warns before sending to OpenAI; Continue proceeds.
     await w.getByRole('button', { name: /visualize this dream/i }).click();
@@ -5920,7 +5920,7 @@ test('dreams: visualize a dream — sensitive warning, generate, encrypted round
     await gridCard.click();
     await expect(w.getByRole('img')).toBeVisible();
 
-    // The chosen preset is stamped onto the dream's image descriptor on disk.
+    // The GLOBAL style (Settings → Images) is stamped onto the dream's image descriptor on disk.
     const key = await loadMasterKey(secrets);
     if (!key) throw new Error('master key missing');
     const fs = createNodeFileSystem(vault);
@@ -6614,27 +6614,28 @@ test('AI: enabling reveals key + model, saving a key and testing connects', asyn
   }
 });
 
-test('dreams: enabling image generation reveals the model, style, and admin-only OpenAI key', async () => {
+test('images: enabling image generation reveals the model, single global style, and admin-only OpenAI key', async () => {
   const { userData, vault } = await seedReadyVault({ 'dreams.imageGenerationEnabled': true });
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Settings' }).click();
-    await w.getByRole('button', { name: 'Dreams', exact: true }).click();
+    // The single home for AI image generation — one consent switch, one key, one global style (§3.8).
+    await w.getByRole('button', { name: 'Images', exact: true }).click();
 
-    // Consent on → the model, style, style notes, and OpenAI key controls are revealed.
+    // Consent on → the model, the single global style, style direction, and OpenAI key controls appear.
     await expect(w.getByLabel('Image model')).toBeVisible();
-    await expect(w.getByLabel('Default image style')).toBeVisible();
-    await expect(w.getByLabel('Style notes (optional)')).toBeVisible();
+    await expect(w.getByRole('combobox', { name: 'Image style' })).toBeVisible();
+    await expect(w.getByLabel('Style direction (optional)')).toBeVisible();
     await expect(w.getByLabel('OpenAI API key')).toBeVisible();
 
     // The image model + key are admin-only — marked so admins know normal users don't see them.
     await expect(w.getByText('Admin only').first()).toBeVisible();
 
     // The expanded, family-grouped presets are available (an option beyond the original four).
-    await w.getByLabel('Default image style').selectOption({ label: 'Gouache' });
-    // The free-text style notes (§15.2) persist through the new textarea control.
-    await w.getByLabel('Style notes (optional)').fill('muted earth tones, golden-hour light');
+    await w.getByRole('combobox', { name: 'Image style' }).selectOption({ label: 'Gouache' });
+    // The free-text style direction (§15.2) persists through the textarea control.
+    await w.getByLabel('Style direction (optional)').fill('muted earth tones, golden-hour light');
 
     const settingsFile = join(vault, 'config', 'settings.json');
     await expect
@@ -11376,6 +11377,10 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
 
     // Mark a chapter reviewed so there's something to publish.
     await w.getByRole('button', { name: /The Garage/ }).click();
+    // Illustrate the chapter (§3.8): image gen is set up, so the button is present (not a dead control),
+    // clicking it distills → renders → places the image, which then appears in the chapter body.
+    await w.getByRole('button', { name: 'Illustrate this chapter' }).click();
+    await expect(w.getByRole('combobox', { name: 'Move image after paragraph' })).toBeVisible();
     await w.getByRole('button', { name: 'Looks good' }).click();
     await w.getByRole('button', { name: /Back to the book/ }).click();
 

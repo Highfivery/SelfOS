@@ -441,39 +441,99 @@ function WizardHarness({
   );
 }
 
-describe('QuestionnaireForm — wizard mode (08 §21.3)', () => {
+describe('QuestionnaireForm — wizard mode, unlocked (08 §25)', () => {
   const twoQ = [
     q({ id: 'a', type: 'shortText', prompt: 'First?', required: true }),
     q({ id: 'b', type: 'shortText', prompt: 'Second?' }),
   ];
 
-  it('shows one question per step with Back/Next; Next becomes Submit on the last step', async () => {
+  it('one question per step; last step goes to Review, then Send fires onSubmit', async () => {
     const onSubmit = vi.fn();
     render(<WizardHarness questions={twoQ} onSubmit={onSubmit} onSaveForLater={vi.fn()} />);
 
-    // Step 1: only the first question, Next (not Submit), Back disabled, Save for later present.
-    expect(screen.getByText('Question 1 of 2')).toBeInTheDocument();
+    // Step 1: only the first question; Next (not Send), Back disabled, Save for later present.
     expect(screen.getByText('First?')).toBeInTheDocument();
     expect(screen.queryByText('Second?')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Save for later' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText('First?'), 'x');
     await userEvent.click(screen.getByRole('button', { name: 'Next' }));
 
-    // Step 2 (last): Submit appears, Back enabled.
-    expect(screen.getByText('Question 2 of 2')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Back' })).toBeEnabled();
-    await userEvent.click(screen.getByRole('button', { name: 'Submit' }));
+    // Step 2 (last): the primary becomes "Review & send".
+    expect(screen.getByText('Second?')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Review & send' }));
+
+    // Review: everything required is answered → Send is enabled and fires onSubmit.
+    expect(screen.getByText(/almost done/i)).toBeInTheDocument();
+    const send = screen.getByRole('button', { name: 'Send answers' });
+    expect(send).toBeEnabled();
+    await userEvent.click(send);
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
-  it('blocks Next on a required-but-empty step and never advances', async () => {
+  it('lets you move PAST a required question without answering (no blocking gate — §25.1)', async () => {
     render(<WizardHarness questions={twoQ} onSubmit={vi.fn()} />);
+    // Next on the required-but-empty first question ADVANCES (no alert, no block).
     await userEvent.click(screen.getByRole('button', { name: 'Next' }));
-    expect(screen.getByRole('alert')).toHaveTextContent(/answer this question before continuing/i);
-    expect(screen.getByText('Question 1 of 2')).toBeInTheDocument(); // still on step 1
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('Second?')).toBeInTheDocument();
+  });
+
+  it('skips a question with a reason → shows the skipped state; the review reflects it (§25.2)', async () => {
+    render(
+      <WizardHarness
+        questions={[q({ id: 'a', type: 'shortText', prompt: 'Deep one?' })]}
+        onSubmit={vi.fn()}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: /Skip this/i }));
+    // Reason picker: pick the "Not clear" preset (the unclear flag), then confirm.
+    await userEvent.click(screen.getByRole('button', { name: 'Not clear — needs more context' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Skip this question' }));
+    // The question now reads as skipped, with the reason + an "Answer it instead" undo.
+    expect(screen.getByText(/Skipped\./)).toBeInTheDocument();
+    expect(screen.getByText(/Reason: Not clear — needs more context/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Answer it instead' })).toBeInTheDocument();
+    // "Answer it instead" brings the control back so they can still answer.
+    await userEvent.click(screen.getByRole('button', { name: 'Answer it instead' }));
+    expect(screen.getByLabelText('Deep one?')).toBeInTheDocument();
+  });
+
+  it('required = answer OR skip: Send is blocked until a required question is answered or skipped (§25.3)', async () => {
+    render(<WizardHarness questions={twoQ} onSubmit={vi.fn()} />);
+    // Straight to review without answering the required q1.
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Review & send' }));
+    expect(screen.getByText(/1 required question/i)).toBeInTheDocument();
+    expect(screen.getByText(/still needs an answer or a reason/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send answers' })).toBeDisabled();
+
+    // Edit q1 (via its review row) and SKIP it with a reason → the required gate is satisfied.
+    const firstRow = screen.getByText('First?').closest('li') as HTMLElement;
+    await userEvent.click(within(firstRow).getByRole('button', { name: 'Edit' }));
+    await userEvent.click(screen.getByRole('button', { name: /Skip this/i }));
+    await userEvent.click(screen.getByRole('button', { name: 'Prefer not to say' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Skip this question' }));
+    // Back to review (q1 is step 0 → Next to the last, then Review & send) — Send is now enabled.
+    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Review & send' }));
+    expect(screen.getByRole('button', { name: 'Send answers' })).toBeEnabled();
+  });
+
+  it('the navigator jumps to any question (see all → click) without answering the previous (§25.1)', async () => {
+    const three = [
+      q({ id: 'a', type: 'shortText', prompt: 'First?' }),
+      q({ id: 'b', type: 'shortText', prompt: 'Second?' }),
+      q({ id: 'c', type: 'shortText', prompt: 'Third?' }),
+    ];
+    render(<WizardHarness questions={three} onSubmit={vi.fn()} />);
+    // The overview shows every prompt.
+    await userEvent.click(screen.getByRole('button', { name: 'See all questions' }));
+    expect(screen.getByRole('button', { name: /Third\?/ })).toBeInTheDocument();
+    // Jump straight to the third question from the overview (never touched the first two).
+    await userEvent.click(screen.getByRole('button', { name: /Third\?/ }));
+    expect(screen.getByText('Question 3 of 3')).toBeInTheDocument();
   });
 
   it('is branch-aware — a revealed follow-up is appended to the steps', async () => {
@@ -497,8 +557,6 @@ describe('QuestionnaireForm — wizard mode (08 §21.3)', () => {
   });
 
   it('clamps the step without crashing when a branch answer HIDES a later step you already passed', async () => {
-    // Q1 (yesNo) reveals Q2 only when Yes; Q3 is always visible. Step to Q3, then go Back to Q1 and flip to
-    // No — Q2 vanishes, so the visible set shrinks (3 → 2). The wizard must clamp, not crash or get stuck.
     const branched = [
       q({ id: 'a', type: 'yesNo', prompt: 'Together?' }),
       q({
@@ -522,16 +580,7 @@ describe('QuestionnaireForm — wizard mode (08 §21.3)', () => {
     expect(screen.getByText('Together?')).toBeInTheDocument();
   });
 
-  it('clears the required-empty alert as soon as the current question is answered', async () => {
-    render(<WizardHarness questions={twoQ} onSubmit={vi.fn()} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Next' }));
-    expect(screen.getByRole('alert')).toBeInTheDocument();
-    // Answering the required question clears the alert without needing to click Next again.
-    await userEvent.type(screen.getByLabelText('First?'), 'x');
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-  });
-
-  it('uses the host labels for editing (Update answers + Cancel), no Save for later', () => {
+  it('uses the host labels for editing (Update answers on review + Cancel), no Save for later', async () => {
     render(
       <WizardHarness
         questions={[q({ id: 'a', type: 'shortText', prompt: 'Only?' })]}
@@ -541,8 +590,11 @@ describe('QuestionnaireForm — wizard mode (08 §21.3)', () => {
         declineLabel="Cancel"
       />,
     );
-    expect(screen.getByRole('button', { name: 'Update answers' })).toBeInTheDocument();
+    // Cancel (the whole-decline escape) is in the action bar; Save for later is absent.
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save for later' })).not.toBeInTheDocument();
+    // The host's submit label lands on the review Send button.
+    await userEvent.click(screen.getByRole('button', { name: 'Review & send' }));
+    expect(screen.getByRole('button', { name: 'Update answers' })).toBeInTheDocument();
   });
 });

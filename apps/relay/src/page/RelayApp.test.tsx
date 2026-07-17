@@ -79,13 +79,14 @@ describe('RelayApp', () => {
     expect(screen.getByText(/Sam/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /continue/i }));
 
-    // The shared form renders the question; answering + submit reaches the thanks state.
+    // The shared form renders the question; answering → Review & send → Submit reaches the thanks state.
     await userEvent.type(await screen.findByLabelText('One thing I do well?'), 'Listening');
+    await userEvent.click(screen.getByRole('button', { name: /review & send/i }));
     await userEvent.click(screen.getByRole('button', { name: /^submit$/i }));
     expect(await screen.findByText(/thanks for filling this out/i)).toBeInTheDocument();
   });
 
-  it('steps through a multi-question questionnaire one at a time (wizard, §21.3)', async () => {
+  it('steps through a multi-question questionnaire one at a time, unlocked (§25.1)', async () => {
     nextContent = content({
       questions: [
         { id: 'a', type: 'shortText', prompt: 'One thing I do well?', required: true },
@@ -101,17 +102,18 @@ describe('RelayApp', () => {
     await userEvent.click(screen.getByRole('button', { name: /open questionnaire/i }));
     await userEvent.click(await screen.findByRole('button', { name: /continue/i }));
 
-    // One question at a time: step 1 of 2, the primary is "Next" (not Submit yet).
+    // One question at a time: step 1 of 2, primary "Next" (no Submit yet).
     expect(await screen.findByText('Question 1 of 2')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^submit$/i })).not.toBeInTheDocument();
-    // Next blocks the required first step while empty, then advances once answered.
+    // Next advances FREELY even with the required first question empty (§25.1) — no block.
     await userEvent.click(screen.getByRole('button', { name: 'Next' }));
-    expect(screen.getByText(/answer this question before continuing/i)).toBeInTheDocument();
+    expect(screen.queryByText(/answer this question before continuing/i)).not.toBeInTheDocument();
+    expect(await screen.findByText('Question 2 of 2')).toBeInTheDocument();
+    // Back, answer the required q1, then Review & send → Submit → thanks.
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
     await userEvent.type(screen.getByLabelText('One thing I do well?'), 'Listening');
     await userEvent.click(screen.getByRole('button', { name: 'Next' }));
-
-    // Step 2 of 2 → the primary is Submit; submitting reaches the thanks state.
-    expect(await screen.findByText('Question 2 of 2')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /review & send/i }));
     await userEvent.click(screen.getByRole('button', { name: /^submit$/i }));
     expect(await screen.findByText(/thanks for filling this out/i)).toBeInTheDocument();
   });
@@ -163,6 +165,7 @@ describe('RelayApp', () => {
     await userEvent.click(screen.getByRole('button', { name: /open questionnaire/i }));
     await userEvent.click(await screen.findByRole('button', { name: /continue/i }));
     await userEvent.type(await screen.findByLabelText('One thing I do well?'), 'Listening');
+    await userEvent.click(screen.getByRole('button', { name: /review & send/i }));
     await userEvent.click(screen.getByRole('button', { name: /^submit$/i }));
     // Not the plain "thanks for filling this out" — the results-pending state.
     expect(await screen.findByText(/once everyone has answered/i)).toBeInTheDocument();

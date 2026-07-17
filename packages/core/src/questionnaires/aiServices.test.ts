@@ -258,6 +258,58 @@ describe('generateQuestions', () => {
     expect(opts.maxTokens).toBeGreaterThanOrEqual(2000);
   });
 
+  it('drops a generated question that back-references unseen context, keeps the self-contained one (§25.4)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    const set = JSON.stringify([
+      { type: 'shortText', prompt: 'How does that goal you mentioned feel now?', required: false },
+      { type: 'shortText', prompt: 'What helps you unwind after a hard day?', required: false },
+    ]);
+    const result = await generateQuestions(deps(fs, fakeClient(set), author), {
+      type: 'general',
+      sensitivity: 'standard',
+      context: {
+        authorPersonId: author,
+        includeAuthor: true,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+    });
+    expect(result.ok).toBe(true);
+    expect(result.questions?.map((q) => q.prompt)).toEqual([
+      'What helps you unwind after a hard day?',
+    ]);
+  });
+
+  it('the self-contained rule reaches the model (§25.4)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    let system = '';
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options) => {
+        system = options.system;
+        return Promise.resolve({
+          text: valid,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    await generateQuestions(deps(fs, capturing, author), {
+      type: 'general',
+      sensitivity: 'standard',
+      context: {
+        authorPersonId: author,
+        includeAuthor: true,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+    });
+    expect(system).toContain('STAND ENTIRELY ON ITS OWN');
+  });
+
   it('scales maxTokens with the requested count so a large set is not truncated (§23.4)', async () => {
     const fs = memFileSystem();
     const { author } = await seedHousehold(fs);

@@ -96,6 +96,8 @@ describe('QuestionnaireResults', () => {
               questionId: 'pick',
               prompt: 'Best word?',
               responseCount: 3,
+              skipped: 0,
+              unclear: 0,
               kind: 'distribution',
               options: [
                 { label: 'Calm', count: 2 },
@@ -106,6 +108,9 @@ describe('QuestionnaireResults', () => {
               questionId: 'rate',
               prompt: 'How connected?',
               responseCount: 3,
+              // Two people skipped this, one flagged it unclear → the author sees a reword nudge (§25.5).
+              skipped: 2,
+              unclear: 1,
               kind: 'average',
               average: 3.5,
               min: 1,
@@ -121,6 +126,9 @@ describe('QuestionnaireResults', () => {
     // The value is shown as text (never colour-only, §9).
     expect(screen.getByText('3.5')).toBeInTheDocument();
     expect(screen.getByText(/scale 1–5/)).toBeInTheDocument();
+    // The skip/"unclear" signal surfaces on the question people struggled with (§25.5).
+    expect(screen.getByText(/1 found it unclear/)).toBeInTheDocument();
+    expect(screen.getByText(/2 skipped · consider rewording/)).toBeInTheDocument();
   });
 
   const aiReadyBridge = {
@@ -279,13 +287,27 @@ describe('QuestionnaireResults', () => {
         }),
       assignmentsResults: () =>
         Promise.resolve([
-          send({ answers: [{ prompt: 'How are we doing?', answer: 'Doing great' }] }),
+          send({
+            answers: [
+              { prompt: 'How are we doing?', answer: 'Doing great' },
+              // A skipped question renders as a distinct "Skipped" chip + reason, not a plain answer (§25.5).
+              {
+                prompt: 'What worries you?',
+                answer: 'Skipped — Prefer not to say',
+                declined: true,
+                declineReason: 'Prefer not to say',
+              },
+            ],
+          }),
         ]),
     });
     renderResults();
     await expandRows();
     expect(await screen.findByText('How are we doing?')).toBeInTheDocument();
     expect(screen.getByText('Doing great')).toBeInTheDocument();
+    // The skip shows the "Skipped" chip + its reason (not the "Skipped — …" string blob).
+    expect(screen.getByText('Skipped')).toBeInTheDocument();
+    expect(screen.getByText('Prefer not to say')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /analyze/i })).toBeInTheDocument();
   });
 

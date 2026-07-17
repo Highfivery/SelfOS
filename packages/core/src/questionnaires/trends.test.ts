@@ -121,4 +121,24 @@ describe('buildQuestionTrends', () => {
     ];
     expect(buildQuestionTrends(sends)).toEqual([]);
   });
+
+  it('a declined answer contributes no trend point (§25.5)', () => {
+    const questions = [q({ id: 'r', type: 'rating', prompt: 'Connection?' })];
+    const sends: TrendSend[] = [
+      {
+        submittedAt: '2026-01-01',
+        recipientName: 'Mara',
+        questions,
+        answers: [{ questionId: 'r', value: 3 }],
+      },
+      {
+        submittedAt: '2026-02-01',
+        recipientName: 'Mara',
+        questions,
+        answers: [{ questionId: 'r', value: { declined: true, reason: 'Prefer not to say' } }],
+      },
+    ];
+    // Only ONE real point remains, so there's no ≥2-point series — the decline never became a 0/NaN point.
+    expect(buildQuestionTrends(sends)).toEqual([]);
+  });
 });

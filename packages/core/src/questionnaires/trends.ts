@@ -8,6 +8,7 @@ import {
   type TrendPoint,
   type TrendSeries,
 } from '../schemas';
+import { isDeclined } from './answering';
 
 /**
  * Per-question rating-over-time trends (08-questionnaires §3.7). Pure + DOM-free so it's reused/tested in
@@ -66,6 +67,7 @@ export function buildQuestionTrends(sends: TrendSend[]): QuestionTrend[] {
       const answer = send.answers.find((a) => a.questionId === questionId);
       if (!answer) continue;
       const value = answer.value;
+      if (isDeclined(value)) continue; // a skipped question contributes no trend point (§25.5)
       if (question.type === 'rating' || question.type === 'slider') {
         if (typeof value === 'number' && Number.isFinite(value)) {
           add(send.recipientName, send.submittedAt, value);

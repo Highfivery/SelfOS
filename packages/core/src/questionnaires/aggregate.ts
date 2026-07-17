@@ -8,6 +8,7 @@ import {
   type QuestionAggregate,
   type QuestionnaireAggregate,
 } from '../schemas';
+import { isDeclined, UNCLEAR_SKIP_REASON, type AnswerValue } from './answering';
 
 /**
  * The cross-recipient "At a glance" aggregate (08-questionnaires §20.7). Pure + DOM-free so it's reused/
@@ -78,13 +79,27 @@ export function buildQuestionnaireAggregate(sends: AggregateSend[]): Questionnai
     const question = repr.get(questionId);
     if (!question) continue;
 
-    const answerOf = (s: AggregateSend): Answer['value'] | undefined =>
+    // A per-question decline (§25.5) is transparent to the distribution/average — it's not an answer — but is
+    // counted separately as `skipped`/`unclear` so the author sees which questions people struggle with.
+    const rawOf = (s: AggregateSend): Answer['value'] | undefined =>
       s.answers.find((a) => a.questionId === questionId)?.value;
+    const answerOf = (s: AggregateSend): Answer['value'] | undefined => {
+      const v = rawOf(s);
+      return v !== undefined && isDeclined(v as AnswerValue) ? undefined : v;
+    };
     // Standard sends that answered this question — the response count (private sends are already excluded).
     const responseCount = standardSends.filter((s) => answerOf(s) !== undefined).length;
-    if (responseCount === 0) continue; // nothing answered → not in the at-a-glance
+    // Standard sends that SKIPPED it, and of those how many flagged it "Not clear" (question-quality signal).
+    const declines = standardSends
+      .map(rawOf)
+      .filter((v): v is AnswerValue => v !== undefined && isDeclined(v as AnswerValue));
+    const skipped = declines.length;
+    const unclear = declines.filter(
+      (v) => isDeclined(v) && v.reason === UNCLEAR_SKIP_REASON,
+    ).length;
+    if (responseCount === 0 && skipped === 0) continue; // nothing answered or skipped → not in the at-a-glance
 
-    const base = { questionId, prompt: question.prompt, responseCount };
+    const base = { questionId, prompt: question.prompt, responseCount, skipped, unclear };
 
     if (NUMERIC.has(question.type)) {
       // rating / slider — a single numeric value.

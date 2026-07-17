@@ -327,6 +327,41 @@ describe('generateAlignment', () => {
     expect(['alex', 'bri']).toContain(drafted?.provenance.aboutPersonId);
   });
 
+  it('skips an alignment item when one participant declined it (no "Skipped" vs a real answer — §25.5)', async () => {
+    const fs = memFileSystem();
+    const { groupId, bId } = await seedAnsweredGroup(fs);
+    // Bri SKIPS c2 with a reason — that item can't be compared and the reason must not reach the model.
+    await saveResponse(fs, key, {
+      id: 'rb',
+      schemaVersion: 1,
+      assignmentId: bId,
+      answers: [
+        { questionId: 'c1', value: 3 },
+        { questionId: 'c2', value: { declined: true, reason: 'Too personal to compare' } },
+      ],
+      submittedAt: now.toISOString(),
+    });
+
+    const seen: string[] = [];
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(ALIGNMENT),
+      stream: (options, onDelta) => {
+        seen.push(JSON.stringify(options));
+        onDelta(ALIGNMENT);
+        return Promise.resolve({
+          text: ALIGNMENT,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await generateAlignment(deps(fs, capturing), { compatibilityGroupId: groupId });
+    expect(result.ok).toBe(true);
+    const sent = seen.join('\n');
+    expect(sent).toContain('How connected do you feel?'); // c1 is still aligned
+    expect(sent).not.toContain('Do you want more time together?'); // c2 (skipped by Bri) is not
+    expect(sent).not.toContain('Too personal to compare'); // the skip reason never reaches the model
+  });
+
   it('is NOT_READY until both people have submitted', async () => {
     const fs = memFileSystem();
     const { groupId, bId } = await seedAnsweredGroup(fs);
@@ -413,6 +448,52 @@ describe('distillContextOnly (§16.2)', () => {
         (i) => i.provenance.compatibilityGroupId === groupId,
       ),
     ).toBe(false);
+  });
+
+  it('EXCLUDES a participant’s declined answer from their own-context distillation (§25.5)', async () => {
+    const fs = memFileSystem();
+    const { groupId, aId, bId } = await seedAnsweredGroup(fs, 'contextOnly');
+    // BOTH participants skip c2 with a reason (order-independent — the seed's member order isn't fixed):
+    // a skipped question's prompt + reason must never reach the model nor become an auto-approved own fact.
+    await saveResponse(fs, key, {
+      id: 'ra',
+      schemaVersion: 1,
+      assignmentId: aId,
+      answers: [
+        { questionId: 'c1', value: 4 },
+        { questionId: 'c2', value: { declined: true, reason: 'Too triggering to answer' } },
+      ],
+      submittedAt: now.toISOString(),
+    });
+    await saveResponse(fs, key, {
+      id: 'rb',
+      schemaVersion: 1,
+      assignmentId: bId,
+      answers: [
+        { questionId: 'c1', value: 3 },
+        { questionId: 'c2', value: { declined: true, reason: 'Not something I share' } },
+      ],
+      submittedAt: now.toISOString(),
+    });
+    const seen: string[] = [];
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(DISTILL),
+      stream: (options, onDelta) => {
+        seen.push(JSON.stringify(options));
+        onDelta(DISTILL);
+        return Promise.resolve({
+          text: DISTILL,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await distillContextOnly(deps(fs, capturing), { compatibilityGroupId: groupId });
+    expect(result.ok).toBe(true);
+    const sent = seen.join('\n');
+    expect(sent).toContain('How connected do you feel?'); // each participant's real c1 answer IS distilled
+    expect(sent).not.toContain('Do you want more time together?'); // the skipped c2 is not (either side)
+    expect(sent).not.toContain('Too triggering to answer'); // no skip reason reaches the model
+    expect(sent).not.toContain('Not something I share');
   });
 
   it('re-running reuses each participant’s Insight (no duplicates)', async () => {

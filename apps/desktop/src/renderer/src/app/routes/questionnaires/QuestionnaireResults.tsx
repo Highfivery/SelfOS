@@ -34,6 +34,7 @@ import {
   Text,
   type LineChartSeries,
 } from '../../../design-system/components';
+import { AnswerList } from './AlignmentReportView';
 import { Avatar } from './Avatar';
 import { AtAGlance } from './AtAGlance';
 import { formatDateTime } from './sentState';
@@ -464,17 +465,9 @@ function SendCard({
               </Text>
             ) : null}
 
-            {/* Standard, submitted → the raw answers; Private never carries them (privacy boundary). */}
-            {isSubmitted && send.answers ? (
-              <dl className={styles.qaList}>
-                {send.answers.map((qa, i) => (
-                  <div key={i} className={styles.qaItem}>
-                    <dt className={styles.qaPrompt}>{qa.prompt}</dt>
-                    <dd className={styles.qaAnswer}>{qa.answer === '' ? '—' : qa.answer}</dd>
-                  </div>
-                ))}
-              </dl>
-            ) : null}
+            {/* Standard, submitted → the raw answers (a skip renders as a "Skipped" chip + reason, §25.5);
+                Private never carries them (privacy boundary). Uses the shared AnswerList (DRY). */}
+            {isSubmitted && send.answers ? <AnswerList answers={send.answers} /> : null}
 
             {/* PRIVATE submitted send (08 §21.5): the answers are NEVER shown — no words, no numbers. A calm
             explainer, and the only output is the derived coaching insight (a Memory deep-link once analyzed,

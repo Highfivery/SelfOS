@@ -1,7 +1,7 @@
 import type { FileSystem } from '../host';
 import { getPerson } from '../people/peopleService';
 import { listInsightsForPerson } from '../insights';
-import { formatAnswerForDisplay } from './answering';
+import { formatAnswerForDisplay, isDeclined, type AnswerValue } from './answering';
 import { getAssignmentSnapshot, listAssignments } from './assignmentService';
 import { getResponse } from './responseService';
 
@@ -121,6 +121,9 @@ export async function gatherRecipientPriorAnswers(
     const lines: string[] = [];
     for (const q of snapshot.questions) {
       if (!byId.has(q.id)) continue;
+      // A per-question decline (§25.5) carries no answer content — never feed "Skipped" as biography
+      // material (Your Story) or as "known data" the recipient told us (generation de-dup).
+      if (isDeclined(byId.get(q.id) as AnswerValue | undefined)) continue;
       const display = formatAnswerForDisplay(q, byId.get(q.id)).trim();
       if (display) lines.push(`  Q: ${q.prompt}\n  A: ${display}`);
     }

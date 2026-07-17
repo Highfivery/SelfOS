@@ -50,6 +50,11 @@
 
   --color-danger: #c25b4e;
   --color-danger-subtle-bg: #f7e6e3;
+  /* Answered (green) + skipped (amber) tones for the answering navigator/states (08 §25.3) — matched to
+     the app tokens so the form looks identical in-app and on the relay. Subtle backgrounds are derived
+     via color-mix in the answering CSS, so only the base tones are needed here. */
+  --color-success: #5e8c6a;
+  --color-warning: #c28a3e;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -72,6 +77,8 @@
 
     --color-danger: #e08c7f;
     --color-danger-subtle-bg: #3a2a27;
+    --color-success: #8fb89a;
+    --color-warning: #e0b36b;
   }
 }
 

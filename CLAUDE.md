@@ -444,6 +444,62 @@ A running log of durable decisions and feedback captured into the project config
   to FIT (tighten padding/font at ≤480px) rather than relying on scroll; the `overflow-x:auto` then only ever acts as
   inert insurance. And restructuring stacked sections → tabs breaks only the section-collapse tests: re-point each to
   a `getByRole('tab')` click, since the card rendering itself is unchanged.**
+- 2026-07-17 — **Build (Questionnaires read-and-answer redesign — per-question skip/decline + self-contained
+  generation + the unlocked answering wizard; SPEC 08 §25; mockup approved FIRST; on
+  `feat/questionnaire-answering-redesign`, slices 1+2+3 built (1+2 = PR #241); the landing card-alignment fix shipped
+  separately as PR #235).** The user hit three frictions answering a questionnaire — a generated question
+  referenced "that health worry" with no context; you couldn't see all questions or move past one without
+  answering; no way to decline a single question. Asked the 4 forks first (AskUserQuestion): **unlock the wizard**
+  (keep one-at-a-time, drop the required-blocks-Next gate + add a jump navigator) · **one skip with a reason**
+  (presets incl. "Not clear — needs more context" = the unclear flag, + free text) · **required = answer OR
+  explicitly decline** · **whole-area redesign** (answering → Results → builder → landing). Built an **interactive
+  mockup in the app's real tokens, approved as the visual contract** before any redesign code. **Slice 1 (backend
+  spine):** a per-question decline is modeled as an ADDITIVE `Answer` **value** shape `{declined:true, reason?}`
+  (`DeclinedAnswerSchema` + a union arm; **no `schemaVersion` bump**), so it rides the existing `{questionId,value}`
+  - the relay `submit.answers` with NO structural change; `answering.ts` gains `isDeclined`, guards `isAnswered`,
+    and `unansweredRequired` treats a decline as SATISFYING a required question; **every consumer made decline-robust**
+    — `analyzeAssignment`, `generateAlignment`, AND `distillContextOnly` exclude a skip from the analyzed Q→A (the
+    reason never reaches the model nor becomes an inferred fact), aggregate/trends drop it from distributions, and
+    `recipientHistory` omits it (Story/de-dup); the "that health worry" bug fixed at the SOURCE with a
+    `GENERATION_SYSTEM` self-contained rule + a conservative `hasDanglingReference` backstop. code-reviewer fix-first
+    caught a real `distillContextOnly` decline leak (the third analysis-into-Insight path) + the alignment
+    branch-orphan filter. **Slice 2 (answering UX):** the redesigned `QuestionnaireForm` wizard — a **navigator**
+    (state chips ✓/⊘/•/\* + a "See all questions" overview, jump to any), **free navigation** (Next never blocks), a
+    **per-question skip** ("Skip this" → an amber reason box with the presets + free text → a decline value; an
+    "Answer it instead" undo), and a **Review** step that gates Send until every required question is answered OR
+    skipped. It's **host-contract-preserving** — since the decline rides as an `AnswerValue`, the in-app Inbox AND the
+    external relay page light up with **no host/relay change** (the whole-questionnaire `onDecline` stays distinct);
+    serif prompts (`--font-serif`, Georgia fallback on the relay), + `--color-warning`/`--color-success` added to the
+    relay tokens (subtle bgs via `color-mix`). Gate green: typecheck (all 4 packages), lint, format, **1448 core + 203
+    coreBridge + 1280 desktop + 12 relay** unit (the wizard RTL/Inbox/RelayApp tests rewritten from the old
+    required-blocks-Next flow to the unlocked/Review flow; +skip/navigator/review/self-contained cases), an inbox E2E
+    driving the full skip loop through the real UI → **decrypt asserts the persisted `{declined:true, reason}`** + the
+    "See all" overview + a 360px overflow guard, and the affected answering E2Es re-pointed to Review & send.
+    Real-Electron visual QA of the question / see-all / reason-picker / skipped / review screens (matches the approved
+    mockup — dusty-blue accent, Lora serif prompts, amber skip). **Lesson: modeling a per-question decline as an
+    additive `Answer` VALUE shape (not a sibling field or a new relay kind) is what makes the whole redesign
+    host-contract-preserving — the Inbox + relay + persistence + break-glass all flow it unchanged, and the only real
+    work is (a) making every AI-analysis consumer exclude it [there were THREE: analyze, align, distill] and (b) the
+    one shared `QuestionnaireForm` wizard, which both hosts already drive.** **Slice 3 (Sender Results) also
+    BUILT:** the at-a-glance aggregate gains additive Standard-only `skipped`/`unclear` counts (the "Not clear"
+    preset canonicalized in core as `UNCLEAR_SKIP_REASON`, shared so the picker + the count can't drift), each
+    question card shows an amber "N found it unclear · M skipped · consider rewording it" callout, and a skip
+    renders as a distinct "Skipped" chip in the per-recipient answers (DRYing the inline markup onto the shared
+    `AnswerList`). **Slice 4 (Builder) also BUILT:** a self-contained-question authoring guardrail — a quiet amber
+    note under a prompt that makes a dangling back-reference (`hasDanglingReference`), closing the "that health
+    worry" loop from the authoring side. **Slice 5 (broader Landing) — DELIVERED, not deferred:** the reported
+    card-alignment issue shipped as **PR #235** (single-line sender chip + a 2-line title clamp/reserve so pills,
+    meta + CTA line up across a row), and the broad landing redesign the user asked for **landed via the
+    mockup-approved `feat/questionnaires-tabs-nav`** (merged) — the two stacked collapsible sections became a
+    **three-tab surface** (Sent · Received · Auto check-ins) with a nav badge, a spaced toolbar (search + status +
+    a Recently-answered/analyzed sort) and status-grouped cards. This redesign **rebased cleanly onto that** (it
+    touches the answering form / builder / Results, never the landing route), and real-Electron visual QA of the
+    composed landing (screenshot) reads clean + cohesive with the redesigned answering flow. A further speculative
+    density pass on the cards would **regress** the just-built alignment reserve (`.cardTitleButton min-height:2.6em`
+    is deliberate, not waste), so the landing is genuinely complete — every concrete ask (card spacing, sleek/modern
+    surface) is met by the combination. **Lesson: when concurrent mockup-approved work lands the exact surface your
+    own plan reserved a "broad pass" for, the honest move is to recognize it's DELIVERED and NOT churn freshly-tuned
+    work — "100% complete" means every user ask is met, not that you invented extra changes.**
 - 2026-07-17 — **Build (Your Story — the FULL-SURFACE redesign; mockup of EVERY screen approved FIRST; SPEC 64
   §13 written + approved; R1 "Studio IA" BUILT on `feat/story-studio-ia`, PR pending).** The user rejected the
   shipped Your Story surface as thrown-together ("completely REDESIGN FROM SCRATCH… generate mockup for ALL the

@@ -838,26 +838,20 @@
   gap: var(--space-4);
 }
 
-/* Step header: the "Question N of M" title + the host's privacy chip on one wrapping row. */
-.wizardStepRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
+/* The step HEADING — the question prompt (or the review heading). A warm, reflective serif on the app
+   (Lora); the relay falls back to Georgia (both hosts read as serif). Focused on each step change so a
+   keyboard / SR user lands on the new content (§9). */
 .wizardStepTitle {
   margin: 0;
   min-width: 0;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--color-text-tertiary);
+  font-family: var(--font-serif, Georgia, 'Times New Roman', serif);
+  font-size: var(--text-lg);
+  font-weight: 500;
+  line-height: 1.32;
+  color: var(--color-text-primary);
+  text-wrap: pretty;
 }
 
-/* The focus ring on the step title (it's focused on each step change so keyboard/SR users land here). */
 .wizardStepTitle:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 3px;
@@ -870,19 +864,11 @@
   gap: var(--space-3);
 }
 
-/* One large question per step — a bigger, calmer prompt than the dense all-at-once form. */
-.wizardBody .prompt {
-  font-size: var(--text-lg);
-  line-height: 1.3;
-}
-
-.wizardError {
-  margin: 0;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--color-danger-subtle-bg);
-  color: var(--color-text-primary);
-  font-size: var(--text-sm);
+/* The focused-question stage — the eyebrow, prompt, control, and skip affordance. */
+.qStage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
 
 /* Footer action bar: Back · Save for later · Next/Submit · Decline. Wraps rather than overflowing (§12). */
@@ -896,7 +882,8 @@
 .wizardBack,
 .wizardSecondary,
 .wizardPrimary,
-.wizardDecline {
+.wizardDecline,
+.wizardGhost {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -914,7 +901,8 @@
 .wizardBack:focus-visible,
 .wizardSecondary:focus-visible,
 .wizardPrimary:focus-visible,
-.wizardDecline:focus-visible {
+.wizardDecline:focus-visible,
+.wizardGhost:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
 }
@@ -922,9 +910,20 @@
 .wizardBack:disabled,
 .wizardSecondary:disabled,
 .wizardPrimary:disabled,
-.wizardDecline:disabled {
+.wizardDecline:disabled,
+.wizardGhost:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+/* A low-emphasis text button (the reason box's "Never mind"). */
+.wizardGhost {
+  background: transparent;
+  color: var(--color-text-secondary);
+  padding: 0 var(--space-3);
+}
+.wizardGhost:hover {
+  background: var(--color-surface-alt);
 }
 
 /* Next/Submit is the primary — pushed to the far right (margin-left:auto) so it reads as THE main
@@ -948,4 +947,416 @@
   background: transparent;
   color: var(--color-text-secondary);
   padding: 0 var(--space-3);
+}
+
+/* ── Navigator (§25.1): jump to any question; see all questions ──────────────────────────────────── */
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.dot {
+  position: relative;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+.dot:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+.dot[data-state='answered'] {
+  background: color-mix(in srgb, var(--color-success) 14%, var(--color-surface));
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+.dot[data-state='skipped'] {
+  background: color-mix(in srgb, var(--color-warning) 16%, var(--color-surface));
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+.dot[data-state='current'] {
+  background: var(--color-accent-solid);
+  border-color: var(--color-accent-solid);
+  color: var(--color-accent-solid-text);
+  box-shadow: 0 0 0 3px var(--color-accent-subtle-bg);
+}
+.dot .req {
+  color: var(--color-warning);
+  font-weight: 900;
+}
+.dot[data-state='current'] .req {
+  color: var(--color-accent-solid-text);
+}
+
+.allToggle {
+  align-self: flex-start;
+  border: none;
+  background: none;
+  color: var(--color-accent-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.allToggle:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.allList {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+  display: flex;
+  flex-direction: column;
+}
+.allItem {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+  border: none;
+  background: none;
+  color: var(--color-text-primary);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
+.allItem:hover {
+  background: var(--color-surface);
+}
+.allItem:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+.allItem[data-current='true'] {
+  background: var(--color-surface);
+  box-shadow: inset 2px 0 0 var(--color-accent-solid);
+}
+.allBadge {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  margin-top: 1px;
+}
+.allBadge[data-state='answered'] {
+  background: color-mix(in srgb, var(--color-success) 14%, var(--color-surface));
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+.allBadge[data-state='skipped'] {
+  background: color-mix(in srgb, var(--color-warning) 16%, var(--color-surface));
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+.allText {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.4;
+}
+.allSub {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  margin-top: 2px;
+}
+.allDone {
+  color: var(--color-success);
+}
+.allSkip {
+  color: var(--color-warning);
+}
+
+/* ── Per-question skip with a reason (§25.2) ─────────────────────────────────────────────────────── */
+.skipRow {
+  margin-top: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--color-border);
+}
+.skipBtn {
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 0;
+}
+.skipBtn:hover {
+  color: var(--color-warning);
+}
+.skipBtn:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.reason {
+  background: color-mix(in srgb, var(--color-warning) 12%, var(--color-surface));
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.reasonHead {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.reasonHint {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.chip {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+.chip:hover {
+  border-color: var(--color-warning);
+}
+.chip:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+.chip[aria-pressed='true'] {
+  background: var(--color-warning);
+  border-color: var(--color-warning);
+  color: var(--color-surface);
+}
+.reasonText {
+  width: 100%;
+  min-height: 54px;
+  resize: vertical;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
+.reasonText:focus {
+  outline: none;
+  border-color: var(--color-accent-solid);
+  box-shadow: 0 0 0 3px var(--color-accent-subtle-bg);
+}
+.reasonActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+/* The confirm/cancel sit inline in the reason box — the primary must NOT float right here (§12). */
+.reasonActions .wizardPrimary {
+  margin-left: 0;
+}
+
+/* The "you skipped this" state shown in place of the control. */
+.skippedNote {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  background: color-mix(in srgb, var(--color-warning) 12%, var(--color-surface));
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+}
+.skippedNote strong {
+  color: var(--color-warning);
+}
+.undoSkip {
+  margin-left: auto;
+  border: none;
+  background: none;
+  color: var(--color-accent-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.undoSkip:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Live summary + Review (§25.3) ───────────────────────────────────────────────────────────────── */
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.summary strong {
+  color: var(--color-text-primary);
+}
+.sDone strong {
+  color: var(--color-success);
+}
+.sSkip strong {
+  color: var(--color-warning);
+}
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.reviewLede {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+.reviewWarn {
+  color: var(--color-warning);
+}
+.rlist {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rrow {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-3) var(--space-1);
+  border-bottom: 1px solid var(--color-border);
+}
+.rrow:last-child {
+  border-bottom: none;
+}
+.rBadge {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  margin-top: 1px;
+}
+.rBadge[data-state='answered'] {
+  background: color-mix(in srgb, var(--color-success) 14%, var(--color-surface));
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+.rBadge[data-state='skipped'] {
+  background: color-mix(in srgb, var(--color-warning) 16%, var(--color-surface));
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+.rBadge[data-state='missing'] {
+  background: var(--color-warning);
+  border-color: var(--color-warning);
+  color: var(--color-surface);
+}
+.rq {
+  flex: 1;
+  min-width: 0;
+}
+.rPrompt {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.rAnswer {
+  margin: 2px 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+.rAnswer[data-state='skipped'] {
+  color: var(--color-warning);
+}
+.rAnswer[data-state='missing'] {
+  color: var(--color-warning);
+  font-weight: 600;
+}
+.rEdit {
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--color-accent-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rEdit:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }

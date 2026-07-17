@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Copy, ImagePlus, Link2, Plus, Send, Sparkles, Trash2 } from 'lucide-react';
 import {
   ALLOWED_IMAGE_MIME,
+  hasDanglingReference,
   MAX_IMAGE_BYTES,
   validateQuestionnaire,
 } from '@selfos/core/questionnaires';
@@ -1239,6 +1240,18 @@ export function QuestionnaireBuilder({
                           {aiErrors[d.id]}
                         </Text>
                       ) : null}
+                    </div>
+                  ) : null}
+
+                  {/* Self-contained guardrail (08 §25.4): warn when a prompt refers back to context the
+                      recipient can't see — they only ever see this question's text. */}
+                  {hasDanglingReference(d.prompt) ? (
+                    <div className={styles.selfContainedWarn} role="note">
+                      <Text size="xs" tone="secondary">
+                        This looks like it refers to something the recipient can’t see (“…you
+                        mentioned”, “your earlier answer”). They only see this question — name what
+                        you mean plainly so it stands on its own.
+                      </Text>
                     </div>
                   ) : null}
 

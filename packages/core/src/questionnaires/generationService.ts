@@ -32,6 +32,7 @@ import { runClaude, type AiDeps } from './aiCall';
 import { gatherGenerationContext, type GenerationContextRequest } from './contextProviders';
 import { readCustomIntimacyTopics } from './customTypeService';
 import { isNearDuplicate } from './dedup';
+import { hasDanglingReference } from './selfContained';
 import { semanticDedupFilter } from './semanticDedup';
 
 /**
@@ -213,6 +214,10 @@ export async function generateQuestions(
   for (const raw of set.questions) {
     const q = toQuestion(raw);
     if (!q) continue;
+    // Self-contained backstop (08 §25.4): drop a question that makes an unambiguous back-reference to
+    // context the recipient can't see ("…you mentioned", "your earlier answer"). The prompt rule is the
+    // primary fix; this is a conservative deterministic guard (no false positives on legit questions).
+    if (hasDanglingReference(q.prompt)) continue;
     if (isNearDuplicate(q.prompt, request.existingPrompts)) continue;
     if (isNearDuplicate(q.prompt, askedPrompts)) continue;
     if (isNearDuplicate(q.prompt, keptPrompts)) continue;

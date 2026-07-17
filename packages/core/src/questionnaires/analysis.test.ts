@@ -102,6 +102,60 @@ describe('analyzeAssignment', () => {
     expect(all.find((i) => i.id === result.insight?.id)?.approved).toBe(false);
   });
 
+  it('EXCLUDES a per-question decline from the analyzed answers (a skip is not signal — §25.5)', async () => {
+    const fs = memFileSystem();
+    const q = await saveQuestionnaire(fs, key, {
+      title: 'Check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      questions: [
+        { id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true },
+        { id: 'q2', type: 'shortText', prompt: 'What secretly worries you most?', required: false },
+      ],
+    });
+    const a = await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'p1',
+      recipient: { kind: 'person', personId: 'p2' },
+      channel: 'inApp',
+      privacy: 'standard',
+      senderVisibleToRecipient: true,
+    });
+    await saveResponse(fs, key, {
+      id: 'r1',
+      schemaVersion: 1,
+      assignmentId: a.id,
+      answers: [
+        { questionId: 'q1', value: 'Pretty well.' },
+        // q2 was SKIPPED with a reason — it must never reach the model as an answer, nor its prompt.
+        { questionId: 'q2', value: { declined: true, reason: 'Prefer not to say' } },
+      ],
+      submittedAt: now.toISOString(),
+    });
+
+    // Capture the exact user message sent to Claude.
+    const seen: string[] = [];
+    const client: ClaudeClient = {
+      send: () => Promise.resolve(ANALYSIS),
+      stream: (options, onDelta) => {
+        seen.push(JSON.stringify(options));
+        onDelta(ANALYSIS);
+        return Promise.resolve({
+          text: ANALYSIS,
+          usage: { inputTokens: 10, outputTokens: 20, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await analyzeAssignment(deps(fs, client), { assignmentId: a.id });
+    expect(result.ok).toBe(true);
+    const prompt = seen.join('\n');
+    expect(prompt).toContain('How are we doing?'); // the answered question IS analyzed
+    expect(prompt).toContain('Pretty well.');
+    expect(prompt).not.toContain('What secretly worries you most?'); // the skipped question is NOT
+    expect(prompt).not.toContain('Prefer not to say'); // and the skip reason never leaks to the model
+    expect(prompt).not.toContain('Skipped');
+  });
+
   it('stamps NO about-person for a self check-in (recipient === sender) — it stays "about you"', async () => {
     const fs = memFileSystem();
     const q = await saveQuestionnaire(fs, key, {

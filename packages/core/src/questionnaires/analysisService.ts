@@ -7,7 +7,7 @@ import {
 } from '../ai/jsonSalvage';
 import { uuid } from '../id';
 import { listInsightsForPerson, normalizeCategories, saveInsight } from '../insights';
-import { visibleQuestions, type AnswerMap, type AnswerValue } from './answering';
+import { isDeclined, visibleQuestions, type AnswerMap, type AnswerValue } from './answering';
 import type { Insight, QuestionnaireAnalyzeResult, ResponseSet } from '../schemas';
 import { ANALYSIS_SYSTEM, buildAnalysisUserMessage } from './aiPrompts';
 import { aboutFromRecipient } from './aboutResolver';
@@ -98,7 +98,13 @@ export async function analyzeAssignment(
     response.answers.map((a) => [a.questionId, a.value as AnswerValue]),
   );
   const visibleIds = new Set(visibleQuestions(snapshot.questions, answerMap).map((q) => q.id));
-  const liveAnswers = response.answers.filter((a) => visibleIds.has(a.questionId));
+  // A per-question decline (§25.5) carries no answer content and is NOT signal about the person — an
+  // "unclear" is feedback about the question, a "prefer not to say" is a boundary. Exclude declines from
+  // the analyzed Q→A (like a blank) so a skip never becomes an inferred fact or corrupts metrics; the skip
+  // reasons feed the sender/generation loop, not the person's Insight.
+  const liveAnswers = response.answers.filter(
+    (a) => visibleIds.has(a.questionId) && !isDeclined(a.value as AnswerValue),
+  );
   const qa = liveAnswers.flatMap((a) => {
     const q = byId.get(a.questionId);
     return q ? [{ prompt: q.prompt, answer: formatAnswer(a.value) }] : [];

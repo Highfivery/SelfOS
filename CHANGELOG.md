@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.0](https://github.com/Highfivery/SelfOS/compare/v0.37.0...v0.38.0) (2026-07-18)
+
+
+### Features
+
+* **memory:** Questionnaires + Memory review redesign — queue, per-item cards, humanized trends (65) ([2d16b23](https://github.com/Highfivery/SelfOS/commit/2d16b2324091d630fbe10e214630f7dd6c0b6e56))
+
 ## [0.37.0](https://github.com/Highfivery/SelfOS/compare/v0.36.0...v0.37.0) (2026-07-17)
 
 

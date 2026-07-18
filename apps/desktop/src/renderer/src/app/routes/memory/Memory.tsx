@@ -374,20 +374,19 @@ export function Memory(): JSX.Element {
                 />
               ) : null}
 
-              {overview.total > 0 || recipientGroups.length > 0 ? (
-                <div className={styles.duo}>
-                  {activePersonId ? (
-                    <TrendsCard insights={insights} personId={activePersonId} />
-                  ) : null}
-                  {recipientGroups.length > 0 ? (
-                    <ResponsesBand
-                      groups={recipientGroups}
-                      openKeys={openResponses}
-                      onOpenChange={(key, open) => toggle(setOpenResponses, key, open)}
-                      renderCard={renderInsightCard}
-                    />
-                  ) : null}
-                </div>
+              {activePersonId && overview.total > 0 ? (
+                <TrendsCard insights={insights} personId={activePersonId} />
+              ) : null}
+
+              {recipientGroups.length > 0 ? (
+                <ResponsesBand
+                  groups={recipientGroups}
+                  openKeys={openResponses}
+                  onOpenChange={(key, open) => toggle(setOpenResponses, key, open)}
+                  renderCards={(items) => (
+                    <div className={styles.cardGrid}>{items.map(renderInsightCard)}</div>
+                  )}
+                />
               ) : null}
 
               {sections.length > 0 ? (

@@ -47,11 +47,69 @@
 }
 
 /* The insight summary reads as prose (a long portrait shouldn't be a wall of bold); the facts below are the
-   labeled list (34 §3.5 hierarchy). */
+   labeled list (34 §3.5 hierarchy). Summary-first: it leads the read view (65 §3.4). */
 .insightSummary {
   font-weight: 400;
   line-height: 1.55;
   margin-top: 2px;
+}
+
+/* A long summary clamps to ~4 lines until "Read more" (65 §3.4). */
+.insightSummaryClamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.readMore {
+  margin-top: var(--space-1);
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-accent-text);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  cursor: pointer;
+}
+.readMore:hover {
+  text-decoration: underline;
+}
+
+/* Card footer — confidence (left) · date (right), below the facts (65 §3.4). */
+.cardFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
+}
+.cardFootSpacer {
+  flex: 1 1 auto;
+}
+
+/* Read-view per-fact sharing chip (65 §3.4): tap to cycle Just me / Partner / Close family / Everyone. */
+.sharePresetChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  padding: 2px var(--space-2);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sharePresetChip:hover {
+  border-color: var(--color-accent);
+}
+.sharePresetChip[data-private='true'] {
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
 }
 
 .factGroupIcon {
@@ -428,14 +486,17 @@
   border-top: 1px solid var(--color-border);
 }
 
-/* Insight cards flow into a responsive grid inside each life-area section, the review callout, and a
-   responses recipient (62 §grid). Ragged heights align to the top; a long portrait spans the full row so
-   it never creates a lopsided column. Collapses to one column on a phone. */
+/* Insight cards flow into a 2-column grid inside each life-area section, the review callout, and a
+   responses recipient (65 §3.4). A long portrait spans the full row so it never creates a lopsided column.
+   The `.list` variant is a scannable single column (the List toggle); both collapse to one column on a phone. */
 .cardGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: var(--space-4);
   align-items: start;
+}
+.cardGrid.list {
+  grid-template-columns: 1fr;
 }
 .cardGrid > * {
   min-width: 0;
@@ -447,6 +508,17 @@
   .cardGrid {
     grid-template-columns: 1fr;
   }
+}
+
+/* The "By life area" header row: title + the 2-column / List layout toggle (65 §3.4). */
+.sectionsHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.sectionsHead .sectionsTitle {
+  flex: 1 1 auto;
 }
 .sectionIcon {
   flex: none;

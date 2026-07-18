@@ -3677,7 +3677,16 @@ test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted
       return card?.parentElement ? getComputedStyle(card.parentElement).display : '';
     });
     expect(gridDisplay).toBe('grid');
-    await w.getByRole('button', { name: /This isn.t right about me: This one is wrong/ }).click();
+    // Flagging a fact "not right about me" lives in Edit mode now (65 §3.4); it persists + the "marked not
+    // right" tag shows back in the read view.
+    const healthCard = w.locator('#insight-ins-health');
+    await healthCard.getByRole('button', { name: 'Edit this insight' }).click();
+    await healthCard
+      .getByRole('button', { name: /This isn.t right about me: This one is wrong/ })
+      .click();
+    // Flagging persists immediately; leaving Edit mode (Cancel keeps the persisted flag, only drops unsaved
+    // text) returns to the read view where the "marked not right" tag shows.
+    await healthCard.getByRole('button', { name: 'Cancel' }).click();
     await expect(w.getByText('marked not right')).toBeVisible();
     await expect
       .poll(async () => {
@@ -3809,20 +3818,26 @@ test('memory overview: portrait hero, drill in to type-scope a fact to partner (
         return Math.max(max, main ? main.scrollWidth - main.clientWidth : 0);
       });
 
-    // Expand the session section (Emotions & patterns); the per-fact control is the relationship-scope
-    // picker chip (the broadcast ShareToggle is gone). Type-scope "Enjoys rock climbing" to Partner.
+    // Expand the session section; the read-view per-fact sharing is a tap-to-cycle chip (65 §3.4) — from
+    // "Just me" one tap sets Partner, scoping "Enjoys rock climbing" to the partner.
     await w.getByRole('button', { name: /^Emotions & patterns/ }).click();
-    await w.getByRole('button', { name: /Enjoys rock climbing: private/i }).click();
-    await w.getByRole('checkbox', { name: 'Partner' }).click();
-    await w.keyboard.press('Escape'); // close the picker popover so it can't overlay the next control
+    await expect(w.getByText('Enjoys rock climbing')).toBeVisible();
+    await w
+      .getByRole('button', { name: /Sharing for "Enjoys rock climbing": Just me/ })
+      .click({ timeout: 5000 });
     await expect
       .poll(async () => (await buildContext(fs, key, 'partner-1')).includes('Enjoys rock climbing'))
       .toBe(true);
 
-    // Mark the wrong AI-inferred fact "not right about me" → it drops from the owner's own context.
-    await w
+    // Mark the wrong AI-inferred fact "not right about me" (in Edit mode, 65 §3.4) → it drops from the
+    // owner's own context. (Both facts live in the ins-sess card.)
+    const wrongCard = w.locator('#insight-ins-sess');
+    await wrongCard.getByRole('button', { name: 'Edit this insight' }).click();
+    await wrongCard
       .getByRole('button', { name: /This isn.t right about me: WRONGLY-INFERRED-CLAIM/ })
       .click();
+    // Leaving Edit mode (Cancel keeps the persisted flag) returns to the read view where the tag shows.
+    await wrongCard.getByRole('button', { name: 'Cancel' }).click();
     await expect(w.getByText('marked not right')).toBeVisible();
     await expect
       .poll(async () => (await buildContext(fs, key, 'owner-1')).includes('WRONGLY-INFERRED-CLAIM'))
@@ -3983,10 +3998,15 @@ test('memory cleanup: flagging a previously-shared fact retracts it from a relat
     await w.getByRole('button', { name: /^Other/ }).click();
     await expect(w.getByText('PLANNING-A-SURPRISE-PARTY')).toBeVisible();
 
-    // Mark it "not right about me" → the share is retracted (Memory shows "sharing withdrawn").
-    await w
+    // Mark it "not right about me" (in Edit mode, 65 §3.4) → the share is retracted (Memory shows
+    // "sharing withdrawn" back in the read view).
+    const partyCard = w.locator('#insight-ins-share');
+    await partyCard.getByRole('button', { name: 'Edit this insight' }).click();
+    await partyCard
       .getByRole('button', { name: /This isn.t right about me: PLANNING-A-SURPRISE-PARTY/ })
       .click();
+    // Leaving Edit mode (Cancel keeps the persisted flag) returns to the read view.
+    await partyCard.getByRole('button', { name: 'Cancel' }).click();
     await expect(w.getByText('sharing withdrawn')).toBeVisible();
 
     // Decrypt-level proof: Casey's context no longer carries the corrected claim.
@@ -11011,10 +11031,10 @@ test('memory redesign (62): sections collapsed (sensitive too), edit a fact inli
     await expect(w.getByText('Likes early starts')).toHaveCount(0);
     await expect(w.getByText('A private detail')).toHaveCount(0);
 
-    // Expand a section → the insight card renders inline; edit ONE fact in place → Save.
+    // Expand a section → the insight card renders inline; edit a fact via the header pencil → Edit mode → Save.
     await emotions.click();
     await expect(w.getByText('Likes early starts')).toBeVisible();
-    await w.getByRole('button', { name: 'Edit: Likes early starts' }).click();
+    await w.getByRole('button', { name: 'Edit this insight' }).click();
     const field = w.getByRole('textbox', { name: 'Edit fact: Likes early starts' });
     await field.fill('Likes slow mornings');
     await w.getByRole('button', { name: 'Save' }).click();

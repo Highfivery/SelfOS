@@ -25,7 +25,9 @@ export type SharingCategory =
  * Close (blood + step) family — treated like parent/child/sibling for non-sensitive defaults (family-like
  * defaults, resolved 2026-07-17). Gender-neutral structural types; never included in intimacy/trauma.
  */
-const CLOSE_FAMILY: RelationshipType[] = [
+/** The "close family" relationship types (blood + step) — reused by the Memory read-view share-preset chip
+ * (65 §3.4) as the "Close family" cycle stop, so it stays in lockstep with the intake sharing presets. */
+export const CLOSE_FAMILY: RelationshipType[] = [
   'parent',
   'child',
   'stepParent',

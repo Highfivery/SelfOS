@@ -48,6 +48,7 @@ function renderMemory(): void {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   clearMockBridge();
   useInsightStore.setState({
     insights: [],
@@ -136,7 +137,7 @@ describe('Memory (flattened, edit-in-place — spec 62)', () => {
     expect(screen.getByText('A private detail')).toBeInTheDocument();
   });
 
-  it('edits a single fact INLINE (the per-line pencil) and saves it', async () => {
+  it('edits a fact via the "Edit this insight" pencil → Edit mode → Save (65 §3.4)', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     const update = vi.fn((input: unknown) => Promise.resolve(input as Insight));
     installMockBridge({
@@ -153,8 +154,8 @@ describe('Memory (flattened, edit-in-place — spec 62)', () => {
     });
     renderMemory();
     await userEvent.click(await screen.findByRole('button', { name: /Emotions & patterns/ }));
-    // The per-line pencil opens an inline editor for JUST that fact.
-    await userEvent.click(screen.getByRole('button', { name: 'Edit: Likes early starts' }));
+    // Editing a fact's text lives in Edit mode (opened by the single header pencil), not the read view.
+    await userEvent.click(screen.getByRole('button', { name: 'Edit this insight' }));
     const field = screen.getByRole('textbox', { name: 'Edit fact: Likes early starts' });
     await userEvent.clear(field);
     await userEvent.type(field, 'Likes slow mornings');
@@ -165,7 +166,7 @@ describe('Memory (flattened, edit-in-place — spec 62)', () => {
     expect(facts.find((f) => f.id === 'f1')?.text).toBe('Likes slow mornings');
   });
 
-  it('flags an AI-inferred fact "not right about me" inline', async () => {
+  it('flags an AI-inferred fact "not right about me" in Edit mode (65 §3.4)', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     const flag = vi.fn(() => Promise.resolve(null));
     installMockBridge({
@@ -182,10 +183,81 @@ describe('Memory (flattened, edit-in-place — spec 62)', () => {
     });
     renderMemory();
     await userEvent.click(await screen.findByRole('button', { name: /Emotions & patterns/ }));
+    // The read view is scannable; flagging lives in Edit mode.
+    await userEvent.click(screen.getByRole('button', { name: 'Edit this insight' }));
     await userEvent.click(
       screen.getByRole('button', { name: /This isn’t right about me: Dislikes mornings/ }),
     );
     expect(flag).toHaveBeenCalledWith({ insightId: 'i1', factId: 'f1', flagged: true });
+  });
+
+  it('read view: a fact carries a tap-to-change sharing chip (Partner → Just me) (65 §3.4)', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    // The read-view chip writes via setFactScope → insightsUpdate (merge-by-id).
+    const update = vi.fn((input: unknown) => Promise.resolve(input as Insight));
+    installMockBridge({
+      insightsList: () =>
+        Promise.resolve([
+          insight({
+            id: 'i1',
+            summary: 'Values steady routines',
+            categories: ['Emotions & patterns'],
+            facts: [
+              {
+                id: 'f1',
+                text: 'Keeps a morning ritual',
+                shareable: false,
+                shareableTypes: ['partner'],
+              },
+            ],
+          }),
+        ]),
+      insightsUpdate: update,
+    });
+    renderMemory();
+    await userEvent.click(await screen.findByRole('button', { name: /Emotions & patterns/ }));
+    // The read-view chip shows the current preset and taps to cycle (Partner → Close family here).
+    const chip = screen.getByRole('button', { name: /Sharing for .*: Partner/ });
+    await userEvent.click(chip);
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it('a heavy card clamps its summary + collapses its facts; a List toggle is offered (65 §3.4)', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    // "Read more" appears only when the clamped summary MEASURABLY overflows; jsdom has no layout, so
+    // mock the geometry at the prototype so the clamped element reports a taller scrollHeight (65 §7).
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(400);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(80);
+    const longSummary =
+      'You process stress by planning your way out of it, and you feel calmest once there is a concrete next ' +
+      'step written down rather than only turning it over in your head, which is why lists and plans settle you ' +
+      'far more reliably than reassurance does, especially in the evenings after a demanding, unpredictable day.';
+    installMockBridge({
+      insightsList: () =>
+        Promise.resolve([
+          insight({
+            id: 'i1',
+            summary: longSummary,
+            categories: ['Emotions & patterns'],
+            facts: [
+              { id: 'f1', text: 'Makes a list when overwhelmed', shareable: false },
+              { id: 'f2', text: 'Calmer with a concrete next step', shareable: false },
+              { id: 'f3', text: 'Rumination eases once it is written down', shareable: false },
+              { id: 'f4', text: 'Prefers to plan the night before', shareable: false },
+              { id: 'f5', text: 'Dislikes open-ended ambiguity', shareable: false },
+            ],
+          }),
+        ]),
+    });
+    renderMemory();
+    // The layout toggle (2 columns / List) is offered on the page.
+    expect(await screen.findByRole('button', { name: 'List' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Emotions & patterns/ }));
+    // A long summary clamps with "Read more"; a heavy fact list collapses behind a disclosure.
+    expect(screen.getByRole('button', { name: 'Read more' })).toBeInTheDocument();
+    expect(screen.queryByText('Makes a list when overwhelmed')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /5 things SelfOS noted/ }));
+    expect(screen.getByText('Makes a list when overwhelmed')).toBeInTheDocument();
   });
 
   it('shows the portrait hero (narrative); its facts live in a section with the summary hidden', async () => {

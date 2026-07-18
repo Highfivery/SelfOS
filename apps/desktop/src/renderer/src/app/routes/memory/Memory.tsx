@@ -15,6 +15,7 @@ import {
   Card,
   Collapsible,
   Heading,
+  SegmentedControl,
   Stack,
   Text,
   TextInput,
@@ -84,6 +85,7 @@ export function Memory(): JSX.Element {
   const [openAreas, setOpenAreas] = useState<Set<string>>(new Set());
   const [openResponses, setOpenResponses] = useState<Set<string>>(new Set());
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [listView, setListView] = useState(false);
   const scrollTo = useRef<string | null>(null);
 
   useEffect(() => {
@@ -391,9 +393,20 @@ export function Memory(): JSX.Element {
 
               {sections.length > 0 ? (
                 <Stack gap={2}>
-                  <Heading level={3} className={styles.sectionsTitle}>
-                    By life area
-                  </Heading>
+                  <div className={styles.sectionsHead}>
+                    <Heading level={3} className={styles.sectionsTitle}>
+                      By life area
+                    </Heading>
+                    <SegmentedControl
+                      options={[
+                        { value: 'grid' as const, label: '2 columns' },
+                        { value: 'list' as const, label: 'List' },
+                      ]}
+                      value={listView ? 'list' : 'grid'}
+                      onChange={(v) => setListView(v === 'list')}
+                      aria-label="Insight card layout"
+                    />
+                  </div>
                   {sections.map((section) => (
                     <LifeAreaSection
                       key={section.area}
@@ -401,7 +414,7 @@ export function Memory(): JSX.Element {
                       open={openAreas.has(section.area)}
                       onOpenChange={(open) => toggle(setOpenAreas, section.area, open)}
                     >
-                      <div className={styles.cardGrid}>
+                      <div className={`${styles.cardGrid} ${listView ? styles.list : ''}`}>
                         {section.insights.map(renderInsightCard)}
                       </div>
                     </LifeAreaSection>

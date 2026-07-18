@@ -11,7 +11,8 @@ type QueueItem =
   | { kind: 'proposal'; id: string; proposal: MergeProposal };
 
 /**
- * The focused, one-at-a-time Memory review queue (65 §3.3) — inline on Memory (not a route, not a modal). Holds
+ * The focused, one-at-a-time Memory review queue (65 §3.3) — rendered on its own dedicated `/memory/review`
+ * screen (`MemoryReview.tsx`), not inline on the Memory page and not a modal. Holds
  * the active person's **draft insights** (newest-first) then the **merge/duplicate proposals** (39). Chrome: a
  * card-stack visual conveying how many remain, a "N of M" progress read (+ a thin bar), Prev/Next to move
  * without deciding (← / → keys), and auto-advance — resolving an item removes it from the store, so the array

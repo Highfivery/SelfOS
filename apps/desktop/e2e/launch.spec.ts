@@ -3652,18 +3652,19 @@ test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted
     await expect(w.getByRole('button', { name: /^Relationships/ })).toBeVisible();
     await expect(w.getByText(/How you.ve been/)).toBeVisible();
 
-    // The Memory nav badge counts the one draft awaiting review (62 §nav).
-    await expect(w.getByRole('link', { name: /Memory, 1 to review/ })).toBeVisible();
+    // The Memory nav count badge is its OWN deep-link to the dedicated review screen (65 §3.3).
+    await expect(w.getByRole('link', { name: /Review, 1 to review/ })).toBeVisible();
 
     // Search narrows to matching cards.
     await w.getByLabel('Search memory').fill('routine');
     await expect(w.getByText('Sleeps better with a wind-down routine')).toBeVisible();
     await w.getByLabel('Search memory').fill('');
 
-    // The draft opens in the one-at-a-time review queue (65 §3.3) — summary-first (read view), not an edit grid.
-    await w.getByRole('button', { name: 'Review now' }).click();
-    await expect(w.getByText('Might want to set firmer work boundaries')).toBeVisible();
-    await expect(w.getByText(/1 of 1 to review/)).toBeVisible();
+    // The draft review lives on its OWN dedicated screen now (65 §3.3) — the Memory page only carries the
+    // "Needs you" banner (no inline queue), so the draft summary + the "N of M" progress are NOT on this page.
+    await expect(w.getByRole('button', { name: 'Review now' })).toBeVisible();
+    await expect(w.getByText('Might want to set firmer work boundaries')).toHaveCount(0);
+    await expect(w.getByText(/of 1 to review/)).toHaveCount(0);
 
     // Expand the Health section → "source removed" + mark the inaccurate fact not right (persists encrypted).
     await w.getByRole('button', { name: /^Health & body/ }).click();
@@ -3938,7 +3939,7 @@ test('goals: a tracked goal shows on the Goals page with status; marking it Done
   }
 });
 
-test('memory review queue: the banner opens a one-at-a-time queue; widen a draft fact scope, Keep & save (decrypt) → all caught up (65 §3.3)', async () => {
+test('memory review queue: the badge deep-links to the DEDICATED review screen; widen a draft fact scope, Keep & save (decrypt) → all caught up (65 §3.3)', async () => {
   const { userData, vault } = await seedReadyVault();
   const fs = createNodeFileSystem(vault);
   const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
@@ -4005,10 +4006,32 @@ test('memory review queue: the banner opens a one-at-a-time queue; widen a draft
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Memory' }).click();
 
-    // The "needs you" banner opens the one-at-a-time queue (not an inline drafts grid).
-    await w.getByRole('button', { name: 'Review now' }).click();
+    // The Memory page carries a "Needs you" banner (the entry) — the review itself is its own screen (65 §3.3).
+    await expect(w.getByRole('button', { name: 'Review now' })).toBeVisible();
+    // The count badge deep-links straight to the dedicated review screen.
+    await w.getByRole('link', { name: /Review, 1 to review/ }).click();
+    await expect(w.getByRole('heading', { name: 'Review new insights' })).toBeVisible();
     await expect(w.getByText('Might be craving more downtime')).toBeVisible();
     await expect(w.getByText(/1 of 1 to review/)).toBeVisible();
+
+    // The dedicated review screen fits phone width with no horizontal overflow (§12).
+    await w.setViewportSize({ width: 360, height: 800 });
+    const reviewOverflow = await w.evaluate(() => {
+      let max = 0;
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        const style = getComputedStyle(el);
+        if (
+          (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+          el.scrollWidth - el.clientWidth > max
+        ) {
+          max = el.scrollWidth - el.clientWidth;
+        }
+      }
+      const main = document.querySelector('main');
+      return Math.max(max, main ? main.scrollWidth - main.clientWidth : 0);
+    });
+    expect(reviewOverflow).toBeLessThanOrEqual(1);
+    await w.setViewportSize({ width: 1280, height: 800 });
 
     // Widen the fact Partner → Close family (a LOCAL change, written only at Keep & save).
     await w

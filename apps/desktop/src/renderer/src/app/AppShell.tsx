@@ -359,21 +359,32 @@ export function AppShell(): JSX.Element {
               </NavLink>
             ) : null}
             {canViewMemory ? (
-              <NavLink
-                to="/memory"
-                className={navClass}
-                aria-label={memoryCount > 0 ? `Memory, ${memoryCount} to review` : 'Memory'}
-                title={tip('Memory')}
-                onClick={closeDrawer}
-              >
-                <Brain size={18} aria-hidden="true" />
-                <span className={styles.label}>Memory</span>
+              // The Memory entry always opens the dashboard; the COUNT badge is its own deep-link straight to
+              // the dedicated review screen (65 §3.3), so browsing Memory and reviewing stay distinct.
+              <div className={styles.navItemWrap}>
+                <NavLink
+                  to="/memory"
+                  className={navClass}
+                  aria-label="Memory"
+                  title={tip('Memory')}
+                  onClick={closeDrawer}
+                >
+                  <Brain size={18} aria-hidden="true" />
+                  <span className={styles.label}>Memory</span>
+                </NavLink>
                 {memoryCount > 0 ? (
-                  <span className={styles.navBadge} aria-hidden="true">
+                  <NavLink
+                    to="/memory/review"
+                    className={styles.navBadgeLink ?? ''}
+                    // `memoryCount` = drafts + merge proposals, so "to review" (not "new insights").
+                    aria-label={`Review, ${memoryCount} to review`}
+                    title="Review new insights"
+                    onClick={closeDrawer}
+                  >
                     {memoryCount}
-                  </span>
+                  </NavLink>
                 ) : null}
-              </NavLink>
+              </div>
             ) : null}
             {canViewMemory ? (
               <NavLink

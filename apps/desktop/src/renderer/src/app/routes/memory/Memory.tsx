@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Brain, MessageCircle, RefreshCw, Search, Sparkles } from 'lucide-react';
 import type { Insight, Relationship } from '@shared/schemas';
-import { ReviewQueue } from './ReviewQueue';
 import { availableRelationshipTypesFor } from '../../availableRelationshipTypes';
 import { useInsightStore } from '../../../stores/insightStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
@@ -83,7 +82,6 @@ export function Memory(): JSX.Element {
   const [relationships, setRelationships] = useState<Relationship[]>([]);
   const [openAreas, setOpenAreas] = useState<Set<string>>(new Set());
   const [openResponses, setOpenResponses] = useState<Set<string>>(new Set());
-  const [reviewOpen, setReviewOpen] = useState(false);
   const [listView, setListView] = useState(false);
   const scrollTo = useRef<string | null>(null);
 
@@ -98,7 +96,6 @@ export function Memory(): JSX.Element {
   useEffect(() => {
     setOpenAreas(new Set());
     setOpenResponses(new Set());
-    setReviewOpen(false);
     setQuery('');
   }, [activePersonId, location.key]);
 
@@ -106,18 +103,6 @@ export function Memory(): JSX.Element {
     () => availableRelationshipTypesFor(activePersonId, relationships),
     [activePersonId, relationships],
   );
-  // The active person's partner's name (partner↔partner is symmetric) — names the review-queue sharing note.
-  const partnerName = useMemo(() => {
-    if (!activePersonId) return undefined;
-    for (const edge of relationships) {
-      if (edge.type !== 'partner') continue;
-      if (edge.fromPersonId === activePersonId)
-        return people.find((p) => p.id === edge.toPersonId)?.displayName;
-      if (edge.toPersonId === activePersonId)
-        return people.find((p) => p.id === edge.fromPersonId)?.displayName;
-    }
-    return undefined;
-  }, [activePersonId, relationships, people]);
   const liveConversationIds = useMemo(
     () => new Set(conversations.map((c) => c.id)),
     [conversations],
@@ -296,8 +281,9 @@ export function Memory(): JSX.Element {
             />
           ) : null}
 
-          {/* "Needs you" banner — opens the one-at-a-time review queue (65 §3.2/§3.3), not an inline grid. */}
-          {reviewCount > 0 && !reviewOpen ? (
+          {/* "Needs you" banner — links to the DEDICATED review screen (65 §3.2/§3.3), a focused one-at-a-time
+              queue on its own route, so reviewing isn't mixed into the busy Memory page. */}
+          {reviewCount > 0 ? (
             <div className={styles.needsYou}>
               <Sparkles size={18} aria-hidden="true" className={styles.needsYouIcon} />
               <Text size="sm" className={styles.needsYouText}>
@@ -309,21 +295,10 @@ export function Memory(): JSX.Element {
                   ? `${proposals.length} possible ${proposals.length === 1 ? 'duplicate' : 'duplicates'}`
                   : ''}
               </Text>
-              <Button variant="primary" onClick={() => setReviewOpen(true)}>
+              <Button variant="primary" onClick={() => navigate('/memory/review')}>
                 Review now
               </Button>
             </div>
-          ) : null}
-
-          {reviewOpen ? (
-            <ReviewQueue
-              drafts={drafts}
-              proposals={proposals}
-              aboutNameFor={(insight) => responseAbout(insight)?.name}
-              onClose={() => setReviewOpen(false)}
-              {...(availableTypes ? { availableTypes } : {})}
-              {...(partnerName ? { partnerName } : {})}
-            />
           ) : null}
 
           <div className={styles.searchRow}>

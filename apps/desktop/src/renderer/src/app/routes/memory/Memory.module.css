@@ -5,6 +5,25 @@
   min-width: 0;
 }
 
+/* Back-to-Memory link on the dedicated review screen (65 §3.3). */
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.backLink:hover {
+  color: var(--color-accent-text);
+  text-decoration: underline;
+}
+
 /* --- Header search + refresh --- */
 .searchRow {
   display: flex;

@@ -7,6 +7,7 @@ import { Sessions } from './routes/sessions/Sessions';
 import { Questionnaires } from './routes/questionnaires/Questionnaires';
 import { Inbox } from './routes/inbox/Inbox';
 import { Memory } from './routes/memory/Memory';
+import { MemoryReview } from './routes/memory/MemoryReview';
 import { Goals } from './routes/goals/Goals';
 import { SharingAndRelationships } from './routes/sharing/SharingAndRelationships';
 import { Dreams } from './routes/dreams/Dreams';
@@ -42,6 +43,8 @@ const GUARDED_ROUTES: { path: string; capability: CapabilityKey; element: JSX.El
   { path: 'questionnaires', capability: 'questionnaires.create', element: <Questionnaires /> },
   { path: 'inbox', capability: 'questionnaires.answer', element: <Inbox /> },
   { path: 'memory', capability: 'memory.own', element: <Memory /> },
+  // The dedicated one-at-a-time review screen (65 §3.3) — its own focused route, not inline on Memory.
+  { path: 'memory/review', capability: 'memory.own', element: <MemoryReview /> },
   { path: 'goals', capability: 'memory.own', element: <Goals /> },
   { path: 'sharing', capability: 'memory.own', element: <SharingAndRelationships /> },
   { path: 'dreams', capability: 'dreams.own', element: <Dreams /> },

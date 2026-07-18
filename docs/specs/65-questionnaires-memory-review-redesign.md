@@ -152,9 +152,11 @@ order:
 1. **Header** — "Memory" + "What SelfOS understands about you — edit anything that isn't right." + the "Memory last
    tidied `<rel date>`" line (unchanged).
 2. **"Needs you" banner** (only when drafts/proposals exist) — an accent callout ("2 new insights to review · 1
-   possible duplicate") whose primary action **opens the review queue** (§3.3). This **replaces** the current
-   `Collapsible` callout that expands inline into a drafts grid (`Memory.tsx`, the `reviewOpen` region). The count is
-   `drafts.length + proposals.length` (the same `memoryReviewCount`, `navCounts.ts`, that drives the sidebar badge).
+   possible duplicate") whose primary action **navigates to the dedicated review screen** (§3.3, `/memory/review`).
+   This **replaces** the current `Collapsible` callout that expanded inline into a drafts grid (`Memory.tsx`, the old
+   `reviewOpen` region — now removed; `Memory.tsx` no longer renders the queue). The count is
+   `drafts.length + proposals.length` (the same `memoryReviewCount`, `navCounts.ts`, that drives the sidebar badge —
+   the badge is itself a deep-link to `/memory/review`).
 3. **Stats strip** — the compact metric row (things known · confidence · areas · since tidied); self-hides its
    zero state for a brand-new person. Unchanged (`StatsStrip`).
 4. **Search** — full-width; a query filters to matching insights as a flat card grid (hero/trends/responses/sections
@@ -174,8 +176,18 @@ grid), and **trends + responses leave the `.duo` grid** and stack full-width (ea
 Replaces the "Insights to review" drafts grid (62 §4 / `Memory.tsx` `reviewOpen` region). The problem: drafts open
 in **full edit mode by default** (`cardEditing = isDraft`) as a multi-column grid of tall, uneven cards — with
 real data (long summaries + many paragraph-length facts) it's an unusable wall of textareas. The redesign is a
-**focused, one-at-a-time review queue, inline on Memory** (not a separate route, not a modal — an inline focused
-region opened from the banner, consistent with the app's modal-free convention).
+**focused, one-at-a-time review queue on its own DEDICATED screen** at **`/memory/review`** (`MemoryReview.tsx`;
+capability `memory.own`, nested under Memory so the sidebar entry stays highlighted). It is **not mixed into the
+busy Memory page** — reviewing is a distinct, focused task with its own screen (header "Review new insights" + a
+"← Memory" back link + the crisis footer). It is reached from **(a)** the Memory "Needs you" banner's "Review now"
+button and **(b)** the sidebar Memory count badge, which is its OWN deep-link straight to `/memory/review` (the
+Memory nav label still opens the dashboard, so browsing and reviewing stay separate). It returns to `/memory` when
+done / all caught up (a "Done"/"Close" affordance + the back link). The `ReviewQueue` component itself is unchanged
+— only its host moved from an inline region to a dedicated route.
+
+> **Amended (2026-07-18, user):** the review queue was originally shipped inline on Memory (65 first release); the
+> user found that "confusing and not focused," so it moved to this **dedicated `/memory/review` screen** reached
+> from the banner + the count-badge deep-link. `Memory.tsx` no longer renders `ReviewQueue`; the banner navigates.
 
 **Queue contents & order.** The queue holds the active person's **draft insights** (`!approved` own insights) and,
 as a distinct card variant, the **merge/duplicate proposals** (39; `proposals` in `insightStore`). Order (decided,
@@ -538,6 +550,14 @@ All open questions were resolved with the user (2026-07-17):
 
 ## 12. Changelog
 
+- 2026-07-18 — **Follow-up (user): the review queue moved to its OWN dedicated screen** (`/memory/review`,
+  `MemoryReview.tsx`), out of the busy Memory page — the user found the inline queue "confusing and not focused."
+  The "Needs you" banner now navigates there, and the sidebar Memory **count badge is its own deep-link** to the
+  screen (the Memory nav label still opens the dashboard, so browsing vs. reviewing stay distinct). `Memory.tsx`
+  no longer renders `ReviewQueue` (the `reviewOpen`/`partnerName` state removed); the queue component is unchanged.
+  On `feat/memory-review-screen`, released as its own slice. Gate: typecheck + lint + format clean; 57 memory unit
+  (the 5 queue-interaction tests moved to `MemoryReview.test.tsx`; Memory keeps one banner-navigation test) + 17
+  memory E2E green (a new 360px overflow guard on the dedicated screen); real-Electron visual QA at desktop + 360px.
 - 2026-07-17 — **All four slices BUILT** (one branch `feat/questionnaires-memory-redesign`, landing together as
   one PR per the user). Slice 1 (Questionnaires landing: `orderSentGroups` pins Answered-ready-to-analyze first +
   the card-spacing fix). Slice 2 (Memory trends humanized `METRIC_LABELS`/`prettifyMetricKey` + series picker +

@@ -173,4 +173,26 @@ describe('orderSentGroups', () => {
     const input = [group('awaiting'), group('analyzed', '2026-06-08T00:00:00.000Z')];
     expect(orderSentGroups(input, 'title').map((g) => g.status)).toEqual(['awaiting', 'analyzed']);
   });
+
+  it('pins "Answered · ready to analyze" first, always — even when a fresh analyze would float Analyzed up (65 §3.1)', () => {
+    // The Analyzed group carries a recent date; without the pin it would float above the actionable Answered group.
+    const input = [group('analyzed', '2026-06-08T00:00:00.000Z'), group('answered')];
+    for (const sort of ['recent', 'answered', 'analyzed', 'title'] as const) {
+      expect(orderSentGroups(input, sort).map((g) => g.status)[0]).toBe('answered');
+    }
+  });
+
+  it('keeps the remaining groups ranked (by recency/lifecycle) below the pinned Answered group', () => {
+    const input = [
+      group('draft'),
+      group('awaiting'),
+      group('answered'),
+      group('analyzed', '2026-06-08T00:00:00.000Z'),
+    ];
+    const order = orderSentGroups(input, 'analyzed').map((g) => g.status);
+    expect(order[0]).toBe('answered'); // pinned first
+    // Below it, the recency ordering still applies to the rest — the dated Analyzed group floats above the undated ones.
+    expect(order.indexOf('analyzed')).toBeLessThan(order.indexOf('awaiting'));
+    expect(order.indexOf('analyzed')).toBeLessThan(order.indexOf('draft'));
+  });
 });

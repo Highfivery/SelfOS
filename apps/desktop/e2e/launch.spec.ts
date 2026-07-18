@@ -4910,6 +4910,22 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
     await expect(sent.getByRole('button', { name: /Awaiting responses/ })).toBeVisible();
     await expect(sent.getByRole('button', { name: /Answered · ready to analyze/ })).toBeVisible();
     await expect(sent.getByRole('button', { name: /^Weekly mood/ })).toBeVisible();
+
+    // (65 §3.1) The actionable "Answered · ready to analyze" group leads the list (its header sits above the
+    // Awaiting group), and a one-line title takes its NATURAL height — no reserved second line, so a short-title
+    // card leaves no void beneath the title (the old `min-height: 2.6em` reserved ~44px even for one line).
+    {
+      const answeredHead = sent.getByRole('button', { name: /Answered · ready to analyze/ });
+      const awaitingHead = sent.getByRole('button', { name: /Awaiting responses/ });
+      const aY = (await answeredHead.boundingBox())?.y ?? 0;
+      const wY = (await awaitingHead.boundingBox())?.y ?? 1;
+      expect(aY).toBeLessThan(wY);
+      const titleH =
+        (await sent.getByRole('button', { name: 'Values check', exact: true }).boundingBox())
+          ?.height ?? 0;
+      expect(titleH).toBeGreaterThan(0);
+      expect(titleH).toBeLessThan(30); // ~1 line (22px), not the old reserved 2 lines (~44px)
+    }
     await expect(sent.getByText('Awaiting response', { exact: true })).toBeVisible();
     await expect(sent.getByText('1 new')).toBeVisible();
     // The meta carries date AND time; the answered card offers one-tap Analyze.

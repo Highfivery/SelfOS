@@ -72,18 +72,21 @@ export interface SentGroup {
 }
 
 /**
- * Order the status GROUPS for a time-based sort so the group whose entries carry that sort value floats up —
- * e.g. "Recently analyzed" puts the Analyzed group first, un-analyzed groups (whose entries have no analyzed
- * date) sink to the bottom. Without this the fixed lifecycle order (Drafts → Awaiting → Answered → Analyzed)
- * would keep the un-analyzed groups on top no matter the sort. Each group's rank is the max sort value among
- * its entries (they're pre-sorted descending, so `entries[0]`); an empty rank (no such date) sorts last.
- * "Title" keeps the lifecycle order (a title implies no group ordering). Stable — equal ranks keep the
- * original (lifecycle) order.
+ * Order the status GROUPS. The **Answered · ready to analyze** group is the one group that needs the user's
+ * action, so it is **pinned first — always, regardless of sort** (65 §3.1): a fresh analyze floats the Analyzed
+ * group by recency, and that must never bury the actionable Answered group.
+ *
+ * The remaining groups (`draft`, `awaiting`, `analyzed`) keep the prior behaviour below it: for a time-based sort
+ * each floats by the max sort value among its (pre-sorted, descending) entries — so "Recently analyzed" puts the
+ * Analyzed group directly under Answered, and groups with no date for that sort sink to the bottom. "Title" keeps
+ * the lifecycle order for the remainder. Stable — equal ranks keep the original (lifecycle) order.
  */
 export function orderSentGroups(groups: SentGroup[], sort: SentSort): SentGroup[] {
-  if (sort === 'title') return groups;
+  const answered = groups.filter((g) => g.status === 'answered');
+  const rest = groups.filter((g) => g.status !== 'answered');
+  if (sort === 'title') return [...answered, ...rest];
   const rankOf = (g: SentGroup): string => (g.entries[0] ? sortValue(g.entries[0], sort) : '');
-  return [...groups].sort((a, b) => {
+  const orderedRest = [...rest].sort((a, b) => {
     const ra = rankOf(a);
     const rb = rankOf(b);
     if (ra === rb) return 0;
@@ -91,4 +94,5 @@ export function orderSentGroups(groups: SentGroup[], sort: SentSort): SentGroup[
     if (!rb) return -1; // b has no date → below a
     return rb.localeCompare(ra); // most recent group first
   });
+  return [...answered, ...orderedRest];
 }

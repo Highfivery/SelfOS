@@ -3660,11 +3660,10 @@ test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted
     await expect(w.getByText('Sleeps better with a wind-down routine')).toBeVisible();
     await w.getByLabel('Search memory').fill('');
 
-    // The draft is behind the Review callout (it expands inline into the draft, in edit mode).
-    await w.getByRole('button', { name: /new insight.*to review/i }).click();
-    await expect(w.getByLabel('Insight summary')).toHaveValue(
-      'Might want to set firmer work boundaries',
-    );
+    // The draft opens in the one-at-a-time review queue (65 §3.3) — summary-first (read view), not an edit grid.
+    await w.getByRole('button', { name: 'Review now' }).click();
+    await expect(w.getByText('Might want to set firmer work boundaries')).toBeVisible();
+    await expect(w.getByText(/1 of 1 to review/)).toBeVisible();
 
     // Expand the Health section → "source removed" + mark the inaccurate fact not right (persists encrypted).
     await w.getByRole('button', { name: /^Health & body/ }).click();
@@ -3677,7 +3676,16 @@ test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted
       return card?.parentElement ? getComputedStyle(card.parentElement).display : '';
     });
     expect(gridDisplay).toBe('grid');
-    await w.getByRole('button', { name: /This isn.t right about me: This one is wrong/ }).click();
+    // Flagging a fact "not right about me" lives in Edit mode now (65 §3.4); it persists + the "marked not
+    // right" tag shows back in the read view.
+    const healthCard = w.locator('#insight-ins-health');
+    await healthCard.getByRole('button', { name: 'Edit this insight' }).click();
+    await healthCard
+      .getByRole('button', { name: /This isn.t right about me: This one is wrong/ })
+      .click();
+    // Flagging persists immediately; leaving Edit mode (Cancel keeps the persisted flag, only drops unsaved
+    // text) returns to the read view where the "marked not right" tag shows.
+    await healthCard.getByRole('button', { name: 'Cancel' }).click();
     await expect(w.getByText('marked not right')).toBeVisible();
     await expect
       .poll(async () => {
@@ -3809,20 +3817,26 @@ test('memory overview: portrait hero, drill in to type-scope a fact to partner (
         return Math.max(max, main ? main.scrollWidth - main.clientWidth : 0);
       });
 
-    // Expand the session section (Emotions & patterns); the per-fact control is the relationship-scope
-    // picker chip (the broadcast ShareToggle is gone). Type-scope "Enjoys rock climbing" to Partner.
+    // Expand the session section; the read-view per-fact sharing is a tap-to-cycle chip (65 §3.4) — from
+    // "Just me" one tap sets Partner, scoping "Enjoys rock climbing" to the partner.
     await w.getByRole('button', { name: /^Emotions & patterns/ }).click();
-    await w.getByRole('button', { name: /Enjoys rock climbing: private/i }).click();
-    await w.getByRole('checkbox', { name: 'Partner' }).click();
-    await w.keyboard.press('Escape'); // close the picker popover so it can't overlay the next control
+    await expect(w.getByText('Enjoys rock climbing')).toBeVisible();
+    await w
+      .getByRole('button', { name: /Sharing for "Enjoys rock climbing": Just me/ })
+      .click({ timeout: 5000 });
     await expect
       .poll(async () => (await buildContext(fs, key, 'partner-1')).includes('Enjoys rock climbing'))
       .toBe(true);
 
-    // Mark the wrong AI-inferred fact "not right about me" → it drops from the owner's own context.
-    await w
+    // Mark the wrong AI-inferred fact "not right about me" (in Edit mode, 65 §3.4) → it drops from the
+    // owner's own context. (Both facts live in the ins-sess card.)
+    const wrongCard = w.locator('#insight-ins-sess');
+    await wrongCard.getByRole('button', { name: 'Edit this insight' }).click();
+    await wrongCard
       .getByRole('button', { name: /This isn.t right about me: WRONGLY-INFERRED-CLAIM/ })
       .click();
+    // Leaving Edit mode (Cancel keeps the persisted flag) returns to the read view where the tag shows.
+    await wrongCard.getByRole('button', { name: 'Cancel' }).click();
     await expect(w.getByText('marked not right')).toBeVisible();
     await expect
       .poll(async () => (await buildContext(fs, key, 'owner-1')).includes('WRONGLY-INFERRED-CLAIM'))
@@ -3924,6 +3938,107 @@ test('goals: a tracked goal shows on the Goals page with status; marking it Done
   }
 });
 
+test('memory review queue: the banner opens a one-at-a-time queue; widen a draft fact scope, Keep & save (decrypt) → all caught up (65 §3.3)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const at = '2026-06-20T10:00:00.000Z';
+  // A partner (so a partner-scoped fact reaches their context) + a parent (so "Close family" widens beyond
+  // partner) related to the owner.
+  await savePerson(fs, key, {
+    id: 'partner-1',
+    schemaVersion: 1,
+    displayName: 'Pat',
+    isSubject: true,
+    tags: [],
+    createdAt: at,
+    updatedAt: at,
+  });
+  await saveRelationship(fs, key, {
+    id: 'rel-p',
+    schemaVersion: 1,
+    fromPersonId: 'owner-1',
+    toPersonId: 'partner-1',
+    type: 'partner',
+    createdAt: at,
+    updatedAt: at,
+  });
+  await savePerson(fs, key, {
+    id: 'parent-1',
+    schemaVersion: 1,
+    displayName: 'Robin',
+    isSubject: false,
+    tags: [],
+    createdAt: at,
+    updatedAt: at,
+  });
+  await saveRelationship(fs, key, {
+    id: 'rel-parent',
+    schemaVersion: 1,
+    fromPersonId: 'owner-1',
+    toPersonId: 'parent-1',
+    type: 'parent',
+    createdAt: at,
+    updatedAt: at,
+  });
+  // A DRAFT (unapproved) session insight with one fact defaulting to Partner.
+  await saveInsight(fs, key, {
+    id: 'ins-draft',
+    schemaVersion: 1,
+    source: 'session',
+    subjectPersonId: 'owner-1',
+    summary: 'Might be craving more downtime',
+    facts: [
+      { id: 'df1', text: 'Wants quieter weekends', shareable: false, shareableTypes: ['partner'] },
+    ],
+    confidence: 'medium',
+    categories: ['Emotions & patterns'],
+    approved: false,
+    provenance: { conversationId: 'c1', at },
+    createdAt: at,
+    updatedAt: at,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Memory' }).click();
+
+    // The "needs you" banner opens the one-at-a-time queue (not an inline drafts grid).
+    await w.getByRole('button', { name: 'Review now' }).click();
+    await expect(w.getByText('Might be craving more downtime')).toBeVisible();
+    await expect(w.getByText(/1 of 1 to review/)).toBeVisible();
+
+    // Widen the fact Partner → Close family (a LOCAL change, written only at Keep & save).
+    await w
+      .getByRole('button', { name: /Sharing for "Wants quieter weekends": Partner/ })
+      .click({ timeout: 5000 });
+    await w.getByRole('button', { name: 'Keep & save' }).click();
+
+    // The draft is now approved and carries the widened scope (decrypt-persisted).
+    await expect
+      .poll(async () => (await getInsight(fs, key, 'owner-1', 'ins-draft'))?.approved)
+      .toBe(true);
+    const saved = await getInsight(fs, key, 'owner-1', 'ins-draft');
+    expect(saved?.facts.find((f) => f.id === 'df1')?.shareableTypes).toContain('parent');
+    // The fact reaches the partner's coaching context.
+    await expect
+      .poll(async () =>
+        (await buildContext(fs, key, 'partner-1')).includes('Wants quieter weekends'),
+      )
+      .toBe(true);
+
+    // Queue empties → "all caught up"; the banner is gone.
+    await expect(w.getByText(/All caught up/)).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Review now' })).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('memory cleanup: flagging a previously-shared fact retracts it from a related person’s context (39 §4.2)', async () => {
   const { userData, vault } = await seedReadyVault();
   const fs = createNodeFileSystem(vault);
@@ -3983,10 +4098,15 @@ test('memory cleanup: flagging a previously-shared fact retracts it from a relat
     await w.getByRole('button', { name: /^Other/ }).click();
     await expect(w.getByText('PLANNING-A-SURPRISE-PARTY')).toBeVisible();
 
-    // Mark it "not right about me" → the share is retracted (Memory shows "sharing withdrawn").
-    await w
+    // Mark it "not right about me" (in Edit mode, 65 §3.4) → the share is retracted (Memory shows
+    // "sharing withdrawn" back in the read view).
+    const partyCard = w.locator('#insight-ins-share');
+    await partyCard.getByRole('button', { name: 'Edit this insight' }).click();
+    await partyCard
       .getByRole('button', { name: /This isn.t right about me: PLANNING-A-SURPRISE-PARTY/ })
       .click();
+    // Leaving Edit mode (Cancel keeps the persisted flag) returns to the read view.
+    await partyCard.getByRole('button', { name: 'Cancel' }).click();
     await expect(w.getByText('sharing withdrawn')).toBeVisible();
 
     // Decrypt-level proof: Casey's context no longer carries the corrected claim.
@@ -4910,6 +5030,22 @@ test('questionnaires redesign (§3.1/§3.3): Sent + Received card sections; answ
     await expect(sent.getByRole('button', { name: /Awaiting responses/ })).toBeVisible();
     await expect(sent.getByRole('button', { name: /Answered · ready to analyze/ })).toBeVisible();
     await expect(sent.getByRole('button', { name: /^Weekly mood/ })).toBeVisible();
+
+    // (65 §3.1) The actionable "Answered · ready to analyze" group leads the list (its header sits above the
+    // Awaiting group), and a one-line title takes its NATURAL height — no reserved second line, so a short-title
+    // card leaves no void beneath the title (the old `min-height: 2.6em` reserved ~44px even for one line).
+    {
+      const answeredHead = sent.getByRole('button', { name: /Answered · ready to analyze/ });
+      const awaitingHead = sent.getByRole('button', { name: /Awaiting responses/ });
+      const aY = (await answeredHead.boundingBox())?.y ?? 0;
+      const wY = (await awaitingHead.boundingBox())?.y ?? 1;
+      expect(aY).toBeLessThan(wY);
+      const titleH =
+        (await sent.getByRole('button', { name: 'Values check', exact: true }).boundingBox())
+          ?.height ?? 0;
+      expect(titleH).toBeGreaterThan(0);
+      expect(titleH).toBeLessThan(30); // ~1 line (22px), not the old reserved 2 lines (~44px)
+    }
     await expect(sent.getByText('Awaiting response', { exact: true })).toBeVisible();
     await expect(sent.getByText('1 new')).toBeVisible();
     // The meta carries date AND time; the answered card offers one-tap Analyze.
@@ -10995,10 +11131,10 @@ test('memory redesign (62): sections collapsed (sensitive too), edit a fact inli
     await expect(w.getByText('Likes early starts')).toHaveCount(0);
     await expect(w.getByText('A private detail')).toHaveCount(0);
 
-    // Expand a section → the insight card renders inline; edit ONE fact in place → Save.
+    // Expand a section → the insight card renders inline; edit a fact via the header pencil → Edit mode → Save.
     await emotions.click();
     await expect(w.getByText('Likes early starts')).toBeVisible();
-    await w.getByRole('button', { name: 'Edit: Likes early starts' }).click();
+    await w.getByRole('button', { name: 'Edit this insight' }).click();
     const field = w.getByRole('textbox', { name: 'Edit fact: Likes early starts' });
     await field.fill('Likes slow mornings');
     await w.getByRole('button', { name: 'Save' }).click();

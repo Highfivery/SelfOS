@@ -67,6 +67,13 @@ the reconcile/flag/approve engine, and the privacy gates are unchanged.
 
 ## 3. UX & flows
 
+> **Amended by [`65`](65-questionnaires-memory-review-redesign.md) (2026-07-17):** §3.1 (whole-page order — the
+> "Needs your review" callout now opens a one-at-a-time review queue instead of expanding an inline drafts grid,
+> and trends + responses move full-width out of the two-up `.duo`), §3.3 (the `InsightCard` is redesigned:
+> summary-first + Read-more, collapsible facts, read-view tap-to-change `SharePresetChip`, edit-text + flag in
+> Edit mode, single pencil, 2-col/List), §3.5 (humanized trend labels + selectable series + area-fill/
+> emphasized-endpoint chart), and §3.6 (compact responses strip) are superseded there.
+
 ### 3.1 Page structure (top → bottom)
 
 `/memory` renders one full-width column (no `max-width` cap), in order:

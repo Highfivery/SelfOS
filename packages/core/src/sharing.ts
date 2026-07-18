@@ -151,3 +151,6 @@ export function confidentialityPreamble(viewerName: string): string {
     `other people's private information.`
   );
 }
+
+/** Re-export the close-family relationship set so the Memory share-preset chip (65 §3.4) reuses ONE source. */
+export { CLOSE_FAMILY } from './people/sharingPresets';

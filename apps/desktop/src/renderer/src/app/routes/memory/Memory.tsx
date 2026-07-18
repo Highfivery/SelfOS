@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Brain, MessageCircle, RefreshCw, Search, Sparkles } from 'lucide-react';
 import type { Insight, Relationship } from '@shared/schemas';
+import { ReviewQueue } from './ReviewQueue';
 import { availableRelationshipTypesFor } from '../../availableRelationshipTypes';
 import { useInsightStore } from '../../../stores/insightStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
@@ -13,8 +14,8 @@ import {
   Banner,
   Button,
   Card,
-  Collapsible,
   Heading,
+  SegmentedControl,
   Stack,
   Text,
   TextInput,
@@ -75,7 +76,6 @@ export function Memory(): JSX.Element {
   const lastReconciledAt = useInsightStore((s) => s.lastReconciledAt);
   const proposals = useInsightStore((s) => s.proposals);
   const loadReconcileState = useInsightStore((s) => s.loadReconcileState);
-  const resolveProposal = useInsightStore((s) => s.resolveProposal);
 
   const [query, setQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
@@ -84,6 +84,7 @@ export function Memory(): JSX.Element {
   const [openAreas, setOpenAreas] = useState<Set<string>>(new Set());
   const [openResponses, setOpenResponses] = useState<Set<string>>(new Set());
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [listView, setListView] = useState(false);
   const scrollTo = useRef<string | null>(null);
 
   useEffect(() => {
@@ -105,6 +106,18 @@ export function Memory(): JSX.Element {
     () => availableRelationshipTypesFor(activePersonId, relationships),
     [activePersonId, relationships],
   );
+  // The active person's partner's name (partner↔partner is symmetric) — names the review-queue sharing note.
+  const partnerName = useMemo(() => {
+    if (!activePersonId) return undefined;
+    for (const edge of relationships) {
+      if (edge.type !== 'partner') continue;
+      if (edge.fromPersonId === activePersonId)
+        return people.find((p) => p.id === edge.toPersonId)?.displayName;
+      if (edge.toPersonId === activePersonId)
+        return people.find((p) => p.id === edge.fromPersonId)?.displayName;
+    }
+    return undefined;
+  }, [activePersonId, relationships, people]);
   const liveConversationIds = useMemo(
     () => new Set(conversations.map((c) => c.id)),
     [conversations],
@@ -283,56 +296,34 @@ export function Memory(): JSX.Element {
             />
           ) : null}
 
-          {reviewCount > 0 ? (
-            <Collapsible
-              className={styles.callout}
-              headerClassName={styles.calloutHead}
-              open={reviewOpen}
-              onOpenChange={setReviewOpen}
-              header={
-                <>
-                  <Sparkles size={18} aria-hidden="true" className={styles.calloutIcon} />
-                  <Text size="sm" className={styles.calloutText}>
-                    {drafts.length > 0
-                      ? `${drafts.length} new ${drafts.length === 1 ? 'insight' : 'insights'} to review`
-                      : ''}
-                    {drafts.length > 0 && proposals.length > 0 ? ', ' : ''}
-                    {proposals.length > 0
-                      ? `${proposals.length} possible ${proposals.length === 1 ? 'duplicate' : 'duplicates'}`
-                      : ''}
-                  </Text>
-                </>
-              }
-            >
-              {proposals.map((proposal) => (
-                <Card key={proposal.id} className={styles.proposal}>
-                  <Stack gap={2}>
-                    <Text size="sm" tone="secondary">
-                      These two look like the same thing — combine them into one?
-                    </Text>
-                    <Text>· {proposal.intoSummary}</Text>
-                    <Text>· {proposal.fromSummary}</Text>
-                    <div className={styles.proposalActions}>
-                      <Button
-                        variant="secondary"
-                        onClick={() => void resolveProposal(proposal.id, 'merge')}
-                      >
-                        Merge
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        onClick={() => void resolveProposal(proposal.id, 'keepBoth')}
-                      >
-                        Keep both
-                      </Button>
-                    </div>
-                  </Stack>
-                </Card>
-              ))}
-              {drafts.length > 0 ? (
-                <div className={styles.cardGrid}>{drafts.map(renderInsightCard)}</div>
-              ) : null}
-            </Collapsible>
+          {/* "Needs you" banner — opens the one-at-a-time review queue (65 §3.2/§3.3), not an inline grid. */}
+          {reviewCount > 0 && !reviewOpen ? (
+            <div className={styles.needsYou}>
+              <Sparkles size={18} aria-hidden="true" className={styles.needsYouIcon} />
+              <Text size="sm" className={styles.needsYouText}>
+                {drafts.length > 0
+                  ? `${drafts.length} new ${drafts.length === 1 ? 'insight' : 'insights'} to review`
+                  : ''}
+                {drafts.length > 0 && proposals.length > 0 ? ' · ' : ''}
+                {proposals.length > 0
+                  ? `${proposals.length} possible ${proposals.length === 1 ? 'duplicate' : 'duplicates'}`
+                  : ''}
+              </Text>
+              <Button variant="primary" onClick={() => setReviewOpen(true)}>
+                Review now
+              </Button>
+            </div>
+          ) : null}
+
+          {reviewOpen ? (
+            <ReviewQueue
+              drafts={drafts}
+              proposals={proposals}
+              aboutNameFor={(insight) => responseAbout(insight)?.name}
+              onClose={() => setReviewOpen(false)}
+              {...(availableTypes ? { availableTypes } : {})}
+              {...(partnerName ? { partnerName } : {})}
+            />
           ) : null}
 
           <div className={styles.searchRow}>
@@ -374,27 +365,37 @@ export function Memory(): JSX.Element {
                 />
               ) : null}
 
-              {overview.total > 0 || recipientGroups.length > 0 ? (
-                <div className={styles.duo}>
-                  {activePersonId ? (
-                    <TrendsCard insights={insights} personId={activePersonId} />
-                  ) : null}
-                  {recipientGroups.length > 0 ? (
-                    <ResponsesBand
-                      groups={recipientGroups}
-                      openKeys={openResponses}
-                      onOpenChange={(key, open) => toggle(setOpenResponses, key, open)}
-                      renderCard={renderInsightCard}
-                    />
-                  ) : null}
-                </div>
+              {activePersonId && overview.total > 0 ? (
+                <TrendsCard insights={insights} personId={activePersonId} />
+              ) : null}
+
+              {recipientGroups.length > 0 ? (
+                <ResponsesBand
+                  groups={recipientGroups}
+                  openKeys={openResponses}
+                  onOpenChange={(key, open) => toggle(setOpenResponses, key, open)}
+                  renderCards={(items) => (
+                    <div className={styles.cardGrid}>{items.map(renderInsightCard)}</div>
+                  )}
+                />
               ) : null}
 
               {sections.length > 0 ? (
                 <Stack gap={2}>
-                  <Heading level={3} className={styles.sectionsTitle}>
-                    By life area
-                  </Heading>
+                  <div className={styles.sectionsHead}>
+                    <Heading level={3} className={styles.sectionsTitle}>
+                      By life area
+                    </Heading>
+                    <SegmentedControl
+                      options={[
+                        { value: 'grid' as const, label: '2 columns' },
+                        { value: 'list' as const, label: 'List' },
+                      ]}
+                      value={listView ? 'list' : 'grid'}
+                      onChange={(v) => setListView(v === 'list')}
+                      aria-label="Insight card layout"
+                    />
+                  </div>
                   {sections.map((section) => (
                     <LifeAreaSection
                       key={section.area}
@@ -402,7 +403,7 @@ export function Memory(): JSX.Element {
                       open={openAreas.has(section.area)}
                       onOpenChange={(open) => toggle(setOpenAreas, section.area, open)}
                     >
-                      <div className={styles.cardGrid}>
+                      <div className={`${styles.cardGrid} ${listView ? styles.list : ''}`}>
                         {section.insights.map(renderInsightCard)}
                       </div>
                     </LifeAreaSection>

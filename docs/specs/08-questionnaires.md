@@ -236,7 +236,13 @@ status subgroups (Drafts → Awaiting → Answered → Analyzed), a within-group
 pinned on top under "Recently analyzed". Now a pure **`orderSentGroups`** floats the group carrying the sort's
 date to the top (each group ranked by the max sort value among its entries; groups with no such date sink to
 the bottom; "Title" keeps the lifecycle order) — so "Recently analyzed"/"Recently answered" put the
-Analyzed/Answered group first. The **Received** tab gained its own **sort** (`sortReceived`: Recently received
+Analyzed/Answered group first. **(Amended by [`65`](65-questionnaires-memory-review-redesign.md) §3.1,
+2026-07-17):** the **Answered · ready to analyze** group is now **pinned first, always, regardless of sort** —
+the one group that needs the user's action must never be buried by a fresh analyze floating "Analyzed" above it;
+`orderSentGroups` hoists it, then applies the recency/lifecycle ranking above to the remainder below it. The card
+spacing reserve (`.cardTitleButton { min-height: 2.6em }`) is likewise dropped in favour of a natural-height
+title + a bottom-pinned `.cardFoot` (`margin-top: auto`), so a one-line title leaves no void and footers align
+across a row (65 §3.1). The **Received** tab gained its own **sort** (`sortReceived`: Recently received
 [default] · Recently answered · Title A–Z; favourites pinned, missing-date items sink). The attention count on
 the Received tab uses a soft `--color-warning-subtle-bg`/`-text` pill (both themes) rather than a harsh
 dark-yellow-on-black.

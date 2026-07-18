@@ -419,6 +419,38 @@ export function Gallery(): JSX.Element {
           </div>
           <div style={{ maxWidth: 360, marginTop: 16 }}>
             <Text size="sm" weight={600} tone="secondary">
+              With area fill + an emphasized latest point
+            </Text>
+            <LineChart
+              ariaLabel="Example trend with an area fill and an emphasized latest point"
+              yMin={-1}
+              yMax={1}
+              fill
+              emphasizeLast
+              series={[
+                {
+                  label: 'Mood',
+                  points: [
+                    { x: 0, y: 0.1 },
+                    { x: 1, y: 0.2 },
+                    { x: 2, y: 0.15 },
+                    { x: 3, y: 0.4 },
+                  ],
+                },
+                {
+                  label: 'Energy',
+                  points: [
+                    { x: 0, y: 0.3 },
+                    { x: 1, y: 0.28 },
+                    { x: 2, y: 0.34 },
+                    { x: 3, y: 0.33 },
+                  ],
+                },
+              ]}
+            />
+          </div>
+          <div style={{ maxWidth: 360, marginTop: 16 }}>
+            <Text size="sm" weight={600} tone="secondary">
               With optional Low/High y-axis labels
             </Text>
             <LineChart

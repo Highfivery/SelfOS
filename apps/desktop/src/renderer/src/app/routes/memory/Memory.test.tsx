@@ -48,6 +48,7 @@ function renderMemory(): void {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   clearMockBridge();
   useInsightStore.setState({
     insights: [],
@@ -136,7 +137,7 @@ describe('Memory (flattened, edit-in-place — spec 62)', () => {
     expect(screen.getByText('A private detail')).toBeInTheDocument();
   });
 
-  it('edits a single fact INLINE (the per-line pencil) and saves it', async () => {
+  it('edits a fact via the "Edit this insight" pencil → Edit mode → Save (65 §3.4)', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     const update = vi.fn((input: unknown) => Promise.resolve(input as Insight));
     installMockBridge({
@@ -153,8 +154,8 @@ describe('Memory (flattened, edit-in-place — spec 62)', () => {
     });
     renderMemory();
     await userEvent.click(await screen.findByRole('button', { name: /Emotions & patterns/ }));
-    // The per-line pencil opens an inline editor for JUST that fact.
-    await userEvent.click(screen.getByRole('button', { name: 'Edit: Likes early starts' }));
+    // Editing a fact's text lives in Edit mode (opened by the single header pencil), not the read view.
+    await userEvent.click(screen.getByRole('button', { name: 'Edit this insight' }));
     const field = screen.getByRole('textbox', { name: 'Edit fact: Likes early starts' });
     await userEvent.clear(field);
     await userEvent.type(field, 'Likes slow mornings');
@@ -165,7 +166,7 @@ describe('Memory (flattened, edit-in-place — spec 62)', () => {
     expect(facts.find((f) => f.id === 'f1')?.text).toBe('Likes slow mornings');
   });
 
-  it('flags an AI-inferred fact "not right about me" inline', async () => {
+  it('flags an AI-inferred fact "not right about me" in Edit mode (65 §3.4)', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
     const flag = vi.fn(() => Promise.resolve(null));
     installMockBridge({
@@ -182,10 +183,81 @@ describe('Memory (flattened, edit-in-place — spec 62)', () => {
     });
     renderMemory();
     await userEvent.click(await screen.findByRole('button', { name: /Emotions & patterns/ }));
+    // The read view is scannable; flagging lives in Edit mode.
+    await userEvent.click(screen.getByRole('button', { name: 'Edit this insight' }));
     await userEvent.click(
       screen.getByRole('button', { name: /This isn’t right about me: Dislikes mornings/ }),
     );
     expect(flag).toHaveBeenCalledWith({ insightId: 'i1', factId: 'f1', flagged: true });
+  });
+
+  it('read view: a fact carries a tap-to-change sharing chip (Partner → Just me) (65 §3.4)', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    // The read-view chip writes via setFactScope → insightsUpdate (merge-by-id).
+    const update = vi.fn((input: unknown) => Promise.resolve(input as Insight));
+    installMockBridge({
+      insightsList: () =>
+        Promise.resolve([
+          insight({
+            id: 'i1',
+            summary: 'Values steady routines',
+            categories: ['Emotions & patterns'],
+            facts: [
+              {
+                id: 'f1',
+                text: 'Keeps a morning ritual',
+                shareable: false,
+                shareableTypes: ['partner'],
+              },
+            ],
+          }),
+        ]),
+      insightsUpdate: update,
+    });
+    renderMemory();
+    await userEvent.click(await screen.findByRole('button', { name: /Emotions & patterns/ }));
+    // The read-view chip shows the current preset and taps to cycle (Partner → Close family here).
+    const chip = screen.getByRole('button', { name: /Sharing for .*: Partner/ });
+    await userEvent.click(chip);
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it('a heavy card clamps its summary + collapses its facts; a List toggle is offered (65 §3.4)', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    // "Read more" appears only when the clamped summary MEASURABLY overflows; jsdom has no layout, so
+    // mock the geometry at the prototype so the clamped element reports a taller scrollHeight (65 §7).
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(400);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(80);
+    const longSummary =
+      'You process stress by planning your way out of it, and you feel calmest once there is a concrete next ' +
+      'step written down rather than only turning it over in your head, which is why lists and plans settle you ' +
+      'far more reliably than reassurance does, especially in the evenings after a demanding, unpredictable day.';
+    installMockBridge({
+      insightsList: () =>
+        Promise.resolve([
+          insight({
+            id: 'i1',
+            summary: longSummary,
+            categories: ['Emotions & patterns'],
+            facts: [
+              { id: 'f1', text: 'Makes a list when overwhelmed', shareable: false },
+              { id: 'f2', text: 'Calmer with a concrete next step', shareable: false },
+              { id: 'f3', text: 'Rumination eases once it is written down', shareable: false },
+              { id: 'f4', text: 'Prefers to plan the night before', shareable: false },
+              { id: 'f5', text: 'Dislikes open-ended ambiguity', shareable: false },
+            ],
+          }),
+        ]),
+    });
+    renderMemory();
+    // The layout toggle (2 columns / List) is offered on the page.
+    expect(await screen.findByRole('button', { name: 'List' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Emotions & patterns/ }));
+    // A long summary clamps with "Read more"; a heavy fact list collapses behind a disclosure.
+    expect(screen.getByRole('button', { name: 'Read more' })).toBeInTheDocument();
+    expect(screen.queryByText('Makes a list when overwhelmed')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /5 things SelfOS noted/ }));
+    expect(screen.getByText('Makes a list when overwhelmed')).toBeInTheDocument();
   });
 
   it('shows the portrait hero (narrative); its facts live in a section with the summary hidden', async () => {
@@ -235,22 +307,145 @@ describe('Memory (flattened, edit-in-place — spec 62)', () => {
     expect(screen.queryByText('Sam started a new job')).not.toBeInTheDocument();
   });
 
-  it('opens the review callout and approves a draft', async () => {
+  it('opens the review queue from the "needs you" banner and keeps a draft (65 §3.3)', async () => {
     useSessionStore.setState({ activePerson: activeP1 });
-    let current = insight({ id: 'd1', approved: false, summary: 'Wants more connection' });
-    const approve = vi.fn(() => {
-      current = { ...current, approved: true };
-      return Promise.resolve(current);
-    });
+    const approve = vi.fn((input: unknown) => Promise.resolve(input as Insight));
     installMockBridge({
-      insightsList: () => Promise.resolve([current]),
+      insightsList: () =>
+        Promise.resolve([insight({ id: 'd1', approved: false, summary: 'Wants more connection' })]),
       insightsApprove: approve,
     });
     renderMemory();
-    await userEvent.click(await screen.findByRole('button', { name: /new insight.*to review/i }));
-    expect(screen.getByDisplayValue('Wants more connection')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    // The banner (not an inline drafts grid) opens the one-at-a-time queue.
+    expect(await screen.findByText(/1 new insight to review/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Review now' }));
+    expect(screen.getByText('Wants more connection')).toBeInTheDocument();
+    expect(screen.getByText(/1 of 1 to review/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Keep & save' }));
     expect(approve).toHaveBeenCalled();
+  });
+
+  it('drops a fact with "not right" before keeping; the approve edit omits it (65 §3.3)', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    const approve = vi.fn((input: unknown) => Promise.resolve(input as Insight));
+    installMockBridge({
+      insightsList: () =>
+        Promise.resolve([
+          insight({
+            id: 'd1',
+            approved: false,
+            summary: 'S',
+            facts: [
+              { id: 'f1', text: 'Keep me', shareable: false, shareableTypes: ['partner'] },
+              { id: 'f2', text: 'Wrong one', shareable: false, shareableTypes: ['partner'] },
+            ],
+          }),
+        ]),
+      insightsApprove: approve,
+    });
+    renderMemory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Review now' }));
+    await userEvent.click(screen.getByRole('button', { name: /not right — drop: Wrong one/i }));
+    expect(screen.queryByText('Wrong one')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Keep & save' }));
+    const [arg] = approve.mock.calls[0] ?? [];
+    const facts = (arg as { facts: { id: string }[] } | undefined)?.facts ?? [];
+    expect(facts.map((f) => f.id)).toEqual(['f1']);
+  });
+
+  it('the review-queue share chip cycles a fact scope; Keep & save carries it (65 §3.3)', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    const approve = vi.fn((input: unknown) => Promise.resolve(input as Insight));
+    installMockBridge({
+      insightsList: () =>
+        Promise.resolve([
+          insight({
+            id: 'd1',
+            approved: false,
+            summary: 'S',
+            facts: [
+              { id: 'f1', text: 'Likes trail runs', shareable: false, shareableTypes: ['partner'] },
+            ],
+          }),
+        ]),
+      insightsApprove: approve,
+    });
+    renderMemory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Review now' }));
+    // The fact defaults to Partner; tapping cycles it to Close family — carried at Keep & save (local, not
+    // written until then).
+    await userEvent.click(screen.getByRole('button', { name: /Sharing for .*: Partner/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Keep & save' }));
+    const [arg] = approve.mock.calls[0] ?? [];
+    const facts =
+      (arg as { facts: { id: string; shareableTypes?: string[] }[] } | undefined)?.facts ?? [];
+    expect(facts.find((f) => f.id === 'f1')?.shareableTypes).toContain('parent');
+  });
+
+  it('a merge proposal in the queue offers Merge / Keep both / Discard new (65 §3.3)', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    const resolveProposal = vi.fn(() => Promise.resolve());
+    installMockBridge({
+      // A proposal implies insights exist to reconcile — seed the two it references (approved own insights).
+      insightsList: () =>
+        Promise.resolve([
+          insight({ id: 'a', summary: 'Likes hiking' }),
+          insight({ id: 'b', summary: 'Enjoys hiking' }),
+        ]),
+      memoryReconcileState: () =>
+        Promise.resolve({
+          proposals: [
+            {
+              id: 'mp1',
+              schemaVersion: 1,
+              subjectPersonId: 'p1',
+              fromId: 'a',
+              intoId: 'b',
+              fromSummary: 'Likes hiking',
+              intoSummary: 'Enjoys hiking',
+              createdAt: '2026-06-11T12:00:00.000Z',
+            },
+          ],
+        }),
+      memoryResolveProposal: resolveProposal,
+    });
+    renderMemory();
+    expect(await screen.findByText(/1 possible duplicate/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Review now' }));
+    expect(screen.getByText('Likes hiking')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Keep both' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Discard new' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Merge into one' }));
+    expect(resolveProposal).toHaveBeenCalledWith({ proposalId: 'mp1', action: 'merge' });
+  });
+
+  it('a restricted draft fact gets NO share chip in the queue — it stays own-only (65 §3.3)', async () => {
+    useSessionStore.setState({ activePerson: activeP1 });
+    const approve = vi.fn((input: unknown) => Promise.resolve(input as Insight));
+    installMockBridge({
+      insightsList: () =>
+        Promise.resolve([
+          insight({
+            id: 'd1',
+            source: 'intake',
+            approved: false,
+            summary: 'A private matter',
+            facts: [{ id: 'f1', text: 'A sensitive detail', shareable: false, restricted: true }],
+          }),
+        ]),
+      insightsApprove: approve,
+    });
+    renderMemory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Review now' }));
+    // The sensitive fact shows the read-only "private" tag and NEVER a sharing chip (structurally own-only).
+    expect(screen.getByText('private')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Sharing for/ })).not.toBeInTheDocument();
+    // Keep & save carries NO scope for the restricted fact (preserves its restriction server-side).
+    await userEvent.click(screen.getByRole('button', { name: 'Keep & save' }));
+    const [arg] = approve.mock.calls[0] ?? [];
+    const facts =
+      (arg as { facts: { id: string; shareableTypes?: string[] }[] } | undefined)?.facts ?? [];
+    expect(facts.find((f) => f.id === 'f1')).not.toHaveProperty('shareableTypes');
   });
 
   it('search surfaces matching insights as cards', async () => {

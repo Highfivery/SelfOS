@@ -171,6 +171,10 @@ deletes the source). For automatic reconciliation, whether merges/contradiction-
 is chosen: merges become **proposals** surfaced in Memory's "Needs your review" region (20 §3.1) with
 **Merge / Keep both**, and the confidence/category recalibration (low-risk) still auto-applies.
 
+**(Amended by [`65`](65-questionnaires-memory-review-redesign.md) §3.3, 2026-07-17):** the "Needs your review"
+region is now a focused one-at-a-time review queue, and the merge-proposal card adds a third **"Discard new"**
+action (`resolveProposal('keepBoth')` + `insights:remove(fromId)` — no new channel).
+
 ### 3.5 Cross-source coherence (developer-facing)
 
 When reconciliation considers a subject's insights, it sees **all sources** (intake / session /

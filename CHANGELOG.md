@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.0](https://github.com/Highfivery/SelfOS/compare/v0.38.0...v0.39.0) (2026-07-18)
+
+
+### Features
+
+* **memory:** move insight review to a dedicated /memory/review screen (65) ([4995ef7](https://github.com/Highfivery/SelfOS/commit/4995ef785de4dbc4713d2eaa238f538b3da3f6a7))
+
 ## [0.38.0](https://github.com/Highfivery/SelfOS/compare/v0.37.0...v0.38.0) (2026-07-18)
 
 

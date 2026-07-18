@@ -269,27 +269,12 @@
   flex-wrap: wrap;
 }
 
-.proposal {
-  border: 1px solid var(--color-border);
-}
-
-.proposalActions {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
 .meterOn {
   background: var(--color-accent-solid);
 }
 
 .meterOff {
   background: var(--color-border-strong);
-}
-
-.calloutIcon {
-  color: var(--color-accent-solid);
-  flex: none;
 }
 
 /* Secondary row: trend + responses */
@@ -462,18 +447,160 @@
   color: var(--color-accent-text);
 }
 
-/* Review callout as a Collapsible (override the old flex .callout) */
-.callout {
+/* "Needs you" banner — opens the review queue (65 §3.2) */
+.needsYou {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   background: var(--color-accent-subtle-bg);
   border: 1px solid var(--color-accent-border, var(--color-border));
   border-radius: var(--radius-md);
-  padding: 0 var(--space-3);
+  padding: var(--space-3);
 }
-.calloutHead {
-  color: var(--color-accent-text);
+.needsYouIcon {
+  color: var(--color-accent-solid);
+  flex: none;
 }
-.calloutText {
+.needsYouText {
   color: var(--color-accent-text);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The one-at-a-time review queue (65 §3.3) */
+.reviewQueue {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.reviewProgress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.reviewProgressSpacer {
+  flex: 1 1 auto;
+}
+.reviewBar {
+  flex: 0 1 160px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  overflow: hidden;
+}
+.reviewBar > span {
+  display: block;
+  height: 100%;
+  background: var(--color-accent-solid);
+  transition: width 120ms ease;
+}
+/* Card-stack: 2 offset ghosts behind the active card convey how many remain. */
+.reviewStack {
+  position: relative;
+}
+.reviewGhost {
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.reviewGhost1 {
+  transform: translateY(6px) scale(0.985);
+  opacity: 0.7;
+}
+.reviewGhost2 {
+  transform: translateY(12px) scale(0.97);
+  opacity: 0.45;
+}
+.reviewCard {
+  position: relative;
+}
+.reviewHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+/* Facts scroll inside a capped region so the actions stay pinned (the one intentional inner scroll, §12). */
+.reviewFacts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 30vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.reviewFactRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+.reviewFactRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.reviewFactMain {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.reviewFactActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.dropFact {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  padding: 2px var(--space-2);
+  background: none;
+  color: var(--color-text-tertiary);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dropFact:hover {
+  border-color: var(--color-danger, var(--color-border-strong));
+  color: var(--color-danger-text, var(--color-text-secondary));
+}
+.reviewActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.reviewActionsSpacer {
+  flex: 1 1 auto;
+}
+.proposalSummary {
+  border-left: 3px solid var(--color-accent-border, var(--color-border));
+  padding-left: var(--space-3);
+  color: var(--color-text-secondary);
+}
+.allCaughtUpMark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-solid);
 }
 
 /* Life-area sections */

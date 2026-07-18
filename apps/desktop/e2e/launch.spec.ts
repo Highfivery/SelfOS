@@ -3660,11 +3660,10 @@ test('memory: the dashboard groups by life-area, flags a fact (decrypt-persisted
     await expect(w.getByText('Sleeps better with a wind-down routine')).toBeVisible();
     await w.getByLabel('Search memory').fill('');
 
-    // The draft is behind the Review callout (it expands inline into the draft, in edit mode).
-    await w.getByRole('button', { name: /new insight.*to review/i }).click();
-    await expect(w.getByLabel('Insight summary')).toHaveValue(
-      'Might want to set firmer work boundaries',
-    );
+    // The draft opens in the one-at-a-time review queue (65 §3.3) — summary-first (read view), not an edit grid.
+    await w.getByRole('button', { name: 'Review now' }).click();
+    await expect(w.getByText('Might want to set firmer work boundaries')).toBeVisible();
+    await expect(w.getByText(/1 of 1 to review/)).toBeVisible();
 
     // Expand the Health section → "source removed" + mark the inaccurate fact not right (persists encrypted).
     await w.getByRole('button', { name: /^Health & body/ }).click();
@@ -3932,6 +3931,107 @@ test('goals: a tracked goal shows on the Goals page with status; marking it Done
       return Math.max(max, main ? main.scrollWidth - main.clientWidth : 0);
     });
     expect(overflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('memory review queue: the banner opens a one-at-a-time queue; widen a draft fact scope, Keep & save (decrypt) → all caught up (65 §3.3)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('master key missing');
+  const at = '2026-06-20T10:00:00.000Z';
+  // A partner (so a partner-scoped fact reaches their context) + a parent (so "Close family" widens beyond
+  // partner) related to the owner.
+  await savePerson(fs, key, {
+    id: 'partner-1',
+    schemaVersion: 1,
+    displayName: 'Pat',
+    isSubject: true,
+    tags: [],
+    createdAt: at,
+    updatedAt: at,
+  });
+  await saveRelationship(fs, key, {
+    id: 'rel-p',
+    schemaVersion: 1,
+    fromPersonId: 'owner-1',
+    toPersonId: 'partner-1',
+    type: 'partner',
+    createdAt: at,
+    updatedAt: at,
+  });
+  await savePerson(fs, key, {
+    id: 'parent-1',
+    schemaVersion: 1,
+    displayName: 'Robin',
+    isSubject: false,
+    tags: [],
+    createdAt: at,
+    updatedAt: at,
+  });
+  await saveRelationship(fs, key, {
+    id: 'rel-parent',
+    schemaVersion: 1,
+    fromPersonId: 'owner-1',
+    toPersonId: 'parent-1',
+    type: 'parent',
+    createdAt: at,
+    updatedAt: at,
+  });
+  // A DRAFT (unapproved) session insight with one fact defaulting to Partner.
+  await saveInsight(fs, key, {
+    id: 'ins-draft',
+    schemaVersion: 1,
+    source: 'session',
+    subjectPersonId: 'owner-1',
+    summary: 'Might be craving more downtime',
+    facts: [
+      { id: 'df1', text: 'Wants quieter weekends', shareable: false, shareableTypes: ['partner'] },
+    ],
+    confidence: 'medium',
+    categories: ['Emotions & patterns'],
+    approved: false,
+    provenance: { conversationId: 'c1', at },
+    createdAt: at,
+    updatedAt: at,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Memory' }).click();
+
+    // The "needs you" banner opens the one-at-a-time queue (not an inline drafts grid).
+    await w.getByRole('button', { name: 'Review now' }).click();
+    await expect(w.getByText('Might be craving more downtime')).toBeVisible();
+    await expect(w.getByText(/1 of 1 to review/)).toBeVisible();
+
+    // Widen the fact Partner → Close family (a LOCAL change, written only at Keep & save).
+    await w
+      .getByRole('button', { name: /Sharing for "Wants quieter weekends": Partner/ })
+      .click({ timeout: 5000 });
+    await w.getByRole('button', { name: 'Keep & save' }).click();
+
+    // The draft is now approved and carries the widened scope (decrypt-persisted).
+    await expect
+      .poll(async () => (await getInsight(fs, key, 'owner-1', 'ins-draft'))?.approved)
+      .toBe(true);
+    const saved = await getInsight(fs, key, 'owner-1', 'ins-draft');
+    expect(saved?.facts.find((f) => f.id === 'df1')?.shareableTypes).toContain('parent');
+    // The fact reaches the partner's coaching context.
+    await expect
+      .poll(async () =>
+        (await buildContext(fs, key, 'partner-1')).includes('Wants quieter weekends'),
+      )
+      .toBe(true);
+
+    // Queue empties → "all caught up"; the banner is gone.
+    await expect(w.getByText(/All caught up/)).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Review now' })).toHaveCount(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

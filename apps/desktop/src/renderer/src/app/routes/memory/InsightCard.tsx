@@ -27,7 +27,7 @@ const formatDate = (iso: string): string => {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString();
 };
 
-const SOURCE_EYEBROW: Record<Insight['source'], string> = {
+export const SOURCE_EYEBROW: Record<Insight['source'], string> = {
   intake: 'Onboarding',
   session: 'Session',
   dream: 'Dream',

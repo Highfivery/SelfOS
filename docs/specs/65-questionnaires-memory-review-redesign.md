@@ -538,6 +538,18 @@ All open questions were resolved with the user (2026-07-17):
 
 ## 12. Changelog
 
+- 2026-07-17 — **All four slices BUILT** (one branch `feat/questionnaires-memory-redesign`, landing together as
+  one PR per the user). Slice 1 (Questionnaires landing: `orderSentGroups` pins Answered-ready-to-analyze first +
+  the card-spacing fix). Slice 2 (Memory trends humanized `METRIC_LABELS`/`prettifyMetricKey` + series picker +
+  `LineChart` `fill`/`emphasizeLast` + the compact responses strip out of `.duo`). Slice 3 (`InsightCard`
+  redesign: summary-first + measured Read-more, collapsible heavy facts, read-view `SharePresetChip`
+  tap-to-change, edit-text + flag in Edit mode, balanced footer, single pencil, 2-col/List). Slice 4 (the
+  "needs you" banner opens a one-at-a-time `ReviewQueue` — card-stack + `N of M` progress + prev/next + ← / →
+  keys + auto-advance + all-caught-up; a compact `DraftReviewCard` with a capped-height fact scroll, inline
+  "✕ not right" drop, and a LOCAL-mode share chip whose scopes are written at Keep & save; a `ProposalReviewCard`
+  with Merge / Keep both / Discard-new [the two-write reuse]; the whole page reordered). Renderer-only, no schema/
+  IPC change. Gate: typecheck + lint + format clean; 53 memory unit + 17 memory E2E green; real-Electron visual QA
+  at desktop + 360px.
 - 2026-07-17 — created + **Approved**. Design + interactive mockup approved by the user as the visual contract;
   the §11 open questions resolved with the user (no recap; drafts-then-proposals order; four-preset read-view
   chip with custom in Edit mode; `CLOSE_FAMILY` reuse; two-write "Discard new"). Captures: (A) Questionnaires landing — "Answered · ready to analyze" pinned first + card-spacing fix;

@@ -2203,6 +2203,10 @@ export const DreamSchema = z.object({
   informsContext: z.boolean().optional(),
   status: DreamStatusSchema,
   analysisId: z.string().optional(), // the canonical DreamAnalysis, once created
+  // When the coach signalled it has explored enough to write an analysis (66 §3.4). Previously this lived
+  // only in renderer state, so navigating away lost the nudge until the coach re-emitted the marker.
+  // Stamped once and never cleared. Additive-optional; absent ⇒ not yet signalled.
+  analysisReadyAt: z.string().optional(),
   image: DreamImageDescriptorSchema.optional(), // the generated image's metadata (13 §4.2); bytes in image.enc
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -2567,7 +2571,9 @@ export interface IntakeState {
  */
 export type IntakeTurnResult =
   | { ok: true; session: IntakeSession; usage: UsageEvent; filledFields?: string[] }
-  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };
+  // EMPTY (66 §3.2) = the model returned no visible text. Never persisted as a blank bubble; the
+  // person's message is already on disk, so `intake:retryTurn` can recover the turn.
+  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'EMPTY'; message: string };
 
 /**
  * Result of a synthesis pass (§6/§11.3). With a `sectionId`: a light per-section reflection (sets

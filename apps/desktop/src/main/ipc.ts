@@ -681,6 +681,15 @@ export function registerIpcHandlers(): void {
       dreamSender = undefined;
     }
   });
+  // 66 §3.2 — the retry re-generates a reply and streams it on the same dream sink.
+  ipcMain.handle(IpcChannels.dreamRetryTurn, async (event, raw: unknown) => {
+    dreamSender = event.sender;
+    try {
+      return await bridge.dreamRetryTurn(raw as { dreamId: string });
+    } finally {
+      dreamSender = undefined;
+    }
+  });
 
   // intakeRunTurn streams the interviewer reply on its own channel (kept separate from chat/dreams). Same
   // per-turn sender binding + reset as chatStream (18-personal-onboarding §6).
@@ -688,6 +697,15 @@ export function registerIpcHandlers(): void {
     intakeSender = event.sender;
     try {
       return await bridge.intakeRunTurn(raw as { sectionId: string; userText: string });
+    } finally {
+      intakeSender = undefined;
+    }
+  });
+  // 66 §3.2 — the retry re-generates a reply and streams it on the same intake sink.
+  ipcMain.handle(IpcChannels.intakeRetryTurn, async (event, raw: unknown) => {
+    intakeSender = event.sender;
+    try {
+      return await bridge.intakeRetryTurn(raw as { sectionId: string });
     } finally {
       intakeSender = undefined;
     }

@@ -465,6 +465,8 @@ export const IpcChannels = {
   dreamDelete: 'dreams:delete',
   dreamStartReflection: 'dreams:startReflection',
   dreamAnalyzeTurn: 'dreams:analyzeTurn',
+  /** 66 §6 — regenerate a dream reply for a transcript ending on an unanswered message. */
+  dreamRetryTurn: 'dreams:retryTurn',
   dreamChunk: 'dreams:chunk', // main → renderer event
   dreamGetAnalysis: 'dreams:getAnalysis',
   dreamGetConversation: 'dreams:getConversation',
@@ -490,6 +492,8 @@ export const IpcChannels = {
   // Personal onboarding (18-personal-onboarding §6).
   intakeGetState: 'intake:getState',
   intakeRunTurn: 'intake:runTurn',
+  /** 66 §6 — regenerate an interviewer reply for a section ending on an unanswered message. */
+  intakeRetryTurn: 'intake:retryTurn',
   intakeChunk: 'intake:chunk', // main → renderer event
   intakeSkipSection: 'intake:skipSection',
   intakeSubmitForm: 'intake:submitForm',
@@ -1634,6 +1638,11 @@ export interface SelfosBridge {
    * the final turn. The transcript persists under the dream (never in Sessions). Requires `dreams.own`.
    */
   dreamAnalyzeTurn(input: { dreamId: string; userText: string }): Promise<ChatTurnResult>;
+  /**
+   * 66 §3.2 — re-generate the coach's reply when a dream transcript ends on an unanswered message
+   * (a failed/empty turn, or a reflection reopened mid-turn). Adds no new user message.
+   */
+  dreamRetryTurn(input: { dreamId: string }): Promise<ChatTurnResult>;
   /** Subscribe to streamed dream-analysis reply chunks; returns an unsubscribe function. */
   onDreamChunk(listener: (delta: string) => void): () => void;
   /** Load a dream's synthesized analysis; null if not analyzed yet. Requires `dreams.own`. */
@@ -1711,6 +1720,11 @@ export interface SelfosBridge {
    * any direct field fills (the transcript lives under the person, never in Sessions). Requires `intake.own`.
    */
   intakeRunTurn(input: { sectionId: string; userText: string }): Promise<IntakeTurnResult>;
+  /**
+   * 66 §3.2 — re-generate the interviewer's reply when a section ends on an unanswered message.
+   * Adds no new user message, so it can never duplicate one.
+   */
+  intakeRetryTurn(input: { sectionId: string }): Promise<IntakeTurnResult>;
   /** Subscribe to streamed intake interview chunks; returns an unsubscribe function. */
   onIntakeChunk(listener: (delta: string) => void): () => void;
   /** Skip a whole intake section (never blocks completion). Requires `intake.own`. */

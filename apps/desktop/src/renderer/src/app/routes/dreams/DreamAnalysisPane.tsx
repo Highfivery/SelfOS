@@ -15,10 +15,12 @@ import {
   Markdown,
   MessageDayDivider,
   MessageRow,
+  RetryBanner,
   Stack,
   Text,
 } from '../../../design-system/components';
 import { Composer } from '../sessions/Composer';
+import { awaitingReply } from '../../../stores/conversationStore';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { DreamSynthesisCard } from './DreamSynthesisCard';
 import { DreamAnalyzeSuggestion } from './DreamAnalyzeSuggestion';
@@ -60,11 +62,16 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
   const open = useDreamAnalysisStore((s) => s.open);
   const startReflection = useDreamAnalysisStore((s) => s.startReflection);
   const sendTurn = useDreamAnalysisStore((s) => s.sendTurn);
+  const retryTurn = useDreamAnalysisStore((s) => s.retryTurn);
   const synthesize = useDreamAnalysisStore((s) => s.synthesize);
   const saveEdits = useDreamAnalysisStore((s) => s.saveEdits);
   const approve = useDreamAnalysisStore((s) => s.approve);
   const removeFromContext = useDreamAnalysisStore((s) => s.removeFromContext);
   const appendChunk = useDreamAnalysisStore((s) => s.appendChunk);
+
+  // 66 §3.4 — readiness is durable (stamped on the dream) OR from this turn, so leaving the reflection and
+  // coming back doesn't lose the coach's offer.
+  const ready = Boolean(dream.analysisReadyAt) || analysisReady;
 
   const threadRef = useRef<HTMLDivElement>(null);
   // Lead with the card once analyzed; the chat tucks behind a toggle (12 §3.2, confirmed in review).
@@ -160,13 +167,20 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
         )}
       </div>
 
+      {/* 66 §3.2 — a turn still awaiting a reply is always recoverable: a live failure shows the error, a
+          reflection reopened mid-turn shows a gentle prompt. Try again asks the coach to answer the
+          existing transcript, never re-sending the message. */}
+      {!sending && !opening && awaitingReply(messages) ? (
+        <RetryBanner error={error} onRetry={() => void retryTurn()} />
+      ) : null}
+
       <Composer disabled={sending || opening} onSend={(text) => void sendTurn(text)} />
 
       {/* Once the coach signals it has enough (12 §15.4), a highlighted nudge; otherwise the
           always-available "Create analysis" (or "Re-create analysis" once one exists). Exactly one analyze
           affordance at a time — never a gate. The nudge is only for the not-yet-analyzed path (a reopened
           chat behind "Continue the conversation" already has an analysis → offer re-create, not the nudge). */}
-      {analysisReady && !analysis ? (
+      {ready && !analysis ? (
         <DreamAnalyzeSuggestion busy={synthesizing} onAnalyze={() => void synthesize()} />
       ) : (
         <div className={styles.synthRow}>
@@ -195,7 +209,8 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
       </button>
       <Heading level={2}>Dream analysis</Heading>
 
-      {error ? <Banner tone="warning">{error}</Banner> : null}
+      {/* Only when the recoverable-turn banner below isn't already carrying it, so it never doubles. */}
+      {error && !awaitingReply(messages) ? <Banner tone="warning">{error}</Banner> : null}
 
       {analysis ? (
         <>

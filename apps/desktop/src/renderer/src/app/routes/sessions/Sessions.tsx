@@ -21,6 +21,7 @@ import {
   Markdown,
   MessageDayDivider,
   MessageRow,
+  RetryBanner,
   Select,
   Stack,
   Text,
@@ -465,16 +466,7 @@ export function Sessions(): JSX.Element {
                 dead-ended on an empty reply is caught too — all offer "Try again" (which asks the coach to reply
                 to the existing transcript, never re-sending/duplicating the message). */}
             {!sending && awaitingReply(messages) ? (
-              <Banner tone={error ? 'warning' : 'info'}>
-                <Stack gap={2}>
-                  <Text>{error ?? 'Your last message hasn’t been answered yet.'}</Text>
-                  <div>
-                    <Button variant="secondary" onClick={() => void retry()}>
-                      Try again
-                    </Button>
-                  </div>
-                </Stack>
-              </Banner>
+              <RetryBanner error={error} onRetry={() => void retry()} />
             ) : error ? (
               <Banner tone="warning">{error}</Banner>
             ) : null}

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Lock } from 'lucide-react';
-import { Button, Inline, Markdown, Text } from '../../../design-system/components';
+import { Button, Inline, Markdown, RetryBanner, Text } from '../../../design-system/components';
 import { Composer } from '../sessions/Composer';
 import { MessageAttachments } from '../sessions/MessageAttachments';
 import { CrisisFooter } from '../sessions/CrisisFooter';
-import { useConversationStore } from '../../../stores/conversationStore';
+import { awaitingReply, useConversationStore } from '../../../stores/conversationStore';
 import styles from './Together.module.css';
 
 /**
@@ -24,6 +24,8 @@ export function PrepPanel({
   const streaming = useConversationStore((s) => s.streaming);
   const sending = useConversationStore((s) => s.sending);
   const send = useConversationStore((s) => s.send);
+  const retry = useConversationStore((s) => s.retry);
+  const error = useConversationStore((s) => s.error);
   const appendChunk = useConversationStore((s) => s.appendChunk);
   const [ready, setReady] = useState(false);
 
@@ -105,6 +107,12 @@ export function PrepPanel({
           </Text>
         ) : null}
       </div>
+
+      {/* 66 §3.2 — the prep thread reuses the conversation store, which has always had a working
+          `retry()`; it simply had no button, so a failed prep turn was an unreachable dead end. */}
+      {!sending && awaitingReply(messages) ? (
+        <RetryBanner error={error} onRetry={() => void retry()} />
+      ) : null}
 
       <Composer
         disabled={sending}

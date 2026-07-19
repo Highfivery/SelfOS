@@ -55,9 +55,25 @@ export interface ClaudeStreamOptions {
   extendedThinking?: boolean;
 }
 
+/**
+ * Why a reply ended (66 §4). `max_tokens` means the model hit the ceiling mid-sentence — the reply is
+ * TRUNCATED, not finished. Surfacing it is what makes a cut-off detectable at all: before this, a
+ * truncated reply was persisted as if the model had chosen to stop, so nothing downstream could tell
+ * the difference (the reported "the AI just stops" bug). Kept as a widened string, not a closed union,
+ * so a new API stop reason can never crash a turn.
+ */
+export type ClaudeStopReason =
+  | 'end_turn'
+  | 'max_tokens'
+  | 'stop_sequence'
+  | 'tool_use'
+  | (string & {});
+
 export interface ClaudeStreamResult {
   text: string;
   usage: ClaudeUsage;
+  /** Absent when the transport can't report one — treated as "finished" (never as truncated). */
+  stopReason?: ClaudeStopReason;
 }
 
 export interface ClaudeClient {

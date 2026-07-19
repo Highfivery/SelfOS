@@ -86,6 +86,8 @@ export function browserClaudeClient(): ClaudeClient {
           cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
           cacheReadTokens: usage.cache_read_input_tokens ?? 0,
         },
+        // 66 §4 — kept in lockstep with the Electron client; iOS must detect truncation identically.
+        ...(final.stop_reason ? { stopReason: final.stop_reason } : {}),
       };
     },
   };

@@ -607,6 +607,7 @@ import {
   openReflection,
   removeFromContext,
   removePatternNarrativeFromContext,
+  retryDreamReply,
   runAnalysisTurn,
   saveDream,
   setDreamFactShare,
@@ -619,6 +620,7 @@ import {
   getIntakeSection,
   getIntakeSession,
   intakeSectionMeta,
+  retryIntakeTurn,
   runIntakeTurn,
   setIntakeAnswerSharing,
   skipIntakeSection,
@@ -6850,6 +6852,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personId,
         status: existing?.status ?? 'captured',
         ...(existing?.analysisId !== undefined ? { analysisId: existing.analysisId } : {}),
+        // 66 §3.4 — the readiness signal is main-owned like status/analysisId; carry it across an edit or
+        // editing the dream would silently drop the coach's "ready to analyze" offer.
+        ...(existing?.analysisReadyAt !== undefined
+          ? { analysisReadyAt: existing.analysisReadyAt }
+          : {}),
         ...(existing?.image !== undefined ? { image: existing.image } : {}),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
@@ -6906,6 +6913,26 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personId,
         dreamId,
         userText,
+        onDelta: (text) => host.emitDreamChunk(text),
+        now: new Date(),
+      });
+    },
+    dreamRetryTurn: async (input): Promise<ChatTurnResult> => {
+      const { dreamId } = DreamIdSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      return retryDreamReply({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        personId,
+        dreamId,
         onDelta: (text) => host.emitDreamChunk(text),
         now: new Date(),
       });
@@ -7219,6 +7246,26 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personId,
         sectionId,
         userText,
+        onDelta: (text) => host.emitIntakeChunk(text),
+        now: new Date(),
+      });
+    },
+    intakeRetryTurn: async (input): Promise<IntakeTurnResult> => {
+      const { sectionId } = IntakeSectionIdSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      return retryIntakeTurn({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        personId,
+        sectionId,
         onDelta: (text) => host.emitIntakeChunk(text),
         now: new Date(),
       });

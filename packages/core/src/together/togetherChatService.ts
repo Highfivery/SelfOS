@@ -24,6 +24,7 @@ import { buildTogetherSystemPrompt } from './togetherPromptBuilder';
 import { captureAgreementFromMarker } from './agreementService';
 import { captureJointChallengeFromMarker } from './togetherChallengeService';
 import { captureSuggestionFromMarker } from './suggestionService';
+import { streamWithContinuation } from '../conversations/streamWithContinuation';
 
 // ── The couples turn (58 §5.1) — a sibling of `runChatTurn` (05 §4.1), not a change to it ─────────
 // Invariants held verbatim: budget gate (the INITIATOR pays, §6.2) → persist the author's message FIRST
@@ -212,9 +213,27 @@ async function generateCoachReply(
 
   let result;
   try {
-    result = await client.stream(
+    result = await streamWithContinuation(
+      client,
       { apiKey, model, system, messages, maxTokens: TOGETHER_MAX_TOKENS },
       deps.onDelta,
+      {
+        // 66 §3.1 — continue a cut-off couples reply silently; re-check the budget each time, since a
+        // continuation is a fresh billed call charged to the initiator (§5.1).
+        canContinue: async () =>
+          !(
+            (
+              await checkBudget(fs, key, {
+                scope: 'person',
+                personId: session.initiatorPersonId,
+                now,
+                override: deps.override,
+              })
+            ).state === 'over' ||
+            (await checkBudget(fs, key, { scope: 'app', now, override: deps.override })).state ===
+              'over'
+          ),
+      },
     );
   } catch {
     return {

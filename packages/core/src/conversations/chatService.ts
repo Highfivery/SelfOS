@@ -27,6 +27,7 @@ import { getExercise } from './guidedCatalog';
 import { CHALLENGE_COACH_ID } from './challengeCoach';
 import { parseChallengeMarker, parseLatestStep, stripCoachMarkers } from './guidedSteps';
 import { TOPIC_MODEL, classifyTopic, topicShifted } from './topicClassifier';
+import { streamWithContinuation } from './streamWithContinuation';
 
 export type { ChatTurnResult };
 
@@ -265,6 +266,8 @@ async function generateCoachReply(
     | 'onDelta'
     | 'depthAsk'
     | 'goalRaise'
+    // 66 §5.1 — the continuation gate re-checks the budget, which honours the owner override.
+    | 'override'
   >,
   conversation: Conversation,
   topicOverride: { lifeAreas: string[] } | undefined,
@@ -288,7 +291,8 @@ async function generateCoachReply(
   const claudeMessages = await buildClaudeMessages(fs, key, conversation.messages);
   let result;
   try {
-    result = await client.stream(
+    result = await streamWithContinuation(
+      client,
       {
         apiKey,
         model,
@@ -300,6 +304,23 @@ async function generateCoachReply(
         maxTokens: CHAT_MAX_TOKENS,
       },
       deps.onDelta,
+      {
+        // 66 §3.1 — if the reply still hits the ceiling, continue it silently rather than persisting a
+        // half-finished one. Re-check the budget before each continuation: it's a fresh billed call.
+        canContinue: async () =>
+          !(
+            (
+              await checkBudget(fs, key, {
+                scope: 'person',
+                personId,
+                now,
+                override: deps.override,
+              })
+            ).state === 'over' ||
+            (await checkBudget(fs, key, { scope: 'app', now, override: deps.override })).state ===
+              'over'
+          ),
+      },
     );
   } catch {
     return {

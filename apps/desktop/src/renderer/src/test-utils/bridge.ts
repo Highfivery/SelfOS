@@ -588,6 +588,36 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
           ],
         },
       }),
+    dreamRetryTurn: (input) =>
+      Promise.resolve({
+        ok: true,
+        conversation: {
+          id: input.dreamId,
+          schemaVersion: 1,
+          personId: 'owner-1',
+          title: 'Dream',
+          createdAt: 'now',
+          updatedAt: 'now',
+          messages: [
+            { role: 'user', content: 'I was falling', ts: 'now' },
+            { role: 'assistant', content: 'Tell me more about how it felt.', ts: 'now' },
+          ],
+        },
+        usage: {
+          id: 'u',
+          schemaVersion: 1,
+          type: 'dream.analyze',
+          personId: 'owner-1',
+          sessionId: input.dreamId,
+          model: 'claude-sonnet-4-6',
+          at: 'now',
+          inputTokens: 100,
+          outputTokens: 10,
+          cacheWriteTokens: 0,
+          cacheReadTokens: 0,
+          costUsd: 0.001,
+        },
+      }),
     dreamAnalyzeTurn: (input) =>
       Promise.resolve({
         ok: true,
@@ -724,6 +754,43 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         sections: [],
         aiAvailable: false,
         adultAcknowledged: false,
+      }),
+    intakeRetryTurn: (input) =>
+      Promise.resolve({
+        ok: true,
+        session: {
+          id: 'intake-1',
+          schemaVersion: 1,
+          personId: 'owner-1',
+          status: 'inProgress',
+          sections: [
+            {
+              id: input.sectionId,
+              status: 'inProgress',
+              restricted: false,
+              messages: [
+                { role: 'user', content: 'I am Sam.', ts: 'now' },
+                { role: 'assistant', content: 'Thank you for sharing that.', ts: 'now' },
+              ],
+              answers: {},
+            },
+          ],
+          startedAt: 'now',
+          updatedAt: 'now',
+        },
+        usage: {
+          id: 'u',
+          schemaVersion: 1,
+          type: 'intake.interview',
+          personId: 'owner-1',
+          model: 'claude-sonnet-4-6',
+          at: 'now',
+          inputTokens: 10,
+          outputTokens: 10,
+          cacheWriteTokens: 0,
+          cacheReadTokens: 0,
+          costUsd: 0.001,
+        },
       }),
     intakeRunTurn: (input) =>
       Promise.resolve({

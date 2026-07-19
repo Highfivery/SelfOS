@@ -419,6 +419,25 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-19 — **Fix (editing a dream silently DROPPED its generated image; SPEC 13 §4.2; on
+  `claude/brave-hugle-19da20`).** `coreBridge.dreamSave` rebuilds the `Dream` from `DreamInputSchema.parse(input)`
+  plus a few explicitly carried-forward main-owned fields (`id`/`status`/`analysisId`/`createdAt`). **`Dream.image`
+  — the additive-optional image descriptor written ONLY by `dreamImageService` — was neither in `DreamInput` (so the
+  renderer can never send it back) nor carried forward**, so "Edit dream" → Save dropped it: the encrypted bytes at
+  `people/<id>/dreams/<id>/image.enc` were orphaned with nothing pointing at them, the image vanished from the UI,
+  and any per-person `shareableWith` on the descriptor was silently revoked. **Reproduced FIRST** (a coreBridge test
+  asserting `edited.image` — `undefined` before the fix), then fixed by carrying `existing.image` forward exactly the
+  way `analysisId` already is (a one-line conditional spread; no schema/IPC change). Gate green: typecheck, lint,
+  format, **1483 core + 12 relay + 1347 desktop** unit (+1 regression: generate → share with a partner → edit → the
+  descriptor AND its `shareableWith` survive AND the bytes still resolve), **9 dream E2E** (the existing visualize
+  walk extended through the real UI: Edit dream → Save → the image is still rendered on the read-first detail + a
+  vault decrypt asserts the descriptor survived — **verified to FAIL with the fix reverted**, i.e. the image really
+  does disappear on screen). **Lesson: when a handler rebuilds a record from a narrower renderer INPUT schema plus a
+  hand-listed set of carried-forward fields, every main-owned field is opt-in — adding an additive-optional field to
+  the full schema (`Dream.image`) silently makes it droppable on the next edit. Audit the carry-forward list against
+  the full schema whenever a main-written field is added; a bridge round-trip test alone isn't enough — drive the
+  edit through the UI, since the user-visible symptom is the image disappearing.**
+
 - 2026-07-17 — **Build + durable owner decision (Memory insights — context header, card grid, nav badge &
   ALL-insights-shared-with-partner-by-default; mockup approved FIRST; SPEC 62 §13; on `feat/memory-insights-context`,
   a worktree off main, PR pending).** Four user-requested Memory improvements; interactive Artifact mockup approved +

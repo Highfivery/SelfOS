@@ -17,6 +17,7 @@ import {
   pairKeyFor,
   projectMessages,
   reapTogetherForPerson,
+  awaitingTogetherReply,
   turnStateFor,
   unreadCountFor,
   updateState,
@@ -172,6 +173,29 @@ describe('projectMessages (§5.2)', () => {
     const forB = projectMessages(messages, B);
     expect(forB.map((m) => m.id)).toEqual(['reply']);
     expect(forB[0]?.replyToMessageId).toBeUndefined();
+  });
+});
+
+describe('awaitingTogetherReply (66 §3.2)', () => {
+  it('is true when the coach still owes a reply, false once it has answered', () => {
+    // Together used to gate "Try again" on transient `error` state only, so a session reopened after an
+    // unanswered turn dead-ended. Deriving it from the transcript is what fixes that.
+    const unanswered = [msg(A, 'user', '1'), msg('coach', 'assistant', '2'), msg(B, 'user', '3')];
+    expect(awaitingTogetherReply(unanswered, A)).toBe(true);
+
+    const answered = [...unanswered, msg('coach', 'assistant', '4')];
+    expect(awaitingTogetherReply(answered, A)).toBe(false);
+  });
+
+  it('ignores a trailing blank ghost reply left by older code', () => {
+    const withGhost = [msg(A, 'user', '1'), msg('coach', 'assistant', '2', { content: '  ' })];
+    expect(awaitingTogetherReply(withGhost, A)).toBe(true);
+  });
+
+  it('is viewer-projected — a partner’s private aside never makes it look answered', () => {
+    // B must not see A's aside at all, so it can't affect whether B is owed a reply.
+    const messages = [msg(B, 'user', '1'), msg(A, 'user', '2', { id: 'x', privateAside: true })];
+    expect(awaitingTogetherReply(messages, B)).toBe(true);
   });
 });
 

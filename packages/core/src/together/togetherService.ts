@@ -515,6 +515,27 @@ export function turnStateFor(messages: TogetherMessage[], viewerId: string): boo
   return newest ? newest.authorPersonId !== viewerId : false;
 }
 
+/**
+ * Whether the coach still owes this viewer a reply (66 §3.2) — the newest non-blank message in THEIR
+ * projection is a human one. Derived from the transcript, not from transient error state, so a session
+ * reopened days later still offers recovery instead of dead-ending (the 05 §4.1 fix, ported to Together).
+ * Viewer-projected, so a partner's private aside never counts toward the viewer's turn.
+ */
+export function awaitingTogetherReply(messages: TogetherMessage[], viewerId: string): boolean {
+  return awaitingReplyIn(projectMessages(messages, viewerId));
+}
+
+/**
+ * The same predicate over an ALREADY-projected list — the shape the renderer holds, so the thread's
+ * "Try again" and any host-side derivation share one definition rather than drifting apart.
+ */
+export function awaitingReplyIn(
+  projected: { role: 'user' | 'assistant'; content: string }[],
+): boolean {
+  const real = projected.filter((m) => m.content.trim() !== '');
+  return real[real.length - 1]?.role === 'user';
+}
+
 /** Unread (§3.11): projected messages not authored by the viewer, newer than their `lastReadMessageAt`. */
 export function unreadCountFor(
   messages: TogetherMessage[],

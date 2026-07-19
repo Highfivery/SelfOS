@@ -18,6 +18,8 @@ interface IntakeStoreState {
   load: () => Promise<void>;
   appendChunk: (delta: string) => void;
   runTurn: (sectionId: string, userText: string) => Promise<void>;
+  /** Re-answer a section whose transcript ends on an unanswered message (66 §3.2). */
+  retryTurn: (sectionId: string) => Promise<void>;
   skipSection: (sectionId: string) => Promise<void>;
   /** Submit a structured form section's answers (no AI). Fills the profile + marks the section complete.
    * `sharing` carries the per-question relationship-type scopes (43); unset questions default server-side. */
@@ -66,6 +68,22 @@ export const useIntakeStore = create<IntakeStoreState>((set, get) => ({
     if (!trimmed || get().running) return;
     set({ running: true, streaming: '', error: null });
     const result = await window.selfos?.intakeRunTurn({ sectionId, userText: trimmed });
+    if (result?.ok) {
+      set((s) => ({
+        running: false,
+        streaming: '',
+        state: s.state ? { ...s.state, session: result.session } : s.state,
+      }));
+      await useBudgetStore.getState().refresh();
+    } else {
+      set({ running: false, streaming: '', error: result?.message ?? 'Something went wrong.' });
+    }
+  },
+  retryTurn: async (sectionId) => {
+    if (get().running) return;
+    // Adds no new user message — core re-answers the section transcript as it already stands (66 §3.2).
+    set({ running: true, streaming: '', error: null });
+    const result = await window.selfos?.intakeRetryTurn({ sectionId });
     if (result?.ok) {
       set((s) => ({
         running: false,

@@ -1,6 +1,7 @@
 import { Fragment, useRef, useState } from 'react';
 import { ImagePlus, Lock, MessageCirclePlus, Users, X } from 'lucide-react';
 import type { TogetherMessageView, TogetherSessionView } from '@shared/schemas';
+import { awaitingReplyIn } from '@selfos/core/together';
 import {
   AttachmentThumb,
   Banner,
@@ -363,11 +364,14 @@ export function TogetherThread({
         ) : null}
       </div>
 
-      {error ? (
+      {/* 66 §3.2 — recovery is driven by the TRANSCRIPT, not just a live error: a session reopened after an
+          unanswered turn used to dead-end here, since `error` is transient. Now the coach owing a reply is
+          enough to offer Try again, with the gentler tone when there's no live failure. */}
+      {!sending && (error || awaitingReplyIn(session.messages)) ? (
         <div className={styles.threadBanner}>
-          <Banner tone="danger">
+          <Banner tone={error ? 'danger' : 'info'}>
             <Inline gap={2} align="center" wrap>
-              <span>{error}</span>
+              <span>{error ?? 'The last message hasn’t been answered yet.'}</span>
               <Button variant="secondary" onClick={() => void retry()} disabled={sending}>
                 Try again
               </Button>

@@ -19,10 +19,10 @@ const challenge = (over: Partial<Challenge>): Challenge => ({
   ...over,
 });
 
-function renderCard(): void {
+function renderCard(props: { checkInHandledElsewhere?: boolean } = {}): void {
   render(
     <MemoryRouter>
-      <ChallengeCard />
+      <ChallengeCard {...props} />
     </MemoryRouter>,
   );
 }
@@ -49,16 +49,29 @@ describe('ChallengeCard', () => {
   });
 
   // …and once it IS due, the card defers so Home never offers the same check-in twice (§7).
-  it('hides its action row once a check-in is due, deferring to the focal recommendation', () => {
+  it('hides its action row once a check-in is due AND the recommendation is on screen', () => {
     useChallengeStore.setState({
       challenges: [challenge({ checkInAt: new Date(Date.now() - 3600_000).toISOString() })],
       loaded: true,
     });
-    renderCard();
+    renderCard({ checkInHandledElsewhere: true });
     expect(screen.getByText(/ready for a check-in/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /how.s it going/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'I did it' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Not yet' })).toBeNull();
+  });
+
+  // The gap the conditional closes: the "For you" band is suppressed under proactivity-off / crisis / a new
+  // person / dismissal, so deferring on `checkInDue` alone left the highest-intent moment with no action.
+  it('KEEPS its actions when a check-in is due but the recommendation is suppressed', () => {
+    useChallengeStore.setState({
+      challenges: [challenge({ checkInAt: new Date(Date.now() - 3600_000).toISOString() })],
+      loaded: true,
+    });
+    renderCard({ checkInHandledElsewhere: false });
+    expect(screen.getByText(/ready for a check-in/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'I did it' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Not yet' })).toBeInTheDocument();
   });
 
   it('self-hides when there is no active challenge', () => {

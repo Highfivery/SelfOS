@@ -201,12 +201,14 @@ A captured challenge surfaces as a **ChallengeCard** in two places (reusing exis
 
   The `challenge-checkin` provider is **unchanged** — this is a renderer-side deferral, not an engine change.
 
-  **Caveat (accepted):** the "For you" band is itself suppressed when `coaching.proactivity` is off, under a
-  recurring crisis, for a brand-new person, or once that recommendation has been dismissed for the current
-  signal (53 §3.4). In those states a due check-in has no inline actions on Home and degrades to the
-  "How's it going?" link into Sessions. That is the **pre-existing** behaviour for a due check-in (60 §3.1.5
-  left only that link), so this is not a regression — but "the recommendation owns the moment" holds only
-  while the band is rendering.
+  **The deferral is conditional on the recommendation ACTUALLY RENDERING, not on `checkInDue` alone.** The
+  "For you" band is itself suppressed when `coaching.proactivity` is off, under a recurring crisis, for a
+  brand-new person, or once that recommendation has been dismissed for the current signal (53 §3.4).
+  Deferring on due-ness alone would hand the moment to a surface that isn't on screen, leaving the
+  highest-intent moment with no inline action anywhere on Home. So Home computes
+  `showEncouragement && recs.some(r => r.id === 'challenge-checkin')` and passes it as
+  `ChallengeCard.checkInHandledElsewhere`; the card hides its action row only then, and otherwise keeps it.
+  Both surfaces stay mutually exclusive, with no dead state in between.
 
 - **Sessions surface** — a slim "active challenge" indicator/section so a challenge is visible where the work
   happens (placement a build nicety). (A dedicated `/challenges` list of history is a §11/future nicety — v1

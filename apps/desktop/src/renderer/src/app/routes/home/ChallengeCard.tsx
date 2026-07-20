@@ -34,9 +34,20 @@ function daysSince(iso: string | undefined, now: number): number {
  * split the job so they never duplicate (§7):
  *   • not due → this card owns it (inline I did it / Not yet / Reflect);
  *   • due     → this card HIDES its action row and the focal "For you" recommendation owns the moment.
+ *
+ * The deferral is conditional on `checkInHandledElsewhere`, NOT on `checkInDue` alone: the "For you" band is
+ * itself suppressed under proactivity-off, an active crisis, a brand-new person, or once that recommendation
+ * has been dismissed for the current signal (53 §3.4). Deferring to a surface that isn't rendering would
+ * leave a due check-in — the highest-intent moment — with no inline action anywhere on Home.
+ *
  * Self-hides when there's no active challenge. Per-person (the store is scoped).
  */
-export function ChallengeCard(): JSX.Element | null {
+export function ChallengeCard({
+  checkInHandledElsewhere = false,
+}: {
+  /** True only when the `challenge-checkin` recommendation is genuinely on screen (Home computes this). */
+  checkInHandledElsewhere?: boolean;
+} = {}): JSX.Element | null {
   const navigate = useNavigate();
   const challenges = useChallengeStore((s) => s.challenges);
   const checkIn = useChallengeStore((s) => s.checkIn);
@@ -82,9 +93,9 @@ export function ChallengeCard(): JSX.Element | null {
             {checkInDue ? ' · ready for a check-in' : ''}
           </Text>
         </div>
-        {/* Due → defer to the "For you" `challenge-checkin` recommendation, which owns the moment in the
-            focal zone. Offering the same outcome buttons here too would be the §7 duplicate-action failure. */}
-        {checkInDue ? (
+        {/* Defer only when that recommendation is ACTUALLY rendering — otherwise this card keeps the actions
+            so a due check-in is never left with nowhere to act (§7 duplicate-action vs. a dead end). */}
+        {checkInDue && checkInHandledElsewhere ? (
           <Button variant="ghost" size="sm" onClick={() => navigate('/sessions')}>
             How’s it going?
           </Button>

@@ -121,11 +121,14 @@ function isContinuationCall(messages: ClaudeMessage[]): boolean {
  * "…it stops mid-sentence — and here is the rest."
  */
 function fakeTruncation(
-  options: { messages: ClaudeMessage[] },
+  options: { messages: ClaudeMessage[]; model: string },
   onDelta: (text: string) => void,
 ): Promise<ClaudeStreamResult> | null {
   const mode = process.env['SELFOS_FAKE_TRUNCATE'];
   if (!mode) return null;
+  // The cheap Haiku topic classifier runs BEFORE the chat turn and lands here too — without this it would
+  // consume the one-shot, leaving the actual reply untruncated (the same trap SELFOS_FAKE_CHAT_EMPTY hit).
+  if (options.model.includes('haiku')) return null;
   const usage = { inputTokens: 120, outputTokens: 20, cacheWriteTokens: 0, cacheReadTokens: 0 };
 
   if (isContinuationCall(options.messages)) {

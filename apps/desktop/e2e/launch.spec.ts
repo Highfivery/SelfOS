@@ -1978,6 +1978,108 @@ test('sessions (05 §4.1): an empty reply surfaces an error + a working "Try aga
   }
 });
 
+test('sessions (66 §3.1): a cut-off reply auto-continues into one seamless message', async () => {
+  // The reported bug: a reply that hit the token ceiling was persisted half-finished, with nothing in the
+  // app able to tell it apart from a finished one. SELFOS_FAKE_TRUNCATE makes the first prose reply stop at
+  // `max_tokens`; the continuation completes it. The two halves must arrive as ONE reply — no seam, no
+  // banner, no button.
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_TRUNCATE: '1' },
+  });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await w.getByLabel('Message').fill('Tell me something that runs long');
+    await w.getByRole('button', { name: 'Send' }).click();
+
+    // The stitched sentence reads as one continuous reply.
+    await expect(
+      w.getByText(/first half and it stops mid-sentence — and here is the rest\./i).first(),
+    ).toBeVisible();
+    // Auto-continue is invisible: it is NOT surfaced as a failure the person has to recover from.
+    await expect(w.getByRole('button', { name: 'Try again' })).toHaveCount(0);
+    await expect(w.getByText(/came back empty/i)).toHaveCount(0);
+
+    await w.screenshot({ path: 'e2e-artifacts/66-auto-continue.png' });
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('sessions (66 §3.3): rewind — retry from here, then delete from here, persisted', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: e2eEnv(),
+  });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+
+    await w.getByLabel('Message').fill('first question');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+    await w.getByLabel('Message').fill('second question');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText('second question').first()).toBeVisible();
+
+    // Hover a message so the actions are actually visible for the visual check (they're opacity:0 at rest).
+    await w.getByText('second question').first().hover();
+    await w.screenshot({ path: 'e2e-artifacts/66-message-actions.png' });
+
+    // "Retry from here" on the coach's LAST reply re-answers the same question — never duplicating it.
+    await w
+      .getByRole('button', { name: /Retry from the coach’s reply/i })
+      .last()
+      .click();
+    await expect(w.getByText('second question')).toHaveCount(1);
+
+    // "Delete from here" on the second question drops it and everything after, behind an inline confirm.
+    await w
+      .getByRole('button', { name: /Delete from your turn/i })
+      .last()
+      .click();
+    await expect(w.getByText(/Delete 2 messages\?/i)).toBeVisible();
+    await w.screenshot({ path: 'e2e-artifacts/66-delete-confirm.png' });
+    await w.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(w.getByText('second question')).toHaveCount(0);
+
+    // It's a vault write, not just store state — reopen the session and it's still gone.
+    await w.getByRole('link', { name: 'Home' }).click();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await w
+      .getByRole('button', { name: /first question/i })
+      .first()
+      .click();
+    await expect(w.getByText('first question').first()).toBeVisible();
+    await expect(w.getByText('second question')).toHaveCount(0);
+
+    // §12 — the actions must not introduce a horizontal scrollbar at phone width.
+    await w.setViewportSize({ width: 360, height: 800 });
+    const overflow = await w.evaluate(() =>
+      [...document.querySelectorAll('*')].some((el) => {
+        const style = getComputedStyle(el);
+        return (
+          (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+          el.scrollWidth > el.clientWidth
+        );
+      }),
+    );
+    expect(overflow).toBe(false);
+    await w.screenshot({ path: 'e2e-artifacts/66-rewind-360.png' });
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('sessions (05 §4.1): re-opening a session that ended on the user’s message offers a working "Try again"', async () => {
   // The reported case: a prior turn never got a reply, so the transcript ends on the user's message. Re-opening
   // it must not be a dead end — a gentle prompt + a Try again that gets a reply (no duplicate of the message).

@@ -34,10 +34,10 @@ export function MessageActions({
     const total = followingCount + 1;
     return (
       <div className={styles.confirm} role="group" aria-label={`Delete ${label}?`}>
+        {/* Short enough to sit on one line beside the buttons, while still naming the real count —
+            the honest part is how many go, not the sentence. */}
         <span className={styles.confirmText}>
-          {total === 1
-            ? 'Delete this message?'
-            : `Delete this message and the ${followingCount} after it?`}
+          {total === 1 ? 'Delete this message?' : `Delete ${total} messages?`}
         </span>
         <Button
           variant="secondary"

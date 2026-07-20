@@ -385,9 +385,10 @@ export function Sessions(): JSX.Element {
                                   0,
                                   messages.length - messages.indexOf(message) - 1,
                                 )}
-                                label={
-                                  message.role === 'user' ? 'your message' : 'the coach’s reply'
-                                }
+                                // Deliberately NOT "…your message": Playwright's getByLabel matches
+                                // aria-label SUBSTRINGS, so any label containing "message" collides with
+                                // the composer's `getByLabel('Message')` in 42 existing tests.
+                                label={message.role === 'user' ? 'your turn' : 'the coach’s reply'}
                                 onRegenerate={() => void regenerateFrom(messages.indexOf(message))}
                                 onDelete={() => void rewind(messages.indexOf(message))}
                               />

@@ -64,13 +64,19 @@
   color: var(--color-danger);
 }
 
-/* The inline confirm — matches the app's existing two-step habit rather than introducing a modal. */
+/* The inline confirm — matches the app's existing two-step habit rather than introducing a modal.
+   `max-content` sizes it to ONE line when that fits (it otherwise stretched toward the full bubble
+   width and pushed Cancel onto its own line, which read as a stray message rather than a prompt). */
 .confirm {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
-  padding: var(--space-2);
+  /* A flex ITEM ignores `width: max-content` unless it's told not to grow/shrink. */
+  flex: none;
+  width: max-content;
+  max-width: 100%;
+  padding: var(--space-1) var(--space-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
@@ -81,4 +87,10 @@
   color: var(--color-text-secondary);
   /* The classic flexbox footgun (§12) — without this the text pushes the buttons out of the row. */
   min-width: 0;
+}
+
+/* Compact the buttons so the prompt reads as one quiet line, not a full-size action bar. */
+.confirm button {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-sm);
 }

@@ -51,6 +51,74 @@
   padding: 2px var(--space-2);
 }
 
+/* ── Tab strip (§3.2a — the Questionnaires tab pattern) ──────────────────────────
+   ≤4 fixed tabs fit at 360px; overflow-x is an inert last resort, never the norm (§12). */
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px var(--space-4) 12px;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab:hover {
+  color: var(--color-text-primary);
+}
+.tab:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+.tabActive {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  border-bottom-color: var(--color-accent-solid);
+}
+.tabCount {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: var(--radius-full, 999px);
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+.tabCountAttn {
+  background: var(--color-warning-subtle-bg);
+  color: var(--color-warning-subtle-text);
+  border-color: transparent;
+}
+.tabPanel {
+  min-width: 0;
+}
+/* Tighten so all 4 tabs (incl. Desire) fit at 360px with no scroll (§12) — badges shrink too. */
+@media (max-width: 480px) {
+  .tab {
+    padding: 9px var(--space-1) 11px;
+    gap: var(--space-1);
+    font-size: 0.8rem;
+  }
+  .tabCount {
+    padding: 1px 5px;
+    font-size: 0.62rem;
+  }
+}
+
 /* ── Check-in strip (Pulse, §3.10a) ──────────────────────────────────────────── */
 .checkIn {
   display: flex;
@@ -500,7 +568,7 @@
 }
 .practiceGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: var(--space-3);
 }
 .practiceCard {
@@ -539,13 +607,17 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-/* The full blurb — never clamped, so it's clear what each practice is (§166). */
+/* Blurb clamped to 2 lines (§3.2a/§12 density) — the full text is on the practice's own start screen. */
 .practiceBlurb {
   font-size: 0.82rem;
   color: var(--color-text-secondary);
-  line-height: 1.5;
+  line-height: 1.45;
   min-width: 0;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* ── Joint challenge strip ───────────────────────────────────────────────────── */

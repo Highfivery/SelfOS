@@ -166,6 +166,50 @@ With >1 partner, a partner switcher scopes the page to one pair at a time.
 in D, Pulse in G, Joint challenge in H) and **every tile self-hides when its data source is empty**.
 Each phase's E2E asserts no unbuilt tile/row renders.
 
+#### 3.2a Tabbed information architecture (amended 2026-07-20, `feat/together-tabs-ia`)
+
+By Phase H the home had grown to seven stacked sections (hero · Pulse · sessions board · an 8-card
+guided catalog whose blurbs were never clamped · joint challenges · the Desire & intimacy panel ·
+crisis footer) — a long, busy scroll where finding one thing meant passing everything else. The flat
+§3.2 layout is **superseded by a four-tab surface** (the user chose "four tabs" from an approved
+mockup); the sections above are unchanged in behaviour, only regrouped.
+
+- **Persistent chrome (outside the tabs):** the hero (title · partner switcher · frame line · New
+  session) and the crisis footer stay above/below the tabs on every tab — a session is never more
+  than one control away, and the not-medical line + "Get help now" are always present (§8.2).
+- **The tabs**, in order, using the established tab pattern (the Questionnaires `role="tablist"` +
+  roving-tabindex a11y, deep-linked via a `together/*` splat route like Your Story so a tab survives
+  reload and is linkable — the `together/session/:id` sibling route is disambiguated by an
+  `isTogetherTab`-style guard, and any unknown segment falls back to the default tab):
+  1. **Sessions** — the sessions board (its existing groups: Your turn · Open invitation · Waiting ·
+     Invitations you sent · Wrapped-up-collapsed) **and the Joint challenge section below it** (both
+     are the shared, in-flight work with the partner — the tab is "what's active between you"). Its
+     count badge shows the your-turn + open-invitation total, amber when any needs you.
+  2. **Practices** — the non-adult guided catalog (Connect + Repair, 8 cards) with its search. **Card
+     blurbs clamp to 2 lines** in a denser `auto-fit minmax(~260px)` grid (they were full-width and
+     never clamped — the single biggest contributor to the old scroll length, §12 density rule). When
+     Desire is not yet unlocked for the pair, the **18+ acknowledgement prompt lives quietly at the
+     bottom of this tab** (never its own visible tab until it's real — see below).
+  3. **Pulse** — the check-in form + trend/alignment blocks, unchanged. Its tab carries a **"due"
+     count badge** when a check-in is due (>7 days since the last, §3.10a), mirroring the
+     Questionnaires tab-count pattern, so a check-in behind a tab isn't forgotten — the badge clears
+     once logged. (Chosen over an inline duplicate on another tab, which would be a §7 double-surface.)
+  4. **🔒 Desire** — the full Desire & intimacy panel (YNM + the 3 adult practices). **The tab appears
+     ONLY once BOTH partners have acknowledged 18+ / enabled adult content** (`status.eligible`, the
+     existing host-gated conjunction) — so the word "Desire" is never on screen over someone's
+     shoulder until the pair is actually using it. Before that, the ack/opt-in prompt is the
+     bottom-of-Practices affordance above; a person who has acked but is waiting on their partner sees
+     the "waiting for <partner>" state there, still with no visible Desire tab. This is a **stricter**
+     privacy posture than today (where the "Desire & intimacy" heading is always on the page once you
+     have a partner), consistent with §1's "never make anyone feel surveilled". The tab's visibility
+     is derived from the same host-side `youAcked`/`eligible` signals the panel already returns — no
+     new gate, no inventory leaked to decide it.
+- **Progressive assembly still holds:** a tab whose only content hasn't been built/enabled yet does
+  not render (Pulse is Phase G, Desire is Phase F, the catalog is Phase E). With everything built, an
+  empty-of-sessions Sessions tab shows the existing "No sessions yet" empty state, not a bare heading.
+- **Responsive (§12):** the tab strip scrolls-x only as an inert last resort (`overflow-x:auto`,
+  hidden scrollbar); at ≤4 fixed tabs it fits at 360px. No content section caps its width.
+
 ### 3.3 Starting a session
 
 1. **Start a session** → pick the partner (pre-selected when only one) → optional topic (free text

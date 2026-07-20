@@ -9,9 +9,9 @@ export function practiceEyebrow(
 }
 
 /**
- * One full-width guided-practice card (58 §3.10) — eyebrow (framework + steps), title, and the FULL blurb
- * (never clamped, §166) so it's clear what the practice is. Picking it raises it to the start bar. Shared by
- * the main catalog and the Desire & intimacy panel.
+ * One guided-practice card (58 §3.10) — eyebrow (framework + steps), title, and a blurb clamped to 2 lines
+ * (§3.2a/§12 density: unclamped full-width blurbs were the biggest contributor to the old scroll length).
+ * Picking it opens the start modal. Shared by the Practices tab and the Desire & intimacy panel.
  */
 export function PracticeCard({
   entry,

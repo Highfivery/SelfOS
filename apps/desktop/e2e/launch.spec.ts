@@ -303,6 +303,14 @@ async function switchTogetherPerson(w: Page, name: string): Promise<void> {
   await expect(w.getByRole('button', { name: `Signed in as ${name}` })).toBeVisible();
 }
 
+/** Switch the Together home to a tab (58 §3.2a) — Sessions is the default; catalog/Pulse/Desire live behind. */
+async function openTogetherTab(
+  w: Page,
+  name: 'Sessions' | 'Practices' | 'Pulse' | 'Desire',
+): Promise<void> {
+  await w.getByRole('tab', { name: new RegExp(name) }).click();
+}
+
 /**
  * §12: assert nothing scrolls horizontally. The guard is the INNER-SCROLLER scan (any element whose computed
  * `overflow-x` is auto/scroll and whose content exceeds it), NOT a document-width assertion — on macOS the
@@ -10463,6 +10471,47 @@ test('together (58) issue #206: "Wrap up & reflect" CLOSES OUT an active session
   }
 });
 
+test('together (58 §3.2a): the home is tabbed — Sessions/Practices/Pulse (no Desire until unlocked), and a tab deep-links + survives reload', async () => {
+  const { userData, vault } = await seedTogetherReady();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Together/ }).click();
+
+    // Three tabs while Desire is locked; the guided catalog is NOT on the default Sessions tab.
+    await expect(w.getByRole('tab', { name: /Sessions/ })).toBeVisible();
+    await expect(w.getByRole('tab', { name: /Practices/ })).toBeVisible();
+    await expect(w.getByRole('tab', { name: /Pulse/ })).toBeVisible();
+    await expect(w.getByRole('tab', { name: /Desire/ })).toHaveCount(0);
+    await expect(w.getByRole('heading', { name: 'Start a guided practice' })).toHaveCount(0);
+
+    await w.screenshot({ path: 'e2e-artifacts/58-tabs-sessions.png' });
+
+    // Open Practices → the catalog appears, and the URL reflects the tab (deep-linkable, §3.2a).
+    await openTogetherTab(w, 'Practices');
+    await expect(w.getByRole('heading', { name: 'Start a guided practice' })).toBeVisible();
+    expect(await w.evaluate(() => location.hash)).toContain('/together/practices');
+    await w.screenshot({ path: 'e2e-artifacts/58-tabs-practices.png' });
+
+    // Reload → the deep-linked tab survives (the splat route + state mirror), not a reset to Sessions.
+    await w.reload();
+    await expect(w.getByRole('heading', { name: 'Start a guided practice' })).toBeVisible();
+    await expect(w.getByRole('tab', { name: /Practices/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+
+    // §12: no inner horizontal scrollbar at 360px with the (3-tab) strip.
+    await w.setViewportSize({ width: 360, height: 900 });
+    await expectNoInnerOverflow(w);
+    await w.screenshot({ path: 'e2e-artifacts/58-tabs-360.png' });
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('together (58) issue #207: picking a practice card lower down opens a centered start MODAL, in view (not an off-screen inline bar)', async () => {
   const { userData, vault } = await seedTogetherReady();
   const app = await launch(userData);
@@ -10473,6 +10522,7 @@ test('together (58) issue #207: picking a practice card lower down opens a cente
     // the top, so opening it from a card lower down left it off-screen (the button read as "doing nothing").
     // Now it's a centered modal, so it's always in view regardless of scroll position (58 §3.3, issue #207).
     await w.setViewportSize({ width: 1000, height: 520 });
+    await openTogetherTab(w, 'Practices'); // the guided catalog lives on the Practices tab (§3.2a)
     await expect(w.getByRole('heading', { name: 'Start a guided practice' })).toBeVisible();
 
     // Pick a Repair-group card lower on the page (Playwright auto-scrolls it into view, so the top is out of view).
@@ -10521,9 +10571,9 @@ test('together (58) phase E: start a structured guided couples session from the 
     const w = await app.firstWindow();
     await w.getByRole('link', { name: /Together/ }).click();
 
-    // The guided catalog lists Connect + Repair; pick a structured practice → it binds to the start form.
+    // The guided catalog lives on the Practices tab (§3.2a); it lists Connect + Repair.
+    await openTogetherTab(w, 'Practices');
     await expect(w.getByRole('heading', { name: 'Start a guided practice' })).toBeVisible();
-    // `exact` — the Pulse strip's "Connection" metric label (now at the top) substring-matches "Connect".
     await expect(w.getByText('Connect', { exact: true })).toBeVisible();
     await w.getByRole('button', { name: /Love Maps/ }).click();
     await expect(w.getByRole('heading', { name: /Start .Love Maps./ })).toBeVisible();
@@ -10633,22 +10683,27 @@ test('together (58) phase F: the Desire group + explicit register are withheld u
     const w = await app.firstWindow();
     await w.getByRole('link', { name: /Together/ }).click();
 
-    // The Desire & intimacy group is WITHHELD (no adult cards) before any ack.
+    // Before any ack there is NO Desire tab (§3.2a — never on screen over-the-shoulder); the 18+ ack lives at
+    // the bottom of Practices, and the adult cards are withheld host-side.
+    await expect(w.getByRole('tab', { name: /Desire/ })).toHaveCount(0);
+    await openTogetherTab(w, 'Practices');
     await expect(w.getByRole('heading', { name: 'Start a guided practice' })).toBeVisible();
     await expect(w.getByText('Sensate Focus')).toHaveCount(0);
 
-    // Ben turns on adult content — still withheld (Angel hasn't).
+    // Ben turns on adult content — still no Desire tab (Angel hasn't acked).
     await w.getByRole('button', { name: /turn on adult content/i }).click();
     await expect(w.getByText(/Waiting for Angel to turn it on/i)).toBeVisible();
-    await expect(w.getByText('Sensate Focus')).toHaveCount(0);
+    await expect(w.getByRole('tab', { name: /Desire/ })).toHaveCount(0);
 
     // Angel turns it on too — now BOTH have acked (all further assertions run as Angel, a Member who can do
     // everything in Together — the full both-opted-in overlap + revoke is proven decrypt-level in the bridge test).
     await switchTogetherPerson(w, 'Angel');
     await w.getByRole('link', { name: /Together/ }).click();
+    await openTogetherTab(w, 'Practices');
     await w.getByRole('button', { name: /turn on adult content/i }).click();
 
-    // The Desire & intimacy group now appears (both acked, host-side).
+    // The Desire TAB now appears (both acked, host-side) — open it to reach the adult cards.
+    await openTogetherTab(w, 'Desire');
     await expect(w.getByText('Sensate Focus')).toBeVisible();
 
     // Start a Desire session → the captured couples prompt carries the EXPLICIT register (both acked).
@@ -10663,26 +10718,17 @@ test('together (58) phase F: the Desire group + explicit register are withheld u
 
     // YNM opt-in + revoke through the UI (the mutual overlap needs BOTH opted in — covered in the bridge test).
     await w.getByRole('link', { name: /Together/ }).click();
+    await openTogetherTab(w, 'Desire');
     await w.getByRole('button', { name: 'Opt in to compare' }).click();
     await expect(w.getByText(/Waiting for Ben to opt in/i)).toBeVisible();
     await w.getByRole('button', { name: 'Revoke' }).click();
     await expect(w.getByRole('button', { name: 'Opt in to compare' })).toBeVisible();
 
-    // 360px: the intimacy card + catalog have no inner horizontal scrollbar.
+    // 360px: with Desire unlocked all FOUR tabs are visible — the tab strip + intimacy card must not
+    // inner-scroll (§12; the ≤480px rule tightens the tabs to fit).
+    await expect(w.getByRole('tab', { name: /Desire/ })).toBeVisible();
     await w.setViewportSize({ width: 360, height: 900 });
-    const overflow = await w.evaluate(() => {
-      for (const el of Array.from(document.querySelectorAll('*'))) {
-        const style = getComputedStyle(el);
-        if (
-          (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
-          el.scrollWidth > el.clientWidth + 1
-        ) {
-          return el.className || el.tagName;
-        }
-      }
-      return null;
-    });
-    expect(overflow).toBeNull();
+    await expectNoInnerOverflow(w);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -10698,7 +10744,8 @@ test('together (58) phase G: Pulse logs each partner’s own check-in; the desir
     const w = await app.firstWindow();
     await w.getByRole('link', { name: /Together/ }).click();
 
-    // The check-in strip is present at the top (no adult ack needed — it's the dyad check-in). No alignment yet.
+    // The check-in lives on the Pulse tab (§3.2a; no adult ack needed — it's the dyad check-in). No alignment yet.
+    await openTogetherTab(w, 'Pulse');
     await expect(w.getByRole('heading', { name: /How are things with/ })).toBeVisible();
     await expect(w.getByText(/Takes 20 seconds/i)).toBeVisible();
 
@@ -10716,6 +10763,7 @@ test('together (58) phase G: Pulse logs each partner’s own check-in; the desir
     // Angel logs a check-in with Desire = High and shares too → dual consent met.
     await switchTogetherPerson(w, 'Angel');
     await w.getByRole('link', { name: /Together/ }).click();
+    await openTogetherTab(w, 'Pulse');
     await w
       .getByRole('group', { name: 'Desire level' })
       .getByRole('button', { name: 'High' })

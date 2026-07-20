@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -6,6 +7,7 @@ import type {
   Challenge,
   JointChallengeStatus,
   Person,
+  TogetherPulseView,
   TogetherSessionSummary,
   TogetherSessionView,
 } from '@shared/schemas';
@@ -180,6 +182,136 @@ describe('Together home (§3.2)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
+
+describe('Together home — tabbed IA (§3.2a)', () => {
+  const catalogEntry = (over: Partial<TogetherCatalogEntry> = {}): TogetherCatalogEntry => ({
+    id: 'love-maps',
+    group: 'together-connect',
+    groupTitle: 'Connect',
+    title: 'Love Maps',
+    framework: 'Gottman',
+    blurb: 'Take turns learning each other’s world.',
+    kind: 'structured',
+    stepCount: 4,
+    adult: false,
+    ...over,
+  });
+
+  const seedPair = (over: Partial<ReturnType<typeof useTogetherStore.getState>> = {}): void => {
+    setActivePerson();
+    useTogetherStore.setState({
+      loaded: true,
+      hasPartner: true,
+      partners: [{ personId: PARTNER, displayName: 'Angel', eligible: true }],
+      sessions: [],
+      catalog: [catalogEntry()],
+      load: async () => {},
+      loadCatalog: async () => {},
+      ...over,
+    });
+  };
+
+  const renderHome = (): void => {
+    render(
+      <MemoryRouter initialEntries={['/together']}>
+        <Together />
+      </MemoryRouter>,
+    );
+  };
+
+  it('shows exactly three tabs when Desire is locked, and hides the guided catalog behind Practices', async () => {
+    installMockBridge({ togetherYnmStatus: () => Promise.resolve(ynmLocked()) });
+    seedPair();
+    renderHome();
+    // The Desire tab is absent over-the-shoulder until the pair unlocks it (§1).
+    await waitFor(() => expect(screen.getByRole('tab', { name: /Sessions/ })).toBeInTheDocument());
+    expect(screen.getByRole('tab', { name: /Practices/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Pulse/ })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /Desire/ })).toBeNull();
+    // The catalog lives on Practices, not on the default Sessions tab.
+    expect(screen.queryByText('Love Maps')).toBeNull();
+    await userEvent.click(screen.getByRole('tab', { name: /Practices/ }));
+    expect(await screen.findByText('Love Maps')).toBeInTheDocument();
+  });
+
+  it('reveals the Desire tab only once both partners have unlocked it (eligible)', async () => {
+    installMockBridge({
+      togetherYnmStatus: () => Promise.resolve(ynmLocked({ youAcked: true, eligible: true })),
+    });
+    seedPair();
+    renderHome();
+    expect(await screen.findByRole('tab', { name: /Desire/ })).toBeInTheDocument();
+  });
+
+  it('badges the Pulse tab "Due" when a check-in is overdue, and clears it once one is logged', async () => {
+    installMockBridge({
+      togetherYnmStatus: () => Promise.resolve(ynmLocked()),
+      togetherPulse: () =>
+        Promise.resolve({
+          checkInSeries: [],
+          sessionSeries: [],
+          hasCheckIns: false, // never checked in → due
+          alignment: { ready: false },
+        }),
+      togetherPulseLog: () =>
+        Promise.resolve({
+          checkInSeries: [],
+          sessionSeries: [],
+          hasCheckIns: true,
+          lastCheckInAt: new Date().toISOString(), // just now → no longer due
+          alignment: { ready: false },
+        }),
+    });
+    seedPair();
+    renderHome();
+    const pulseTab = await screen.findByRole('tab', { name: /Pulse/ });
+    await waitFor(() => expect(within(pulseTab).getByText('Due')).toBeInTheDocument());
+    // Log a check-in from the Pulse tab → the parent's view swaps, so the badge clears (§3.2a).
+    await userEvent.click(pulseTab);
+    await userEvent.click(await screen.findByRole('button', { name: 'Save check-in' }));
+    await waitFor(() =>
+      expect(within(screen.getByRole('tab', { name: /Pulse/ })).queryByText('Due')).toBeNull(),
+    );
+  });
+
+  it('keeps the joint challenge on the Sessions tab, and the crisis footer on every tab', async () => {
+    installMockBridge({
+      togetherYnmStatus: () => Promise.resolve(ynmLocked()),
+      togetherJointChallenges: () =>
+        Promise.resolve([
+          {
+            groupId: 'g1',
+            action: 'Share one appreciation a day',
+            memberCount: 2,
+            checkedInCount: 0,
+            allCheckedIn: false,
+            active: true,
+            updatedAt: 'now',
+          },
+        ]),
+    });
+    seedPair();
+    renderHome();
+    // Joint challenge sits under Sessions (the "what's active between us" tab).
+    expect(await screen.findByText('Share one appreciation a day')).toBeInTheDocument();
+    // The not-medical line is present regardless of tab (§8.2).
+    expect(screen.getByText(/wellness support, not medical care/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: /Pulse/ }));
+    expect(screen.getByText(/wellness support, not medical care/i)).toBeInTheDocument();
+  });
+});
+
+/** A locked YNM status (neither partner has unlocked Desire) — the common state. */
+function ynmLocked(over: Partial<TogetherYnmStatus> = {}): TogetherYnmStatus {
+  return {
+    youAcked: false,
+    eligible: false,
+    youOptedIn: false,
+    partnerOptedIn: false,
+    ready: false,
+    ...over,
+  };
+}
 
 describe('session card status + relative time', () => {
   it('maps each viewer state to a labelled, toned status', () => {
@@ -541,26 +673,41 @@ describe('TogetherIntimacy (§3.10/§3.10b)', () => {
     ...over,
   });
 
+  // The component is now controlled on `status` (the parent owns it, §3.2a) and renders per `variant`:
+  // 'unlock' pre-eligibility (bottom of Practices), 'panel' once eligible (the Desire tab).
+  const renderIntimacy = (
+    status: TogetherYnmStatus,
+    opts: {
+      variant?: 'unlock' | 'panel';
+      onPick?: (e: TogetherCatalogEntry) => void;
+      adultPractices?: TogetherCatalogEntry[];
+    } = {},
+  ): void => {
+    render(
+      <MemoryRouter>
+        <TogetherIntimacy
+          variant={opts.variant ?? (status.eligible ? 'panel' : 'unlock')}
+          partnerId="partner"
+          partnerName="Angel"
+          adultPractices={opts.adultPractices ?? []}
+          selectedId={null}
+          onPick={opts.onPick ?? (() => {})}
+          status={status}
+          onRefresh={() => Promise.resolve()}
+        />
+      </MemoryRouter>,
+    );
+  };
+
   it('offers the 18+ acknowledgement when the active person has not acked', async () => {
     let acked = 0;
     installMockBridge({
-      togetherYnmStatus: () => Promise.resolve(ynm({ youAcked: false })),
       togetherAcknowledgeAdult: () => {
         acked += 1;
         return Promise.resolve(true);
       },
     });
-    render(
-      <MemoryRouter>
-        <TogetherIntimacy
-          partnerId="partner"
-          partnerName="Angel"
-          adultPractices={[]}
-          selectedId={null}
-          onPick={() => {}}
-        />
-      </MemoryRouter>,
-    );
+    renderIntimacy(ynm({ youAcked: false }), { variant: 'unlock' });
     const btn = await screen.findByRole('button', { name: /turn on adult content/i });
     await userEvent.click(btn);
     expect(acked).toBe(1);
@@ -568,29 +715,11 @@ describe('TogetherIntimacy (§3.10/§3.10b)', () => {
 
   it('shows the mutual overlap + a "Start Yes/No/Maybe together" action when ready; never a one-sided list', async () => {
     installMockBridge({
-      togetherYnmStatus: () =>
-        Promise.resolve(
-          ynm({
-            youAcked: true,
-            eligible: true,
-            youOptedIn: true,
-            partnerOptedIn: true,
-            ready: true,
-          }),
-        ),
       togetherYnmOverlap: () =>
         Promise.resolve({ ready: true, items: [{ key: 'k1', label: 'Something you both like' }] }),
     });
-    render(
-      <MemoryRouter>
-        <TogetherIntimacy
-          partnerId="partner"
-          partnerName="Angel"
-          adultPractices={[]}
-          selectedId={null}
-          onPick={() => {}}
-        />
-      </MemoryRouter>,
+    renderIntimacy(
+      ynm({ youAcked: true, eligible: true, youOptedIn: true, partnerOptedIn: true, ready: true }),
     );
     expect(await screen.findByText('Something you both like')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start Yes/No/Maybe together' })).toBeInTheDocument();
@@ -599,71 +728,75 @@ describe('TogetherIntimacy (§3.10/§3.10b)', () => {
 
   it('surfaces the adult guided practices alongside the YNM card once unlocked (§3.10)', async () => {
     let picked = '';
-    installMockBridge({
-      togetherYnmStatus: () =>
-        Promise.resolve(ynm({ youAcked: true, eligible: true, youOptedIn: false })),
+    installMockBridge();
+    renderIntimacy(ynm({ youAcked: true, eligible: true, youOptedIn: false }), {
+      onPick: (e) => (picked = e.id),
+      adultPractices: [
+        {
+          id: 'sensate-focus',
+          group: 'together-desire',
+          groupTitle: 'Desire & intimacy',
+          title: 'Sensate Focus',
+          framework: 'Masters & Johnson',
+          blurb: 'A gentle, pressure-free program of touch.',
+          kind: 'structured',
+          stepCount: 5,
+          adult: true,
+        },
+      ],
     });
-    render(
-      <MemoryRouter>
-        <TogetherIntimacy
-          partnerId="partner"
-          partnerName="Angel"
-          selectedId={null}
-          onPick={(e) => (picked = e.id)}
-          adultPractices={[
-            {
-              id: 'sensate-focus',
-              group: 'together-desire',
-              groupTitle: 'Desire & intimacy',
-              title: 'Sensate Focus',
-              framework: 'Masters & Johnson',
-              blurb: 'A gentle, pressure-free program of touch.',
-              kind: 'structured',
-              stepCount: 5,
-              adult: true,
-            },
-          ]}
-        />
-      </MemoryRouter>,
-    );
     expect(await screen.findByText('Sensate Focus')).toBeInTheDocument();
     await userEvent.click(screen.getByText('Sensate Focus'));
     expect(picked).toBe('sensate-focus');
   });
 
   it('waits for the partner to ack (no dead controls) when only the active person has acked', async () => {
-    installMockBridge({
-      togetherYnmStatus: () => Promise.resolve(ynm({ youAcked: true, eligible: false })),
-    });
-    render(
-      <MemoryRouter>
-        <TogetherIntimacy
-          partnerId="partner"
-          partnerName="Angel"
-          adultPractices={[]}
-          selectedId={null}
-          onPick={() => {}}
-        />
-      </MemoryRouter>,
-    );
+    installMockBridge();
+    renderIntimacy(ynm({ youAcked: true, eligible: false }), { variant: 'unlock' });
     expect(await screen.findByText(/Waiting for Angel to turn it on/i)).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /turn on adult content/i }),
     ).not.toBeInTheDocument();
   });
+
+  it('renders NOTHING in the unlock variant once eligible — the Desire tab owns it (§3.2a)', () => {
+    installMockBridge();
+    const { container } = render(
+      <MemoryRouter>
+        <TogetherIntimacy
+          variant="unlock"
+          partnerId="partner"
+          partnerName="Angel"
+          adultPractices={[]}
+          selectedId={null}
+          onPick={() => {}}
+          status={ynm({ youAcked: true, eligible: true })}
+          onRefresh={() => Promise.resolve()}
+        />
+      </MemoryRouter>,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
 });
 
 describe('TogetherPulse (§3.10a)', () => {
+  // TogetherPulse is now CONTROLLED (the parent owns the view for the tab "due" badge, §3.2a) — the tests
+  // pass the view directly instead of mocking the fetch. A tiny stateful harness lets `onLogged` swap it.
+  const renderPulse = (view: TogetherPulseView): void => {
+    const Harness = (): JSX.Element => {
+      const [v, setV] = useState<TogetherPulseView | null>(view);
+      return <TogetherPulse partnerId="partner" partnerName="Angel" view={v} onView={setV} />;
+    };
+    render(
+      <MemoryRouter>
+        <Harness />
+      </MemoryRouter>,
+    );
+  };
+
   it('logs a check-in with the chosen levels and desire-share choice', async () => {
     let logged: { metrics: Record<string, number>; shareMetrics?: string[] } | null = null;
     installMockBridge({
-      togetherPulse: () =>
-        Promise.resolve({
-          checkInSeries: [],
-          sessionSeries: [],
-          hasCheckIns: false,
-          alignment: { ready: false },
-        }),
       togetherPulseLog: (input) => {
         logged = {
           metrics: input.metrics,
@@ -677,11 +810,12 @@ describe('TogetherPulse (§3.10a)', () => {
         });
       },
     });
-    render(
-      <MemoryRouter>
-        <TogetherPulse partnerId="partner" partnerName="Angel" />
-      </MemoryRouter>,
-    );
+    renderPulse({
+      checkInSeries: [],
+      sessionSeries: [],
+      hasCheckIns: false,
+      alignment: { ready: false },
+    });
     // The taps are always visible (no "Log a check-in" reveal) — a one-motion check-in.
     const connGroup = await screen.findByRole('group', { name: 'Connection level' });
     await userEvent.click(within(connGroup).getByRole('button', { name: 'High' }));
@@ -694,58 +828,44 @@ describe('TogetherPulse (§3.10a)', () => {
   });
 
   it('renders the desire alignment as a you-vs-partner comparison only when ready', async () => {
-    installMockBridge({
-      togetherPulse: () =>
-        Promise.resolve({
-          checkInSeries: [
-            {
-              label: 'Connection',
-              points: [
-                { x: 1, y: 0.2 },
-                { x: 2, y: 0.8 },
-              ],
-              direction: 'rising',
-            },
+    installMockBridge();
+    renderPulse({
+      checkInSeries: [
+        {
+          label: 'Connection',
+          points: [
+            { x: 1, y: 0.2 },
+            { x: 2, y: 0.8 },
           ],
-          sessionSeries: [],
-          hasCheckIns: true,
-          alignment: { ready: true, yours: 0.8, theirs: 0.75, read: 'aligned' },
-        }),
+          direction: 'rising',
+        },
+      ],
+      sessionSeries: [],
+      hasCheckIns: true,
+      alignment: { ready: true, yours: 0.8, theirs: 0.75, read: 'aligned' },
     });
-    render(
-      <MemoryRouter>
-        <TogetherPulse partnerId="partner" partnerName="Angel" />
-      </MemoryRouter>,
-    );
     expect(await screen.findByText(/desire levels are closely aligned/i)).toBeInTheDocument();
     // The comparison names both people (you + the partner), not a vague banner.
     expect(screen.getByText(/You & Angel · desire/)).toBeInTheDocument();
   });
 
   it('splits the two data sources: a "Your check-ins" chart (≥2 points) + a separate "From your sessions" group', async () => {
-    installMockBridge({
-      togetherPulse: () =>
-        Promise.resolve({
-          checkInSeries: [
-            {
-              label: 'Connection',
-              points: [
-                { x: 1, y: 0.4 },
-                { x: 2, y: 0.6 },
-              ],
-              direction: 'rising',
-            },
+    installMockBridge();
+    renderPulse({
+      checkInSeries: [
+        {
+          label: 'Connection',
+          points: [
+            { x: 1, y: 0.4 },
+            { x: 2, y: 0.6 },
           ],
-          sessionSeries: [{ label: 'Calm', points: [{ x: 1, y: 0.7 }], direction: 'flat' }],
-          hasCheckIns: true,
-          alignment: { ready: false },
-        }),
+          direction: 'rising',
+        },
+      ],
+      sessionSeries: [{ label: 'Calm', points: [{ x: 1, y: 0.7 }], direction: 'flat' }],
+      hasCheckIns: true,
+      alignment: { ready: false },
     });
-    render(
-      <MemoryRouter>
-        <TogetherPulse partnerId="partner" partnerName="Angel" />
-      </MemoryRouter>,
-    );
     // The check-ins group has ≥2 points → a real trend chart (its own labelled image).
     expect(
       await screen.findByRole('img', { name: /Your check-in trends with Angel/i }),
@@ -756,23 +876,16 @@ describe('TogetherPulse (§3.10a)', () => {
   });
 
   it('shows a current-value read (not a lone floating dot) when a group has only one reading', async () => {
-    installMockBridge({
-      togetherPulse: () =>
-        Promise.resolve({
-          checkInSeries: [
-            { label: 'Connection', points: [{ x: 1, y: 0.9 }], direction: 'flat' },
-            { label: 'Satisfaction', points: [{ x: 1, y: 0.2 }], direction: 'flat' },
-          ],
-          sessionSeries: [],
-          hasCheckIns: true,
-          alignment: { ready: false },
-        }),
+    installMockBridge();
+    renderPulse({
+      checkInSeries: [
+        { label: 'Connection', points: [{ x: 1, y: 0.9 }], direction: 'flat' },
+        { label: 'Satisfaction', points: [{ x: 1, y: 0.2 }], direction: 'flat' },
+      ],
+      sessionSeries: [],
+      hasCheckIns: true,
+      alignment: { ready: false },
     });
-    render(
-      <MemoryRouter>
-        <TogetherPulse partnerId="partner" partnerName="Angel" />
-      </MemoryRouter>,
-    );
     // A single check-in → no chart image; the current values read as words instead (scoped to the readout
     // so the check-in form's own Low/Steady/High buttons don't collide).
     await screen.findByText('Your check-ins');
@@ -784,20 +897,13 @@ describe('TogetherPulse (§3.10a)', () => {
   });
 
   it('hides the desire alignment when not ready (dual consent unmet)', async () => {
-    installMockBridge({
-      togetherPulse: () =>
-        Promise.resolve({
-          checkInSeries: [],
-          sessionSeries: [],
-          hasCheckIns: false,
-          alignment: { ready: false },
-        }),
+    installMockBridge();
+    renderPulse({
+      checkInSeries: [],
+      sessionSeries: [],
+      hasCheckIns: false,
+      alignment: { ready: false },
     });
-    render(
-      <MemoryRouter>
-        <TogetherPulse partnerId="partner" partnerName="Angel" />
-      </MemoryRouter>,
-    );
     // The inviting nudge shows (no fabricated streak); no alignment read without dual consent.
     expect(await screen.findByText(/Takes 20 seconds/i)).toBeInTheDocument();
     expect(screen.queryByText(/desire levels/i)).not.toBeInTheDocument();
@@ -805,21 +911,14 @@ describe('TogetherPulse (§3.10a)', () => {
 
   it('shows an honest "last check-in N days ago" nudge from the view timestamp', async () => {
     const fiveDaysAgo = new Date(Date.now() - 5 * 86_400_000).toISOString();
-    installMockBridge({
-      togetherPulse: () =>
-        Promise.resolve({
-          checkInSeries: [],
-          sessionSeries: [],
-          hasCheckIns: true,
-          lastCheckInAt: fiveDaysAgo,
-          alignment: { ready: false },
-        }),
+    installMockBridge();
+    renderPulse({
+      checkInSeries: [],
+      sessionSeries: [],
+      hasCheckIns: true,
+      lastCheckInAt: fiveDaysAgo,
+      alignment: { ready: false },
     });
-    render(
-      <MemoryRouter>
-        <TogetherPulse partnerId="partner" partnerName="Angel" />
-      </MemoryRouter>,
-    );
     expect(await screen.findByText(/Last check-in 5 days ago/i)).toBeInTheDocument();
   });
 });

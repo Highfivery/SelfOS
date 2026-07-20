@@ -34,7 +34,16 @@ export async function listPeople(fs: FileSystem, key: Uint8Array): Promise<Perso
   return people.sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
-/** Create or update a person from renderer input; the main process owns id + timestamps. */
+/**
+ * Create or update a person from renderer input; the main process owns id + timestamps.
+ *
+ * NOTE — same shape as `coreBridge.dreamSave`: rebuilt from the narrower `PersonInput` plus a
+ * hand-listed set of main-owned fields carried forward from `existing`. That list is opt-in, so a new
+ * main-written field on `Person` that nobody adds here is silently wiped by the next edit (this is how
+ * `Dream.image` was lost — see 12 §5.1). `Person`'s main-owned set is `schemaVersion | avatarPath |
+ * createdAt | updatedAt` and all four are handled below; if you add another, carry it forward. Unlike
+ * `dreamSave` this is NOT compile-time guarded — worth adding the same tripwire if it grows.
+ */
 export async function upsertPerson(
   fs: FileSystem,
   key: Uint8Array,

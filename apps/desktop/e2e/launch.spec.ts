@@ -6176,8 +6176,9 @@ test('dreams: visualize a dream — sensitive warning, generate, encrypted round
     await expect(w.getByRole('img')).toBeVisible();
     const afterEdit = await listDreams(createNodeFileSystem(vault), key, 'owner-1');
     expect(afterEdit[0]?.narrative).toBe('A brighter surreal place of open doors.');
-    expect(afterEdit[0]?.image?.style).toBe('watercolor'); // the descriptor survived the edit
-    expect(await findFileNamed(vault, 'image.enc')).not.toBeNull();
+    // THE assertion for this bug: the descriptor survived. (Deliberately not asserting image.enc still
+    // exists — the orphaned bytes are exactly what the bug leaves behind, so that would pass either way.)
+    expect(afterEdit[0]?.image?.style).toBe('watercolor');
 
     // Regenerate replaces it (a confirm, then the new image).
     await w.getByRole('button', { name: 'Regenerate' }).click();

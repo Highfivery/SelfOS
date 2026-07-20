@@ -1122,34 +1122,6 @@ async function reshareLink(
   }
 }
 
-/**
- * Compile-time guard for `dreamSave`'s merge (12 §5.1).
- *
- * `dreamSave` rebuilds the `Dream` from the narrower `DreamInput` plus a **hand-listed** set of
- * main-owned fields it carries forward from the existing record. That list is opt-in, so adding an
- * additive-optional main-written field to `DreamSchema` silently makes it droppable on the next edit —
- * which is exactly how `Dream.image` came to be wiped by "Edit dream" → Save, orphaning the encrypted
- * bytes at `dreams/<id>/image.enc`. The failure is silent (data loss), so it needs a loud tripwire.
- *
- * Every `Dream` field the renderer cannot send must be listed here as either set-fresh or carried
- * forward. Add a new main-owned field to `Dream` without deciding, and this stops compiling.
- */
-type MainOwnedDreamField = Exclude<keyof Dream, keyof DreamInput>;
-/** Main-owned fields `dreamSave` sets fresh on every write (never taken from the renderer). */
-type DreamFieldSetOnSave = 'schemaVersion' | 'personId' | 'status' | 'createdAt' | 'updatedAt';
-/** Main-owned fields `dreamSave` must preserve from the existing record, or an edit destroys them. */
-type DreamFieldCarriedForward = 'analysisId' | 'image';
-type UnhandledMainOwnedDreamField = Exclude<
-  MainOwnedDreamField,
-  DreamFieldSetOnSave | DreamFieldCarriedForward
->;
-// If this errors, `Dream` gained a main-owned field: decide in `dreamSave` whether an edit keeps it,
-// then add it to `DreamFieldSetOnSave` or `DreamFieldCarriedForward`. Do NOT just widen this type.
-const _everyMainOwnedDreamFieldIsHandled: UnhandledMainOwnedDreamField extends never
-  ? true
-  : never = true;
-void _everyMainOwnedDreamFieldIsHandled;
-
 /** Build the renderer-facing `SelfosBridge` from a platform `BridgeHost`. */
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
   const activePersonId = async (): Promise<string | null> =>
@@ -6844,17 +6816,40 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // preserves createdAt + the analysis link (status/analysisId change only in the analysis slice) and
       // the image descriptor (13 §4.2 — written only by dreamImageService, never sendable by the renderer;
       // dropping it would orphan the encrypted bytes at dreams/<id>/image.enc and revoke its sharing).
-      // The carry-forward list below is hand-maintained, which is exactly how `image` was once dropped —
-      // so `_everyMainOwnedDreamFieldIsHandled` fails the build if `Dream` gains another main-owned field
-      // and nobody decides here whether it survives an edit.
+      //
+      // The carry-forward list is hand-maintained, which is exactly how `image` was once dropped, so the
+      // guard below fails the BUILD if `Dream` gains another main-owned field and nobody decides here
+      // whether it survives an edit. Note what it does and does not prove: it checks that every
+      // main-owned field has been CLASSIFIED, not that the corresponding spread was actually written —
+      // listing a field as carried-forward without adding its spread still compiles. A triage tripwire,
+      // not a proof.
+      type MainOwnedDreamField = Exclude<keyof Dream, keyof DreamInput>;
+      /** Errors if any listed key is not actually main-owned (catches a stale or misspelled entry). */
+      type OnlyMainOwned<T extends MainOwnedDreamField> = T;
+      /** Set fresh on every write, never taken from the renderer. */
+      type DreamFieldSetOnSave = OnlyMainOwned<
+        'schemaVersion' | 'personId' | 'status' | 'createdAt' | 'updatedAt'
+      >;
+      /** Preserved from the existing record, or an edit destroys them. */
+      type DreamFieldCarriedForward = OnlyMainOwned<'analysisId' | 'image'>;
+      type UnhandledMainOwnedDreamField = Exclude<
+        MainOwnedDreamField,
+        DreamFieldSetOnSave | DreamFieldCarriedForward
+      >;
+      // If this errors, `Dream` gained a main-owned field: decide whether an edit keeps it, then add it
+      // to `DreamFieldSetOnSave` or `DreamFieldCarriedForward` (and write the spread). Do NOT just widen.
+      const _everyMainOwnedDreamFieldIsHandled: UnhandledMainOwnedDreamField extends never
+        ? true
+        : never = true;
+      void _everyMainOwnedDreamFieldIsHandled;
       //
       // Keep this read immediately before the write. `dreamSave` and `generateDreamImage` are both
       // read-then-write-the-whole-record, so whichever writes last wins; reading at save time (rather
-      // than caching anything from when the composer opened) keeps that window down to this function
-      // rather than the seconds a user spends editing. It is not closed — a generation landing inside
-      // this window still loses, and the reverse direction (a generation overwriting a just-saved
-      // narrative) is unaffected. Fully closing it needs field-level merging or serialization across
-      // every dream writer, which is wider than this fix.
+      // than caching anything from when the composer opened) keeps this side's window down to the few
+      // microseconds of this function. `generateDreamImage` re-reads before ITS write for the same
+      // reason (its window spanned two network calls, so it could lose typed prose — the worse
+      // direction). Neither is a lock: two writes landing inside each other's re-read still race.
+      // Closing it properly needs field-level merging or serialization across every dream writer.
       const existing = inputId ? await getDream(ctx.fs, ctx.key, personId, inputId) : null;
       const now = new Date().toISOString();
       const dream: Dream = {

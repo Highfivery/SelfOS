@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.41.0](https://github.com/Highfivery/SelfOS/compare/v0.40.1...v0.41.0) (2026-07-20)
+
+
+### Features
+
+* **together:** make the joint-challenge tile actionable and fix the dead-end it pointed at ([#277](https://github.com/Highfivery/SelfOS/issues/277)) ([d11ed33](https://github.com/Highfivery/SelfOS/commit/d11ed33a5642d1f957f0662c12964c5cda9bfae9))
+* **together:** redesign the home into a four-tab surface ([#280](https://github.com/Highfivery/SelfOS/issues/280)) ([2940a84](https://github.com/Highfivery/SelfOS/commit/2940a845182b386a040d7bb20eb31ae934ad0dd8))
+
+
+### Bug Fixes
+
+* **home:** defer the challenge check-in only when the recommendation is actually rendering ([#279](https://github.com/Highfivery/SelfOS/issues/279)) ([3228aea](https://github.com/Highfivery/SelfOS/commit/3228aea93d8097ace3221423e606df1e419ab14d))
+* **together:** only the selected tab references the rendered tabpanel ([#281](https://github.com/Highfivery/SelfOS/issues/281)) ([eadfe5d](https://github.com/Highfivery/SelfOS/commit/eadfe5d92d51ecb58ceb3ab094f21eb52c68d052))
+
 ## [0.40.1](https://github.com/Highfivery/SelfOS/compare/v0.40.0...v0.40.1) (2026-07-20)
 
 

@@ -592,8 +592,12 @@ async function clearOpenIfResolved(
   completeness?: StoryCompleteness,
 ): Promise<StoryInterviewCadenceResult> {
   if (interview.openCheckinAssignmentId) {
+    // Re-read: some callers hand us an `interview` read BEFORE a gap pass (which spans a 10-60s model
+    // call even when it fails), so spreading it would revert a photoAnswer/askedPrompt written meanwhile.
+    // Clearing the open-check-in flag is the only field that is ours here.
+    const live = (await getInterviewState(deps.fs, deps.key, deps.personId, bookId)) ?? interview;
     await saveInterviewState(deps.fs, deps.key, deps.personId, bookId, {
-      ...interview,
+      ...live,
       openCheckinAssignmentId: undefined,
     });
   }

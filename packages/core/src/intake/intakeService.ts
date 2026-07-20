@@ -1012,15 +1012,26 @@ async function synthesizeSection(
   const overBudgetNow = await overBudget(fs, key, personId, now, deps.override);
   // Reflect only when AI is ready, in budget, and the section has content — else just record completion.
   if (!apiKey || !person || !section || section.messages.length === 0 || overBudgetNow) {
-    session.updatedAt = at;
-    await writeEncryptedJson(fs, intakePath(personId), session, key);
+    // Route through patchIntakeSession like the rest of this function: no model call here, but
+    // overBudget + getPerson + buildContext (many decrypts) sit between the read and this write, and
+    // the onboarding form auto-saves every ~600ms.
+    const early = await patchIntakeSession(fs, key, personId, (live) => {
+      const target = live.sections.find((sec) => sec.id === sectionId);
+      if (target && target.status !== 'skipped') target.status = 'complete';
+      live.updatedAt = at;
+    });
+    if (early) Object.assign(session, early);
     return { ok: true, session };
   }
 
   const system = await buildIntakeSystem(fs, key, person, sectionId);
   if (!system) {
-    session.updatedAt = at;
-    await writeEncryptedJson(fs, intakePath(personId), session, key);
+    const early = await patchIntakeSession(fs, key, personId, (live) => {
+      const target = live.sections.find((sec) => sec.id === sectionId);
+      if (target && target.status !== 'skipped') target.status = 'complete';
+      live.updatedAt = at;
+    });
+    if (early) Object.assign(session, early);
     return { ok: true, session };
   }
 
@@ -1275,12 +1286,16 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
   // session too, so "X% out of date" reflects what the portrait was actually built from plus anything
   // added since (it re-baselines on the next refresh either way).
   const snapshot = intakeCatalogSnapshot();
+  // The freshness signature must describe the answers the portrait was ACTUALLY built from — i.e. the
+  // pre-call session — so an answer typed during synthesis correctly reads as "not yet reflected" (§15)
+  // instead of being baselined as covered by a portrait that never saw it.
+  const builtFromSig = intakeAnswerHashes(session);
   const patched = await patchIntakeSession(fs, key, personId, (live) => {
     live.status = 'complete';
     live.completedAt = at;
     live.insightId = insightId;
     live.portrait = draft.portrait;
-    live.portraitAnswerSig = intakeAnswerHashes(live);
+    live.portraitAnswerSig = builtFromSig;
     // Snapshot the catalog as it stands now (55 §4), so a later update's new section/question is
     // detectable as genuinely new — refreshing the portrait re-baselines.
     live.knownSectionIds = snapshot.sectionIds;

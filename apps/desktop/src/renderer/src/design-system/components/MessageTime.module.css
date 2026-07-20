@@ -26,6 +26,20 @@
   align-self: flex-start;
   align-items: flex-start;
 }
+/* The timestamp line, which also hosts the optional rewind actions (66 §3.3). Wraps so a long confirm
+   never pushes controls out of the row at narrow widths (§12). */
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+.meta[data-side='user'] {
+  justify-content: flex-end;
+}
+
 /* The bubble (first child) fills the row — the row owns the 80% cap + side alignment, so each surface's
    own .userMsg/.coachMsg max-width is neutralized here without editing it. */
 .row > :first-child {

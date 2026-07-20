@@ -83,6 +83,8 @@ const bridge: SelfosBridge = {
   budgetStatus: () => ipcRenderer.invoke(IpcChannels.budgetStatus),
   chatStream: (input) => ipcRenderer.invoke(IpcChannels.chatStream, input),
   chatRetry: (conversationId) => ipcRenderer.invoke(IpcChannels.chatRetry, conversationId),
+  conversationsRewind: (input) => ipcRenderer.invoke(IpcChannels.conversationsRewind, input),
+  chatRegenerateFrom: (input) => ipcRenderer.invoke(IpcChannels.chatRegenerateFrom, input),
   onChatChunk: (listener) => {
     const handler = (_event: unknown, delta: string): void => listener(delta);
     ipcRenderer.on(IpcChannels.chatChunk, handler);

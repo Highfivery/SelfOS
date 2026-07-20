@@ -1,7 +1,13 @@
 import { getMedia, isAllowedImageMime, MAX_IMAGE_BYTES, storeMedia } from '../media';
 import type { FileSystem } from '../host';
-import { type AttachmentRef, ConversationSchema, type Conversation } from '../schemas';
+import {
+  type AttachmentRef,
+  ConversationSchema,
+  type Conversation,
+  type RewindResult,
+} from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
+import { reapDroppedAttachments, truncateMessages, type MessageStamp } from './rewindService';
 
 function conversationsDir(personId: string): string {
   return `people/${personId}/conversations`;
@@ -71,6 +77,35 @@ export async function deleteConversation(
   // Purge the sibling attachments folder so no orphaned media is left behind (45 §7; the 08 §13.2 /
   // 13-dream-images §3.3 orphaned-media lesson). `fs.remove` is recursive + a no-op when absent.
   await fs.remove(`${conversationsDir(personId)}/${id}`);
+}
+
+/**
+ * Truncate a session transcript at `index` and persist it (66 §3.3) — the storage half of both
+ * "delete from here" and "retry from here". Reaps any attachments on the dropped messages so a rewind
+ * never orphans encrypted bytes.
+ */
+export async function rewindConversation(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  conversationId: string,
+  index: number,
+  expect: MessageStamp,
+): Promise<RewindResult> {
+  const conversation = await getConversation(fs, key, personId, conversationId);
+  if (!conversation) return { ok: false, reason: 'NOT_FOUND' };
+
+  const result = truncateMessages(conversation.messages, index, expect);
+  if (!result.ok) return result;
+
+  await reapDroppedAttachments(fs, result.dropped, isConversationAttachmentPath);
+  const trimmed: Conversation = {
+    ...conversation,
+    messages: result.messages,
+    updatedAt: new Date().toISOString(),
+  };
+  await saveConversation(fs, key, trimmed);
+  return { ok: true, conversation: trimmed };
 }
 
 /** The result of storing a Session attachment — a ref, or a calm reject (mime/size validated in core). */

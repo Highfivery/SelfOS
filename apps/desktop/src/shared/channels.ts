@@ -158,6 +158,7 @@ import type {
   RelationshipInput,
   RelationshipType,
   RelayStatus,
+  RewindResult,
   Role,
   SensitivityTier,
   SessionCost,
@@ -252,6 +253,10 @@ export const IpcChannels = {
   budgetStatus: 'budget:status',
   chatStream: 'chat:stream',
   chatRetry: 'chat:retry',
+  /** 66 §6 — truncate a session transcript at a message ("delete from here"). */
+  conversationsRewind: 'conversations:rewind',
+  /** 66 §6 — truncate then re-generate ("retry from here"), in one call so no half-rewound state shows. */
+  chatRegenerateFrom: 'chat:regenerateFrom',
   chatChunk: 'chat:chunk', // main → renderer event
   conversationStoreAttachment: 'conversation:storeAttachment',
   conversationGetAttachment: 'conversation:getAttachment',
@@ -544,6 +549,8 @@ export const MIN_OWNER_PIN_LENGTH = 4;
 export const ANTHROPIC_API_KEY_ID = 'anthropic.apiKey';
 export const OPENAI_API_KEY_ID = 'openai.apiKey';
 export type { DeviceView } from '@selfos/core/schemas';
+/** 66 §3.3 — re-exported so the bridge + renderer share one rewind outcome type. */
+export type { RewindResult } from '@selfos/core/schemas';
 
 /** The outcome of a key rotation (32 §6.4). The new recovery phrase is shown once; never logged. */
 export type KeyRotateResult =
@@ -777,6 +784,21 @@ export interface SelfosBridge {
    * duplication); streams via `chat:chunk`. Scoped to the active person in the bridge.
    */
   chatRetry(conversationId: string): Promise<ChatTurnResult>;
+  /**
+   * 66 §3.3 — "delete from here": drop this message and everything after it. `expect` is verified against
+   * the stored transcript first, so a stale view refuses rather than deleting the wrong span.
+   */
+  conversationsRewind(input: {
+    conversationId: string;
+    index: number;
+    expect: { role: 'user' | 'assistant'; ts: string };
+  }): Promise<RewindResult>;
+  /** 66 §3.3 — "retry from here": truncate, then re-generate, in one call. */
+  chatRegenerateFrom(input: {
+    conversationId: string;
+    index: number;
+    expect: { role: 'user' | 'assistant'; ts: string };
+  }): Promise<ChatTurnResult>;
   /** Subscribe to streamed reply chunks; returns an unsubscribe function. */
   onChatChunk(listener: (delta: string) => void): () => void;
   /**

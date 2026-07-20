@@ -22,6 +22,8 @@ import { buildContext, buildLinkedPeopleContext, listRelationships } from '../pe
 import type { RelationshipType } from '../schemas';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { streamWithContinuation } from '../conversations/streamWithContinuation';
+import { truncateMessages, type MessageStamp } from '../conversations/rewindService';
+import type { RewindResult } from '../schemas';
 import { deleteInsight, getInsight, producedFactShare, saveInsight } from '../insights';
 import {
   getAnalysis,
@@ -380,6 +382,35 @@ async function generateDreamReply(
   await saveDreamConversation(fs, key, conversation);
 
   return { ok: true, conversation, usage, ...(analysisReady ? { analysisReady } : {}) };
+}
+
+/**
+ * Truncate a dream transcript at `index` and persist it (66 §3.3). The dream chat reuses the `Conversation`
+ * shape, so it reuses the same pure truncate + staleness check as Sessions.
+ */
+export async function rewindDreamConversation(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  dreamId: string,
+  index: number,
+  expect: MessageStamp,
+): Promise<RewindResult> {
+  const conversation = await getDreamConversation(fs, key, personId, dreamId);
+  if (!conversation) return { ok: false, reason: 'NOT_FOUND' };
+
+  const result = truncateMessages(conversation.messages, index, expect);
+  if (!result.ok) return result;
+
+  // Dream chat messages carry no attachments today, so there is nothing to reap — but the shape is the
+  // same, so if that changes the reap belongs here alongside the Sessions one.
+  const trimmed: Conversation = {
+    ...conversation,
+    messages: result.messages,
+    updatedAt: new Date().toISOString(),
+  };
+  await saveDreamConversation(fs, key, trimmed);
+  return { ok: true, conversation: trimmed };
 }
 
 /** Deps for `retryDreamReply` — a dream turn minus the (already-persisted) user text. */

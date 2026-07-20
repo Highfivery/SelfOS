@@ -9,6 +9,7 @@ import {
   type ChatTurnResult,
   type ClaudeTestResult,
   type ConversationMeta,
+  type RewindResult,
   type KeyRotateResult,
   type RotationStatus,
   type VaultSyncReadiness,
@@ -325,7 +326,9 @@ import {
   getGuidanceState,
   isConversationAttachmentPath,
   listConversations,
+  regenerateFrom,
   retryReply,
+  rewindConversation,
   runChatTurn,
   saveConversation,
   setSessionStatus,
@@ -864,6 +867,12 @@ const TestTakeSchema = z.object({
 const SessionSetStatusSchema = z.object({
   conversationId: z.string().min(1),
   status: SessionStatusSchema,
+});
+/** 66 §3.3 — a rewind target: which message, plus the stamp core re-verifies before truncating. */
+const RewindConversationSchema = z.object({
+  conversationId: z.string().min(1),
+  index: z.number().int().nonnegative(),
+  expect: z.object({ role: z.enum(['user', 'assistant']), ts: z.string().min(1) }),
 });
 const DreamAnalyzeTurnSchema = z.object({
   dreamId: z.string().min(1),
@@ -2351,6 +2360,44 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         onDelta: (text) => host.emitChatChunk(text),
         now: new Date(),
       });
+    },
+
+    conversationsRewind: async (input): Promise<RewindResult> => {
+      // 66 §3.3 — "delete from here". Person-scoped: `rewindConversation` is keyed by the HOST's active
+      // person, so a foreign conversationId simply resolves to nothing.
+      const { conversationId, index, expect } = RewindConversationSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own'))) {
+        return { ok: false, reason: 'NOT_FOUND' };
+      }
+      return rewindConversation(ctx.fs, ctx.key, personId, conversationId, index, expect);
+    },
+    chatRegenerateFrom: async (input): Promise<ChatTurnResult> => {
+      // 66 §3.3 — "retry from here": truncate + re-generate in ONE call, so the renderer never observes a
+      // half-rewound transcript. Streams on the existing chat:chunk sink.
+      const { conversationId, index, expect } = RewindConversationSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      return regenerateFrom(
+        {
+          fs: ctx.fs,
+          key: ctx.key,
+          client: host.claude,
+          apiKey,
+          model: await host.activeModel(),
+          personId,
+          conversationId,
+          onDelta: (text) => host.emitChatChunk(text),
+          now: new Date(),
+        },
+        index,
+        expect,
+      );
     },
 
     // --- Together: couples sessions (58) — every handler gates on together.own + membership + live edge ---

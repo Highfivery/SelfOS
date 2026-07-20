@@ -173,6 +173,14 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
           costUsd: 0.001,
         },
       }),
+    conversationsRewind: () =>
+      Promise.resolve({ ok: false as const, reason: 'NOT_FOUND' as const }),
+    chatRegenerateFrom: () =>
+      Promise.resolve({
+        ok: false as const,
+        reason: 'ERROR' as const,
+        message: 'not wired in tests',
+      }),
     chatRetry: () =>
       Promise.resolve({
         ok: false as const,

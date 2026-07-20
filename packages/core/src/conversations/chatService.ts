@@ -14,8 +14,10 @@ import type { GoalRaiseContext } from '../coaching/goalRaise';
 import {
   getConversation,
   getConversationAttachment,
+  rewindConversation,
   saveConversation,
 } from './conversationService';
+import { regenerateIndexFor, type MessageStamp } from './rewindService';
 import { getGuidancePrefs } from './guidanceService';
 // Import the specific file (not the `../challenges` barrel) so loading `conversations` never pulls
 // `challengeSuggestService`, which imports `conversations/promptBuilder` — keeping the one runtime edge
@@ -426,6 +428,50 @@ async function generateCoachReply(
 
 /** Deps for `retryReply` — the same as a chat turn, minus the (already-persisted) user text + attachments. */
 export type RetryReplyDeps = Omit<ChatTurnDeps, 'userText' | 'attachments'>;
+
+/**
+ * "Retry from here" (66 §3.3) — rewind to the given message, then re-generate. Deliberately composes the
+ * two existing pieces rather than adding a third generation path: truncating so the transcript ends on a
+ * user message is precisely the state `retryReply` already knows how to answer.
+ *
+ * A stale stamp refuses without touching anything, so a click on an out-of-date view can't silently delete
+ * the wrong span.
+ */
+export async function regenerateFrom(
+  deps: RetryReplyDeps,
+  index: number,
+  expect: MessageStamp,
+): Promise<ChatTurnResult> {
+  const { fs, key, personId, conversationId } = deps;
+  const conversation = await getConversation(fs, key, personId, conversationId);
+  if (!conversation)
+    return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+
+  // Validate the caller's stamp against the message they actually pointed at, BEFORE anything is written.
+  const target = conversation.messages[index];
+  if (!target || target.role !== expect.role || target.ts !== expect.ts) {
+    return {
+      ok: false,
+      reason: 'ERROR',
+      message: 'This conversation moved on — reopen it and try again.',
+    };
+  }
+
+  // Truncate so the transcript ends on a user message (an assistant target drops itself; a user target
+  // keeps itself and drops the reply after it), then let the existing retry answer it.
+  const at = regenerateIndexFor(conversation.messages, index);
+  if (at < conversation.messages.length) {
+    const cut = conversation.messages[at];
+    if (!cut) return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+    const rewound = await rewindConversation(fs, key, personId, conversationId, at, {
+      role: cut.role,
+      ts: cut.ts,
+    });
+    if (!rewound.ok)
+      return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+  }
+  return retryReply(deps);
+}
 
 /**
  * Re-generate the coach's reply for a conversation whose LAST message is an unanswered user message (05 §4.1) —

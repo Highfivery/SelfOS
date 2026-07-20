@@ -8,6 +8,7 @@ export { Card } from './Card';
 export { Collapsible } from './Collapsible';
 export { Banner } from './Banner';
 export { RetryBanner } from './RetryBanner';
+export { MessageActions } from './MessageActions';
 export { AdminOnlyBadge } from './AdminOnlyBadge';
 export { ScopeBadge } from './ScopeBadge';
 export { OneTimeTip } from './OneTimeTip';

@@ -2569,6 +2569,29 @@ export interface IntakeState {
  * One adaptive interview turn (§6). Streams the interviewer reply via `onIntakeChunk`; resolves with the
  * updated session and which `Person` fields were filled this turn (direct `[[SELFOS:FIELD:…]]` markers).
  */
+/**
+ * What the renderer believes it's rewinding (66 §3.3). The stamp is verified against the stored transcript
+ * before anything is truncated, so a click on a stale view refuses instead of deleting the wrong span.
+ */
+export const MessageStampSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  ts: z.string().min(1),
+});
+
+/** A rewind/regenerate request: the message index plus the stamp that must still match it. */
+export const RewindTargetSchema = z.object({
+  index: z.number().int().nonnegative(),
+  expect: MessageStampSchema,
+});
+
+/**
+ * A rewind's outcome, shaped for the IPC seam. Lives here (not in `conversationService`) because
+ * `channels.ts` is imported by the SANDBOXED preload — a view type must come from the crypto-free shim.
+ */
+export type RewindResult =
+  | { ok: true; conversation: Conversation }
+  | { ok: false; reason: 'STALE' | 'INVALID' | 'NOT_FOUND' };
+
 export type IntakeTurnResult =
   | { ok: true; session: IntakeSession; usage: UsageEvent; filledFields?: string[] }
   // EMPTY (66 §3.2) = the model returned no visible text. Never persisted as a blank bubble; the

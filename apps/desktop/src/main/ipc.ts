@@ -662,6 +662,23 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.conversationGetAttachment, bridge.conversationGetAttachment);
   handle(IpcChannels.conversationExportAttachment, bridge.conversationExportAttachment);
 
+  // 66 §3.3 — "delete from here" writes only; "retry from here" also streams, so it binds the chat sender.
+  ipcMain.handle(IpcChannels.conversationsRewind, async (_event, raw: unknown) =>
+    bridge.conversationsRewind(
+      raw as { conversationId: string; index: number; expect: { role: 'user'; ts: string } },
+    ),
+  );
+  ipcMain.handle(IpcChannels.chatRegenerateFrom, async (event, raw: unknown) => {
+    chatSender = event.sender;
+    try {
+      return await bridge.chatRegenerateFrom(
+        raw as { conversationId: string; index: number; expect: { role: 'user'; ts: string } },
+      );
+    } finally {
+      chatSender = undefined;
+    }
+  });
+
   // dreamStartReflection + dreamAnalyzeTurn stream the guided-analysis reply on their own channel (kept
   // separate from chat so the Sessions and Dreams streams never cross). Same per-turn sender binding +
   // reset as chatStream — the coach's opener streams too (12 §15.4).

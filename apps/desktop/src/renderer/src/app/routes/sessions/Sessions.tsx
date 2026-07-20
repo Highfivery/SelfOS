@@ -20,6 +20,7 @@ import {
   dayDividerLabel,
   Markdown,
   MessageDayDivider,
+  MessageActions,
   MessageRow,
   RetryBanner,
   Select,
@@ -77,6 +78,8 @@ export function Sessions(): JSX.Element {
   const open = useConversationStore((s) => s.open);
   const send = useConversationStore((s) => s.send);
   const retry = useConversationStore((s) => s.retry);
+  const rewind = useConversationStore((s) => s.rewind);
+  const regenerateFrom = useConversationStore((s) => s.regenerateFrom);
   const loadGuidance = useGuidanceStore((s) => s.load);
   const remove = useConversationStore((s) => s.remove);
   const rename = useConversationStore((s) => s.rename);
@@ -373,6 +376,23 @@ export function Sessions(): JSX.Element {
                         <MessageRow
                           side={message.role === 'user' ? 'user' : 'coach'}
                           iso={message.ts}
+                          actions={
+                            sending ? undefined : (
+                              <MessageActions
+                                // `shownMessages` hides blank ghosts, so its index isn't the stored
+                                // one — map back by reference to rewind the right message.
+                                followingCount={Math.max(
+                                  0,
+                                  messages.length - messages.indexOf(message) - 1,
+                                )}
+                                label={
+                                  message.role === 'user' ? 'your message' : 'the coach’s reply'
+                                }
+                                onRegenerate={() => void regenerateFrom(messages.indexOf(message))}
+                                onDelete={() => void rewind(messages.indexOf(message))}
+                              />
+                            )
+                          }
                         >
                           <div
                             className={message.role === 'user' ? styles.userMsg : styles.coachMsg}

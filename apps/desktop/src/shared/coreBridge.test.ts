@@ -815,6 +815,90 @@ describe('createCoreBridge', () => {
     expect((await bridge.conversationsList())[0]?.status).toBe('inProgress');
   });
 
+  it('rewinds a transcript, persisting the truncation (66 §3.3)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    await bridge.chatStream({ conversationId: 'c1', userText: 'first' });
+    await bridge.chatStream({ conversationId: 'c1', userText: 'second' });
+
+    const before = await bridge.conversationsGet('c1');
+    expect(before?.messages).toHaveLength(4); // user, coach, user, coach
+
+    // Delete from the SECOND user message onward.
+    const result = await bridge.conversationsRewind({
+      conversationId: 'c1',
+      index: 2,
+      expect: { role: 'user', ts: before!.messages[2]!.ts },
+    });
+    expect(result.ok).toBe(true);
+
+    // Read it back from the vault — the truncation is on disk, not just in the returned object.
+    const after = await bridge.conversationsGet('c1');
+    expect(after?.messages).toHaveLength(2);
+    expect(after?.messages.map((m) => m.content)).not.toContain('second');
+  });
+
+  it('refuses a rewind whose stamp no longer matches, rather than cutting the wrong span', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    await bridge.chatStream({ conversationId: 'c1', userText: 'first' });
+
+    const result = await bridge.conversationsRewind({
+      conversationId: 'c1',
+      index: 0,
+      expect: { role: 'user', ts: '1999-01-01T00:00:00.000Z' },
+    });
+    expect(result).toEqual({ ok: false, reason: 'STALE' });
+    // Nothing was touched.
+    expect((await bridge.conversationsGet('c1'))?.messages).toHaveLength(2);
+  });
+
+  it('regenerates from a message: drops the reply and answers the same question again', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    await bridge.chatStream({ conversationId: 'c1', userText: 'first' });
+    const before = await bridge.conversationsGet('c1');
+
+    // Point at the coach's reply — it should be replaced, and the user's message kept.
+    const result = await bridge.chatRegenerateFrom({
+      conversationId: 'c1',
+      index: 1,
+      expect: { role: 'assistant', ts: before!.messages[1]!.ts },
+    });
+    expect(result.ok).toBe(true);
+
+    const after = await bridge.conversationsGet('c1');
+    expect(after?.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    // The question is asked ONCE — regenerating must never duplicate it.
+    expect(after?.messages.filter((m) => m.content === 'first')).toHaveLength(1);
+  });
+
+  it('rewind is denied for a person without sessions.own (the bridge is the trust boundary)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    await bridge.chatStream({ conversationId: 'c1', userText: 'first' });
+
+    // A Guest role has no sessions.own.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+
+    expect(
+      await bridge.conversationsRewind({
+        conversationId: 'c1',
+        index: 0,
+        expect: { role: 'user', ts: 'x' },
+      }),
+    ).toEqual({ ok: false, reason: 'NOT_FOUND' });
+    expect(
+      await bridge.chatRegenerateFrom({
+        conversationId: 'c1',
+        index: 0,
+        expect: { role: 'user', ts: 'x' },
+      }),
+    ).toMatchObject({ ok: false });
+  });
+
   it('sets session status, summarizes on complete, and feeds a later session', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

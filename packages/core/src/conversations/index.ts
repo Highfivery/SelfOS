@@ -1,6 +1,7 @@
 // @selfos/core/conversations — transcripts, the system-prompt builder, and the chat-turn orchestrator
 // (host/main-only).
 export * from './conversationService';
+export * from './rewindService';
 export * from './promptBuilder';
 export * from './chatService';
 export * from './wrapUp';

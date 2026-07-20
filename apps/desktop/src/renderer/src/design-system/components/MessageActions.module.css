@@ -1,0 +1,84 @@
+/* Per-message rewind actions (66 §3.3/§9). */
+
+.actions {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  /* Always in the DOM, revealed on hover/focus — never conditionally rendered, or focus could never
+     land on it and the affordance would be mouse-only (§9, a11y is not optional). */
+  opacity: 0;
+  transition: opacity var(--motion-fast) ease;
+}
+
+/* The row reveals its actions on hover OR when anything inside it takes focus. */
+:global(.messageRowHost):hover .actions,
+.actions:focus-within {
+  opacity: 1;
+}
+
+/* Touch has no hover, and §12 requires this to work at 360px — so keep them visible there. */
+@media (hover: none) {
+  .actions {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actions {
+    transition: none;
+  }
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Fixed size in a flex row — must not shrink (the Switch-shrink lesson, §7 geometry guard). */
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.button:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+.button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.button[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.danger:hover {
+  color: var(--color-danger);
+}
+
+/* The inline confirm — matches the app's existing two-step habit rather than introducing a modal. */
+.confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.confirmText {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  /* The classic flexbox footgun (§12) — without this the text pushes the buttons out of the row. */
+  min-width: 0;
+}

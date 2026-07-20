@@ -29,6 +29,7 @@ import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { buildContext, getPerson, savePerson } from '../people';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { streamWithContinuation } from '../conversations/streamWithContinuation';
+import { truncateMessages, type MessageStamp } from '../conversations/rewindService';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getInsight, normalizeCategories, saveInsight } from '../insights';
 import { isAnswered, isQuestionVisible, type AnswerMap } from '../questionnaires/answering';
@@ -657,6 +658,41 @@ async function generateIntakeReply(
 
   return { ok: true, session, usage };
 }
+
+/**
+ * Truncate a section transcript at `index` and persist it (66 §3.3). Same pure truncate + staleness check
+ * as the other surfaces; the messages live nested in the one intake document rather than their own file.
+ *
+ * Note this rewinds the CONVERSATION only. Structured answers are written separately by
+ * `submitSectionForm`, so they are deliberately untouched — rewinding what you said to the interviewer
+ * shouldn't silently unpick fields you filled in on a form.
+ */
+export async function rewindIntakeSection(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  sectionId: string,
+  index: number,
+  expect: MessageStamp,
+  now: Date,
+): Promise<IntakeRewindResult> {
+  const session = await getIntakeSession(fs, key, personId);
+  const section = session?.sections.find((s) => s.id === sectionId);
+  if (!session || !section) return { ok: false, reason: 'NOT_FOUND' };
+
+  const result = truncateMessages(section.messages, index, expect);
+  if (!result.ok) return result;
+
+  section.messages = result.messages;
+  session.updatedAt = now.toISOString();
+  await writeEncryptedJson(fs, intakePath(personId), session, key);
+  return { ok: true, session };
+}
+
+/** A section rewind's outcome — the updated session, or an honest refusal (66 §3.3). */
+export type IntakeRewindResult =
+  | { ok: true; session: IntakeSession }
+  | { ok: false; reason: 'STALE' | 'INVALID' | 'NOT_FOUND' };
 
 /** Deps for `retryIntakeTurn` — a turn minus the (already-persisted) user text. */
 export type IntakeRetryDeps = Omit<IntakeTurnDeps, 'userText'>;

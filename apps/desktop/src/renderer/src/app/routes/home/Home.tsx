@@ -679,7 +679,15 @@ export function Home(): JSX.Element {
                 />
                 <DreamsCard dreams={dreams} stats={patternStats} />
                 <MemoryCard insights={approvedInsights} canView={canViewMemory} />
-                <ChallengeCard />
+                {/* The card defers its check-in row ONLY when the `challenge-checkin` recommendation is
+                    genuinely on screen — the band is suppressed under proactivity-off / crisis / a new
+                    person / dismissal, and deferring to something that isn't rendering would leave a due
+                    check-in with no inline action at all (52 §3.3). */}
+                <ChallengeCard
+                  checkInHandledElsewhere={
+                    showEncouragement && recs.some((r) => r.id === 'challenge-checkin')
+                  }
+                />
                 {canViewMemory ? <GoalsCard configured={configured} crisis={crisis} /> : null}
                 <QuestionnairesCard
                   sentOverview={sentOverview}

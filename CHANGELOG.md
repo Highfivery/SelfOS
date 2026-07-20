@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.3](https://github.com/Highfivery/SelfOS/compare/v0.39.2...v0.39.3) (2026-07-20)
+
+
+### Bug Fixes
+
+* **dreams:** close the stale-write bug class across all three dream writers ([#263](https://github.com/Highfivery/SelfOS/issues/263)) ([2f57387](https://github.com/Highfivery/SelfOS/commit/2f57387a1ae35af5b578094bf8025cc11426a592))
+
 ## [0.39.2](https://github.com/Highfivery/SelfOS/compare/v0.39.1...v0.39.2) (2026-07-20)
 
 

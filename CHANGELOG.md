@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.0](https://github.com/Highfivery/SelfOS/compare/v0.39.7...v0.40.0) (2026-07-20)
+
+
+### Features
+
+* **chat:** detect truncation, auto-continue, and add rewind across every AI chat surface ([#273](https://github.com/Highfivery/SelfOS/issues/273)) ([b9fc8a8](https://github.com/Highfivery/SelfOS/commit/b9fc8a89dad021abeefb1e48dafb534843efe5ab))
+
 ## [0.39.7](https://github.com/Highfivery/SelfOS/compare/v0.39.6...v0.39.7) (2026-07-20)
 
 

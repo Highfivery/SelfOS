@@ -7,6 +7,7 @@ import type { Dream } from '../schemas';
 import { listConversations } from '../conversations';
 import { getInsight, listInsightsForPerson, saveInsight, summarizeForContext } from '../insights';
 import { savePerson, saveRelationship } from '../people';
+import { listGoals } from '../goals';
 import { queryUsage, setPersonBudget } from '../usage';
 import {
   deleteDream,
@@ -94,6 +95,94 @@ function deps(fs: ReturnType<typeof memFileSystem>, client: ClaudeClient) {
     now: new Date('2026-06-11T10:00:00.000Z'),
   };
 }
+
+/** The dreamer — several artifact tests need a real Person to author/send as. */
+const dreamer = (): Parameters<typeof savePerson>[2] => ({
+  id: 'p1',
+  schemaVersion: 1,
+  displayName: 'Alex',
+  isSubject: true,
+  tags: [],
+  createdAt: 'now',
+  updatedAt: 'now',
+});
+
+describe('dreamAnalysisService — artifacts from an analysis (66 §3.4)', () => {
+  const DRAFT_WITH_ARTIFACTS = {
+    ...VALID_DRAFT,
+    goals: ['Call my brother this week'],
+    questionnaires: [{ title: 'About us', brief: 'How connected we feel lately', for: 'me' }],
+  };
+
+  it('turns the goals the person voiced into tracked goals', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, dreamer());
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+
+    const res = await synthesizeAnalysis(
+      deps(fs, fakeClient({ synthesisText: JSON.stringify(DRAFT_WITH_ARTIFACTS) })),
+    );
+    expect(res.ok).toBe(true);
+
+    const goals = await listGoals(fs, key, 'p1');
+    expect(goals.map((g) => g.text)).toEqual(['Call my brother this week']);
+    expect(goals[0]?.provenance.dreamId).toBe('d1');
+    // NO insightId: synthesis runs before approval, and re-synthesis deletes the prior Insight — a link
+    // here would dangle.
+    expect(goals[0]?.insightId).toBeUndefined();
+  });
+
+  it('is idempotent across re-synthesis — no duplicate goal, no growing provenance', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, dreamer());
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    const d = deps(fs, fakeClient({ synthesisText: JSON.stringify(DRAFT_WITH_ARTIFACTS) }));
+
+    await synthesizeAnalysis(d);
+    // Re-synthesize LATER — a moving origin timestamp would fold the same dream in a second time.
+    await synthesizeAnalysis({ ...d, now: new Date('2026-06-12T10:00:00.000Z') });
+
+    const goals = await listGoals(fs, key, 'p1');
+    expect(goals).toHaveLength(1);
+    expect(goals[0]?.contributingSources ?? []).toHaveLength(0);
+  });
+
+  it('salvages the analysis when the artifact fields are malformed', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, dreamer());
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+
+    const res = await synthesizeAnalysis(
+      deps(
+        fs,
+        fakeClient({
+          synthesisText: JSON.stringify({
+            ...VALID_DRAFT,
+            goals: 'not an array',
+            questionnaires: [{ nonsense: true }],
+          }),
+        }),
+      ),
+    );
+    // The reflection is the product — a bad artifact field must never cost the person their analysis.
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.analysis.summary).toBe(VALID_DRAFT.summary);
+    expect(await listGoals(fs, key, 'p1')).toHaveLength(0);
+  });
+
+  it('mints nothing when the person cannot create questionnaires', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, dreamer());
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+
+    const res = await synthesizeAnalysis({
+      ...deps(fs, fakeClient({ synthesisText: JSON.stringify(DRAFT_WITH_ARTIFACTS) })),
+      questionnairesEnabled: false,
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.analysis.questionnaires).toBeUndefined();
+  });
+});
 
 describe('dreamAnalysisService — the coach offers, never writes the analysis (66 §3.4)', () => {
   // The double-analysis bug: the guidance used to say "the person can ask you to write up an analysis

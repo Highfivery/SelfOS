@@ -23,6 +23,8 @@ import type { RelationshipType } from '../schemas';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { streamWithContinuation } from '../conversations/streamWithContinuation';
 import { truncateMessages, type MessageStamp } from '../conversations/rewindService';
+import { extractGoals } from '../goals/goalService';
+import { mintDreamQuestionnaires } from './dreamQuestionnaireService';
 import type { RewindResult } from '../schemas';
 import { deleteInsight, getInsight, producedFactShare, saveInsight } from '../insights';
 import {
@@ -129,7 +131,12 @@ JSON object (no markdown fences, no prose outside it) with these keys:
 - "tags": { "emotions": [], "symbols": [], "settings": [], "themes": [], "people": [] } — short lowercase keywords for tracking patterns over time
 - "metrics": optional object of normalized signals for trend tracking, e.g. {"emotionalIntensity": 0.0-1.0, "valence": -1.0..1.0} (object)
 - "crisisFlag": true ONLY if self-harm, suicide, or acute crisis is disclosed (boolean)
-- "distressSignal": true if there are signs of significant trauma or recurring distress worth gently noting (boolean)`;
+- "distressSignal": true if there are signs of significant trauma or recurring distress worth gently noting (boolean)
+- "goals": commitments the person ACTUALLY VOICED in the conversation — their words, not your inference. \
+Never invent one from dream imagery alone. Omit the key entirely if they named none. (array of strings)
+- "questionnaires": AT MOST ONE, and only when the dream points at something genuinely worth asking a \
+specific person about. Each is { "title": short title, "brief": one sentence on what to explore, "for": \
+either "me" or the NAME of someone who appeared in the dream }. Omit the key entirely otherwise. (array)`;
 
 const EMPTY_TAGS = { emotions: [], symbols: [], settings: [], themes: [], people: [] };
 
@@ -151,6 +158,20 @@ const DreamAnalysisDraftSchema = z.object({
   metrics: z.record(z.string(), z.number()).optional().catch(undefined),
   crisisFlag: z.boolean().optional().catch(undefined),
   distressSignal: z.boolean().optional().catch(undefined),
+  // 66 §3.4 — both tolerant: a malformed goal or proposal drops itself, never the whole analysis.
+  goals: tolerantArray(z.string(), '', (g) => g.trim() !== ''),
+  questionnaires: tolerantArray(
+    z.object({
+      title: z.string().min(1),
+      brief: z.string().min(1),
+      // "me" or a display NAME. Deliberately never a personId — the model must not be able to address a
+      // recipient directly; the host resolves the name against the dream's own people.
+      for: z.string().optional().catch(undefined),
+    }),
+    // The drop sentinel: a malformed proposal collapses to an empty title and is filtered out.
+    { title: '', brief: '' },
+    (q) => q.title.trim() !== '' && q.brief.trim() !== '',
+  ),
 });
 
 export interface DreamAnalysisTurnDeps {
@@ -177,6 +198,12 @@ export interface DreamSynthesisDeps {
   dreamId: string;
   now: Date;
   override?: boolean;
+  /**
+   * Whether this person may create questionnaires (66 §3.4). `dreams:synthesize` gates on `dreams.own`,
+   * but auto-sending needs `questionnaires.create` — so the bridge resolves it and passes it in, the same
+   * way `memoryEnabled` reaches `approveAnalysis`. False ⇒ no minting; the analysis still succeeds.
+   */
+  questionnairesEnabled?: boolean;
 }
 
 function deriveTitle(text: string): string {
@@ -628,6 +655,52 @@ export async function synthesizeAnalysis(deps: DreamSynthesisDeps): Promise<Drea
     generatedAt: at,
     updatedAt: at,
   };
+
+  // 66 §3.4 — the artifacts this analysis produces. Both are wrapped: they're a bonus, the reflection is
+  // the product, so a failure here must never cost the person their analysis.
+  try {
+    if (draft.goals.length > 0) {
+      // The origin `at` is deliberately the FIRST analysis's timestamp, not now: `extractGoals` de-dups by
+      // provenance, so a moving timestamp would fold the same dream in again on every re-synthesis and grow
+      // `contributingSources` without bound. Stable identity = "this dream, first analyzed at T".
+      const touched = await extractGoals({
+        fs,
+        key,
+        personId,
+        goals: draft.goals,
+        provenance: { dreamId, at: prior?.generatedAt ?? at },
+        lifeArea: 'Emotions & patterns',
+        now,
+      });
+      // Note: NO `insightId`. Synthesis runs before approval, and re-synthesis deletes the prior Insight —
+      // linking one here would leave a dangling reference.
+      if (touched.length > 0) {
+        analysis.goals = draft.goals;
+        analysis.goalIds = touched.map((g) => g.id);
+      }
+    }
+  } catch {
+    // A goal-write failure leaves `goals`/`goalIds` unset; the analysis still saves.
+  }
+
+  try {
+    if (deps.questionnairesEnabled && draft.questionnaires.length > 0) {
+      const sent = await mintDreamQuestionnaires({
+        deps,
+        fs,
+        key,
+        personId,
+        dream,
+        analysisId: analysis.id,
+        proposals: draft.questionnaires,
+        now,
+      });
+      if (sent.length > 0) analysis.questionnaires = sent;
+    }
+  } catch {
+    // Same: nothing is persisted by a failed mint, and the analysis is unaffected.
+  }
+
   await saveAnalysis(fs, key, analysis);
   // `patchDream`, NOT `{...dream}`: `dream` was read before the synthesis call, so spreading it here
   // reverts every field written during it — which is exactly how an image generated mid-synthesis got

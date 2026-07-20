@@ -1499,6 +1499,19 @@ export const StoryProvenanceSchema = z.object({
 });
 export type StoryProvenance = z.infer<typeof StoryProvenanceSchema>;
 
+/**
+ * Records that a questionnaire came out of a dream analysis (66 §3.4). Mirrors `StoryProvenance`, and
+ * rides the immutable send snapshot, so a recipient's copy carries the source too. The dream's NARRATIVE
+ * is never included — only the analysis-derived brief that prompted it.
+ */
+export const DreamProvenanceSchema = z.object({
+  dreamId: z.string().min(1),
+  analysisId: z.string().min(1),
+  brief: z.string().max(280),
+  generatedAt: z.string(),
+});
+export type DreamProvenance = z.infer<typeof DreamProvenanceSchema>;
+
 export const QuestionnaireSchema = z.object({
   id: z.string().min(1),
   schemaVersion: z.number().int().positive(),
@@ -1530,6 +1543,9 @@ export const QuestionnaireSchema = z.object({
   // Your Story provenance (64-your-story §5.5) — present only on a biography-interview gap questionnaire.
   // Host-side only; carried through an edit like `autoCheckin`. Additive-optional, no schemaVersion bump.
   storyProvenance: StoryProvenanceSchema.optional(),
+  // Dream provenance (66 §3.4) — present only on a questionnaire a dream analysis produced. Same
+  // host-side-only, carried-through-an-edit treatment as `storyProvenance`.
+  dreamProvenance: DreamProvenanceSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -1550,6 +1566,8 @@ export const QuestionnaireInputSchema = z.object({
   autoCheckin: AutoCheckinProvenanceSchema.optional(),
   // Present only for a Your Story interview gap questionnaire (64 §5.5) — flows in host-side, never the builder.
   storyProvenance: StoryProvenanceSchema.optional(),
+  // Present only for a dream-analysis questionnaire (66 §3.4) — host-side, never the builder.
+  dreamProvenance: DreamProvenanceSchema.optional(),
 });
 export type QuestionnaireInput = z.infer<typeof QuestionnaireInputSchema>;
 
@@ -2223,6 +2241,20 @@ export const DreamTagsSchema = z.object({
 });
 export type DreamTags = z.infer<typeof DreamTagsSchema>;
 
+/**
+ * A questionnaire a dream analysis created and sent (66 §3.4). Stored on the analysis so the card can
+ * show what went out and to whom — there was no review step, so the person finds out here.
+ */
+export const DreamQuestionnaireArtifactSchema = z.object({
+  questionnaireId: z.string().min(1),
+  assignmentId: z.string().min(1),
+  title: z.string(),
+  recipientPersonId: z.string().min(1),
+  recipientName: z.string().optional(),
+  sentAt: z.string(),
+});
+export type DreamQuestionnaireArtifact = z.infer<typeof DreamQuestionnaireArtifactSchema>;
+
 export const DreamAnalysisSchema = z.object({
   id: z.string().min(1),
   schemaVersion: z.number().int().positive(),
@@ -2243,6 +2275,11 @@ export const DreamAnalysisSchema = z.object({
   distressSignal: z.boolean().optional(), // milder trauma/distress → feeds the nightmare nudge (12 §8.2)
   edited: z.boolean(), // the person edited the AI output before approving
   insightId: z.string().optional(), // the Insight produced on approval (08 §4.4)
+  // What this analysis produced besides the reflection (66 §3.4). All additive-optional — an analysis
+  // from before 66 simply has none, so no schemaVersion bump and no migration.
+  goals: z.array(z.string()).optional(), // the raw commitments the person voiced (what the card shows)
+  goalIds: z.array(z.string()).optional(), // the tracked Goals created/folded, for audit + idempotency
+  questionnaires: z.array(DreamQuestionnaireArtifactSchema).optional(), // what was created AND sent
   generatedAt: z.string(),
   updatedAt: z.string(),
 });

@@ -666,6 +666,21 @@ export function fakeClaudeClient(): ClaudeClient {
           metrics: { emotionalIntensity: 0.5, valence: 0 },
           crisisFlag: false,
           distressSignal: false,
+          // 66 §3.4 — a voiced commitment becomes a tracked Goal (free; it rides this same pass).
+          goals: ['Notice one steady thing each evening'],
+          // The SEND is gated behind a flag: minting a real questionnaire on every dream synthesis would
+          // perturb unrelated tests that count questionnaires/assignments.
+          ...(process.env['SELFOS_FAKE_DREAM_QUESTIONNAIRE']
+            ? {
+                questionnaires: [
+                  {
+                    title: 'What home means to you',
+                    brief: 'What feels like it is changing at home',
+                    for: process.env['SELFOS_FAKE_DREAM_QUESTIONNAIRE'],
+                  },
+                ],
+              }
+            : {}),
         });
         return Promise.resolve({
           text: draft,

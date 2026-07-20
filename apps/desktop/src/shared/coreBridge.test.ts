@@ -384,6 +384,8 @@ function makeHost(): {
               people: [],
             },
             metrics: { emotionalIntensity: 0.4, valence: -0.1 },
+            // 66 §3.4 — a voiced commitment, so the synthesis pass also produces a tracked Goal.
+            goals: ['Notice one steady thing each evening'],
             crisisFlag: false,
             distressSignal: false,
           })
@@ -4786,6 +4788,13 @@ describe('createCoreBridge', () => {
     expect(synth.analysis.summary).toContain('shifting rooms');
     expect(synth.usage.type).toBe('dream.analyze');
     expect((await bridge.dreamGet(dream.id))?.status).toBe('analyzed');
+
+    // 66 §3.4 — a commitment voiced in the reflection becomes a tracked Goal, riding this same pass
+    // (no extra AI call), and the analysis records what it produced.
+    const goals = await bridge.goalsList();
+    expect(goals.map((g) => g.text)).toContain('Notice one steady thing each evening');
+    expect(goals.find((g) => g.text.startsWith('Notice'))?.provenance.dreamId).toBe(dream.id);
+    expect(synth.analysis.goals).toContain('Notice one steady thing each evening');
 
     // Edits overwrite only the supplied section and mark the analysis edited.
     const edited = await bridge.dreamUpdateAnalysis({

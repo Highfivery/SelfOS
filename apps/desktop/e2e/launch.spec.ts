@@ -6529,6 +6529,14 @@ test('dreams: analyze → synthesize → edit → approve feeds the coach; the t
     await expect(w.getByRole('heading', { name: 'Your dream analysis' })).toBeVisible();
     await expect(w.getByText(/shifting rooms and open skies/i)).toBeVisible();
 
+    // 66 §3.4 — the analysis also produced a tracked goal, and says so on the card (there was no
+    // review step, so this is where the person finds out).
+    await expect(w.getByText('What SelfOS did with this')).toBeVisible();
+    await expect(w.getByText('Notice one steady thing each evening')).toBeVisible();
+    await w.screenshot({ path: 'e2e-artifacts/66-dream-artifacts.png' });
+    // That the goal is a REAL tracked Goal (not just card text) is asserted at the bridge level, where
+    // it's read back out of the goals store — cheaper and more direct than another nav round-trip here.
+
     // Edit a section (read-first → Edit toggle → Save).
     await w.getByRole('button', { name: 'Edit' }).click();
     await w.getByLabel('Summary').fill('My own retelling of the dream.');

@@ -7013,6 +7013,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personId,
         dreamId,
         now: new Date(),
+        // 66 §3.4 — this channel gates on `dreams.own`, but auto-creating a questionnaire needs
+        // `questionnaires.create`. Resolved here (the bridge is the trust boundary) rather than in core.
+        questionnairesEnabled: await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'),
       });
     },
     dreamUpdateAnalysis: async (input): Promise<DreamAnalysis | null> => {

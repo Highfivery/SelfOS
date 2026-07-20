@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.4](https://github.com/Highfivery/SelfOS/compare/v0.39.3...v0.39.4) (2026-07-20)
+
+
+### Bug Fixes
+
+* **core:** sweep the stale-write bug class across every record rebuild ([#265](https://github.com/Highfivery/SelfOS/issues/265)) ([85e0f4f](https://github.com/Highfivery/SelfOS/commit/85e0f4ff2a83f36538f24fa15b4007829da802f3))
+
 ## [0.39.3](https://github.com/Highfivery/SelfOS/compare/v0.39.2...v0.39.3) (2026-07-20)
 
 

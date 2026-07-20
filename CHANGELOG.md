@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.5](https://github.com/Highfivery/SelfOS/compare/v0.39.4...v0.39.5) (2026-07-20)
+
+
+### Bug Fixes
+
+* **core:** finish the stale-write sweep — 8 more live instances ([#267](https://github.com/Highfivery/SelfOS/issues/267)) ([1b6c9b1](https://github.com/Highfivery/SelfOS/commit/1b6c9b1cf0d33f49c77da451b90509d37418c8c9))
+
 ## [0.39.4](https://github.com/Highfivery/SelfOS/compare/v0.39.3...v0.39.4) (2026-07-20)
 
 

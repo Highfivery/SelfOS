@@ -9,6 +9,7 @@ import {
   dayDividerLabel,
   Heading,
   MessageDayDivider,
+  MessageActions,
   MessageRow,
   RetryBanner,
   Stack,
@@ -41,6 +42,8 @@ export function IntakeSectionPanel({
   const busy = useIntakeStore((s) => s.busy);
   const runTurn = useIntakeStore((s) => s.runTurn);
   const retryTurn = useIntakeStore((s) => s.retryTurn);
+  const rewind = useIntakeStore((s) => s.rewind);
+  const regenerateFrom = useIntakeStore((s) => s.regenerateFrom);
   const error = useIntakeStore((s) => s.error);
   const completeSection = useIntakeStore((s) => s.completeSection);
   const skipSection = useIntakeStore((s) => s.skipSection);
@@ -107,7 +110,20 @@ export function IntakeSectionPanel({
             return (
               <Fragment key={i}>
                 {divider ? <MessageDayDivider label={divider} /> : null}
-                <MessageRow side={m.role === 'user' ? 'user' : 'coach'} iso={m.ts}>
+                <MessageRow
+                  side={m.role === 'user' ? 'user' : 'coach'}
+                  iso={m.ts}
+                  actions={
+                    running ? undefined : (
+                      <MessageActions
+                        followingCount={Math.max(0, messages.length - i - 1)}
+                        label={m.role === 'user' ? 'your turn' : 'the interviewer’s reply'}
+                        onRegenerate={() => void regenerateFrom(meta.id, i)}
+                        onDelete={() => void rewind(meta.id, i)}
+                      />
+                    )
+                  }
+                >
                   <div
                     className={`${styles.turn} ${m.role === 'user' ? styles.userMsg : styles.coachMsg}`}
                   >

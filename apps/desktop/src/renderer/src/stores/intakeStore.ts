@@ -20,6 +20,10 @@ interface IntakeStoreState {
   runTurn: (sectionId: string, userText: string) => Promise<void>;
   /** Re-answer a section whose transcript ends on an unanswered message (66 §3.2). */
   retryTurn: (sectionId: string) => Promise<void>;
+  /** "Delete from here" — drop this message and everything after it (66 §3.3). */
+  rewind: (sectionId: string, index: number) => Promise<void>;
+  /** "Retry from here" — truncate to this point, then re-generate (66 §3.3). */
+  regenerateFrom: (sectionId: string, index: number) => Promise<void>;
   skipSection: (sectionId: string) => Promise<void>;
   /** Submit a structured form section's answers (no AI). Fills the profile + marks the section complete.
    * `sharing` carries the per-question relationship-type scopes (43); unset questions default server-side. */
@@ -44,6 +48,14 @@ interface IntakeStoreState {
   /** Generate the closing portrait (the explicit, bigger spend). Returns true on success. */
   finishIntake: () => Promise<boolean>;
   reset: () => void;
+}
+
+/** A section's transcript, or empty — the rewind actions need it to build the staleness stamp. */
+function messagesOf(
+  state: Pick<IntakeStoreState, 'state'>,
+  sectionId: string,
+): { role: 'user' | 'assistant'; ts: string }[] {
+  return state.state?.session?.sections.find((s) => s.id === sectionId)?.messages ?? [];
 }
 
 const EMPTY = {
@@ -84,6 +96,52 @@ export const useIntakeStore = create<IntakeStoreState>((set, get) => ({
     // Adds no new user message — core re-answers the section transcript as it already stands (66 §3.2).
     set({ running: true, streaming: '', error: null });
     const result = await window.selfos?.intakeRetryTurn({ sectionId });
+    if (result?.ok) {
+      set((s) => ({
+        running: false,
+        streaming: '',
+        state: s.state ? { ...s.state, session: result.session } : s.state,
+      }));
+      await useBudgetStore.getState().refresh();
+    } else {
+      set({ running: false, streaming: '', error: result?.message ?? 'Something went wrong.' });
+    }
+  },
+  rewind: async (sectionId, index) => {
+    // "Delete from here" (66 §3.3). Rewinds the CONVERSATION only — structured form answers are written
+    // separately and stay put, so this never silently unpicks fields the person filled in.
+    const messages = messagesOf(get(), sectionId);
+    const target = messages[index];
+    if (get().running || !target) return;
+    const result = await window.selfos?.intakeRewind({
+      sectionId,
+      index,
+      expect: { role: target.role, ts: target.ts },
+    });
+    if (result?.ok) {
+      set((s) => ({
+        state: s.state ? { ...s.state, session: result.session } : s.state,
+        error: null,
+      }));
+    } else {
+      set({
+        error:
+          result?.reason === 'STALE'
+            ? 'This section moved on — reopen it and try again.'
+            : 'Couldn’t remove those messages.',
+      });
+    }
+  },
+  regenerateFrom: async (sectionId, index) => {
+    const messages = messagesOf(get(), sectionId);
+    const target = messages[index];
+    if (get().running || !target) return;
+    set({ running: true, streaming: '', error: null });
+    const result = await window.selfos?.intakeRegenerateFrom({
+      sectionId,
+      index,
+      expect: { role: target.role, ts: target.ts },
+    });
     if (result?.ok) {
       set((s) => ({
         running: false,

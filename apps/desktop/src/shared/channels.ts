@@ -157,6 +157,7 @@ import type {
   Relationship,
   RelationshipInput,
   RelationshipType,
+  IntakeRewindOutcome,
   RelayStatus,
   RewindResult,
   Role,
@@ -472,6 +473,10 @@ export const IpcChannels = {
   dreamAnalyzeTurn: 'dreams:analyzeTurn',
   /** 66 §6 — regenerate a dream reply for a transcript ending on an unanswered message. */
   dreamRetryTurn: 'dreams:retryTurn',
+  /** 66 §3.3 — truncate a dream transcript at a message ("delete from here"). */
+  dreamRewind: 'dreams:rewind',
+  /** 66 §3.3 — truncate then re-generate ("retry from here"). */
+  dreamRegenerateFrom: 'dreams:regenerateFrom',
   dreamChunk: 'dreams:chunk', // main → renderer event
   dreamGetAnalysis: 'dreams:getAnalysis',
   dreamGetConversation: 'dreams:getConversation',
@@ -499,6 +504,10 @@ export const IpcChannels = {
   intakeRunTurn: 'intake:runTurn',
   /** 66 §6 — regenerate an interviewer reply for a section ending on an unanswered message. */
   intakeRetryTurn: 'intake:retryTurn',
+  /** 66 §3.3 — truncate a section transcript at a message ("delete from here"). */
+  intakeRewind: 'intake:rewind',
+  /** 66 §3.3 — truncate then re-generate ("retry from here"). */
+  intakeRegenerateFrom: 'intake:regenerateFrom',
   intakeChunk: 'intake:chunk', // main → renderer event
   intakeSkipSection: 'intake:skipSection',
   intakeSubmitForm: 'intake:submitForm',
@@ -550,7 +559,7 @@ export const ANTHROPIC_API_KEY_ID = 'anthropic.apiKey';
 export const OPENAI_API_KEY_ID = 'openai.apiKey';
 export type { DeviceView } from '@selfos/core/schemas';
 /** 66 §3.3 — re-exported so the bridge + renderer share one rewind outcome type. */
-export type { RewindResult } from '@selfos/core/schemas';
+export type { RewindResult, IntakeRewindOutcome } from '@selfos/core/schemas';
 
 /** The outcome of a key rotation (32 §6.4). The new recovery phrase is shown once; never logged. */
 export type KeyRotateResult =
@@ -1665,6 +1674,18 @@ export interface SelfosBridge {
    * (a failed/empty turn, or a reflection reopened mid-turn). Adds no new user message.
    */
   dreamRetryTurn(input: { dreamId: string }): Promise<ChatTurnResult>;
+  /** 66 §3.3 — "delete from here" in a dream reflection. */
+  dreamRewind(input: {
+    dreamId: string;
+    index: number;
+    expect: { role: 'user' | 'assistant'; ts: string };
+  }): Promise<RewindResult>;
+  /** 66 §3.3 — "retry from here" in a dream reflection: truncate, then re-generate. */
+  dreamRegenerateFrom(input: {
+    dreamId: string;
+    index: number;
+    expect: { role: 'user' | 'assistant'; ts: string };
+  }): Promise<ChatTurnResult>;
   /** Subscribe to streamed dream-analysis reply chunks; returns an unsubscribe function. */
   onDreamChunk(listener: (delta: string) => void): () => void;
   /** Load a dream's synthesized analysis; null if not analyzed yet. Requires `dreams.own`. */
@@ -1747,6 +1768,21 @@ export interface SelfosBridge {
    * Adds no new user message, so it can never duplicate one.
    */
   intakeRetryTurn(input: { sectionId: string }): Promise<IntakeTurnResult>;
+  /**
+   * 66 §3.3 — "delete from here" in an intake section. Rewinds the CONVERSATION only; structured form
+   * answers are written separately and are deliberately untouched.
+   */
+  intakeRewind(input: {
+    sectionId: string;
+    index: number;
+    expect: { role: 'user' | 'assistant'; ts: string };
+  }): Promise<IntakeRewindOutcome>;
+  /** 66 §3.3 — "retry from here" in an intake section: truncate, then re-generate. */
+  intakeRegenerateFrom(input: {
+    sectionId: string;
+    index: number;
+    expect: { role: 'user' | 'assistant'; ts: string };
+  }): Promise<IntakeTurnResult>;
   /** Subscribe to streamed intake interview chunks; returns an unsubscribe function. */
   onIntakeChunk(listener: (delta: string) => void): () => void;
   /** Skip a whole intake section (never blocks completion). Requires `intake.own`. */

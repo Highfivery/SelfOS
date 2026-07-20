@@ -10,6 +10,7 @@ import {
   type ClaudeTestResult,
   type ConversationMeta,
   type RewindResult,
+  type IntakeRewindOutcome,
   type KeyRotateResult,
   type RotationStatus,
   type VaultSyncReadiness,
@@ -609,8 +610,10 @@ import {
   deleteDream,
   openReflection,
   removeFromContext,
+  regenerateDreamFrom,
   removePatternNarrativeFromContext,
   retryDreamReply,
+  rewindDreamConversation,
   runAnalysisTurn,
   saveDream,
   setDreamFactShare,
@@ -623,7 +626,9 @@ import {
   getIntakeSection,
   getIntakeSession,
   intakeSectionMeta,
+  regenerateIntakeFrom,
   retryIntakeTurn,
+  rewindIntakeSection,
   runIntakeTurn,
   setIntakeAnswerSharing,
   skipIntakeSection,
@@ -871,6 +876,16 @@ const SessionSetStatusSchema = z.object({
 /** 66 §3.3 — a rewind target: which message, plus the stamp core re-verifies before truncating. */
 const RewindConversationSchema = z.object({
   conversationId: z.string().min(1),
+  index: z.number().int().nonnegative(),
+  expect: z.object({ role: z.enum(['user', 'assistant']), ts: z.string().min(1) }),
+});
+const RewindDreamSchema = z.object({
+  dreamId: z.string().min(1),
+  index: z.number().int().nonnegative(),
+  expect: z.object({ role: z.enum(['user', 'assistant']), ts: z.string().min(1) }),
+});
+const RewindIntakeSchema = z.object({
+  sectionId: z.string().min(1),
   index: z.number().int().nonnegative(),
   expect: z.object({ role: z.enum(['user', 'assistant']), ts: z.string().min(1) }),
 });
@@ -6984,6 +6999,39 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         now: new Date(),
       });
     },
+    dreamRewind: async (input): Promise<RewindResult> => {
+      const { dreamId, index, expect } = RewindDreamSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
+        return { ok: false, reason: 'NOT_FOUND' };
+      }
+      return rewindDreamConversation(ctx.fs, ctx.key, personId, dreamId, index, expect);
+    },
+    dreamRegenerateFrom: async (input): Promise<ChatTurnResult> => {
+      const { dreamId, index, expect } = RewindDreamSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      return regenerateDreamFrom(
+        {
+          fs: ctx.fs,
+          key: ctx.key,
+          client: host.claude,
+          apiKey,
+          model: await host.activeModel(),
+          personId,
+          dreamId,
+          onDelta: (text) => host.emitDreamChunk(text),
+          now: new Date(),
+        },
+        index,
+        expect,
+      );
+    },
     dreamGetAnalysis: async (dreamId): Promise<DreamAnalysis | null> => {
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
@@ -7319,6 +7367,39 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         onDelta: (text) => host.emitIntakeChunk(text),
         now: new Date(),
       });
+    },
+    intakeRewind: async (input): Promise<IntakeRewindOutcome> => {
+      const { sectionId, index, expect } = RewindIntakeSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
+        return { ok: false, reason: 'NOT_FOUND' };
+      }
+      return rewindIntakeSection(ctx.fs, ctx.key, personId, sectionId, index, expect, new Date());
+    },
+    intakeRegenerateFrom: async (input): Promise<IntakeTurnResult> => {
+      const { sectionId, index, expect } = RewindIntakeSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      return regenerateIntakeFrom(
+        {
+          fs: ctx.fs,
+          key: ctx.key,
+          client: host.claude,
+          apiKey,
+          model: await host.activeModel(),
+          personId,
+          sectionId,
+          onDelta: (text) => host.emitIntakeChunk(text),
+          now: new Date(),
+        },
+        index,
+        expect,
+      );
     },
     intakeSkipSection: async (input): Promise<IntakeState> => {
       const { sectionId } = IntakeSectionIdSchema.parse(input);

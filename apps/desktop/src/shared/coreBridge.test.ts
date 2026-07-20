@@ -901,6 +901,82 @@ describe('createCoreBridge', () => {
     ).toMatchObject({ ok: false });
   });
 
+  it('rewinds a dream reflection and an intake section, each gated + person-scoped (66 §3.3)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+
+    // Dreams.
+    const dream = await bridge.dreamSave({
+      narrative: 'I was back in my childhood house.',
+      lucid: false,
+      nightmare: false,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+    });
+    await bridge.dreamAnalyzeTurn({ dreamId: dream.id, userText: 'first' });
+    await bridge.dreamAnalyzeTurn({ dreamId: dream.id, userText: 'second' });
+    const dreamBefore = await bridge.dreamGetConversation(dream.id);
+    expect(dreamBefore?.messages).toHaveLength(4);
+
+    const dreamRewind = await bridge.dreamRewind({
+      dreamId: dream.id,
+      index: 2,
+      expect: { role: 'user', ts: dreamBefore!.messages[2]!.ts },
+    });
+    expect(dreamRewind.ok).toBe(true);
+    // Read it back from the vault — the truncation is on disk.
+    expect((await bridge.dreamGetConversation(dream.id))?.messages).toHaveLength(2);
+
+    // A stale stamp refuses without touching anything.
+    expect(
+      await bridge.dreamRewind({
+        dreamId: dream.id,
+        index: 0,
+        expect: { role: 'user', ts: '1999-01-01T00:00:00.000Z' },
+      }),
+    ).toEqual({ ok: false, reason: 'STALE' });
+
+    // Intake.
+    await bridge.intakeRunTurn({ sectionId: 'story', userText: 'where to start' });
+    const state = await bridge.intakeGetState();
+    const section = state?.session?.sections.find((s) => s.id === 'story');
+    expect(section?.messages).toHaveLength(2);
+
+    const intakeRewind = await bridge.intakeRewind({
+      sectionId: 'story',
+      index: 0,
+      expect: { role: 'user', ts: section!.messages[0]!.ts },
+    });
+    expect(intakeRewind.ok).toBe(true);
+    const after = await bridge.intakeGetState();
+    expect(after?.session?.sections.find((s) => s.id === 'story')?.messages).toHaveLength(0);
+  });
+
+  it('dream + intake rewind are denied without their capability (the trust boundary)', async () => {
+    const { bridge } = await freshOwner();
+    // A Guest role has neither dreams.own nor intake.own.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+
+    const stamp = { role: 'user' as const, ts: 'x' };
+    expect(await bridge.dreamRewind({ dreamId: 'd1', index: 0, expect: stamp })).toEqual({
+      ok: false,
+      reason: 'NOT_FOUND',
+    });
+    expect(await bridge.intakeRewind({ sectionId: 'story', index: 0, expect: stamp })).toEqual({
+      ok: false,
+      reason: 'NOT_FOUND',
+    });
+    expect(
+      await bridge.dreamRegenerateFrom({ dreamId: 'd1', index: 0, expect: stamp }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await bridge.intakeRegenerateFrom({ sectionId: 'story', index: 0, expect: stamp }),
+    ).toMatchObject({ ok: false });
+  });
+
   it('sets session status, summarizes on complete, and feeds a later session', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

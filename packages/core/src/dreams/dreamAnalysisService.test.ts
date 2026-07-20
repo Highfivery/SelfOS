@@ -22,8 +22,10 @@ import {
   DREAM_READY_MARKER,
   approveAnalysis,
   openReflection,
+  regenerateDreamFrom,
   removeFromContext,
   retryDreamReply,
+  rewindDreamConversation,
   runAnalysisTurn,
   stripDreamMarkers,
   synthesizeAnalysis,
@@ -271,6 +273,58 @@ describe('dreamAnalysisService — fail-safe turns (66 §3.2)', () => {
     // Exactly one user message (never re-sent) followed by the recovered reply.
     expect(saved?.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
     expect(saved?.messages.filter((m) => m.content === 'I was falling')).toHaveLength(1);
+  });
+
+  it('rewinds a reflection, dropping the message and everything after it', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    await runAnalysisTurn({ ...deps(fs, fakeClient()), userText: 'first', onDelta: () => {} });
+    await runAnalysisTurn({ ...deps(fs, fakeClient()), userText: 'second', onDelta: () => {} });
+
+    const before = await getDreamConversation(fs, key, 'p1', 'd1');
+    expect(before?.messages).toHaveLength(4);
+
+    const result = await rewindDreamConversation(fs, key, 'p1', 'd1', 2, {
+      role: 'user',
+      ts: before!.messages[2]!.ts,
+    });
+    expect(result.ok).toBe(true);
+
+    const after = await getDreamConversation(fs, key, 'p1', 'd1');
+    expect(after?.messages).toHaveLength(2);
+    expect(after?.messages.map((m) => m.content)).not.toContain('second');
+  });
+
+  it('refuses a rewind whose stamp no longer matches', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    await runAnalysisTurn({ ...deps(fs, fakeClient()), userText: 'first', onDelta: () => {} });
+
+    expect(
+      await rewindDreamConversation(fs, key, 'p1', 'd1', 0, {
+        role: 'user',
+        ts: 'not-the-real-ts',
+      }),
+    ).toEqual({ ok: false, reason: 'STALE' });
+    // Nothing touched.
+    expect((await getDreamConversation(fs, key, 'p1', 'd1'))?.messages).toHaveLength(2);
+  });
+
+  it('regenerates from a reply, re-answering the same message without duplicating it', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    await runAnalysisTurn({ ...deps(fs, fakeClient()), userText: 'first', onDelta: () => {} });
+    const before = await getDreamConversation(fs, key, 'p1', 'd1');
+
+    const res = await regenerateDreamFrom({ ...deps(fs, fakeClient()), onDelta: () => {} }, 1, {
+      role: 'assistant',
+      ts: before!.messages[1]!.ts,
+    });
+    expect(res.ok).toBe(true);
+
+    const after = await getDreamConversation(fs, key, 'p1', 'd1');
+    expect(after?.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(after?.messages.filter((m) => m.content === 'first')).toHaveLength(1);
   });
 
   it('refuses to retry when the last turn already has a real reply', async () => {

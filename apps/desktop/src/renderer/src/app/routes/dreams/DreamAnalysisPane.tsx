@@ -14,6 +14,7 @@ import {
   Heading,
   Markdown,
   MessageDayDivider,
+  MessageActions,
   MessageRow,
   RetryBanner,
   Stack,
@@ -63,6 +64,8 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
   const startReflection = useDreamAnalysisStore((s) => s.startReflection);
   const sendTurn = useDreamAnalysisStore((s) => s.sendTurn);
   const retryTurn = useDreamAnalysisStore((s) => s.retryTurn);
+  const rewind = useDreamAnalysisStore((s) => s.rewind);
+  const regenerateFrom = useDreamAnalysisStore((s) => s.regenerateFrom);
   const synthesize = useDreamAnalysisStore((s) => s.synthesize);
   const saveEdits = useDreamAnalysisStore((s) => s.saveEdits);
   const approve = useDreamAnalysisStore((s) => s.approve);
@@ -139,7 +142,20 @@ export function DreamAnalysisPane({ dream, onBack }: DreamAnalysisPaneProps): JS
               return (
                 <Fragment key={index}>
                   {divider ? <MessageDayDivider label={divider} /> : null}
-                  <MessageRow side={message.role === 'user' ? 'user' : 'coach'} iso={message.ts}>
+                  <MessageRow
+                    side={message.role === 'user' ? 'user' : 'coach'}
+                    iso={message.ts}
+                    actions={
+                      sending || opening ? undefined : (
+                        <MessageActions
+                          followingCount={Math.max(0, messages.length - index - 1)}
+                          label={message.role === 'user' ? 'your turn' : 'the coach’s reply'}
+                          onRegenerate={() => void regenerateFrom(index)}
+                          onDelete={() => void rewind(index)}
+                        />
+                      )
+                    }
+                  >
                     <div className={message.role === 'user' ? styles.userMsg : styles.coachMsg}>
                       {message.role === 'user' ? (
                         message.content

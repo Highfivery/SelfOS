@@ -596,6 +596,20 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
           ],
         },
       }),
+    dreamRewind: () => Promise.resolve({ ok: false as const, reason: 'NOT_FOUND' as const }),
+    dreamRegenerateFrom: () =>
+      Promise.resolve({
+        ok: false as const,
+        reason: 'ERROR' as const,
+        message: 'not wired in tests',
+      }),
+    intakeRewind: () => Promise.resolve({ ok: false as const, reason: 'NOT_FOUND' as const }),
+    intakeRegenerateFrom: () =>
+      Promise.resolve({
+        ok: false as const,
+        reason: 'ERROR' as const,
+        message: 'not wired in tests',
+      }),
     dreamRetryTurn: (input) =>
       Promise.resolve({
         ok: true,

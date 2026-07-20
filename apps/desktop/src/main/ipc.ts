@@ -707,6 +707,22 @@ export function registerIpcHandlers(): void {
       dreamSender = undefined;
     }
   });
+  // 66 §3.3 — rewind writes only; regenerate also streams, so it binds the dream sender.
+  ipcMain.handle(IpcChannels.dreamRewind, async (_event, raw: unknown) =>
+    bridge.dreamRewind(
+      raw as { dreamId: string; index: number; expect: { role: 'user'; ts: string } },
+    ),
+  );
+  ipcMain.handle(IpcChannels.dreamRegenerateFrom, async (event, raw: unknown) => {
+    dreamSender = event.sender;
+    try {
+      return await bridge.dreamRegenerateFrom(
+        raw as { dreamId: string; index: number; expect: { role: 'user'; ts: string } },
+      );
+    } finally {
+      dreamSender = undefined;
+    }
+  });
 
   // intakeRunTurn streams the interviewer reply on its own channel (kept separate from chat/dreams). Same
   // per-turn sender binding + reset as chatStream (18-personal-onboarding §6).
@@ -723,6 +739,22 @@ export function registerIpcHandlers(): void {
     intakeSender = event.sender;
     try {
       return await bridge.intakeRetryTurn(raw as { sectionId: string });
+    } finally {
+      intakeSender = undefined;
+    }
+  });
+  // 66 §3.3 — rewind writes only; regenerate also streams, so it binds the intake sender.
+  ipcMain.handle(IpcChannels.intakeRewind, async (_event, raw: unknown) =>
+    bridge.intakeRewind(
+      raw as { sectionId: string; index: number; expect: { role: 'user'; ts: string } },
+    ),
+  );
+  ipcMain.handle(IpcChannels.intakeRegenerateFrom, async (event, raw: unknown) => {
+    intakeSender = event.sender;
+    try {
+      return await bridge.intakeRegenerateFrom(
+        raw as { sectionId: string; index: number; expect: { role: 'user'; ts: string } },
+      );
     } finally {
       intakeSender = undefined;
     }

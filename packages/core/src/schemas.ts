@@ -2629,6 +2629,11 @@ export type RewindResult =
   | { ok: true; conversation: Conversation }
   | { ok: false; reason: 'STALE' | 'INVALID' | 'NOT_FOUND' };
 
+/** The intake equivalent — a section's messages live inside the one session doc, so it returns that. */
+export type IntakeRewindOutcome =
+  | { ok: true; session: IntakeSession }
+  | { ok: false; reason: 'STALE' | 'INVALID' | 'NOT_FOUND' };
+
 export type IntakeTurnResult =
   | { ok: true; session: IntakeSession; usage: UsageEvent; filledFields?: string[] }
   // EMPTY (66 §3.2) = the model returned no visible text. Never persisted as a blank bubble; the

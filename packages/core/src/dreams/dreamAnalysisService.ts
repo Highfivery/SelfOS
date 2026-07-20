@@ -22,7 +22,11 @@ import { buildContext, buildLinkedPeopleContext, listRelationships } from '../pe
 import type { RelationshipType } from '../schemas';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { streamWithContinuation } from '../conversations/streamWithContinuation';
-import { truncateMessages, type MessageStamp } from '../conversations/rewindService';
+import {
+  regenerateIndexFor,
+  truncateMessages,
+  type MessageStamp,
+} from '../conversations/rewindService';
 import { extractGoals } from '../goals/goalService';
 import { mintDreamQuestionnaires } from './dreamQuestionnaireService';
 import type { RewindResult } from '../schemas';
@@ -442,6 +446,44 @@ export async function rewindDreamConversation(
 
 /** Deps for `retryDreamReply` — a dream turn minus the (already-persisted) user text. */
 export type DreamRetryDeps = Omit<DreamAnalysisTurnDeps, 'userText'>;
+
+/**
+ * "Retry from here" for a dream reflection (66 §3.3) — rewind to the message, then re-generate. Same
+ * shape as the Sessions one: validate the caller's stamp BEFORE writing anything, truncate so the
+ * transcript ends on the person's message, then let the existing retry answer it.
+ */
+export async function regenerateDreamFrom(
+  deps: DreamRetryDeps,
+  index: number,
+  expect: MessageStamp,
+): Promise<ChatTurnResult> {
+  const { fs, key, personId, dreamId } = deps;
+  const conversation = await getDreamConversation(fs, key, personId, dreamId);
+  if (!conversation)
+    return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+
+  const target = conversation.messages[index];
+  if (!target || target.role !== expect.role || target.ts !== expect.ts) {
+    return {
+      ok: false,
+      reason: 'ERROR',
+      message: 'This reflection moved on — reopen it and try again.',
+    };
+  }
+
+  const at = regenerateIndexFor(conversation.messages, index);
+  if (at < conversation.messages.length) {
+    const cut = conversation.messages[at];
+    if (!cut) return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+    const rewound = await rewindDreamConversation(fs, key, personId, dreamId, at, {
+      role: cut.role,
+      ts: cut.ts,
+    });
+    if (!rewound.ok)
+      return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+  }
+  return retryDreamReply(deps);
+}
 
 /**
  * Re-generate the coach's reply for a dream transcript that ends on an unanswered message (66 §3.2) —

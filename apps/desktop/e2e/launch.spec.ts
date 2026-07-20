@@ -6524,6 +6524,18 @@ test('dreams: analyze → synthesize → edit → approve feeds the coach; the t
     await w.getByRole('button', { name: 'Send' }).click();
     await expect(w.getByText('It felt unsettling but oddly familiar.')).toBeVisible();
 
+    // 66 §3.3 — rewind works in a dream reflection too: delete this turn and everything after it,
+    // then re-say it. Proves the dream seam is wired, not just the Sessions one.
+    await w
+      .getByRole('button', { name: /Delete from your turn/i })
+      .last()
+      .click();
+    await w.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(w.getByText('It felt unsettling but oddly familiar.')).toHaveCount(0);
+    await w.getByLabel('Message').fill('It felt unsettling but oddly familiar.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText('It felt unsettling but oddly familiar.')).toBeVisible();
+
     // Synthesize → the structured card.
     await w.getByRole('button', { name: 'Create analysis' }).click();
     await expect(w.getByRole('heading', { name: 'Your dream analysis' })).toBeVisible();

@@ -365,6 +365,8 @@ const bridge: SelfosBridge = {
   dreamStartReflection: (input) => ipcRenderer.invoke(IpcChannels.dreamStartReflection, input),
   dreamAnalyzeTurn: (input) => ipcRenderer.invoke(IpcChannels.dreamAnalyzeTurn, input),
   dreamRetryTurn: (input) => ipcRenderer.invoke(IpcChannels.dreamRetryTurn, input),
+  dreamRewind: (input) => ipcRenderer.invoke(IpcChannels.dreamRewind, input),
+  dreamRegenerateFrom: (input) => ipcRenderer.invoke(IpcChannels.dreamRegenerateFrom, input),
   onDreamChunk: (listener) => {
     const handler = (_event: unknown, delta: string): void => listener(delta);
     ipcRenderer.on(IpcChannels.dreamChunk, handler);
@@ -396,6 +398,8 @@ const bridge: SelfosBridge = {
   intakeGetState: () => ipcRenderer.invoke(IpcChannels.intakeGetState),
   intakeRunTurn: (input) => ipcRenderer.invoke(IpcChannels.intakeRunTurn, input),
   intakeRetryTurn: (input) => ipcRenderer.invoke(IpcChannels.intakeRetryTurn, input),
+  intakeRewind: (input) => ipcRenderer.invoke(IpcChannels.intakeRewind, input),
+  intakeRegenerateFrom: (input) => ipcRenderer.invoke(IpcChannels.intakeRegenerateFrom, input),
   onIntakeChunk: (listener) => {
     const handler = (_event: unknown, delta: string): void => listener(delta);
     ipcRenderer.on(IpcChannels.intakeChunk, handler);

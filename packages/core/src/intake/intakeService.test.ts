@@ -15,7 +15,9 @@ import {
   formatIntakeForGeneration,
   getIntakeSession,
   redactRestrictedFacts,
+  regenerateIntakeFrom,
   retryIntakeTurn,
+  rewindIntakeSection,
   runIntakeTurn,
   setIntakeAnswerSharing,
   skipIntakeSection,
@@ -193,6 +195,69 @@ describe('intakeService — fail-safe turns (66 §3.2)', () => {
     const messages = await messagesOf(fs);
     expect(messages.map((m) => m.role)).toEqual(['user', 'assistant']);
     expect(messages.filter((m) => m.content === 'I am Sam.')).toHaveLength(1);
+  });
+
+  it('rewinds a section transcript but leaves the form answers alone', async () => {
+    // The important guarantee: rewinding what you SAID to the interviewer must not unpick fields you
+    // filled in on the form — those are written separately by `submitSectionForm`.
+    const fs = await setup();
+    await submitSectionForm(fs, key, 'p1', 'basics', { occupation: 'nurse' }, NOW);
+    await runIntakeTurn(turn(fs, fakeClient(), 'basics', 'first'));
+    await runIntakeTurn(turn(fs, fakeClient(), 'basics', 'second'));
+
+    const before = await messagesOf(fs);
+    expect(before).toHaveLength(4);
+
+    const result = await rewindIntakeSection(
+      fs,
+      key,
+      'p1',
+      'basics',
+      2,
+      { role: 'user', ts: before[2]!.ts },
+      NOW,
+    );
+    expect(result.ok).toBe(true);
+
+    expect(await messagesOf(fs)).toHaveLength(2);
+    const section = (await getIntakeSession(fs, key, 'p1'))?.sections.find(
+      (s) => s.id === 'basics',
+    );
+    expect(section?.answers['occupation']).toBe('nurse'); // untouched
+  });
+
+  it('refuses a rewind whose stamp no longer matches', async () => {
+    const fs = await setup();
+    await runIntakeTurn(turn(fs, fakeClient(), 'basics', 'first'));
+
+    expect(
+      await rewindIntakeSection(
+        fs,
+        key,
+        'p1',
+        'basics',
+        0,
+        { role: 'user', ts: 'not-the-real-ts' },
+        NOW,
+      ),
+    ).toEqual({ ok: false, reason: 'STALE' });
+    expect(await messagesOf(fs)).toHaveLength(2);
+  });
+
+  it('regenerates from a reply without duplicating the message it answers', async () => {
+    const fs = await setup();
+    await runIntakeTurn(turn(fs, fakeClient(), 'basics', 'first'));
+    const before = await messagesOf(fs);
+
+    const res = await regenerateIntakeFrom(retryDeps(fs, fakeClient()), 1, {
+      role: 'assistant',
+      ts: before[1]!.ts,
+    });
+    expect(res.ok).toBe(true);
+
+    const after = await messagesOf(fs);
+    expect(after.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(after.filter((m) => m.content === 'first')).toHaveLength(1);
   });
 
   it('refuses to retry when the last turn already has a real reply', async () => {

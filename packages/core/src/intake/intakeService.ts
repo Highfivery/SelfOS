@@ -29,7 +29,11 @@ import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { buildContext, getPerson, savePerson } from '../people';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { streamWithContinuation } from '../conversations/streamWithContinuation';
-import { truncateMessages, type MessageStamp } from '../conversations/rewindService';
+import {
+  regenerateIndexFor,
+  truncateMessages,
+  type MessageStamp,
+} from '../conversations/rewindService';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getInsight, normalizeCategories, saveInsight } from '../insights';
 import { isAnswered, isQuestionVisible, type AnswerMap } from '../questionnaires/answering';
@@ -696,6 +700,49 @@ export type IntakeRewindResult =
 
 /** Deps for `retryIntakeTurn` — a turn minus the (already-persisted) user text. */
 export type IntakeRetryDeps = Omit<IntakeTurnDeps, 'userText'>;
+
+/**
+ * "Retry from here" for an intake section (66 §3.3) — rewind to the message, then re-generate. The
+ * stamp is validated before anything is written, so a stale view refuses rather than cutting the wrong
+ * span. Structured form answers are untouched (see `rewindIntakeSection`).
+ */
+export async function regenerateIntakeFrom(
+  deps: IntakeRetryDeps,
+  index: number,
+  expect: MessageStamp,
+): Promise<IntakeTurnResult> {
+  const { fs, key, personId, sectionId, now } = deps;
+  const session = await getIntakeSession(fs, key, personId);
+  const section = session?.sections.find((s) => s.id === sectionId);
+  if (!section) return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+
+  const target = section.messages[index];
+  if (!target || target.role !== expect.role || target.ts !== expect.ts) {
+    return {
+      ok: false,
+      reason: 'ERROR',
+      message: 'This section moved on — reopen it and try again.',
+    };
+  }
+
+  const at = regenerateIndexFor(section.messages, index);
+  if (at < section.messages.length) {
+    const cut = section.messages[at];
+    if (!cut) return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+    const rewound = await rewindIntakeSection(
+      fs,
+      key,
+      personId,
+      sectionId,
+      at,
+      { role: cut.role, ts: cut.ts },
+      now,
+    );
+    if (!rewound.ok)
+      return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+  }
+  return retryIntakeTurn(deps);
+}
 
 /**
  * Re-generate the interviewer's reply for a section whose transcript ends on an unanswered message

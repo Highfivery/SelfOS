@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.2](https://github.com/Highfivery/SelfOS/compare/v0.39.1...v0.39.2) (2026-07-20)
+
+
+### Bug Fixes
+
+* **dreams:** stop a generation clobbering an edit saved while it ran ([#261](https://github.com/Highfivery/SelfOS/issues/261)) ([a898e4c](https://github.com/Highfivery/SelfOS/commit/a898e4c9293e01eebbef48c9e94aa46285776385))
+
 ## [0.39.1](https://github.com/Highfivery/SelfOS/compare/v0.39.0...v0.39.1) (2026-07-20)
 
 

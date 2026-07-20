@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.7](https://github.com/Highfivery/SelfOS/compare/v0.39.6...v0.39.7) (2026-07-20)
+
+
+### Bug Fixes
+
+* **core:** relay first-wins on live status; repair 5 silently-failing E2E tests ([#271](https://github.com/Highfivery/SelfOS/issues/271)) ([2cf05fd](https://github.com/Highfivery/SelfOS/commit/2cf05fd3663b9a263b780788b6e8b2acb22fb0e2))
+
 ## [0.39.6](https://github.com/Highfivery/SelfOS/compare/v0.39.5...v0.39.6) (2026-07-20)
 
 

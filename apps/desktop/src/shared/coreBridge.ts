@@ -6812,7 +6812,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const { id: inputId, ...fields } = DreamInputSchema.parse(input);
       // Main owns id/schemaVersion/personId/status/timestamps; merge over an existing dream so editing
-      // preserves createdAt + the analysis link (status/analysisId change only in the analysis slice).
+      // preserves createdAt + the analysis link (status/analysisId change only in the analysis slice) and
+      // the image descriptor (13 §4.2 — written only by dreamImageService, never sendable by the renderer;
+      // dropping it would orphan the encrypted bytes at dreams/<id>/image.enc and revoke its sharing).
       const existing = inputId ? await getDream(ctx.fs, ctx.key, personId, inputId) : null;
       const now = new Date().toISOString();
       const dream: Dream = {
@@ -6822,6 +6824,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personId,
         status: existing?.status ?? 'captured',
         ...(existing?.analysisId !== undefined ? { analysisId: existing.analysisId } : {}),
+        ...(existing?.image !== undefined ? { image: existing.image } : {}),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };

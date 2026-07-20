@@ -6165,6 +6165,20 @@ test('dreams: visualize a dream — sensitive warning, generate, encrypted round
     expect(envelope.alg).toBe('aes-256-gcm');
     expect(envelope.data).not.toContain('iVBORw0KG'); // the fake PNG's base64 header — never in ciphertext
 
+    // EDITING the dream must not drop the image. `Dream.image` is written only by the image service and
+    // is absent from DreamInputSchema, so the renderer can never send it back — the bridge has to carry it
+    // forward, or Save silently orphans the encrypted bytes and the image vanishes from the UI.
+    await w.getByRole('button', { name: 'Edit dream' }).click();
+    await w.getByLabel('What happened?').fill('A brighter surreal place of open doors.');
+    await w.getByRole('button', { name: 'Save' }).click();
+    // Saving an edit returns to the read-first detail — the image must still be rendered there.
+    await expect(w.getByText('A brighter surreal place of open doors.')).toBeVisible();
+    await expect(w.getByRole('img')).toBeVisible();
+    const afterEdit = await listDreams(createNodeFileSystem(vault), key, 'owner-1');
+    expect(afterEdit[0]?.narrative).toBe('A brighter surreal place of open doors.');
+    expect(afterEdit[0]?.image?.style).toBe('watercolor'); // the descriptor survived the edit
+    expect(await findFileNamed(vault, 'image.enc')).not.toBeNull();
+
     // Regenerate replaces it (a confirm, then the new image).
     await w.getByRole('button', { name: 'Regenerate' }).click();
     await w.getByRole('button', { name: 'Regenerate' }).click();

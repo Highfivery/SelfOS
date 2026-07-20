@@ -4784,6 +4784,57 @@ describe('createCoreBridge', () => {
     expect((await bridge.dreamGet(dream.id))?.image).toBeUndefined();
   });
 
+  it('keeps a generated image (and its sharing) when the dream is edited', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    await bridge.setSetting({ key: 'dreams.imageGenerationEnabled', value: true, scope: 'vault' });
+    await bridge.secretSet({ id: OPENAI_API_KEY_ID, value: 'sk-openai' });
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-ant' });
+
+    const dream = await bridge.dreamSave({
+      narrative: 'rooms that rearrange',
+      lucid: false,
+      nightmare: false,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+    });
+    expect((await bridge.dreamGenerateImage({ dreamId: dream.id })).ok).toBe(true);
+
+    // Share it with a related person, so the edit also exercises the descriptor's sharing state.
+    const partner = await bridge.peopleSave({ displayName: 'Partner', isSubject: true, tags: [] });
+    await bridge.relationshipsSave({
+      fromPersonId: ownerId,
+      toPersonId: partner.id,
+      type: 'partner',
+    });
+    await bridge.dreamSetImageShare({
+      dreamId: dream.id,
+      targetPersonId: partner.id,
+      shared: true,
+    });
+
+    // Editing the dream (the renderer can never send `image` — it isn't in DreamInputSchema) must NOT drop
+    // the descriptor, or the encrypted bytes at dreams/<id>/image.enc are orphaned with nothing pointing
+    // at them: the image silently vanishes from the UI and the share is revoked.
+    const edited = await bridge.dreamSave({
+      id: dream.id,
+      narrative: 'a clearer retelling of the rearranging rooms',
+      lucid: false,
+      nightmare: false,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+    });
+    expect(edited.image?.model).toBe('gpt-image-2');
+    expect(edited.image?.shareableWith).toContain(partner.id);
+
+    const reread = await bridge.dreamGet(dream.id);
+    expect(reread?.narrative).toBe('a clearer retelling of the rearranging rooms');
+    expect(reread?.image?.model).toBe('gpt-image-2');
+    // …and the bytes are still reachable through the descriptor.
+    expect((await bridge.dreamGetImage({ dreamId: dream.id }))?.mime).toBe('image/png');
+  });
+
   it('exports an image, shares it with a related person, and the recipient reads it in "Shared with you"', async () => {
     const { bridge, ownerId } = await freshOwner();
     await bridge.setSetting({ key: 'dreams.imageGenerationEnabled', value: true, scope: 'vault' });

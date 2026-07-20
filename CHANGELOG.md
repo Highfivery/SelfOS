@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.1](https://github.com/Highfivery/SelfOS/compare/v0.40.0...v0.40.1) (2026-07-20)
+
+
+### Bug Fixes
+
+* **chat:** the auto-continue shipped in 0.40.0 is rejected by the live API ([#275](https://github.com/Highfivery/SelfOS/issues/275)) ([c1fe3da](https://github.com/Highfivery/SelfOS/commit/c1fe3dabb736a68719a8a97dfd471f53594a5a0d))
+
 ## [0.40.0](https://github.com/Highfivery/SelfOS/compare/v0.39.7...v0.40.0) (2026-07-20)
 
 

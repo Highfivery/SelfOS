@@ -57,10 +57,12 @@ async function makeMailbox(pin: string): Promise<RelayMailbox> {
 // MAX_PIN_ATTEMPTS run of wrong guesses — several hundred ms of KDF each. That is comfortably under the
 // 5s default in isolation but tips over when the suite runs in parallel with the rest of the package, so
 // these were an intermittent pre-push/CI failure. Give the block headroom rather than weakening the
-// assertions or cheapening the KDF (the cost IS the brute-force protection being tested). 10s is ~6x the
-// observed worst case (1.7s under full parallel load) — enough for a slow CI runner, while still low
-// enough that a genuine KDF performance regression would surface here instead of being swallowed.
-describe('relay mailbox', { timeout: 10_000 }, () => {
+// assertions or cheapening the KDF (the cost IS the brute-force protection being tested). Worst case is
+// ~2.2s under a full parallel run on a fast dev machine; a GitHub-hosted runner is commonly 2–4x slower
+// per core on CPU-bound scrypt, so 20s keeps real margin there. (A timeout is a poor perf regression
+// detector anyway — it yields a flake, not a diagnosis — so we do not shave it close for that; the point
+// is only to stop the flake without hiding a true hang.)
+describe('relay mailbox', { timeout: 20_000 }, () => {
   let kv: RelayKv & { store: Map<string, string> };
   let clock: number;
   let env: RelayEnv;

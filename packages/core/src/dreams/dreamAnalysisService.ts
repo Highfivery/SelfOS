@@ -26,8 +26,8 @@ import {
   getAnalysis,
   getDream,
   getDreamConversation,
+  patchDream,
   saveAnalysis,
-  saveDream,
   saveDreamConversation,
 } from './dreamService';
 
@@ -304,8 +304,10 @@ export async function runAnalysisTurn(deps: DreamAnalysisTurnDeps): Promise<Chat
   await saveDreamConversation(fs, key, conversation);
 
   // Mark the dream as in-analysis the first time we talk about it (until a synthesis lands).
+  // `patchDream` (not a `{...dream}` write): `dream` was read before the model call, so writing it whole
+  // would revert anything saved meanwhile — e.g. an image generated during this turn (12 §5.1).
   if (dream.status === 'captured') {
-    await saveDream(fs, key, { ...dream, status: 'analyzing', updatedAt: at });
+    await patchDream(fs, key, personId, dreamId, { status: 'analyzing', updatedAt: at });
   }
 
   const usage = buildUsage(model, dreamId, personId, at, result.usage);
@@ -367,7 +369,7 @@ export async function openReflection(
     };
     await saveDreamConversation(fs, key, conversation);
     if (dream.status === 'captured') {
-      await saveDream(fs, key, { ...dream, status: 'analyzing', updatedAt: at });
+      await patchDream(fs, key, personId, dreamId, { status: 'analyzing', updatedAt: at });
     }
     return { ok: true, conversation, ...(usage ? { usage } : {}) };
   };
@@ -485,8 +487,10 @@ export async function synthesizeAnalysis(deps: DreamSynthesisDeps): Promise<Drea
     updatedAt: at,
   };
   await saveAnalysis(fs, key, analysis);
-  await saveDream(fs, key, {
-    ...dream,
+  // `patchDream`, NOT `{...dream}`: `dream` was read before the synthesis call, so spreading it here
+  // reverts every field written during it — which is exactly how an image generated mid-synthesis got
+  // its descriptor wiped and its encrypted bytes orphaned (the 12 §5.1 bug, via a second writer).
+  await patchDream(fs, key, personId, dreamId, {
     status: 'analyzed',
     analysisId: analysis.id,
     updatedAt: at,

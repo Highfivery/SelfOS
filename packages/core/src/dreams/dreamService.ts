@@ -55,6 +55,33 @@ export async function saveDream(fs: FileSystem, key: Uint8Array, dream: Dream): 
   await writeEncryptedJson(fs, dreamPath(dream.personId, dream.id), dream, key);
 }
 
+/**
+ * Apply a partial update to a dream, re-reading it immediately before the write.
+ *
+ * Prefer this over `getDream` → mutate → `saveDream` **whenever anything slow sits between the read and
+ * the write** (a Claude or OpenAI call, a user editing a form). A dream record is written whole, so a
+ * long-lived stale copy silently reverts every field the caller did not mean to touch. That has bitten
+ * twice: `Dream.image` was wiped by an edit (12 §5.1), and again by a synthesis running while an image
+ * generated. Re-reading here means a concurrent writer's fields survive — only `patch` is applied.
+ *
+ * Returns the written record, or `null` if the dream no longer exists (deleted while the caller was
+ * working). Callers must handle `null` rather than resurrect it. This narrows the window to this
+ * function; it is not a lock, so two writers landing inside each other's read still race.
+ */
+export async function patchDream(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  dreamId: string,
+  patch: Partial<Omit<Dream, 'id' | 'personId' | 'schemaVersion' | 'createdAt'>>,
+): Promise<Dream | null> {
+  const fresh = await getDream(fs, key, personId, dreamId);
+  if (!fresh) return null;
+  const next: Dream = { ...fresh, ...patch };
+  await saveDream(fs, key, next);
+  return next;
+}
+
 /** Read one dream by dreamer + id; null if absent. */
 export async function getDream(
   fs: FileSystem,

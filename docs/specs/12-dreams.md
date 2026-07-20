@@ -410,8 +410,12 @@ gated by **`dreams.own`** unless noted:
     that is how `Dream.image` was once lost, orphaning the encrypted bytes at `dreams/<id>/image.enc`.
     A compile-time guard in `dreamSave` now fails the build if `Dream` gains a main-owned field that is
     in neither list. **Adding a field to `Dream`? Classify it here.**
-  - Both `dreams:save` and `generateDreamImage` write the **whole** record, so they re-read immediately
-    before writing (last-write-wins is narrowed, not eliminated — see §7).
+  - **Three paths rebuild the whole `Dream` record** — `dreams:save`, `generateDreamImage`, and
+    `dreamAnalysisService` (marking `analyzing` / `analyzed`) — so a copy read before a slow step (a
+    network call, a user editing) reverts every field written meanwhile. All three now re-read
+    immediately before writing (via `patchDream`, which returns `null` when the dream was deleted rather
+    than resurrecting it). Last-write-wins is narrowed, not eliminated — see §7. **Any new whole-record
+    dream write must do the same.**
 - **Analysis** — `dreams:analyzeTurn({ dreamId, userText })` (streams via `dreams:chunk`, reusing `05`'s
   streaming pattern; the transcript persists to the dream folder) / `dreams:synthesize({ dreamId })`
   (produces the `DreamAnalysis`) / `dreams:updateAnalysis` / `dreams:approve({ dreamId, edits?,

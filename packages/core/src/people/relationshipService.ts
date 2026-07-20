@@ -1,5 +1,6 @@
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
+import type { AssertMainOwnedHandled } from '../rebuildGuard';
 import { RelationshipSchema, type Relationship, type RelationshipInput } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { RELATIONSHIP_SCHEMA_VERSION, migrateRelationshipRaw } from './migrations';
@@ -35,6 +36,13 @@ export async function upsertRelationship(
   key: Uint8Array,
   input: RelationshipInput,
 ): Promise<Relationship> {
+  // Every main-owned field must be set fresh or carried forward below; see `rebuildGuard`.
+  const _guard: AssertMainOwnedHandled<
+    Relationship,
+    RelationshipInput,
+    'schemaVersion' | 'createdAt' | 'updatedAt'
+  > = true;
+  void _guard;
   const now = new Date().toISOString();
   let createdAt = now;
   if (input.id) {

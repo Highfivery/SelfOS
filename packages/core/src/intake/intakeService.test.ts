@@ -335,6 +335,35 @@ describe('intakeService', () => {
     expect(body).not.toContain('[object Object]');
   });
 
+  it('does not revert a profile edit saved WHILE the portrait was being synthesized', async () => {
+    const fs = await setup();
+    await submitSectionForm(fs, key, 'p1', 'basics', { occupation: 'nurse' }, NOW);
+
+    // The person edits their profile mid-synthesis (the portrait call is a long model turn). The
+    // inferred-fields write afterwards must not put back the copy read BEFORE that call — that is the
+    // 12 §5.1 stale-write class reaching the intake path.
+    const editMidFlight = fakeClient({
+      capture: () => {},
+    });
+    const client: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: async (options, onDelta) => {
+        const live = await getPerson(fs, key, 'p1');
+        await savePerson(fs, key, { ...live!, location: 'Lisbon', displayName: 'Sam Renamed' });
+        return editMidFlight.stream(options, onDelta);
+      },
+    };
+
+    await synthesizeIntake(synth(fs, client));
+
+    const after = await getPerson(fs, key, 'p1');
+    expect(after?.location).toBe('Lisbon'); // the mid-flight edit survived
+    expect(after?.displayName).toBe('Sam Renamed');
+    // …and the portrait's inferred fields still landed on the (fresh) record.
+    expect(after?.communicationStyle).toBe('direct and warm');
+    expect(after?.goals).toBe('feel less alone');
+  });
+
   it('synthesis resolves the activity matrix oral rows by ANATOMY, keyed by stable keys (46 §4.2)', async () => {
     const fs = await setup();
     // A person with a penis, into vulvas: own anatomy → receiving blowjob; partner anatomy → cunnilingus.

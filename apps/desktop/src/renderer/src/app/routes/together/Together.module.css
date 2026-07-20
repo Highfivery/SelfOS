@@ -576,6 +576,73 @@
   min-width: 0;
 }
 
+/* The expanded check-in panel (§5.6 amendment) — takes the full row so the outcome buttons + note never
+   squeeze the action text beside them. */
+.challengeExpand {
+  flex: 1 1 100%;
+  min-width: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+/* A failed action's message — full-width so it never squeezes the row's text or actions. */
+.challengeError {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+/* Row kebab (snooze / let it go) — mirrors the sessions lifecycle menu so the two read identically. The
+   strip is full-width content (not a narrow pane), so a right-aligned menu stays on screen (§12). */
+.menuWrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+.menuBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  border: none;
+  background: transparent;
+  cursor: default;
+}
+.menu {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-overlay);
+}
+.menuItem {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.menuItem:hover {
+  background: var(--color-surface-alt);
+}
+.menuItem:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+.menuItemDanger {
+  color: var(--color-danger);
+}
+
 /* ── Desire & intimacy — cohesive panel (§3.10/§3.10b) ──────────────────────────── */
 .intimacyPanel {
   display: flex;

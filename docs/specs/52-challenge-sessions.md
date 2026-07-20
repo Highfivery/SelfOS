@@ -186,6 +186,28 @@ A captured challenge surfaces as a **ChallengeCard** in two places (reusing exis
   up one conversation with a stranger this week._ Due Fri.") with quick actions **I did it / Not yet /
   Reflect** and a **Check in** affordance once `checkInAt` passes (§3.5). Self-hides when there's no active
   challenge.
+
+  **RESTORED + CLARIFIED 2026-07-20 (`feat/joint-challenge-actions`).** 60 §3.1.5 had reduced this card to a
+  passive status surface whose only action navigated to `/sessions`, moving the actionable nudge wholly to the
+  "For you" `challenge-checkin` recommendation. But that recommendation fires **only when a check-in is due**,
+  so before the due date Home offered no way to act at all — and it made the Together joint-challenge tile's
+  "track your own check-in on Home" copy point at a surface that couldn't check in (58 §5.6). The quick actions
+  above are restored, with an explicit **ownership split so the two Home surfaces never duplicate** (§7):
+  - **Not due** → the card owns it: inline **I did it / Not yet / Reflect** (the `challenge-checkin`
+    recommendation isn't showing).
+  - **Due** → the card **hides its action row** and the "For you" `challenge-checkin` recommendation owns the
+    moment in the focal zone (53), keeping the ranked placement a due check-in deserves. The card stays visible
+    as status, carrying its "ready for a check-in" marker.
+
+  The `challenge-checkin` provider is **unchanged** — this is a renderer-side deferral, not an engine change.
+
+  **Caveat (accepted):** the "For you" band is itself suppressed when `coaching.proactivity` is off, under a
+  recurring crisis, for a brand-new person, or once that recommendation has been dismissed for the current
+  signal (53 §3.4). In those states a due check-in has no inline actions on Home and degrades to the
+  "How's it going?" link into Sessions. That is the **pre-existing** behaviour for a due check-in (60 §3.1.5
+  left only that link), so this is not a regression — but "the recommendation owns the moment" holds only
+  while the band is rendering.
+
 - **Sessions surface** — a slim "active challenge" indicator/section so a challenge is visible where the work
   happens (placement a build nicety). (A dedicated `/challenges` list of history is a §11/future nicety — v1
   surfaces the **current** one + closed ones in a collapsed "Past challenges" affordance, the `39` Goals
@@ -217,7 +239,8 @@ After `checkInAt` passes for an `active` challenge, the app **gently** prompts a
 dismissing it suppresses it until the challenge's state changes (the `35` `onChange` re-surface rule, the `40`
 goal-followup precedent). Two ways to check in (resolved at build; both supported):
 
-- **Inline (quick)** — from the ChallengeCard / the `challenge-followup` notification: **I did it / Not yet /
+- **Inline (quick)** — from the ChallengeCard / the `challenge-followup` notification, or the Together
+  joint-challenge tile for a twin (58 §5.6): **I did it / Not yet /
   Let it go** + an optional one-line reflection. "I did it" + a reflection runs the **reflection analysis**
   (§5.4) and marks the challenge `done`; "Not yet" keeps it `active` (and may offer to shrink it or push
   `checkInAt` out); "Let it go" marks it `abandoned` so it never returns (the `39` "let it go" precedent).
@@ -474,7 +497,8 @@ build detail mirroring `09`/`39`.
   source computing the derived nudge from the active-challenge `checkInAt`. Crisis is **not** a kind (`40`
   §3.5).
 - **Home cards (`17`)** — a **`ChallengeCard`** (current active challenge + I-did-it / Not-yet / Reflect + the
-  comfort dial + Check-in once due) and a **`SuggestedChallengeCard`** (explicit-tap "Get a challenge idea" →
+  comfort dial — the action row shows only while NO check-in is due; once one is, the card defers to the
+  `challenge-checkin` recommendation, §3.3 as amended) and a **`SuggestedChallengeCard`** (explicit-tap "Get a challenge idea" →
   the cached/fresh suggestion → Accept/Tweak/Dismiss), both reusing existing primitives (Card/Stack + the `17`
   seed-handoff to start the session). Self-hiding on empty; per-person via the existing Home load (`17` §3.4).
   A new labelled status chip / comfort control → `/gallery` if a genuinely new primitive (DoD §12); otherwise
@@ -719,7 +743,8 @@ checkInDays}`; `stripChallengeMarker` removes it (and a **partial mid-stream** m
 **Component (Vitest + RTL)**
 
 - The launcher renders the "Take on a challenge" entry; the **ChallengeCard** renders an active challenge with
-  status chip + comfort dial + I-did-it/Not-yet/Reflect (and Check-in once due); the **SuggestedChallengeCard**
+  status chip + comfort dial + I-did-it/Not-yet/Reflect (and HIDES that row once a check-in is due, deferring
+  to the For-you rec — §3.3); the **SuggestedChallengeCard**
   explicit-tap → AI-off/over-budget calm states (no dead button) + Accept/Tweak/Dismiss; the inline check-in
   records an outcome; the closed/"Past challenges" section; the **18+ gate** hides sexual challenge surfaces
   un-acked.

@@ -303,6 +303,28 @@ async function switchTogetherPerson(w: Page, name: string): Promise<void> {
   await expect(w.getByRole('button', { name: `Signed in as ${name}` })).toBeVisible();
 }
 
+/**
+ * §12: assert nothing scrolls horizontally. The guard is the INNER-SCROLLER scan (any element whose computed
+ * `overflow-x` is auto/scroll and whose content exceeds it), NOT a document-width assertion — on macOS the
+ * titlebar's traffic-light inset makes the document ~18px wider than a 360px E2E window, an artifact that
+ * doesn't exist on the real phone target.
+ */
+async function expectNoInnerOverflow(w: Page): Promise<void> {
+  await expect
+    .poll(async () =>
+      w.evaluate(
+        () =>
+          [...document.querySelectorAll('*')].filter((el) => {
+            const overflowX = getComputedStyle(el).overflowX;
+            return (
+              (overflowX === 'auto' || overflowX === 'scroll') && el.scrollWidth > el.clientWidth
+            );
+          }).length,
+      ),
+    )
+    .toBe(0);
+}
+
 // Deterministic AI: passthrough secret encryption (no keychain prompt) + offline Claude client.
 function e2eEnv(): Record<string, string> {
   const env: Record<string, string> = {};
@@ -10957,6 +10979,65 @@ test('together (58) phase H2: a couples turn mints a JOINT challenge for both pa
     await w.getByRole('link', { name: /Together/ }).click();
     await expect(w.getByRole('heading', { name: /Joint challenge/ })).toBeVisible();
     await expect(w.getByText('Share one appreciation a day')).toBeVisible();
+
+    // §5.6 (amended): the strip NAMES whose turn it is, and the check-in happens HERE — the old copy that
+    // punted to Home is gone (Home's card couldn't check in, so that pointer was a dead end).
+    await expect(w.getByText('Neither of you has checked in yet')).toBeVisible();
+    await expect(w.getByText(/Track your own check-in on Home/)).toHaveCount(0);
+
+    // One tap expands the outcome row; recording an outcome checks in Ben's OWN twin.
+    await expect(w.getByRole('button', { name: 'Check in' })).toBeVisible();
+    await w.getByText('Share one appreciation a day').first().scrollIntoViewIfNeeded();
+    await w.screenshot({ path: 'e2e-artifacts/58-joint-challenge-actionable.png' });
+
+    // §12 guard runs HERE — against the at-risk row: an OPEN challenge whose pill, primary button and kebab
+    // all sit on one non-shrinkable line, with the pill carrying an unbounded partner name. (Asserting this
+    // only after both partners finish would test the short closed row and prove nothing.)
+    await w.setViewportSize({ width: 360, height: 900 });
+    await expect(w.getByRole('button', { name: 'Check in' })).toBeVisible();
+    await expectNoInnerOverflow(w);
+    await w.getByText('Share one appreciation a day').first().scrollIntoViewIfNeeded();
+    await w.screenshot({ path: 'e2e-artifacts/58-joint-challenge-360.png' });
+    await w.setViewportSize({ width: 1280, height: 900 });
+    await w.getByRole('button', { name: 'Check in' }).click();
+    await w.getByText('Share one appreciation a day').first().scrollIntoViewIfNeeded();
+    await w.screenshot({ path: 'e2e-artifacts/58-joint-challenge-expanded.png' });
+    await w.getByLabel('Your reflection').fill('managed it most days');
+    await w.getByRole('button', { name: 'I did it' }).click();
+
+    // Decrypt-level proof that the strip acted on Ben's own twin — and only his.
+    await expect
+      .poll(async () => {
+        const states: string[] = [];
+        for (const name of await fs.list(`people/${ben}/challenges`)) {
+          if (!name.endsWith('.enc')) continue;
+          const raw = (await readEncryptedJson(fs, `people/${ben}/challenges/${name}`, key)) as {
+            groupId?: string;
+            outcome?: string;
+            reflection?: string;
+          } | null;
+          if (raw?.groupId) states.push(`${raw.outcome ?? 'none'}:${raw.reflection ?? ''}`);
+        }
+        return states.join('|');
+      })
+      .toBe('did:managed it most days');
+
+    // The row now reflects Ben's side and waits on Angel — and offers him no second check-in.
+    await expect(w.getByText('You’ve checked in · waiting on Angel')).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Check in' })).toHaveCount(0);
+    await w.screenshot({ path: 'e2e-artifacts/58-joint-challenge-waiting.png' });
+
+    // Angel sees the ball is in HER court, checks in from her own Together strip…
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await expect(w.getByText('Ben checked in · your turn')).toBeVisible();
+    await w.getByRole('button', { name: 'Check in' }).click();
+    await w.getByRole('button', { name: 'I did it' }).click();
+
+    // …and once both have, it's kept as a shared record in the collapsed closed group, not dropped.
+    await expect(w.getByRole('button', { name: /Completed & closed \(1\)/ })).toBeVisible();
+    await w.getByRole('button', { name: /Completed & closed \(1\)/ }).click();
+    await expect(w.getByText('You both did it').first()).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

@@ -4,7 +4,7 @@ import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient, FileSystem } from '../host';
 import type { Person, TogetherSession } from '../schemas';
 import { savePerson, saveRelationship } from '../people';
-import { listChallenges, recordCheckIn } from '../challenges/challengeService';
+import { listChallenges, recordCheckIn, setChallengeStatus } from '../challenges/challengeService';
 import { createSession } from './togetherService';
 import { runTogetherTurn } from './togetherChatService';
 import { buildTogetherSystemPrompt } from './togetherPromptBuilder';
@@ -146,6 +146,22 @@ describe('listJointChallenges + grounding (§5.6)', () => {
     statuses = await listJointChallenges(fs, key, [BEN, ANGEL]);
     expect(statuses[0]?.allCheckedIn).toBe(true);
     // A fully-checked-in, no-longer-active challenge drops out of the grounding lines.
+    expect(jointChallengeGroundingLines(statuses)).toHaveLength(0);
+  });
+
+  it('drops a LET-GO challenge from the grounding pack instead of grounding on it forever', async () => {
+    const fs = memFileSystem();
+    const session = await seedPair(fs);
+    await captureJointChallengeFromMarker(fs, key, [BEN, ANGEL], marker, session.id, NOW);
+    // Both partners let it go — nobody ever checked in, so this is `active:false, allCheckedIn:false`,
+    // the shape an `active || !allCheckedIn` filter would have treated as a live commitment forever.
+    for (const person of [BEN, ANGEL]) {
+      const own = (await listChallenges(fs, key, person))[0]!;
+      await setChallengeStatus(fs, key, person, own.id, 'abandoned', NOW);
+    }
+    const statuses = await listJointChallenges(fs, key, [BEN, ANGEL]);
+    expect(statuses[0]?.active).toBe(false);
+    expect(statuses[0]?.allCheckedIn).toBe(false);
     expect(jointChallengeGroundingLines(statuses)).toHaveLength(0);
   });
 

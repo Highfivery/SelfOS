@@ -419,6 +419,51 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-20 — **Build (the Together "Joint challenge" tile becomes ACTIONABLE — plus the dead-end it pointed
+  at; SPEC 58 §5.6 + SPEC 52 §3.3 amended; on `feat/joint-challenge-actions`, PR pending).** The user: the
+  joint-challenge card on the Together dashboard "should have an action the user can click to log/complete,"
+  and asked for a review of the workflow. **Reviewed first, and the review found worse than a missing button:**
+  the tile was display-only by design (58 §5.6 deliberately routed check-in to "each partner's own Home card"),
+  but its subtitle "Track your own check-in on Home" was a **dead end** — 60 §3.1.5 had reduced Home's
+  `ChallengeCard` to a passive navigate, so the only real actions lived a THIRD hop away in the Sessions
+  `ChallengeSection`. The journey was Together → Home → Sessions with the first instruction factually wrong (a
+  §7 whole-flow-coherence failure), and it contradicted the durable §12 rule (surface the control WHERE the
+  work happens). **All 5 forks asked first (AskUserQuestion):** one-tap-then-expand · name whose turn it is ·
+  keep closed ones in a collapsed group · make Home actionable too · and — surfaced only after tracing the code
+  — how the Home card and the "For you" `challenge-checkin` recommendation should divide the job, since both
+  would otherwise render the same buttons once a check-in is due (chose: the card defers while due). **The key
+  design finding: NO schema, IPC, or bridge change was needed.** `JointChallengeStatus` is a pure cross-partner
+  aggregate that discards which twin is yours — but it carries `groupId`, and `challengeStore` already holds the
+  viewer's OWN challenges, so the twin is matchable **client-side** and acted on through the existing
+  person-scoped `challenges:checkIn`/`snooze`/`setStatus`. The partner's state is DERIVED
+  (`checkedInCount − (mine ? 1 : 0)`). **That makes the §8 privacy boundary structural, not conventional:** the
+  aggregate comes from the gated bridge read, the viewer's record from their own store, and a partner's
+  `reflection`/`outcome` text never reaches the renderer — only a count ever crosses (code-reviewer verified
+  this adversarially and confirmed it airtight, including that `action` is coach-authored on both twins with no
+  user edit path). **Three real bugs surfaced during the build, each caught by a gate rather than assumed:**
+  (1) the E2E caught that gating the store refresh on `if (!loaded)` left a **stale-but-loaded empty list** —
+  Home loads the store at boot, so a twin minted later in a session produced NO check-in button at all (fixed
+  by refreshing on mount unconditionally); (2) the RTL suite was passing on a **race** (the mock's default
+  `challengesList: []` wiped the seeded twin after the assertion ran) — the bridge and the seed now agree; and
+  (3) the code-reviewer caught that the new "Let it go" action created a **zombie row**: both twins `abandoned`
+  is `active:false, allCheckedIn:false`, which the `active || !allCheckedIn` split stranded in the OPEN list
+  forever with no live twin (so no buttons, no way to clear it) — and the SAME predicate in core's
+  `jointChallengeGroundingLines` kept feeding it to the couples coach as a live commitment. Both now key on
+  **`active` alone**, and a closed row reports its own ending ("You both did it" / "Let go"). Also applied from
+  the review: check-in failures are **surfaced with the typed note preserved** (`challengeStore.checkIn` now
+  returns its result instead of discarding it — a silent loss of a reflection the person believes they saved is
+  the worst outcome here), busy-guards on both surfaces, and a §12 `wrap` fix on the collapsed row (the pill
+  carries an **unbounded** partner display name). Gate green: typecheck, lint, format, **1553 core + 1370
+  desktop** unit, E2E (the H2 walk extended into a two-persona decrypt-level flow: named state → one-tap
+  check-in → decrypt asserts it hit Ben's OWN twin → partner's turn → both done → closed group). **Lessons:
+  (1) "add a button" is worth reviewing as a FLOW — the missing action was real, but the copy pointing at a
+  surface that couldn't perform it was the worse bug, and only a whole-flow walk finds that. (2) A guard that
+  short-circuits on `loaded` is wrong whenever the data can change AFTER the first load — `loaded` means
+  "fetched once", never "fresh". (3) An RTL test that seeds a store the component also refetches passes on a
+  RACE unless the mock bridge serves the same records. (4) A new terminal action (let-it-go) can reach a state
+  the list-splitting predicate never anticipated — and if a core grounding filter shares that predicate, the
+  coach silently inherits the bug too; move BOTH the E2E overflow guard and the reasoning onto the state the
+  new action actually creates (the guard was verified to FAIL without the `wrap` fix, so it proves something).**
 - 2026-07-20 — **Build + durable owner decision (AI chat reliability, message management & dream-analysis
   coherence; SPEC 66 written + BUILT, all 5 slices; on `feat/chat-reliability-and-rewind`, PR pending).** The
   user reported AI replies "getting cut off or incomplete" with no recovery, no way to regenerate or delete/go

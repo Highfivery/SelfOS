@@ -594,7 +594,11 @@ complete flows through the rendered UI, not bridge calls (CLAUDE.md §7). E2E is
   `main`. A self-hiding `ChallengeCard` shows the one ACTIVE challenge as a STATUS surface (agreed action +
   `ComfortDial` + a gentle "Day N" marker + a reflect entry) — visible the whole time you're on it, not only
   when a check-in is due (the actionable "how did it go?" nudge stays owned by the `challenge-checkin` "For
-  you" recommendation, so no duplicate CTA). Placed in the left bento between Memory and Sharing. RTL-covered
+  you" recommendation, so no duplicate CTA). **[PARTLY SUPERSEDED 2026-07-20 — see 52 §3.3: the card is
+  status-only ONLY while a check-in is due. Because that recommendation fires exclusively when one IS due,
+  making the card wholly passive left Home with no way to act beforehand (and made the Together tile's
+  "check in on Home" pointer a dead end), so the inline quick actions are restored for the not-due state.
+  The no-duplicate-CTA rule is preserved by the card hiding its action row once due.]** Placed in the left bento between Memory and Sharing. RTL-covered
   (active/self-hide/check-in-due), matching the Slice-1 home-card pattern (SharingCard/TogetherHomeCard are
   RTL-covered, not separately E2E-seeded). **Deferred (a smaller follow-up):** the Together **pulse ring +
   desire alignment** on `TogetherHomeCard` — it needs an async per-partner `togetherPulse` read (the store

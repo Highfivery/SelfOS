@@ -851,6 +851,46 @@ framework (35), recommendation engine (53).
   `together.own` + a re-checked live edge). An **adult** joint challenge inherits the 52 restricted-
   reflection + 18+ gating on each partner's own surfaces; the couples coach only proposes one in the
   explicit register, which itself requires both 18+ acks (Phase F).
+
+  **AMENDED 2026-07-20 (`feat/joint-challenge-actions`) — the tile is ACTIONABLE, not a status
+  mirror.** The original split above ("each partner keeping their own check-in cadence/Home card")
+  made the Together tile display-only, with copy that told the reader to _"Track your own check-in on
+  Home."_ That punt was a dead end: Home's 52 `ChallengeCard` was itself reduced to a passive
+  navigate by 60 §3.1.5, so the real actions lived a third hop away in the Sessions
+  `ChallengeSection` — a §7 whole-flow coherence failure (Together → Home → Sessions, with the first
+  instruction factually wrong). It also contradicts the durable CLAUDE.md §12 rule: **surface a
+  control WHERE the work happens.** The tile now carries the check-in itself:
+  - **One-tap, then expand.** Each open joint challenge shows a primary **"Check in"**; tapping
+    expands the 52 §4 `ChallengeOutcome` row (**I did it / Partly / Not this time**) plus an optional
+    one-line note, with **Not yet** (snooze) and **Let it go** (abandon) behind a kebab so the row
+    stays dense (§12). Deterministic — an outcome-only check-in spends nothing; only the AI
+    reflection path does.
+  - **The state is NAMED, not counted.** "You've checked in · waiting on `<partner>`" /
+    "`<partner>` checked in · your turn" / "Neither of you has checked in yet", replacing the
+    neutral "N of M". Shared accountability is the point of a joint challenge, and a bare count
+    doesn't say whose court the ball is in.
+  - **NO new schema, IPC, or bridge widening.** `JointChallengeStatus` stays a pure aggregate; the
+    viewer's OWN twin is matched **client-side** by `groupId` against the existing per-person
+    `challengeStore` (picking the newest twin per group, mirroring `listJointChallenges`'s
+    collapse), and acted on through the existing person-scoped `challenges:checkIn`/`snooze`/
+    `setStatus`. The partner's state is **derived** as `checkedInCount − (mine ? 1 : 0)`.
+    **This preserves the §8 boundary by construction:** the aggregate comes from the gated bridge
+    read, the viewer's own record from their own store, and a partner's `reflection`/`outcome` text
+    is never in reach of the renderer — only a count ever crosses.
+  - **Closed joint challenges persist** in a collapsed **"Completed & closed"** `Collapsible` group on
+    the tile (the Goals precedent), instead of silently dropping off — the shared record of what the
+    pair actually did. **Open vs closed is keyed on `active` ALONE, never on `allCheckedIn`:** a pair
+    who let a challenge go leaves every twin `abandoned` (`active: false, allCheckedIn: false`), so an
+    `allCheckedIn` test would strand that row in the open list forever — un-actionable (no live twin ⇒
+    no buttons) with no way to clear it. Each closed row reports its own ending ("You both did it" /
+    "Let go"). For the same reason `jointChallengeGroundingLines` now filters on `active` alone, so an
+    abandoned challenge stops being fed to the couples coach as a live commitment.
+  - **Freshness:** acting refreshes BOTH the `challengeStore` (own twin) and the
+    `together:jointChallenges` read (partner side), so the strip can't show a stale count after a
+    check-in — the previous fetch-on-mount-only behaviour left it stale until remount.
+  - **Adult joint challenges** are unchanged: the inline note still yields the 52 **restricted**
+    reflection facts, and "Talk it through" stays hidden for an adult challenge (52 §3.5).
+
 - **Questionnaire suggestions**: a coach suggestion artifact carries a compat-questionnaire seed;
   "Send to both" drives the existing `toSeed()`/builder or direct compat-send path (user-confirmed
   before anything sends); the resulting `AlignmentReport` joins the grounding pack.
@@ -1207,7 +1247,9 @@ projection, aside composer, report card, catalog gating, pulse, disabled partner
    duplicate, no ghost); decline-quietly → the initiator's **bridge read** returns invited →
    expired (never declined) → send-again mints a fresh session id.
 7. **Integrations**: agreement marker → ledger + card; challenge marker → twin challenges linked by
-   groupId (decrypt); questionnaire suggestion → seeded compat builder → alignment report in the
+   groupId (decrypt); then each partner checks in from their own tile (decrypt-asserts the outcome
+   landed on that partner's twin only) and the pair's finished challenge moves to the collapsed
+   "Completed &amp; closed" group; questionnaire suggestion → seeded compat builder → alignment report in the
    next session's prompt file; YNM (one opts in → `NOT_READY`; both → mutual-only list,
    decrypt-asserts a one-sided item absent; revoke → `NOT_READY` again).
 8. **Pulse**: check-ins both sides → trend renders with text equivalent; comparative view hidden

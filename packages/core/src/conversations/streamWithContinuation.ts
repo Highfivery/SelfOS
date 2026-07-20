@@ -26,6 +26,23 @@ import type {
  */
 export const MAX_CONTINUATIONS = 2;
 
+/**
+ * The instruction that carries a truncated reply forward.
+ *
+ * This is NOT assistant prefill. Prefill (ending the conversation on an assistant turn) is the
+ * obvious way to continue a reply and it is what this shipped with — but the current models reject
+ * it outright: `This model does not support assistant message prefill. The conversation must end
+ * with a user message.` The offline fake accepted the prefill shape happily, so every test passed
+ * while the live path 400'd. Caught only by running against the real API.
+ *
+ * So a continuation sends the partial as an assistant turn and then THIS as a final user turn, which
+ * satisfies the constraint. The wording matters: without "do not repeat" the model tends to restart
+ * the reply, and without "no preamble" it prefixes something like "Continuing:" mid-sentence.
+ */
+export const CONTINUATION_INSTRUCTION =
+  'Continue your previous message from exactly where it stopped. Do not repeat any of it, do not ' +
+  'restate the question, and do not add any preamble — just carry straight on.';
+
 export interface ContinuationOptions {
   /** Override the continuation cap (tests). Defaults to `MAX_CONTINUATIONS`. */
   maxContinuations?: number;
@@ -80,28 +97,44 @@ export async function streamWithContinuation(
 
   for (;;) {
     // The first pass sends the caller's messages; each continuation re-sends them plus the partial
-    // reply so far as an assistant turn, which the model then carries on from.
+    // reply as an assistant turn AND a final user turn asking it to carry on (the models reject a
+    // conversation ending on an assistant turn — see CONTINUATION_INSTRUCTION).
     //
-    // `trimEnd` matters: the API rejects a final assistant message ending in whitespace. We trim only
-    // what we SEND — `text` keeps its trailing whitespace, so the continuation appends onto it
-    // without swallowing a space at the seam.
+    // `trimEnd` matters on what we SEND — `text` keeps its trailing whitespace, so the continuation
+    // appends onto it without swallowing a space at the seam.
     const isContinuation = text !== '';
     const messages = isContinuation
-      ? [...options.messages, { role: 'assistant' as const, content: text.trimEnd() }]
+      ? [
+          ...options.messages,
+          { role: 'assistant' as const, content: text.trimEnd() },
+          { role: 'user' as const, content: CONTINUATION_INSTRUCTION },
+        ]
       : options.messages;
 
-    const result = await client.stream(
-      {
-        ...options,
-        messages,
-        // Extended thinking is incompatible with assistant prefill, so a continuation MUST disable it.
-        // It's also what we want independently: the continuation should spend its whole budget on
-        // visible output rather than sharing it with thinking, which is what starved the reply to
-        // begin with ([[adaptive-thinking-shares-maxtokens]]).
-        ...(isContinuation ? { extendedThinking: false } : {}),
-      },
-      onDelta,
-    );
+    let result: ClaudeStreamResult;
+    try {
+      result = await client.stream(
+        {
+          ...options,
+          messages,
+          // The continuation should spend its whole budget on visible output rather than sharing it
+          // with thinking, which is what starved the reply to begin with
+          // ([[adaptive-thinking-shares-maxtokens]]).
+          ...(isContinuation ? { extendedThinking: false } : {}),
+        },
+        onDelta,
+      );
+    } catch (error) {
+      // A FIRST-call failure is the caller's to handle (it has no reply to salvage), so rethrow. A
+      // CONTINUATION failure must never destroy the text we already have: keep the partial and stop.
+      // "A short reply beats a lost one" — and without this, a transport blip or an unsupported
+      // continuation shape turns a usable truncated reply into a hard error, which is strictly worse
+      // than the bug this whole helper exists to fix.
+      if (!isContinuation) throw error;
+      // The counter was bumped before this attempt; it contributed no text, so don't report it.
+      continuations -= 1;
+      break;
+    }
     text += result.text;
     usage = addUsage(usage, result.usage);
     stopReason = result.stopReason;

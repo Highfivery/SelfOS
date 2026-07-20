@@ -15,3 +15,6 @@ export * from './guidanceService';
 export * from './topicClassifier';
 export * from './challengeCoach';
 export * from './challengeSession';
+// The continuation contract (66 §5.1) — exported so the fake client keys off the SAME instruction the
+// real path sends, instead of re-encoding the request shape and drifting from it.
+export * from './streamWithContinuation';

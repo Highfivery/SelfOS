@@ -1210,9 +1210,12 @@ test('home (60): the Hybrid dashboard shows the quick dock, life-rings, and the 
     // The rings draw a real SVG progress arc — the fix for the reported "blank circles".
     expect(await w.evaluate(() => !!document.querySelector('circle[stroke-dasharray]'))).toBe(true);
 
-    // Goals card (60 §3.1.3) — the seeded goal + a way to set + complete more.
+    // Goals card (60 §3.1.3) — the seeded goal + a way to set + complete more. The goal text appears
+    // TWICE on Home by design (61: the needs-attention item shows the commitment text too), so assert
+    // both rather than a bare ambiguous match.
     await expect(w.getByRole('heading', { name: /^goals$/i })).toBeVisible();
-    await expect(w.getByText('Reach out to an old friend')).toBeVisible();
+    await expect(w.getByText('Reach out to an old friend')).toHaveCount(2);
+    await expect(w.getByText('Reach out to an old friend').first()).toBeVisible();
 
     // You card (60 §3.1.4) — the self-assessments hub window (invite state: nothing taken yet).
     await expect(w.getByRole('heading', { name: /^you$/i })).toBeVisible();
@@ -1222,7 +1225,8 @@ test('home (60): the Hybrid dashboard shows the quick dock, life-rings, and the 
     await w.getByRole('button', { name: /new goal/i }).click();
     await w.getByRole('textbox', { name: 'New goal' }).fill('Read for ten minutes');
     await w.getByRole('button', { name: /^add goal$/i }).click();
-    await expect(w.getByText('Read for ten minutes')).toBeVisible();
+    // Same duplication as above (attention item + Goals card) once the new goal exists.
+    await expect(w.getByText('Read for ten minutes').first()).toBeVisible();
 
     // The cross-feature activity feed ("recent across everything") surfaces a recent event.
     await expect(w.getByRole('heading', { name: 'Recent', exact: true })).toBeVisible();
@@ -9524,7 +9528,7 @@ test('self-assessments (50): take ECR-R → profile bars → retake adds a trend
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'You' }).click();
+    await w.getByRole('link', { name: 'You', exact: true }).click();
     await expect(w.getByRole('heading', { name: /how you see yourself/i })).toBeVisible();
 
     // Take the Attachment (ECR-R) test through the rendered UI — its catalog card's "Take" button.
@@ -9565,7 +9569,7 @@ test('self-assessments (50): take ECR-R → profile bars → retake adds a trend
 
     // 95 — back on the hub, the taken test drops out of "Available tests": Attachment lives ONLY under
     // "Your profiles" (with Retake), never a second time as a catalog "Take" card.
-    await w.getByRole('link', { name: 'You' }).click();
+    await w.getByRole('link', { name: 'You', exact: true }).click();
     await expect(w.getByRole('heading', { name: /how you see yourself/i })).toBeVisible();
     const profiles = w.locator('section', {
       has: w.getByRole('heading', { name: 'Your profiles' }),
@@ -9613,7 +9617,7 @@ test('self-assessments (50): the kink test is 18+-gated; a result writes partner
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'You' }).click();
+    await w.getByRole('link', { name: 'You', exact: true }).click();
 
     // The Intimacy & sexuality group is 18+-gated — the cards are withheld until acknowledged.
     await expect(w.getByText(/These are 18\+/)).toBeVisible();
@@ -9686,7 +9690,7 @@ test('wellbeing (51): mood check-in → GENTLE range + help line; AI-off narrate
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'You' }).click();
+    await w.getByRole('link', { name: 'You', exact: true }).click();
 
     // The wellbeing group is distinct and NOT 18+-gated; it invites a "Check in", not "Take".
     await expect(w.getByRole('heading', { name: 'Reflections & check-ins' })).toBeVisible();
@@ -9799,7 +9803,7 @@ test('wellbeing (51): PHQ-9 item 9 surfaces crisis resources MID-check-in; the f
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'You' }).click();
+    await w.getByRole('link', { name: 'You', exact: true }).click();
     await w.getByRole('heading', { name: 'Mood check-in' }).scrollIntoViewIfNeeded();
     await w
       .locator(

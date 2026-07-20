@@ -388,33 +388,39 @@ export async function submitSectionForm(
     await savePerson(fs, key, { ...person, updatedAt: at });
   }
 
-  section.answers = { ...section.answers, ...clean };
-  // Resolve + persist a sharing scope for every question the person has ANSWERED *or* explicitly SCOPED (the
-  // renderer sends a scope for each question in `sharing`). Persisting an explicit scope for a not-yet-answered
-  // question is how "share this whole section with Partner" sticks the MOMENT it's clicked — before anything is
-  // filled in (the reported bug: a fresh-section bulk-share saved nothing because it keyed off answers only). It
-  // stays safe: an unanswered question has no derived fact, so a scope on it shares nothing until it's answered,
-  // at which point the person's pre-set choice (e.g. Partner) is honored instead of silently reverting to the
-  // category default. The renderer's choice wins, else a prior stored scope, else the category preset.
-  const scopedQids = new Set([...Object.keys(section.answers), ...Object.keys(sharing ?? {})]);
-  const nextSharing: Record<string, RelationshipType[]> = {};
-  for (const qid of scopedQids) {
-    if (!byId.has(qid)) continue; // only this section's catalog questions
-    const chosen =
-      sharing?.[qid] ?? section.answerSharing?.[qid] ?? defaultScopeForQuestion(sectionId, qid);
-    nextSharing[qid] = dedupeTypes(chosen);
-  }
-  section.answerSharing = nextSharing;
-  if (markComplete) {
-    if (section.status !== 'skipped') section.status = 'complete';
-  } else if (section.status === 'notStarted') {
-    // A draft auto-save: the person has started this section, but don't complete it (that's the explicit
-    // Continue) and never un-complete an already-complete/skipped one — only nudge notStarted → inProgress.
-    section.status = 'inProgress';
-  }
-  session.updatedAt = at;
-  await writeEncryptedJson(fs, intakePath(personId), session, key);
-  return session;
+  // Apply to a FRESH read: `getPerson`/`savePerson` above sit between the session read and this write,
+  // and the onboarding form auto-saves every ~600ms, so a whole-record write could revert a sibling
+  // section's answer saved in that window. Recompute the sharing scopes against the live section too.
+  const patched = await patchIntakeSession(fs, key, personId, (live) => {
+    const target = live.sections.find((sec) => sec.id === sectionId);
+    if (!target) return;
+    target.answers = { ...target.answers, ...clean };
+    // Resolve + persist a sharing scope for every question the person has ANSWERED *or* explicitly SCOPED (the
+    // renderer sends a scope for each question in `sharing`). Persisting an explicit scope for a not-yet-answered
+    // question is how "share this whole section with Partner" sticks the MOMENT it's clicked — before anything is
+    // filled in (the reported bug: a fresh-section bulk-share saved nothing because it keyed off answers only). It
+    // stays safe: an unanswered question has no derived fact, so a scope on it shares nothing until it's answered,
+    // at which point the person's pre-set choice (e.g. Partner) is honored instead of silently reverting to the
+    // category default. The renderer's choice wins, else a prior stored scope, else the category preset.
+    const scopedQids = new Set([...Object.keys(target.answers), ...Object.keys(sharing ?? {})]);
+    const nextSharing: Record<string, RelationshipType[]> = {};
+    for (const qid of scopedQids) {
+      if (!byId.has(qid)) continue; // only this section's catalog questions
+      const chosen =
+        sharing?.[qid] ?? target.answerSharing?.[qid] ?? defaultScopeForQuestion(sectionId, qid);
+      nextSharing[qid] = dedupeTypes(chosen);
+    }
+    target.answerSharing = nextSharing;
+    if (markComplete) {
+      if (target.status !== 'skipped') target.status = 'complete';
+    } else if (target.status === 'notStarted') {
+      // A draft auto-save: the person has started this section, but don't complete it (that's the explicit
+      // Continue) and never un-complete an already-complete/skipped one — only nudge notStarted → inProgress.
+      target.status = 'inProgress';
+    }
+    live.updatedAt = at;
+  });
+  return patched ?? session;
 }
 
 /** De-dupe a scope, preserving order (the bridge Zod-validates the types themselves). */
@@ -1282,9 +1288,7 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
   // Re-read before the completion write. `session` predates the portrait model call and carries EVERY
   // section's answers/answerSharing/status — and the onboarding form auto-saves on a ~600ms debounce, so
   // writing this copy back would silently revert answers the person typed while the portrait generated.
-  // Apply only the completion fields to the live session. The answer signature is computed from the LIVE
-  // session too, so "X% out of date" reflects what the portrait was actually built from plus anything
-  // added since (it re-baselines on the next refresh either way).
+  // Apply only the completion fields to the live session.
   const snapshot = intakeCatalogSnapshot();
   // The freshness signature must describe the answers the portrait was ACTUALLY built from — i.e. the
   // pre-call session — so an answer typed during synthesis correctly reads as "not yet reflected" (§15)

@@ -277,7 +277,12 @@ export async function attachRelayLink(
   // Re-read across the mailbox upload: `assignment` was read before that network round-trip, and an
   // in-app submit/decline (`updateAssignmentStatus`) can land meanwhile — spreading the stale copy would
   // revert a `submitted` status back to `sent`. Only the relay material is ours.
-  const liveForMint = (await getAssignment(fs, key, assignmentId)) ?? assignment;
+  const liveForMint = await getAssignment(fs, key, assignmentId);
+  // Deleted during the upload: leave it deleted. Re-writing it would restore a send with a LIVE mailbox
+  // but no snapshot (deleteSend purged the folder) — the unanswerable state createRelaySend orders its
+  // writes to avoid. Throwing (rather than returning) reuses the callers' existing mint-failure path, so
+  // the sender sees an honest "no link" instead of one pointing at nothing.
+  if (!liveForMint) throw new Error('That send was deleted before its link could be created.');
   const updated: Assignment = {
     ...liveForMint,
     relay: minted.relay,
@@ -365,7 +370,15 @@ export async function drainRelaySend(
   }
 
   // Same re-read rule across the relay fetch above; only the drained status/note are ours.
-  const liveForDrain = (await getAssignment(fs, key, assignmentId)) ?? assignment;
+  const liveForDrain = await getAssignment(fs, key, assignmentId);
+  // Deleted mid-drain → leave it deleted (see attachRelayLink).
+  if (!liveForDrain) return { assignmentId, drained: 0, declined: false };
+  // Re-check first-wins (08 §17.13) against the CURRENT status: the guard above ran before the relay
+  // fetch, so an in-app submit/decline can have landed during it. Writing unconditionally would let a late
+  // relay drain overwrite the local answer — the exact thing that guard exists to prevent.
+  if (liveForDrain.status === 'submitted' || liveForDrain.status === 'declined') {
+    return { assignmentId, drained: 0, declined: false };
+  }
   const updated: Assignment = {
     ...liveForDrain,
     status: nextStatus,

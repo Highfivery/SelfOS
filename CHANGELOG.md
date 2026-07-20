@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.39.1](https://github.com/Highfivery/SelfOS/compare/v0.39.0...v0.39.1) (2026-07-20)
+
+
+### Bug Fixes
+
+* **dreams:** guard the dreamSave carry-forward list at compile time ([#258](https://github.com/Highfivery/SelfOS/issues/258)) ([dea3e4a](https://github.com/Highfivery/SelfOS/commit/dea3e4a3222ddbe3ccc469f275774948b866525b))
+* **dreams:** keep a generated image when the dream is edited ([#257](https://github.com/Highfivery/SelfOS/issues/257)) ([dbc112e](https://github.com/Highfivery/SelfOS/commit/dbc112ebe1bb88a1eaed914c1e81ea4090a3b941))
+
 ## [0.39.0](https://github.com/Highfivery/SelfOS/compare/v0.38.0...v0.39.0) (2026-07-18)
 
 

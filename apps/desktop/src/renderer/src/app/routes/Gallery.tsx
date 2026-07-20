@@ -471,6 +471,30 @@ export function Gallery(): JSX.Element {
               ]}
             />
           </div>
+          <div style={{ marginTop: 16 }}>
+            <Text size="sm" weight={600} tone="secondary">
+              With a raised width cap (`maxWidth`) to fill a wider dashboard column
+            </Text>
+            <LineChart
+              ariaLabel="Example trend filling a wider column via maxWidth"
+              yMin={0}
+              yMax={1}
+              yLowLabel="Low"
+              yHighLabel="High"
+              maxWidth={600}
+              series={[
+                {
+                  label: 'Connection',
+                  points: [
+                    { x: 0, y: 0.4 },
+                    { x: 1, y: 0.6 },
+                    { x: 2, y: 0.55 },
+                    { x: 3, y: 0.8 },
+                  ],
+                },
+              ]}
+            />
+          </div>
         </Section>
 
         <Section title="Charts">

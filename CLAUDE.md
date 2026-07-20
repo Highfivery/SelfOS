@@ -419,6 +419,27 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-20 — **Fix (Pulse tab chart layout — the big empty white space; user-reported with a screenshot; SPEC
+  58 §3.2a; on `fix/pulse-chart-layout`).** The user: the two Pulse trend cards ("Your check-ins" / "From your
+  sessions") had large empty white space that "doesn't look good," but explicitly did NOT want the charts to
+  span 100% wide ("they'd be too big"). **Root cause (from the code, not assumed):** `LineChart` is deliberately
+  capped at `max-width: 440px` (a fixed-aspect chart at `width:100%` in a wide container scales to an enormous
+  height — that's the "too big" the user intuited), but each chart sat ALONE in a full-width card, so the 440px
+  chart floated left and ~900px of the card was empty. **Fix:** the two trend cards now lay out in a centered,
+  width-capped grid — `.pulseCharts { grid-template-columns: repeat(auto-fit, minmax(300px, 540px));
+justify-content: center }` — so two cards sit side by side filling the width, and (the case my first QA
+  caught) a LONE card is a bounded, centered chart rather than a narrow chart adrift in a wide card. `LineChart`
+  gained an optional `maxWidth` prop (default keeps the 440 cap for questionnaire/Memory trends unchanged) so
+  the dashboard column can raise it; Pulse passes 600 (the 540 grid track is the real cap). **Visual-QA caught
+  the real problem the CSS math alone would've missed:** my first attempt used `1fr` columns, which STRETCH a
+  lone card full-width — the screenshot showed the single-chart case (a couple with no session wrap-ups yet, a
+  common early state) still had a huge empty right; capping the track + centering fixed it, verified at 1440/
+  1000/700px. **Lessons: (1) a fixed-aspect chart fundamentally can't fill a wide row without becoming too tall
+  — so "remove the empty space" means bounding the chart's width and CENTERING it (balanced, intentional), not
+  stretching it; capping a chart's width is the §12 chart exception and exactly what "don't make them span the
+  full width" asks for. (2) An `auto-fit minmax(_, 1fr)` grid fills beautifully for N≥2 items but stretches a
+  lone item full-width — cap the track (`minmax(_, 540px)`) + `justify-content: center` so the single-item case
+  is bounded, and always screenshot the 1-item state, not just the happy 2-item one.**
 - 2026-07-20 — **Build (Together home REDESIGNED into a 4-tab surface + the challenge-checkin deferral fixed;
   SPEC 58 §3.2a + SPEC 52 §3.3; two PRs — the follow-up #279 (merged) then `feat/together-tabs-ia`).** The user:
   the Together page had grown busy and hard to scan (7 stacked sections — hero · Pulse · sessions board · an

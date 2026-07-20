@@ -67,6 +67,9 @@ function TrendGroup({
             yMax={1}
             yHighLabel="High"
             yLowLabel="Low"
+            // Fill the (half-width, in a 2-up grid) card; the cap keeps the fixed-aspect height sane on wide
+            // screens so it never becomes the enormous full-width chart the 440 default guards against.
+            maxWidth={600}
           />
           {/* §9 text equivalent — the trend direction as words, never colour/shape alone. */}
           <Text size="xs" tone="secondary">
@@ -165,23 +168,27 @@ export function TogetherPulse({
         </div>
       ) : null}
 
-      {view.hasCheckIns ? (
-        <TrendGroup
-          title="Your check-ins"
-          icon={<User size={13} aria-hidden="true" />}
-          series={view.checkInSeries}
-          ariaLabel={`Your check-in trends with ${partnerName} — connection, desire, and satisfaction over time`}
-          sparseNote="Check in again to see how these trend over time."
-        />
-      ) : null}
+      {/* The two trend cards sit side by side (58 §3.2a) so each chart fills a half-width column instead of
+          floating in a full-width card with a big empty right. Stacks to one column on narrow screens. */}
+      <div className={styles.pulseCharts}>
+        {view.hasCheckIns ? (
+          <TrendGroup
+            title="Your check-ins"
+            icon={<User size={13} aria-hidden="true" />}
+            series={view.checkInSeries}
+            ariaLabel={`Your check-in trends with ${partnerName} — connection, desire, and satisfaction over time`}
+            sparseNote="Check in again to see how these trend over time."
+          />
+        ) : null}
 
-      <TrendGroup
-        title="From your sessions together"
-        icon={<MessagesSquare size={13} aria-hidden="true" />}
-        series={view.sessionSeries}
-        ariaLabel={`Connection and calm from your Together sessions with ${partnerName} over time`}
-        sparseNote="Drawn from your last session wrap-up. A trend line appears after a few sessions."
-      />
+        <TrendGroup
+          title="From your sessions together"
+          icon={<MessagesSquare size={13} aria-hidden="true" />}
+          series={view.sessionSeries}
+          ariaLabel={`Connection and calm from your Together sessions with ${partnerName} over time`}
+          sparseNote="Drawn from your last session wrap-up. A trend line appears after a few sessions."
+        />
+      </div>
     </div>
   );
 }

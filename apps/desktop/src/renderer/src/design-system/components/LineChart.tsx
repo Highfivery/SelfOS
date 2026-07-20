@@ -25,6 +25,11 @@ interface LineChartProps {
   fill?: boolean;
   /** Emphasize each series' latest point with a larger, ringed marker so "now" reads at a glance. */
   emphasizeLast?: boolean;
+  /**
+   * Override the default 440px width cap (px). The chart has a fixed aspect ratio, so this bounds its HEIGHT
+   * too — raise it to let the chart fill a wider dashboard column (e.g. a two-up grid) without going enormous.
+   */
+  maxWidth?: number;
 }
 
 const PALETTE = [
@@ -52,6 +57,7 @@ export function LineChart({
   yHighLabel,
   fill = false,
   emphasizeLast = false,
+  maxWidth,
 }: LineChartProps): JSX.Element {
   const titleId = useId();
   const xs = series.flatMap((s) => s.points.map((p) => p.x));
@@ -70,7 +76,10 @@ export function LineChart({
   const hasAxis = yHighLabel !== undefined || yLowLabel !== undefined;
 
   return (
-    <div className={styles.chart}>
+    <div
+      className={styles.chart}
+      {...(maxWidth != null ? { style: { maxWidth: `${maxWidth}px` } } : {})}
+    >
       <div className={styles.plot}>
         {hasAxis ? (
           <div className={styles.yAxis} aria-hidden="true">

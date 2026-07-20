@@ -361,6 +361,17 @@ async function generateCoachReply(
       ...(conversation.topicLifeAreas !== undefined
         ? { topicLifeAreas: conversation.topicLifeAreas }
         : {}),
+      // Reopening a completed session (09 §14.4) is ALSO ours, and `retryReply` relies on this write to
+      // persist it — derive it from the LIVE record so `...live` can't reinstate `complete`/`endedAt` or
+      // swallow the staleness flag. Without this a retried reply lands on a session still marked wrapped
+      // up, with its Insight silently no longer matching the transcript.
+      ...(live.status === 'complete'
+        ? {
+            status: 'inProgress' as const,
+            endedAt: undefined,
+            ...(live.insightId ? { insightStale: true } : {}),
+          }
+        : {}),
       updatedAt: at,
     });
   }
@@ -433,10 +444,10 @@ export async function retryReply(deps: RetryReplyDeps): Promise<ChatTurnResult> 
     // Nothing to retry — the last turn already has a real reply (or the session is empty). A no-op failure.
     return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
   }
-  // Continuing a completed session reopens it (09 §14.4), mirroring runChatTurn. The reopen persists only on
-  // the success path (inside generateCoachReply) — benign, and in practice unreachable: a completed session
-  // that ends on an un-answered user message never occurs, since runChatTurn persists the reopen up front
-  // before its own reply attempt, so a failed turn already leaves the session `inProgress` on disk.
+  // Continuing a completed session reopens it (09 §14.4), mirroring runChatTurn. The reopen persists on the
+  // success path inside `generateCoachReply`, which derives it from the record it re-reads — so it survives
+  // that re-read. Reachable: a failed turn leaves the transcript ending on the user's message, the session
+  // can then be wrapped up, and the Try-again banner is gated on the transcript shape, not on status.
   if (conversation.status === 'complete') {
     conversation.status = 'inProgress';
     delete conversation.endedAt;

@@ -152,6 +152,50 @@ describe('runChatTurn', () => {
     expect(usage.length).toBe(2);
   });
 
+  it('retryReply REOPENS a wrapped-up session, and the re-read write preserves that (09 §14.4)', async () => {
+    await base();
+    // A turn fails, so the transcript ends on the user's message…
+    const empty: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: () =>
+        Promise.resolve({
+          text: '',
+          usage: { inputTokens: 200, outputTokens: 0, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        }),
+    };
+    const turnDeps = {
+      fs,
+      key,
+      client: empty,
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'c1',
+      onDelta: () => {},
+      now,
+    };
+    await runChatTurn({ ...turnDeps, userText: 'Please help' });
+
+    // …then the person wraps the session up (status complete + an Insight).
+    const wrapped = await getConversation(fs, key, 'p1', 'c1');
+    await saveConversation(fs, key, {
+      ...wrapped!,
+      status: 'complete',
+      endedAt: now.toISOString(),
+      insightId: 'ins-1',
+    });
+
+    // Retrying must REOPEN it. The write re-reads the record, so the reopen has to be derived from the
+    // live copy — otherwise `...live` reinstates 'complete' and the Insight silently stops matching.
+    const result = await retryReply({ ...turnDeps, client: fakeClient });
+    expect(result.ok).toBe(true);
+    const after = await getConversation(fs, key, 'p1', 'c1');
+    expect(after?.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(after?.status).toBe('inProgress');
+    expect(after?.endedAt).toBeUndefined();
+    expect(after?.insightStale).toBe(true);
+  });
+
   it('retryReply re-generates a reply for an unanswered turn without duplicating the user message (05 §4.1)', async () => {
     await base();
     // First turn comes back empty → the user's message is persisted, no reply.

@@ -274,8 +274,12 @@ export async function attachRelayLink(
     createdAt: assignment.createdAt,
     expiresAt,
   });
+  // Re-read across the mailbox upload: `assignment` was read before that network round-trip, and an
+  // in-app submit/decline (`updateAssignmentStatus`) can land meanwhile — spreading the stale copy would
+  // revert a `submitted` status back to `sent`. Only the relay material is ours.
+  const liveForMint = (await getAssignment(fs, key, assignmentId)) ?? assignment;
   const updated: Assignment = {
-    ...assignment,
+    ...liveForMint,
     relay: minted.relay,
     expiresAt,
     updatedAt: new Date().toISOString(),
@@ -360,8 +364,10 @@ export async function drainRelaySend(
     nextStatus = 'submitted';
   }
 
+  // Same re-read rule across the relay fetch above; only the drained status/note are ours.
+  const liveForDrain = (await getAssignment(fs, key, assignmentId)) ?? assignment;
   const updated: Assignment = {
-    ...assignment,
+    ...liveForDrain,
     status: nextStatus,
     updatedAt: new Date().toISOString(),
     ...(declineNote !== undefined ? { declineNote } : {}),

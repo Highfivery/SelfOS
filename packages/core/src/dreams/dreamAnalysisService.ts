@@ -401,8 +401,10 @@ async function generateDreamReply(
   const analysisReady = result.text.includes(DREAM_READY_MARKER);
   // 66 §3.4 — persist the signal the first time it fires, so the offer survives navigating away and back
   // (it used to live only in renderer state and was lost on remount).
+  // Via `patchDream`, not a spread of `dream`: that object predates the model call, so writing it whole
+  // would revert anything saved during the turn (an image, an edit) — the stale-write class swept off main.
   if (analysisReady && !dream.analysisReadyAt) {
-    await saveDream(fs, key, { ...dream, analysisReadyAt: at, updatedAt: at });
+    await patchDream(fs, key, personId, dream.id, { analysisReadyAt: at, updatedAt: at });
   }
   conversation.messages.push({
     role: 'assistant',

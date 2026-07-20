@@ -6905,12 +6905,21 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // listing a field as carried-forward without adding its spread still compiles. A triage tripwire,
       // not a proof.
       // Set fresh here: schemaVersion/personId/status/createdAt/updatedAt. Carried forward from the
-      // existing record: analysisId/image. If this errors, `Dream` gained a main-owned field — decide
-      // whether an edit keeps it, add it below, then list it here. Do NOT just widen the list.
+      // existing record: analysisId/image/analysisReadyAt. If this errors, `Dream` gained a main-owned
+      // field — decide whether an edit keeps it, add it below, then list it here. Do NOT just widen the
+      // list. (`analysisReadyAt` is carried: it is the coach's "ready to analyze" offer, 66 §3.4, and
+      // dropping it on an edit would silently retract the offer.)
       const _guard: AssertMainOwnedHandled<
         Dream,
         DreamInput,
-        'schemaVersion' | 'personId' | 'status' | 'createdAt' | 'updatedAt' | 'analysisId' | 'image'
+        | 'schemaVersion'
+        | 'personId'
+        | 'status'
+        | 'createdAt'
+        | 'updatedAt'
+        | 'analysisId'
+        | 'image'
+        | 'analysisReadyAt'
       > = true;
       void _guard;
       //

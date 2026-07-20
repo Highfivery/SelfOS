@@ -437,6 +437,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     togetherMarkRead: () => Promise.resolve(),
     togetherSendMessage: () =>
       Promise.resolve({ ok: false, reason: 'NOT_ALLOWED', message: 'Not available.' }),
+    togetherRewind: () => Promise.resolve(null),
     togetherRetry: () =>
       Promise.resolve({ ok: false, reason: 'NOT_ALLOWED', message: 'Not available.' }),
     onTogetherChunk: () => () => {},

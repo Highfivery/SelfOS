@@ -152,6 +152,7 @@ import {
   type TogetherTurnResult,
   TogetherSendMessageInputSchema,
   TogetherRetryInputSchema,
+  TogetherRewindInputSchema,
   TogetherPrepOpenSchema,
   TogetherStoreAttachmentSchema,
   TogetherGetAttachmentSchema,
@@ -376,6 +377,7 @@ import {
   runTogetherWrapUp,
   saveAgreement,
   projectMessages as projectTogetherMessages,
+  removeMessagesFrom,
   retryTogetherReply,
   runTogetherTurn,
   storeTogetherAttachment,
@@ -2707,6 +2709,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!owner || (owner.privateAside && owner.authorPersonId !== c.personId)) return null;
       const bytes = await getTogetherAttachment(c.fs, c.key, path);
       return bytes ? { mime: sniffImageMime(bytes), dataBase64: toBase64(bytes) } : null;
+    },
+    togetherRewind: async (input): Promise<TogetherSessionView | null> => {
+      // 66 §3.3 — same membership + live-edge gate as every other Together op. The projection check
+      // lives in core: `removeMessagesFrom` computes the span over the remover's OWN view, so a
+      // message they can't see (a partner's private aside) can't be targeted even by id.
+      const { sessionId, fromMessageId } = TogetherRewindInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return null;
+      const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
+      if (!session) return null;
+      const result = await removeMessagesFrom(c.fs, c.key, session.id, c.personId, fromMessageId);
+      if (!result.ok) return null;
+      const view = await buildTogetherView(c.fs, c.key, session, c.personId, new Date());
+      return view.status === 'declined' ? null : view;
     },
     togetherRetry: async (input): Promise<TogetherTurnResult> => {
       const { sessionId } = TogetherRetryInputSchema.parse(input);

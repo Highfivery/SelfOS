@@ -290,6 +290,7 @@ const bridge: SelfosBridge = {
   togetherMarkRead: (input) => ipcRenderer.invoke(IpcChannels.togetherMarkRead, input),
   togetherSendMessage: (input) => ipcRenderer.invoke(IpcChannels.togetherSendMessage, input),
   togetherRetry: (input) => ipcRenderer.invoke(IpcChannels.togetherRetry, input),
+  togetherRewind: (input) => ipcRenderer.invoke(IpcChannels.togetherRewind, input),
   togetherPrepOpen: (input) => ipcRenderer.invoke(IpcChannels.togetherPrepOpen, input),
   togetherStoreAttachment: (input) =>
     ipcRenderer.invoke(IpcChannels.togetherStoreAttachment, input),

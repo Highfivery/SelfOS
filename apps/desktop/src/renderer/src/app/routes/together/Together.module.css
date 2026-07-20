@@ -730,6 +730,22 @@
   min-width: 0;
 }
 
+/* 66 §3.3 — the removal placeholder: centred, quiet, and clearly not a message. */
+.redactedRow {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-1) 0;
+}
+
+/* The timestamp line, which also hosts the per-message actions. */
+.bubbleMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+}
+
 .bubbleRow {
   display: flex;
   gap: var(--space-2);

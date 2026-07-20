@@ -707,6 +707,11 @@ export function registerIpcHandlers(): void {
       dreamSender = undefined;
     }
   });
+  // 66 §3.3 — Together rewind writes only (no regeneration), so no sender binding.
+  ipcMain.handle(IpcChannels.togetherRewind, async (_event, raw: unknown) =>
+    bridge.togetherRewind(raw as { sessionId: string; fromMessageId: string }),
+  );
+
   // 66 §3.3 — rewind writes only; regenerate also streams, so it binds the dream sender.
   ipcMain.handle(IpcChannels.dreamRewind, async (_event, raw: unknown) =>
     bridge.dreamRewind(

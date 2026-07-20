@@ -257,3 +257,18 @@ None — all resolved before implementation:
     silently would break a promise made to someone who never entered this flow. It is one check in
     `mintDreamQuestionnaires` if the owner wants it the other way.
   - Also fixed in passing: `dreamSave` was dropping `image` on edit, orphaning generated dream images.
+- 2026-07-20 — **COMPLETE.** Rewind now reaches every surface: dreams and onboarding gained their seam +
+  UI, and Together gained the tombstone. Two implementation notes worth keeping:
+  - **Together removal deletes the files and appends a write-once tombstone**, rather than rewriting the
+    originals in place. The `<millis>-<personId>-<uuid>.enc` naming exists precisely so no two writers
+    ever target the same file; rewriting would reintroduce sync-conflict copies across two partners'
+    synced vaults. It also means the removed text is genuinely gone, not blanked in place.
+  - **A tombstone inherits the privacy of what it replaced.** An aside-only removal produces a PRIVATE
+    tombstone — otherwise the partner would see "2 messages were removed" for an exchange they never knew
+    existed, which leaks the existence of asides. A mixed span emits two tombstones (one shared, one
+    private) and the existing projection hides the right one.
+  - **Together offers removal but not regenerate.** Re-rolling a shared couples reply is a different and
+    more fraught act than re-rolling your own; only the solo surfaces regenerate.
+  - Also fixed: five long-standing E2E failures — a nav `"You"`/`"Your Story"` substring collision, and a
+    Home assertion that never accounted for a goal legitimately appearing in both "Needs attention" and
+    the Goals card. The suite is now fully green (171 passing).

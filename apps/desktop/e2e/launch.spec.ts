@@ -9650,6 +9650,7 @@ test('self-assessments (50): take ECR-R → profile bars → retake adds a trend
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
+    // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
     await w.getByRole('link', { name: 'You', exact: true }).click();
     await expect(w.getByRole('heading', { name: /how you see yourself/i })).toBeVisible();
 
@@ -9691,6 +9692,7 @@ test('self-assessments (50): take ECR-R → profile bars → retake adds a trend
 
     // 95 — back on the hub, the taken test drops out of "Available tests": Attachment lives ONLY under
     // "Your profiles" (with Retake), never a second time as a catalog "Take" card.
+    // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
     await w.getByRole('link', { name: 'You', exact: true }).click();
     await expect(w.getByRole('heading', { name: /how you see yourself/i })).toBeVisible();
     const profiles = w.locator('section', {
@@ -9739,6 +9741,7 @@ test('self-assessments (50): the kink test is 18+-gated; a result writes partner
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
+    // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
     await w.getByRole('link', { name: 'You', exact: true }).click();
 
     // The Intimacy & sexuality group is 18+-gated — the cards are withheld until acknowledged.
@@ -9812,6 +9815,7 @@ test('wellbeing (51): mood check-in → GENTLE range + help line; AI-off narrate
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
+    // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
     await w.getByRole('link', { name: 'You', exact: true }).click();
 
     // The wellbeing group is distinct and NOT 18+-gated; it invites a "Check in", not "Take".
@@ -9925,6 +9929,7 @@ test('wellbeing (51): PHQ-9 item 9 surfaces crisis resources MID-check-in; the f
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
+    // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
     await w.getByRole('link', { name: 'You', exact: true }).click();
     await w.getByRole('heading', { name: 'Mood check-in' }).scrollIntoViewIfNeeded();
     await w
@@ -10854,6 +10859,57 @@ test('together (58): the sessions board groups by whose move it is + spells out 
     const mine = w.getByRole('region', { name: 'Your turn' });
     await expect(mine.getByText('Reconnecting')).toBeVisible();
     await expect(mine.getByText('Ben is waiting on your reply.')).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('together (66 §3.3): removing messages leaves a tombstone BOTH partners see, not a silent gap', async () => {
+  const { userData, vault } = await seedTogetherReady();
+  const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });
+  try {
+    const w = await app.firstWindow();
+
+    // Ben starts a session and writes two messages.
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Reconnecting');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+    await w.getByLabel('Message').fill('Something I regret saying.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText('Something I regret saying.')).toBeVisible();
+
+    // Angel accepts, so both partners are live in the session.
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: /Together/ }).click();
+    const invite = w.getByRole('region', { name: 'Open invitation' });
+    await invite.getByText('Reconnecting').click();
+    await w.getByRole('button', { name: 'Continue' }).click();
+    await expect(w.getByText('Something I regret saying.')).toBeVisible();
+
+    // Back as Ben: remove that message and everything after it.
+    await switchTogetherPerson(w, 'Ben');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByText('Reconnecting').first().click();
+    await w
+      .getByRole('button', { name: /Delete from your turn/i })
+      .first()
+      .click();
+    await w.getByRole('button', { name: 'Delete', exact: true }).click();
+
+    // Gone for Ben — and replaced by an honest placeholder rather than silently closing the gap.
+    await expect(w.getByText('Something I regret saying.')).toHaveCount(0);
+    await expect(w.getByText(/were removed|was removed/i).first()).toBeVisible();
+    await w.screenshot({ path: 'e2e-artifacts/66-together-tombstone.png' });
+
+    // And the same for Angel — the shared record never changes shape without saying so (§8.3).
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByText('Reconnecting').first().click();
+    await expect(w.getByText('Something I regret saying.')).toHaveCount(0);
+    await expect(w.getByText(/were removed|was removed/i).first()).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

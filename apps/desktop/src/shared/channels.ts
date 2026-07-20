@@ -416,6 +416,8 @@ export const IpcChannels = {
   togetherMarkRead: 'together:markRead',
   togetherSendMessage: 'together:sendMessage',
   togetherRetry: 'together:retry',
+  /** 66 §3.3 — remove a span of messages, leaving a "removed" tombstone for both partners. */
+  togetherRewind: 'together:rewind',
   togetherChunk: 'together:chunk', // main → renderer event
   togetherPrepOpen: 'together:prepOpen',
   togetherStoreAttachment: 'together:storeAttachment',
@@ -1429,6 +1431,15 @@ export interface SelfosBridge {
   }): Promise<TogetherTurnResult>;
   /** Reply-only regeneration for a session whose newest message is an unanswered human message (§7). */
   togetherRetry(input: { sessionId: string }): Promise<TogetherTurnResult>;
+  /**
+   * 66 §3.3 — "delete from here" in a couples session. The span is computed over the REMOVER's own
+   * projection (you can't delete what you can't see), and leaves a neutral tombstone so the shared
+   * transcript never silently changes shape for the other partner.
+   */
+  togetherRewind(input: {
+    sessionId: string;
+    fromMessageId: string;
+  }): Promise<TogetherSessionView | null>;
   /** Subscribe to streamed couples-turn reply chunks (a separate sink from chat — §5.4). */
   onTogetherChunk(listener: (delta: string) => void): () => void;
   /** Open (or return) the caller's OWN private prep thread for a session (§3.7) — an ordinary conversation. */

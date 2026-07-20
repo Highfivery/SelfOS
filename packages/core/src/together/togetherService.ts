@@ -330,6 +330,118 @@ export async function appendMessage(
   return message;
 }
 
+/**
+ * A removal placeholder rather than a real message (66 §3.3). EVERY derivation must skip these — the
+ * model must never see one, and a tombstone must not flip whose turn it is, count as unread, preview in
+ * the sessions list, un-complete a wrapped-up session, or disturb the guided step.
+ */
+export function isTombstone(m: TogetherMessage): boolean {
+  return m.redacted === true;
+}
+
+/** Messages with their filenames — redaction needs the names to delete the right files. */
+export async function listMessageFiles(
+  fs: FileSystem,
+  key: Uint8Array,
+  id: string,
+): Promise<{ name: string; message: TogetherMessage }[]> {
+  const out: { name: string; message: TogetherMessage }[] = [];
+  if (!isSafeSegment(id)) return out;
+  for (const name of await fs.list(messagesDir(id))) {
+    if (!name.endsWith('.enc')) continue;
+    try {
+      const raw = await readEncryptedJson(fs, `${messagesDir(id)}/${name}`, key);
+      if (raw) out.push({ name, message: TogetherMessageSchema.parse(raw) });
+    } catch {
+      // Skip a corrupt message, as `listMessages` does.
+    }
+  }
+  return out.sort((a, b) => a.message.ts.localeCompare(b.message.ts));
+}
+
+/**
+ * Remove a span of messages and leave a tombstone in their place (66 §3.3/§8.3).
+ *
+ * The span is computed over the REMOVER'S OWN PROJECTION — you cannot delete what you cannot see, so a
+ * partner's private aside is never touched even though it sits in the same time range.
+ *
+ * The real files are DELETED (a "delete" that leaves the plaintext on disk isn't one) and a fresh
+ * write-once tombstone is appended. Rewriting the originals in place would be simpler, but the
+ * `<millis>-<personId>-<uuid>.enc` naming exists precisely so no two writers ever target the same file —
+ * rewriting reintroduces sync-conflict copies across two partners' synced vaults.
+ *
+ * A tombstone INHERITS the privacy of what it replaced. If everything removed was the remover's own
+ * aside, the tombstone is itself an aside — otherwise the partner would see "2 messages removed" for an
+ * exchange they never knew existed, which leaks the existence of asides. A mixed span therefore produces
+ * TWO tombstones, one shared and one private, and the existing projection hides the right one for free.
+ */
+export async function removeMessagesFrom(
+  fs: FileSystem,
+  key: Uint8Array,
+  sessionId: string,
+  removerId: string,
+  fromMessageId: string,
+): Promise<{ ok: true; removed: number } | { ok: false; reason: 'NOT_FOUND' }> {
+  const files = await listMessageFiles(fs, key, sessionId);
+  const visible = projectMessages(
+    files.map((f) => f.message),
+    removerId,
+  );
+  const startIndex = visible.findIndex((m) => m.id === fromMessageId);
+  if (startIndex === -1) return { ok: false, reason: 'NOT_FOUND' };
+
+  // Everything from that point on, but ONLY within what this person can see.
+  const doomedIds = new Set(visible.slice(startIndex).map((m) => m.id));
+  const doomed = files.filter((f) => doomedIds.has(f.message.id));
+  if (doomed.length === 0) return { ok: false, reason: 'NOT_FOUND' };
+
+  const anchorTs = doomed[0]!.message.ts;
+  let sharedCount = 0;
+  let asideCount = 0;
+  for (const { name, message } of doomed) {
+    if (message.privateAside === true) asideCount += 1;
+    else sharedCount += 1;
+    await fs.remove(`${messagesDir(sessionId)}/${name}`);
+    // Take any attachments with them — a removal that leaves encrypted image bytes behind isn't one.
+    for (const ref of message.attachments ?? []) {
+      if (!isTogetherAttachmentPath(ref.path)) continue;
+      try {
+        await fs.remove(ref.path);
+      } catch {
+        // Best-effort cleanup; never fails the removal.
+      }
+    }
+  }
+
+  const base = {
+    schemaVersion: 1 as const,
+    authorPersonId: removerId,
+    role: 'assistant' as const,
+    content: '',
+    // Anchored at the FIRST removed message so the placeholder sorts into the gap rather than piling
+    // up at the bottom of the thread.
+    ts: anchorTs,
+    redacted: true as const,
+    redactedByPersonId: removerId,
+  };
+  if (sharedCount > 0) {
+    await appendMessage(fs, key, sessionId, {
+      ...base,
+      id: uuid(),
+      redactedCount: sharedCount,
+    });
+  }
+  if (asideCount > 0) {
+    await appendMessage(fs, key, sessionId, {
+      ...base,
+      id: uuid(),
+      redactedCount: asideCount,
+      privateAside: true,
+    });
+  }
+  return { ok: true, removed: doomed.length };
+}
+
 // ── Attachments (58 §6.1) — Together's OWN seam (the 45 solo channels are person-scoped by construction) ──
 
 /** The session's encrypted image-attachment folder (§4.1). */
@@ -442,7 +554,9 @@ export function togetherGuideView(guideId: string | undefined): TogetherGuideVie
 function newestSharedHumanTs(messages: TogetherMessage[]): string | null {
   let newest: string | null = null;
   for (const m of messages) {
-    if (m.role === 'user' && !m.privateAside) {
+    // A tombstone is authored as `assistant`, but skip it explicitly: a removal must never re-open a
+    // wrapped-up session (66 §3.3).
+    if (m.role === 'user' && !m.privateAside && !isTombstone(m)) {
       if (newest === null || m.ts > newest) newest = m.ts;
     }
   }
@@ -498,6 +612,17 @@ export function projectMessages(
       ts: m.ts,
       privateAside: m.privateAside === true,
       ...(m.attachments ? { attachments: m.attachments } : {}),
+      // 66 §3.3 — a tombstone passes THROUGH the projection (the placeholder is the point), carrying
+      // what the thread needs to render "N messages removed".
+      ...(m.redacted
+        ? {
+            redacted: true,
+            ...(m.redactedCount !== undefined ? { redactedCount: m.redactedCount } : {}),
+            ...(m.redactedByPersonId !== undefined
+              ? { redactedByPersonId: m.redactedByPersonId }
+              : {}),
+          }
+        : {}),
     };
     // A replyToMessageId is dropped if its target isn't in this projection — it must never dangle across a
     // masking projection (§3.6). Coach aside-replies are themselves asides, so this only fires defensively.
@@ -510,7 +635,10 @@ export function projectMessages(
 
 /** "Your turn" (§3.6): the newest human message in the viewer's projection isn't theirs. A nudge, not a lock. */
 export function turnStateFor(messages: TogetherMessage[], viewerId: string): boolean {
-  const projected = projectMessages(messages, viewerId).filter((m) => m.role === 'user');
+  // A tombstone must never flip whose turn it is (66 §3.3).
+  const projected = projectMessages(messages, viewerId).filter(
+    (m) => m.role === 'user' && !m.redacted,
+  );
   const newest = projected[projected.length - 1];
   return newest ? newest.authorPersonId !== viewerId : false;
 }
@@ -543,7 +671,11 @@ export function unreadCountFor(
   lastReadMessageAt: string | undefined,
 ): number {
   return projectMessages(messages, viewerId).filter(
-    (m) => m.authorPersonId !== viewerId && (!lastReadMessageAt || m.ts > lastReadMessageAt),
+    // A placeholder is not something to read (66 §3.3).
+    (m) =>
+      !m.redacted &&
+      m.authorPersonId !== viewerId &&
+      (!lastReadMessageAt || m.ts > lastReadMessageAt),
   ).length;
 }
 
@@ -571,7 +703,8 @@ export function digestFor(
 ): SessionDigest {
   const status = deriveStatusFor(session, states, wrappedUpAt, messages, viewerId, now);
   const projected = projectMessages(messages, viewerId);
-  const last = projected[projected.length - 1];
+  // The sessions-list preview skips tombstones — an empty placeholder must never become the snippet.
+  const last = [...projected].reverse().find((m) => !m.redacted);
   const vState = states.get(viewerId);
   // The newest coach-INITIATED private note for this viewer (§3.14 Part B) — keyed on `coachInitiated` so it
   // fires ONLY for an unprompted note, NOT for an ordinary §3.6 aside coach REPLY (both are assistant +

@@ -17,6 +17,7 @@ import {
   pairKeyFor,
   projectMessages,
   reapTogetherForPerson,
+  removeMessagesFrom,
   awaitingTogetherReply,
   turnStateFor,
   unreadCountFor,
@@ -173,6 +174,104 @@ describe('projectMessages (§5.2)', () => {
     const forB = projectMessages(messages, B);
     expect(forB.map((m) => m.id)).toEqual(['reply']);
     expect(forB[0]?.replyToMessageId).toBeUndefined();
+  });
+});
+
+describe('removeMessagesFrom — the tombstone (66 §3.3/§8.3)', () => {
+  const fs = () => memFileSystem();
+
+  async function seed(messages: TogetherMessage[]): Promise<ReturnType<typeof memFileSystem>> {
+    const f = fs();
+    for (const m of messages) await appendMessage(f, key, 'S1', m);
+    return f;
+  }
+
+  it('deletes the span and leaves ONE tombstone standing in its place', async () => {
+    const f = await seed([
+      msg(A, 'user', '1'),
+      msg('coach', 'assistant', '2'),
+      msg(B, 'user', '3'),
+    ]);
+
+    const result = await removeMessagesFrom(f, key, 'S1', A, `${'coach'}-2`);
+    expect(result).toEqual({ ok: true, removed: 2 });
+
+    const after = projectMessages(await listMessages(f, key, 'S1'), A);
+    expect(after.map((m) => m.id)).toEqual([`${A}-1`, expect.any(String)]);
+    const stone = after[1]!;
+    expect(stone.redacted).toBe(true);
+    expect(stone.redactedCount).toBe(2);
+    expect(stone.redactedByPersonId).toBe(A);
+    // The content is genuinely gone — a "delete" that leaves the text on disk isn't one.
+    expect(JSON.stringify(after)).not.toContain('user from ' + B);
+  });
+
+  it('shows the same tombstone to BOTH partners — the shared record never silently changes shape', async () => {
+    const f = await seed([msg(A, 'user', '1'), msg(B, 'user', '2')]);
+    await removeMessagesFrom(f, key, 'S1', A, `${B}-2`);
+
+    const stored = await listMessages(f, key, 'S1');
+    for (const viewer of [A, B]) {
+      const projected = projectMessages(stored, viewer);
+      expect(projected.some((m) => m.redacted)).toBe(true);
+    }
+  });
+
+  it('cannot remove a message the remover cannot see', async () => {
+    // B's private aside is invisible to A, so A can't target it even by id.
+    const f = await seed([msg(B, 'user', '1', { id: 'secret', privateAside: true })]);
+    expect(await removeMessagesFrom(f, key, 'S1', A, 'secret')).toEqual({
+      ok: false,
+      reason: 'NOT_FOUND',
+    });
+    expect(await listMessages(f, key, 'S1')).toHaveLength(1); // untouched
+  });
+
+  it('keeps an aside-only removal PRIVATE — the tombstone must not leak that asides exist', async () => {
+    // If A removes only their own asides, B must not see "A removed 1 message" for an exchange they
+    // never knew about.
+    const f = await seed([
+      msg(B, 'user', '1'),
+      msg(A, 'user', '2', { id: 'mine', privateAside: true }),
+    ]);
+    await removeMessagesFrom(f, key, 'S1', A, 'mine');
+
+    const stored = await listMessages(f, key, 'S1');
+    expect(projectMessages(stored, A).some((m) => m.redacted)).toBe(true);
+    expect(projectMessages(stored, B).some((m) => m.redacted)).toBe(false);
+  });
+
+  it('splits a MIXED span into a shared tombstone and a private one', async () => {
+    const f = await seed([
+      msg(A, 'user', '1'),
+      msg(A, 'user', '2', { id: 'aside', privateAside: true }),
+      msg(A, 'user', '3'),
+    ]);
+    await removeMessagesFrom(f, key, 'S1', A, `${A}-1`);
+
+    const stored = await listMessages(f, key, 'S1');
+    // A sees both; B sees only the shared one, counting only what they could have seen.
+    expect(projectMessages(stored, A).filter((m) => m.redacted)).toHaveLength(2);
+    const forB = projectMessages(stored, B).filter((m) => m.redacted);
+    expect(forB).toHaveLength(1);
+    expect(forB[0]?.redactedCount).toBe(2);
+  });
+
+  it('a tombstone disturbs no derived signal', async () => {
+    // The whole correctness surface in one place: it must not flip the turn, count as unread, or
+    // become the sessions-list preview.
+    const f = await seed([
+      msg(A, 'user', '1'),
+      msg('coach', 'assistant', '2'),
+      msg(B, 'user', '3'),
+    ]);
+    await removeMessagesFrom(f, key, 'S1', A, `${B}-3`);
+    const stored = await listMessages(f, key, 'S1');
+
+    // B wrote last, but that message is gone — so it is no longer A's turn.
+    expect(turnStateFor(stored, A)).toBe(false);
+    expect(unreadCountFor(stored, A, undefined)).toBe(1); // the coach reply only, not the tombstone
+    expect(awaitingTogetherReply(stored, A)).toBe(false); // an empty placeholder isn't an unanswered turn
   });
 });
 

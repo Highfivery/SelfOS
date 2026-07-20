@@ -85,6 +85,8 @@ interface TogetherState {
     pending?: PendingAttachment[],
   ) => Promise<TogetherTurnResult>;
   retry: () => Promise<TogetherTurnResult>;
+  /** "Delete from here" — remove this message and everything after it, leaving a tombstone (66 §3.3). */
+  rewind: (fromMessageId: string) => Promise<void>;
   markRead: (id: string) => Promise<void>;
   leave: (id: string) => Promise<void>;
   /** Withdraw a pending invitation (initiator-only, recipient hasn't responded) — deletes it for both. */
@@ -267,6 +269,18 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
       set({ sending: false, streaming: '', error: TURN_ERROR.message });
       return TURN_ERROR;
     }
+  },
+  rewind: async (fromMessageId) => {
+    // 66 §3.3 — remove this message and everything after it IN THIS VIEWER'S PROJECTION, leaving a
+    // tombstone both partners see. Core owns the span + privacy rules; the store just refreshes.
+    const open = get().open;
+    if (!open || get().sending) return;
+    const view = await window.selfos?.togetherRewind({
+      sessionId: open.id,
+      fromMessageId,
+    });
+    if (view) set({ open: view, error: null });
+    else set({ error: 'Couldn’t remove those messages.' });
   },
   retry: async () => {
     const open = get().open;

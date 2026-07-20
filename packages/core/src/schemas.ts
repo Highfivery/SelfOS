@@ -3279,6 +3279,13 @@ export const TogetherMessageSchema = z.object({
   // (both are `assistant` + `privateAside` + authored-for-viewer). Drives the `together-private` signal so it
   // fires only for an unprompted note, never for a reply the viewer just watched arrive. Additive-optional.
   coachInitiated: z.boolean().optional(),
+  // 66 §3.3/§8.3 — this record IS a tombstone left where messages were removed. In a couples context a
+  // transcript that silently rewrites itself is disorienting, so removal leaves a neutral placeholder for
+  // both partners: the content is gone, the fact that something was there is not hidden. Additive-optional
+  // (the `privateAside`/`coachInitiated` precedent) — no schemaVersion bump.
+  redacted: z.literal(true).optional(),
+  redactedCount: z.number().int().positive().optional(), // how many messages it stands in for
+  redactedByPersonId: z.string().min(1).optional(),
 });
 export type TogetherMessage = z.infer<typeof TogetherMessageSchema>;
 
@@ -3310,6 +3317,11 @@ export interface TogetherMessageView {
   privateAside: boolean;
   replyToMessageId?: string;
   attachments?: AttachmentRef[];
+  // 66 §3.3 — a removal placeholder. The thread renders a quiet "N messages removed" line rather than
+  // silently closing the gap. Not persisted here; projected from the stored tombstone.
+  redacted?: boolean;
+  redactedCount?: number;
+  redactedByPersonId?: string;
 }
 
 /** A Together sessions-list summary, every field derived over the viewer's projection (§3 intro). */
@@ -3414,6 +3426,11 @@ export const TogetherSendMessageInputSchema = z.object({
 export type TogetherSendMessageInput = z.infer<typeof TogetherSendMessageInputSchema>;
 
 export const TogetherRetryInputSchema = z.object({ sessionId: z.string().min(1) });
+/** 66 §3.3 — remove this message and everything after it, within the remover's own projection. */
+export const TogetherRewindInputSchema = z.object({
+  sessionId: z.string().min(1),
+  fromMessageId: z.string().min(1),
+});
 export type TogetherRetryInput = z.infer<typeof TogetherRetryInputSchema>;
 
 /** Prep-space open input (§3.7) — the caller's own prep Conversation for a session. */

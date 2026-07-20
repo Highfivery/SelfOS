@@ -19,7 +19,13 @@ import { parseAgreementMarker } from '../conversations/agreementMarker';
 import { parseSuggestMarker } from '../conversations/suggestMarker';
 import { parsePrivateMarker } from '../conversations/privateMarker';
 import { getTogetherGuide } from './togetherCatalog';
-import { appendMessage, getSession, getTogetherAttachment, listMessages } from './togetherService';
+import {
+  appendMessage,
+  getSession,
+  getTogetherAttachment,
+  isTombstone,
+  listMessages,
+} from './togetherService';
 import { buildTogetherSystemPrompt } from './togetherPromptBuilder';
 import { captureAgreementFromMarker } from './agreementService';
 import { captureJointChallengeFromMarker } from './togetherChallengeService';
@@ -110,7 +116,9 @@ async function buildTogetherClaudeMessages(
   messages: TogetherMessage[],
   nameOf: (personId: string) => string,
 ): Promise<ClaudeMessage[]> {
-  const windowed = messages.slice(-TOGETHER_TRANSCRIPT_WINDOW);
+  // 66 §3.3 — tombstones are dropped BEFORE the window, so the model never sees a removal placeholder
+  // and the window isn't spent on empty records.
+  const windowed = messages.filter((m) => !isTombstone(m)).slice(-TOGETHER_TRANSCRIPT_WINDOW);
   // Each message → a role + its parts (a name-prefixed text part + any image blocks). Consecutive same-role
   // messages MERGE (two partners can write before a reply — the API requires alternating roles). A missing/
   // corrupt attachment is skipped so the turn still completes (the 45 §6.1 degrade rule).
@@ -422,7 +430,10 @@ export async function retryTogetherReply(deps: TogetherRetryDeps): Promise<Toget
   let newest: TogetherMessage | undefined;
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (m && !(m.role === 'assistant' && m.content.trim() === '')) {
+    // Skip blank ghosts AND removal tombstones (66 §3.3) — neither is a real turn. A tombstone is
+    // already empty-content so the first clause catches it, but say so explicitly so this keeps holding
+    // if a placeholder ever carries text.
+    if (m && !isTombstone(m) && !(m.role === 'assistant' && m.content.trim() === '')) {
       newest = m;
       break;
     }

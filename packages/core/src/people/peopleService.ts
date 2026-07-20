@@ -1,5 +1,6 @@
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
+import type { AssertMainOwnedHandled } from '../rebuildGuard';
 import { PersonSchema, type Person, type PersonInput } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { PERSON_SCHEMA_VERSION, migratePersonRaw } from './migrations';
@@ -37,18 +38,22 @@ export async function listPeople(fs: FileSystem, key: Uint8Array): Promise<Perso
 /**
  * Create or update a person from renderer input; the main process owns id + timestamps.
  *
- * NOTE — same shape as `coreBridge.dreamSave`: rebuilt from the narrower `PersonInput` plus a
- * hand-listed set of main-owned fields carried forward from `existing`. That list is opt-in, so a new
- * main-written field on `Person` that nobody adds here is silently wiped by the next edit (this is how
- * `Dream.image` was lost — see 12 §5.1). `Person`'s main-owned set is `schemaVersion | avatarPath |
- * createdAt | updatedAt` and all four are handled below; if you add another, carry it forward. Unlike
- * `dreamSave` this is NOT compile-time guarded — worth adding the same tripwire if it grows.
+ * Rebuilt from the narrower `PersonInput` plus a hand-listed set of main-owned fields carried forward
+ * from `existing` — the shape that silently lost `Dream.image` (12 §5.1), so the `AssertMainOwnedHandled`
+ * guard below fails the build if `Person` gains a main-owned field nobody classifies here.
  */
 export async function upsertPerson(
   fs: FileSystem,
   key: Uint8Array,
   input: PersonInput,
 ): Promise<Person> {
+  // Every main-owned field must be set fresh or carried forward below; see `rebuildGuard`.
+  const _guard: AssertMainOwnedHandled<
+    Person,
+    PersonInput,
+    'schemaVersion' | 'createdAt' | 'updatedAt' | 'avatarPath'
+  > = true;
+  void _guard;
   const existing = input.id ? await getPerson(fs, key, input.id) : null;
   const now = new Date().toISOString();
   const person: Person = {

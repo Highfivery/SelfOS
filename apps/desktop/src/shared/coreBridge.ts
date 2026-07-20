@@ -250,6 +250,7 @@ import {
   writeRelayConfig,
 } from './relay/relayConfig';
 import type { ClaudeClient, FileSystem, ImageClient, SecretStore } from '@selfos/core/host';
+import type { AssertMainOwnedHandled } from '@selfos/core/rebuild-guard';
 import { uuid } from '@selfos/core/id';
 import {
   aiKeyStatus as computeAiKeyStatus,
@@ -6823,25 +6824,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // main-owned field has been CLASSIFIED, not that the corresponding spread was actually written —
       // listing a field as carried-forward without adding its spread still compiles. A triage tripwire,
       // not a proof.
-      type MainOwnedDreamField = Exclude<keyof Dream, keyof DreamInput>;
-      /** Errors if any listed key is not actually main-owned (catches a stale or misspelled entry). */
-      type OnlyMainOwned<T extends MainOwnedDreamField> = T;
-      /** Set fresh on every write, never taken from the renderer. */
-      type DreamFieldSetOnSave = OnlyMainOwned<
-        'schemaVersion' | 'personId' | 'status' | 'createdAt' | 'updatedAt'
-      >;
-      /** Preserved from the existing record, or an edit destroys them. */
-      type DreamFieldCarriedForward = OnlyMainOwned<'analysisId' | 'image'>;
-      type UnhandledMainOwnedDreamField = Exclude<
-        MainOwnedDreamField,
-        DreamFieldSetOnSave | DreamFieldCarriedForward
-      >;
-      // If this errors, `Dream` gained a main-owned field: decide whether an edit keeps it, then add it
-      // to `DreamFieldSetOnSave` or `DreamFieldCarriedForward` (and write the spread). Do NOT just widen.
-      const _everyMainOwnedDreamFieldIsHandled: UnhandledMainOwnedDreamField extends never
-        ? true
-        : never = true;
-      void _everyMainOwnedDreamFieldIsHandled;
+      // Set fresh here: schemaVersion/personId/status/createdAt/updatedAt. Carried forward from the
+      // existing record: analysisId/image. If this errors, `Dream` gained a main-owned field — decide
+      // whether an edit keeps it, add it below, then list it here. Do NOT just widen the list.
+      const _guard: AssertMainOwnedHandled<
+        Dream,
+        DreamInput,
+        'schemaVersion' | 'personId' | 'status' | 'createdAt' | 'updatedAt' | 'analysisId' | 'image'
+      > = true;
+      void _guard;
       //
       // Keep this read immediately before the write. `dreamSave` and `generateDreamImage` are both
       // read-then-write-the-whole-record, so whichever writes last wins; reading at save time (rather

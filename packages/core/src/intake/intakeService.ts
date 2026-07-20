@@ -1039,7 +1039,14 @@ async function applyInferredFields(
   now: Date,
 ): Promise<void> {
   if (!inferred) return;
-  const next: Person = { ...person };
+  // RE-READ. `person` was fetched before the portrait synthesis call, so it is a whole Person record
+  // that is now tens of seconds stale — writing it back would revert any profile edit saved during the
+  // synthesis (the 12 §5.1 stale-write class, in the intake path). Only the empty fields below are ours
+  // to fill; everything else must come from the current record. A `null` read means the person was
+  // deleted mid-synthesis: return rather than resurrecting them.
+  const fresh = await getPerson(fs, key, person.id);
+  if (!fresh) return;
+  const next: Person = { ...fresh };
   let changed = false;
   const setStr = (
     k: PersonFieldKey & ('communicationStyle' | 'goals' | 'faith'),

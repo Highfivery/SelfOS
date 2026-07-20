@@ -9,6 +9,7 @@
     "./id": "./src/id.ts",
     "./encoding": "./src/encoding.ts",
     "./schemas": "./src/schemas.ts",
+    "./rebuild-guard": "./src/rebuildGuard.ts",
     "./capabilities": "./src/capabilities.ts",
     "./usage-types": "./src/usageTypes.ts",
     "./appearance": "./src/appearance.ts",

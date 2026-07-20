@@ -1,5 +1,6 @@
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
+import type { AssertMainOwnedHandled } from '../rebuildGuard';
 import { QuestionnaireSchema, type Questionnaire, type QuestionnaireInput } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { DEFS_DIR, defPath } from './paths';
@@ -47,6 +48,15 @@ export async function saveQuestionnaire(
   input: QuestionnaireInput,
   creatorPersonId?: string,
 ): Promise<Questionnaire> {
+  // Every main-owned field must be set fresh or carried forward below; see `rebuildGuard`. `favorite`
+  // is the cautionary one: a list star, not author-supplied, so it is only here because someone
+  // remembered to carry it — exactly the shape that lost `Dream.image`.
+  const _guard: AssertMainOwnedHandled<
+    Questionnaire,
+    QuestionnaireInput,
+    'schemaVersion' | 'version' | 'createdAt' | 'updatedAt' | 'creatorPersonId' | 'favorite'
+  > = true;
+  void _guard;
   const existing = input.id ? await getQuestionnaire(fs, key, input.id) : null;
   const at = new Date().toISOString();
   // Creator is stamped ONLY on actual create; an edit preserves the original (and never back-fills a

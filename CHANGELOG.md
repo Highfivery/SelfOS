@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.6](https://github.com/Highfivery/SelfOS/compare/v0.39.5...v0.39.6) (2026-07-20)
+
+
+### Bug Fixes
+
+* **core:** repair a regression I introduced, plus 4 remaining stale-write sites ([#269](https://github.com/Highfivery/SelfOS/issues/269)) ([47bd23f](https://github.com/Highfivery/SelfOS/commit/47bd23f447ccf11953cdceb2985d842f82d9b554))
+
 ## [0.39.5](https://github.com/Highfivery/SelfOS/compare/v0.39.4...v0.39.5) (2026-07-20)
 
 

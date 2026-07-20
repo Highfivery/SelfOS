@@ -14,7 +14,10 @@
 
     <!-- Open Graph / social -->
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="SelfOS — a private AI therapist &amp; life coach that's entirely yours" />
+    <meta
+      property="og:title"
+      content="SelfOS — a private AI therapist &amp; life coach that's entirely yours"
+    />
     <meta
       property="og:description"
       content="A coach that truly knows you — and never leaves your device. Encrypted files you own, powered by your own Claude key."
@@ -36,8 +39,7 @@
         try {
           var saved = localStorage.getItem('selfos-theme');
           var theme =
-            saved ||
-            (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
           document.documentElement.setAttribute('data-theme', theme);
         } catch (e) {}
       })();
@@ -1239,7 +1241,10 @@
           <span class="tile" aria-hidden="true">
             <svg viewBox="0 0 28 28">
               <path class="leaf-back" d="M14 17 C 9.5 17.5 6 14 5.5 8 C 11 8.5 13.5 12.5 14 17 Z" />
-              <path class="leaf-front" d="M14 15 C 18.5 15.5 22 12 22.5 6 C 17 6.5 14.5 10.5 14 15 Z" />
+              <path
+                class="leaf-front"
+                d="M14 15 C 18.5 15.5 22 12 22.5 6 C 17 6.5 14.5 10.5 14 15 Z"
+              />
               <path class="stem" d="M14 25 C 13 21 13.4 17 14 13" />
             </svg>
           </span>
@@ -1261,15 +1266,28 @@
             aria-label="Toggle light and dark theme"
             type="button"
           >
-            <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <svg
+              class="sun"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
               <circle cx="12" cy="12" r="4" />
-              <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+              <path
+                d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
+              />
             </svg>
             <svg class="moon" viewBox="0 0 24 24" fill="currentColor">
               <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
             </svg>
           </button>
-          <a class="btn btn-primary nav-download" href="https://github.com/Highfivery/SelfOS/releases/latest">Download</a>
+          <a
+            class="btn btn-primary nav-download"
+            href="https://github.com/Highfivery/SelfOS/releases/latest"
+            >Download</a
+          >
         </div>
       </div>
     </header>
@@ -1281,7 +1299,8 @@
           <div class="hero-copy">
             <p class="eyebrow">Private AI therapist &amp; life coach · macOS</p>
             <h1>
-              A coach that truly <span class="accent">knows you</span> — and never leaves your device.
+              A coach that truly <span class="accent">knows you</span> — and never leaves your
+              device.
             </h1>
             <p class="sub">
               SelfOS is a calm, deeply personal AI companion for reflection and self-coaching. It
@@ -1289,42 +1308,117 @@
               live on <em>your</em> computer — powered by your own Claude API key.
             </p>
             <div class="hero-cta" id="download">
-              <a class="btn btn-primary" href="https://github.com/Highfivery/SelfOS/releases/latest">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
-                  <path d="M16.5 2.1c.1 1.1-.3 2.2-1 3-.7.9-1.9 1.5-3 1.4-.1-1.1.4-2.2 1-3 .8-.9 2-1.5 3-1.4zM19.6 17c-.5 1.2-.8 1.7-1.5 2.8-.9 1.5-2.3 3.3-3.9 3.3-1.5 0-1.8-1-3.8-1-1.9 0-2.4 1-3.8 1-1.6 0-2.9-1.7-3.8-3.1C-.1 16-.4 11.3 1.2 8.8 2.3 7 4.1 5.9 5.8 5.9c1.7 0 2.8 1 4.2 1 1.4 0 2.2-1 4.2-1 1.5 0 3 .8 4.1 2.2-3.6 2-3 7.1 1.3 8.9z" />
+              <a
+                class="btn btn-primary"
+                href="https://github.com/Highfivery/SelfOS/releases/latest"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M16.5 2.1c.1 1.1-.3 2.2-1 3-.7.9-1.9 1.5-3 1.4-.1-1.1.4-2.2 1-3 .8-.9 2-1.5 3-1.4zM19.6 17c-.5 1.2-.8 1.7-1.5 2.8-.9 1.5-2.3 3.3-3.9 3.3-1.5 0-1.8-1-3.8-1-1.9 0-2.4 1-3.8 1-1.6 0-2.9-1.7-3.8-3.1C-.1 16-.4 11.3 1.2 8.8 2.3 7 4.1 5.9 5.8 5.9c1.7 0 2.8 1 4.2 1 1.4 0 2.2-1 4.2-1 1.5 0 3 .8 4.1 2.2-3.6 2-3 7.1 1.3 8.9z"
+                  />
                 </svg>
                 <span>Download for macOS<span class="sub"> &nbsp;·&nbsp; free</span></span>
               </a>
               <a class="btn btn-ghost" href="https://github.com/Highfivery/SelfOS">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
-                  <path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.3-1.7-1.3-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.78 1.2 1.78 1.2 1.04 1.78 2.73 1.27 3.4.97.1-.76.4-1.27.74-1.56-2.56-.29-5.26-1.28-5.26-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.7 5.4-5.28 5.69.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5z" />
+                <svg
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.34-1.3-1.7-1.3-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.78 1.2 1.78 1.2 1.04 1.78 2.73 1.27 3.4.97.1-.76.4-1.27.74-1.56-2.56-.29-5.26-1.28-5.26-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.7 5.4-5.28 5.69.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5z"
+                  />
                 </svg>
                 View on GitHub
               </a>
             </div>
             <p class="hero-note">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 13l4 4L19 7"/></svg>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <path d="M5 13l4 4L19 7" />
+              </svg>
               No account. No servers. No tracking. Your data never touches us.
             </p>
             <div class="badge-row">
-              <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/></svg> Encrypted &amp; private</span>
-              <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h7l2 2h9v10H3z"/></svg> Plain files you own</span>
-              <span class="chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2L12 16.6 5.7 21l2.3-7.2-6-4.4h7.6z"/></svg> Powered by Claude</span>
+              <span class="chip"
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z" />
+                </svg>
+                Encrypted &amp; private</span
+              >
+              <span class="chip"
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 7h7l2 2h9v10H3z" />
+                </svg>
+                Plain files you own</span
+              >
+              <span class="chip"
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2L12 16.6 5.7 21l2.3-7.2-6-4.4h7.6z" />
+                </svg>
+                Powered by Claude</span
+              >
             </div>
           </div>
 
           <!-- Hero mockup: Sessions -->
           <div class="hero-visual reveal in">
-            <div class="window" role="img" aria-label="A SelfOS coaching session: the AI coach replies in a warm chat thread">
+            <div
+              class="window"
+              role="img"
+              aria-label="A SelfOS coaching session: the AI coach replies in a warm chat thread"
+            >
               <div class="titlebar">
                 <span class="lights"><i class="r"></i><i class="y"></i><i class="g"></i></span>
                 <span class="tb-brand">
-                  <span class="tile"><svg viewBox="0 0 28 28"><path class="leaf-back" d="M14 17 C 9.5 17.5 6 14 5.5 8 C 11 8.5 13.5 12.5 14 17 Z"/><path class="leaf-front" d="M14 15 C 18.5 15.5 22 12 22.5 6 C 17 6.5 14.5 10.5 14 15 Z"/><path class="stem" d="M14 25 C 13 21 13.4 17 14 13"/></svg></span>
+                  <span class="tile"
+                    ><svg viewBox="0 0 28 28">
+                      <path
+                        class="leaf-back"
+                        d="M14 17 C 9.5 17.5 6 14 5.5 8 C 11 8.5 13.5 12.5 14 17 Z"
+                      />
+                      <path
+                        class="leaf-front"
+                        d="M14 15 C 18.5 15.5 22 12 22.5 6 C 17 6.5 14.5 10.5 14 15 Z"
+                      />
+                      <path class="stem" d="M14 25 C 13 21 13.4 17 14 13" /></svg
+                  ></span>
                   SelfOS
                 </span>
                 <svg class="ring" viewBox="0 0 36 36" aria-hidden="true">
-                  <circle cx="18" cy="18" r="15" fill="none" stroke="var(--border)" stroke-width="4"/>
-                  <circle cx="18" cy="18" r="15" fill="none" stroke="var(--accent-solid)" stroke-width="4" stroke-linecap="round" stroke-dasharray="94" stroke-dashoffset="34" transform="rotate(-90 18 18)"/>
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="15"
+                    fill="none"
+                    stroke="var(--border)"
+                    stroke-width="4"
+                  />
+                  <circle
+                    cx="18"
+                    cy="18"
+                    r="15"
+                    fill="none"
+                    stroke="var(--accent-solid)"
+                    stroke-width="4"
+                    stroke-linecap="round"
+                    stroke-dasharray="94"
+                    stroke-dashoffset="34"
+                    transform="rotate(-90 18 18)"
+                  />
                 </svg>
               </div>
               <div class="app-body">
@@ -1337,17 +1431,29 @@
                 </aside>
                 <div class="panel">
                   <div class="bubble ai">
-                    Last week you mentioned the review with your manager felt heavy. <strong>How did it
-                    land?</strong>
+                    Last week you mentioned the review with your manager felt heavy.
+                    <strong>How did it land?</strong>
                   </div>
-                  <div class="bubble user">Better than I feared — but I still downplayed my work.</div>
+                  <div class="bubble user">
+                    Better than I feared — but I still downplayed my work.
+                  </div>
                   <div class="bubble ai">
                     That's a pattern worth noticing. Let's name one thing you did well, in your own
                     words.
                   </div>
                   <div class="composer">
                     Tell me what's on your mind…
-                    <span class="send" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+                    <span class="send" aria-hidden="true"
+                      ><svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.4"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path d="M5 12h14M13 6l6 6-6 6" /></svg
+                    ></span>
                   </div>
                 </div>
               </div>
@@ -1364,70 +1470,145 @@
             <h2>Not a chatbot. A companion that grows with you.</h2>
             <p class="lede">
               Most AI tools forget you the moment you close the tab. SelfOS is built to remember,
-              connect the dots, and gently move you forward — across sessions, dreams, relationships,
-              and time.
+              connect the dots, and gently move you forward — across sessions, dreams,
+              relationships, and time.
             </p>
           </div>
 
           <div class="features">
             <article class="card reveal">
-              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 11.5a8.4 8.4 0 0 1-12 7.6L3 21l1.9-5.9A8.5 8.5 0 1 1 21 11.5z"/></svg></span>
+              <span class="ic"
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path
+                    d="M21 11.5a8.4 8.4 0 0 1-12 7.6L3 21l1.9-5.9A8.5 8.5 0 1 1 21 11.5z"
+                  /></svg
+              ></span>
               <h3>Coaching sessions</h3>
-              <p>A streaming, judgment-free AI coach grounded in who you are — to think out loud, untangle a feeling, or work a problem.</p>
+              <p>
+                A streaming, judgment-free AI coach grounded in who you are — to think out loud,
+                untangle a feeling, or work a problem.
+              </p>
             </article>
 
             <article class="card reveal">
-              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></span>
+              <span class="ic"
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <circle cx="12" cy="8" r="4" />
+                  <path d="M4 21c0-4 4-6 8-6s8 2 8 6" /></svg
+              ></span>
               <h3>Gets to know you</h3>
-              <p>A warm, guided onboarding builds a rich personal portrait — and quietly keeps it up to date as life changes.</p>
+              <p>
+                A warm, guided onboarding builds a rich personal portrait — and quietly keeps it up
+                to date as life changes.
+              </p>
             </article>
 
             <article class="card reveal">
-              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3a9 9 0 1 0 9 9"/><path d="M12 7v5l3 2"/><path d="M21 3l-3 3-3-3"/></svg></span>
+              <span class="ic"
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M12 3a9 9 0 1 0 9 9" />
+                  <path d="M12 7v5l3 2" />
+                  <path d="M21 3l-3 3-3-3" /></svg
+              ></span>
               <h3>Living memory</h3>
-              <p>Confidence-rated insights, organized by life-area, that reconcile themselves over time — and that you can edit, flag, or correct.</p>
+              <p>
+                Confidence-rated insights, organized by life-area, that reconcile themselves over
+                time — and that you can edit, flag, or correct.
+              </p>
             </article>
 
             <article class="card reveal">
-              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/><circle cx="12" cy="12" r="4"/></svg></span>
+              <span class="ic"
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" />
+                  <circle cx="12" cy="12" r="4" /></svg
+              ></span>
               <h3>Proactive, not passive</h3>
-              <p>It follows up on your goals, spots patterns across sessions and dreams, and nudges next steps — fully tunable, never naggy.</p>
+              <p>
+                It follows up on your goals, spots patterns across sessions and dreams, and nudges
+                next steps — fully tunable, never naggy.
+              </p>
             </article>
 
             <article class="card reveal">
-              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>
+              <span class="ic"
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M9 18V5l12-2v13" />
+                  <circle cx="6" cy="18" r="3" />
+                  <circle cx="18" cy="16" r="3" /></svg
+              ></span>
               <h3>Guided exercises</h3>
-              <p>A library of self-guided exercises informed by CBT, ACT, GROW and more — pick one, or get a smart "suggested for you".</p>
+              <p>
+                A library of self-guided exercises informed by CBT, ACT, GROW and more — pick one,
+                or get a smart "suggested for you".
+              </p>
             </article>
 
             <article class="card reveal">
-              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span>
+              <span class="ic"
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg
+              ></span>
               <h3>Dreams &amp; AI imagery</h3>
-              <p>Capture dreams in seconds, work through a guided analysis, track recurring patterns — and visualize any dream as AI art.</p>
+              <p>
+                Capture dreams in seconds, work through a guided analysis, track recurring patterns
+                — and visualize any dream as AI art.
+              </p>
             </article>
 
             <article class="card reveal">
-              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="9" r="3"/><circle cx="17" cy="7" r="2.4"/><path d="M2 20c0-3.3 2.7-5 6-5s6 1.7 6 5"/><path d="M15 20c0-2.4 1.4-4 4-4"/></svg></span>
+              <span class="ic"
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <circle cx="8" cy="9" r="3" />
+                  <circle cx="17" cy="7" r="2.4" />
+                  <path d="M2 20c0-3.3 2.7-5 6-5s6 1.7 6 5" />
+                  <path d="M15 20c0-2.4 1.4-4 4-4" /></svg
+              ></span>
               <h3>Built for couples &amp; households</h3>
-              <p>A graph of people and relationships where each person's coaching can draw on shared context — with relationship-scoped privacy.</p>
+              <p>
+                A graph of people and relationships where each person's coaching can draw on shared
+                context — with relationship-scoped privacy.
+              </p>
             </article>
 
             <article class="card reveal">
-              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg></span>
+              <span class="ic"
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M9 11l3 3 8-8" />
+                  <path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /></svg
+              ></span>
               <h3>Questionnaires &amp; compatibility</h3>
-              <p>Send hand-written or AI-drafted questionnaires in-app or via a private link — or run a two-person compatibility check.</p>
+              <p>
+                Send hand-written or AI-drafted questionnaires in-app or via a private link — or run
+                a two-person compatibility check.
+              </p>
             </article>
 
             <article class="card reveal">
-              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-7-4.5-9-9.5C1.6 7.4 4 4 7.5 4c1.9 0 3.4 1 4.5 2.5C13.1 5 14.6 4 16.5 4 20 4 22.4 7.4 21 11.5c-2 5-9 9.5-9 9.5z"/></svg></span>
+              <span class="ic"
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path
+                    d="M12 21s-7-4.5-9-9.5C1.6 7.4 4 4 7.5 4c1.9 0 3.4 1 4.5 2.5C13.1 5 14.6 4 16.5 4 20 4 22.4 7.4 21 11.5c-2 5-9 9.5-9 9.5z"
+                  /></svg
+              ></span>
               <h3>Relationship &amp; intimacy tracking</h3>
-              <p>A frictionless intimacy check-in and a partner dashboard — connection, desire, appreciation, conflict — both-consent, never covert.</p>
+              <p>
+                A frictionless intimacy check-in and a partner dashboard — connection, desire,
+                appreciation, conflict — both-consent, never covert.
+              </p>
             </article>
 
             <article class="card reveal">
-              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+              <span class="ic"
+                ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <rect x="4" y="10" width="16" height="11" rx="2" />
+                  <path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg
+              ></span>
               <h3>You hold the keys</h3>
-              <p>Encrypted at rest with a key only your devices hold. Recovery phrase, multi-device join, device revocation and key rotation.</p>
+              <p>
+                Encrypted at rest with a key only your devices hold. Recovery phrase, multi-device
+                join, device revocation and key rotation.
+              </p>
             </article>
           </div>
         </div>
@@ -1447,26 +1628,66 @@
                 coaching keeps getting sharper.
               </p>
               <ul class="sp-list">
-                <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span> Insights grouped by life-area, with provenance you can trace</li>
-                <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span> Tracked goals &amp; commitments it can follow up on</li>
-                <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span> Correct it any time — edit, delete, or flag "this isn't right about me"</li>
+                <li>
+                  <span class="tick"
+                    ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                      <path d="M5 13l4 4L19 7" /></svg
+                  ></span>
+                  Insights grouped by life-area, with provenance you can trace
+                </li>
+                <li>
+                  <span class="tick"
+                    ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                      <path d="M5 13l4 4L19 7" /></svg
+                  ></span>
+                  Tracked goals &amp; commitments it can follow up on
+                </li>
+                <li>
+                  <span class="tick"
+                    ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                      <path d="M5 13l4 4L19 7" /></svg
+                  ></span>
+                  Correct it any time — edit, delete, or flag "this isn't right about me"
+                </li>
               </ul>
             </div>
             <div class="sp-visual reveal">
               <div class="insight">
-                <div class="top"><span class="tag">Work &amp; purpose</span><span class="tag src">From a session</span></div>
-                <p>Tends to downplay accomplishments in performance reviews; wants to practice naming wins.</p>
-                <div class="conf">High confidence <span class="bar"><i style="width:86%"></i></span> 86%</div>
+                <div class="top">
+                  <span class="tag">Work &amp; purpose</span
+                  ><span class="tag src">From a session</span>
+                </div>
+                <p>
+                  Tends to downplay accomplishments in performance reviews; wants to practice naming
+                  wins.
+                </p>
+                <div class="conf">
+                  High confidence <span class="bar"><i style="width: 86%"></i></span> 86%
+                </div>
               </div>
               <div class="insight">
-                <div class="top"><span class="tag">Relationships</span><span class="tag src">From onboarding</span></div>
-                <p>Values quality time over gifts; feels most connected on unhurried weekend mornings.</p>
-                <div class="conf">Medium confidence <span class="bar"><i style="width:62%"></i></span> 62%</div>
+                <div class="top">
+                  <span class="tag">Relationships</span><span class="tag src">From onboarding</span>
+                </div>
+                <p>
+                  Values quality time over gifts; feels most connected on unhurried weekend
+                  mornings.
+                </p>
+                <div class="conf">
+                  Medium confidence <span class="bar"><i style="width: 62%"></i></span> 62%
+                </div>
               </div>
               <div class="insight">
-                <div class="top"><span class="tag">Emotions &amp; patterns</span><span class="tag src">From a dream</span></div>
-                <p>Recurring "running late" dreams cluster around weeks with back-to-back meetings.</p>
-                <div class="conf">Building <span class="bar"><i style="width:44%"></i></span> 44%</div>
+                <div class="top">
+                  <span class="tag">Emotions &amp; patterns</span
+                  ><span class="tag src">From a dream</span>
+                </div>
+                <p>
+                  Recurring "running late" dreams cluster around weeks with back-to-back meetings.
+                </p>
+                <div class="conf">
+                  Building <span class="bar"><i style="width: 44%"></i></span> 44%
+                </div>
               </div>
             </div>
           </div>
@@ -1482,19 +1703,47 @@
                 into a single piece of AI art.
               </p>
               <ul class="sp-list">
-                <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span> Guided analysis: emotions, symbols, and reflective questions</li>
-                <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span> Cross-dream patterns &amp; a gentle recurring-nightmare nudge</li>
-                <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg></span> "Visualize this dream" — private AI imagery, stored encrypted</li>
+                <li>
+                  <span class="tick"
+                    ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                      <path d="M5 13l4 4L19 7" /></svg
+                  ></span>
+                  Guided analysis: emotions, symbols, and reflective questions
+                </li>
+                <li>
+                  <span class="tick"
+                    ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                      <path d="M5 13l4 4L19 7" /></svg
+                  ></span>
+                  Cross-dream patterns &amp; a gentle recurring-nightmare nudge
+                </li>
+                <li>
+                  <span class="tick"
+                    ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                      <path d="M5 13l4 4L19 7" /></svg
+                  ></span>
+                  "Visualize this dream" — private AI imagery, stored encrypted
+                </li>
               </ul>
             </div>
             <div class="sp-visual reveal">
-              <div class="dream-card" role="img" aria-label="A dream visualized as soft, abstract AI art with a moon over a dusk horizon">
-                <div class="dream-img"><span class="moon"></span><span class="ai-pill">✦ AI-generated</span></div>
+              <div
+                class="dream-card"
+                role="img"
+                aria-label="A dream visualized as soft, abstract AI art with a moon over a dusk horizon"
+              >
+                <div class="dream-img">
+                  <span class="moon"></span><span class="ai-pill">✦ AI-generated</span>
+                </div>
                 <div class="dream-meta">
                   <h4>The quiet shoreline</h4>
-                  <p>Walking an endless beach at dusk — calm, but searching for someone just out of sight.</p>
+                  <p>
+                    Walking an endless beach at dusk — calm, but searching for someone just out of
+                    sight.
+                  </p>
                   <div class="dream-tags">
-                    <span class="tag">Calm</span><span class="tag">Searching</span><span class="tag src">Recurring</span>
+                    <span class="tag">Calm</span><span class="tag">Searching</span
+                    ><span class="tag src">Recurring</span>
                   </div>
                 </div>
               </div>
@@ -1514,22 +1763,34 @@
             <div class="step reveal">
               <span class="n">1</span>
               <h3>Choose your vault</h3>
-              <p>Pick a folder for your data — local, or a synced folder like iCloud or Dropbox to use it on more than one device.</p>
+              <p>
+                Pick a folder for your data — local, or a synced folder like iCloud or Dropbox to
+                use it on more than one device.
+              </p>
             </div>
             <div class="step reveal">
               <span class="n">2</span>
               <h3>Add your Claude key</h3>
-              <p>Bring your own Anthropic API key. SelfOS uses it directly — there's no middleman and no subscription to us.</p>
+              <p>
+                Bring your own Anthropic API key. SelfOS uses it directly — there's no middleman and
+                no subscription to us.
+              </p>
             </div>
             <div class="step reveal">
               <span class="n">3</span>
               <h3>Tell it about you</h3>
-              <p>A warm, guided intake builds your portrait, so the very first session already understands your world.</p>
+              <p>
+                A warm, guided intake builds your portrait, so the very first session already
+                understands your world.
+              </p>
             </div>
             <div class="step reveal">
               <span class="n">4</span>
               <h3>Reflect &amp; grow</h3>
-              <p>Talk, journal, dream, set goals. SelfOS remembers, connects the dots, and gently checks back in.</p>
+              <p>
+                Talk, journal, dream, set goals. SelfOS remembers, connects the dots, and gently
+                checks back in.
+              </p>
             </div>
           </div>
         </div>
@@ -1549,45 +1810,99 @@
               </p>
               <div class="privacy-points">
                 <div class="pp">
-                  <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-                  <div><h4>Encrypted at rest</h4><p>Private content is encrypted with a master key only your devices hold — protected by a recovery phrase and an owner PIN.</p></div>
+                  <span class="ic"
+                    ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <rect x="4" y="10" width="16" height="11" rx="2" />
+                      <path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg
+                  ></span>
+                  <div>
+                    <h4>Encrypted at rest</h4>
+                    <p>
+                      Private content is encrypted with a master key only your devices hold —
+                      protected by a recovery phrase and an owner PIN.
+                    </p>
+                  </div>
                 </div>
                 <div class="pp">
-                  <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h7l2 2h9v10H3z"/></svg></span>
-                  <div><h4>Plain files you own</h4><p>No proprietary database. Your data is portable, inspectable, and yours — back it up or move it like any other folder.</p></div>
+                  <span class="ic"
+                    ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path d="M3 7h7l2 2h9v10H3z" /></svg
+                  ></span>
+                  <div>
+                    <h4>Plain files you own</h4>
+                    <p>
+                      No proprietary database. Your data is portable, inspectable, and yours — back
+                      it up or move it like any other folder.
+                    </p>
+                  </div>
                 </div>
                 <div class="pp">
-                  <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/></svg></span>
-                  <div><h4>Sharing means "informs their AI"</h4><p>In a household, shared context can help a partner's coach — but it's never shown to them, and you scope it by relationship type.</p></div>
+                  <span class="ic"
+                    ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                      <path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z" /></svg
+                  ></span>
+                  <div>
+                    <h4>Sharing means "informs their AI"</h4>
+                    <p>
+                      In a household, shared context can help a partner's coach — but it's never
+                      shown to them, and you scope it by relationship type.
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
 
-            <div class="privacy-diagram reveal" role="img" aria-label="Diagram: your device reads and writes an encrypted vault folder; the only outbound call is to the Claude API using your key">
+            <div
+              class="privacy-diagram reveal"
+              role="img"
+              aria-label="Diagram: your device reads and writes an encrypted vault folder; the only outbound call is to the Claude API using your key"
+            >
               <div class="diagram-row">
                 <div class="node">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <rect x="3" y="4" width="18" height="13" rx="2" />
+                    <path d="M8 21h8M12 17v4" />
+                  </svg>
                   <b>Your device</b><small>SelfOS app</small>
                 </div>
-                <div class="link-lab">encrypted<div class="line"></div>read / write</div>
+                <div class="link-lab">
+                  encrypted
+                  <div class="line"></div>
+                  read / write
+                </div>
                 <div class="node">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7h7l2 2h9v10H3z"/><path d="M9 14l2 2 4-4"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <path d="M3 7h7l2 2h9v10H3z" />
+                    <path d="M9 14l2 2 4-4" />
+                  </svg>
                   <b>Your vault</b><small>files you own</small>
                 </div>
               </div>
-              <div class="diagram-row" style="margin-top:18px">
+              <div class="diagram-row" style="margin-top: 18px">
                 <div class="node">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <rect x="3" y="4" width="18" height="13" rx="2" />
+                    <path d="M8 21h8M12 17v4" />
+                  </svg>
                   <b>Your device</b><small>only on your action</small>
                 </div>
-                <div class="link-lab">your key<div class="line"></div>https</div>
+                <div class="link-lab">
+                  your key
+                  <div class="line"></div>
+                  https
+                </div>
                 <div class="node">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2L12 16.6 5.7 21l2.3-7.2-6-4.4h7.6z"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                    <path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2L12 16.6 5.7 21l2.3-7.2-6-4.4h7.6z" />
+                  </svg>
                   <b>Claude API</b><small>Anthropic</small>
                 </div>
               </div>
               <div class="diagram-note">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 8v5M12 16h.01" />
+                </svg>
                 There is no SelfOS server in this picture. Nothing is uploaded to us, ever.
               </div>
             </div>
@@ -1604,28 +1919,94 @@
           </div>
           <div class="faq">
             <details class="q reveal">
-              <summary>Is SelfOS therapy? <span class="plus" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg></span></summary>
-              <div class="a">No. SelfOS is a <strong>wellness and self-help tool</strong> — it is not a medical device, not therapy in the clinical sense, and not a substitute for professional care. It draws on therapeutic <em>frameworks</em> to help you reflect, but it doesn't diagnose or treat. If you're in crisis, contact local emergency services or a crisis line.</div>
+              <summary>
+                Is SelfOS therapy?
+                <span class="plus" aria-hidden="true"
+                  ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                    <path d="M12 5v14M5 12h14" /></svg
+                ></span>
+              </summary>
+              <div class="a">
+                No. SelfOS is a <strong>wellness and self-help tool</strong> — it is not a medical
+                device, not therapy in the clinical sense, and not a substitute for professional
+                care. It draws on therapeutic <em>frameworks</em> to help you reflect, but it
+                doesn't diagnose or treat. If you're in crisis, contact local emergency services or
+                a crisis line.
+              </div>
             </details>
             <details class="q reveal">
-              <summary>Is my data really private? <span class="plus" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg></span></summary>
-              <div class="a">Yes. There's no backend and no account. Your content lives in encrypted files in a folder you choose, on your own machine. The only outbound network calls are the messages you send to the Claude API (with your own key) and a lightweight version check to GitHub — which sends no personal data and can be turned off.</div>
+              <summary>
+                Is my data really private?
+                <span class="plus" aria-hidden="true"
+                  ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                    <path d="M12 5v14M5 12h14" /></svg
+                ></span>
+              </summary>
+              <div class="a">
+                Yes. There's no backend and no account. Your content lives in encrypted files in a
+                folder you choose, on your own machine. The only outbound network calls are the
+                messages you send to the Claude API (with your own key) and a lightweight version
+                check to GitHub — which sends no personal data and can be turned off.
+              </div>
             </details>
             <details class="q reveal">
-              <summary>Do I need a Claude API key? What does it cost? <span class="plus" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg></span></summary>
-              <div class="a">SelfOS itself is free and open. The AI features use your own <strong>Anthropic (Claude) API key</strong>, billed directly to your Anthropic account — there's no subscription to us. SelfOS includes per-person and household budgets, prompt caching, and a usage view to keep costs visible and in check.</div>
+              <summary>
+                Do I need a Claude API key? What does it cost?
+                <span class="plus" aria-hidden="true"
+                  ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                    <path d="M12 5v14M5 12h14" /></svg
+                ></span>
+              </summary>
+              <div class="a">
+                SelfOS itself is free and open. The AI features use your own
+                <strong>Anthropic (Claude) API key</strong>, billed directly to your Anthropic
+                account — there's no subscription to us. SelfOS includes per-person and household
+                budgets, prompt caching, and a usage view to keep costs visible and in check.
+              </div>
             </details>
             <details class="q reveal">
-              <summary>Which platforms are supported? <span class="plus" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg></span></summary>
-              <div class="a"><strong>macOS</strong> today (the build is currently unsigned, so first launch needs a one-time Gatekeeper bypass — see the README). An <strong>iPhone</strong> companion that shares the same vault over iCloud Drive is in the works. Windows and Linux are later phases.</div>
+              <summary>
+                Which platforms are supported?
+                <span class="plus" aria-hidden="true"
+                  ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                    <path d="M12 5v14M5 12h14" /></svg
+                ></span>
+              </summary>
+              <div class="a">
+                <strong>macOS</strong> today (the build is currently unsigned, so first launch needs
+                a one-time Gatekeeper bypass — see the README). An <strong>iPhone</strong> companion
+                that shares the same vault over iCloud Drive is in the works. Windows and Linux are
+                later phases.
+              </div>
             </details>
             <details class="q reveal">
-              <summary>Can my partner or household use it too? <span class="plus" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg></span></summary>
-              <div class="a">Yes. SelfOS supports multiple people and the relationships between them. Each person gets their own coaching, and you choose exactly what context is shared — scoped by relationship type. "Shared" means it can <em>inform</em> the other person's AI, but is never shown to them directly.</div>
+              <summary>
+                Can my partner or household use it too?
+                <span class="plus" aria-hidden="true"
+                  ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                    <path d="M12 5v14M5 12h14" /></svg
+                ></span>
+              </summary>
+              <div class="a">
+                Yes. SelfOS supports multiple people and the relationships between them. Each person
+                gets their own coaching, and you choose exactly what context is shared — scoped by
+                relationship type. "Shared" means it can <em>inform</em> the other person's AI, but
+                is never shown to them directly.
+              </div>
             </details>
             <details class="q reveal">
-              <summary>Is it open source? <span class="plus" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg></span></summary>
-              <div class="a">The source is public on <a href="https://github.com/Highfivery/SelfOS">GitHub</a>, built spec-first and slice by slice. You can read every line, build it yourself, and see exactly how your data is handled.</div>
+              <summary>
+                Is it open source?
+                <span class="plus" aria-hidden="true"
+                  ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+                    <path d="M12 5v14M5 12h14" /></svg
+                ></span>
+              </summary>
+              <div class="a">
+                The source is public on <a href="https://github.com/Highfivery/SelfOS">GitHub</a>,
+                built spec-first and slice by slice. You can read every line, build it yourself, and
+                see exactly how your data is handled.
+              </div>
             </details>
           </div>
         </div>
@@ -1637,13 +2018,31 @@
           <div class="cta-band reveal">
             <p class="eyebrow">Start where you are</p>
             <h2>A calmer, more self-aware you — privately.</h2>
-            <p>Download SelfOS for macOS, point it at a folder, add your Claude key, and have your first session today. Your data never leaves your hands.</p>
+            <p>
+              Download SelfOS for macOS, point it at a folder, add your Claude key, and have your
+              first session today. Your data never leaves your hands.
+            </p>
             <div class="cta-actions">
-              <a class="btn btn-primary" href="https://github.com/Highfivery/SelfOS/releases/latest">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M16.5 2.1c.1 1.1-.3 2.2-1 3-.7.9-1.9 1.5-3 1.4-.1-1.1.4-2.2 1-3 .8-.9 2-1.5 3-1.4zM19.6 17c-.5 1.2-.8 1.7-1.5 2.8-.9 1.5-2.3 3.3-3.9 3.3-1.5 0-1.8-1-3.8-1-1.9 0-2.4 1-3.8 1-1.6 0-2.9-1.7-3.8-3.1C-.1 16-.4 11.3 1.2 8.8 2.3 7 4.1 5.9 5.8 5.9c1.7 0 2.8 1 4.2 1 1.4 0 2.2-1 4.2-1 1.5 0 3 .8 4.1 2.2-3.6 2-3 7.1 1.3 8.9z"/></svg>
+              <a
+                class="btn btn-primary"
+                href="https://github.com/Highfivery/SelfOS/releases/latest"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M16.5 2.1c.1 1.1-.3 2.2-1 3-.7.9-1.9 1.5-3 1.4-.1-1.1.4-2.2 1-3 .8-.9 2-1.5 3-1.4zM19.6 17c-.5 1.2-.8 1.7-1.5 2.8-.9 1.5-2.3 3.3-3.9 3.3-1.5 0-1.8-1-3.8-1-1.9 0-2.4 1-3.8 1-1.6 0-2.9-1.7-3.8-3.1C-.1 16-.4 11.3 1.2 8.8 2.3 7 4.1 5.9 5.8 5.9c1.7 0 2.8 1 4.2 1 1.4 0 2.2-1 4.2-1 1.5 0 3 .8 4.1 2.2-3.6 2-3 7.1 1.3 8.9z"
+                  />
+                </svg>
                 Download for macOS
               </a>
-              <a class="btn btn-ghost" href="https://github.com/Highfivery/SelfOS">View on GitHub</a>
+              <a class="btn btn-ghost" href="https://github.com/Highfivery/SelfOS"
+                >View on GitHub</a
+              >
             </div>
           </div>
         </div>
@@ -1652,10 +2051,12 @@
       <!-- Disclaimer -->
       <div class="disclaimer reveal">
         <div class="box">
-          <strong>SelfOS is a wellness and self-help tool — not a medical device, and not a substitute
-          for professional care.</strong> It does not provide diagnosis or treatment. If you are in
-          crisis or may be a danger to yourself or others, contact local emergency services or a crisis
-          line right away.
+          <strong
+            >SelfOS is a wellness and self-help tool — not a medical device, and not a substitute
+            for professional care.</strong
+          >
+          It does not provide diagnosis or treatment. If you are in crisis or may be a danger to
+          yourself or others, contact local emergency services or a crisis line right away.
         </div>
       </div>
     </main>
@@ -1666,7 +2067,17 @@
         <div class="foot-top">
           <a class="brand" href="#top" aria-label="SelfOS home">
             <span class="tile" aria-hidden="true">
-              <svg viewBox="0 0 28 28"><path class="leaf-back" d="M14 17 C 9.5 17.5 6 14 5.5 8 C 11 8.5 13.5 12.5 14 17 Z"/><path class="leaf-front" d="M14 15 C 18.5 15.5 22 12 22.5 6 C 17 6.5 14.5 10.5 14 15 Z"/><path class="stem" d="M14 25 C 13 21 13.4 17 14 13"/></svg>
+              <svg viewBox="0 0 28 28">
+                <path
+                  class="leaf-back"
+                  d="M14 17 C 9.5 17.5 6 14 5.5 8 C 11 8.5 13.5 12.5 14 17 Z"
+                />
+                <path
+                  class="leaf-front"
+                  d="M14 15 C 18.5 15.5 22 12 22.5 6 C 17 6.5 14.5 10.5 14 15 Z"
+                />
+                <path class="stem" d="M14 25 C 13 21 13.4 17 14 13" />
+              </svg>
             </span>
             SelfOS
           </a>
@@ -1680,8 +2091,13 @@
           </nav>
         </div>
         <div class="foot-bottom">
-          <p>An AI therapist &amp; life coach for reflection and self-coaching — calm, private, and entirely yours.</p>
-          <p>© <span id="year">2026</span> SelfOS · Built with Claude · macOS · Not medical software.</p>
+          <p>
+            An AI therapist &amp; life coach for reflection and self-coaching — calm, private, and
+            entirely yours.
+          </p>
+          <p>
+            © <span id="year">2026</span> SelfOS · Built with Claude · macOS · Not medical software.
+          </p>
         </div>
       </div>
     </footer>
@@ -1720,7 +2136,7 @@
               }
             });
           },
-          { rootMargin: '0px 0px -10% 0px', threshold: 0.08 }
+          { rootMargin: '0px 0px -10% 0px', threshold: 0.08 },
         );
         document.querySelectorAll('.reveal').forEach(function (el) {
           io.observe(el);

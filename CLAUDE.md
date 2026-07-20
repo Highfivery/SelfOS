@@ -419,6 +419,39 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-19 — **Hardening + housekeeping (the three loose ends the dream-image fix surfaced; on
+  `fix/dream-carry-forward-guard-and-flakes`).** Follow-up to #257, addressing everything that fix turned up
+  rather than just the one field. **(1) The ROOT CAUSE — a compile-time carry-forward guard.** `dreamSave`
+  rebuilds the `Dream` from the narrower `DreamInput` plus a **hand-listed** set of main-owned fields, so the
+  list is opt-in and a new additive-optional main-written field is silently droppable on the next edit (exactly
+  how `Dream.image` was lost). Added `MainOwnedDreamField = Exclude<keyof Dream, keyof DreamInput>` split into
+  `DreamFieldSetOnSave` / `DreamFieldCarriedForward`, with a `never` assertion that **fails the build** if
+  `Dream` gains a main-owned field nobody triaged. **Verified it trips** by temporarily adding a field to
+  `DreamSchema` (`error TS2322: Type 'true' is not assignable to type 'never'`). **(2) A real pre-push/CI
+  flake, not a fluke.** `relayMailbox.test.ts` blocked a push with 2 timeouts; root-caused (not retried-away)
+  to the PIN gate's deliberately expensive salted scrypt (N=16384) — the lockout tests burn a full
+  `MAX_PIN_ATTEMPTS` run of wrong guesses, fine in isolation but over the 5s default under parallel load.
+  Gave the block `{ timeout: 30_000 }` rather than weakening assertions or cheapening the KDF (**the cost IS
+  the brute-force protection under test**). **(3) `site/index.html` is finally Prettier-clean.** It had been
+  "pre-existing unclean, left untouched" for months, which meant it silently re-dirtied the tree and twice
+  nearly rode along in an unrelated commit. Formatted for real; **proved the reflow is behaviour-preserving**
+  — no `<pre>`/`white-space:pre`, and the only content change is Prettier adding an ES2017 trailing comma in
+  an inline `IntersectionObserver(…, {…},)` call — then **A/B'd both versions in a real browser** (identical
+  settled `scrollHeight` 20435, 19 links, 44 images, same reveals; no console errors; theme toggle still
+  persists). `pnpm format:check` is now clean repo-wide for the first time. **(4) The read-then-write race —
+  owner decision: "late re-read only".** `dreamSave` and `generateDreamImage` are both
+  read-then-write-the-whole-record, so last-write-wins. On inspection the read was **already** immediately
+  before the write, so this is a comment documenting the real (microsecond) window + the invariant that it
+  must stay there, NOT a behaviour change — I'd initially overstated the window as "seconds" and corrected
+  that rather than shipping a no-op dressed as a fix. Fully closing it (field-level merge in `saveDream`, or
+  serialization across every dream writer) was explicitly deferred as wider than a bug fix. Gate green:
+  typecheck, lint, **format repo-wide**, **1483 core + 12 relay + 1347 desktop** unit, **9 dream E2E**.
+  **Lesson: when a handler rebuilds a record from a narrower input schema plus a hand-listed carry-forward,
+  the list itself is the bug — patch the field, then make the NEXT one a compile error (`Exclude<keyof Full,
+keyof Input>` + a `never` assertion), and prove the tripwire trips by temporarily adding a field. And a
+  "pre-existing unclean" file is not inert: it re-dirties the tree and will eventually ride along in someone
+  else's commit — fix it or ignore it, don't leave it half-way.**
+
 - 2026-07-19 — **Fix (editing a dream silently DROPPED its generated image; SPEC 13 §4.2; on
   `claude/brave-hugle-19da20`).** `coreBridge.dreamSave` rebuilds the `Dream` from `DreamInputSchema.parse(input)`
   plus a few explicitly carried-forward main-owned fields (`id`/`status`/`analysisId`/`createdAt`). **`Dream.image`

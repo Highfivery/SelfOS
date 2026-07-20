@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.1](https://github.com/Highfivery/SelfOS/compare/v0.41.0...v0.41.1) (2026-07-20)
+
+
+### Bug Fixes
+
+* **together:** remove the empty space beside the Pulse trend charts ([#282](https://github.com/Highfivery/SelfOS/issues/282)) ([0cb402e](https://github.com/Highfivery/SelfOS/commit/0cb402e955931aedec02a33005b2536b6ceaaa88))
+
 ## [0.41.0](https://github.com/Highfivery/SelfOS/compare/v0.40.1...v0.41.0) (2026-07-20)
 
 

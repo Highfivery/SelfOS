@@ -329,6 +329,39 @@ describe('generateDreamImage', () => {
     expect(Array.from((await getDreamImage(fs, key, 'p1', 'd1'))?.bytes ?? [])).toEqual([9, 9]);
   });
 
+  it('does not clobber an edit (or a share) saved WHILE the image was generating', async () => {
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1', narrative: 'the original dump' }));
+
+    // The dreamer edits the dream and shares the (previous) image mid-generation. The image client runs
+    // between generateDreamImage's read and its write, so this stands in for the tens of seconds the two
+    // network calls take — the exact window in which a `{...staleDream}` write would lose typed prose.
+    const editMidFlight: ImageClient = {
+      verify: () => Promise.resolve(),
+      generate: async (o) => {
+        imageCaptured.prompt = o.prompt;
+        const live = await getDream(fs, key, 'p1', 'd1');
+        await saveDream(fs, key, {
+          ...live!,
+          narrative: 'a clearer retelling typed during generation',
+          title: 'Edited mid-flight',
+          image: {
+            ...(live!.image ?? { style: 's', mime: 'image/png', generatedAt: 'x', model: 'm' }),
+            shareableWith: ['partner-1'],
+          },
+        });
+        return { ok: true, image: { bytes: new Uint8Array([7, 7]), mime: 'image/png' } };
+      },
+    };
+
+    expect((await generateDreamImage(deps({ image: editMidFlight }))).ok).toBe(true);
+
+    const after = await getDream(fs, key, 'p1', 'd1');
+    expect(after?.narrative).toBe('a clearer retelling typed during generation'); // prose survived
+    expect(after?.title).toBe('Edited mid-flight');
+    expect(after?.image?.shareableWith).toEqual(['partner-1']); // share made mid-flight honoured
+    expect(Array.from((await getDreamImage(fs, key, 'p1', 'd1'))?.bytes ?? [])).toEqual([7, 7]);
+  });
+
   it('deletes the image bytes + clears the descriptor', async () => {
     await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
     await generateDreamImage(deps());
@@ -408,6 +441,39 @@ describe('dream image sharing', () => {
     await fs.remove('relationships/r-p1-p2.enc');
     expect(await getSharedDreamImage(fs, key, 'p2', 'p1', 'd1')).toBeNull();
     expect(await listImagesSharedWith(fs, key, 'p2')).toEqual([]);
+  });
+
+  it('escalating sensitivity RETAINS shareableWith but denies every read; de-escalating restores it', async () => {
+    // `sensitivity` is editable via DreamInput, so standard → explicit is reachable through "Edit dream".
+    // PINNED SEMANTICS: the share list is RETAINED (it is the dreamer's explicit §3.6 choice, and the
+    // regenerate path preserves it the same way) while the tier gate makes it INERT — every read denies.
+    // Dropping back to standard therefore reactivates the prior shares without a fresh explicit act; that
+    // is intended and visible (the panel renders the live list). If you change either half, change this.
+    await seedSharedImage();
+    await setDreamImageShare({
+      fs,
+      key,
+      dreamerId: 'p1',
+      dreamId: 'd1',
+      targetPersonId: 'p2',
+      shared: true,
+      now: NOW,
+    });
+    expect(await getSharedDreamImage(fs, key, 'p2', 'p1', 'd1')).not.toBeNull();
+
+    const shared = await getDream(fs, key, 'p1', 'd1');
+    await saveDream(fs, key, { ...shared!, sensitivity: 'explicit' });
+
+    // Retained on disk…
+    expect((await getDream(fs, key, 'p1', 'd1'))?.image?.shareableWith).toEqual(['p2']);
+    // …but inert: both read paths deny while the dream is sensitive.
+    expect(await getSharedDreamImage(fs, key, 'p2', 'p1', 'd1')).toBeNull();
+    expect(await listImagesSharedWith(fs, key, 'p2')).toEqual([]);
+
+    // Back to standard → the retained share is live again (no re-share needed).
+    const sensitive = await getDream(fs, key, 'p1', 'd1');
+    await saveDream(fs, key, { ...sensitive!, sensitivity: 'standard' });
+    expect(await getSharedDreamImage(fs, key, 'p2', 'p1', 'd1')).not.toBeNull();
   });
 
   it('refuses to share a sensitive-tier dream + a non-related target', async () => {

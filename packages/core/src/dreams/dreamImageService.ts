@@ -311,16 +311,22 @@ export async function generateDreamImage(
     dreamImagePath(personId, dreamId),
     new TextEncoder().encode(JSON.stringify(envelope)),
   );
+  //    RE-READ before writing. The `dream` above was fetched BEFORE two network calls (the Claude
+  //    distillation + the OpenAI render), so by now it is tens of seconds stale — spreading it would
+  //    clobber a narrative edit the dreamer saved while the image was generating, losing typed prose
+  //    (strictly worse than losing a regenerable image). Only the image fields are ours to write here;
+  //    everything else comes from the current record. `shareableWith` is read from the fresh copy too,
+  //    so a share/un-share made during generation is honoured rather than reverted.
+  const fresh = (await getDream(fs, key, personId, dreamId)) ?? dream;
+  const carriedShares = fresh.image?.shareableWith;
   const descriptor: DreamImageDescriptor = {
     style,
     mime,
     generatedAt: at,
     model: imageModel,
-    ...(dream.image?.shareableWith && dream.image.shareableWith.length > 0
-      ? { shareableWith: dream.image.shareableWith }
-      : {}),
+    ...(carriedShares && carriedShares.length > 0 ? { shareableWith: carriedShares } : {}),
   };
-  await saveDream(fs, key, { ...dream, image: descriptor, updatedAt: at });
+  await saveDream(fs, key, { ...fresh, image: descriptor, updatedAt: at });
 
   return { ok: true, descriptor, mime, promptUsage, imageUsage };
 }

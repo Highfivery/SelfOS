@@ -403,6 +403,15 @@ Typed channels (`src/shared`, Zod-validated both sides; the API key never crosse
 gated by **`dreams.own`** unless noted:
 
 - **Journal** — `dreams:list` / `:get` / `:save` / `:delete` (delete purges the dream folder + its Insight).
+  - `dreams:save` rebuilds the `Dream` from the narrower `DreamInput`, so every **main-owned** field is
+    either **set fresh** (`schemaVersion`, `personId`, `status`, `createdAt`, `updatedAt`) or **carried
+    forward** from the existing record (`analysisId`, `image`). The distinction matters: a main-written
+    field the renderer cannot send is silently wiped by the next edit unless it is carried forward —
+    that is how `Dream.image` was once lost, orphaning the encrypted bytes at `dreams/<id>/image.enc`.
+    A compile-time guard in `dreamSave` now fails the build if `Dream` gains a main-owned field that is
+    in neither list. **Adding a field to `Dream`? Classify it here.**
+  - Both `dreams:save` and `generateDreamImage` write the **whole** record, so they re-read immediately
+    before writing (last-write-wins is narrowed, not eliminated — see §7).
 - **Analysis** — `dreams:analyzeTurn({ dreamId, userText })` (streams via `dreams:chunk`, reusing `05`'s
   streaming pattern; the transcript persists to the dream folder) / `dreams:synthesize({ dreamId })`
   (produces the `DreamAnalysis`) / `dreams:updateAnalysis` / `dreams:approve({ dreamId, edits?,

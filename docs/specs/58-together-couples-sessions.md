@@ -190,10 +190,17 @@ mockup); the sections above are unchanged in behaviour, only regrouped.
      never clamped — the single biggest contributor to the old scroll length, §12 density rule). When
      Desire is not yet unlocked for the pair, the **18+ acknowledgement prompt lives quietly at the
      bottom of this tab** (never its own visible tab until it's real — see below).
-  3. **Pulse** — the check-in form + trend/alignment blocks, unchanged. Its tab carries a **"due"
-     count badge** when a check-in is due (>7 days since the last, §3.10a), mirroring the
-     Questionnaires tab-count pattern, so a check-in behind a tab isn't forgotten — the badge clears
-     once logged. (Chosen over an inline duplicate on another tab, which would be a §7 double-surface.)
+  3. **Pulse** — the check-in form + trend/alignment blocks. Its tab carries a **"due" count badge**
+     when a check-in is due (>7 days since the last, §3.10a), mirroring the Questionnaires tab-count
+     pattern, so a check-in behind a tab isn't forgotten — the badge clears once logged. (Chosen over
+     an inline duplicate on another tab, which would be a §7 double-surface.) **The two trend cards
+     ("Your check-ins" / "From your sessions") lay out in a centered, width-capped grid** (`auto-fit`
+     columns capped at 540px, `justify-content: center`): two cards sit side by side filling the width,
+     and a lone card (a couple with only one data source yet) is a bounded, centered chart rather than a
+     narrow chart adrift in a full-width card with a big empty right. A fixed-aspect chart can't be
+     full-width without becoming enormously tall (the `LineChart` gained an optional `maxWidth` so a
+     dashboard column can raise its 440px default), so capping + centering is both the §12 chart
+     exception and what "don't make them span the full width" wants.
   4. **🔒 Desire** — the full Desire & intimacy panel (YNM + the 3 adult practices). **The tab appears
      ONLY once BOTH partners have acknowledged 18+ / enabled adult content** (`status.eligible`, the
      existing host-gated conjunction) — so the word "Desire" is never on screen over someone's

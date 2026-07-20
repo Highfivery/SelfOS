@@ -56,4 +56,13 @@ describe('LineChart', () => {
     );
     expect(ringed).toHaveLength(1);
   });
+
+  it('applies an optional maxWidth override so callers can fill a wider column', () => {
+    const series = [{ label: 'A', points: [{ x: 0, y: 1 }] }];
+    const { container, rerender } = render(<LineChart ariaLabel="default" series={series} />);
+    // Default: no inline max-width (the CSS default 440px cap applies).
+    expect((container.firstElementChild as HTMLElement).style.maxWidth).toBe('');
+    rerender(<LineChart ariaLabel="wide" series={series} maxWidth={600} />);
+    expect((container.firstElementChild as HTMLElement).style.maxWidth).toBe('600px');
+  });
 });

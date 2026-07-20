@@ -168,6 +168,18 @@
   gap: var(--space-2);
 }
 /* ── Pulse redesign (58 §3.10a, "Two clean charts") ─────────────────────────────────────────────── */
+/* The two trend cards sit side by side so each chart fills a bounded column instead of floating in a
+   full-width card with a big empty right (§3.2a). Columns cap at 540px and the group is CENTERED, so a lone
+   card (a new couple with only one data source yet) reads as an intentional centered chart rather than a
+   narrow chart adrift in a wide card. Fixed-aspect charts capping their width is the §12 chart exception —
+   and exactly what "don't make them span the full width" asked for. Stacks to one column below ~620px. */
+.pulseCharts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 540px));
+  gap: var(--space-3);
+  justify-content: center;
+  align-items: start;
+}
 /* A trend group card — "Your check-ins" / "From your sessions", each with its own chart or current-value read. */
 .pulseGroup {
   display: flex;

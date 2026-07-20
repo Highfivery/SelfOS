@@ -36,10 +36,20 @@ describe('ChallengeCard', () => {
     expect(screen.getByRole('heading', { name: /your challenge/i })).toBeInTheDocument();
     expect(screen.getByText(/say the honest thing/i)).toBeInTheDocument();
     expect(screen.getByText(/day 3/i)).toBeInTheDocument(); // agreed 2 days ago → day 3
-    expect(screen.getByRole('button', { name: /reflect on it/i })).toBeInTheDocument();
   });
 
-  it('invites a check-in once one is due', () => {
+  // 52 §3.3 (amended): before a check-in is due, THIS card owns the actions — the "For you"
+  // `challenge-checkin` recommendation isn't showing, so without these Home offers no way to act.
+  it('offers inline quick actions while no check-in is due', () => {
+    useChallengeStore.setState({ challenges: [challenge({})], loaded: true });
+    renderCard();
+    expect(screen.getByRole('button', { name: 'I did it' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Not yet' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reflect' })).toBeInTheDocument();
+  });
+
+  // …and once it IS due, the card defers so Home never offers the same check-in twice (§7).
+  it('hides its action row once a check-in is due, deferring to the focal recommendation', () => {
     useChallengeStore.setState({
       challenges: [challenge({ checkInAt: new Date(Date.now() - 3600_000).toISOString() })],
       loaded: true,
@@ -47,6 +57,8 @@ describe('ChallengeCard', () => {
     renderCard();
     expect(screen.getByText(/ready for a check-in/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /how.s it going/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'I did it' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Not yet' })).toBeNull();
   });
 
   it('self-hides when there is no active challenge', () => {

@@ -221,7 +221,9 @@ export function Together(): JSX.Element {
             />
           ) : null}
 
-          {partnerId ? <TogetherJointChallenges partnerId={partnerId} /> : null}
+          {partnerId ? (
+            <TogetherJointChallenges partnerId={partnerId} partnerName={partnerName} />
+          ) : null}
 
           {partnerId ? (
             <TogetherIntimacy

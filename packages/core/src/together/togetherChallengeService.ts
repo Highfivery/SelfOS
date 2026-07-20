@@ -106,10 +106,16 @@ export async function listJointChallenges(
   return out.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
-/** A grounding-pack line describing where the pair's OPEN joint challenges stand (§5.6). Empty when none. */
+/**
+ * A grounding-pack line describing where the pair's OPEN joint challenges stand (§5.6). Empty when none.
+ *
+ * Keyed on `active` alone: a pair who LET A CHALLENGE GO leaves every twin `abandoned`, which is
+ * `active: false, allCheckedIn: false` — the old `active || !allCheckedIn` test kept grounding the coach on it
+ * as a live commitment forever. Only a still-live challenge belongs in the pack.
+ */
 export function jointChallengeGroundingLines(statuses: JointChallengeStatus[]): string[] {
   return statuses
-    .filter((s) => s.active || !s.allCheckedIn)
+    .filter((s) => s.active)
     .map((s) => {
       const where = s.allCheckedIn
         ? 'both of you have checked in'

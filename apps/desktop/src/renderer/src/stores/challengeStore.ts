@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type {
   Challenge,
+  ChallengeCheckInResult,
   ChallengeOutcome,
   ChallengeStatus,
   ChallengeSuggestion,
@@ -16,7 +17,12 @@ interface ChallengeState {
   load: () => Promise<void>;
   reset: () => void;
   setStatus: (challengeId: string, status: ChallengeStatus) => Promise<void>;
-  checkIn: (challengeId: string, outcome: ChallengeOutcome, reflection?: string) => Promise<void>;
+  /** Returns the bridge result so a caller can surface an honest failure (e.g. a stale/missing twin). */
+  checkIn: (
+    challengeId: string,
+    outcome: ChallengeOutcome,
+    reflection?: string,
+  ) => Promise<ChallengeCheckInResult | null>;
   snooze: (challengeId: string) => Promise<void>;
   seedGoal: (challengeId: string) => Promise<Challenge | null>;
   remove: (challengeId: string) => Promise<void>;
@@ -43,12 +49,14 @@ export const useChallengeStore = create<ChallengeState>((set, get) => ({
     await get().load();
   },
   checkIn: async (challengeId, outcome, reflection) => {
-    await window.selfos?.challengesCheckIn({
-      challengeId,
-      outcome,
-      ...(reflection ? { reflection } : {}),
-    });
+    const result =
+      (await window.selfos?.challengesCheckIn({
+        challengeId,
+        outcome,
+        ...(reflection ? { reflection } : {}),
+      })) ?? null;
     await get().load();
+    return result;
   },
   snooze: async (challengeId) => {
     await window.selfos?.challengesSnooze({ challengeId });

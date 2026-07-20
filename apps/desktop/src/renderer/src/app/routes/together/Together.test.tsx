@@ -2,7 +2,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import type { Person, TogetherSessionSummary, TogetherSessionView } from '@shared/schemas';
+import type {
+  Challenge,
+  JointChallengeStatus,
+  Person,
+  TogetherSessionSummary,
+  TogetherSessionView,
+} from '@shared/schemas';
 import { Together } from './Together';
 import { InvitationCeremony } from './InvitationCeremony';
 import { TogetherThread } from './TogetherThread';
@@ -22,6 +28,7 @@ import type {
   TogetherYnmStatus,
 } from '@shared/schemas';
 import { useTogetherStore } from '../../../stores/togetherStore';
+import { useChallengeStore } from '../../../stores/challengeStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
 
@@ -818,38 +825,174 @@ describe('TogetherPulse (§3.10a)', () => {
 });
 
 describe('TogetherJointChallenges (§5.6)', () => {
-  it('renders the pair’s open joint challenge with its cross-partner status', async () => {
+  const jointStatus = (over: Partial<JointChallengeStatus> = {}): JointChallengeStatus => ({
+    groupId: 'g1',
+    action: 'Share one appreciation a day',
+    memberCount: 2,
+    checkedInCount: 1,
+    allCheckedIn: false,
+    active: true,
+    updatedAt: 'now',
+    ...over,
+  });
+
+  /** The viewer's OWN twin, as it lives in their person-scoped challenge store (matched by `groupId`). */
+  const ownChallenge = (over: Partial<Challenge> = {}): Challenge => ({
+    id: 'ch-mine',
+    schemaVersion: 1,
+    subjectPersonId: 'me',
+    action: 'Share one appreciation a day',
+    status: 'active',
+    comfort: 3,
+    provenance: { conversationId: 's1', at: '2026-07-01T00:00:00.000Z' },
+    groupId: 'g1',
+    createdAt: '2026-07-01T00:00:00.000Z',
+    updatedAt: '2026-07-01T00:00:00.000Z',
+    ...over,
+  });
+
+  /**
+   * Seed the viewer's OWN twins. The tile refreshes the per-person store on mount (a twin minted mid-session
+   * would otherwise leave a stale-but-loaded list), so the BRIDGE has to serve the same records the store is
+   * seeded with — seeding alone would be raced away by that load.
+   */
+  const seedOwn = (challenges: Challenge[]): void => {
+    useChallengeStore.setState({ challenges, suggestion: null, loaded: true });
+  };
+
+  afterEach(() => {
+    useChallengeStore.getState().reset();
+  });
+
+  it('names whose turn it is rather than showing a bare count', async () => {
     installMockBridge({
-      togetherJointChallenges: () =>
-        Promise.resolve([
-          {
-            groupId: 'g1',
-            action: 'Share one appreciation a day',
-            memberCount: 2,
-            checkedInCount: 1,
-            allCheckedIn: false,
-            active: true,
-            updatedAt: 'now',
-          },
-        ]),
+      togetherJointChallenges: () => Promise.resolve([jointStatus()]),
+      challengesList: () => Promise.resolve([ownChallenge()]),
     });
+    seedOwn([ownChallenge()]); // the partner checked in, the viewer hasn't
     render(
       <MemoryRouter>
-        <TogetherJointChallenges partnerId="partner" />
+        <TogetherJointChallenges partnerId="partner" partnerName="Angel" />
       </MemoryRouter>,
     );
     expect(await screen.findByText('Share one appreciation a day')).toBeInTheDocument();
-    expect(screen.getByText('1 of 2 checked in')).toBeInTheDocument();
+    expect(screen.getByText('Angel checked in · your turn')).toBeInTheDocument();
+    // The old dead-end pointer is gone (§12 — the control lives here now).
+    expect(screen.queryByText(/Track your own check-in on Home/)).toBeNull();
+  });
+
+  it('checks in from the strip: one tap expands the outcome row, which records against the own twin', async () => {
+    const checkInCalls: unknown[] = [];
+    installMockBridge({
+      togetherJointChallenges: () => Promise.resolve([jointStatus()]),
+      challengesCheckIn: (input) => {
+        checkInCalls.push(input);
+        return Promise.resolve({
+          ok: true as const,
+          challenge: ownChallenge({ status: 'done', outcome: 'did' }),
+        });
+      },
+      // The tile refreshes the per-person store on mount, so the bridge must serve the twin too.
+      challengesList: () => Promise.resolve([ownChallenge()]),
+    });
+    seedOwn([ownChallenge()]);
+    render(
+      <MemoryRouter>
+        <TogetherJointChallenges partnerId="partner" partnerName="Angel" />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Check in' }));
+    await userEvent.type(screen.getByLabelText('Your reflection'), 'went well');
+    await userEvent.click(screen.getByRole('button', { name: 'I did it' }));
+
+    expect(checkInCalls).toEqual([
+      { challengeId: 'ch-mine', outcome: 'did', reflection: 'went well' },
+    ]);
+  });
+
+  it('offers no check-in once the viewer’s own twin is done, and waits on the partner', async () => {
+    const done = ownChallenge({ status: 'done', outcome: 'did' });
+    installMockBridge({
+      togetherJointChallenges: () => Promise.resolve([jointStatus({ checkedInCount: 1 })]),
+      challengesList: () => Promise.resolve([done]),
+    });
+    seedOwn([done]);
+    render(
+      <MemoryRouter>
+        <TogetherJointChallenges partnerId="partner" partnerName="Angel" />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('You’ve checked in · waiting on Angel')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Check in' })).toBeNull();
+  });
+
+  it('keeps a finished joint challenge in a collapsed Completed & closed group', async () => {
+    installMockBridge({
+      togetherJointChallenges: () =>
+        Promise.resolve([
+          jointStatus({ groupId: 'g-done', allCheckedIn: true, active: false, checkedInCount: 2 }),
+        ]),
+    });
+    seedOwn([]);
+    render(
+      <MemoryRouter>
+        <TogetherJointChallenges partnerId="partner" partnerName="Angel" />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Completed & closed (1)')).toBeInTheDocument();
+  });
+
+  // A pair who let a challenge go leaves it `active:false, allCheckedIn:false` — it must CLOSE, not sit in
+  // the open list forever with no live twin and therefore no way to clear it.
+  it('closes a let-go joint challenge instead of stranding it as un-actionable', async () => {
+    installMockBridge({
+      togetherJointChallenges: () =>
+        Promise.resolve([
+          jointStatus({ groupId: 'g-gone', active: false, allCheckedIn: false, checkedInCount: 0 }),
+        ]),
+    });
+    seedOwn([]);
+    render(
+      <MemoryRouter>
+        <TogetherJointChallenges partnerId="partner" partnerName="Angel" />
+      </MemoryRouter>,
+    );
+    // It's closed (not stranded in the open list), and reports HOW it ended once the group is expanded.
+    expect(screen.queryByText('Neither of you has checked in yet')).toBeNull();
+    await userEvent.click(await screen.findByRole('button', { name: /Completed & closed \(1\)/ }));
+    expect(screen.getByText('Let go')).toBeInTheDocument();
+  });
+
+  it('surfaces a failed check-in and keeps the typed note instead of silently discarding it', async () => {
+    installMockBridge({
+      togetherJointChallenges: () => Promise.resolve([jointStatus({ checkedInCount: 0 })]),
+      challengesList: () => Promise.resolve([ownChallenge()]),
+      challengesCheckIn: () =>
+        Promise.resolve({ ok: false as const, reason: 'NOT_FOUND' as const, message: 'Gone.' }),
+    });
+    seedOwn([ownChallenge()]);
+    render(
+      <MemoryRouter>
+        <TogetherJointChallenges partnerId="partner" partnerName="Angel" />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Check in' }));
+    await userEvent.type(screen.getByLabelText('Your reflection'), 'went well');
+    await userEvent.click(screen.getByRole('button', { name: 'I did it' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Gone.');
+    expect(screen.getByLabelText('Your reflection')).toHaveValue('went well');
   });
 
   it('self-hides when the pair has no joint challenge', async () => {
     installMockBridge({ togetherJointChallenges: () => Promise.resolve([]) });
+    seedOwn([]);
     const { container } = render(
       <MemoryRouter>
-        <TogetherJointChallenges partnerId="partner" />
+        <TogetherJointChallenges partnerId="partner" partnerName="Angel" />
       </MemoryRouter>,
     );
-    // Nothing renders (the card returns null when there are no open joint challenges).
+    // Nothing renders (the card returns null when there are no joint challenges at all).
     await waitForNoJointCard(container);
   });
 });

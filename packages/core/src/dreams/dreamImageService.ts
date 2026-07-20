@@ -2,6 +2,7 @@ import { decryptBytes, encryptBytes, isEncryptedEnvelope } from '../crypto';
 import type { ClaudeClient, FileSystem, ImageClient } from '../host';
 import { uuid } from '../id';
 import type {
+  Dream,
   DreamImageDescriptor,
   DreamImageGenerateResult,
   DreamSharedImage,
@@ -10,7 +11,7 @@ import type {
 } from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { buildDepictionNote, listPeople, listRelatedPeople } from '../people';
-import { getDream, listDreams, saveDream } from './dreamService';
+import { deleteDream, getDream, listDreams, saveDream } from './dreamService';
 
 /**
  * Dream-image generation service (13-dream-images §5.2). Two providers, one orchestrator: a **Claude**
@@ -317,7 +318,33 @@ export async function generateDreamImage(
   //    (strictly worse than losing a regenerable image). Only the image fields are ours to write here;
   //    everything else comes from the current record. `shareableWith` is read from the fresh copy too,
   //    so a share/un-share made during generation is honoured rather than reverted.
-  const fresh = (await getDream(fs, key, personId, dreamId)) ?? dream;
+  //
+  //    This is past the point of no return — both calls are billed and the bytes are on disk — so the
+  //    re-read must not be able to THROW. `getDream` returns null only when the file is absent; a
+  //    malformed or undecryptable envelope throws, which is plausible on the part-synced iCloud/Dropbox
+  //    vaults we support. An escaping throw would skip the caller's `phase: 'error'` progress event and
+  //    leave the UI stuck on "rendering" forever, so treat a corrupt read as "cannot merge" and fall
+  //    back to the stale copy: reverting a concurrent edit is bad, but far better than a stuck spinner.
+  let fresh: Dream | null;
+  try {
+    fresh = await getDream(fs, key, personId, dreamId);
+  } catch {
+    fresh = dream;
+  }
+  if (!fresh) {
+    // Deleted mid-generation. Writing here would RESURRECT the dream the dreamer just deleted — and the
+    // `writeAtomic` above has already recreated its folder to hold the bytes — so undo that and fail
+    // honestly instead. Both calls really happened, so the usage stays reported (a billed failure, like
+    // the wrong-MIME branch above). Deleting again is idempotent: it just removes the folder we recreated.
+    await deleteDream(fs, personId, dreamId);
+    return {
+      ok: false,
+      reason: 'ERROR',
+      message: 'That dream was deleted while its image was being created.',
+      promptUsage,
+      imageUsage,
+    };
+  }
   const carriedShares = fresh.image?.shareableWith;
   const descriptor: DreamImageDescriptor = {
     style,
@@ -326,6 +353,11 @@ export async function generateDreamImage(
     model: imageModel,
     ...(carriedShares && carriedShares.length > 0 ? { shareableWith: carriedShares } : {}),
   };
+  // `updatedAt: at` records when the image was requested (the service's single injected clock; we do not
+  // mint a fresh `Date` — the whole module is deterministic on `now`). Caveat: if a narrative edit landed
+  // mid-flight its newer `updatedAt` is rolled back to `at` here — harmless today (nothing reads
+  // `dream.updatedAt`; `listDreams` sorts on `createdAt`), but a future "last edited" / sync check would
+  // want the max of the two. The edit's CONTENT survives (that is the fix); only its timestamp regresses.
   await saveDream(fs, key, { ...fresh, image: descriptor, updatedAt: at });
 
   return { ok: true, descriptor, mime, promptUsage, imageUsage };

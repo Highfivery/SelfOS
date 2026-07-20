@@ -7,7 +7,7 @@ import { DreamSchema } from '../schemas';
 import type { Relationship } from '../schemas';
 import { savePerson, saveRelationship } from '../people';
 import { queryUsage, setPersonBudget } from '../usage';
-import { getDream, saveDream } from './dreamService';
+import { deleteDream, getDream, saveDream } from './dreamService';
 import {
   buildImagePromptInput,
   deleteDreamImage,
@@ -360,6 +360,31 @@ describe('generateDreamImage', () => {
     expect(after?.title).toBe('Edited mid-flight');
     expect(after?.image?.shareableWith).toEqual(['partner-1']); // share made mid-flight honoured
     expect(Array.from((await getDreamImage(fs, key, 'p1', 'd1'))?.bytes ?? [])).toEqual([7, 7]);
+  });
+
+  it('does not RESURRECT a dream deleted while its image was generating', async () => {
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+
+    // The dreamer deletes the dream mid-generation (deleteDream purges the whole folder). The write that
+    // follows must not bring it back — and the image bytes written moments earlier recreate the folder,
+    // so that has to be undone too, or a deleted dream leaves a ghost directory holding an image.
+    const deleteMidFlight: ImageClient = {
+      verify: () => Promise.resolve(),
+      generate: async () => {
+        await deleteDream(fs, 'p1', 'd1');
+        return { ok: true as const, image: { bytes: new Uint8Array([3, 3]), mime: 'image/png' } };
+      },
+    };
+
+    const result = await generateDreamImage(deps({ image: deleteMidFlight }));
+    expect(result).toMatchObject({ ok: false, reason: 'ERROR' });
+    expect(await getDream(fs, key, 'p1', 'd1')).toBeNull(); // stays deleted
+    expect(await getDreamImage(fs, key, 'p1', 'd1')).toBeNull(); // no orphaned bytes
+
+    // Both calls really happened, so they stay metered (a billed failure).
+    const usage = await allUsage();
+    expect(usage.find((u) => u.type === 'dream.imagePrompt')).toBeDefined();
+    expect(usage.find((u) => u.type === 'dream.image')).toBeDefined();
   });
 
   it('deletes the image bytes + clears the descriptor', async () => {

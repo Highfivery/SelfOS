@@ -131,6 +131,37 @@ describe('dreamAnalysisService', () => {
     expect(d?.analysisId).toBe(res.analysis.id);
   });
 
+  it('does not wipe an image that was generated WHILE the synthesis ran (12 §5.1, 2nd writer)', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1', status: 'analyzing' }));
+
+    // The synthesis reads the dream, then makes its model call — during which an image generation lands
+    // and stamps Dream.image. Spreading the pre-read `dream` here would revert that (the original
+    // image-wipe bug, reached through the analysis writer instead of an edit). `patchDream` re-reads.
+    const clientThatStampsAnImageMidCall: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: async (_options, onDelta) => {
+        const live = await getDream(fs, key, 'p1', 'd1');
+        await saveDream(fs, key, {
+          ...live!,
+          image: { style: 's', mime: 'image/png', generatedAt: 'g', model: 'gpt-image-2' },
+        });
+        const text = JSON.stringify(VALID_DRAFT);
+        onDelta(text);
+        return {
+          text,
+          usage: { inputTokens: 10, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        };
+      },
+    };
+
+    const res = await synthesizeAnalysis(deps(fs, clientThatStampsAnImageMidCall));
+    expect(res.ok).toBe(true);
+    const d = await getDream(fs, key, 'p1', 'd1');
+    expect(d?.status).toBe('analyzed'); // the synthesis still marked it analyzed
+    expect(d?.image?.model).toBe('gpt-image-2'); // …WITHOUT clobbering the mid-flight image
+  });
+
   it('saves edits to a section, marks it edited, and leaves AI-owned coding intact', async () => {
     const fs = memFileSystem();
     await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));

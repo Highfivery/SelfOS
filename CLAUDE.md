@@ -419,6 +419,46 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-20 — **Build (Together home REDESIGNED into a 4-tab surface + the challenge-checkin deferral fixed;
+  SPEC 58 §3.2a + SPEC 52 §3.3; two PRs — the follow-up #279 (merged) then `feat/together-tabs-ia`).** The user:
+  the Together page had grown busy and hard to scan (7 stacked sections — hero · Pulse · sessions board · an
+  8-card guided catalog with **unclamped** blurbs · joint challenges · Desire & intimacy · crisis footer), and
+  asked to redesign it, "maybe tabs". **Process: mockup-first, and the FIRST mockup was broken** — I built it in
+  JS and delivered it into a context that renders only STATIC snapshots, so the script never ran and the user saw
+  an empty shell (they rightly called it out). Rebuilt it **pure-CSS/HTML** (radio-driven switching, no JS) so it
+  works as a static snapshot, validated it (balanced tags, every control wired, no `<script>`), and showed three
+  IA options (3-tab / 4-tab / no-tabs collapse). **Decisions locked (AskUserQuestion):** the user chose **4 tabs**
+  (Sessions · Practices · Pulse · Desire); then two sub-forks — **the Desire tab appears ONLY once BOTH partners
+  enable adult content** (a stricter privacy posture than the old always-shown "Desire & intimacy" heading — the
+  §1 "never make anyone feel surveilled" call), and **joint challenges live on the Sessions tab** ("what's active
+  between you"). **Built:** a `together/*` splat route (deep-linkable, reload-surviving) with the tab active-state
+  mirrored to `useState` (the Your Story pattern, so it also works rendered bare in RTL); the Questionnaires
+  `role="tablist"` + roving-tabindex a11y; a **"Due" badge on the Pulse tab** (reusing `pulseIsDue`, now extracted
+  to a shared `pulseDue.ts` so Home + Together share one definition — DRY). To badge the Pulse tab and gate the
+  Desire tab, the parent (`Together.tsx`) now **owns** the YNM status + Pulse view: `TogetherPulse` and
+  `TogetherIntimacy` became **controlled** (the intimacy panel split into a `variant='unlock'` affordance at the
+  bottom of Practices pre-eligibility and a `variant='panel'` full panel on the Desire tab). **The catalog blurbs
+  now clamp to 2 lines** in a denser `auto-fill minmax(240px)` grid — the single biggest scroll-length win (§12
+  density). The hero + crisis footer stay outside the tabs, present on every tab (§8.2). **The follow-up shipped
+  FIRST as its own PR (#279, merged):** `ChallengeCard` deferred its check-in row whenever a check-in was due, but
+  the "For you" band it deferred to is itself suppressed under proactivity-off/crisis/new-person/dismissal — so a
+  due check-in could be left with no inline action. Home now passes `checkInHandledElsewhere` (computed from
+  whether the `challenge-checkin` recommendation actually survived ranking), and the card defers only then. (That
+  fix is entirely on `main`; the tabs PR's only Home change is the `pulseDue` import swap.) **Gate green:**
+  typecheck, lint, format, **1381 desktop** unit (+`togetherTabs`/`pulseDue` pure helpers, +4 tab-IA RTL, +the
+  controlled-component test refactors, +the ChallengeCard suppressed-band branch), **20 Together E2E** (incl. a
+  new tab-IA walk: 3 tabs while Desire is locked, catalog behind Practices, deep-link + **reload survives** the
+  tab, 360px overflow guard). Real-Electron visual QA at desktop (clean 3-tab strip, "Due" badge, the Practices
+  grid with clamped blurbs) + 360px. **Lessons: (1) a mockup is only useful if it RENDERS where you send it — a
+  JS-driven page becomes an empty shell in a static-snapshot pane; build approval mockups pure-CSS/HTML (radio/
+  `:checked` switching) so they work anywhere, and verify before sending. (2) A tab strip must FIT at 360px (§12):
+  4 text tabs overran by ~23px, so the ≤480px rule tightens padding + shrinks the count badges — the
+  `overflow-x:auto` is then truly inert, and the E2E inner-scroller guard is what proved it (measured `sw`/`cw` to
+  find the exact overrun rather than guessing). (3) To badge/gate a tab from state a child owns, LIFT that state
+  to the parent and make the child controlled — the parent needs the YNM status even when the Desire panel isn't
+  mounted, and owning the Pulse view avoids a second fetch that would drift after a check-in. (4) A splat-route
+  tab must mirror the route param into `useState` (the Story pattern) or it breaks in RTL, where the component is
+  rendered without the matching Route so `useParams` never updates.**
 - 2026-07-20 — **Build (the Together "Joint challenge" tile becomes ACTIONABLE — plus the dead-end it pointed
   at; SPEC 58 §5.6 + SPEC 52 §3.3 amended; on `feat/joint-challenge-actions`, PR pending).** The user: the
   joint-challenge card on the Together dashboard "should have an action the user can click to log/complete,"

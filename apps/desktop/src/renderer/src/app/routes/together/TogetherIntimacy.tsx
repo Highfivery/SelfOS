@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shuffle, Lock, ShieldCheck } from 'lucide-react';
 import type { TogetherCatalogEntry, TogetherYnmStatus } from '@shared/schemas';
@@ -8,11 +8,17 @@ import { PracticeCard } from './PracticeCard';
 import styles from './Together.module.css';
 
 /**
- * The Desire & intimacy panel (58 §3.10/§3.10b), redesigned as ONE cohesive 18+ space instead of a bolted-on
- * card: the active person's one-time 18+ acknowledgement, and — once BOTH partners have acked + a live edge —
- * the symmetric, revocable Yes/No/Maybe opt-in + mutual overlap, alongside the adult guided practices. Every
- * gate is enforced host-side; this surface only reflects the bridge's `youAcked`/`eligible`/`ready`, and a
- * one-sided answer is NEVER shown (`ready:false` until both opt in).
+ * The Desire & intimacy space (58 §3.10/§3.10b), split by the §3.2a tab redesign so the word "Desire" never
+ * shows on screen until the pair has actually unlocked it:
+ *   • `variant="unlock"` — the pre-eligible affordance (the 18+ ack, then the "waiting for <partner>" state).
+ *     Rendered quietly at the bottom of the PRACTICES tab; renders NOTHING once eligible (the Desire tab
+ *     owns it). This is the only intimacy surface a not-yet-unlocked pair ever sees.
+ *   • `variant="panel"` — the full unlocked panel (Yes/No/Maybe + adult practices), rendered in the Desire
+ *     tab, which itself exists only when `status.eligible`.
+ *
+ * CONTROLLED on `status`: the parent owns the YNM status so it can decide the Desire tab's visibility without
+ * this component being mounted. Every gate is still enforced host-side; a one-sided answer is NEVER shown
+ * (`ready:false` until both opt in).
  */
 export function TogetherIntimacy({
   partnerId,
@@ -20,52 +26,57 @@ export function TogetherIntimacy({
   adultPractices,
   selectedId,
   onPick,
+  status,
+  onRefresh,
+  variant,
 }: {
   partnerId: string;
   partnerName: string;
   adultPractices: TogetherCatalogEntry[];
   selectedId: string | null;
   onPick: (entry: TogetherCatalogEntry) => void;
+  status: TogetherYnmStatus | null;
+  onRefresh: () => Promise<void>;
+  variant: 'unlock' | 'panel';
 }): JSX.Element | null {
   const navigate = useNavigate();
   const create = useTogetherStore((s) => s.create);
   const loadCatalog = useTogetherStore((s) => s.loadCatalog);
-  const [status, setStatus] = useState<TogetherYnmStatus | null>(null);
   const [overlap, setOverlap] = useState<{ key: string; label: string }[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async (): Promise<void> => {
-    const s = (await window.selfos?.togetherYnmStatus({ partnerPersonId: partnerId })) ?? null;
-    setStatus(s);
-    if (s?.ready) {
-      const o = await window.selfos?.togetherYnmOverlap({ partnerPersonId: partnerId });
-      setOverlap(o?.ready ? o.items : []);
-    } else {
-      setOverlap(null);
-    }
-  }, [partnerId]);
-
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    let cancelled = false;
+    void (async (): Promise<void> => {
+      if (status?.ready) {
+        const o = await window.selfos?.togetherYnmOverlap({ partnerPersonId: partnerId });
+        if (!cancelled) setOverlap(o?.ready ? o.items : []);
+      } else if (!cancelled) {
+        setOverlap(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [partnerId, status?.ready]);
 
   const ack = async (): Promise<void> => {
     setBusy(true);
     await window.selfos?.togetherAcknowledgeAdult();
-    await Promise.all([refresh(), loadCatalog()]);
+    await Promise.all([onRefresh(), loadCatalog()]);
     setBusy(false);
   };
   const optIn = async (): Promise<void> => {
     setBusy(true);
     await window.selfos?.togetherYnmOptIn({ partnerPersonId: partnerId });
-    await refresh();
+    await onRefresh();
     setBusy(false);
   };
   const revoke = async (): Promise<void> => {
     setBusy(true);
     await window.selfos?.togetherYnmRevoke({ partnerPersonId: partnerId });
-    await refresh();
+    await onRefresh();
     setBusy(false);
   };
   const startYnm = async (): Promise<void> => {
@@ -80,6 +91,11 @@ export function TogetherIntimacy({
   };
 
   if (!status) return null;
+  // The unlock affordance shows ONLY before the pair is eligible; once eligible, the Desire tab (variant
+  // 'panel') owns everything, so the Practices-tab instance renders nothing.
+  if (variant === 'unlock' && status.eligible) return null;
+  // The full panel only ever renders for an eligible pair (its tab doesn't exist otherwise) — belt-and-braces.
+  if (variant === 'panel' && !status.eligible) return null;
 
   return (
     <div className={styles.intimacyPanel}>

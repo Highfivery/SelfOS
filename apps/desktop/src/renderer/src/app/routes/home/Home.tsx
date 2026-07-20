@@ -48,6 +48,7 @@ import { ContinueCard } from './ContinueCard';
 import { WellbeingCard } from './WellbeingCard';
 import { DreamsCard } from './DreamsCard';
 import { MemoryCard } from './MemoryCard';
+import { pulseIsDue } from '../together/pulseDue';
 import { ChallengeCard } from './ChallengeCard';
 import { GoalsCard } from './GoalsCard';
 import { YouCard } from './YouCard';
@@ -91,15 +92,6 @@ function withinDays(iso: string | undefined, days: number, now: number): boolean
   if (!iso) return false;
   const t = Date.parse(iso);
   return !Number.isNaN(t) && now - t <= days * MS_PER_DAY && t <= now;
-}
-
-/** Days after which a Together Pulse check-in is "due" (spec 61 §3.4) — never checked in, or last > 7 days. */
-const PULSE_DUE_DAYS = 7;
-function pulseIsDue(view: { hasCheckIns: boolean; lastCheckInAt?: string }, now: number): boolean {
-  if (!view.hasCheckIns || !view.lastCheckInAt) return true;
-  const t = Date.parse(view.lastCheckInAt);
-  if (!Number.isFinite(t)) return true;
-  return now - t > PULSE_DUE_DAYS * MS_PER_DAY;
 }
 
 /** Collect the defined, non-empty values from a list of `string | undefined`. */

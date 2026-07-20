@@ -1,4 +1,3 @@
-import { useCallback, useEffect, useState } from 'react';
 import { ArrowRightLeft, MessagesSquare, User } from 'lucide-react';
 import { type PulseSeries, type TogetherPulseView } from '@shared/schemas';
 import { LineChart, Stack, Text } from '../../../design-system/components';
@@ -95,24 +94,22 @@ function TrendGroup({
   );
 }
 
+/**
+ * The Pulse check-in + trends. CONTROLLED by the parent (58 §3.2a): the parent owns the `view` so it can
+ * badge the Pulse TAB "due" without a second fetch that could drift after a check-in. `onView` (the store
+ * `setView`) lets `PulseCheckInForm` swap the view in place on log, which also clears the tab badge.
+ */
 export function TogetherPulse({
   partnerId,
   partnerName,
+  view,
+  onView,
 }: {
   partnerId: string;
   partnerName: string;
+  view: TogetherPulseView | null;
+  onView: (view: TogetherPulseView) => void;
 }): JSX.Element | null {
-  const [view, setView] = useState<TogetherPulseView | null>(null);
-
-  const refresh = useCallback(async (): Promise<void> => {
-    const v = (await window.selfos?.togetherPulse({ partnerPersonId: partnerId })) ?? null;
-    setView(v);
-  }, [partnerId]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
   if (!view) return null;
 
   const alignment = view.alignment;
@@ -124,7 +121,7 @@ export function TogetherPulse({
         partnerId={partnerId}
         partnerName={partnerName}
         {...(view.lastCheckInAt ? { lastCheckInAt: view.lastCheckInAt } : {})}
-        onLogged={setView}
+        onLogged={onView}
       />
 
       {/* Desire alignment — a you-vs-partner comparison on a Low↔High desire track (dual-consent gated). */}

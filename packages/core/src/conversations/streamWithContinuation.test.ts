@@ -5,7 +5,11 @@ import type {
   ClaudeStreamResult,
   ClaudeUsage,
 } from '../host/claudeClient';
-import { MAX_CONTINUATIONS, streamWithContinuation } from './streamWithContinuation';
+import {
+  CONTINUATION_INSTRUCTION,
+  MAX_CONTINUATIONS,
+  streamWithContinuation,
+} from './streamWithContinuation';
 import { parseChallengeMarker, stripCoachMarkers } from './guidedSteps';
 
 const USAGE: ClaudeUsage = {
@@ -81,7 +85,7 @@ describe('streamWithContinuation', () => {
     expect(deltas.join('')).toBe('It stops mid-sentence — and finishes.');
   });
 
-  it('continues via assistant prefill with thinking disabled', async () => {
+  it('continues with the partial as an assistant turn and a trailing user instruction', async () => {
     const { client, calls } = scriptedClient([
       { text: 'Half. ', stopReason: 'max_tokens' },
       { text: 'Rest.', stopReason: 'end_turn' },
@@ -89,14 +93,50 @@ describe('streamWithContinuation', () => {
     await streamWithContinuation(client, BASE, () => {});
 
     const continuation = calls[1]!;
-    const last = continuation.messages[continuation.messages.length - 1]!;
-    expect(last.role).toBe('assistant');
-    // Trailing whitespace must be trimmed — the API rejects a final assistant turn that ends in it.
-    expect(last.content).toBe('Half.');
-    // Prefill is incompatible with extended thinking, and the continuation wants the whole budget anyway.
+    const [partial, instruction] = continuation.messages.slice(-2);
+    // The partial goes back as an assistant turn, trimmed (we trim only what we SEND).
+    expect(partial).toMatchObject({ role: 'assistant', content: 'Half.' });
+    // ...but the conversation MUST end on a user turn. This is not a style choice: sending the
+    // assistant turn last is assistant prefill, which the live API rejects outright with
+    // "This model does not support assistant message prefill." The offline fake accepted it, so this
+    // shipped broken and was caught only by running against the real model. Assert the real shape.
+    expect(instruction).toMatchObject({ role: 'user', content: CONTINUATION_INSTRUCTION });
+    // The continuation wants its whole budget on visible output, not shared with thinking.
     expect(continuation.extendedThinking).toBe(false);
     // The first call is untouched — thinking stays on for normal coaching replies.
     expect(calls[0]!.extendedThinking).toBeUndefined();
+  });
+
+  it('keeps the partial when a CONTINUATION throws, and rethrows a first-call failure', async () => {
+    // A continuation is a fresh billed call over the network; it can fail for reasons that have
+    // nothing to do with the reply already in hand. Losing that reply would make a truncated-but-
+    // usable answer strictly worse than before this helper existed.
+    let call = 0;
+    const flaky: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (_options, onDelta) => {
+        call += 1;
+        if (call === 1) {
+          onDelta('The usable half.');
+          return Promise.resolve({
+            text: 'The usable half.',
+            usage: USAGE,
+            stopReason: 'max_tokens' as const,
+          });
+        }
+        return Promise.reject(new Error('400 continuation refused'));
+      },
+    };
+    const result = await streamWithContinuation(flaky, BASE, () => {});
+    expect(result.text).toBe('The usable half.');
+    expect(result.continuations).toBe(0);
+
+    // A FIRST-call failure has no partial to salvage, so it still propagates to the caller.
+    const dead: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: () => Promise.reject(new Error('transport down')),
+    };
+    await expect(streamWithContinuation(dead, BASE, () => {})).rejects.toThrow('transport down');
   });
 
   it('keeps the partial rather than trimming it out of the final text', async () => {

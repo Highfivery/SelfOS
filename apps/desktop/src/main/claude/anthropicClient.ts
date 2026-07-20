@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ClaudeClient, ClaudeMessage, ClaudeStreamResult } from '@selfos/core/host';
 import { flattenContent } from '@selfos/core/host';
+import { CONTINUATION_INSTRUCTION } from '@selfos/core/conversations';
 
 /**
  * Map our `ClaudeMessage.content` union (string | text/image blocks, 45 §5.3) to the Anthropic SDK's
@@ -107,13 +108,19 @@ let togetherPromptSeq = 0;
 let fakeTruncateServed = false;
 
 /**
- * 66 §5.1 — is this a continuation call? `streamWithContinuation` re-sends the partial reply as a
- * trailing assistant message (assistant prefill), so that shape is the tell. Lets the fake return the
- * SECOND half on a continuation, making the stitched result one grammatical sentence — an E2E can then
- * assert seamlessness rather than mere concatenation.
+ * 66 §5.1 — is this a continuation call? `streamWithContinuation` re-sends the partial reply as an
+ * assistant turn followed by `CONTINUATION_INSTRUCTION` as a user turn, so that instruction is the
+ * tell. Lets the fake return the SECOND half on a continuation, making the stitched result one
+ * grammatical sentence — an E2E can then assert seamlessness rather than mere concatenation.
+ *
+ * Matched on the real constant, not a trailing-assistant heuristic. The earlier heuristic encoded the
+ * assistant-prefill shape the live API rejects, so the fake happily validated a request that 400'd in
+ * production — keying off the shared constant keeps fake and real in lockstep by construction.
  */
 function isContinuationCall(messages: ClaudeMessage[]): boolean {
-  return messages[messages.length - 1]?.role === 'assistant';
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== 'user') return false;
+  return flattenContent(last.content).includes(CONTINUATION_INSTRUCTION);
 }
 
 /**

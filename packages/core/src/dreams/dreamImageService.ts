@@ -10,7 +10,7 @@ import type {
 } from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { buildDepictionNote, listPeople, listRelatedPeople } from '../people';
-import { getDream, listDreams, saveDream } from './dreamService';
+import { deleteDream, getDream, listDreams, saveDream } from './dreamService';
 
 /**
  * Dream-image generation service (13-dream-images §5.2). Two providers, one orchestrator: a **Claude**
@@ -317,7 +317,21 @@ export async function generateDreamImage(
   //    (strictly worse than losing a regenerable image). Only the image fields are ours to write here;
   //    everything else comes from the current record. `shareableWith` is read from the fresh copy too,
   //    so a share/un-share made during generation is honoured rather than reverted.
-  const fresh = (await getDream(fs, key, personId, dreamId)) ?? dream;
+  const fresh = await getDream(fs, key, personId, dreamId);
+  if (!fresh) {
+    // Deleted mid-generation. Writing here would RESURRECT the dream the dreamer just deleted — and the
+    // `writeAtomic` above has already recreated its folder to hold the bytes — so undo that and fail
+    // honestly instead. Both calls really happened, so the usage stays reported (a billed failure, like
+    // the wrong-MIME branch above). Deleting again is idempotent: it just removes the folder we recreated.
+    await deleteDream(fs, personId, dreamId);
+    return {
+      ok: false,
+      reason: 'ERROR',
+      message: 'That dream was deleted while its image was being created.',
+      promptUsage,
+      imageUsage,
+    };
+  }
   const carriedShares = fresh.image?.shareableWith;
   const descriptor: DreamImageDescriptor = {
     style,

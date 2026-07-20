@@ -419,6 +419,27 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-19 — **Release ops + doc drift (the Release workflow failed on two merges — a GitHub OUTAGE, not the
+  manifest loop; and the stale `release-please-action@v4` note corrected).** After #257 + #258 landed, the
+  **Release** workflow failed on **both** pushes to `main` (11s / 8s — a fast failure at the `Run release-please`
+  step), so **no release PR was proposed and the dream-image fix sat on `main` unshipped**. **Diagnosed from the
+  actual run log** (downloaded via the logs API after the `gh` CLI itself kept 503-ing) rather than assumed —
+  and it was NOT this repo's familiar manifest-drift loop: `.release-please-manifest.json` (`0.39.0`) matched the
+  latest tag (`v0.39.0`), and the error was explicit: `release-please failed: No server is currently available to
+service your request.` — a **GitHub API 503**, corroborated by githubstatus.com reporting a **Minor Service
+  Outage**. **No repo change is warranted; the fix is to re-run the workflow once GitHub recovers**
+  (`gh run rerun <id>`), or simply let the next merge to `main` recompute it — release-please derives the whole
+  proposal from scratch each run, so a missed run self-heals. **Doc drift fixed alongside:** the 2026-06-22 entry
+  claimed `googleapis/release-please-action@v4` is deliberately "left" pending "a v5 major bump [that] needs
+  careful testing" — but `951bb1f` (#25) **did** that bump; `release.yml` has been on **`@v5`** (release-please
+  17.6.0) for a while and it cut v0.39.0 successfully. That stale sentence is now marked SUPERSEDED in place, so
+  nobody "restores" v4 on the strength of it. **Lesson: a failed Release run in THIS repo pattern-matches to the
+  well-documented manifest-drift loop, and that pattern-match is a trap — check the manifest against the latest
+  tag FIRST (if they agree it is not drift), then read the actual run log; a transient provider outage needs a
+  re-run, not a config change, and "fixing" the manifest in response would have introduced the very drift the
+  loop is made of. Also: when `gh run view --log-failed` 503s, the logs ZIP endpoint
+  (`/actions/runs/<id>/logs`) often still serves — retry that before giving up and guessing.**
+
 - 2026-07-19 — **Hardening + housekeeping (the three loose ends the dream-image fix surfaced; on
   `fix/dream-carry-forward-guard-and-flakes`).** Follow-up to #257, addressing everything that fix turned up
   rather than just the one field. **(1) The ROOT CAUSE — a compile-time carry-forward guard.** `dreamSave`
@@ -3220,7 +3241,10 @@ currentVersion, now})` does the **unauthenticated** GitHub `releases/latest` GET
   `pnpm/action-setup@v4→v6` in both `ci.yml` + `release.yml` (inputs unchanged; pnpm reads `packageManager` from
   package.json; CI verified green with the new actions). `googleapis/release-please-action@v4` is **left** (it
   drives the fragile release flow — a v5 major bump needs careful testing; it's force-run on Node 24 for now, a
-  flagged follow-up). **(2)** Merging the v0.3.1 PR triggered a **spurious "release 0.3.2" PR (#11)** re-proposing
+  flagged follow-up). **[SUPERSEDED 2026-07-19 — that follow-up is DONE: `951bb1f` (#25) bumped the action to
+  `@v5`, clearing the last Node-20 deprecation, and v5 (release-please 17.6.0) has since cut real releases
+  including v0.39.0. The repo is on `@v5`; do not "restore" v4 on the strength of the sentence above.]**
+  **(2)** Merging the v0.3.1 PR triggered a **spurious "release 0.3.2" PR (#11)** re-proposing
   the already-shipped fix — the manifest-drift loop again. Root cause this time: **`bootstrap-sha` was STALE at
   v0.3.0 (573c634)**, so release-please re-scanned from v0.3.0 each run and re-found the v0.3.1 commit. Fix:
   **advance `bootstrap-sha` to the v0.3.1 commit (e5562a6)** + close PR #11; verified the next release-please run

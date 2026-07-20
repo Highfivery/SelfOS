@@ -11524,10 +11524,36 @@ test('auto check-ins (63): an owner streams check-ins to a partner, including un
     // Auto check-ins is its own tab now (§3.1) — open it.
     await w.getByRole('tab', { name: /Auto check-ins/ }).click();
     await expect(w.getByRole('heading', { name: 'Auto check-ins' })).toBeVisible();
-    // The owner sees the partner target row with the resolved name (not "Someone"). Scope to the panel —
-    // "Angel" also appears in recipient chips elsewhere on the Questionnaires page.
-    const acPanel = w.getByLabel('Auto check-ins', { exact: true });
-    await expect(acPanel.getByText('Angel')).toBeVisible();
+    // The owner sees the OUTGOING partner target row with the resolved name (not "Someone"). Scope to that
+    // one stream: "Angel" also appears in recipient chips elsewhere on the page, and (66) once more in the
+    // panel's own "Questions others send you" list — Angel could send to the owner too, so the off-switch
+    // is reachable in advance. Two rows, opposite directions, both correct.
+    // The row's own switch is labelled with the resolved name, so this asserts the resolution directly.
+    await expect(w.getByLabel('Auto check-ins for Angel', { exact: true })).toBeVisible();
+    // The row spreads its name and its switch. This is a REAL-Chromium guard: `justify="between"` is not
+    // valid CSS, so the browser drops it and computes `normal` — the row bunches left with no error and
+    // no failing test (jsdom doesn't validate CSS, so only a computed-style check in Chromium catches it).
+    // It shipped that way at ten call sites; `FlexJustify` now makes it a build error and this pins it.
+    expect(
+      await w.evaluate(() => {
+        const sw = document.querySelector('[aria-label="Auto check-ins for Angel"]');
+        // The switch sits in an inner Inline (Remove + switch); the SPREADING row is its parent Inline.
+        const inner = sw?.closest('div[class*="inline"]');
+        const row = inner?.parentElement?.closest('div[class*="inline"]');
+        return row ? getComputedStyle(row).justifyContent : null;
+      }),
+    ).toBe('space-between');
+    // §12 phone-width guard over the panel, including the "Questions others send you" section: no element
+    // scrolls horizontally (the switch is `flex: none`, so the row must wrap rather than crush it).
+    await w.setViewportSize({ width: 360, height: 800 });
+    expect(
+      await w.evaluate(() =>
+        Array.from(document.querySelectorAll('main *'))
+          .filter((el) => el.scrollWidth > el.clientWidth + 1)
+          .map((el) => `${el.tagName}.${el.className}`),
+      ),
+    ).toEqual([]);
+    await w.setViewportSize({ width: 1280, height: 900 });
     await w.getByRole('button', { name: /Run now/ }).click();
     await expect(w.getByText(/Added \d+ new check-in|Nothing new right now/)).toBeVisible();
 

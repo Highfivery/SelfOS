@@ -1,11 +1,12 @@
 import type { CSSProperties, ReactNode } from 'react';
+import type { FlexAlign, FlexJustify } from '../alignment';
 import { space, type SpaceStep } from '../spacing';
 import styles from './Inline.module.css';
 
 interface InlineProps {
   gap?: SpaceStep;
-  align?: CSSProperties['alignItems'];
-  justify?: CSSProperties['justifyContent'];
+  align?: FlexAlign;
+  justify?: FlexJustify;
   wrap?: boolean;
   className?: string | undefined;
   children: ReactNode;

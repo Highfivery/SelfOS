@@ -9,7 +9,7 @@ export function Switcher({ onClose }: { onClose: () => void }): JSX.Element {
     <div className={styles.overlay} role="dialog" aria-modal="true" aria-label="Who's here?">
       <Card className={styles.panel}>
         <Stack gap={4}>
-          <Inline gap={2} justify="between">
+          <Inline gap={2} justify="space-between">
             <Heading level={2}>Who’s here?</Heading>
             <IconButton aria-label="Close" onClick={onClose}>
               <X size={18} aria-hidden="true" />

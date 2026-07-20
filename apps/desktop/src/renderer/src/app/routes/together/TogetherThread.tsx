@@ -258,7 +258,7 @@ function TogetherComposer({
           }
         }}
       />
-      <Inline gap={2} align="center" justify="between" wrap>
+      <Inline gap={2} align="center" justify="space-between" wrap>
         <IconButton
           aria-label="Attach image"
           onClick={() => fileRef.current?.click()}

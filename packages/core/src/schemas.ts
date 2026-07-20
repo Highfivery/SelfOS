@@ -1629,8 +1629,15 @@ export interface IncomingAutoCheckinStream {
   senderPersonId: string;
   senderName: string;
   relationshipLabel?: string; // e.g. "partner" — from the viewer↔sender edge
-  cadence: AutoCheckinCadence;
-  includeIntimacy: boolean; // whether this stream can send unfiltered intimacy check-ins
+  /**
+   * Whether this person has a recurring stream configured at the viewer right now (66). When false they
+   * are listed anyway, so the viewer can turn them off BEFORE anything is ever sent — the block also
+   * governs one-off automated sends (a dream-derived questionnaire), which would otherwise be gated on a
+   * switch that only became reachable after someone had already started sending.
+   */
+  active: boolean;
+  cadence?: AutoCheckinCadence; // only meaningful for an active stream
+  includeIntimacy?: boolean; // whether an active stream can send unfiltered intimacy check-ins
   blocked: boolean; // the viewer has turned this sender off
 }
 

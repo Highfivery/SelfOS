@@ -103,9 +103,11 @@ export async function mintDreamQuestionnaires(
     if (!isSelf) {
       const person = await getPerson(fs, key, recipient.personId);
       if (!person) continue;
-      // The recipient's OWN standing opt-out (63 §3.3a) — their data, stored in their vault, and a hard
-      // fail-closed gate everywhere else auto-sending happens. Honoured here for the same reason: it's
-      // their choice, not the dreamer's. (Flip this single check to send regardless.)
+      // The recipient's OWN standing opt-out (63 §3.3a) — their data, in their vault, and a hard gate
+      // everywhere else automated sending happens. Honoured here for the same reason: it's their choice,
+      // not the dreamer's. The switch behind it is reachable BEFORE anything is sent (66 — the
+      // "Questions others send you" list includes people who could send, not just those already
+      // sending), so this is a real gate rather than one guarding an invisible control.
       if (await isSenderBlocked(fs, key, recipient.personId, personId)) continue;
     }
 

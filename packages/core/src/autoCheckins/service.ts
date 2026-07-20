@@ -383,23 +383,29 @@ export async function listIncomingAutoCheckinStreams(
   const out: IncomingAutoCheckinStream[] = [];
   for (const owner of people) {
     if (owner.id === viewerId) continue;
+    // Only a SUBJECT can send — a plain contact has no account and configures nothing.
+    if (!owner.isSubject) continue;
     const config = await getAutoCheckinConfig(fs, key, owner.id);
-    if (!config.enabled) continue;
-    const stream = config.targets.find(
-      (t) => t.enabled && t.target.kind === 'person' && t.target.personId === viewerId,
-    );
-    if (!stream) continue;
+    const stream = config.enabled
+      ? config.targets.find(
+          (t) => t.enabled && t.target.kind === 'person' && t.target.personId === viewerId,
+        )
+      : undefined;
     const relType = relationshipTypeBetween(relationships, viewerId, owner.id);
+    // 66 — everyone who COULD send is listed, not just those already sending. The block governs one-off
+    // automated sends too (a dream-derived questionnaire), so a switch that only appeared after someone
+    // had started a recurring stream would be unreachable exactly when it mattered most.
     out.push({
       senderPersonId: owner.id,
       senderName: owner.displayName,
       ...(relType ? { relationshipLabel: relType } : {}),
-      cadence: stream.cadence,
-      includeIntimacy: stream.includeIntimacy,
+      active: stream !== undefined,
+      ...(stream ? { cadence: stream.cadence, includeIntimacy: stream.includeIntimacy } : {}),
       blocked: blocked.has(owner.id),
     });
   }
-  return out;
+  // Those actively sending lead; the rest are there to pre-empt.
+  return out.sort((a, b) => Number(b.active) - Number(a.active));
 }
 
 function tailoringFor(

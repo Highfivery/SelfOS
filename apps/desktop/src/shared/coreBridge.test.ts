@@ -1434,9 +1434,11 @@ describe('createCoreBridge', () => {
       // ANGEL sees the incoming stream (who + cadence), NOT the owner's private exploration focus.
       await bridge.sessionSetActive({ personId: angel.id });
       const forAngel = await bridge.autoCheckinsIncomingStreams();
-      expect(forAngel).toHaveLength(1);
+      // The owner's stream is ACTIVE and leads the list. (66: people who COULD send are listed too, so
+      // the off-switch is reachable before anything arrives — hence match by sender, not by length.)
       expect(forAngel[0]).toMatchObject({
         senderPersonId: ownerId,
+        active: true,
         cadence: 'weekly',
         blocked: false,
       });
@@ -1447,14 +1449,20 @@ describe('createCoreBridge', () => {
       expect((await bridge.autoCheckinsGetBlocks()).blockedSenders).toEqual([ownerId]);
       expect((await bridge.autoCheckinsIncomingStreams())[0]?.blocked).toBe(true);
 
-      // CARA (not targeted) sees no incoming streams, and her own block list is untouched by Angel's edit.
+      // CARA isn't targeted, so nothing is ACTIVE toward her — and her own block list is untouched by
+      // Angel's edit (the per-person scoping that actually matters here).
       await bridge.sessionSetActive({ personId: cara.id });
-      expect(await bridge.autoCheckinsIncomingStreams()).toHaveLength(0);
+      const forCara = await bridge.autoCheckinsIncomingStreams();
+      expect(forCara.every((s) => !s.active)).toBe(true);
       expect((await bridge.autoCheckinsGetBlocks()).blockedSenders).toEqual([]);
 
-      // The OWNER isn't a target of themselves, and never sees Angel's block — it's her data.
-      await bridge.sessionSetActive({ personId: ownerId });
-      expect(await bridge.autoCheckinsIncomingStreams()).toHaveLength(0);
+      // The OWNER is never listed as a sender to themselves, and never sees Angel's block — it's her data.
+      // Switching BACK to the Owner needs the Owner's PIN; assert it took, or the reads below would
+      // silently still be Cara's (which is exactly what the old both-empty assertions couldn't tell apart).
+      expect((await bridge.sessionSetActive({ personId: ownerId, pin: '1234' })).ok).toBe(true);
+      const forOwner = await bridge.autoCheckinsIncomingStreams();
+      expect(forOwner.some((s) => s.senderPersonId === ownerId)).toBe(false);
+      expect(forOwner.every((s) => !s.active)).toBe(true);
       expect((await bridge.autoCheckinsGetBlocks()).blockedSenders).toEqual([]);
     });
   });

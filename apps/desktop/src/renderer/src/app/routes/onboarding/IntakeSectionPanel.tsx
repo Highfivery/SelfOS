@@ -9,12 +9,16 @@ import {
   dayDividerLabel,
   Heading,
   MessageDayDivider,
+  MessageActions,
   MessageRow,
+  RetryBanner,
   Stack,
   Text,
 } from '../../../design-system/components';
 import { Composer } from '../sessions/Composer';
 import { useIntakeStore } from '../../../stores/intakeStore';
+// A section transcript is ChatMessage-shaped, so it shares the same predicate Sessions + Dreams use.
+import { awaitingReply } from '../../../stores/conversationStore';
 import styles from './Onboarding.module.css';
 
 /**
@@ -37,6 +41,10 @@ export function IntakeSectionPanel({
   const running = useIntakeStore((s) => s.running);
   const busy = useIntakeStore((s) => s.busy);
   const runTurn = useIntakeStore((s) => s.runTurn);
+  const retryTurn = useIntakeStore((s) => s.retryTurn);
+  const rewind = useIntakeStore((s) => s.rewind);
+  const regenerateFrom = useIntakeStore((s) => s.regenerateFrom);
+  const error = useIntakeStore((s) => s.error);
   const completeSection = useIntakeStore((s) => s.completeSection);
   const skipSection = useIntakeStore((s) => s.skipSection);
   const acknowledgeAdult = useIntakeStore((s) => s.acknowledgeAdult);
@@ -102,7 +110,20 @@ export function IntakeSectionPanel({
             return (
               <Fragment key={i}>
                 {divider ? <MessageDayDivider label={divider} /> : null}
-                <MessageRow side={m.role === 'user' ? 'user' : 'coach'} iso={m.ts}>
+                <MessageRow
+                  side={m.role === 'user' ? 'user' : 'coach'}
+                  iso={m.ts}
+                  actions={
+                    running ? undefined : (
+                      <MessageActions
+                        followingCount={Math.max(0, messages.length - i - 1)}
+                        label={m.role === 'user' ? 'your turn' : 'the interviewer’s reply'}
+                        onRegenerate={() => void regenerateFrom(meta.id, i)}
+                        onDelete={() => void rewind(meta.id, i)}
+                      />
+                    )
+                  }
+                >
                   <div
                     className={`${styles.turn} ${m.role === 'user' ? styles.userMsg : styles.coachMsg}`}
                   >
@@ -140,6 +161,12 @@ export function IntakeSectionPanel({
 
         {!complete ? (
           <>
+            {/* 66 §3.2 — a turn that failed used to lose the person's message entirely. It's now persisted
+                before the call, so the transcript ends on it and this offers a real way back. */}
+            {!running && awaitingReply(messages) ? (
+              <RetryBanner error={error} onRetry={() => void retryTurn(meta.id)} />
+            ) : null}
+
             <Composer
               disabled={running}
               onSend={(text) => void runTurn(meta.id, text)}

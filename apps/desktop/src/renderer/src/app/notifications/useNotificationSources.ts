@@ -344,6 +344,10 @@ export function useNotificationSources(conflicts: string[]): void {
     // dismissed; a genuinely NEW sender is a new coalesce key → a new notice.
     for (const s of incomingStreams) {
       if (s.blocked) continue;
+      // 66 — the list now also carries people who COULD send but haven't (so the off-switch is reachable
+      // before anything arrives). Only an ACTIVE stream is news; without this every household member
+      // would trigger a "set up check-ins for you" notice.
+      if (!s.active) continue;
       candidates.push({
         kind: 'auto-checkin-incoming',
         coalesceKey: `auto-checkin-incoming:${s.senderPersonId}`,

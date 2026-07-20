@@ -1978,6 +1978,108 @@ test('sessions (05 §4.1): an empty reply surfaces an error + a working "Try aga
   }
 });
 
+test('sessions (66 §3.1): a cut-off reply auto-continues into one seamless message', async () => {
+  // The reported bug: a reply that hit the token ceiling was persisted half-finished, with nothing in the
+  // app able to tell it apart from a finished one. SELFOS_FAKE_TRUNCATE makes the first prose reply stop at
+  // `max_tokens`; the continuation completes it. The two halves must arrive as ONE reply — no seam, no
+  // banner, no button.
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_TRUNCATE: '1' },
+  });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await w.getByLabel('Message').fill('Tell me something that runs long');
+    await w.getByRole('button', { name: 'Send' }).click();
+
+    // The stitched sentence reads as one continuous reply.
+    await expect(
+      w.getByText(/first half and it stops mid-sentence — and here is the rest\./i).first(),
+    ).toBeVisible();
+    // Auto-continue is invisible: it is NOT surfaced as a failure the person has to recover from.
+    await expect(w.getByRole('button', { name: 'Try again' })).toHaveCount(0);
+    await expect(w.getByText(/came back empty/i)).toHaveCount(0);
+
+    await w.screenshot({ path: 'e2e-artifacts/66-auto-continue.png' });
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('sessions (66 §3.3): rewind — retry from here, then delete from here, persisted', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: e2eEnv(),
+  });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+
+    await w.getByLabel('Message').fill('first question');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/hear you/i).first()).toBeVisible();
+    await w.getByLabel('Message').fill('second question');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText('second question').first()).toBeVisible();
+
+    // Hover a message so the actions are actually visible for the visual check (they're opacity:0 at rest).
+    await w.getByText('second question').first().hover();
+    await w.screenshot({ path: 'e2e-artifacts/66-message-actions.png' });
+
+    // "Retry from here" on the coach's LAST reply re-answers the same question — never duplicating it.
+    await w
+      .getByRole('button', { name: /Retry from the coach’s reply/i })
+      .last()
+      .click();
+    await expect(w.getByText('second question')).toHaveCount(1);
+
+    // "Delete from here" on the second question drops it and everything after, behind an inline confirm.
+    await w
+      .getByRole('button', { name: /Delete from your turn/i })
+      .last()
+      .click();
+    await expect(w.getByText(/Delete 2 messages\?/i)).toBeVisible();
+    await w.screenshot({ path: 'e2e-artifacts/66-delete-confirm.png' });
+    await w.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(w.getByText('second question')).toHaveCount(0);
+
+    // It's a vault write, not just store state — reopen the session and it's still gone.
+    await w.getByRole('link', { name: 'Home' }).click();
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await w
+      .getByRole('button', { name: /first question/i })
+      .first()
+      .click();
+    await expect(w.getByText('first question').first()).toBeVisible();
+    await expect(w.getByText('second question')).toHaveCount(0);
+
+    // §12 — the actions must not introduce a horizontal scrollbar at phone width.
+    await w.setViewportSize({ width: 360, height: 800 });
+    const overflow = await w.evaluate(() =>
+      [...document.querySelectorAll('*')].some((el) => {
+        const style = getComputedStyle(el);
+        return (
+          (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+          el.scrollWidth > el.clientWidth
+        );
+      }),
+    );
+    expect(overflow).toBe(false);
+    await w.screenshot({ path: 'e2e-artifacts/66-rewind-360.png' });
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('sessions (05 §4.1): re-opening a session that ended on the user’s message offers a working "Try again"', async () => {
   // The reported case: a prior turn never got a reply, so the transcript ends on the user's message. Re-opening
   // it must not be a dead end — a gentle prompt + a Try again that gets a reply (no duplicate of the message).
@@ -6422,10 +6524,30 @@ test('dreams: analyze → synthesize → edit → approve feeds the coach; the t
     await w.getByRole('button', { name: 'Send' }).click();
     await expect(w.getByText('It felt unsettling but oddly familiar.')).toBeVisible();
 
+    // 66 §3.3 — rewind works in a dream reflection too: delete this turn and everything after it,
+    // then re-say it. Proves the dream seam is wired, not just the Sessions one.
+    await w
+      .getByRole('button', { name: /Delete from your turn/i })
+      .last()
+      .click();
+    await w.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(w.getByText('It felt unsettling but oddly familiar.')).toHaveCount(0);
+    await w.getByLabel('Message').fill('It felt unsettling but oddly familiar.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText('It felt unsettling but oddly familiar.')).toBeVisible();
+
     // Synthesize → the structured card.
     await w.getByRole('button', { name: 'Create analysis' }).click();
     await expect(w.getByRole('heading', { name: 'Your dream analysis' })).toBeVisible();
     await expect(w.getByText(/shifting rooms and open skies/i)).toBeVisible();
+
+    // 66 §3.4 — the analysis also produced a tracked goal, and says so on the card (there was no
+    // review step, so this is where the person finds out).
+    await expect(w.getByText('What SelfOS did with this')).toBeVisible();
+    await expect(w.getByText('Notice one steady thing each evening')).toBeVisible();
+    await w.screenshot({ path: 'e2e-artifacts/66-dream-artifacts.png' });
+    // That the goal is a REAL tracked Goal (not just card text) is asserted at the bridge level, where
+    // it's read back out of the goals store — cheaper and more direct than another nav round-trip here.
 
     // Edit a section (read-first → Edit toggle → Save).
     await w.getByRole('button', { name: 'Edit' }).click();
@@ -9528,6 +9650,7 @@ test('self-assessments (50): take ECR-R → profile bars → retake adds a trend
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
+    // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
     await w.getByRole('link', { name: 'You', exact: true }).click();
     await expect(w.getByRole('heading', { name: /how you see yourself/i })).toBeVisible();
 
@@ -9569,6 +9692,7 @@ test('self-assessments (50): take ECR-R → profile bars → retake adds a trend
 
     // 95 — back on the hub, the taken test drops out of "Available tests": Attachment lives ONLY under
     // "Your profiles" (with Retake), never a second time as a catalog "Take" card.
+    // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
     await w.getByRole('link', { name: 'You', exact: true }).click();
     await expect(w.getByRole('heading', { name: /how you see yourself/i })).toBeVisible();
     const profiles = w.locator('section', {
@@ -9617,6 +9741,7 @@ test('self-assessments (50): the kink test is 18+-gated; a result writes partner
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
+    // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
     await w.getByRole('link', { name: 'You', exact: true }).click();
 
     // The Intimacy & sexuality group is 18+-gated — the cards are withheld until acknowledged.
@@ -9690,6 +9815,7 @@ test('wellbeing (51): mood check-in → GENTLE range + help line; AI-off narrate
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
+    // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
     await w.getByRole('link', { name: 'You', exact: true }).click();
 
     // The wellbeing group is distinct and NOT 18+-gated; it invites a "Check in", not "Take".
@@ -9803,6 +9929,7 @@ test('wellbeing (51): PHQ-9 item 9 surfaces crisis resources MID-check-in; the f
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
+    // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
     await w.getByRole('link', { name: 'You', exact: true }).click();
     await w.getByRole('heading', { name: 'Mood check-in' }).scrollIntoViewIfNeeded();
     await w
@@ -10739,6 +10866,57 @@ test('together (58): the sessions board groups by whose move it is + spells out 
   }
 });
 
+test('together (66 §3.3): removing messages leaves a tombstone BOTH partners see, not a silent gap', async () => {
+  const { userData, vault } = await seedTogetherReady();
+  const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });
+  try {
+    const w = await app.firstWindow();
+
+    // Ben starts a session and writes two messages.
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Reconnecting');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+    await w.getByLabel('Message').fill('Something I regret saying.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText('Something I regret saying.')).toBeVisible();
+
+    // Angel accepts, so both partners are live in the session.
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: /Together/ }).click();
+    const invite = w.getByRole('region', { name: 'Open invitation' });
+    await invite.getByText('Reconnecting').click();
+    await w.getByRole('button', { name: 'Continue' }).click();
+    await expect(w.getByText('Something I regret saying.')).toBeVisible();
+
+    // Back as Ben: remove that message and everything after it.
+    await switchTogetherPerson(w, 'Ben');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByText('Reconnecting').first().click();
+    await w
+      .getByRole('button', { name: /Delete from your turn/i })
+      .first()
+      .click();
+    await w.getByRole('button', { name: 'Delete', exact: true }).click();
+
+    // Gone for Ben — and replaced by an honest placeholder rather than silently closing the gap.
+    await expect(w.getByText('Something I regret saying.')).toHaveCount(0);
+    await expect(w.getByText(/were removed|was removed/i).first()).toBeVisible();
+    await w.screenshot({ path: 'e2e-artifacts/66-together-tombstone.png' });
+
+    // And the same for Angel — the shared record never changes shape without saying so (§8.3).
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByText('Reconnecting').first().click();
+    await expect(w.getByText('Something I regret saying.')).toHaveCount(0);
+    await expect(w.getByText(/were removed|was removed/i).first()).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('together (58) phase H2: a couples turn mints a JOINT challenge for both partners; the home tile shows it (§5.6, decrypt)', async () => {
   const { userData, vault, ben, angel } = await seedTogetherReady();
   const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });
@@ -11346,10 +11524,36 @@ test('auto check-ins (63): an owner streams check-ins to a partner, including un
     // Auto check-ins is its own tab now (§3.1) — open it.
     await w.getByRole('tab', { name: /Auto check-ins/ }).click();
     await expect(w.getByRole('heading', { name: 'Auto check-ins' })).toBeVisible();
-    // The owner sees the partner target row with the resolved name (not "Someone"). Scope to the panel —
-    // "Angel" also appears in recipient chips elsewhere on the Questionnaires page.
-    const acPanel = w.getByLabel('Auto check-ins', { exact: true });
-    await expect(acPanel.getByText('Angel')).toBeVisible();
+    // The owner sees the OUTGOING partner target row with the resolved name (not "Someone"). Scope to that
+    // one stream: "Angel" also appears in recipient chips elsewhere on the page, and (66) once more in the
+    // panel's own "Questions others send you" list — Angel could send to the owner too, so the off-switch
+    // is reachable in advance. Two rows, opposite directions, both correct.
+    // The row's own switch is labelled with the resolved name, so this asserts the resolution directly.
+    await expect(w.getByLabel('Auto check-ins for Angel', { exact: true })).toBeVisible();
+    // The row spreads its name and its switch. This is a REAL-Chromium guard: `justify="between"` is not
+    // valid CSS, so the browser drops it and computes `normal` — the row bunches left with no error and
+    // no failing test (jsdom doesn't validate CSS, so only a computed-style check in Chromium catches it).
+    // It shipped that way at ten call sites; `FlexJustify` now makes it a build error and this pins it.
+    expect(
+      await w.evaluate(() => {
+        const sw = document.querySelector('[aria-label="Auto check-ins for Angel"]');
+        // The switch sits in an inner Inline (Remove + switch); the SPREADING row is its parent Inline.
+        const inner = sw?.closest('div[class*="inline"]');
+        const row = inner?.parentElement?.closest('div[class*="inline"]');
+        return row ? getComputedStyle(row).justifyContent : null;
+      }),
+    ).toBe('space-between');
+    // §12 phone-width guard over the panel, including the "Questions others send you" section: no element
+    // scrolls horizontally (the switch is `flex: none`, so the row must wrap rather than crush it).
+    await w.setViewportSize({ width: 360, height: 800 });
+    expect(
+      await w.evaluate(() =>
+        Array.from(document.querySelectorAll('main *'))
+          .filter((el) => el.scrollWidth > el.clientWidth + 1)
+          .map((el) => `${el.tagName}.${el.className}`),
+      ),
+    ).toEqual([]);
+    await w.setViewportSize({ width: 1280, height: 900 });
     await w.getByRole('button', { name: /Run now/ }).click();
     await expect(w.getByText(/Added \d+ new check-in|Nothing new right now/)).toBeVisible();
 

@@ -384,6 +384,8 @@ function makeHost(): {
               people: [],
             },
             metrics: { emotionalIntensity: 0.4, valence: -0.1 },
+            // 66 §3.4 — a voiced commitment, so the synthesis pass also produces a tracked Goal.
+            goals: ['Notice one steady thing each evening'],
             crisisFlag: false,
             distressSignal: false,
           })
@@ -813,6 +815,166 @@ describe('createCoreBridge', () => {
     expect(await bridge.conversationsList()).toHaveLength(1);
     // A fresh session lists as in-progress.
     expect((await bridge.conversationsList())[0]?.status).toBe('inProgress');
+  });
+
+  it('rewinds a transcript, persisting the truncation (66 §3.3)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    await bridge.chatStream({ conversationId: 'c1', userText: 'first' });
+    await bridge.chatStream({ conversationId: 'c1', userText: 'second' });
+
+    const before = await bridge.conversationsGet('c1');
+    expect(before?.messages).toHaveLength(4); // user, coach, user, coach
+
+    // Delete from the SECOND user message onward.
+    const result = await bridge.conversationsRewind({
+      conversationId: 'c1',
+      index: 2,
+      expect: { role: 'user', ts: before!.messages[2]!.ts },
+    });
+    expect(result.ok).toBe(true);
+
+    // Read it back from the vault — the truncation is on disk, not just in the returned object.
+    const after = await bridge.conversationsGet('c1');
+    expect(after?.messages).toHaveLength(2);
+    expect(after?.messages.map((m) => m.content)).not.toContain('second');
+  });
+
+  it('refuses a rewind whose stamp no longer matches, rather than cutting the wrong span', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    await bridge.chatStream({ conversationId: 'c1', userText: 'first' });
+
+    const result = await bridge.conversationsRewind({
+      conversationId: 'c1',
+      index: 0,
+      expect: { role: 'user', ts: '1999-01-01T00:00:00.000Z' },
+    });
+    expect(result).toEqual({ ok: false, reason: 'STALE' });
+    // Nothing was touched.
+    expect((await bridge.conversationsGet('c1'))?.messages).toHaveLength(2);
+  });
+
+  it('regenerates from a message: drops the reply and answers the same question again', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    await bridge.chatStream({ conversationId: 'c1', userText: 'first' });
+    const before = await bridge.conversationsGet('c1');
+
+    // Point at the coach's reply — it should be replaced, and the user's message kept.
+    const result = await bridge.chatRegenerateFrom({
+      conversationId: 'c1',
+      index: 1,
+      expect: { role: 'assistant', ts: before!.messages[1]!.ts },
+    });
+    expect(result.ok).toBe(true);
+
+    const after = await bridge.conversationsGet('c1');
+    expect(after?.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    // The question is asked ONCE — regenerating must never duplicate it.
+    expect(after?.messages.filter((m) => m.content === 'first')).toHaveLength(1);
+  });
+
+  it('rewind is denied for a person without sessions.own (the bridge is the trust boundary)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    await bridge.chatStream({ conversationId: 'c1', userText: 'first' });
+
+    // A Guest role has no sessions.own.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+
+    expect(
+      await bridge.conversationsRewind({
+        conversationId: 'c1',
+        index: 0,
+        expect: { role: 'user', ts: 'x' },
+      }),
+    ).toEqual({ ok: false, reason: 'NOT_FOUND' });
+    expect(
+      await bridge.chatRegenerateFrom({
+        conversationId: 'c1',
+        index: 0,
+        expect: { role: 'user', ts: 'x' },
+      }),
+    ).toMatchObject({ ok: false });
+  });
+
+  it('rewinds a dream reflection and an intake section, each gated + person-scoped (66 §3.3)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+
+    // Dreams.
+    const dream = await bridge.dreamSave({
+      narrative: 'I was back in my childhood house.',
+      lucid: false,
+      nightmare: false,
+      tags: [],
+      people: [],
+      sensitivity: 'standard',
+    });
+    await bridge.dreamAnalyzeTurn({ dreamId: dream.id, userText: 'first' });
+    await bridge.dreamAnalyzeTurn({ dreamId: dream.id, userText: 'second' });
+    const dreamBefore = await bridge.dreamGetConversation(dream.id);
+    expect(dreamBefore?.messages).toHaveLength(4);
+
+    const dreamRewind = await bridge.dreamRewind({
+      dreamId: dream.id,
+      index: 2,
+      expect: { role: 'user', ts: dreamBefore!.messages[2]!.ts },
+    });
+    expect(dreamRewind.ok).toBe(true);
+    // Read it back from the vault — the truncation is on disk.
+    expect((await bridge.dreamGetConversation(dream.id))?.messages).toHaveLength(2);
+
+    // A stale stamp refuses without touching anything.
+    expect(
+      await bridge.dreamRewind({
+        dreamId: dream.id,
+        index: 0,
+        expect: { role: 'user', ts: '1999-01-01T00:00:00.000Z' },
+      }),
+    ).toEqual({ ok: false, reason: 'STALE' });
+
+    // Intake.
+    await bridge.intakeRunTurn({ sectionId: 'story', userText: 'where to start' });
+    const state = await bridge.intakeGetState();
+    const section = state?.session?.sections.find((s) => s.id === 'story');
+    expect(section?.messages).toHaveLength(2);
+
+    const intakeRewind = await bridge.intakeRewind({
+      sectionId: 'story',
+      index: 0,
+      expect: { role: 'user', ts: section!.messages[0]!.ts },
+    });
+    expect(intakeRewind.ok).toBe(true);
+    const after = await bridge.intakeGetState();
+    expect(after?.session?.sections.find((s) => s.id === 'story')?.messages).toHaveLength(0);
+  });
+
+  it('dream + intake rewind are denied without their capability (the trust boundary)', async () => {
+    const { bridge } = await freshOwner();
+    // A Guest role has neither dreams.own nor intake.own.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+
+    const stamp = { role: 'user' as const, ts: 'x' };
+    expect(await bridge.dreamRewind({ dreamId: 'd1', index: 0, expect: stamp })).toEqual({
+      ok: false,
+      reason: 'NOT_FOUND',
+    });
+    expect(await bridge.intakeRewind({ sectionId: 'story', index: 0, expect: stamp })).toEqual({
+      ok: false,
+      reason: 'NOT_FOUND',
+    });
+    expect(
+      await bridge.dreamRegenerateFrom({ dreamId: 'd1', index: 0, expect: stamp }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await bridge.intakeRegenerateFrom({ sectionId: 'story', index: 0, expect: stamp }),
+    ).toMatchObject({ ok: false });
   });
 
   it('sets session status, summarizes on complete, and feeds a later session', async () => {
@@ -1272,9 +1434,11 @@ describe('createCoreBridge', () => {
       // ANGEL sees the incoming stream (who + cadence), NOT the owner's private exploration focus.
       await bridge.sessionSetActive({ personId: angel.id });
       const forAngel = await bridge.autoCheckinsIncomingStreams();
-      expect(forAngel).toHaveLength(1);
+      // The owner's stream is ACTIVE and leads the list. (66: people who COULD send are listed too, so
+      // the off-switch is reachable before anything arrives — hence match by sender, not by length.)
       expect(forAngel[0]).toMatchObject({
         senderPersonId: ownerId,
+        active: true,
         cadence: 'weekly',
         blocked: false,
       });
@@ -1285,14 +1449,20 @@ describe('createCoreBridge', () => {
       expect((await bridge.autoCheckinsGetBlocks()).blockedSenders).toEqual([ownerId]);
       expect((await bridge.autoCheckinsIncomingStreams())[0]?.blocked).toBe(true);
 
-      // CARA (not targeted) sees no incoming streams, and her own block list is untouched by Angel's edit.
+      // CARA isn't targeted, so nothing is ACTIVE toward her — and her own block list is untouched by
+      // Angel's edit (the per-person scoping that actually matters here).
       await bridge.sessionSetActive({ personId: cara.id });
-      expect(await bridge.autoCheckinsIncomingStreams()).toHaveLength(0);
+      const forCara = await bridge.autoCheckinsIncomingStreams();
+      expect(forCara.every((s) => !s.active)).toBe(true);
       expect((await bridge.autoCheckinsGetBlocks()).blockedSenders).toEqual([]);
 
-      // The OWNER isn't a target of themselves, and never sees Angel's block — it's her data.
-      await bridge.sessionSetActive({ personId: ownerId });
-      expect(await bridge.autoCheckinsIncomingStreams()).toHaveLength(0);
+      // The OWNER is never listed as a sender to themselves, and never sees Angel's block — it's her data.
+      // Switching BACK to the Owner needs the Owner's PIN; assert it took, or the reads below would
+      // silently still be Cara's (which is exactly what the old both-empty assertions couldn't tell apart).
+      expect((await bridge.sessionSetActive({ personId: ownerId, pin: '1234' })).ok).toBe(true);
+      const forOwner = await bridge.autoCheckinsIncomingStreams();
+      expect(forOwner.some((s) => s.senderPersonId === ownerId)).toBe(false);
+      expect(forOwner.every((s) => !s.active)).toBe(true);
       expect((await bridge.autoCheckinsGetBlocks()).blockedSenders).toEqual([]);
     });
   });
@@ -4702,6 +4872,13 @@ describe('createCoreBridge', () => {
     expect(synth.analysis.summary).toContain('shifting rooms');
     expect(synth.usage.type).toBe('dream.analyze');
     expect((await bridge.dreamGet(dream.id))?.status).toBe('analyzed');
+
+    // 66 §3.4 — a commitment voiced in the reflection becomes a tracked Goal, riding this same pass
+    // (no extra AI call), and the analysis records what it produced.
+    const goals = await bridge.goalsList();
+    expect(goals.map((g) => g.text)).toContain('Notice one steady thing each evening');
+    expect(goals.find((g) => g.text.startsWith('Notice'))?.provenance.dreamId).toBe(dream.id);
+    expect(synth.analysis.goals).toContain('Notice one steady thing each evening');
 
     // Edits overwrite only the supplied section and mark the analysis edited.
     const edited = await bridge.dreamUpdateAnalysis({

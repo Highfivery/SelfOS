@@ -1,6 +1,7 @@
 import { Fragment, useRef, useState } from 'react';
 import { ImagePlus, Lock, MessageCirclePlus, Users, X } from 'lucide-react';
 import type { TogetherMessageView, TogetherSessionView } from '@shared/schemas';
+import { awaitingReplyIn } from '@selfos/core/together';
 import {
   AttachmentThumb,
   Banner,
@@ -10,6 +11,7 @@ import {
   Inline,
   Markdown,
   MessageDayDivider,
+  MessageActions,
   MessageTime,
   Text,
 } from '../../../design-system/components';
@@ -49,15 +51,47 @@ function MessageBubble({
   message,
   session,
   isMine,
+  followingCount,
+  onRewind,
 }: {
   message: TogetherMessageView;
   session: TogetherSessionView;
   isMine: boolean;
+  /** How many messages follow this one in THIS viewer's projection — what the confirm names. */
+  followingCount: number;
+  /**
+   * 66 §3.3 — "delete from here". Absent while a turn is in flight. There is deliberately no
+   * regenerate here: re-rolling a shared couples reply is a different (and more fraught) act than
+   * re-rolling your own, so Together only offers removal.
+   */
+  onRewind?: () => void;
 }): JSX.Element {
+  // 66 §3.3/§8.3 — a removal placeholder, not a message. Rendered as a quiet neutral line rather than
+  // silently closing the gap, so the shared transcript never changes shape without saying so. It carries
+  // no content, no actions, and no author bubble.
+  if (message.redacted) {
+    const remover =
+      message.redactedByPersonId === undefined
+        ? null
+        : nameFor(session, message.redactedByPersonId);
+    const count = message.redactedCount ?? 1;
+    return (
+      <div className={styles.redactedRow} role="note">
+        <Text size="xs" tone="tertiary">
+          {count === 1 ? 'A message was removed' : `${count} messages were removed`}
+          {remover ? ` by ${remover}` : ''}
+        </Text>
+      </div>
+    );
+  }
+
   const isCoach = message.role === 'assistant';
   const author = isCoach ? 'Coach' : nameFor(session, message.authorPersonId);
   const classes = [
     styles.bubbleRow,
+    // The hover/focus target MessageActions reveals itself from — Together renders its own bubble
+    // rather than the shared MessageRow, so it opts in explicitly.
+    'messageRowHost',
     isMine ? styles.bubbleMine : '',
     message.privateAside ? styles.bubbleAside : '',
   ]
@@ -88,7 +122,16 @@ function MessageBubble({
             ) : null}
           </>
         )}
-        <MessageTime iso={message.ts} />
+        <div className={styles.bubbleMeta}>
+          <MessageTime iso={message.ts} />
+          {onRewind ? (
+            <MessageActions
+              followingCount={followingCount}
+              label={isMine ? 'your turn' : isCoach ? 'the coach’s reply' : 'this message'}
+              onDelete={onRewind}
+            />
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -215,7 +258,7 @@ function TogetherComposer({
           }
         }}
       />
-      <Inline gap={2} align="center" justify="between" wrap>
+      <Inline gap={2} align="center" justify="space-between" wrap>
         <IconButton
           aria-label="Attach image"
           onClick={() => fileRef.current?.click()}
@@ -273,6 +316,7 @@ export function TogetherThread({
   const error = useTogetherStore((s) => s.error);
   const send = useTogetherStore((s) => s.sendMessage);
   const retry = useTogetherStore((s) => s.retry);
+  const rewind = useTogetherStore((s) => s.rewind);
   // On a wrapped-up session the composer stays hidden until the person deliberately reopens it (§3.8).
   const [reopened, setReopened] = useState(false);
 
@@ -339,6 +383,8 @@ export function TogetherThread({
                   message={m}
                   session={session}
                   isMine={m.role === 'user' && m.authorPersonId === me}
+                  followingCount={Math.max(0, session.messages.length - i - 1)}
+                  {...(sending ? {} : { onRewind: () => void rewind(m.id) })}
                 />
               </Fragment>
             );
@@ -363,11 +409,14 @@ export function TogetherThread({
         ) : null}
       </div>
 
-      {error ? (
+      {/* 66 §3.2 — recovery is driven by the TRANSCRIPT, not just a live error: a session reopened after an
+          unanswered turn used to dead-end here, since `error` is transient. Now the coach owing a reply is
+          enough to offer Try again, with the gentler tone when there's no live failure. */}
+      {!sending && (error || awaitingReplyIn(session.messages)) ? (
         <div className={styles.threadBanner}>
-          <Banner tone="danger">
+          <Banner tone={error ? 'danger' : 'info'}>
             <Inline gap={2} align="center" wrap>
-              <span>{error}</span>
+              <span>{error ?? 'The last message hasn’t been answered yet.'}</span>
               <Button variant="secondary" onClick={() => void retry()} disabled={sending}>
                 Try again
               </Button>

@@ -68,6 +68,9 @@ export async function saveQuestionnaire(
   const autoCheckin = existing?.autoCheckin ?? input.autoCheckin;
   // Your Story interview provenance (64 §5.5) — the same host-side-only, preserved-across-edit rule.
   const storyProvenance = existing?.storyProvenance ?? input.storyProvenance;
+  // 66 §3.4 — same treatment: host-side only, and preserved across an edit so a dream-sourced
+  // questionnaire never loses where it came from.
+  const dreamProvenance = existing?.dreamProvenance ?? input.dreamProvenance;
   const questionnaire: Questionnaire = {
     id: existing?.id ?? input.id ?? uuid(),
     schemaVersion: 1,
@@ -87,6 +90,7 @@ export async function saveQuestionnaire(
     ...(existing?.favorite ? { favorite: existing.favorite } : {}),
     ...(autoCheckin !== undefined ? { autoCheckin } : {}),
     ...(storyProvenance !== undefined ? { storyProvenance } : {}),
+    ...(dreamProvenance !== undefined ? { dreamProvenance } : {}),
   };
   await writeEncryptedJson(fs, defPath(questionnaire.id), questionnaire, key);
   return questionnaire;

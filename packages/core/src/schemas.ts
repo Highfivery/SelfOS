@@ -1499,6 +1499,19 @@ export const StoryProvenanceSchema = z.object({
 });
 export type StoryProvenance = z.infer<typeof StoryProvenanceSchema>;
 
+/**
+ * Records that a questionnaire came out of a dream analysis (66 §3.4). Mirrors `StoryProvenance`, and
+ * rides the immutable send snapshot, so a recipient's copy carries the source too. The dream's NARRATIVE
+ * is never included — only the analysis-derived brief that prompted it.
+ */
+export const DreamProvenanceSchema = z.object({
+  dreamId: z.string().min(1),
+  analysisId: z.string().min(1),
+  brief: z.string().max(280),
+  generatedAt: z.string(),
+});
+export type DreamProvenance = z.infer<typeof DreamProvenanceSchema>;
+
 export const QuestionnaireSchema = z.object({
   id: z.string().min(1),
   schemaVersion: z.number().int().positive(),
@@ -1530,6 +1543,9 @@ export const QuestionnaireSchema = z.object({
   // Your Story provenance (64-your-story §5.5) — present only on a biography-interview gap questionnaire.
   // Host-side only; carried through an edit like `autoCheckin`. Additive-optional, no schemaVersion bump.
   storyProvenance: StoryProvenanceSchema.optional(),
+  // Dream provenance (66 §3.4) — present only on a questionnaire a dream analysis produced. Same
+  // host-side-only, carried-through-an-edit treatment as `storyProvenance`.
+  dreamProvenance: DreamProvenanceSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -1550,6 +1566,8 @@ export const QuestionnaireInputSchema = z.object({
   autoCheckin: AutoCheckinProvenanceSchema.optional(),
   // Present only for a Your Story interview gap questionnaire (64 §5.5) — flows in host-side, never the builder.
   storyProvenance: StoryProvenanceSchema.optional(),
+  // Present only for a dream-analysis questionnaire (66 §3.4) — host-side, never the builder.
+  dreamProvenance: DreamProvenanceSchema.optional(),
 });
 export type QuestionnaireInput = z.infer<typeof QuestionnaireInputSchema>;
 
@@ -1611,8 +1629,15 @@ export interface IncomingAutoCheckinStream {
   senderPersonId: string;
   senderName: string;
   relationshipLabel?: string; // e.g. "partner" — from the viewer↔sender edge
-  cadence: AutoCheckinCadence;
-  includeIntimacy: boolean; // whether this stream can send unfiltered intimacy check-ins
+  /**
+   * Whether this person has a recurring stream configured at the viewer right now (66). When false they
+   * are listed anyway, so the viewer can turn them off BEFORE anything is ever sent — the block also
+   * governs one-off automated sends (a dream-derived questionnaire), which would otherwise be gated on a
+   * switch that only became reachable after someone had already started sending.
+   */
+  active: boolean;
+  cadence?: AutoCheckinCadence; // only meaningful for an active stream
+  includeIntimacy?: boolean; // whether an active stream can send unfiltered intimacy check-ins
   blocked: boolean; // the viewer has turned this sender off
 }
 
@@ -2203,6 +2228,10 @@ export const DreamSchema = z.object({
   informsContext: z.boolean().optional(),
   status: DreamStatusSchema,
   analysisId: z.string().optional(), // the canonical DreamAnalysis, once created
+  // When the coach signalled it has explored enough to write an analysis (66 §3.4). Previously this lived
+  // only in renderer state, so navigating away lost the nudge until the coach re-emitted the marker.
+  // Stamped once and never cleared. Additive-optional; absent ⇒ not yet signalled.
+  analysisReadyAt: z.string().optional(),
   image: DreamImageDescriptorSchema.optional(), // the generated image's metadata (13 §4.2); bytes in image.enc
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -2218,6 +2247,20 @@ export const DreamTagsSchema = z.object({
   people: z.array(z.string()),
 });
 export type DreamTags = z.infer<typeof DreamTagsSchema>;
+
+/**
+ * A questionnaire a dream analysis created and sent (66 §3.4). Stored on the analysis so the card can
+ * show what went out and to whom — there was no review step, so the person finds out here.
+ */
+export const DreamQuestionnaireArtifactSchema = z.object({
+  questionnaireId: z.string().min(1),
+  assignmentId: z.string().min(1),
+  title: z.string(),
+  recipientPersonId: z.string().min(1),
+  recipientName: z.string().optional(),
+  sentAt: z.string(),
+});
+export type DreamQuestionnaireArtifact = z.infer<typeof DreamQuestionnaireArtifactSchema>;
 
 export const DreamAnalysisSchema = z.object({
   id: z.string().min(1),
@@ -2239,6 +2282,11 @@ export const DreamAnalysisSchema = z.object({
   distressSignal: z.boolean().optional(), // milder trauma/distress → feeds the nightmare nudge (12 §8.2)
   edited: z.boolean(), // the person edited the AI output before approving
   insightId: z.string().optional(), // the Insight produced on approval (08 §4.4)
+  // What this analysis produced besides the reflection (66 §3.4). All additive-optional — an analysis
+  // from before 66 simply has none, so no schemaVersion bump and no migration.
+  goals: z.array(z.string()).optional(), // the raw commitments the person voiced (what the card shows)
+  goalIds: z.array(z.string()).optional(), // the tracked Goals created/folded, for audit + idempotency
+  questionnaires: z.array(DreamQuestionnaireArtifactSchema).optional(), // what was created AND sent
   generatedAt: z.string(),
   updatedAt: z.string(),
 });
@@ -2565,9 +2613,39 @@ export interface IntakeState {
  * One adaptive interview turn (§6). Streams the interviewer reply via `onIntakeChunk`; resolves with the
  * updated session and which `Person` fields were filled this turn (direct `[[SELFOS:FIELD:…]]` markers).
  */
+/**
+ * What the renderer believes it's rewinding (66 §3.3). The stamp is verified against the stored transcript
+ * before anything is truncated, so a click on a stale view refuses instead of deleting the wrong span.
+ */
+export const MessageStampSchema = z.object({
+  role: z.enum(['user', 'assistant']),
+  ts: z.string().min(1),
+});
+
+/** A rewind/regenerate request: the message index plus the stamp that must still match it. */
+export const RewindTargetSchema = z.object({
+  index: z.number().int().nonnegative(),
+  expect: MessageStampSchema,
+});
+
+/**
+ * A rewind's outcome, shaped for the IPC seam. Lives here (not in `conversationService`) because
+ * `channels.ts` is imported by the SANDBOXED preload — a view type must come from the crypto-free shim.
+ */
+export type RewindResult =
+  | { ok: true; conversation: Conversation }
+  | { ok: false; reason: 'STALE' | 'INVALID' | 'NOT_FOUND' };
+
+/** The intake equivalent — a section's messages live inside the one session doc, so it returns that. */
+export type IntakeRewindOutcome =
+  | { ok: true; session: IntakeSession }
+  | { ok: false; reason: 'STALE' | 'INVALID' | 'NOT_FOUND' };
+
 export type IntakeTurnResult =
   | { ok: true; session: IntakeSession; usage: UsageEvent; filledFields?: string[] }
-  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR'; message: string };
+  // EMPTY (66 §3.2) = the model returned no visible text. Never persisted as a blank bubble; the
+  // person's message is already on disk, so `intake:retryTurn` can recover the turn.
+  | { ok: false; reason: 'NO_KEY' | 'BUDGET' | 'ERROR' | 'EMPTY'; message: string };
 
 /**
  * Result of a synthesis pass (§6/§11.3). With a `sectionId`: a light per-section reflection (sets
@@ -3208,6 +3286,13 @@ export const TogetherMessageSchema = z.object({
   // (both are `assistant` + `privateAside` + authored-for-viewer). Drives the `together-private` signal so it
   // fires only for an unprompted note, never for a reply the viewer just watched arrive. Additive-optional.
   coachInitiated: z.boolean().optional(),
+  // 66 §3.3/§8.3 — this record IS a tombstone left where messages were removed. In a couples context a
+  // transcript that silently rewrites itself is disorienting, so removal leaves a neutral placeholder for
+  // both partners: the content is gone, the fact that something was there is not hidden. Additive-optional
+  // (the `privateAside`/`coachInitiated` precedent) — no schemaVersion bump.
+  redacted: z.literal(true).optional(),
+  redactedCount: z.number().int().positive().optional(), // how many messages it stands in for
+  redactedByPersonId: z.string().min(1).optional(),
 });
 export type TogetherMessage = z.infer<typeof TogetherMessageSchema>;
 
@@ -3239,6 +3324,11 @@ export interface TogetherMessageView {
   privateAside: boolean;
   replyToMessageId?: string;
   attachments?: AttachmentRef[];
+  // 66 §3.3 — a removal placeholder. The thread renders a quiet "N messages removed" line rather than
+  // silently closing the gap. Not persisted here; projected from the stored tombstone.
+  redacted?: boolean;
+  redactedCount?: number;
+  redactedByPersonId?: string;
 }
 
 /** A Together sessions-list summary, every field derived over the viewer's projection (§3 intro). */
@@ -3343,6 +3433,11 @@ export const TogetherSendMessageInputSchema = z.object({
 export type TogetherSendMessageInput = z.infer<typeof TogetherSendMessageInputSchema>;
 
 export const TogetherRetryInputSchema = z.object({ sessionId: z.string().min(1) });
+/** 66 §3.3 — remove this message and everything after it, within the remover's own projection. */
+export const TogetherRewindInputSchema = z.object({
+  sessionId: z.string().min(1),
+  fromMessageId: z.string().min(1),
+});
 export type TogetherRetryInput = z.infer<typeof TogetherRetryInputSchema>;
 
 /** Prep-space open input (§3.7) — the caller's own prep Conversation for a session. */

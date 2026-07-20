@@ -85,6 +85,10 @@ export function anthropicClient(): ClaudeClient {
           cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
           cacheReadTokens: usage.cache_read_input_tokens ?? 0,
         },
+        // 66 §4 — `max_tokens` here is what makes a cut-off reply detectable; without it a truncated
+        // reply is indistinguishable from a finished one. Null (the SDK's "unknown") ⇒ omit, so an
+        // absent stop reason is treated as finished rather than falsely continued.
+        ...(final.stop_reason ? { stopReason: final.stop_reason } : {}),
       };
     },
   };
@@ -97,6 +101,53 @@ let fakeChatEmptyServed = false;
 // is one-shot + haiku-gated, so Together needs a separate flag).
 let fakeTogetherEmptyServed = false;
 let togetherPromptSeq = 0;
+// 66 §10 — the truncation hook. `SELFOS_FAKE_TRUNCATE=1` truncates the FIRST prose reply once (the
+// continuation then completes it); `=always` truncates every call, so a test can drive the continuation
+// CAP. Module-level like `fakeChatEmptyServed` so it survives client re-instantiation within a launch.
+let fakeTruncateServed = false;
+
+/**
+ * 66 §5.1 — is this a continuation call? `streamWithContinuation` re-sends the partial reply as a
+ * trailing assistant message (assistant prefill), so that shape is the tell. Lets the fake return the
+ * SECOND half on a continuation, making the stitched result one grammatical sentence — an E2E can then
+ * assert seamlessness rather than mere concatenation.
+ */
+function isContinuationCall(messages: ClaudeMessage[]): boolean {
+  return messages[messages.length - 1]?.role === 'assistant';
+}
+
+/**
+ * Serve the truncation hook for a prose reply, or null when it isn't armed. The two halves join into
+ * "…it stops mid-sentence — and here is the rest."
+ */
+function fakeTruncation(
+  options: { messages: ClaudeMessage[]; model: string },
+  onDelta: (text: string) => void,
+): Promise<ClaudeStreamResult> | null {
+  const mode = process.env['SELFOS_FAKE_TRUNCATE'];
+  if (!mode) return null;
+  // The cheap Haiku topic classifier runs BEFORE the chat turn and lands here too — without this it would
+  // consume the one-shot, leaving the actual reply untruncated (the same trap SELFOS_FAKE_CHAT_EMPTY hit).
+  if (options.model.includes('haiku')) return null;
+  const usage = { inputTokens: 120, outputTokens: 20, cacheWriteTokens: 0, cacheReadTokens: 0 };
+
+  if (isContinuationCall(options.messages)) {
+    // `always` keeps truncating so the cap is reachable; otherwise the continuation completes the reply.
+    const rest = ' and here is the rest.';
+    for (const word of rest.split(' ')) onDelta(`${word} `);
+    return Promise.resolve({
+      text: rest,
+      usage,
+      stopReason: mode === 'always' ? 'max_tokens' : 'end_turn',
+    });
+  }
+
+  if (mode !== 'always' && fakeTruncateServed) return null;
+  fakeTruncateServed = true;
+  const half = 'I hear you. This is the first half and it stops mid-sentence —';
+  for (const word of half.split(' ')) onDelta(`${word} `);
+  return Promise.resolve({ text: half, usage, stopReason: 'max_tokens' });
+}
 
 /**
  * 58-together §10 — the `SELFOS_FAKE_PROMPT_DIR` capture hook (the `SELFOS_FAKE_SAVE_DIR` precedent): the fake
@@ -615,6 +666,21 @@ export function fakeClaudeClient(): ClaudeClient {
           metrics: { emotionalIntensity: 0.5, valence: 0 },
           crisisFlag: false,
           distressSignal: false,
+          // 66 §3.4 — a voiced commitment becomes a tracked Goal (free; it rides this same pass).
+          goals: ['Notice one steady thing each evening'],
+          // The SEND is gated behind a flag: minting a real questionnaire on every dream synthesis would
+          // perturb unrelated tests that count questionnaires/assignments.
+          ...(process.env['SELFOS_FAKE_DREAM_QUESTIONNAIRE']
+            ? {
+                questionnaires: [
+                  {
+                    title: 'What home means to you',
+                    brief: 'What feels like it is changing at home',
+                    for: process.env['SELFOS_FAKE_DREAM_QUESTIONNAIRE'],
+                  },
+                ],
+              }
+            : {}),
         });
         return Promise.resolve({
           text: draft,
@@ -744,6 +810,12 @@ export function fakeClaudeClient(): ClaudeClient {
           usage: { inputTokens: 220, outputTokens: 30, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+
+      // 66 §10 — the truncation hook, placed after every structured-JSON branch so it can only ever affect
+      // PROSE replies (Sessions + the dream chat, which both fall through to the generic reply below).
+      // Structured calls must never be truncated by a test hook — they have their own 37 salvage path.
+      const truncated = fakeTruncation(options, onDelta);
+      if (truncated) return truncated;
 
       // E2E fail-safe hook (05 §4.1): serve ONE empty chat reply (as adaptive-thinking starvation would) so the
       // "Try again" retry path can be driven through the real UI. Gated by SELFOS_FAKE_CHAT_EMPTY; the retry

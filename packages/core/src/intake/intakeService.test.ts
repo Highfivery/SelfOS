@@ -15,6 +15,9 @@ import {
   formatIntakeForGeneration,
   getIntakeSession,
   redactRestrictedFacts,
+  regenerateIntakeFrom,
+  retryIntakeTurn,
+  rewindIntakeSection,
   runIntakeTurn,
   setIntakeAnswerSharing,
   skipIntakeSection,
@@ -119,6 +122,152 @@ async function setup() {
   await savePerson(fs, key, person({ id: 'p1' }));
   return fs;
 }
+
+describe('intakeService — fail-safe turns (66 §3.2)', () => {
+  const messagesOf = async (fs: ReturnType<typeof memFileSystem>, sectionId = 'basics') =>
+    (await getIntakeSession(fs, key, 'p1'))?.sections.find((s) => s.id === sectionId)?.messages ??
+    [];
+
+  /** A retry's deps are a turn's minus `userText` — it re-answers the transcript as it already stands. */
+  const retryDeps = (
+    fs: ReturnType<typeof memFileSystem>,
+    client: ClaudeClient,
+    sectionId = 'basics',
+  ) => ({ ...base(fs, client), sectionId, onDelta: () => {} });
+
+  it('keeps the person’s message on disk when the reply fails, so nothing is lost', async () => {
+    // The bug: BOTH messages were persisted only on success, and the store never optimistically
+    // appended — so a failed turn made the typed message vanish from the UI and the vault at once.
+    const fs = await setup();
+    const throwing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: () => Promise.reject(new Error('network down')),
+    };
+
+    const res = await runIntakeTurn(turn(fs, throwing, 'basics', 'I am Sam.'));
+    expect(res.ok).toBe(false);
+
+    const messages = await messagesOf(fs);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({ role: 'user', content: 'I am Sam.' });
+  });
+
+  it('sends the person’s message to the model exactly ONCE', async () => {
+    // Persisting first means the message is already in `section.messages`; the prompt builder must not
+    // append it again. Getting this wrong sends every turn twice — the likeliest regression here.
+    const fs = await setup();
+    let sent: { role: string; content: unknown }[] = [];
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        sent = options.messages.map((m) => ({ role: m.role, content: m.content }));
+        onDelta('ok');
+        return Promise.resolve({
+          text: 'ok',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    await runIntakeTurn(turn(fs, capturing, 'basics', 'I am Sam.'));
+    expect(sent.filter((m) => m.content === 'I am Sam.')).toHaveLength(1);
+  });
+
+  it('treats a blank reply as an honest failure and never persists an empty bubble', async () => {
+    const fs = await setup();
+    const res = await runIntakeTurn(turn(fs, fakeClient({ reply: '' }), 'basics', 'hi'));
+    expect(res).toMatchObject({ ok: false, reason: 'EMPTY' });
+
+    expect((await messagesOf(fs)).map((m) => m.role)).toEqual(['user']);
+  });
+
+  it('retries a section that ends on an unanswered message, without duplicating it', async () => {
+    const fs = await setup();
+    const throwing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: () => Promise.reject(new Error('network down')),
+    };
+    await runIntakeTurn(turn(fs, throwing, 'basics', 'I am Sam.'));
+
+    const res = await retryIntakeTurn(retryDeps(fs, fakeClient()));
+    expect(res.ok).toBe(true);
+
+    const messages = await messagesOf(fs);
+    expect(messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(messages.filter((m) => m.content === 'I am Sam.')).toHaveLength(1);
+  });
+
+  it('rewinds a section transcript but leaves the form answers alone', async () => {
+    // The important guarantee: rewinding what you SAID to the interviewer must not unpick fields you
+    // filled in on the form — those are written separately by `submitSectionForm`.
+    const fs = await setup();
+    await submitSectionForm(fs, key, 'p1', 'basics', { occupation: 'nurse' }, NOW);
+    await runIntakeTurn(turn(fs, fakeClient(), 'basics', 'first'));
+    await runIntakeTurn(turn(fs, fakeClient(), 'basics', 'second'));
+
+    const before = await messagesOf(fs);
+    expect(before).toHaveLength(4);
+
+    const result = await rewindIntakeSection(
+      fs,
+      key,
+      'p1',
+      'basics',
+      2,
+      { role: 'user', ts: before[2]!.ts },
+      NOW,
+    );
+    expect(result.ok).toBe(true);
+
+    expect(await messagesOf(fs)).toHaveLength(2);
+    const section = (await getIntakeSession(fs, key, 'p1'))?.sections.find(
+      (s) => s.id === 'basics',
+    );
+    expect(section?.answers['occupation']).toBe('nurse'); // untouched
+  });
+
+  it('refuses a rewind whose stamp no longer matches', async () => {
+    const fs = await setup();
+    await runIntakeTurn(turn(fs, fakeClient(), 'basics', 'first'));
+
+    expect(
+      await rewindIntakeSection(
+        fs,
+        key,
+        'p1',
+        'basics',
+        0,
+        { role: 'user', ts: 'not-the-real-ts' },
+        NOW,
+      ),
+    ).toEqual({ ok: false, reason: 'STALE' });
+    expect(await messagesOf(fs)).toHaveLength(2);
+  });
+
+  it('regenerates from a reply without duplicating the message it answers', async () => {
+    const fs = await setup();
+    await runIntakeTurn(turn(fs, fakeClient(), 'basics', 'first'));
+    const before = await messagesOf(fs);
+
+    const res = await regenerateIntakeFrom(retryDeps(fs, fakeClient()), 1, {
+      role: 'assistant',
+      ts: before[1]!.ts,
+    });
+    expect(res.ok).toBe(true);
+
+    const after = await messagesOf(fs);
+    expect(after.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(after.filter((m) => m.content === 'first')).toHaveLength(1);
+  });
+
+  it('refuses to retry when the last turn already has a real reply', async () => {
+    const fs = await setup();
+    await runIntakeTurn(turn(fs, fakeClient(), 'basics', 'hi'));
+
+    const res = await retryIntakeTurn(retryDeps(fs, fakeClient()));
+    expect(res).toMatchObject({ ok: false, reason: 'ERROR' });
+  });
+});
 
 describe('intakeService', () => {
   it('ensures a fresh session with all catalog sections, and is idempotent on resume', async () => {

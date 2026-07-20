@@ -115,7 +115,7 @@ describe('AutoCheckinsPanel', () => {
     expect(screen.queryByRole('heading', { name: 'Auto check-ins' })).not.toBeInTheDocument();
   });
 
-  it('shows "Check-ins others send you" (even with no own config) and turning a sender off stops it (§3.3a)', async () => {
+  it('shows "Questions others send you" (even with no own config) and turning a sender off stops it (§3.3a)', async () => {
     signIn('member');
     const setBlock = vi.fn(() =>
       Promise.resolve({ schemaVersion: 1 as const, blockedSenders: ['angel'] }),
@@ -128,6 +128,7 @@ describe('AutoCheckinsPanel', () => {
             senderPersonId: 'angel',
             senderName: 'Angel',
             relationshipLabel: 'partner',
+            active: true,
             cadence: 'weekly',
             includeIntimacy: true,
             blocked: false,
@@ -136,14 +137,39 @@ describe('AutoCheckinsPanel', () => {
       autoCheckinsSetBlock: setBlock,
     });
     expect(
-      await screen.findByRole('heading', { name: 'Check-ins others send you' }),
+      await screen.findByRole('heading', { name: 'Questions others send you' }),
     ).toBeInTheDocument();
     expect(screen.getByText('Angel')).toBeInTheDocument();
     expect(
       screen.getByText(/Your partner · Weekly · includes intimacy check-ins/),
     ).toBeInTheDocument();
     // Turning the "Receiving" switch off calls setBlock(blocked: true).
-    await userEvent.click(screen.getByLabelText('Receive check-ins from Angel'));
+    await userEvent.click(screen.getByLabelText('Receive questions from Angel'));
     expect(setBlock).toHaveBeenCalledWith({ senderPersonId: 'angel', blocked: true });
+  });
+
+  it('lets you pre-empt someone who could send but hasn’t — reads "Nothing scheduled", still toggles (66)', async () => {
+    signIn('member');
+    const setBlock = vi.fn(() =>
+      Promise.resolve({ schemaVersion: 1 as const, blockedSenders: ['ben'] }),
+    );
+    mount(null, {
+      autoCheckinsIncomingStreams: () =>
+        Promise.resolve([
+          {
+            senderPersonId: 'ben',
+            senderName: 'Ben',
+            relationshipLabel: 'partner',
+            active: false, // could send, but nothing is configured yet
+            blocked: false,
+          },
+        ]),
+      autoCheckinsSetBlock: setBlock,
+    });
+    expect(await screen.findByText('Ben')).toBeInTheDocument();
+    // No cadence to report — the off-switch is reachable BEFORE anything is sent, which is the point.
+    expect(screen.getByText(/Your partner · Nothing scheduled/)).toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText('Receive questions from Ben'));
+    expect(setBlock).toHaveBeenCalledWith({ senderPersonId: 'ben', blocked: true });
   });
 });

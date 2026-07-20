@@ -119,6 +119,41 @@ export function DreamSynthesisCard({
         <Section title="A gentle prompt" body={analysis.coachingPrompt} />
       ) : null}
 
+      {/* 66 §3.4 — what this analysis created. There was no review step, so this is where the person
+          finds out; the sent questionnaires name their recipient explicitly. Self-hides when empty, so
+          every pre-66 analysis renders exactly as before. */}
+      {(analysis.goals?.length ?? 0) > 0 || (analysis.questionnaires?.length ?? 0) > 0 ? (
+        <div className={styles.section}>
+          <Text weight={600}>What SelfOS did with this</Text>
+          {(analysis.goals?.length ?? 0) > 0 ? (
+            <>
+              <Text tone="secondary" size="sm">
+                Added to your goals
+              </Text>
+              <ul className={styles.questionList}>
+                {analysis.goals?.map((goal, index) => (
+                  <li key={index}>{goal}</li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          {(analysis.questionnaires?.length ?? 0) > 0 ? (
+            <>
+              <Text tone="secondary" size="sm">
+                Questions sent
+              </Text>
+              <ul className={styles.questionList}>
+                {analysis.questionnaires?.map((q) => (
+                  <li key={q.assignmentId}>
+                    “{q.title}” — sent to {q.recipientName ?? 'you'}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className={styles.cardActions}>
         <Button variant="secondary" onClick={() => setEditing(true)}>
           <Pencil size={16} aria-hidden="true" />

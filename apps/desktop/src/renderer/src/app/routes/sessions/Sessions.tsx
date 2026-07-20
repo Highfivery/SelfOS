@@ -20,7 +20,9 @@ import {
   dayDividerLabel,
   Markdown,
   MessageDayDivider,
+  MessageActions,
   MessageRow,
+  RetryBanner,
   Select,
   Stack,
   Text,
@@ -76,6 +78,8 @@ export function Sessions(): JSX.Element {
   const open = useConversationStore((s) => s.open);
   const send = useConversationStore((s) => s.send);
   const retry = useConversationStore((s) => s.retry);
+  const rewind = useConversationStore((s) => s.rewind);
+  const regenerateFrom = useConversationStore((s) => s.regenerateFrom);
   const loadGuidance = useGuidanceStore((s) => s.load);
   const remove = useConversationStore((s) => s.remove);
   const rename = useConversationStore((s) => s.rename);
@@ -372,6 +376,24 @@ export function Sessions(): JSX.Element {
                         <MessageRow
                           side={message.role === 'user' ? 'user' : 'coach'}
                           iso={message.ts}
+                          actions={
+                            sending ? undefined : (
+                              <MessageActions
+                                // `shownMessages` hides blank ghosts, so its index isn't the stored
+                                // one — map back by reference to rewind the right message.
+                                followingCount={Math.max(
+                                  0,
+                                  messages.length - messages.indexOf(message) - 1,
+                                )}
+                                // Deliberately NOT "…your message": Playwright's getByLabel matches
+                                // aria-label SUBSTRINGS, so any label containing "message" collides with
+                                // the composer's `getByLabel('Message')` in 42 existing tests.
+                                label={message.role === 'user' ? 'your turn' : 'the coach’s reply'}
+                                onRegenerate={() => void regenerateFrom(messages.indexOf(message))}
+                                onDelete={() => void rewind(messages.indexOf(message))}
+                              />
+                            )
+                          }
                         >
                           <div
                             className={message.role === 'user' ? styles.userMsg : styles.coachMsg}
@@ -465,16 +487,7 @@ export function Sessions(): JSX.Element {
                 dead-ended on an empty reply is caught too — all offer "Try again" (which asks the coach to reply
                 to the existing transcript, never re-sending/duplicating the message). */}
             {!sending && awaitingReply(messages) ? (
-              <Banner tone={error ? 'warning' : 'info'}>
-                <Stack gap={2}>
-                  <Text>{error ?? 'Your last message hasn’t been answered yet.'}</Text>
-                  <div>
-                    <Button variant="secondary" onClick={() => void retry()}>
-                      Try again
-                    </Button>
-                  </div>
-                </Stack>
-              </Banner>
+              <RetryBanner error={error} onRetry={() => void retry()} />
             ) : error ? (
               <Banner tone="warning">{error}</Banner>
             ) : null}

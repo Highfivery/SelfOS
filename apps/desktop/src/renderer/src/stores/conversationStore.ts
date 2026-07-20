@@ -104,6 +104,10 @@ interface ConversationState {
    *  trailing blank ghost) and nothing's in flight — covering a live failure, a re-opened session, and a legacy
    *  empty-reply dead-end. Drives the "Try again" affordance (05 §4.1). */
   retry: () => Promise<void>;
+  /** "Delete from here" — drop this message and everything after it (66 §3.3). */
+  rewind: (index: number) => Promise<void>;
+  /** "Retry from here" — truncate to this point, then re-generate the reply (66 §3.3). */
+  regenerateFrom: (index: number) => Promise<void>;
   /** Resolve + cache a stored attachment's data URL for a thumbnail/lightbox (45 §3.3). */
   loadAttachment: (ref: AttachmentRef) => Promise<void>;
   /** Export a stored attachment to a file outside the vault (45 §11); returns the saved path or null. */
@@ -310,6 +314,59 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
       set((s) => successPatch(s, result));
       await get().load();
       if (result.challengeCreated) await useChallengeStore.getState().load();
+      await useBudgetStore.getState().refresh();
+    } else {
+      set({ sending: false, streaming: '', error: result?.message ?? 'Something went wrong.' });
+    }
+  },
+  rewind: async (index) => {
+    // "Delete from here" (66 §3.3) — drop this message and everything after it. The stamp is what core
+    // verifies before truncating, so a click on a view that moved on refuses instead of cutting the
+    // wrong span.
+    const state = get();
+    const target = state.messages[index];
+    if (state.sending || !state.activeId || !target) return;
+    const result = await window.selfos?.conversationsRewind({
+      conversationId: state.activeId,
+      index,
+      expect: { role: target.role, ts: target.ts },
+    });
+    if (result?.ok) {
+      set({ messages: result.conversation.messages, wrapUp: null, error: null });
+      await get().load();
+    } else {
+      set({
+        error:
+          result?.reason === 'STALE'
+            ? 'This session moved on — reopen it and try again.'
+            : 'Couldn’t remove those messages.',
+      });
+    }
+  },
+  regenerateFrom: async (index) => {
+    // "Retry from here" — truncate + re-generate in ONE bridge call, so the thread never flashes a
+    // half-rewound state. Streams back through the same chat:chunk sink as a normal turn.
+    const state = get();
+    const target = state.messages[index];
+    if (state.sending || !state.activeId || !target) return;
+    set({ sending: true, streaming: '', error: null, wrapUp: null });
+    let result: ChatTurnResult | undefined;
+    try {
+      result = await window.selfos?.chatRegenerateFrom({
+        conversationId: state.activeId,
+        index,
+        expect: { role: target.role, ts: target.ts },
+      });
+    } catch {
+      result = {
+        ok: false,
+        reason: 'ERROR',
+        message: 'The coach couldn’t respond — please try again.',
+      };
+    }
+    if (result?.ok) {
+      set((s) => successPatch(s, result));
+      await get().load();
       await useBudgetStore.getState().refresh();
     } else {
       set({ sending: false, streaming: '', error: result?.message ?? 'Something went wrong.' });

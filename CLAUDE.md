@@ -419,6 +419,61 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-20 — **Build + durable owner decision (AI chat reliability, message management & dream-analysis
+  coherence; SPEC 66 written + BUILT, all 5 slices; on `feat/chat-reliability-and-rewind`, PR pending).** The
+  user reported AI replies "getting cut off or incomplete" with no recovery, no way to regenerate or delete/go
+  back through messages, and the dream coach producing TWO analyses. Traced rather than pattern-matched.
+  **Root cause of the cut-offs (verified, not assumed): `ClaudeStreamResult` was `{ text, usage }` — it carried
+  NO `stop_reason`.** The SDK exposes it on `finalMessage()` and we discarded it, so a reply truncated at the
+  ceiling was persisted as if the model had finished and nothing in the app could tell the two apart.
+  **Slice 1:** added `stopReason` to the contract (real + browser + fake clients, iOS parity) and ONE shared
+  `streamWithContinuation` helper — on `max_tokens` it re-calls with the partial appended as an assistant
+  message (assistant-prefill), capped at `MAX_CONTINUATIONS = 2`, budget re-checked before EACH continuation,
+  **usage SUMMED so callers meter unchanged**, `extendedThinking` off on continuations (the API rejects it with
+  a prefill), and **markers stripped only after stitching** so a `[[SELFOS:…]]` straddling the seam reassembles.
+  Budgets raised where the fix had never reached: dream turn 1024→4096, dream opener 512→1024, intake 1024→4096
+  (Sessions/Together already had it). **Slice 2 (fail-safe parity):** dream + intake now persist the user's
+  message BEFORE the model call (the 05 §4.1 pattern) — they previously saved only on success, so a failed turn
+  silently LOST the message; plus retry on every surface, Together's trigger generalized from transient `error`
+  to a transcript predicate (a reopened session was a dead end), and the Together prep Try-again button that
+  the store already supported but nothing rendered. **Slice 3 (rewind):** "Retry from here" / "Delete from
+  here" via a core `truncateMessages` keyed on a **`(role, ts)` stamp, NOT a new `ChatMessage.id`** — an id
+  would be absent on every message already in a vault, so it would silently fall back to index exactly where it
+  matters; dropped attachments are reaped. `MessageActions` hangs off the shared `MessageRow` (hover AND
+  keyboard-reachable, inline two-step confirm). **Together is append-only (one encrypted file per message), so
+  removal deletes the files + appends a write-once tombstone** — with **aside-privacy inheritance**: an
+  aside-only span yields a private tombstone, a mixed span yields TWO, and every derived signal
+  (`turnStateFor`/`unreadCountFor`/`newestSharedHumanTs`/`digestFor`) filters them. **Slice 4 (the double
+  analysis):** root-caused to one clause in `DREAM_ANALYSIS_GUIDANCE` licensing the coach to write the analysis
+  as chat prose while the app's `[[SELFOS:DREAM_READY]]` marker drove the real structured artifact — two
+  independent channels. Rewritten so the coach NEVER writes it inline and instead invites the person to run it
+  (explicitly "unless there's more you want to talk about", per the request), with the spoken invitation bound
+  to the same turn as the marker. **Slice 5 (dream artifacts):** the synthesis JSON now also returns `goals`
+  (→ `extractGoals`, provenance stamped with a **stable `at`** so re-synthesis is idempotent) and a
+  questionnaire proposal (→ new `mintDreamQuestionnaires`, modelled on the auto-checkin recipe: resolve
+  recipient WITHOUT trusting the model with an id, validate-before-save, compensating delete if the send
+  throws) — **goals cost no extra AI, riding the existing synthesis call**. **THE DURABLE OWNER DECISION
+  (informed, spelled out before it was taken): a dream questionnaire is auto-created AND auto-sent, including
+  to another household member, with NO review step and NO sensitive-tier carve-out** — so it can disclose to
+  someone that they were dreamt about, and roughly what happened, without the dreamer seeing what was asked
+  (spec 66 §8.4; the sibling of the "questionnaire tailoring uses ALL data" override). **Close-out fixes:** the
+  recipient's standing opt-out gate that `mintDreamQuestionnaires` honours was **mostly inert** — the switch
+  only rendered for someone who had ALREADY set up a recurring stream, so for a one-off there was no way to opt
+  out in advance; `listIncomingAutoCheckinStreams` now lists every subject who COULD send (active/inactive,
+  contacts excluded), with the first-time notice gated on `active`. Also fixed **`justify="between"`** — not
+  valid CSS, and `Inline`/`Stack` typed the prop as `CSSProperties['justifyContent']` (effectively `string`),
+  so the browser dropped it and computed `normal`: ten rows across Usage/Switcher/Together/People/Budgets bunched
+  left instead of spreading, silently, for months. Both props are now closed `FlexJustify`/`FlexAlign` unions.
+  Gate green: typecheck, lint, format, **1544 core + 1353 desktop** unit, **171 E2E** (a `SELFOS_FAKE_TRUNCATE`
+  hook drives a real truncation→continuation through the UI; rewind, dream retry, the tombstone and the sent
+  dream questionnaire are all decrypt-asserted). Visual QA at desktop + 360px. **Lessons: (1) a transport that
+  drops `stop_reason` makes truncation STRUCTURALLY undetectable — no amount of downstream handling can
+  recover it, and the offline fakes hide it completely because they always return clean output, so add the
+  field at the transport and give the fake a way to simulate the failure. (2) Rewind must key on data every
+  existing record already has — a `(role, ts)` stamp, not a newly-added `id` that is absent on every message
+  already in a vault. (3) A prop typed `CSSProperties['justifyContent']` is `string`: it accepts values CSS
+  rejects, the browser drops them silently, and jsdom does not validate CSS — so the only real defenses are a
+  closed union (build error) and a computed-style assertion in real Chromium.**
 - 2026-07-19 — **Release ops + doc drift (the Release workflow failed on two merges — a GitHub OUTAGE, not the
   manifest loop; and the stale `release-please-action@v4` note corrected).** After #257 + #258 landed, the
   **Release** workflow failed on **both** pushes to `main` (11s / 8s — a fast failure at the `Run release-please`

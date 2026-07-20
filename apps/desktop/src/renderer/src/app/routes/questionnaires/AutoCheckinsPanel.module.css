@@ -20,6 +20,15 @@
   padding-top: var(--space-1);
 }
 
+/*
+ * The name + meta half of a row. `min-width: 0` is the flexbox footgun (§12): without it this block
+ * refuses to shrink below its content, so at phone width the row overflows instead of wrapping.
+ */
+.rowIdentity {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .addRow {
   display: flex;
   flex-direction: column;

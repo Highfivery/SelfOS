@@ -37,7 +37,7 @@ export function BudgetEditor({
 
   return (
     <Stack gap={2}>
-      <Inline gap={2} justify="between">
+      <Inline gap={2} justify="space-between">
         <Text size="sm" weight={500}>
           {label}
         </Text>

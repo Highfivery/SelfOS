@@ -21,6 +21,15 @@ import { checkBudget, costOf, recordUsage } from '../usage';
 import { buildContext, buildLinkedPeopleContext, listRelationships } from '../people';
 import type { RelationshipType } from '../schemas';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
+import { streamWithContinuation } from '../conversations/streamWithContinuation';
+import {
+  regenerateIndexFor,
+  truncateMessages,
+  type MessageStamp,
+} from '../conversations/rewindService';
+import { extractGoals } from '../goals/goalService';
+import { mintDreamQuestionnaires } from './dreamQuestionnaireService';
+import type { RewindResult } from '../schemas';
 import { deleteInsight, getInsight, producedFactShare, saveInsight } from '../insights';
 import {
   getAnalysis,
@@ -50,20 +59,38 @@ fact, science, or diagnosis. Guide gently, ONE focused question at a time, follo
 person brings — the felt emotions, the images that stood out, and what it might connect to in their waking \
 life — in an unhurried exploration → insight → gentle-action arc. Favour one good question over a wall of \
 interpretation; stay curious, never clinical. This is reflective self-help, not therapy, diagnosis, or \
-treatment. When you have enough to write a meaningful reflection, the person can ask you to write up an \
-analysis (and you may gently offer).`;
+treatment.
+
+You NEVER write the analysis yourself in this conversation. The written analysis is a separate thing the \
+app produces and saves to their dream journal — so never write out a summary, an interpretation, a list of \
+symbols, or anything that reads as "the analysis". Stay in the exploring register: one question at a time.
+
+When you have explored enough — they have shared the feelings, the images that stood out, and any \
+waking-life echoes you need — do not keep going. In one short sentence, tell them it feels like there is \
+enough here and invite them to create their analysis, and make clear they can keep talking if there is \
+more they want to bring. Then let them choose. If they say there is more, keep exploring and do not ask \
+again for a while. If they ask you directly to analyze the dream, do not write it out — warmly point them \
+to creating the analysis instead.`;
+
+/**
+ * Token ceilings for the dream chat (66 §5.2). Adaptive thinking SHARES `maxTokens` with the visible
+ * reply ([[adaptive-thinking-shares-maxtokens]]), so the old 1024/512 routinely starved a reflective
+ * reply into a truncated or empty one. Ceilings, not targets — only generated tokens are billed.
+ */
+const DREAM_CHAT_MAX_TOKENS = 4096;
+const DREAM_OPENER_MAX_TOKENS = 1024;
 
 /** The private "I have enough to write an analysis now" signal (12 §15.4) — mirrors `05`/`09`'s wrap-up
  * marker. Deliberately unlikely to occur in natural prose; never shown to the person. */
 export const DREAM_READY_MARKER = '[[SELFOS:DREAM_READY]]';
 
 /** Teaches the coach the readiness-marker convention (appended to dream-analysis chat turns only). */
-export const DREAM_READY_INSTRUCTION = `Privately, once you have gathered enough about this dream to write \
-a meaningful reflection — the person has shared the feelings, the images that stood out, and any \
-waking-life echoes you need — append the exact token ${DREAM_READY_MARKER} as the very last thing in your \
-reply, on its own. It is a silent signal to the app that an analysis can now be written; it is never shown \
-to the person, so never mention it, explain it, or use it before you genuinely have enough. If you still \
-need more from them first, do not include it.`;
+export const DREAM_READY_INSTRUCTION = `On the SAME turn that you invite them to create their analysis, \
+append the exact token ${DREAM_READY_MARKER} as the very last thing in your reply, on its own. Pair the \
+two: the spoken invitation and this token always go together, so the app's offer matches what you just \
+said. It is a silent signal that an analysis can now be written; it is never shown to the person, so never \
+mention it, explain it, or use it before you genuinely have enough. If they still have more they want to \
+explore, keep exploring and do not include it yet.`;
 
 /** The (non-persisted) instruction that has the coach OPEN the reflection referencing this specific dream. */
 const OPENER_INSTRUCTION = `Open the reflection now. Greet the person warmly and briefly, reflect their \
@@ -108,7 +135,12 @@ JSON object (no markdown fences, no prose outside it) with these keys:
 - "tags": { "emotions": [], "symbols": [], "settings": [], "themes": [], "people": [] } — short lowercase keywords for tracking patterns over time
 - "metrics": optional object of normalized signals for trend tracking, e.g. {"emotionalIntensity": 0.0-1.0, "valence": -1.0..1.0} (object)
 - "crisisFlag": true ONLY if self-harm, suicide, or acute crisis is disclosed (boolean)
-- "distressSignal": true if there are signs of significant trauma or recurring distress worth gently noting (boolean)`;
+- "distressSignal": true if there are signs of significant trauma or recurring distress worth gently noting (boolean)
+- "goals": commitments the person ACTUALLY VOICED in the conversation — their words, not your inference. \
+Never invent one from dream imagery alone. Omit the key entirely if they named none. (array of strings)
+- "questionnaires": AT MOST ONE, and only when the dream points at something genuinely worth asking a \
+specific person about. Each is { "title": short title, "brief": one sentence on what to explore, "for": \
+either "me" or the NAME of someone who appeared in the dream }. Omit the key entirely otherwise. (array)`;
 
 const EMPTY_TAGS = { emotions: [], symbols: [], settings: [], themes: [], people: [] };
 
@@ -130,6 +162,20 @@ const DreamAnalysisDraftSchema = z.object({
   metrics: z.record(z.string(), z.number()).optional().catch(undefined),
   crisisFlag: z.boolean().optional().catch(undefined),
   distressSignal: z.boolean().optional().catch(undefined),
+  // 66 §3.4 — both tolerant: a malformed goal or proposal drops itself, never the whole analysis.
+  goals: tolerantArray(z.string(), '', (g) => g.trim() !== ''),
+  questionnaires: tolerantArray(
+    z.object({
+      title: z.string().min(1),
+      brief: z.string().min(1),
+      // "me" or a display NAME. Deliberately never a personId — the model must not be able to address a
+      // recipient directly; the host resolves the name against the dream's own people.
+      for: z.string().optional().catch(undefined),
+    }),
+    // The drop sentinel: a malformed proposal collapses to an empty title and is filtered out.
+    { title: '', brief: '' },
+    (q) => q.title.trim() !== '' && q.brief.trim() !== '',
+  ),
 });
 
 export interface DreamAnalysisTurnDeps {
@@ -156,6 +202,12 @@ export interface DreamSynthesisDeps {
   dreamId: string;
   now: Date;
   override?: boolean;
+  /**
+   * Whether this person may create questionnaires (66 §3.4). `dreams:synthesize` gates on `dreams.own`,
+   * but auto-sending needs `questionnaires.create` — so the bridge resolves it and passes it in, the same
+   * way `memoryEnabled` reaches `approveAnalysis`. False ⇒ no minting; the analysis still succeeds.
+   */
+  questionnairesEnabled?: boolean;
 }
 
 function deriveTitle(text: string): string {
@@ -250,7 +302,7 @@ async function overBudget(
  * dream's transcript (under the dream, never in Sessions), and meter as `dream.analyze`.
  */
 export async function runAnalysisTurn(deps: DreamAnalysisTurnDeps): Promise<ChatTurnResult> {
-  const { fs, key, client, apiKey, model, personId, dreamId, userText, now } = deps;
+  const { fs, key, apiKey, personId, dreamId, userText, now } = deps;
   if (!apiKey) return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };
 
   const dream = await getDream(fs, key, personId, dreamId);
@@ -272,34 +324,11 @@ export async function runAnalysisTurn(deps: DreamAnalysisTurnDeps): Promise<Chat
     updatedAt: at,
     messages: [],
   };
+  // 66 §3.2 — persist the person's message BEFORE the model call. Previously the transcript was saved
+  // only after a successful reply, so a failed turn lost what they'd typed (the store showed it
+  // optimistically and never rolled back, so it silently vanished on reload). Saving first leaves the
+  // transcript ending on their message, which is the state `retryDreamReply` recovers from.
   conversation.messages.push({ role: 'user', content: userText, ts: at });
-
-  // Teach the coach the readiness-marker convention on chat turns (never on synthesis), mirroring `05`'s
-  // wrap-up instruction — so it can silently signal when it has enough to write an analysis.
-  const system = `${await buildDreamPrompt(fs, key, personId, dream)}\n\n${DREAM_READY_INSTRUCTION}`;
-  let result;
-  try {
-    result = await client.stream(
-      {
-        apiKey,
-        model,
-        system,
-        messages: conversation.messages.map((m) => ({ role: m.role, content: m.content })),
-        maxTokens: 1024,
-      },
-      deps.onDelta,
-    );
-  } catch {
-    return { ok: false, reason: 'ERROR', message: 'The coach couldn’t respond. Please try again.' };
-  }
-
-  // Detect the readiness marker, then strip it (and any mid-stream partial) so it never persists or shows.
-  const analysisReady = result.text.includes(DREAM_READY_MARKER);
-  conversation.messages.push({
-    role: 'assistant',
-    content: stripDreamMarkers(result.text),
-    ts: at,
-  });
   conversation.updatedAt = at;
   await saveDreamConversation(fs, key, conversation);
 
@@ -310,9 +339,187 @@ export async function runAnalysisTurn(deps: DreamAnalysisTurnDeps): Promise<Chat
     await patchDream(fs, key, personId, dreamId, { status: 'analyzing', updatedAt: at });
   }
 
+  return generateDreamReply(deps, conversation, dream);
+}
+
+/**
+ * Stream the coach's reply for a dream transcript that already ends with the person's message. Shared by
+ * `runAnalysisTurn` (after it persists that message) and `retryDreamReply` (which re-runs on the existing
+ * transcript). A blank reply is an honest EMPTY failure that is never persisted (66 §3.2).
+ */
+async function generateDreamReply(
+  deps: Omit<DreamAnalysisTurnDeps, 'userText'>,
+  conversation: Conversation,
+  dream: Dream,
+): Promise<ChatTurnResult> {
+  const { fs, key, client, apiKey, model, personId, dreamId, now } = deps;
+  if (!apiKey) return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };
+  const at = now.toISOString();
+
+  // Teach the coach the readiness-marker convention on chat turns (never on synthesis), mirroring `05`'s
+  // wrap-up instruction — so it can silently signal when it has enough to write an analysis.
+  const system = `${await buildDreamPrompt(fs, key, personId, dream)}\n\n${DREAM_READY_INSTRUCTION}`;
+  let result;
+  try {
+    result = await streamWithContinuation(
+      client,
+      {
+        apiKey,
+        model,
+        system,
+        messages: conversation.messages.map((m) => ({ role: m.role, content: m.content })),
+        // 66 §5.2 — was 1024. Adaptive thinking SHARES this budget, so a reflective reply was routinely
+        // starved to a truncated or empty one (the reported cut-offs). Matches Sessions' ceiling; you only
+        // pay for tokens actually generated.
+        maxTokens: DREAM_CHAT_MAX_TOKENS,
+      },
+      deps.onDelta,
+      {
+        canContinue: async () => !(await overBudget(fs, key, personId, now, deps.override)),
+      },
+    );
+  } catch {
+    return { ok: false, reason: 'ERROR', message: 'The coach couldn’t respond. Please try again.' };
+  }
+
+  // Meter the billed call FIRST (even a blank reply consumed input + thinking tokens), then decide.
   const usage = buildUsage(model, dreamId, personId, at, result.usage);
   await recordUsage(fs, key, usage);
+
+  // 66 §3.2 — a blank reply is a FAILURE, not a silently-saved empty bubble (the 05 §4.1 rule, which the
+  // dream surface never had). The person's message is already on disk, so Try again can recover the turn.
+  if (result.text.trim() === '') {
+    return {
+      ok: false,
+      reason: 'EMPTY',
+      message: 'The coach’s reply came back empty — please try again.',
+    };
+  }
+
+  // Detect the readiness marker, then strip it (and any mid-stream partial) so it never persists or shows.
+  // Both run on the STITCHED text, so a marker split across a continuation seam still resolves (66 §5.1).
+  const analysisReady = result.text.includes(DREAM_READY_MARKER);
+  // 66 §3.4 — persist the signal the first time it fires, so the offer survives navigating away and back
+  // (it used to live only in renderer state and was lost on remount).
+  // Via `patchDream`, not a spread of `dream`: that object predates the model call, so writing it whole
+  // would revert anything saved during the turn (an image, an edit) — the stale-write class swept off main.
+  if (analysisReady && !dream.analysisReadyAt) {
+    await patchDream(fs, key, personId, dream.id, { analysisReadyAt: at, updatedAt: at });
+  }
+  conversation.messages.push({
+    role: 'assistant',
+    content: stripDreamMarkers(result.text),
+    ts: at,
+  });
+  conversation.updatedAt = at;
+  await saveDreamConversation(fs, key, conversation);
+
   return { ok: true, conversation, usage, ...(analysisReady ? { analysisReady } : {}) };
+}
+
+/**
+ * Truncate a dream transcript at `index` and persist it (66 §3.3). The dream chat reuses the `Conversation`
+ * shape, so it reuses the same pure truncate + staleness check as Sessions.
+ */
+export async function rewindDreamConversation(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  dreamId: string,
+  index: number,
+  expect: MessageStamp,
+): Promise<RewindResult> {
+  const conversation = await getDreamConversation(fs, key, personId, dreamId);
+  if (!conversation) return { ok: false, reason: 'NOT_FOUND' };
+
+  const result = truncateMessages(conversation.messages, index, expect);
+  if (!result.ok) return result;
+
+  // Dream chat messages carry no attachments today, so there is nothing to reap — but the shape is the
+  // same, so if that changes the reap belongs here alongside the Sessions one.
+  const trimmed: Conversation = {
+    ...conversation,
+    messages: result.messages,
+    updatedAt: new Date().toISOString(),
+  };
+  await saveDreamConversation(fs, key, trimmed);
+  return { ok: true, conversation: trimmed };
+}
+
+/** Deps for `retryDreamReply` — a dream turn minus the (already-persisted) user text. */
+export type DreamRetryDeps = Omit<DreamAnalysisTurnDeps, 'userText'>;
+
+/**
+ * "Retry from here" for a dream reflection (66 §3.3) — rewind to the message, then re-generate. Same
+ * shape as the Sessions one: validate the caller's stamp BEFORE writing anything, truncate so the
+ * transcript ends on the person's message, then let the existing retry answer it.
+ */
+export async function regenerateDreamFrom(
+  deps: DreamRetryDeps,
+  index: number,
+  expect: MessageStamp,
+): Promise<ChatTurnResult> {
+  const { fs, key, personId, dreamId } = deps;
+  const conversation = await getDreamConversation(fs, key, personId, dreamId);
+  if (!conversation)
+    return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+
+  const target = conversation.messages[index];
+  if (!target || target.role !== expect.role || target.ts !== expect.ts) {
+    return {
+      ok: false,
+      reason: 'ERROR',
+      message: 'This reflection moved on — reopen it and try again.',
+    };
+  }
+
+  const at = regenerateIndexFor(conversation.messages, index);
+  if (at < conversation.messages.length) {
+    const cut = conversation.messages[at];
+    if (!cut) return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+    const rewound = await rewindDreamConversation(fs, key, personId, dreamId, at, {
+      role: cut.role,
+      ts: cut.ts,
+    });
+    if (!rewound.ok)
+      return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+  }
+  return retryDreamReply(deps);
+}
+
+/**
+ * Re-generate the coach's reply for a dream transcript that ends on an unanswered message (66 §3.2) —
+ * after a failed/empty turn, or on reopening a reflection left mid-turn. Adds NO new user message, so it
+ * can never duplicate one. Budget-gated + metered like a normal turn.
+ */
+export async function retryDreamReply(deps: DreamRetryDeps): Promise<ChatTurnResult> {
+  const { fs, key, personId, dreamId, now } = deps;
+  if (!deps.apiKey)
+    return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };
+  if (await overBudget(fs, key, personId, now, deps.override)) {
+    return { ok: false, reason: 'BUDGET', message: 'AI budget reached for this period.' };
+  }
+  const dream = await getDream(fs, key, personId, dreamId);
+  if (!dream)
+    return { ok: false, reason: 'ERROR', message: 'That dream could no longer be found.' };
+
+  const conversation = await getDreamConversation(fs, key, personId, dreamId);
+  if (!conversation)
+    return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+
+  // Drop any trailing blank assistant ghost first (pre-66 code could persist one), so the transcript
+  // ends on the person's message and can be answered.
+  while (conversation.messages.length > 0) {
+    const tail = conversation.messages[conversation.messages.length - 1];
+    if (tail && tail.role === 'assistant' && tail.content.trim() === '')
+      conversation.messages.pop();
+    else break;
+  }
+  if (conversation.messages[conversation.messages.length - 1]?.role !== 'user') {
+    return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+  }
+
+  return generateDreamReply(deps, conversation, dream);
 }
 
 export interface DreamOpenReflectionDeps {
@@ -380,15 +587,21 @@ export async function openReflection(
 
   let result;
   try {
-    result = await client.stream(
+    result = await streamWithContinuation(
+      client,
       {
         apiKey,
         model,
         system: await buildDreamPrompt(fs, key, personId, dream),
         messages: [{ role: 'user', content: OPENER_INSTRUCTION }],
-        maxTokens: 512,
+        // 66 §5.2 — was 512. The opener is short, but adaptive thinking shares the budget, so 512 could
+        // starve even a two-sentence greeting into a truncated one.
+        maxTokens: DREAM_OPENER_MAX_TOKENS,
       },
       deps.onDelta,
+      {
+        canContinue: async () => !(await overBudget(fs, key, personId, now, deps.override)),
+      },
     );
   } catch {
     return persist(staticOpener()); // transport error → still open, statically
@@ -486,6 +699,52 @@ export async function synthesizeAnalysis(deps: DreamSynthesisDeps): Promise<Drea
     generatedAt: at,
     updatedAt: at,
   };
+
+  // 66 §3.4 — the artifacts this analysis produces. Both are wrapped: they're a bonus, the reflection is
+  // the product, so a failure here must never cost the person their analysis.
+  try {
+    if (draft.goals.length > 0) {
+      // The origin `at` is deliberately the FIRST analysis's timestamp, not now: `extractGoals` de-dups by
+      // provenance, so a moving timestamp would fold the same dream in again on every re-synthesis and grow
+      // `contributingSources` without bound. Stable identity = "this dream, first analyzed at T".
+      const touched = await extractGoals({
+        fs,
+        key,
+        personId,
+        goals: draft.goals,
+        provenance: { dreamId, at: prior?.generatedAt ?? at },
+        lifeArea: 'Emotions & patterns',
+        now,
+      });
+      // Note: NO `insightId`. Synthesis runs before approval, and re-synthesis deletes the prior Insight —
+      // linking one here would leave a dangling reference.
+      if (touched.length > 0) {
+        analysis.goals = draft.goals;
+        analysis.goalIds = touched.map((g) => g.id);
+      }
+    }
+  } catch {
+    // A goal-write failure leaves `goals`/`goalIds` unset; the analysis still saves.
+  }
+
+  try {
+    if (deps.questionnairesEnabled && draft.questionnaires.length > 0) {
+      const sent = await mintDreamQuestionnaires({
+        deps,
+        fs,
+        key,
+        personId,
+        dream,
+        analysisId: analysis.id,
+        proposals: draft.questionnaires,
+        now,
+      });
+      if (sent.length > 0) analysis.questionnaires = sent;
+    }
+  } catch {
+    // Same: nothing is persisted by a failed mint, and the analysis is unaffected.
+  }
+
   await saveAnalysis(fs, key, analysis);
   // `patchDream`, NOT `{...dream}`: `dream` was read before the synthesis call, so spreading it here
   // reverts every field written during it — which is exactly how an image generated mid-synthesis got

@@ -38,6 +38,12 @@ interface DreamAnalysisState {
   startReflection: () => Promise<void>;
   /** Send one guided-chat turn; the streamed reply arrives via `appendChunk`. */
   sendTurn: (text: string) => Promise<void>;
+  /** Re-generate the coach's reply when the transcript ends on an unanswered message (66 §3.2). */
+  retryTurn: () => Promise<void>;
+  /** "Delete from here" — drop this message and everything after it (66 §3.3). */
+  rewind: (index: number) => Promise<void>;
+  /** "Retry from here" — truncate to this point, then re-generate (66 §3.3). */
+  regenerateFrom: (index: number) => Promise<void>;
   /** Synthesize the dream (+ transcript) into a structured analysis. */
   synthesize: () => Promise<void>;
   /** Save the person's section edits; re-approves to keep an approved context in sync. */
@@ -126,6 +132,72 @@ export const useDreamAnalysisStore = create<DreamAnalysisState>((set, get) => ({
       }));
       await useBudgetStore.getState().refresh(); // dream.analyze is metered → update the usage ring
       await useDreamStore.getState().load(); // status may flip captured → analyzing
+    } else {
+      set({ sending: false, streaming: '', error: result?.message ?? 'Something went wrong.' });
+    }
+  },
+  retryTurn: async () => {
+    const dreamId = get().dreamId;
+    if (!dreamId || get().sending) return;
+    // Adds no new user message — core re-generates a reply for the transcript as it already stands, so
+    // the person's message can never be duplicated (66 §3.2).
+    set({ streaming: '', sending: true, error: null });
+    const result = await window.selfos?.dreamRetryTurn({ dreamId });
+    if (result?.ok) {
+      set((s) => ({
+        messages: result.conversation.messages,
+        streaming: '',
+        sending: false,
+        analysisReady: s.analysisReady || Boolean(result.analysisReady),
+      }));
+      await useBudgetStore.getState().refresh();
+      await useDreamStore.getState().load();
+    } else {
+      set({ sending: false, streaming: '', error: result?.message ?? 'Something went wrong.' });
+    }
+  },
+  rewind: async (index) => {
+    // "Delete from here" (66 §3.3) — the stamp is what core verifies before truncating, so a click on
+    // a view that moved on refuses rather than cutting the wrong span.
+    const { dreamId, messages, sending } = get();
+    const target = messages[index];
+    if (!dreamId || sending || !target) return;
+    const result = await window.selfos?.dreamRewind({
+      dreamId,
+      index,
+      expect: { role: target.role, ts: target.ts },
+    });
+    if (result?.ok) {
+      set({ messages: result.conversation.messages, error: null });
+    } else {
+      set({
+        error:
+          result?.reason === 'STALE'
+            ? 'This reflection moved on — reopen it and try again.'
+            : 'Couldn’t remove those messages.',
+      });
+    }
+  },
+  regenerateFrom: async (index) => {
+    // "Retry from here" — truncate + re-generate in ONE bridge call, so the thread never flashes a
+    // half-rewound state. Streams back through the same dreams:chunk sink.
+    const { dreamId, messages, sending } = get();
+    const target = messages[index];
+    if (!dreamId || sending || !target) return;
+    set({ streaming: '', sending: true, error: null });
+    const result = await window.selfos?.dreamRegenerateFrom({
+      dreamId,
+      index,
+      expect: { role: target.role, ts: target.ts },
+    });
+    if (result?.ok) {
+      set((s) => ({
+        messages: result.conversation.messages,
+        streaming: '',
+        sending: false,
+        analysisReady: s.analysisReady || Boolean(result.analysisReady),
+      }));
+      await useBudgetStore.getState().refresh();
     } else {
       set({ sending: false, streaming: '', error: result?.message ?? 'Something went wrong.' });
     }

@@ -28,6 +28,12 @@ import {
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { buildContext, getPerson, savePerson } from '../people';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
+import { streamWithContinuation } from '../conversations/streamWithContinuation';
+import {
+  regenerateIndexFor,
+  truncateMessages,
+  type MessageStamp,
+} from '../conversations/rewindService';
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { getInsight, normalizeCategories, saveInsight } from '../insights';
 import { isAnswered, isQuestionVisible, type AnswerMap } from '../questionnaires/answering';
@@ -57,6 +63,11 @@ import { intakeAnswerHashes } from './portraitFreshness';
  */
 
 const SCHEMA_VERSION = 1;
+/**
+ * The interviewer-turn ceiling (66 §5.2). Was 1024, which adaptive thinking SHARES with the visible
+ * reply — so a warm, multi-part interviewer turn could be truncated. Ceiling, not target.
+ */
+const INTAKE_MAX_TOKENS = 4096;
 const intakePath = (personId: string): string => `people/${personId}/intake/session.enc`;
 
 // --- Persistence ---
@@ -541,7 +552,7 @@ export interface IntakeTurnDeps {
  * it's prepended to the model messages each turn but never duplicated into the transcript.
  */
 export async function runIntakeTurn(deps: IntakeTurnDeps): Promise<IntakeTurnResult> {
-  const { fs, key, client, apiKey, model, personId, sectionId, userText, now } = deps;
+  const { fs, key, apiKey, personId, sectionId, userText, now } = deps;
   if (!apiKey) return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };
   const def = getIntakeSection(sectionId);
   if (!def) return { ok: false, reason: 'ERROR', message: 'That section could not be found.' };
@@ -558,20 +569,60 @@ export async function runIntakeTurn(deps: IntakeTurnDeps): Promise<IntakeTurnRes
   const section = session.sections.find((s) => s.id === sectionId);
   if (!section) return { ok: false, reason: 'ERROR', message: 'That section could not be found.' };
 
-  const system = await buildIntakeSystem(fs, key, person, sectionId);
+  // 66 §3.2 — persist the person's message BEFORE the model call. Previously both messages were saved
+  // only on success, so a failed turn silently ate what they'd typed (it wasn't even shown optimistically).
+  // Saving first means a failure simply leaves the transcript ending on their message, which is exactly
+  // the state `retryIntakeTurn` recovers from. Via `patchIntakeSession` so it can't clobber a concurrent
+  // form auto-save (the same stale-write rule the reply write follows).
+  const withMessage = await patchIntakeSession(fs, key, personId, (live) => {
+    const target = live.sections.find((sec) => sec.id === sectionId);
+    if (!target) return;
+    target.messages.push({ role: 'user', content: userText, ts: at });
+    if (target.status === 'notStarted') target.status = 'inProgress';
+    live.updatedAt = at;
+  });
+  if (withMessage) Object.assign(session, withMessage);
+  const live = session.sections.find((s) => s.id === sectionId) ?? section;
+
+  return generateIntakeReply(deps, session, live, def);
+}
+
+/**
+ * Stream the interviewer's reply for a section whose transcript already ends with the person's message.
+ * Shared by `runIntakeTurn` (after it persists that message) and `retryIntakeTurn` (which re-runs on the
+ * existing transcript). A blank reply is an honest EMPTY failure that is never persisted (66 §3.2).
+ */
+async function generateIntakeReply(
+  deps: Omit<IntakeTurnDeps, 'userText'>,
+  session: IntakeSession,
+  section: IntakeSection,
+  def: IntakeSectionDef,
+): Promise<IntakeTurnResult> {
+  const { fs, key, client, apiKey, model, personId, now } = deps;
+  if (!apiKey) return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };
+  const at = now.toISOString();
+
+  const person = await getPerson(fs, key, personId);
+  if (!person) return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+  const system = await buildIntakeSystem(fs, key, person, section.id);
   if (!system) return { ok: false, reason: 'ERROR', message: 'That section could not be found.' };
 
+  // The person's message is ALREADY in `section.messages` (persisted above), so it must NOT be appended
+  // again here — doing so would send it to the model twice.
   const messages = [
     { role: 'assistant' as const, content: def.opener },
     ...section.messages.map((m) => ({ role: m.role, content: m.content })),
-    { role: 'user' as const, content: userText },
   ];
 
   let result;
   try {
-    result = await client.stream(
-      { apiKey, model, system, messages, maxTokens: 1024 },
+    result = await streamWithContinuation(
+      client,
+      // 66 §5.2 — was 1024. Adaptive thinking shares this budget, so an interviewer reply could be
+      // starved into a truncated one. Ceiling, not target.
+      { apiKey, model, system, messages, maxTokens: INTAKE_MAX_TOKENS },
       deps.onDelta,
+      { canContinue: async () => !(await overBudget(fs, key, personId, now, deps.override)) },
     );
   } catch {
     return {
@@ -581,26 +632,149 @@ export async function runIntakeTurn(deps: IntakeTurnDeps): Promise<IntakeTurnRes
     };
   }
 
-  // Meter the paid call the moment it returns (06).
+  // Meter the paid call the moment it returns (06) — even a blank reply consumed input + thinking tokens.
   const usage = buildUsage('intake.interview', model, session.id, personId, at, result.usage);
   await recordUsage(fs, key, usage);
+
+  // 66 §3.2 — a blank reply is a FAILURE, not a silently-saved empty bubble (the 05 §4.1 rule, which
+  // intake never had). The person's message stays on disk, so Try again can recover the turn.
+  if (result.text.trim() === '') {
+    return {
+      ok: false,
+      reason: 'EMPTY',
+      message: 'The interviewer’s reply came back empty — please try again.',
+    };
+  }
 
   // Chat replies no longer carry field markers (forms fill fields, §14.6); strip defensively anyway.
   const clean = stripIntakeFieldMarkers(result.text);
 
   // Re-read: `session` predates the model call, so writing it whole would revert any form answer
-  // auto-saved during the turn. Apply just this turn's messages to the CURRENT session.
+  // auto-saved during the turn. Apply just this turn's REPLY to the CURRENT session — the person's own
+  // message was already persisted before the call (66 §3.2), so only the reply is appended here.
   const patched = await patchIntakeSession(fs, key, personId, (live) => {
-    const target = live.sections.find((sec) => sec.id === sectionId);
+    const target = live.sections.find((sec) => sec.id === section.id);
     if (!target) return;
-    target.messages.push({ role: 'user', content: userText, ts: at });
     target.messages.push({ role: 'assistant', content: clean, ts: at });
-    if (target.status === 'notStarted') target.status = 'inProgress';
     live.updatedAt = at;
   });
   if (patched) Object.assign(session, patched);
 
   return { ok: true, session, usage };
+}
+
+/**
+ * Truncate a section transcript at `index` and persist it (66 §3.3). Same pure truncate + staleness check
+ * as the other surfaces; the messages live nested in the one intake document rather than their own file.
+ *
+ * Note this rewinds the CONVERSATION only. Structured answers are written separately by
+ * `submitSectionForm`, so they are deliberately untouched — rewinding what you said to the interviewer
+ * shouldn't silently unpick fields you filled in on a form.
+ */
+export async function rewindIntakeSection(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  sectionId: string,
+  index: number,
+  expect: MessageStamp,
+  now: Date,
+): Promise<IntakeRewindResult> {
+  const session = await getIntakeSession(fs, key, personId);
+  const section = session?.sections.find((s) => s.id === sectionId);
+  if (!session || !section) return { ok: false, reason: 'NOT_FOUND' };
+
+  const result = truncateMessages(section.messages, index, expect);
+  if (!result.ok) return result;
+
+  section.messages = result.messages;
+  session.updatedAt = now.toISOString();
+  await writeEncryptedJson(fs, intakePath(personId), session, key);
+  return { ok: true, session };
+}
+
+/** A section rewind's outcome — the updated session, or an honest refusal (66 §3.3). */
+export type IntakeRewindResult =
+  | { ok: true; session: IntakeSession }
+  | { ok: false; reason: 'STALE' | 'INVALID' | 'NOT_FOUND' };
+
+/** Deps for `retryIntakeTurn` — a turn minus the (already-persisted) user text. */
+export type IntakeRetryDeps = Omit<IntakeTurnDeps, 'userText'>;
+
+/**
+ * "Retry from here" for an intake section (66 §3.3) — rewind to the message, then re-generate. The
+ * stamp is validated before anything is written, so a stale view refuses rather than cutting the wrong
+ * span. Structured form answers are untouched (see `rewindIntakeSection`).
+ */
+export async function regenerateIntakeFrom(
+  deps: IntakeRetryDeps,
+  index: number,
+  expect: MessageStamp,
+): Promise<IntakeTurnResult> {
+  const { fs, key, personId, sectionId, now } = deps;
+  const session = await getIntakeSession(fs, key, personId);
+  const section = session?.sections.find((s) => s.id === sectionId);
+  if (!section) return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+
+  const target = section.messages[index];
+  if (!target || target.role !== expect.role || target.ts !== expect.ts) {
+    return {
+      ok: false,
+      reason: 'ERROR',
+      message: 'This section moved on — reopen it and try again.',
+    };
+  }
+
+  const at = regenerateIndexFor(section.messages, index);
+  if (at < section.messages.length) {
+    const cut = section.messages[at];
+    if (!cut) return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+    const rewound = await rewindIntakeSection(
+      fs,
+      key,
+      personId,
+      sectionId,
+      at,
+      { role: cut.role, ts: cut.ts },
+      now,
+    );
+    if (!rewound.ok)
+      return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+  }
+  return retryIntakeTurn(deps);
+}
+
+/**
+ * Re-generate the interviewer's reply for a section whose transcript ends on an unanswered message
+ * (66 §3.2) — after a failed/empty turn, or on returning to a section that was left mid-turn. Adds NO
+ * new user message, so it can never duplicate one. Budget-gated + metered like a normal turn.
+ */
+export async function retryIntakeTurn(deps: IntakeRetryDeps): Promise<IntakeTurnResult> {
+  const { fs, key, personId, sectionId, now } = deps;
+  if (!deps.apiKey)
+    return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };
+  const def = getIntakeSection(sectionId);
+  if (!def) return { ok: false, reason: 'ERROR', message: 'That section could not be found.' };
+  if (await overBudget(fs, key, personId, now, deps.override)) {
+    return { ok: false, reason: 'BUDGET', message: 'AI budget reached for this period.' };
+  }
+
+  const session = await ensureIntakeSession(fs, key, personId, now);
+  const section = session.sections.find((s) => s.id === sectionId);
+  if (!section) return { ok: false, reason: 'ERROR', message: 'That section could not be found.' };
+
+  // Drop any trailing blank assistant ghost first (pre-66 code could persist one), so the transcript
+  // ends on the person's message and can be answered.
+  while (section.messages.length > 0) {
+    const tail = section.messages[section.messages.length - 1];
+    if (tail && tail.role === 'assistant' && tail.content.trim() === '') section.messages.pop();
+    else break;
+  }
+  if (section.messages[section.messages.length - 1]?.role !== 'user') {
+    return { ok: false, reason: 'ERROR', message: 'There’s nothing to retry here.' };
+  }
+
+  return generateIntakeReply(deps, session, section, def);
 }
 
 // --- Skip ---

@@ -333,6 +333,31 @@ describe('runAutoCheckins — other-person targets (intimacy gating §8.2)', () 
 });
 
 describe('listIncomingAutoCheckinStreams (§3.3a)', () => {
+  it('lists only people who could actually send — a plain contact never appears (66)', async () => {
+    const fs = memFileSystem();
+    const me = await seedPerson(fs, { name: 'Me' });
+    // A contact has no account and configures nothing, so listing them would be noise.
+    await upsertPerson(fs, key, { displayName: 'Dentist', isSubject: false, tags: [] });
+    const partner = await seedPerson(fs, { name: 'Partner' });
+
+    const list = await listIncomingAutoCheckinStreams(fs, key, me);
+    expect(list.map((s) => s.senderPersonId)).toEqual([partner]);
+  });
+
+  it('a pre-emptive block sticks before anyone has sent anything (66)', async () => {
+    const fs = memFileSystem();
+    const me = await seedPerson(fs, { name: 'Me' });
+    const other = await seedPerson(fs, { name: 'Other' });
+
+    // Turn them off with no stream configured at all — the case the old UI couldn't reach.
+    await setAutoCheckinBlock(fs, key, me, other, true);
+    const list = await listIncomingAutoCheckinStreams(fs, key, me);
+    expect(list.find((s) => s.senderPersonId === other)).toMatchObject({
+      active: false,
+      blocked: true,
+    });
+  });
+
   it('shows the viewer only the enabled streams that target THEM, with the block state', async () => {
     const fs = memFileSystem();
     const ben = await upsertPerson(fs, key, { displayName: 'Ben', isSubject: true, tags: [] });
@@ -352,20 +377,35 @@ describe('listIncomingAutoCheckinStreams (§3.3a)', () => {
       ],
     });
 
-    // Angel sees Ben's stream toward her (partner, includes intimacy), not-yet-blocked.
+    // Angel sees Ben's stream toward her (partner, includes intimacy), not-yet-blocked, and ACTIVE.
     const forAngel = await listIncomingAutoCheckinStreams(fs, key, angel);
-    expect(forAngel).toHaveLength(1);
     expect(forAngel[0]).toMatchObject({
       senderPersonId: ben.id,
       senderName: 'Ben',
       relationshipLabel: 'partner',
+      active: true,
       includeIntimacy: true,
       blocked: false,
     });
-    // Cara's stream is DISABLED → she sees nothing.
-    expect(await listIncomingAutoCheckinStreams(fs, key, cara)).toHaveLength(0);
-    // Ben (the owner) sees no incoming streams targeting HIM.
-    expect(await listIncomingAutoCheckinStreams(fs, key, ben.id)).toHaveLength(0);
+
+    // 66 — everyone who COULD send is listed too, marked inactive, so the off-switch is reachable
+    // BEFORE anything arrives. Without this the block was only discoverable once someone had already
+    // started sending, which made it useless for one-off automated sends (a dream questionnaire).
+    const cARA = forAngel.find((s) => s.senderPersonId === cara);
+    expect(cARA).toMatchObject({ active: false, blocked: false });
+    expect(cARA?.cadence).toBeUndefined(); // nothing scheduled ⇒ nothing to report
+
+    // Cara's stream from Ben is DISABLED, so he shows as inactive rather than vanishing.
+    const forCara = await listIncomingAutoCheckinStreams(fs, key, cara);
+    expect(forCara.find((s) => s.senderPersonId === ben.id)?.active).toBe(false);
+    // Nobody ever lists themselves.
+    expect(
+      (await listIncomingAutoCheckinStreams(fs, key, ben.id)).some(
+        (s) => s.senderPersonId === ben.id,
+      ),
+    ).toBe(false);
+    // Active senders lead the list.
+    expect(forAngel[0]?.active).toBe(true);
 
     // After Angel blocks Ben, the stream still shows (so she can un-block) but marked blocked.
     await setAutoCheckinBlock(fs, key, angel, ben.id, true);

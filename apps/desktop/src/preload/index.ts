@@ -83,6 +83,8 @@ const bridge: SelfosBridge = {
   budgetStatus: () => ipcRenderer.invoke(IpcChannels.budgetStatus),
   chatStream: (input) => ipcRenderer.invoke(IpcChannels.chatStream, input),
   chatRetry: (conversationId) => ipcRenderer.invoke(IpcChannels.chatRetry, conversationId),
+  conversationsRewind: (input) => ipcRenderer.invoke(IpcChannels.conversationsRewind, input),
+  chatRegenerateFrom: (input) => ipcRenderer.invoke(IpcChannels.chatRegenerateFrom, input),
   onChatChunk: (listener) => {
     const handler = (_event: unknown, delta: string): void => listener(delta);
     ipcRenderer.on(IpcChannels.chatChunk, handler);
@@ -288,6 +290,7 @@ const bridge: SelfosBridge = {
   togetherMarkRead: (input) => ipcRenderer.invoke(IpcChannels.togetherMarkRead, input),
   togetherSendMessage: (input) => ipcRenderer.invoke(IpcChannels.togetherSendMessage, input),
   togetherRetry: (input) => ipcRenderer.invoke(IpcChannels.togetherRetry, input),
+  togetherRewind: (input) => ipcRenderer.invoke(IpcChannels.togetherRewind, input),
   togetherPrepOpen: (input) => ipcRenderer.invoke(IpcChannels.togetherPrepOpen, input),
   togetherStoreAttachment: (input) =>
     ipcRenderer.invoke(IpcChannels.togetherStoreAttachment, input),
@@ -362,6 +365,9 @@ const bridge: SelfosBridge = {
   dreamDelete: (id) => ipcRenderer.invoke(IpcChannels.dreamDelete, id),
   dreamStartReflection: (input) => ipcRenderer.invoke(IpcChannels.dreamStartReflection, input),
   dreamAnalyzeTurn: (input) => ipcRenderer.invoke(IpcChannels.dreamAnalyzeTurn, input),
+  dreamRetryTurn: (input) => ipcRenderer.invoke(IpcChannels.dreamRetryTurn, input),
+  dreamRewind: (input) => ipcRenderer.invoke(IpcChannels.dreamRewind, input),
+  dreamRegenerateFrom: (input) => ipcRenderer.invoke(IpcChannels.dreamRegenerateFrom, input),
   onDreamChunk: (listener) => {
     const handler = (_event: unknown, delta: string): void => listener(delta);
     ipcRenderer.on(IpcChannels.dreamChunk, handler);
@@ -392,6 +398,9 @@ const bridge: SelfosBridge = {
   dreamListSharedImages: () => ipcRenderer.invoke(IpcChannels.dreamListSharedImages),
   intakeGetState: () => ipcRenderer.invoke(IpcChannels.intakeGetState),
   intakeRunTurn: (input) => ipcRenderer.invoke(IpcChannels.intakeRunTurn, input),
+  intakeRetryTurn: (input) => ipcRenderer.invoke(IpcChannels.intakeRetryTurn, input),
+  intakeRewind: (input) => ipcRenderer.invoke(IpcChannels.intakeRewind, input),
+  intakeRegenerateFrom: (input) => ipcRenderer.invoke(IpcChannels.intakeRegenerateFrom, input),
   onIntakeChunk: (listener) => {
     const handler = (_event: unknown, delta: string): void => listener(delta);
     ipcRenderer.on(IpcChannels.intakeChunk, handler);

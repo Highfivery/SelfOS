@@ -9,6 +9,8 @@ import {
   type ChatTurnResult,
   type ClaudeTestResult,
   type ConversationMeta,
+  type RewindResult,
+  type IntakeRewindOutcome,
   type KeyRotateResult,
   type RotationStatus,
   type VaultSyncReadiness,
@@ -150,6 +152,7 @@ import {
   type TogetherTurnResult,
   TogetherSendMessageInputSchema,
   TogetherRetryInputSchema,
+  TogetherRewindInputSchema,
   TogetherPrepOpenSchema,
   TogetherStoreAttachmentSchema,
   TogetherGetAttachmentSchema,
@@ -325,7 +328,9 @@ import {
   getGuidanceState,
   isConversationAttachmentPath,
   listConversations,
+  regenerateFrom,
   retryReply,
+  rewindConversation,
   runChatTurn,
   saveConversation,
   setSessionStatus,
@@ -372,6 +377,7 @@ import {
   runTogetherWrapUp,
   saveAgreement,
   projectMessages as projectTogetherMessages,
+  removeMessagesFrom,
   retryTogetherReply,
   runTogetherTurn,
   storeTogetherAttachment,
@@ -606,7 +612,10 @@ import {
   deleteDream,
   openReflection,
   removeFromContext,
+  regenerateDreamFrom,
   removePatternNarrativeFromContext,
+  retryDreamReply,
+  rewindDreamConversation,
   runAnalysisTurn,
   saveDream,
   setDreamFactShare,
@@ -619,6 +628,9 @@ import {
   getIntakeSection,
   getIntakeSession,
   intakeSectionMeta,
+  regenerateIntakeFrom,
+  retryIntakeTurn,
+  rewindIntakeSection,
   runIntakeTurn,
   setIntakeAnswerSharing,
   skipIntakeSection,
@@ -862,6 +874,22 @@ const TestTakeSchema = z.object({
 const SessionSetStatusSchema = z.object({
   conversationId: z.string().min(1),
   status: SessionStatusSchema,
+});
+/** 66 §3.3 — a rewind target: which message, plus the stamp core re-verifies before truncating. */
+const RewindConversationSchema = z.object({
+  conversationId: z.string().min(1),
+  index: z.number().int().nonnegative(),
+  expect: z.object({ role: z.enum(['user', 'assistant']), ts: z.string().min(1) }),
+});
+const RewindDreamSchema = z.object({
+  dreamId: z.string().min(1),
+  index: z.number().int().nonnegative(),
+  expect: z.object({ role: z.enum(['user', 'assistant']), ts: z.string().min(1) }),
+});
+const RewindIntakeSchema = z.object({
+  sectionId: z.string().min(1),
+  index: z.number().int().nonnegative(),
+  expect: z.object({ role: z.enum(['user', 'assistant']), ts: z.string().min(1) }),
 });
 const DreamAnalyzeTurnSchema = z.object({
   dreamId: z.string().min(1),
@@ -2351,6 +2379,44 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       });
     },
 
+    conversationsRewind: async (input): Promise<RewindResult> => {
+      // 66 §3.3 — "delete from here". Person-scoped: `rewindConversation` is keyed by the HOST's active
+      // person, so a foreign conversationId simply resolves to nothing.
+      const { conversationId, index, expect } = RewindConversationSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own'))) {
+        return { ok: false, reason: 'NOT_FOUND' };
+      }
+      return rewindConversation(ctx.fs, ctx.key, personId, conversationId, index, expect);
+    },
+    chatRegenerateFrom: async (input): Promise<ChatTurnResult> => {
+      // 66 §3.3 — "retry from here": truncate + re-generate in ONE call, so the renderer never observes a
+      // half-rewound transcript. Streams on the existing chat:chunk sink.
+      const { conversationId, index, expect } = RewindConversationSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'sessions.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      return regenerateFrom(
+        {
+          fs: ctx.fs,
+          key: ctx.key,
+          client: host.claude,
+          apiKey,
+          model: await host.activeModel(),
+          personId,
+          conversationId,
+          onDelta: (text) => host.emitChatChunk(text),
+          now: new Date(),
+        },
+        index,
+        expect,
+      );
+    },
+
     // --- Together: couples sessions (58) — every handler gates on together.own + membership + live edge ---
     togetherList: async (): Promise<TogetherSessionSummary[]> => {
       const c = await togetherCtx();
@@ -2643,6 +2709,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!owner || (owner.privateAside && owner.authorPersonId !== c.personId)) return null;
       const bytes = await getTogetherAttachment(c.fs, c.key, path);
       return bytes ? { mime: sniffImageMime(bytes), dataBase64: toBase64(bytes) } : null;
+    },
+    togetherRewind: async (input): Promise<TogetherSessionView | null> => {
+      // 66 §3.3 — same membership + live-edge gate as every other Together op. The projection check
+      // lives in core: `removeMessagesFrom` computes the span over the remover's OWN view, so a
+      // message they can't see (a partner's private aside) can't be targeted even by id.
+      const { sessionId, fromMessageId } = TogetherRewindInputSchema.parse(input);
+      const c = await togetherCtx();
+      if (!c) return null;
+      const session = await accessibleTogetherSession(c.fs, c.key, c.personId, sessionId);
+      if (!session) return null;
+      const result = await removeMessagesFrom(c.fs, c.key, session.id, c.personId, fromMessageId);
+      if (!result.ok) return null;
+      const view = await buildTogetherView(c.fs, c.key, session, c.personId, new Date());
+      return view.status === 'declined' ? null : view;
     },
     togetherRetry: async (input): Promise<TogetherTurnResult> => {
       const { sessionId } = TogetherRetryInputSchema.parse(input);
@@ -6825,12 +6905,21 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // listing a field as carried-forward without adding its spread still compiles. A triage tripwire,
       // not a proof.
       // Set fresh here: schemaVersion/personId/status/createdAt/updatedAt. Carried forward from the
-      // existing record: analysisId/image. If this errors, `Dream` gained a main-owned field — decide
-      // whether an edit keeps it, add it below, then list it here. Do NOT just widen the list.
+      // existing record: analysisId/image/analysisReadyAt. If this errors, `Dream` gained a main-owned
+      // field — decide whether an edit keeps it, add it below, then list it here. Do NOT just widen the
+      // list. (`analysisReadyAt` is carried: it is the coach's "ready to analyze" offer, 66 §3.4, and
+      // dropping it on an edit would silently retract the offer.)
       const _guard: AssertMainOwnedHandled<
         Dream,
         DreamInput,
-        'schemaVersion' | 'personId' | 'status' | 'createdAt' | 'updatedAt' | 'analysisId' | 'image'
+        | 'schemaVersion'
+        | 'personId'
+        | 'status'
+        | 'createdAt'
+        | 'updatedAt'
+        | 'analysisId'
+        | 'image'
+        | 'analysisReadyAt'
       > = true;
       void _guard;
       //
@@ -6850,6 +6939,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personId,
         status: existing?.status ?? 'captured',
         ...(existing?.analysisId !== undefined ? { analysisId: existing.analysisId } : {}),
+        // 66 §3.4 — the readiness signal is main-owned like status/analysisId; carry it across an edit or
+        // editing the dream would silently drop the coach's "ready to analyze" offer.
+        ...(existing?.analysisReadyAt !== undefined
+          ? { analysisReadyAt: existing.analysisReadyAt }
+          : {}),
         ...(existing?.image !== undefined ? { image: existing.image } : {}),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
@@ -6910,6 +7004,59 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         now: new Date(),
       });
     },
+    dreamRetryTurn: async (input): Promise<ChatTurnResult> => {
+      const { dreamId } = DreamIdSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      return retryDreamReply({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        personId,
+        dreamId,
+        onDelta: (text) => host.emitDreamChunk(text),
+        now: new Date(),
+      });
+    },
+    dreamRewind: async (input): Promise<RewindResult> => {
+      const { dreamId, index, expect } = RewindDreamSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
+        return { ok: false, reason: 'NOT_FOUND' };
+      }
+      return rewindDreamConversation(ctx.fs, ctx.key, personId, dreamId, index, expect);
+    },
+    dreamRegenerateFrom: async (input): Promise<ChatTurnResult> => {
+      const { dreamId, index, expect } = RewindDreamSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      return regenerateDreamFrom(
+        {
+          fs: ctx.fs,
+          key: ctx.key,
+          client: host.claude,
+          apiKey,
+          model: await host.activeModel(),
+          personId,
+          dreamId,
+          onDelta: (text) => host.emitDreamChunk(text),
+          now: new Date(),
+        },
+        index,
+        expect,
+      );
+    },
     dreamGetAnalysis: async (dreamId): Promise<DreamAnalysis | null> => {
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
@@ -6939,6 +7086,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personId,
         dreamId,
         now: new Date(),
+        // 66 §3.4 — this channel gates on `dreams.own`, but auto-creating a questionnaire needs
+        // `questionnaires.create`. Resolved here (the bridge is the trust boundary) rather than in core.
+        questionnairesEnabled: await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'),
       });
     },
     dreamUpdateAnalysis: async (input): Promise<DreamAnalysis | null> => {
@@ -7222,6 +7372,59 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         onDelta: (text) => host.emitIntakeChunk(text),
         now: new Date(),
       });
+    },
+    intakeRetryTurn: async (input): Promise<IntakeTurnResult> => {
+      const { sectionId } = IntakeSectionIdSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      return retryIntakeTurn({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        personId,
+        sectionId,
+        onDelta: (text) => host.emitIntakeChunk(text),
+        now: new Date(),
+      });
+    },
+    intakeRewind: async (input): Promise<IntakeRewindOutcome> => {
+      const { sectionId, index, expect } = RewindIntakeSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
+        return { ok: false, reason: 'NOT_FOUND' };
+      }
+      return rewindIntakeSection(ctx.fs, ctx.key, personId, sectionId, index, expect, new Date());
+    },
+    intakeRegenerateFrom: async (input): Promise<IntakeTurnResult> => {
+      const { sectionId, index, expect } = RewindIntakeSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'intake.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      return regenerateIntakeFrom(
+        {
+          fs: ctx.fs,
+          key: ctx.key,
+          client: host.claude,
+          apiKey,
+          model: await host.activeModel(),
+          personId,
+          sectionId,
+          onDelta: (text) => host.emitIntakeChunk(text),
+          now: new Date(),
+        },
+        index,
+        expect,
+      );
     },
     intakeSkipSection: async (input): Promise<IntakeState> => {
       const { sectionId } = IntakeSectionIdSchema.parse(input);

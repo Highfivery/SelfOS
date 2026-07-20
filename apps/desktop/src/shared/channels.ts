@@ -157,7 +157,9 @@ import type {
   Relationship,
   RelationshipInput,
   RelationshipType,
+  IntakeRewindOutcome,
   RelayStatus,
+  RewindResult,
   Role,
   SensitivityTier,
   SessionCost,
@@ -252,6 +254,10 @@ export const IpcChannels = {
   budgetStatus: 'budget:status',
   chatStream: 'chat:stream',
   chatRetry: 'chat:retry',
+  /** 66 §6 — truncate a session transcript at a message ("delete from here"). */
+  conversationsRewind: 'conversations:rewind',
+  /** 66 §6 — truncate then re-generate ("retry from here"), in one call so no half-rewound state shows. */
+  chatRegenerateFrom: 'chat:regenerateFrom',
   chatChunk: 'chat:chunk', // main → renderer event
   conversationStoreAttachment: 'conversation:storeAttachment',
   conversationGetAttachment: 'conversation:getAttachment',
@@ -410,6 +416,8 @@ export const IpcChannels = {
   togetherMarkRead: 'together:markRead',
   togetherSendMessage: 'together:sendMessage',
   togetherRetry: 'together:retry',
+  /** 66 §3.3 — remove a span of messages, leaving a "removed" tombstone for both partners. */
+  togetherRewind: 'together:rewind',
   togetherChunk: 'together:chunk', // main → renderer event
   togetherPrepOpen: 'together:prepOpen',
   togetherStoreAttachment: 'together:storeAttachment',
@@ -465,6 +473,12 @@ export const IpcChannels = {
   dreamDelete: 'dreams:delete',
   dreamStartReflection: 'dreams:startReflection',
   dreamAnalyzeTurn: 'dreams:analyzeTurn',
+  /** 66 §6 — regenerate a dream reply for a transcript ending on an unanswered message. */
+  dreamRetryTurn: 'dreams:retryTurn',
+  /** 66 §3.3 — truncate a dream transcript at a message ("delete from here"). */
+  dreamRewind: 'dreams:rewind',
+  /** 66 §3.3 — truncate then re-generate ("retry from here"). */
+  dreamRegenerateFrom: 'dreams:regenerateFrom',
   dreamChunk: 'dreams:chunk', // main → renderer event
   dreamGetAnalysis: 'dreams:getAnalysis',
   dreamGetConversation: 'dreams:getConversation',
@@ -490,6 +504,12 @@ export const IpcChannels = {
   // Personal onboarding (18-personal-onboarding §6).
   intakeGetState: 'intake:getState',
   intakeRunTurn: 'intake:runTurn',
+  /** 66 §6 — regenerate an interviewer reply for a section ending on an unanswered message. */
+  intakeRetryTurn: 'intake:retryTurn',
+  /** 66 §3.3 — truncate a section transcript at a message ("delete from here"). */
+  intakeRewind: 'intake:rewind',
+  /** 66 §3.3 — truncate then re-generate ("retry from here"). */
+  intakeRegenerateFrom: 'intake:regenerateFrom',
   intakeChunk: 'intake:chunk', // main → renderer event
   intakeSkipSection: 'intake:skipSection',
   intakeSubmitForm: 'intake:submitForm',
@@ -540,6 +560,8 @@ export const MIN_OWNER_PIN_LENGTH = 4;
 export const ANTHROPIC_API_KEY_ID = 'anthropic.apiKey';
 export const OPENAI_API_KEY_ID = 'openai.apiKey';
 export type { DeviceView } from '@selfos/core/schemas';
+/** 66 §3.3 — re-exported so the bridge + renderer share one rewind outcome type. */
+export type { RewindResult, IntakeRewindOutcome } from '@selfos/core/schemas';
 
 /** The outcome of a key rotation (32 §6.4). The new recovery phrase is shown once; never logged. */
 export type KeyRotateResult =
@@ -773,6 +795,21 @@ export interface SelfosBridge {
    * duplication); streams via `chat:chunk`. Scoped to the active person in the bridge.
    */
   chatRetry(conversationId: string): Promise<ChatTurnResult>;
+  /**
+   * 66 §3.3 — "delete from here": drop this message and everything after it. `expect` is verified against
+   * the stored transcript first, so a stale view refuses rather than deleting the wrong span.
+   */
+  conversationsRewind(input: {
+    conversationId: string;
+    index: number;
+    expect: { role: 'user' | 'assistant'; ts: string };
+  }): Promise<RewindResult>;
+  /** 66 §3.3 — "retry from here": truncate, then re-generate, in one call. */
+  chatRegenerateFrom(input: {
+    conversationId: string;
+    index: number;
+    expect: { role: 'user' | 'assistant'; ts: string };
+  }): Promise<ChatTurnResult>;
   /** Subscribe to streamed reply chunks; returns an unsubscribe function. */
   onChatChunk(listener: (delta: string) => void): () => void;
   /**
@@ -1394,6 +1431,15 @@ export interface SelfosBridge {
   }): Promise<TogetherTurnResult>;
   /** Reply-only regeneration for a session whose newest message is an unanswered human message (§7). */
   togetherRetry(input: { sessionId: string }): Promise<TogetherTurnResult>;
+  /**
+   * 66 §3.3 — "delete from here" in a couples session. The span is computed over the REMOVER's own
+   * projection (you can't delete what you can't see), and leaves a neutral tombstone so the shared
+   * transcript never silently changes shape for the other partner.
+   */
+  togetherRewind(input: {
+    sessionId: string;
+    fromMessageId: string;
+  }): Promise<TogetherSessionView | null>;
   /** Subscribe to streamed couples-turn reply chunks (a separate sink from chat — §5.4). */
   onTogetherChunk(listener: (delta: string) => void): () => void;
   /** Open (or return) the caller's OWN private prep thread for a session (§3.7) — an ordinary conversation. */
@@ -1634,6 +1680,23 @@ export interface SelfosBridge {
    * the final turn. The transcript persists under the dream (never in Sessions). Requires `dreams.own`.
    */
   dreamAnalyzeTurn(input: { dreamId: string; userText: string }): Promise<ChatTurnResult>;
+  /**
+   * 66 §3.2 — re-generate the coach's reply when a dream transcript ends on an unanswered message
+   * (a failed/empty turn, or a reflection reopened mid-turn). Adds no new user message.
+   */
+  dreamRetryTurn(input: { dreamId: string }): Promise<ChatTurnResult>;
+  /** 66 §3.3 — "delete from here" in a dream reflection. */
+  dreamRewind(input: {
+    dreamId: string;
+    index: number;
+    expect: { role: 'user' | 'assistant'; ts: string };
+  }): Promise<RewindResult>;
+  /** 66 §3.3 — "retry from here" in a dream reflection: truncate, then re-generate. */
+  dreamRegenerateFrom(input: {
+    dreamId: string;
+    index: number;
+    expect: { role: 'user' | 'assistant'; ts: string };
+  }): Promise<ChatTurnResult>;
   /** Subscribe to streamed dream-analysis reply chunks; returns an unsubscribe function. */
   onDreamChunk(listener: (delta: string) => void): () => void;
   /** Load a dream's synthesized analysis; null if not analyzed yet. Requires `dreams.own`. */
@@ -1711,6 +1774,26 @@ export interface SelfosBridge {
    * any direct field fills (the transcript lives under the person, never in Sessions). Requires `intake.own`.
    */
   intakeRunTurn(input: { sectionId: string; userText: string }): Promise<IntakeTurnResult>;
+  /**
+   * 66 §3.2 — re-generate the interviewer's reply when a section ends on an unanswered message.
+   * Adds no new user message, so it can never duplicate one.
+   */
+  intakeRetryTurn(input: { sectionId: string }): Promise<IntakeTurnResult>;
+  /**
+   * 66 §3.3 — "delete from here" in an intake section. Rewinds the CONVERSATION only; structured form
+   * answers are written separately and are deliberately untouched.
+   */
+  intakeRewind(input: {
+    sectionId: string;
+    index: number;
+    expect: { role: 'user' | 'assistant'; ts: string };
+  }): Promise<IntakeRewindOutcome>;
+  /** 66 §3.3 — "retry from here" in an intake section: truncate, then re-generate. */
+  intakeRegenerateFrom(input: {
+    sectionId: string;
+    index: number;
+    expect: { role: 'user' | 'assistant'; ts: string };
+  }): Promise<IntakeTurnResult>;
   /** Subscribe to streamed intake interview chunks; returns an unsubscribe function. */
   onIntakeChunk(listener: (delta: string) => void): () => void;
   /** Skip a whole intake section (never blocks completion). Requires `intake.own`. */

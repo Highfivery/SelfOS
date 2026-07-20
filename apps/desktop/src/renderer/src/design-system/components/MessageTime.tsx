@@ -42,16 +42,26 @@ export function MessageDayDivider({ label }: { label: string }): JSX.Element {
 export function MessageRow({
   side,
   iso,
+  actions,
   children,
 }: {
   side: 'user' | 'coach';
   iso?: string;
+  /**
+   * Optional per-message rewind controls (66 §3.3), rendered on the timestamp line. Putting the slot
+   * here is what lets Sessions, Dreams and Onboarding share one affordance instead of three copies.
+   * The `messageRowHost` class is the hover target `MessageActions` reveals itself from.
+   */
+  actions?: ReactNode;
   children: ReactNode;
 }): JSX.Element {
   return (
-    <div className={styles.row} data-side={side}>
+    <div className={`${styles.row} messageRowHost`} data-side={side}>
       {children}
-      {iso ? <MessageTime iso={iso} align={side === 'user' ? 'end' : 'start'} /> : null}
+      <div className={styles.meta} data-side={side}>
+        {iso ? <MessageTime iso={iso} align={side === 'user' ? 'end' : 'start'} /> : null}
+        {actions}
+      </div>
     </div>
   );
 }

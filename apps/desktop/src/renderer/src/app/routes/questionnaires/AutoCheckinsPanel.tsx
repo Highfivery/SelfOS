@@ -108,7 +108,7 @@ export function AutoCheckinsPanel(): JSX.Element | null {
         {config ? (
           <Card>
             <Stack gap={4}>
-              <Inline gap={3} align="start" justify="between">
+              <Inline gap={3} align="start" justify="space-between" wrap>
                 <Stack gap={1}>
                   <Heading level={3}>Auto check-ins</Heading>
                   <Text size="sm" tone="secondary">
@@ -131,7 +131,7 @@ export function AutoCheckinsPanel(): JSX.Element | null {
                     const isPerson = t.target.kind === 'person';
                     return (
                       <div key={t.id} className={styles.targetRow}>
-                        <Inline gap={2} align="center" justify="between">
+                        <Inline gap={2} align="center" justify="space-between" wrap>
                           <Text weight={500}>{nameFor(t)}</Text>
                           <Inline gap={2} align="center">
                             {isPerson ? (
@@ -269,22 +269,27 @@ export function AutoCheckinsPanel(): JSX.Element | null {
           <Card>
             <Stack gap={3}>
               <Stack gap={1}>
-                <Heading level={3}>Check-ins others send you</Heading>
+                <Heading level={3}>Questions others send you</Heading>
                 <Text size="sm" tone="secondary">
-                  These people have set up occasional auto check-ins for you. You can turn any of
-                  them off — they’ll stop, and the sender can’t turn them back on.
+                  SelfOS can create questions for you on someone else’s behalf — recurring check-ins
+                  they’ve set up, or a one-off drawn from something they reflected on. Turn anyone
+                  off and none of it reaches you. They can’t turn it back on.
                 </Text>
               </Stack>
               {incoming.map((s) => (
                 <div key={s.senderPersonId} className={styles.targetRow}>
-                  <Inline gap={2} align="center" justify="between">
-                    <Stack gap={1}>
+                  <Inline gap={2} align="center" justify="space-between" wrap>
+                    <Stack gap={1} className={styles.rowIdentity}>
                       <Text weight={500}>{s.senderName}</Text>
                       <Text size="xs" tone="secondary">
                         {[
                           s.relationshipLabel ? `Your ${s.relationshipLabel}` : null,
-                          CADENCES.find((c) => c.value === s.cadence)?.label ?? s.cadence,
-                          s.includeIntimacy ? 'includes intimacy check-ins' : null,
+                          // An inactive sender is listed so you can pre-empt them; there's no cadence
+                          // to report because nothing is scheduled.
+                          s.active
+                            ? (CADENCES.find((c) => c.value === s.cadence)?.label ?? s.cadence)
+                            : 'Nothing scheduled',
+                          s.active && s.includeIntimacy ? 'includes intimacy check-ins' : null,
                         ]
                           .filter(Boolean)
                           .join(' · ')}
@@ -297,7 +302,7 @@ export function AutoCheckinsPanel(): JSX.Element | null {
                       <Switch
                         checked={!s.blocked}
                         onChange={(v) => void setBlock(s.senderPersonId, !v)}
-                        aria-label={`Receive check-ins from ${s.senderName}`}
+                        aria-label={`Receive questions from ${s.senderName}`}
                       />
                     </Inline>
                   </Inline>

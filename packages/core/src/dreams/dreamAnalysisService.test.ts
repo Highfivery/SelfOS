@@ -7,6 +7,7 @@ import type { Dream } from '../schemas';
 import { listConversations } from '../conversations';
 import { getInsight, listInsightsForPerson, saveInsight, summarizeForContext } from '../insights';
 import { savePerson, saveRelationship } from '../people';
+import { listGoals } from '../goals';
 import { queryUsage, setPersonBudget } from '../usage';
 import {
   deleteDream,
@@ -16,10 +17,15 @@ import {
   saveDream,
 } from './dreamService';
 import {
+  DREAM_ANALYSIS_GUIDANCE,
+  DREAM_READY_INSTRUCTION,
   DREAM_READY_MARKER,
   approveAnalysis,
   openReflection,
+  regenerateDreamFrom,
   removeFromContext,
+  retryDreamReply,
+  rewindDreamConversation,
   runAnalysisTurn,
   stripDreamMarkers,
   synthesizeAnalysis,
@@ -91,6 +97,245 @@ function deps(fs: ReturnType<typeof memFileSystem>, client: ClaudeClient) {
     now: new Date('2026-06-11T10:00:00.000Z'),
   };
 }
+
+/** The dreamer — several artifact tests need a real Person to author/send as. */
+const dreamer = (): Parameters<typeof savePerson>[2] => ({
+  id: 'p1',
+  schemaVersion: 1,
+  displayName: 'Alex',
+  isSubject: true,
+  tags: [],
+  createdAt: 'now',
+  updatedAt: 'now',
+});
+
+describe('dreamAnalysisService — artifacts from an analysis (66 §3.4)', () => {
+  const DRAFT_WITH_ARTIFACTS = {
+    ...VALID_DRAFT,
+    goals: ['Call my brother this week'],
+    questionnaires: [{ title: 'About us', brief: 'How connected we feel lately', for: 'me' }],
+  };
+
+  it('turns the goals the person voiced into tracked goals', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, dreamer());
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+
+    const res = await synthesizeAnalysis(
+      deps(fs, fakeClient({ synthesisText: JSON.stringify(DRAFT_WITH_ARTIFACTS) })),
+    );
+    expect(res.ok).toBe(true);
+
+    const goals = await listGoals(fs, key, 'p1');
+    expect(goals.map((g) => g.text)).toEqual(['Call my brother this week']);
+    expect(goals[0]?.provenance.dreamId).toBe('d1');
+    // NO insightId: synthesis runs before approval, and re-synthesis deletes the prior Insight — a link
+    // here would dangle.
+    expect(goals[0]?.insightId).toBeUndefined();
+  });
+
+  it('is idempotent across re-synthesis — no duplicate goal, no growing provenance', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, dreamer());
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    const d = deps(fs, fakeClient({ synthesisText: JSON.stringify(DRAFT_WITH_ARTIFACTS) }));
+
+    await synthesizeAnalysis(d);
+    // Re-synthesize LATER — a moving origin timestamp would fold the same dream in a second time.
+    await synthesizeAnalysis({ ...d, now: new Date('2026-06-12T10:00:00.000Z') });
+
+    const goals = await listGoals(fs, key, 'p1');
+    expect(goals).toHaveLength(1);
+    expect(goals[0]?.contributingSources ?? []).toHaveLength(0);
+  });
+
+  it('salvages the analysis when the artifact fields are malformed', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, dreamer());
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+
+    const res = await synthesizeAnalysis(
+      deps(
+        fs,
+        fakeClient({
+          synthesisText: JSON.stringify({
+            ...VALID_DRAFT,
+            goals: 'not an array',
+            questionnaires: [{ nonsense: true }],
+          }),
+        }),
+      ),
+    );
+    // The reflection is the product — a bad artifact field must never cost the person their analysis.
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.analysis.summary).toBe(VALID_DRAFT.summary);
+    expect(await listGoals(fs, key, 'p1')).toHaveLength(0);
+  });
+
+  it('mints nothing when the person cannot create questionnaires', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, dreamer());
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+
+    const res = await synthesizeAnalysis({
+      ...deps(fs, fakeClient({ synthesisText: JSON.stringify(DRAFT_WITH_ARTIFACTS) })),
+      questionnairesEnabled: false,
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.analysis.questionnaires).toBeUndefined();
+  });
+});
+
+describe('dreamAnalysisService — the coach offers, never writes the analysis (66 §3.4)', () => {
+  // The double-analysis bug: the guidance used to say "the person can ask you to write up an analysis
+  // (and you may gently offer)", which licensed the coach to write one as chat PROSE. That prose was never
+  // a DreamAnalysis record, so the real analyze control was still sitting there — two analyses. These pin
+  // the contract so it can't silently come back.
+  it('no longer licenses the coach to write the analysis in conversation', () => {
+    expect(DREAM_ANALYSIS_GUIDANCE).not.toMatch(/ask you to write up an analysis/i);
+    expect(DREAM_ANALYSIS_GUIDANCE).toMatch(/never write the analysis yourself/i);
+  });
+
+  it('tells the coach to invite them to create it, leaving room to keep talking', () => {
+    expect(DREAM_ANALYSIS_GUIDANCE).toMatch(/invite them to create their analysis/i);
+    expect(DREAM_ANALYSIS_GUIDANCE).toMatch(/keep talking if there is more/i);
+  });
+
+  it('refuses to write it out even when asked directly', () => {
+    expect(DREAM_ANALYSIS_GUIDANCE).toMatch(
+      /ask you directly to analyze the dream, do not write it out/i,
+    );
+  });
+
+  it('binds the readiness marker to the same turn as the spoken invitation', () => {
+    // Previously the spoken offer and the structural marker were independent channels, so the coach could
+    // offer in prose while the UI never surfaced the nudge (or vice versa).
+    expect(DREAM_READY_INSTRUCTION).toMatch(/SAME turn that you invite them/i);
+    expect(DREAM_READY_INSTRUCTION).toContain(DREAM_READY_MARKER);
+  });
+});
+
+describe('dreamAnalysisService — fail-safe turns (66 §3.2)', () => {
+  it('keeps the person’s message on disk when the reply fails, so nothing is lost', async () => {
+    // The bug: the transcript was saved only AFTER a successful reply, so a failed turn lost what they
+    // typed (the store showed it optimistically, then it vanished on reload).
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    const throwing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: () => Promise.reject(new Error('network down')),
+    };
+
+    const res = await runAnalysisTurn({
+      ...deps(fs, throwing),
+      userText: 'I was falling',
+      onDelta: () => {},
+    });
+    expect(res.ok).toBe(false);
+
+    const saved = await getDreamConversation(fs, key, 'p1', 'd1');
+    expect(saved?.messages).toHaveLength(1);
+    expect(saved?.messages[0]).toMatchObject({ role: 'user', content: 'I was falling' });
+  });
+
+  it('treats a blank reply as an honest failure and never persists an empty bubble', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+
+    const res = await runAnalysisTurn({
+      ...deps(fs, fakeClient({ reply: '' })),
+      userText: 'hi',
+      onDelta: () => {},
+    });
+    expect(res).toMatchObject({ ok: false, reason: 'EMPTY' });
+
+    const saved = await getDreamConversation(fs, key, 'p1', 'd1');
+    expect(saved?.messages.map((m) => m.role)).toEqual(['user']);
+  });
+
+  it('retries a transcript that ends on an unanswered message, without duplicating it', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    const throwing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: () => Promise.reject(new Error('network down')),
+    };
+    await runAnalysisTurn({
+      ...deps(fs, throwing),
+      userText: 'I was falling',
+      onDelta: () => {},
+    });
+
+    const res = await retryDreamReply({ ...deps(fs, fakeClient()), onDelta: () => {} });
+    expect(res.ok).toBe(true);
+
+    const saved = await getDreamConversation(fs, key, 'p1', 'd1');
+    // Exactly one user message (never re-sent) followed by the recovered reply.
+    expect(saved?.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(saved?.messages.filter((m) => m.content === 'I was falling')).toHaveLength(1);
+  });
+
+  it('rewinds a reflection, dropping the message and everything after it', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    await runAnalysisTurn({ ...deps(fs, fakeClient()), userText: 'first', onDelta: () => {} });
+    await runAnalysisTurn({ ...deps(fs, fakeClient()), userText: 'second', onDelta: () => {} });
+
+    const before = await getDreamConversation(fs, key, 'p1', 'd1');
+    expect(before?.messages).toHaveLength(4);
+
+    const result = await rewindDreamConversation(fs, key, 'p1', 'd1', 2, {
+      role: 'user',
+      ts: before!.messages[2]!.ts,
+    });
+    expect(result.ok).toBe(true);
+
+    const after = await getDreamConversation(fs, key, 'p1', 'd1');
+    expect(after?.messages).toHaveLength(2);
+    expect(after?.messages.map((m) => m.content)).not.toContain('second');
+  });
+
+  it('refuses a rewind whose stamp no longer matches', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    await runAnalysisTurn({ ...deps(fs, fakeClient()), userText: 'first', onDelta: () => {} });
+
+    expect(
+      await rewindDreamConversation(fs, key, 'p1', 'd1', 0, {
+        role: 'user',
+        ts: 'not-the-real-ts',
+      }),
+    ).toEqual({ ok: false, reason: 'STALE' });
+    // Nothing touched.
+    expect((await getDreamConversation(fs, key, 'p1', 'd1'))?.messages).toHaveLength(2);
+  });
+
+  it('regenerates from a reply, re-answering the same message without duplicating it', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    await runAnalysisTurn({ ...deps(fs, fakeClient()), userText: 'first', onDelta: () => {} });
+    const before = await getDreamConversation(fs, key, 'p1', 'd1');
+
+    const res = await regenerateDreamFrom({ ...deps(fs, fakeClient()), onDelta: () => {} }, 1, {
+      role: 'assistant',
+      ts: before!.messages[1]!.ts,
+    });
+    expect(res.ok).toBe(true);
+
+    const after = await getDreamConversation(fs, key, 'p1', 'd1');
+    expect(after?.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    expect(after?.messages.filter((m) => m.content === 'first')).toHaveLength(1);
+  });
+
+  it('refuses to retry when the last turn already has a real reply', async () => {
+    const fs = memFileSystem();
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    await runAnalysisTurn({ ...deps(fs, fakeClient()), userText: 'hi', onDelta: () => {} });
+
+    const res = await retryDreamReply({ ...deps(fs, fakeClient()), onDelta: () => {} });
+    expect(res).toMatchObject({ ok: false, reason: 'ERROR' });
+  });
+});
 
 describe('dreamAnalysisService', () => {
   it('runs a guided turn under the dream — not in the Sessions list — and meters dream.analyze', async () => {

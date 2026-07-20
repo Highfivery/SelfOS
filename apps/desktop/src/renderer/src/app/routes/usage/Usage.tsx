@@ -146,7 +146,7 @@ export function Usage(): JSX.Element {
                   </Text>
                 ) : (
                   Object.entries(summary.byType).map(([type, row]) => (
-                    <Inline key={type} gap={2} justify="between">
+                    <Inline key={type} gap={2} justify="space-between">
                       <Text size="sm">{usageTypeLabel(type)}</Text>
                       <Text size="sm" tone="secondary">
                         {canManage ? `${formatUsd(row.costUsd)} · ` : ''}
@@ -166,7 +166,7 @@ export function Usage(): JSX.Element {
                   </Text>
                 ) : (
                   Object.entries(summary.byModel).map(([model, row]) => (
-                    <Inline key={model} gap={2} justify="between">
+                    <Inline key={model} gap={2} justify="space-between">
                       <Text size="sm">{model}</Text>
                       <Text size="sm" tone="secondary">
                         {canManage ? `${formatUsd(row.costUsd)} · ` : ''}
@@ -187,7 +187,7 @@ export function Usage(): JSX.Element {
                   <AdminOnlyBadge />
                 </Inline>
                 {Object.entries(summary.byPerson).map(([personId, row]) => (
-                  <Inline key={personId} gap={2} justify="between">
+                  <Inline key={personId} gap={2} justify="space-between">
                     <Text size="sm">{nameOf(personId)}</Text>
                     <Text size="sm" tone="secondary">
                       {formatUsd(row.costUsd)} · {row.count}

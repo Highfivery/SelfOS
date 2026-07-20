@@ -393,6 +393,7 @@ describe('useNotificationSources — auto check-ins (63)', () => {
           {
             senderPersonId: 'angel',
             senderName: 'Angel',
+            active: true,
             cadence: 'weekly',
             includeIntimacy: false,
             blocked: false,
@@ -400,6 +401,7 @@ describe('useNotificationSources — auto check-ins (63)', () => {
           {
             senderPersonId: 'cara',
             senderName: 'Cara',
+            active: true,
             cadence: 'daily',
             includeIntimacy: false,
             blocked: true, // already turned off → no notice

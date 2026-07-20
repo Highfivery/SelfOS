@@ -1,6 +1,6 @@
 # 66 — Chat reliability & message management
 
-> **Status:** **Approved** — _last updated 2026-07-19_
+> **Status:** **Built** — _last updated 2026-07-19_
 >
 > Every AI chat surface in SelfOS gets the same reliability contract: a reply that hits the token
 > ceiling is detected and silently continued rather than persisted half-finished; a failed turn never
@@ -93,13 +93,16 @@ On completion the analysis card shows what was created alongside it: any **goals
 All schema additions are **additive-optional — no `schemaVersion` bump, no migration** (the repo's
 standing precedent).
 
-| Schema            | Field                             | Purpose                                                      |
-| ----------------- | --------------------------------- | ------------------------------------------------------------ |
-| `ChatMessage`     | `id?: string`                     | Stable id for rewind. Absent ⇒ legacy; falls back to index.  |
-| `TogetherMessage` | `redactedAt?: string`             | Tombstone. Set ⇒ `content` cleared, placeholder rendered.    |
-| `Conversation`    | `analysisReady?: boolean`         | Dreams: the readiness nudge, made durable across navigation. |
-| `DreamAnalysis`   | `goals?: string[]`                | Goals the synthesis surfaced → `extractGoals`.               |
-| `DreamAnalysis`   | `questionnaire?: DreamCheckInRef` | What was created + sent, for display + idempotency.          |
+| Schema            | Field                                   | Purpose                                                                                                                                                                                                                                               |
+| ----------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| _(none)_          | —                                       | **As built: no `ChatMessage.id`.** Rewind verifies a `{role, ts}` stamp instead — an id would be absent on every message already in every vault, exactly the ones people rewind, so it would need a positional fallback forever and buy them nothing. |
+| `DreamAnalysis`   | `goals?`, `goalIds?`, `questionnaires?` | What the analysis produced (66 §3.4).                                                                                                                                                                                                                 |
+| `Dream`           | `analysisReadyAt?`                      | The readiness signal, made durable across navigation.                                                                                                                                                                                                 |
+| `Questionnaire`   | `dreamProvenance?`                      | Records the dream a questionnaire came from.                                                                                                                                                                                                          |
+| `TogetherMessage` | `redactedAt?: string`                   | Tombstone. Set ⇒ `content` cleared, placeholder rendered.                                                                                                                                                                                             |
+| `Conversation`    | `analysisReady?: boolean`               | Dreams: the readiness nudge, made durable across navigation.                                                                                                                                                                                          |
+| `DreamAnalysis`   | `goals?: string[]`                      | Goals the synthesis surfaced → `extractGoals`.                                                                                                                                                                                                        |
+| `DreamAnalysis`   | `questionnaire?: DreamCheckInRef`       | What was created + sent, for display + idempotency.                                                                                                                                                                                                   |
 
 `ClaudeStreamResult` (`host/claudeClient.ts`, not persisted) gains `stopReason?: string`.
 
@@ -240,3 +243,17 @@ None — all resolved before implementation:
 
 - 2026-07-19 — created and approved. Five slices: truncation + auto-continue; fail-safe parity;
   rewind; dream coherence; dream artifacts.
+- 2026-07-19 — **BUILT**, all five slices. Three deviations from the plan, each for a reason worth
+  keeping:
+  - **No `ChatMessage.id`** — rewind verifies a `{role, ts}` stamp instead (§4), which works on
+    historical transcripts an additive id never would.
+  - **Usage is summed across continuation calls** rather than recorded per call. `sessionCount`
+    derives from distinct `sessionId`s, so cost and session totals are identical either way, and one
+    event per turn means the five call sites meter unchanged with no double-count risk.
+  - **The recipient's standing opt-out (63 §3.3a) is honoured** for dream-derived questionnaires.
+    Auto-send was chosen deliberately (§8.4), but that decision was about the _dreamer's_ review step
+    and their dream's sensitivity — the block is a _different_ person's explicit choice, stored in
+    their own vault and treated as a hard gate everywhere else auto-sending happens. Bypassing it
+    silently would break a promise made to someone who never entered this flow. It is one check in
+    `mintDreamQuestionnaires` if the owner wants it the other way.
+  - Also fixed in passing: `dreamSave` was dropping `image` on edit, orphaning generated dream images.

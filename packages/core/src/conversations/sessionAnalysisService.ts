@@ -388,14 +388,22 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
     now,
   );
 
-  await saveConversation(fs, key, {
-    ...conversation,
-    status: 'complete',
-    endedAt: conversation.endedAt ?? at,
-    insightId,
-    insightStale: false,
-    updatedAt: at,
-  });
+  // RE-READ before writing. `conversation` was fetched BEFORE the analysis model call, and a Conversation
+  // carries its whole `messages` transcript — so writing the pre-call copy back would DELETE any message
+  // sent while the summary was being generated (12 §5.1's stale-write class, here costing chat messages
+  // rather than an image). Only the wrap-up fields are ours; the transcript comes from the live record.
+  // A `null` read means the session was deleted mid-analysis: leave it deleted rather than resurrecting.
+  const live = await getConversation(fs, key, personId, conversationId);
+  if (live) {
+    await saveConversation(fs, key, {
+      ...live,
+      status: 'complete',
+      endedAt: live.endedAt ?? at,
+      insightId,
+      insightStale: false,
+      updatedAt: at,
+    });
+  }
 
   return { ok: true, insight, usage };
 }

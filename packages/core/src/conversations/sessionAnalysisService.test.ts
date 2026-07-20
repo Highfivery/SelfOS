@@ -133,6 +133,36 @@ describe('setSessionStatus', () => {
 });
 
 describe('endAndSummarize', () => {
+  it('does not delete a message sent WHILE the summary was being generated', async () => {
+    await saveConversation(fs, key, conversation('c1', 'p1'));
+
+    // The person keeps typing while "Wrap up & reflect" runs. A Conversation carries its whole
+    // transcript, so writing back the copy read BEFORE the analysis call would silently drop the new
+    // message — losing chat the user actually wrote.
+    const clientThatGetsAMessageMidCall: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: async (options, onDelta) => {
+        const live = await getConversation(fs, key, 'p1', 'c1');
+        await saveConversation(fs, key, {
+          ...live!,
+          messages: [
+            ...live!.messages,
+            { role: 'user', content: 'one more thing', ts: now.toISOString() },
+          ],
+        });
+        return analysisClient().stream(options, onDelta);
+      },
+    };
+
+    const result = await endAndSummarize(deps({ client: clientThatGetsAMessageMidCall }));
+    expect(result.ok).toBe(true);
+
+    const after = await getConversation(fs, key, 'p1', 'c1');
+    expect(after?.messages.map((m) => m.content)).toContain('one more thing'); // not clobbered
+    expect(after?.status).toBe('complete'); // …and the wrap-up still applied
+    expect(after?.insightId).toBeTruthy();
+  });
+
   beforeEach(async () => {
     await savePerson(fs, key, person('p1', 'Alex'));
     await saveConversation(fs, key, conversation('c1', 'p1'));

@@ -464,26 +464,35 @@ export async function applyMarkup(
     existing.pinnedQuotes,
   );
 
+  // Re-read both records before writing. `existing`/`markup` predate the chapter rewrite — the slowest
+  // call in the app — so spreading them would revert whatever landed meanwhile: `imagePlacements`
+  // (setImagePlacement), `order`/`partId` (syncPartChapterOrder), and any mark the user added during the
+  // revision. Only the rewritten text and its provenance are ours. (`generateChapter` above already reads
+  // AFTER its call; this path was the outlier.)
+  const liveChapter =
+    (await getChapter(deps.fs, deps.key, deps.personId, args.bookId, args.chapterId)) ?? existing;
   const chapter: BookChapter = {
-    ...existing,
+    ...liveChapter,
     markdown: enforced.markdown,
-    revision: existing.revision + 1,
+    revision: liveChapter.revision + 1,
     status: 'updated',
     provenance: stripped.provenance,
     // Re-stamp the freshness fingerprint against the corpus this revision was written from (§5.4).
     sourceSignature: computeSourceSignature(corpus, { provenance: stripped.provenance }),
     lastGeneratedAt: deps.now.toISOString(),
     // The pre-revision text drives the "What changed" diff (§13.5); cleared when the chapter is Reviewed.
-    previousMarkdown: existing.markdown,
+    previousMarkdown: liveChapter.markdown,
   };
   await saveChapter(deps.fs, deps.key, deps.personId, args.bookId, chapter);
 
   // Stamp every applied mark; leave the rest (questions, reminders, dismissed) as they were.
   const includedIds = new Set(pending.map((m) => m.id));
-  const marks = markup.marks.map((m) =>
+  const liveMarkup =
+    (await getMarkup(deps.fs, deps.key, deps.personId, args.bookId, args.chapterId)) ?? markup;
+  const marks = liveMarkup.marks.map((m) =>
     includedIds.has(m.id) ? markApplied(m, chapter.revision) : m,
   );
-  await saveMarkup(deps.fs, deps.key, deps.personId, args.bookId, { ...markup, marks });
+  await saveMarkup(deps.fs, deps.key, deps.personId, args.bookId, { ...liveMarkup, marks });
   // Keep the book-level to-do roll-up in step — an applied `ask` to-do must flip to `applied` there too, or
   // the overview's one-read list would show it still open (the roll-up is denormalized; §3.3.2).
   await syncChapterTodos(deps.fs, deps.key, deps.personId, args.bookId, args.chapterId, marks);

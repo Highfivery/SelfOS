@@ -344,7 +344,26 @@ async function generateCoachReply(
       conversation.guideStep = Math.max(0, Math.min(step, exercise.steps.length - 1));
   }
   conversation.updatedAt = at;
-  await saveConversation(fs, key, conversation);
+  // Re-read before writing. `conversation` was captured BEFORE the stream (10-60s), and other whole-record
+  // writers touch this same file meanwhile — `conversationsRename` and `sessions:setStatus` — so writing our
+  // copy back would silently revert a rename made while the coach was replying. The transcript is ours (only
+  // this path appends messages); everything else comes from the live record. A `null` read means the session
+  // was deleted mid-turn: leave it deleted rather than resurrecting it.
+  const live = await getConversation(fs, key, conversation.personId, conversation.id);
+  if (live) {
+    await saveConversation(fs, key, {
+      ...live,
+      messages: conversation.messages,
+      // Fields this turn legitimately owns alongside the transcript: the stepper and the classified
+      // topic cache (28 §13.2), both computed from this turn. Everything else stays as the live record
+      // has it (title from a concurrent rename, status from a concurrent set-status).
+      ...(conversation.guideStep !== undefined ? { guideStep: conversation.guideStep } : {}),
+      ...(conversation.topicLifeAreas !== undefined
+        ? { topicLifeAreas: conversation.topicLifeAreas }
+        : {}),
+      updatedAt: at,
+    });
+  }
 
   // Meter the classifier call too, if it ran (28 §13.2) — a separate `session.topic` event.
   if (topicUsage) await recordUsage(fs, key, topicUsage);

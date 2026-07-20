@@ -243,7 +243,14 @@ export async function generateStructuralProposals(
     accepted.push(p);
   }
 
-  const merged = { schemaVersion: 1 as const, proposals: [...existing.proposals, ...accepted] };
+  // Re-read: `existing` predates the model call, so an approve/dismiss made during the pass would be
+  // reverted by merging into the stale list. Append to the CURRENT proposals instead.
+  const liveProposals =
+    (await getProposals(deps.fs, deps.key, deps.personId, args.bookId)) ?? existing;
+  const merged = {
+    schemaVersion: 1 as const,
+    proposals: [...liveProposals.proposals, ...accepted],
+  };
   await saveProposals(deps.fs, deps.key, deps.personId, args.bookId, merged);
   return {
     ok: true,

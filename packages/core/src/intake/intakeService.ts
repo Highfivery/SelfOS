@@ -96,6 +96,28 @@ function freshSession(personId: string, at: string): IntakeSession {
  * absent. Also reconciles the section list against the catalog — a section added to the catalog after the
  * session was created is appended (notStarted), so a returning person picks up new sections.
  */
+/**
+ * Re-read the session and apply `mutate` to the CURRENT copy, then persist it.
+ *
+ * Use this instead of writing a `session` object that was read before anything slow (a model call).
+ * `IntakeSession` carries every section's `answers`/`answerSharing`/`status`/`reflection`, and the
+ * onboarding form auto-saves on a ~600ms debounce — so writing back a pre-call copy silently reverts
+ * answers the person typed while the model was working. That is the 12 §5.1 stale-write class, and here
+ * it costs typed answers. Returns the written session, or `null` if it vanished (deleted person).
+ */
+async function patchIntakeSession(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  mutate: (session: IntakeSession) => void,
+): Promise<IntakeSession | null> {
+  const fresh = await getIntakeSession(fs, key, personId);
+  if (!fresh) return null;
+  mutate(fresh);
+  await writeEncryptedJson(fs, intakePath(personId), fresh, key);
+  return fresh;
+}
+
 export async function ensureIntakeSession(
   fs: FileSystem,
   key: Uint8Array,
@@ -560,11 +582,17 @@ export async function runIntakeTurn(deps: IntakeTurnDeps): Promise<IntakeTurnRes
   // Chat replies no longer carry field markers (forms fill fields, §14.6); strip defensively anyway.
   const clean = stripIntakeFieldMarkers(result.text);
 
-  section.messages.push({ role: 'user', content: userText, ts: at });
-  section.messages.push({ role: 'assistant', content: clean, ts: at });
-  if (section.status === 'notStarted') section.status = 'inProgress';
-  session.updatedAt = at;
-  await writeEncryptedJson(fs, intakePath(personId), session, key);
+  // Re-read: `session` predates the model call, so writing it whole would revert any form answer
+  // auto-saved during the turn. Apply just this turn's messages to the CURRENT session.
+  const patched = await patchIntakeSession(fs, key, personId, (live) => {
+    const target = live.sections.find((sec) => sec.id === sectionId);
+    if (!target) return;
+    target.messages.push({ role: 'user', content: userText, ts: at });
+    target.messages.push({ role: 'assistant', content: clean, ts: at });
+    if (target.status === 'notStarted') target.status = 'inProgress';
+    live.updatedAt = at;
+  });
+  if (patched) Object.assign(session, patched);
 
   return { ok: true, session, usage };
 }
@@ -1012,8 +1040,12 @@ async function synthesizeSection(
       () => {},
     );
   } catch {
-    session.updatedAt = at;
-    await writeEncryptedJson(fs, intakePath(personId), session, key);
+    const patched = await patchIntakeSession(fs, key, personId, (live) => {
+      const target = live.sections.find((sec) => sec.id === sectionId);
+      if (target && target.status !== 'skipped') target.status = 'complete';
+      live.updatedAt = at;
+    });
+    if (patched) Object.assign(session, patched);
     return { ok: true, session };
   }
 
@@ -1024,9 +1056,17 @@ async function synthesizeSection(
   // the reflection (the section still completes), so no honest-failure classification is needed here.
   const reflection = ReflectionDraftSchema.safeParse(extractJsonObject(result.text)).data
     ?.reflection;
-  if (reflection) section.reflection = reflection;
-  session.updatedAt = at;
-  await writeEncryptedJson(fs, intakePath(personId), session, key);
+  // Re-read before writing (same reason as the turn path): only the reflection is ours to apply.
+  // Completing the section is structural (set on the stale copy above); re-apply it to the live session
+  // along with the reflection, so neither is lost to the re-read.
+  const patched = await patchIntakeSession(fs, key, personId, (live) => {
+    const target = live.sections.find((sec) => sec.id === sectionId);
+    if (!target) return;
+    if (target.status !== 'skipped') target.status = 'complete';
+    if (reflection) target.reflection = reflection;
+    live.updatedAt = at;
+  });
+  if (patched) Object.assign(session, patched);
   return { ok: true, session, usage, ...(reflection ? { reflection } : {}) };
 }
 
@@ -1044,7 +1084,16 @@ async function applyInferredFields(
   // synthesis (the 12 §5.1 stale-write class, in the intake path). Only the empty fields below are ours
   // to fill; everything else must come from the current record. A `null` read means the person was
   // deleted mid-synthesis: return rather than resurrecting them.
-  const fresh = await getPerson(fs, key, person.id);
+  // Must not THROW: this runs after the paid call and before the session is marked complete, and
+  // onboarding is a hard gate for members — an escaping throw would strand them behind it and re-spend
+  // on retry. `getPerson` throws on a malformed/undecryptable envelope, so fall back to the stale copy
+  // (a reverted inferred field beats a stuck onboarding).
+  let fresh: Person | null;
+  try {
+    fresh = await getPerson(fs, key, person.id);
+  } catch {
+    fresh = person;
+  }
   if (!fresh) return;
   const next: Person = { ...fresh };
   let changed = false;
@@ -1219,19 +1268,26 @@ async function synthesizePortrait(deps: IntakeSynthesizeDeps): Promise<IntakeSyn
   await saveInsight(fs, key, insight);
   await applyInferredFields(fs, key, person, draft.inferred, now);
 
-  session.status = 'complete';
-  session.completedAt = at;
-  session.insightId = insightId;
-  session.portrait = draft.portrait;
-  // Snapshot the answers this portrait was built from, so the app can later show "X% out of date" (§15).
-  session.portraitAnswerSig = intakeAnswerHashes(session);
-  // Snapshot the catalog as it stands now (55 §4), so a later update's new section/question is detectable
-  // as genuinely new — refreshing the portrait re-baselines, so answered-away news doesn't linger.
+  // Re-read before the completion write. `session` predates the portrait model call and carries EVERY
+  // section's answers/answerSharing/status — and the onboarding form auto-saves on a ~600ms debounce, so
+  // writing this copy back would silently revert answers the person typed while the portrait generated.
+  // Apply only the completion fields to the live session. The answer signature is computed from the LIVE
+  // session too, so "X% out of date" reflects what the portrait was actually built from plus anything
+  // added since (it re-baselines on the next refresh either way).
   const snapshot = intakeCatalogSnapshot();
-  session.knownSectionIds = snapshot.sectionIds;
-  session.knownQuestionKeys = snapshot.questionKeys;
-  session.updatedAt = at;
-  await writeEncryptedJson(fs, intakePath(personId), session, key);
+  const patched = await patchIntakeSession(fs, key, personId, (live) => {
+    live.status = 'complete';
+    live.completedAt = at;
+    live.insightId = insightId;
+    live.portrait = draft.portrait;
+    live.portraitAnswerSig = intakeAnswerHashes(live);
+    // Snapshot the catalog as it stands now (55 §4), so a later update's new section/question is
+    // detectable as genuinely new — refreshing the portrait re-baselines.
+    live.knownSectionIds = snapshot.sectionIds;
+    live.knownQuestionKeys = snapshot.questionKeys;
+    live.updatedAt = at;
+  });
+  if (patched) Object.assign(session, patched);
 
   return { ok: true, session, portrait: draft.portrait, insightId, usage };
 }

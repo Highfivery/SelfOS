@@ -342,19 +342,27 @@ describe('intakeService', () => {
     // The person edits their profile mid-synthesis (the portrait call is a long model turn). The
     // inferred-fields write afterwards must not put back the copy read BEFORE that call — that is the
     // 12 §5.1 stale-write class reaching the intake path.
-    const editMidFlight = fakeClient({
-      capture: () => {},
-    });
+    const editMidFlight = fakeClient();
     const client: ClaudeClient = {
       send: () => Promise.resolve(''),
       stream: async (options, onDelta) => {
         const live = await getPerson(fs, key, 'p1');
         await savePerson(fs, key, { ...live!, location: 'Lisbon', displayName: 'Sam Renamed' });
+        // …and the person keeps filling in the form while the portrait generates.
+        await submitSectionForm(fs, key, 'p1', 'basics', { occupation: 'nurse practitioner' }, NOW);
         return editMidFlight.stream(options, onDelta);
       },
     };
 
     await synthesizeIntake(synth(fs, client));
+
+    // The SESSION is the other record read before the portrait call — and it carries typed answers, which
+    // the form auto-saves on a debounce. Those must survive the completion write too (the worse half).
+    const sess = await getIntakeSession(fs, key, 'p1');
+    expect(sess?.sections.find((x) => x.id === 'basics')?.answers.occupation).toBe(
+      'nurse practitioner', // the answer typed DURING the synthesis, not the pre-call 'nurse'
+    );
+    expect(sess?.status).toBe('complete'); // …and the portrait still completed the session
 
     const after = await getPerson(fs, key, 'p1');
     expect(after?.location).toBe('Lisbon'); // the mid-flight edit survived

@@ -288,8 +288,13 @@ export async function runGapPass(
   // deterministic written/reviewed fallback.
   const partCoverage = computePartCoverage(outline, chapters, draft.partCoverage);
 
+  // Re-read: `interview` predates the gap-pass model call, and this record holds `photoAnswers` (typed
+  // prose) plus `askedPrompts`/`openCheckinAssignmentId` that other paths write — so spreading the stale
+  // copy would revert a photo answer saved during the pass. Same rule already noted below for `after`.
+  const liveInterview =
+    (await getInterviewState(deps.fs, deps.key, deps.personId, args.bookId)) ?? interview;
   await saveInterviewState(deps.fs, deps.key, deps.personId, args.bookId, {
-    ...interview,
+    ...liveInterview,
     frameworkCoverage: coverage,
     lastGaps: gaps,
     lastPartCoverage: partCoverage,

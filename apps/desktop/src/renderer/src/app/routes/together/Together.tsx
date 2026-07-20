@@ -289,7 +289,9 @@ export function Together(): JSX.Element {
                 type="button"
                 role="tab"
                 id={`ttab-${t}`}
-                aria-controls={`tpanel-${t}`}
+                // Only ONE tabpanel is rendered (the active one), so only the selected tab references it —
+                // an inactive tab pointing at a non-existent panel id would be a dangling aria-controls.
+                {...(tab === t ? { 'aria-controls': `tpanel-${t}` } : {})}
                 aria-selected={tab === t}
                 tabIndex={tab === t ? 0 : -1}
                 className={`${styles.tab} ${tab === t ? styles.tabActive : ''}`}

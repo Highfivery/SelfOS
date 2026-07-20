@@ -230,8 +230,23 @@ describe('Together home — tabbed IA (§3.2a)', () => {
     expect(screen.queryByRole('tab', { name: /Desire/ })).toBeNull();
     // The catalog lives on Practices, not on the default Sessions tab.
     expect(screen.queryByText('Love Maps')).toBeNull();
+
+    // a11y: exactly ONE tabpanel is rendered, and only the SELECTED tab references it via aria-controls
+    // (an inactive tab pointing at a non-existent panel would be a dangling reference).
+    const panels = screen.getAllByRole('tabpanel');
+    expect(panels).toHaveLength(1);
+    const active = screen.getByRole('tab', { name: /Sessions/ });
+    expect(active).toHaveAttribute('aria-controls', panels[0]!.id);
+    expect(screen.getByRole('tab', { name: /Practices/ })).not.toHaveAttribute('aria-controls');
+
     await userEvent.click(screen.getByRole('tab', { name: /Practices/ }));
     expect(await screen.findByText('Love Maps')).toBeInTheDocument();
+    // …and now Practices owns the panel, Sessions drops its aria-controls.
+    expect(screen.getByRole('tab', { name: /Practices/ })).toHaveAttribute(
+      'aria-controls',
+      screen.getByRole('tabpanel').id,
+    );
+    expect(screen.getByRole('tab', { name: /Sessions/ })).not.toHaveAttribute('aria-controls');
   });
 
   it('reveals the Desire tab only once both partners have unlocked it (eligible)', async () => {

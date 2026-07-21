@@ -119,6 +119,71 @@ export function webDeviceSettings(device: string): WebDeviceSettings {
   };
 }
 
+/** Content tokens for the fake de-dup branch (mirrors the Electron fake + `dedup.ts` intent). */
+function webFakeContentTokens(s: string): Set<string> {
+  const STOP = new Set([
+    'what',
+    'whats',
+    'how',
+    'when',
+    'where',
+    'why',
+    'who',
+    'which',
+    'that',
+    'this',
+    'your',
+    'you',
+    'the',
+    'and',
+    'for',
+    'with',
+    'about',
+    'have',
+    'has',
+    'had',
+    'are',
+    'was',
+    'were',
+    'would',
+    'could',
+    'should',
+    'can',
+    'will',
+    'like',
+    'feel',
+    'feels',
+    'felt',
+    'them',
+    'they',
+    'their',
+    'any',
+    'some',
+    'most',
+    'more',
+    'lately',
+    'these',
+    'those',
+    'been',
+    'from',
+    'into',
+    'over',
+  ]);
+  return new Set(
+    s
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 4 && !STOP.has(w)),
+  );
+}
+function webFakeCoverage(cand: Set<string>, pool: Set<string>): { count: number; frac: number } {
+  if (cand.size === 0) return { count: 0, frac: 0 };
+  let count = 0;
+  for (const t of cand) if (pool.has(t)) count += 1;
+  return { count, frac: count / cand.size };
+}
+
 /**
  * A deterministic, offline `ClaudeClient` for the preview — streams a canned reply so the full Sessions
  * surface (streaming, usage, budgets) is exercisable. Real Claude (the browser-mode Anthropic SDK) lands
@@ -158,6 +223,35 @@ export function webFakeClaudeClient(): ClaudeClient {
         return Promise.resolve({
           text: JSON.stringify(objs),
           usage: { inputTokens: 80, outputTokens: 40, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+      // The semantic de-dup pass (08 §23.5) — actually DROP a candidate covered by the reference (parity with
+      // the Electron fake), so the preview/iOS path isn't a keep-all no-op that hides whether the pass works.
+      if (options.system.includes('strict de-duplication filter')) {
+        const candStart = userText.indexOf('CANDIDATE NEW QUESTIONS:');
+        const refTokens = webFakeContentTokens(candStart >= 0 ? userText.slice(0, candStart) : '');
+        // Scan ONLY the candidate section (a reference answer could contain a "\n2. …" line otherwise).
+        const candBlock = candStart >= 0 ? userText.slice(candStart) : userText;
+        const candidates = [...candBlock.matchAll(/^\s*(\d+)\.\s*(.+)$/gm)].map((m) => ({
+          idx: Number(m[1]),
+          tokens: webFakeContentTokens(m[2] ?? ''),
+        }));
+        const kept: number[] = [];
+        const keptTokens: Set<string>[] = [];
+        for (const c of candidates) {
+          if (c.tokens.size === 0) {
+            kept.push(c.idx);
+            continue;
+          }
+          const ref = webFakeCoverage(c.tokens, refTokens);
+          const dupOfEarlier = keptTokens.some((k) => webFakeCoverage(c.tokens, k).frac >= 0.75);
+          if (ref.count >= 3 || (ref.count >= 2 && ref.frac >= 0.75) || dupOfEarlier) continue;
+          kept.push(c.idx);
+          keptTokens.push(c.tokens);
+        }
+        return Promise.resolve({
+          text: JSON.stringify(kept),
+          usage: { inputTokens: 200, outputTokens: 12, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
       // Compatibility alignment (08 §13.5d) asks for a report JSON object.

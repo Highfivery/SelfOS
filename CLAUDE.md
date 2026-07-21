@@ -430,6 +430,40 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-21 — **Audit + Fix (questionnaire AI de-dup — it STILL re-asked known things despite §17/§23/§23.5b/§24;
+  SPEC 08 §26; on `fix/questionnaire-dedup-audit`, a worktree off origin/main, NOT merged).** The user reported AI
+  questionnaires keep asking the same/similar questions the app already has answers for. **Deep audit first (mapped
+  all 4 generation paths + the fakes + test coverage via parallel agents, verified against the code):** the
+  question-level de-dup was elaborately wired (a fuzzy filter + a semantic AI pass), but the fuzzy filter only
+  compares against exact prior QUESTION PROMPTS — the **only** thing catching a re-ask of onboarding ANSWERS /
+  session-insight facts (in different words) is the semantic pass, and it had four structural gaps: **(1)** the
+  **gap-finder — which SELECTS topics** — had only soft, model-trusted avoidance and the **daily auto check-ins
+  passed it NO avoid-list**, so whole questionnaires repeated topics regardless of question-level de-dup (the biggest
+  driver of "over and over"); **(2)** the semantic pass was **fail-open (any hiccup → silently keep all), truncated a
+  full intake at 8000 chars, and NO test exercised it dropping a reworded dup** — the E2E fake had no de-dup branch
+  and fell through to keep-all, so the real pass could be a no-op with the whole suite green (§6 "fakes hide
+  model-call bugs"); **(3) dream questionnaires passed ZERO de-dup inputs**; **(4)** a DRY drift risk (the bridge
+  inlined its own `buildDedupReference`). **Owner chose "everything incl. reliability rework."** Fixed in 5 slices:
+  **the offline fakes now perform a real reference-driven drop** (conservative token-coverage heuristic; scoped to the
+  candidate section) so the pass is finally testable + a test drives `generateQuestions` end-to-end and proves a
+  reference-covered candidate is removed; **semantic reliability** — reference ceiling 16k→24k + onboarding cap
+  8k→14k (a full intake isn't cut), a **retry-once** on a genuinely-garbled reply (usage+cost summed), and an
+  observable **`degraded`** flag; **topic-level de-dup** — new `gatherRecipientQuestionnaireTitles`, the gap-finder
+  now ENFORCES `avoidSuggestions` deterministically (drops a title near-dup; all-dup → a calm no-`reason` "nothing
+  new" empty state, never a data blame), and both the auto engine + the bridge saved-suggestions path feed prior-sent
+  titles; **dream questionnaires** now carry the full de-dup bundle (self OR a household member); **DRY** — the bridge
+  routes through the shared `buildDedupReference`. code-reviewer **ship** (should-fix applied: sum `costUsd` in the
+  retry usage-merge; nits: scope the fake regex to the candidate section, trim the `degraded` docstring's overclaim).
+  Gate green: typecheck, lint, format, full unit suite (**+ new tests: fake-drops-a-reference-covered-candidate,
+  semantic retry/degraded [6], gap-finder title-dedup + all-dup-empty-state, `gatherRecipientQuestionnaireTitles`,
+  dream de-dup-flows, bridge feeds prior-sent titles**), **26 questionnaire E2E green (no regression)**. **Honest
+  caveat (§26.3): the structural gaps are fixed + verified from code, but confirming the LIVE model's judgment
+  quality needs a real-API run — the fake proves the plumbing + a reference-driven drop, not the live pass's
+  quality; tuning `SEMANTIC_DEDUP_SYSTEM` live is a follow-up, now made observable by `degraded`.** **Lesson: the
+  meaning-level de-dup rested entirely on ONE fail-open AI call that NO test proved worked (the fake was a keep-all
+  no-op) — the highest-leverage fix was making the fake genuinely drop so the behaviour becomes pinnable; and
+  question-level de-dup can't help when the TOPIC selector (gap-finder) re-picks a covered area, so it needs its own
+  hard avoid-list on every path (the auto path had none).**
 - 2026-07-21 — **Feedback + Fix (NEVER defer/create follow-ups — FIX IT NOW; the Together chunk-bleed bug I had
   wrongly deferred, now fixed; on `fix/together-chunk-session-scope`).** After shipping the session-switch fix
   (v0.43.1) I ended my message OFFERING to "open a follow-up" for a real cross-session bug I'd already diagnosed

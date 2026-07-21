@@ -12,6 +12,7 @@ import {
 } from '../schemas';
 import { buildGapFinderUserMessage, GAP_FINDER_SYSTEM } from './aiPrompts';
 import { gatherGenerationContext, isThinContext } from './contextProviders';
+import { isNearDuplicate } from './dedup';
 import { runClaude, type AiDeps } from './generationService';
 
 /**
@@ -119,9 +120,31 @@ export async function suggestQuestionnaires(
   ).parse(raw);
 
   if (suggestions.length === 0) {
-    // The call succeeded but no usable suggestion survived — an HONEST parse outcome, never a data blame.
+    // The call succeeded but no usable suggestion PARSED — an HONEST parse outcome, never a data blame (37).
     const { reason, message } = classifyParseOutcome(call.text, 'suggestion set');
     return { ok: false, reason, usage: call.usage, message };
   }
-  return { ok: true, suggestions, usage: call.usage };
+
+  // Topic-level de-dup backstop (08 §23.5): `avoidSuggestions` (ideas already saved AND questionnaires
+  // already sent to this recipient) is a HARD signal, not just a prompt request — drop any returned
+  // suggestion whose TITLE near-duplicates one already covered, so the gap-finder can't re-propose a topic
+  // the model was told to avoid. Conservative (the same fuzzy `isNearDuplicate` as question-level de-dup),
+  // so a genuinely-different area sharing a word survives. This is what stops "asks about the same things
+  // over and over" at the topic layer, where question-level de-dup can't help.
+  const avoid = input.avoidSuggestions ?? [];
+  const deduped =
+    avoid.length > 0 ? suggestions.filter((s) => !isNearDuplicate(s.title, avoid)) : suggestions;
+
+  if (deduped.length === 0) {
+    // Suggestions DID parse, but every one duplicates a topic already covered/sent — a calm "nothing new"
+    // EMPTY STATE, not a parse failure. No `reason` (the thin-context precedent), so it never reads as an AI
+    // error or a data blame; the auto engine treats this like any gap-finder miss (falls back to a generic
+    // intent brief) and the Suggested panel keeps what it had.
+    return {
+      ok: false,
+      usage: call.usage,
+      message: 'Nothing new to suggest yet — you’ve already covered these topics together.',
+    };
+  }
+  return { ok: true, suggestions: deduped, usage: call.usage };
 }

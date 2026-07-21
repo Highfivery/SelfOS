@@ -8,9 +8,15 @@ import type {
 } from '../schemas';
 import { getPerson } from '../people';
 import { isSenderBlocked } from '../autoCheckins/prefsService';
+import { formatIntakeForGeneration, getIntakeSession } from '../intake';
 import {
+  buildDedupReference,
   createAssignment,
   deleteQuestionnaire,
+  gatherRecipientAskedPrompts,
+  gatherRecipientHistory,
+  gatherRecipientInsightFacts,
+  gatherRecipientPriorAnswers,
   generateQuestions,
   saveQuestionnaire,
   validateQuestionnaire,
@@ -117,6 +123,34 @@ export async function mintDreamQuestionnaires(
       ? proposal.brief
       : `Someone close to you has been reflecting on this and would like to understand it with you: ${proposal.brief}`;
 
+    // De-dup grounding for the recipient (self OR a household member), so a dream check-in never re-asks
+    // what they've already answered in onboarding / prior questionnaires / reflected on (08 §23.5). This
+    // path previously passed NO de-dup inputs — a real hole, since it can reach another member with full
+    // history. Mirrors the auto-checkin/bridge assembly (intake fetched here, the pure reference shared).
+    const [dHistory, dPrompts, dAnswers, dFacts, dSession] = await Promise.all([
+      gatherRecipientHistory(fs, key, recipient.personId),
+      gatherRecipientAskedPrompts(fs, key, recipient.personId),
+      gatherRecipientPriorAnswers(fs, key, recipient.personId),
+      gatherRecipientInsightFacts(fs, key, recipient.personId),
+      getIntakeSession(fs, key, recipient.personId),
+    ]);
+    const dIntake = dSession
+      ? formatIntakeForGeneration(dSession)
+      : { text: '', prompts: [] as string[] };
+    const dedupReference = buildDedupReference({
+      intakeText: dIntake.text,
+      priorAnswers: dAnswers,
+      insightFacts: dFacts,
+      priorPrompts: dPrompts,
+    });
+    const recipientHistory = [
+      dHistory,
+      dIntake.text.trim() ? `What they have already answered in onboarding:\n${dIntake.text}` : '',
+    ]
+      .filter((s) => s.trim() !== '')
+      .join('\n\n');
+    const recipientAskedPrompts = [...dPrompts, ...dIntake.prompts];
+
     const generated = await generateQuestions(deps, {
       type: 'general',
       sensitivity: 'standard',
@@ -131,6 +165,9 @@ export async function mintDreamQuestionnaires(
       },
       existingPrompts: [],
       count: DREAM_QUESTION_COUNT,
+      ...(recipientHistory ? { recipientHistory } : {}),
+      ...(dedupReference ? { dedupReference } : {}),
+      ...(recipientAskedPrompts.length ? { recipientAskedPrompts } : {}),
     });
     const questions = generated.ok ? (generated.questions ?? []) : [];
     if (questions.length === 0) continue;

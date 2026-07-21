@@ -10,6 +10,7 @@ import {
   buildDedupReference,
   gatherRecipientHistory,
   gatherRecipientPriorAnswers,
+  gatherRecipientQuestionnaireTitles,
 } from './recipientHistory';
 
 const key = generateMasterKey();
@@ -154,6 +155,38 @@ describe('gatherRecipientPriorAnswers (08 §24.3-A1)', () => {
   });
 });
 
+describe('gatherRecipientQuestionnaireTitles (08 §23.5 — topic-level de-dup signal)', () => {
+  it('returns the deduped titles of questionnaires already sent to the recipient', async () => {
+    const fs = memFileSystem();
+    const mara = await upsertPerson(fs, key, { displayName: 'Mara', isSubject: true, tags: [] });
+    const send = async (title: string): Promise<void> => {
+      const def = await saveQuestionnaire(fs, key, {
+        title,
+        type: 'general',
+        sensitivity: 'standard',
+        recipient: { kind: 'person', personId: mara.id },
+        questions: [{ id: 'q1', type: 'yesNo', prompt: 'q?', required: false }],
+      });
+      await createAssignment(fs, key, {
+        questionnaireId: def.id,
+        senderPersonId: 'owner',
+        recipient: { kind: 'person', personId: mara.id },
+        channel: 'inApp',
+        privacy: 'private',
+        senderVisibleToRecipient: true,
+      });
+    };
+    await send('Money & roots');
+    await send('Partner discovery');
+    await send('Money & roots'); // a re-send of the same topic → deduped
+
+    const titles = await gatherRecipientQuestionnaireTitles(fs, key, mara.id);
+    expect(titles.sort()).toEqual(['Money & roots', 'Partner discovery']);
+    // A different recipient shares none of these.
+    expect(await gatherRecipientQuestionnaireTitles(fs, key, 'someone-else')).toEqual([]);
+  });
+});
+
 describe('buildDedupReference (08 §23.5b — the shared budgeting rule)', () => {
   it('leads with the onboarding block, then prior answers, then insight facts, then asked prompts', async () => {
     const ref = buildDedupReference({
@@ -196,7 +229,7 @@ describe('buildDedupReference (08 §23.5b — the shared budgeting rule)', () =>
   });
 
   it('caps each section independently so a heavy onboarding can never truncate the other sections away', () => {
-    const bigIntake = 'i'.repeat(8100); // > the 8000 onboarding cap
+    const bigIntake = 'i'.repeat(14100); // > the 14000 onboarding cap (raised so a full intake isn't cut)
     const bigAnswers = 'a'.repeat(4100); // > the 4000 prior-answers cap
     const bigFacts = 'f'.repeat(3100); // > the 3000 insight-facts cap
     const manyPrompts = Array.from({ length: 200 }, (_, n) => `Prompt number ${n} about a thing`); // > 2000 chars joined
@@ -211,9 +244,9 @@ describe('buildDedupReference (08 §23.5b — the shared budgeting rule)', () =>
     expect(ref).toContain('ALREADY ANSWERED in prior questionnaires');
     expect(ref).toContain('ALREADY KNOWN about them');
     expect(ref).toContain('ALREADY ASKED in prior questionnaires');
-    // A truncated onboarding keeps only the first 8000 chars + the ellipsis marker.
-    expect(ref).toContain(`${'i'.repeat(8000)}\n…`);
-    expect(ref).not.toContain('i'.repeat(8001)); // never the full over-long block
+    // A truncated onboarding keeps only the first 14000 chars + the ellipsis marker.
+    expect(ref).toContain(`${'i'.repeat(14000)}\n…`);
+    expect(ref).not.toContain('i'.repeat(14001)); // never the full over-long block
     // The lower-priority sections are truncated too (their own budgets), each ending in the ellipsis marker.
     expect(ref).toContain(`${'a'.repeat(4000)}\n…`);
     expect(ref).toContain(`${'f'.repeat(3000)}\n…`);

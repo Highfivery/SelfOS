@@ -758,6 +758,54 @@ describe('improveQuestion + gap-finder', () => {
     expect(result.usage?.type).toBe('questionnaire.suggest');
   });
 
+  // 08 §23.5 topic-level de-dup: `avoidSuggestions` (topics already covered / sent) is a HARD signal — a
+  // returned suggestion whose TITLE near-duplicates a covered topic is dropped, so the gap-finder can't
+  // re-propose the same area (the "asks about the same things over and over" bug, at the topic layer).
+  it('drops a suggestion whose title near-duplicates an already-covered topic (§23.5)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    const text = JSON.stringify([
+      {
+        title: 'Weekly partner check-in', // == a covered topic → must be dropped
+        type: 'general',
+        rationale: 'r',
+        questions: [{ type: 'yesNo', prompt: 'Q1?', required: false }],
+      },
+      {
+        title: 'Money & roots', // genuinely new → kept
+        type: 'general',
+        rationale: 'r',
+        questions: [{ type: 'yesNo', prompt: 'Q2?', required: false }],
+      },
+    ]);
+    const result = await suggestQuestionnaires(deps(fs, fakeClient(text), author), {
+      avoidSuggestions: ['Weekly partner check-in'],
+    });
+    expect(result.ok).toBe(true);
+    expect(result.suggestions?.map((s) => s.title)).toEqual(['Money & roots']);
+  });
+
+  // When EVERY proposal duplicates a covered topic, it's a calm "nothing new" empty state — NOT a parse
+  // failure / data blame (37 §11). No `reason`, an honest message (the thin-context precedent).
+  it('returns a calm empty state (no reason) when every suggestion duplicates a covered topic', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    const text = JSON.stringify([
+      {
+        title: 'Weekly partner check-in',
+        type: 'general',
+        rationale: 'r',
+        questions: [{ type: 'yesNo', prompt: 'Q?', required: false }],
+      },
+    ]);
+    const result = await suggestQuestionnaires(deps(fs, fakeClient(text), author), {
+      avoidSuggestions: ['Weekly partner check-in'],
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBeUndefined(); // not an AI failure — an empty state
+    expect(result.message).toMatch(/nothing new/i);
+  });
+
   // 08 §19.4: a choice-type sample question keeps its options through the parse, so "Create from this" never
   // seeds a blank multiple-choice question (the reported bug).
   it('keeps a sample question’s options (no blank multiple-choice on seed, §19.4)', async () => {

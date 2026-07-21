@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.1](https://github.com/Highfivery/SelfOS/compare/v0.43.0...v0.43.1) (2026-07-21)
+
+
+### Bug Fixes
+
+* **together:** don't force-navigate back to a session when its turn resolves after switching ([#308](https://github.com/Highfivery/SelfOS/issues/308)) ([2a7ef93](https://github.com/Highfivery/SelfOS/commit/2a7ef93163c970fe6bb78f1fc8700d875ed21ef9))
+
 ## [0.43.0](https://github.com/Highfivery/SelfOS/compare/v0.42.0...v0.43.0) (2026-07-21)
 
 

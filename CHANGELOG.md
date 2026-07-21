@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.0](https://github.com/Highfivery/SelfOS/compare/v0.42.0...v0.43.0) (2026-07-21)
+
+
+### Features
+
+* **story:** resume unfinished memories + a history list ([e05ee32](https://github.com/Highfivery/SelfOS/commit/e05ee32c60c320dafe88334c9c3ad1cc40823e83))
+
 ## [0.42.0](https://github.com/Highfivery/SelfOS/compare/v0.41.1...v0.42.0) (2026-07-21)
 
 

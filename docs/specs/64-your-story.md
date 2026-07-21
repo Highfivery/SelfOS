@@ -1422,3 +1422,23 @@ usage type `story.memory`; the AI key stays host-side.
 2. **One-tap confirm card** (editable) — synthesis then commit, not a Memory-dashboard review.
 3. Memory insight **partner-shared by default**, **trauma/intimacy restricted** (own-context only).
 4. **Full in-chat photo attachments** (the Sessions attachment machinery).
+
+### 14.2 Resume + history (2026-07-21, BUILT)
+
+A memory chat behaves like a Session — you can leave it unfinished and come back to it later, and every
+chat is kept as history.
+
+- **Every started chat is kept** (owner decision) — a memory persists (record + transcript) the moment it's
+  opened; nothing is auto-reaped, even an opener-only draft.
+- **Auto working title** (owner decision, an AI call over the free "first-line snippet") — once there's been
+  an exchange, an untitled **unsaved** draft (`gathering` OR marker-`ready`-but-not-yet-synthesized — both carry
+  an empty title, so a memory shared in a single turn still gets one) gets a short AI-generated working title (a
+  cheap metered `story.memory` call, best-effort; it re-attempts each turn only while the title is still empty,
+  then stops; re-reads before the write so it won't clobber the synthesis title) so the resume list can name it.
+  `listMemoryViews` returns the raw title; the renderer shows a "New memory" fallback for a still-untitled draft.
+- **Two sections on the Interview tab** (owner decision): **"Pick up where you left off"** (the resumable
+  `status !== 'saved'` chats — each with an **"In progress" / "Ready to save"** chip, a "Last worked on <when>"
+  line, and a **Continue** affordance) sits above **"Memories you've shared"** (the finished, `saved` ones).
+- **Reopen a synthesized-but-unsaved draft → straight to the review card** (owner decision) — a `ready`
+  memory reopens directly on the editable confirm card built from the draft it already wrote (no new AI
+  spend); "Keep talking" returns to the chat.

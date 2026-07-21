@@ -584,7 +584,64 @@ async function generateMemoryReply(
   });
   conversation.updatedAt = at;
   await saveMemoryConversation(fs, key, conversation);
+  // Auto working title (§14): once there's been an exchange, give an untitled draft a short title so it's
+  // identifiable in the "Pick up where you left off" list. Best-effort — a failure never breaks the turn.
+  await maybeGenerateWorkingTitle(deps).catch(() => undefined);
   return { ok: true, conversation, usage, ...(analysisReady ? { analysisReady } : {}) };
+}
+
+const WORKING_TITLE_INSTRUCTION = `Give this memory a short working title — 2 to 5 evocative words in the \
+person's own register. Reply with ONLY the title: no quotation marks, no trailing punctuation, no preamble.`;
+
+/**
+ * A cheap AI working title for an in-progress memory (§14) — only while the draft is still UNSAVED
+ * (`gathering` OR marker-`ready`-but-not-synthesized) with an empty title and there's been ≥1 exchange, so the
+ * resume list can name it before it's synthesized+saved. It re-attempts each turn ONLY while the title is still
+ * empty, then stops (the title becoming non-empty is the "run once" mechanism). Metered `story.memory`; a
+ * genuinely-empty/failed reply leaves the title empty (the list
+ * shows a "New memory" fallback). Re-reads before the write so a concurrent synthesis title is never clobbered.
+ */
+async function maybeGenerateWorkingTitle(
+  deps: Omit<StoryMemoryTurnDeps, 'userText' | 'attachments'>,
+): Promise<void> {
+  const { fs, key, client, apiKey, model, personId, memoryId, now } = deps;
+  if (!apiKey) return;
+  const memory = await getMemory(fs, key, personId, memoryId);
+  // Any UNSAVED untitled draft — `gathering` OR marker-`ready`-but-not-yet-synthesized (both carry an empty
+  // title) — so a memory shared in a single turn (which flips straight to `ready`) still gets a resume label.
+  if (!memory || memory.status === 'saved' || memory.title.trim() !== '') return;
+  const transcript = await getMemoryConversation(fs, key, personId, memoryId);
+  if (!transcript?.messages.some((m) => m.role === 'user')) return;
+  if (await overBudget(fs, key, personId, now, deps.override)) return;
+  const at = now.toISOString();
+  const result = await client.stream(
+    {
+      apiKey,
+      model,
+      system: 'You give a personal memory a short, evocative working title in a few words.',
+      messages: [
+        ...transcript.messages.map((m) => ({ role: m.role, content: m.content })),
+        { role: 'user' as const, content: WORKING_TITLE_INSTRUCTION },
+      ],
+      maxTokens: 24,
+      extendedThinking: false,
+    },
+    () => {},
+  );
+  await recordUsage(fs, key, buildUsage(model, memoryId, personId, at, result.usage));
+  const title = result.text
+    .trim()
+    .replace(/^["']+|["']+$/g, '')
+    .replace(/[.!?,;:]+$/g, '')
+    .slice(0, 80)
+    .trim();
+  if (!title) return;
+  // Re-read: only stamp the title if the draft is STILL an untitled, unsaved memory (never clobber a
+  // synthesis that set the final title, or a title already generated on a racing turn).
+  const fresh = await getMemory(fs, key, personId, memoryId);
+  if (fresh && fresh.status !== 'saved' && fresh.title.trim() === '') {
+    await patchMemory(fs, key, personId, memoryId, { title, updatedAt: at });
+  }
 }
 
 /** Re-generate the reply for a transcript ending on an unanswered message (66 §3.2) — after a failed/empty
@@ -905,7 +962,9 @@ export async function listMemoryViews(
     return {
       id: m.id,
       status: m.status,
-      title: m.title || 'A memory',
+      // Raw title (may be empty for an untitled in-progress draft) — the renderer shows a "New memory"
+      // fallback; the auto working title (§14) fills it once there's an exchange.
+      title: m.title,
       ...(m.approxDate ? { approxDate: m.approxDate } : {}),
       people: m.people,
       updatedAt: m.updatedAt,

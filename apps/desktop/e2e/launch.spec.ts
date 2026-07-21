@@ -12608,3 +12608,88 @@ test('story (64): trust repairs — protected words survive a rewrite + history 
     await rm(vault, { recursive: true, force: true });
   }
 });
+
+test('story (64): resume an unfinished memory later — pick up where you left off, then save it into the history (§14)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
+
+    // Start a memory: the biographer opens, the person tells it, and after one exchange it has enough.
+    await w.getByRole('tab', { name: 'Interview' }).click();
+    await w.getByRole('button', { name: 'Share a memory' }).click();
+    await expect(w.getByText(/Take me back/)).toBeVisible();
+    await w
+      .getByRole('textbox', { name: 'Message' })
+      .fill('I got a blue bicycle the summer I was seven and rode it down our gravel drive.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/enough here to write it/)).toBeVisible();
+
+    // Leave WITHOUT saving — the memory becomes a resumable, unfinished draft.
+    await w.getByRole('button', { name: 'Back to your story' }).click();
+
+    // "Pick up where you left off" (§14) — the unfinished draft is listed under its AUTO WORKING TITLE ("A
+    // Summer Ride", generated after the exchange so the draft is identifiable) with a Continue cue, so it can be
+    // resumed later (the whole point of the resume/history feature). Back returns straight to the Interview tab.
+    await expect(w.getByRole('heading', { name: 'Pick up where you left off' })).toBeVisible();
+    const resumeRow = w.getByRole('button', { name: 'Continue the memory “A Summer Ride”' });
+    await expect(resumeRow).toBeVisible();
+    await expect(w.getByText('Continue →')).toBeVisible();
+
+    // 360px while the resume/history collection is visible: no horizontal scroller / inner scroll offender (§12).
+    await w.setViewportSize({ width: 360, height: 800 });
+    const listOffenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(listOffenders).toEqual([]);
+    await w.setViewportSize({ width: 1280, height: 900 });
+
+    // Resume it: reopening an unfinished (not-yet-synthesized) draft lands back in the CHAT — the message we
+    // sent earlier is still there (the transcript resumed), with the biographer's offer to write it.
+    await resumeRow.click();
+    await expect(w.getByText(/I got a blue bicycle/)).toBeVisible();
+
+    // Now finish it: synthesize → confirm card (pre-filled title) → commit → woven in.
+    await w.getByRole('button', { name: /Save this memory/ }).click();
+    await expect(w.getByRole('heading', { name: 'Your memory, in your words' })).toBeVisible();
+    await expect(w.getByRole('textbox', { name: 'Title' })).toHaveValue('The Blue Bicycle');
+    await w.getByRole('button', { name: 'Add to my story' }).click();
+    await expect(w.getByText('Woven into your story.')).toBeVisible();
+    await w.getByRole('button', { name: 'Done' }).click();
+
+    // Back on the Interview tab: the memory has moved from "Pick up where you left off" to the shared history.
+    await expect(w.getByRole('heading', { name: 'Memories you’ve shared' })).toBeVisible();
+    await expect(
+      w.getByRole('button', { name: /Re-read the memory “The Blue Bicycle”/ }),
+    ).toBeVisible();
+    // No unfinished draft remains — the resume section is gone.
+    await expect(w.getByRole('heading', { name: 'Pick up where you left off' })).toHaveCount(0);
+
+    // Decrypt the vault: the single memory persisted as `saved` with the synthesized title.
+    const memories = await listMemories(fs, key, 'owner-1');
+    expect(memories.map((m) => m.status)).toEqual(['saved']);
+    expect(memories[0]?.title).toBe('The Blue Bicycle');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});

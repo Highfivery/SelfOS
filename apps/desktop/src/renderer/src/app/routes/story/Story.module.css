@@ -1967,3 +1967,19 @@
   gap: var(--space-2);
   flex: none;
 }
+/* An in-progress draft's state chip ("In progress" / "Ready to save") in the resume list (§14). */
+.memDraftChip {
+  font-size: var(--text-xs);
+  color: var(--color-warning-subtle-text, var(--color-accent-text));
+  background: var(--color-warning-subtle-bg, var(--color-accent-subtle-bg));
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+}
+/* The "Continue →" cue on a resumable row — visual only (the whole row is the button). */
+.memRowContinue {
+  flex: none;
+  align-self: center;
+  font-size: var(--text-sm);
+  color: var(--color-accent-text);
+  white-space: nowrap;
+}

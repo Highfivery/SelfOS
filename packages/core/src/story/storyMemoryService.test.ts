@@ -17,6 +17,7 @@ import {
   isMemoryAttachmentPath,
   listMemoryViews,
   openMemoryChat,
+  patchMemory,
   runMemoryTurn,
   saveMemory,
   storeMemoryAttachment,
@@ -38,6 +39,27 @@ function fakeClient(text: string): ClaudeClient {
   return {
     send: () => Promise.resolve(text),
     stream: (_options, onDelta) => {
+      onDelta(text);
+      return Promise.resolve({ text, usage: USAGE });
+    },
+  };
+}
+
+/**
+ * A fake that returns `title` for the auto-working-title call and `chat` for the biographer reply — a memory
+ * turn makes TWO stream calls, and the title call is identifiable by the `short working title` instruction in
+ * its messages (the DISTINCTIVE guidance the service appends). `chat` is streamed as the reply (marker-free, so
+ * the memory stays `gathering` and the title guard can fire).
+ */
+function titleAwareClient(map: { title: string; chat: string }): ClaudeClient {
+  const isTitleCall = (opts: { messages: { content: unknown }[] }): boolean =>
+    opts.messages.some(
+      (m) => typeof m.content === 'string' && m.content.includes('short working title'),
+    );
+  return {
+    send: () => Promise.resolve(map.chat),
+    stream: (options, onDelta) => {
+      const text = isTitleCall(options) ? map.title : map.chat;
       onDelta(text);
       return Promise.resolve({ text, usage: USAGE });
     },
@@ -204,6 +226,76 @@ describe('runMemoryTurn (66 §3.2)', () => {
     const last = convo?.messages.at(-1);
     expect(last?.content).not.toContain(MEMORY_READY_MARKER);
     expect(last?.content).toContain('whole memory here now');
+  });
+});
+
+// B2. auto working title (§14) ----------------------------------------------------------------------------
+
+describe('auto working title (64 §14)', () => {
+  async function usageCount(fs: ReturnType<typeof memFileSystem>): Promise<number> {
+    return (await queryUsage(fs, key, { from: '2000', to: '2100', type: 'story.memory' })).length;
+  }
+
+  it('a first turn on an untitled gathering draft generates + patches a working title (the second stream call)', async () => {
+    const fs = await fresh();
+    await openMemoryChat(deps(fs, fakeClient('opener'), 'm1')); // opener records one story.memory event
+    const before = await usageCount(fs);
+    const res = await runMemoryTurn(
+      deps(
+        fs,
+        titleAwareClient({ title: 'A Working Title', chat: 'What did the kitchen smell like?' }),
+        'm1',
+        {
+          userText: 'A memory about a bicycle in summer.',
+        },
+      ),
+    );
+    expect(res.ok).toBe(true);
+    const memory = await getMemory(fs, key, 'me', 'm1');
+    // No readiness marker → the draft is still gathering, and the title call named it.
+    expect(memory?.status).toBe('gathering');
+    expect(memory?.title).toBe('A Working Title');
+    // The turn metered BOTH the chat reply AND the title call (two story.memory events this turn).
+    expect((await usageCount(fs)) - before).toBe(2);
+  });
+
+  it('leaves the title empty when the working-title call comes back empty (best-effort — the turn still succeeds)', async () => {
+    const fs = await fresh();
+    await openMemoryChat(deps(fs, fakeClient('opener'), 'm1'));
+    const res = await runMemoryTurn(
+      deps(fs, titleAwareClient({ title: '   ', chat: 'What did you see first?' }), 'm1', {
+        userText: 'A memory.',
+      }),
+    );
+    expect(res.ok).toBe(true); // a failed title never breaks the turn
+    const memory = await getMemory(fs, key, 'me', 'm1');
+    expect(memory?.title).toBe(''); // no usable title → left empty (the list shows "New memory")
+  });
+
+  it('does NOT overwrite a title that already exists (only untitled gathering drafts get one)', async () => {
+    const fs = await fresh();
+    await openMemoryChat(deps(fs, fakeClient('opener'), 'm1'));
+    await patchMemory(fs, key, 'me', 'm1', { title: 'Preset Title' });
+    const before = await usageCount(fs);
+    const res = await runMemoryTurn(
+      deps(fs, titleAwareClient({ title: 'SHOULD NOT BE USED', chat: 'And then?' }), 'm1', {
+        userText: 'More of the memory.',
+      }),
+    );
+    expect(res.ok).toBe(true);
+    const memory = await getMemory(fs, key, 'me', 'm1');
+    expect(memory?.title).toBe('Preset Title'); // the guard skips an already-titled draft
+    // Only the chat turn was metered — NO title call was made (one event, not two).
+    expect((await usageCount(fs)) - before).toBe(1);
+  });
+
+  it('listMemoryViews returns an untitled gathering draft with a RAW empty title (no fallback)', async () => {
+    const fs = await fresh();
+    await openMemoryChat(deps(fs, fakeClient('opener'), 'm1'));
+    const views = await listMemoryViews(fs, key, 'me');
+    const m1 = views.find((v) => v.id === 'm1');
+    expect(m1?.status).toBe('gathering');
+    expect(m1?.title).toBe(''); // the renderer shows the "New memory" fallback, not the service
   });
 });
 

@@ -240,6 +240,18 @@ export function ShareMemoryPanel({
     if (memory?.status === 'saved') setMode('saved');
   }, [memory?.status, memory?.id]);
 
+  // Reopening a memory you'd already SYNTHESIZED but not saved (§14) lands straight on the review card from the
+  // draft it already wrote — no new AI spend ("Keep talking" still returns to the chat). Gated on an actual
+  // synthesized draft (a non-empty narrative), NOT merely `status: 'ready'` — the biographer's readiness marker
+  // also sets `ready` with no draft yet, and that must reopen into the CHAT (with the Save offer), not an empty
+  // card. Applied once, on the initial open only (a mid-chat synthesize sets `confirm` explicitly via saveThis).
+  const openModeSetRef = useRef(false);
+  useEffect(() => {
+    if (openModeSetRef.current || !loaded) return;
+    openModeSetRef.current = true;
+    if (memory && memory.status === 'ready' && memory.narrative.trim() !== '') setMode('confirm');
+  }, [loaded, memory?.status, memory?.narrative]);
+
   // Readiness is durable (stamped on the memory) OR from this turn — so leaving/returning keeps the offer.
   const ready = Boolean(memory?.readyAt) || readyFlag;
   const hasExchange = messages.some((m) => m.role === 'user');

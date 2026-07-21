@@ -1414,7 +1414,7 @@ describe('Story (64)', () => {
     return { memory, conversation };
   }
 
-  it('the Interview tab shows the "Share a memory" invite and the "Memories you’ve shared" collection (§14)', async () => {
+  it('the Interview tab splits memories into "Pick up where you left off" (in-progress) and "Memories you’ve shared" (saved) (§14)', async () => {
     const memories: StoryMemoryView[] = [
       {
         id: 'm-saved',
@@ -1441,19 +1441,35 @@ describe('Story (64)', () => {
     });
     renderStory();
     await openTab('Interview');
-    // The invite card leads with a "Share a memory" heading + a primary "Share a memory" button.
+    // The invite card leads with a primary "Share a memory" button.
     expect(await screen.findByRole('button', { name: 'Share a memory' })).toBeInTheDocument();
-    // The collection lists both memories; a saved one carries the chapter it wove into…
+
+    // Section 1: "Pick up where you left off" holds the still-gathering draft, with an "In progress" chip and a
+    // Continue affordance — scoped to the section (via its heading's card container).
+    const pickUp = (
+      await screen.findByRole('heading', { name: 'Pick up where you left off' })
+    ).closest('div')!;
+    const draft = within(pickUp).getByRole('button', {
+      name: /Continue the memory “A half-told afternoon”/,
+    });
+    expect(within(draft).getByText('In progress')).toBeInTheDocument();
+    expect(within(pickUp).getByText('Continue →')).toBeInTheDocument();
+    // The saved memory is NOT in this section.
     expect(
-      await screen.findByRole('heading', { name: 'Memories you’ve shared' }),
-    ).toBeInTheDocument();
-    // Anchor with `^` so we hit the row button (name starts with the title), not the "Remove the memory …" one.
-    const saved = screen.getByRole('button', { name: /^The Blue Bicycle/ });
+      within(pickUp).queryByRole('button', { name: /The Blue Bicycle/ }),
+    ).not.toBeInTheDocument();
+
+    // Section 2: "Memories you’ve shared" holds the saved memory (re-read only) with the chapter it wove into and
+    // NO state chip.
+    const shared = (await screen.findByRole('heading', { name: 'Memories you’ve shared' })).closest(
+      'div',
+    )!;
+    const saved = within(shared).getByRole('button', {
+      name: /Re-read the memory “The Blue Bicycle”/,
+    });
     expect(saved).toHaveTextContent('wove into “Roots”');
-    expect(within(saved).queryByText('Draft')).not.toBeInTheDocument();
-    // …while a still-gathering memory shows the "Draft" chip.
-    const draft = screen.getByRole('button', { name: /^A half-told afternoon/ });
-    expect(within(draft).getByText('Draft')).toBeInTheDocument();
+    expect(within(shared).queryByText('In progress')).not.toBeInTheDocument();
+    expect(within(shared).queryByText('Ready to save')).not.toBeInTheDocument();
   });
 
   it('clicking "Share a memory" opens the biographer chat panel (a new memory, storyMemoryOpen({})) (§14)', async () => {
@@ -1530,8 +1546,10 @@ describe('Story (64)', () => {
     });
     renderStory();
     await openTab('Interview');
-    // Open the existing memory from the collection (anchor `^` to skip the "Remove the memory …" button).
-    await userEvent.click(await screen.findByRole('button', { name: /^A memory/ }));
+    // Open the still-gathering memory from the "Pick up where you left off" list (its row is a "Continue …" button).
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Continue the memory “A memory”/ }),
+    );
     // With an exchange present, the "Save this memory" affordance is offered → synthesize.
     await userEvent.click(await screen.findByRole('button', { name: /Save this memory/ }));
     // The confirm card reads the synthesized memory back: the title lands in the editable Title field.
@@ -1645,6 +1663,97 @@ describe('Story (64)', () => {
     // The deep-link opens exactly that memory (a resume, by id).
     expect(await screen.findByRole('button', { name: 'Back to your story' })).toBeInTheDocument();
     await waitFor(() => expect(storyMemoryOpen).toHaveBeenCalledWith({ memoryId: 'm1' }));
+  });
+
+  it('reopening a synthesized-but-unsaved (ready) memory lands on the confirm card WITHOUT re-synthesizing (§14)', async () => {
+    const storyMemorySynthesize = vi.fn(() =>
+      Promise.resolve({ ok: true as const, memory: memoryRecord({ status: 'ready' }) }),
+    );
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      // The reopened memory is already 'ready' (synthesized, not saved), with a prior exchange + a draft.
+      storyMemoryOpen: () =>
+        Promise.resolve(
+          memoryDetail(
+            memoryRecord({
+              status: 'ready',
+              title: 'The Blue Bicycle',
+              narrative: 'I was seven, and the bicycle was the blue of a summer sky.',
+              readyAt: '2026-07-19T00:00:00.000Z',
+            }),
+            [
+              { role: 'assistant', content: 'Tell me about it.', ts: '2026-07-19T00:00:01.000Z' },
+              {
+                role: 'user',
+                content: 'A blue bicycle, the summer I was seven.',
+                ts: '2026-07-19T00:00:02.000Z',
+              },
+            ],
+          ),
+        ),
+      storyMemorySynthesize,
+    });
+    renderStoryAt('/story/interview?memory=m1');
+    // It lands straight on the review card, from the draft it already wrote — the Title is pre-filled…
+    expect(
+      await screen.findByRole('heading', { name: 'Your memory, in your words' }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Title')).toHaveValue('The Blue Bicycle');
+    // …and NO new synthesis call was made (no fresh AI spend on reopen).
+    expect(storyMemorySynthesize).not.toHaveBeenCalled();
+    // "Keep talking" returns to the chat (the prior exchange is there again).
+    await userEvent.click(screen.getByRole('button', { name: 'Keep talking' }));
+    expect(await screen.findByText(/A blue bicycle, the summer I was seven/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Your memory, in your words' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('the "Pick up where you left off" section resumes an in-progress draft by its working title (§14)', async () => {
+    const storyMemoryOpen = vi.fn(() =>
+      Promise.resolve(
+        memoryDetail(memoryRecord({ id: 'm-draft', title: 'A Summer Ride' }), [
+          {
+            role: 'assistant',
+            content: 'Take me back — where were you?',
+            ts: '2026-07-19T00:00:00.000Z',
+          },
+          { role: 'user', content: 'On a blue bicycle.', ts: '2026-07-19T00:00:01.000Z' },
+        ]),
+      ),
+    );
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyMemoryList: () =>
+        Promise.resolve([
+          {
+            id: 'm-draft',
+            status: 'gathering',
+            title: 'A Summer Ride', // the auto working title (§14) names the resumable draft
+            people: [],
+            updatedAt: '2026-07-19T00:00:00.000Z',
+          },
+        ] as StoryMemoryView[]),
+      storyMemoryOpen,
+    });
+    renderStory();
+    await openTab('Interview');
+    const section = (
+      await screen.findByRole('heading', { name: 'Pick up where you left off' })
+    ).closest('div')!;
+    // The draft is named by its working title + carries the "In progress" chip + a Continue cue.
+    const row = within(section).getByRole('button', {
+      name: /Continue the memory “A Summer Ride”/,
+    });
+    expect(within(row).getByText('In progress')).toBeInTheDocument();
+    expect(within(section).getByText('Continue →')).toBeInTheDocument();
+    // Clicking the row resumes exactly that memory by id.
+    await userEvent.click(row);
+    await waitFor(() => expect(storyMemoryOpen).toHaveBeenCalledWith({ memoryId: 'm-draft' }));
   });
 
   it('answers the author from a question comment (§3.3): the Ask button calls the bridge + the answer renders', async () => {

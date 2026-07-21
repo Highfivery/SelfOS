@@ -49,6 +49,7 @@ import type {
   StoryPartCoverage,
   StoryDraftProgress,
   StoryReaderView,
+  StoryMemoryView,
   StoryTodoEntry,
   StructuralProposal,
   TextAnchor,
@@ -1886,6 +1887,120 @@ function LifeMap({
   );
 }
 
+/** A friendly "last worked on" label for an in-progress memory row (§14) — today/yesterday, else a short date. */
+function formatMemoryWhen(iso: string): string {
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return '';
+  const now = new Date();
+  const startOfDay = (d: Date): number =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOfDay(now) - startOfDay(then)) / 86_400_000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  const sameYear = then.getFullYear() === now.getFullYear();
+  return then.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+  });
+}
+
+/** One memory row in the collection (§14) — `progress` (resumable, shows a Continue cue + last-activity) or
+ *  `saved` (re-read only, shows where it wove into the book). The whole row opens the chat; a two-step Remove. */
+function MemoryCollectionRow({
+  m,
+  variant,
+  confirmDelete,
+  onOpen,
+  onArmDelete,
+  onCancelDelete,
+  onConfirmDelete,
+}: {
+  m: StoryMemoryView;
+  variant: 'progress' | 'saved';
+  confirmDelete: string | null;
+  onOpen: () => void;
+  onArmDelete: () => void;
+  onCancelDelete: () => void;
+  onConfirmDelete: () => void | Promise<void>;
+}): JSX.Element {
+  const title = m.title || (variant === 'progress' ? 'New memory' : 'Untitled memory');
+  return (
+    <div className={styles.memRow}>
+      <button
+        type="button"
+        className={styles.memRowMain}
+        aria-label={
+          variant === 'progress'
+            ? `Continue the memory “${title}”`
+            : `Re-read the memory “${title}”`
+        }
+        onClick={onOpen}
+      >
+        <Text size="sm" weight={500}>
+          {title}
+        </Text>
+        <div className={styles.memRowMeta}>
+          {variant === 'progress' ? (
+            <span className={styles.memDraftChip}>
+              {m.status === 'ready' ? 'Ready to save' : 'In progress'}
+            </span>
+          ) : null}
+          {variant === 'progress' ? (
+            <Text size="sm" tone="tertiary">
+              Last worked on {formatMemoryWhen(m.updatedAt)}
+            </Text>
+          ) : null}
+          {m.approxDate ? (
+            <Text size="sm" tone="tertiary">
+              {m.approxDate}
+            </Text>
+          ) : null}
+          {m.people.slice(0, 3).map((p, i) => (
+            <span key={`${p.name}-${i}`} className={styles.memPersonChip}>
+              {p.name}
+            </span>
+          ))}
+          {m.wroteIntoChapterTitle ? (
+            <Text size="sm" tone="tertiary">
+              wove into “{m.wroteIntoChapterTitle}”
+            </Text>
+          ) : null}
+        </div>
+      </button>
+      {variant === 'progress' ? (
+        <span className={styles.memRowContinue} aria-hidden="true">
+          Continue →
+        </span>
+      ) : null}
+      <div className={styles.memRowActions}>
+        {confirmDelete === m.id ? (
+          <>
+            <Text size="sm" tone="tertiary">
+              Remove?
+            </Text>
+            <Button variant="ghost" onClick={onConfirmDelete}>
+              Remove
+            </Button>
+            <button type="button" className={styles.sourcesToggle} onClick={onCancelDelete}>
+              Keep
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className={styles.sourcesToggle}
+            aria-label={`Remove the memory “${title}”`}
+            onClick={onArmDelete}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * The Interview tab (§13.4/§13.6) — the completeness stage + the life map + the biographer's gap invitations
  * ("Ask me about this"), the open check-in, and the answered history. The gaps + coverage render FREE (no AI);
@@ -2094,86 +2209,70 @@ function InterviewTab({
         </Card>
       ) : null}
 
-      {memories.length > 0 ? (
-        <Card>
-          <Stack gap={2}>
-            <Heading level={3}>Memories you’ve shared</Heading>
-            <Text tone="tertiary" size="sm">
-              Moments you’ve told your biographer — open one to re-read it or keep talking. Your
-              biographer weaves them into your story.
-            </Text>
-            <Stack gap={1}>
-              {memories.map((m) => (
-                <div key={m.id} className={styles.memRow}>
-                  <button
-                    type="button"
-                    className={styles.memRowMain}
-                    onClick={() => setPanel({ memoryId: m.id })}
-                  >
-                    <Text size="sm" weight={500}>
-                      {m.title || 'Untitled memory'}
-                    </Text>
-                    <div className={styles.memRowMeta}>
-                      {m.status !== 'saved' ? (
-                        <span className={styles.memPersonChip}>Draft</span>
-                      ) : null}
-                      {m.approxDate ? (
-                        <Text size="sm" tone="tertiary">
-                          {m.approxDate}
-                        </Text>
-                      ) : null}
-                      {m.people.slice(0, 3).map((p, i) => (
-                        <span key={`${p.name}-${i}`} className={styles.memPersonChip}>
-                          {p.name}
-                        </span>
-                      ))}
-                      {m.wroteIntoChapterTitle ? (
-                        <Text size="sm" tone="tertiary">
-                          wove into “{m.wroteIntoChapterTitle}”
-                        </Text>
-                      ) : null}
-                    </div>
-                  </button>
-                  <div className={styles.memRowActions}>
-                    {confirmDelete === m.id ? (
-                      <>
-                        <Text size="sm" tone="tertiary">
-                          Remove?
-                        </Text>
-                        <Button
-                          variant="ghost"
-                          onClick={async () => {
-                            setConfirmDelete(null);
-                            await deleteMemory(m.id);
-                          }}
-                        >
-                          Remove
-                        </Button>
-                        <button
-                          type="button"
-                          className={styles.sourcesToggle}
-                          onClick={() => setConfirmDelete(null)}
-                        >
-                          Keep
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        className={styles.sourcesToggle}
-                        aria-label={`Remove the memory “${m.title || 'Untitled memory'}”`}
-                        onClick={() => setConfirmDelete(m.id)}
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </Stack>
-          </Stack>
-        </Card>
-      ) : null}
+      {(() => {
+        // "Pick up where you left off" = the resumable, not-yet-saved chats (gathering + synthesized-not-saved);
+        // "Memories you've shared" = the finished, saved ones. Both newest-first (listMemoryViews order).
+        const inProgress = memories.filter((m) => m.status !== 'saved');
+        const shared = memories.filter((m) => m.status === 'saved');
+        const rowHandlers = (m: StoryMemoryView) => ({
+          onOpen: () => setPanel({ memoryId: m.id }),
+          onArmDelete: () => setConfirmDelete(m.id),
+          onCancelDelete: () => setConfirmDelete(null),
+          onConfirmDelete: async () => {
+            setConfirmDelete(null);
+            await deleteMemory(m.id);
+          },
+        });
+        return (
+          <>
+            {inProgress.length > 0 ? (
+              <Card>
+                <Stack gap={2}>
+                  <Heading level={3}>Pick up where you left off</Heading>
+                  <Text tone="tertiary" size="sm">
+                    Memory chats you haven’t finished — open one to keep talking, or review a draft
+                    your biographer has already written.
+                  </Text>
+                  <Stack gap={1}>
+                    {inProgress.map((m) => (
+                      <MemoryCollectionRow
+                        key={m.id}
+                        m={m}
+                        variant="progress"
+                        confirmDelete={confirmDelete}
+                        {...rowHandlers(m)}
+                      />
+                    ))}
+                  </Stack>
+                </Stack>
+              </Card>
+            ) : null}
+
+            {shared.length > 0 ? (
+              <Card>
+                <Stack gap={2}>
+                  <Heading level={3}>Memories you’ve shared</Heading>
+                  <Text tone="tertiary" size="sm">
+                    Moments you’ve told your biographer — open one to re-read it. Your biographer
+                    weaves them into your story.
+                  </Text>
+                  <Stack gap={1}>
+                    {shared.map((m) => (
+                      <MemoryCollectionRow
+                        key={m.id}
+                        m={m}
+                        variant="saved"
+                        confirmDelete={confirmDelete}
+                        {...rowHandlers(m)}
+                      />
+                    ))}
+                  </Stack>
+                </Stack>
+              </Card>
+            ) : null}
+          </>
+        );
+      })()}
 
       <Text tone="tertiary" size="sm">
         Questions arrive in your Inbox under “Your biographer”. Your answers feed the book as it

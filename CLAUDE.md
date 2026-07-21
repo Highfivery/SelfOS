@@ -419,6 +419,54 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-20 — **Build (Your Story trust repairs & the draft vault — SPEC 64 §13.9 BUILT; PR 1 of an overnight
+  autonomous Your-Story overhaul; on `fix/story-trust-repairs`).** A deep 10-agent review of Your Story (7 mappers +
+  3 adversarial auditors) surfaced four classes of silent trust breaks between the feature's promises and its
+  wiring; the owner authorized fixing the full set. **(1) Protected words survive EVERY rewrite path.**
+  `enforceProtected` previously ran only in `applyMarkup`, so a stale-chapter auto-rewrite / one-click "Rewrite this
+  chapter" silently dropped the person's protected blocks + pinned quotes from the prose while the record still
+  claimed them. Now `generateChapter` seeds the chapter prompt with a PRESERVE block (the pre-call read) AND
+  code-enforces protected/pins after the call against the **live re-read** chapter (mirroring `applyMarkup`, so a
+  passage pinned mid-rewrite survives; the pre-call snapshot is used ONLY for the prompt — the reviewer caught that
+  my first cut used the pre-call read for carry-forward and would revert a concurrent pin/edit/placement). **(2)
+  Truncation detected + continued + never persisted as complete.** `runClaude` (every one-shot pass, story +
+  questionnaires) now streams through `streamWithContinuation` (66 §5.1): a `max_tokens` reply is transparently
+  continued (≤2, budget re-checked via `canContinue`, usage SUMMED into the one metered `UsageEvent`); a reply still
+  truncated surfaces `truncated: true`, and story chapters refuse it honestly (`TRUNCATED`, nothing persisted) — a
+  chapter ending mid-scene must never save as finished (JSON callers keep salvaging via spec-37 tolerant parse — only
+  chapters refuse). `stripSourceMarkers` also strips a trailing unterminated `[[…` fragment so a half-marker can't
+  render. **(3) The draft vault (chapter version history).** Every rewrite/revision archives the replaced text to
+  `history/<chapterId>.enc` (`ChapterVersion`, cap 20); a **History sheet** (shared `.sheet*` chrome) lists versions
+  newest-first (reason + date + word count), Compare (word-diff vs current, prose fetched one at a time —
+  list entries carry NO markdown over IPC) and Restore behind a two-step confirm (restore archives the current text
+  first — itself undoable). Rewrite-from-scratch raw-copies the whole drafted state (manifest/outline/timeline/
+  chapters/history — encrypted bytes verbatim) into `archive/<ts>/` (keep 3) before discarding. Seam:
+  `story:chapterHistory`/`:chapterVersion`/`:restoreChapterVersion`, gated `story.own` + active-person-scoped. **(4)
+  Honest states.** The interview check returns `aiOff` (distinct from `throttled`) + a `throttleReason`
+  (`weeklyCap`/`interval`/`backoff`); the Interview tab explains each (role-aware AI copy, "already took stock twice
+  this week", the expired-check-in back-off) instead of "check back later"; the refresh notice distinguishes
+  budget/cap/AI-off (never a wrong "turn on AI" when it's on); the begin flow gates on resolved AI readiness (Begin/
+  commission disabled + `AiUnavailableNotice`) instead of stranding the person on NeedsOutline; the commission CTA is
+  **"Write my book"** (the click commissions the whole first draft); "Rewrite this chapter" gains a two-step confirm.
+  **(5) Crisis surfacing (§8.2, finally built):** the `CrisisFooter` renders on every story surface (not inside the
+  immersive reader — its colophon carries the wellness line) and the "biographer is resting while things are heavy"
+  quiet state shows while `aggregateCrisisSignal(...).recurring` holds. **(6)** `extendedThinking: false` on the story
+  - dream image distillation calls (the thrice-documented 400-token starvation class). Gate green: typecheck, lint,
+    format, **1569 core + 12 relay + 1393 desktop** unit (+aiCall continuation/summed-usage/truncated, generateChapter
+    preserve+enforce+history+TRUNCATED, stripSourceMarkers fragment, history cap/restore, archiveDraftState raw-copy +
+    keep-3, image `extendedThinking` capture, cadence `throttleReason`; +coreBridge two-persona history/restore/
+    Guest-denial; +9 Story RTL [History sheet/compare/restore, rewrite confirm, honest refresh/interview copy,
+    begin-gate, crisis quiet, crisis footer]), **story E2E** (a new "trust repairs" walk: an in-your-own-words edit
+    survives a chapter rewrite [enforce-splice — **verified to FAIL with `enforceProtected` neutered in the built
+    bundle**] → History → Compare → Restore brings the old prose back → crisis footer present → 360px guard; the 7
+    existing story E2E re-pointed to the "Write my book" CTA). code-reviewer **ship** (the one should-fix — the
+    concurrent-edit revert — applied). **Lessons: (1) moving a read to BEFORE a multi-second model call to seed a
+    prompt silently reverts any concurrent write — seed the prompt from the pre-call read but re-read LIVE after the
+    call for enforcement/archive/carry-forward (the applyMarkup precedent). (2) A book chapter is the app's longest
+    single generation and was the last surface with no truncation handling — route it through `streamWithContinuation`
+    and REFUSE a still-truncated chapter (never salvage a half-finished one), while JSON passes keep salvaging. (3)
+    Drafts are sacred: archive the replaced text on every rewrite (a bounded per-chapter history) + the whole drafted
+    state before a from-scratch rewrite, so "regenerate" is never irreversible destruction.**
 - 2026-07-20 — **Fix (Pulse tab chart layout — the big empty white space; user-reported with a screenshot; SPEC
   58 §3.2a; on `fix/pulse-chart-layout`).** The user: the two Pulse trend cards ("Your check-ins" / "From your
   sessions") had large empty white space that "doesn't look good," but explicitly did NOT want the charts to

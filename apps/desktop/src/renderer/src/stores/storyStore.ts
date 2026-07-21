@@ -4,6 +4,8 @@ import type {
   BookManifest,
   BookOutline,
   ChapterMarkup,
+  ChapterVersion,
+  StoryChapterHistoryView,
   ExclusionItem,
   ExclusionKind,
   MarkupMark,
@@ -76,6 +78,17 @@ interface StoryState {
   generateChapters: (bookId: string) => Promise<StoryChaptersResult>;
   regenerateChapter: (bookId: string, chapterId: string) => Promise<StoryChaptersResult>;
   reviewChapter: (bookId: string, chapterId: string) => Promise<boolean>;
+  /** The chapter's archived versions (newest first, no prose) for the History sheet (§13.9). Stateless —
+   *  the sheet holds them locally (per-chapter, transient). */
+  chapterHistory: (bookId: string, chapterId: string) => Promise<StoryChapterHistoryView>;
+  /** One archived version in full (markdown for the compare view). */
+  chapterVersion: (
+    bookId: string,
+    chapterId: string,
+    revision: number,
+  ) => Promise<ChapterVersion | null>;
+  /** Restore an archived version as a new revision — adopts the fresh bundle on success. */
+  restoreChapterVersion: (bookId: string, chapterId: string, revision: number) => Promise<boolean>;
   /** The living-book refresh pass (§3.4): mark stale + auto-rewrite. `auto` = the throttled launch/focus cadence
    *  (silent: never shows the busy state, only re-sets the bundle when something actually changed); omit for a
    *  manual "Refresh now" (uncapped, shows the busy state). */
@@ -395,6 +408,19 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   },
   reviewChapter: async (bookId, chapterId) => {
     const bundle = (await window.selfos?.storyReviewChapter({ bookId, chapterId })) ?? null;
+    if (bundle) set({ bundle });
+    return bundle !== null;
+  },
+  chapterHistory: async (bookId, chapterId) =>
+    (await window.selfos?.storyChapterHistory({ bookId, chapterId })) ?? {
+      chapterId,
+      versions: [],
+    },
+  chapterVersion: async (bookId, chapterId, revision) =>
+    (await window.selfos?.storyChapterVersion({ bookId, chapterId, revision })) ?? null,
+  restoreChapterVersion: async (bookId, chapterId, revision) => {
+    const bundle =
+      (await window.selfos?.storyRestoreChapterVersion({ bookId, chapterId, revision })) ?? null;
     if (bundle) set({ bundle });
     return bundle !== null;
   },

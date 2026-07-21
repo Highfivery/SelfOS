@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
-import type { ClaudeClient, ClaudeUsage } from '../host';
+import type { ClaudeClient, ClaudeStreamOptions, ClaudeUsage } from '../host';
 import { memFileSystem } from '../host/memFileSystem';
 import { saveInsight } from '../insights';
 import { savePerson } from '../people';
@@ -30,11 +30,13 @@ import {
   createBook,
   getBook,
   getChapter,
+  getChapterHistory,
   getMarkup,
   getTodos,
   saveChapter,
   saveMarkup,
 } from './storyService';
+import { countWords } from './storyText';
 
 const key = generateMasterKey();
 const now = new Date('2026-07-15T00:00:00.000Z');
@@ -201,6 +203,29 @@ describe('stripSourceMarkers (64 §5.3)', () => {
       { anchor: 'p2', refs: [ref1] }, // the third paragraph, not p1 — no drift
     ]);
   });
+
+  it('strips a trailing UNTERMINATED marker fragment (a still-truncated tail never renders)', () => {
+    // A reply cut off mid-marker leaves a dangling `[[SRC:s1` the marker regex can't match — without the
+    // defensive tail-strip it would persist and render as literal text in the reader/exports.
+    const { markdown, provenance } = stripSourceMarkers(
+      'Para one. [[SRC:s0]]\n\nPara two ends mid-marker [[SRC:s1',
+      map,
+    );
+    expect(markdown).not.toContain('[['); // no fragment anywhere, complete markers stripped too
+    expect(markdown).toContain('Para one.');
+    expect(markdown).toContain('Para two ends mid-marker');
+    // Only the complete citation resolves; the truncated one contributes nothing.
+    expect(provenance).toEqual([{ anchor: 'p0', refs: [ref0] }]);
+  });
+});
+
+describe('countWords (64 §13.9 — the History sheet size cue)', () => {
+  it('counts whitespace-separated tokens; empty/blank text is 0', () => {
+    expect(countWords('')).toBe(0);
+    expect(countWords('   \n\n  ')).toBe(0);
+    expect(countWords('one')).toBe(1);
+    expect(countWords('one two\n\nthree   four')).toBe(4);
+  });
 });
 
 describe('generateChapter (64 §5.3)', () => {
@@ -261,6 +286,129 @@ describe('generateChapter (64 §5.3)', () => {
     const bookId = await seedApprovedBook(fs);
     const res = await generateChapter(deps(fs, fakeClient('x')), { bookId, chapterId: 'nope' });
     expect(res.ok).toBe(false);
+  });
+});
+
+describe('generateChapter — preserve, enforce & the draft vault (64 §5.3/§13.9)', () => {
+  /** Like fakeClient, but records the options of every stream call (so the prompt can be asserted). */
+  function capturingClient(text: string): { client: ClaudeClient; calls: ClaudeStreamOptions[] } {
+    const calls: ClaudeStreamOptions[] = [];
+    return {
+      calls,
+      client: {
+        send: async () => text,
+        stream: async (options) => {
+          calls.push(options);
+          return { text, usage: USAGE };
+        },
+      },
+    };
+  }
+  /** A client whose every reply ends at max_tokens — still truncated after the bounded continuations. */
+  function truncatingClient(text: string): ClaudeClient {
+    return {
+      send: async () => text,
+      stream: async () => ({ text, usage: USAGE, stopReason: 'max_tokens' as const }),
+    };
+  }
+
+  /** Seed a written c1 that carries a protected block + a pinned quote (the person's own words). */
+  async function seedProtectedChapter(fs: ReturnType<typeof memFileSystem>): Promise<string> {
+    const bookId = await seedApprovedBook(fs);
+    await generateChapter(deps(fs, fakeClient('First draft prose. [[SRC:s0]]')), {
+      bookId,
+      chapterId: 'c1',
+    });
+    const existing = await getChapter(fs, key, 'me', bookId, 'c1');
+    if (!existing) throw new Error('seed failed');
+    await saveChapter(fs, key, 'me', bookId, {
+      ...existing,
+      protectedBlocks: [
+        {
+          anchor: { paragraphId: 'p0', quote: 'my exact words stay' },
+          text: 'my exact words stay',
+        },
+      ],
+      pinnedQuotes: [{ anchor: { paragraphId: 'p0' }, text: 'a pinned line of my own' }],
+    });
+    return bookId;
+  }
+
+  it('a rewrite carries protected/pinned texts in the PRESERVE prompt AND splices dropped ones back', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedProtectedChapter(fs);
+    // The fake rewrite omits both texts entirely — the prompt asked, the code must guarantee.
+    const { client, calls } = capturingClient('A totally fresh rewrite. [[SRC:s0]]');
+    const res = await generateChapter(deps(fs, client), { bookId, chapterId: 'c1' });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+
+    // The prompt carried a PRESERVE block with both texts (the first line of defense).
+    const user = calls[0]!.messages
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n');
+    expect(user).toContain('PRESERVE these exact passages');
+    expect(user).toContain('my exact words stay');
+    expect(user).toContain('a pinned line of my own');
+
+    // enforceProtected spliced the dropped texts back — the person's words survive verbatim (the guarantee).
+    expect(res.chapter.markdown).toContain('my exact words stay');
+    expect(res.chapter.markdown).toContain('a pinned line of my own');
+    expect(res.chapter.markdown).toContain('A totally fresh rewrite.');
+
+    // The replaced text was archived FIRST (reason `rewrite`) — drafts are sacred (§13.9).
+    const history = await getChapterHistory(fs, key, 'me', bookId, 'c1');
+    expect(history.versions).toHaveLength(1);
+    expect(history.versions[0]).toMatchObject({
+      revision: 1,
+      reason: 'rewrite',
+      markdown: 'First draft prose.',
+    });
+  });
+
+  it('a STILL-truncated rewrite refuses TRUNCATED and persists nothing (chapter + history untouched)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedProtectedChapter(fs);
+    const before = await getChapter(fs, key, 'me', bookId, 'c1');
+    const res = await generateChapter(deps(fs, truncatingClient('half a chapter [[SRC:s0]]')), {
+      bookId,
+      chapterId: 'c1',
+    });
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.reason).toBe('TRUNCATED');
+    // The old chapter is byte-identical — a half-finished chapter is never persisted as if complete.
+    expect(await getChapter(fs, key, 'me', bookId, 'c1')).toEqual(before);
+    expect((await getChapterHistory(fs, key, 'me', bookId, 'c1')).versions).toEqual([]);
+  });
+
+  it('a STILL-truncated applyMarkup revision refuses TRUNCATED and persists nothing', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedProtectedChapter(fs);
+    await saveMarkup(fs, key, 'me', bookId, {
+      schemaVersion: 1,
+      chapterId: 'c1',
+      marks: [
+        {
+          id: 'd1',
+          kind: 'delete',
+          anchor: { paragraphId: 'p0', quote: 'First draft' },
+          status: 'pending',
+          createdAt: 'now',
+        },
+      ],
+    });
+    const before = await getChapter(fs, key, 'me', bookId, 'c1');
+    const res = await applyMarkup(deps(fs, truncatingClient('half a revision [[SRC:s0]]')), {
+      bookId,
+      chapterId: 'c1',
+    });
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.reason).toBe('TRUNCATED');
+    expect(await getChapter(fs, key, 'me', bookId, 'c1')).toEqual(before);
+    // The pending mark stays pending (the revision never applied).
+    expect((await getMarkup(fs, key, 'me', bookId, 'c1')).marks[0]?.status).toBe('pending');
   });
 });
 
@@ -466,6 +614,11 @@ describe('applyMarkup — the batch revision (64 §3.3.1/§5.3)', () => {
     const marks = (await getMarkup(fs, key, 'me', bookId, 'c1')).marks;
     expect(marks[0]?.status).toBe('applied');
     expect((marks[0] as DeleteMark).appliedRevision).toBe(2);
+    // The pre-revision text was archived first (reason `revision`) — drafts are sacred (§13.9).
+    const history = await getChapterHistory(fs, key, 'me', bookId, 'c1');
+    expect(history.versions).toHaveLength(1);
+    expect(history.versions[0]).toMatchObject({ revision: 1, reason: 'revision' });
+    expect(history.versions[0]?.markdown).toContain('cut pine');
   });
 
   it('code-enforces a protected block the revision dropped (never loses the person’s words)', async () => {

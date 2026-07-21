@@ -401,6 +401,9 @@ export function registerIpcHandlers(): void {
   });
   handle(IpcChannels.storyRegenerateChapter, bridge.storyRegenerateChapter);
   handle(IpcChannels.storyReviewChapter, bridge.storyReviewChapter);
+  handle(IpcChannels.storyChapterHistory, bridge.storyChapterHistory);
+  handle(IpcChannels.storyChapterVersion, bridge.storyChapterVersion);
+  handle(IpcChannels.storyRestoreChapterVersion, bridge.storyRestoreChapterVersion);
   handle(IpcChannels.storyGetMarkup, bridge.storyGetMarkup);
   handle(IpcChannels.storyMark, bridge.storyMark);
   handle(IpcChannels.storyUpdateMark, bridge.storyUpdateMark);

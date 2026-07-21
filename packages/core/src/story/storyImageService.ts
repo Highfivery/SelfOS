@@ -220,6 +220,10 @@ export async function generateStoryImage(
         system: DISTILLATION_INSTRUCTION,
         messages: [{ role: 'user', content: promptInput }],
         maxTokens: DISTILL_MAX_TOKENS,
+        // A bounded 400-token output — adaptive thinking SHARES this budget and can starve the prompt to
+        // empty ("The image prompt came back empty") while still billing the call. The thrice-documented
+        // [[adaptive-thinking-shares-maxtokens]] class; every other bounded pass already disables it.
+        extendedThinking: false,
       },
       () => {},
     );

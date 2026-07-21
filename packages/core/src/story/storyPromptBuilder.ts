@@ -123,15 +123,24 @@ function renderTaggedCorpus(corpus: StoryCorpus, tagged: TaggedCorpusItem[]): st
 export function buildChapterUserMessage(
   corpus: StoryCorpus,
   tagged: TaggedCorpusItem[],
-  opts: { chapter: OutlineChapter; outline: BookOutline; essence?: string },
+  opts: {
+    chapter: OutlineChapter;
+    outline: BookOutline;
+    essence?: string;
+    /** The person's protected/pinned passages (their OWN words) a REWRITE of an existing chapter must keep
+     *  verbatim — the same contract the revision prompt carries. The guarantee is still code
+     *  (`enforceProtected` after the call); this is the first line of defense so the model weaves the words
+     *  in naturally instead of the splice landing them at a paragraph seam. Empty on a first draft. */
+    preserve?: string[];
+  },
 ): string {
-  const { chapter, outline, essence } = opts;
+  const { chapter, outline, essence, preserve } = opts;
   const toc = outline.parts
     .flatMap((part) => part.chapters.map((c) => ({ part: part.title, c })))
     .map(({ part, c }) => `  ${c.id === chapter.id ? '▶ ' : '  '}${part} — ${c.title}: ${c.brief}`)
     .join('\n');
   const era = [chapter.eraFrom, chapter.eraTo].filter(Boolean).join('–');
-  return [
+  const parts = [
     `You are writing ONE chapter of ${corpus.personName || 'this person'}'s book${
       essence ? `. The book is about: ${essence}` : ''
     }.`,
@@ -140,13 +149,23 @@ export function buildChapterUserMessage(
     toc,
     '',
     `WRITE THIS CHAPTER — "${chapter.title}"${era ? ` (${era})` : ''}: ${chapter.brief}`,
+  ];
+  if (preserve && preserve.length > 0) {
+    parts.push(
+      '',
+      'PRESERVE these exact passages verbatim somewhere in the chapter (the person’s own words — never paraphrase, reword, or drop them):',
+      ...preserve.map((t) => `- «${t}»`),
+    );
+  }
+  parts.push(
     '',
     renderTaggedCorpus(corpus, tagged),
     '',
     'Write the chapter as Markdown prose (short paragraphs; you may use *italics*; no headings, no lists, no tables). Open on a rendered scene, not a summary. Draw ONLY on the source material above — if a detail you need is missing, write around it rather than inventing it.',
     'At the END of each paragraph, cite the [sN] sources you drew on for it as `[[SRC:sN,sN]]` (use the exact tags above; omit the marker for a paragraph that draws on nothing specific). Do not cite sources you did not use.',
     'Return ONLY the chapter prose with its inline [[SRC:…]] markers — no title heading, no preamble.',
-  ].join('\n');
+  );
+  return parts.join('\n');
 }
 
 /** Render one pending mark as a plain-language revision instruction (§5.3). A `question` comment is NOT an

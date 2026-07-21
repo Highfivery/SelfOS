@@ -1,14 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
-import { BookConfigSchema, type BookOutline, type LifeTimeline } from '../schemas';
 import {
+  BookConfigSchema,
+  type BookChapter,
+  type BookOutline,
+  type ChapterVersion,
+  type LifeTimeline,
+} from '../schemas';
+import {
+  CHAPTER_HISTORY_CAP,
   addUploadedPhoto,
+  appendChapterVersion,
   applyFoundations,
   approveOutline,
   createBook,
   deleteBook,
   getBook,
+  getChapter,
+  getChapterHistory,
   getExclusions,
   getOutline,
   getInterviewState,
@@ -19,6 +29,7 @@ import {
   listBooks,
   listChapters,
   readBookBundle,
+  restoreChapterVersion,
   rewriteBookFromScratch,
   saveChapter,
   saveExclusions,
@@ -363,5 +374,174 @@ describe('storyService — persistence (64 §5.7)', () => {
   it('rewriteBookFromScratch returns null for a missing book (never crashes)', async () => {
     const fs = memFileSystem();
     expect(await rewriteBookFromScratch(fs, key, 'me', 'nope', now)).toBeNull();
+  });
+});
+
+function chapterOf(over: Partial<BookChapter> & { id: string }): BookChapter {
+  return {
+    schemaVersion: 1,
+    partId: 'p1',
+    order: 0,
+    title: 'The Garage',
+    markdown: 'Once...',
+    revision: 1,
+    status: 'new',
+    sourceSignature: '',
+    provenance: [],
+    protectedBlocks: [],
+    pinnedQuotes: [],
+    imagePlacements: [],
+    ...over,
+  };
+}
+
+function versionOf(
+  revision: number,
+  markdown: string,
+  reason: ChapterVersion['reason'] = 'rewrite',
+) {
+  return {
+    revision,
+    markdown,
+    provenance: [],
+    sourceSignature: `sig-${revision}`,
+    savedAt: now.toISOString(),
+    reason,
+  } satisfies ChapterVersion;
+}
+
+describe('chapter version history (64 §13.9 — the draft vault)', () => {
+  it('appendChapterVersion caps the history at CHAPTER_HISTORY_CAP, dropping the oldest', async () => {
+    const fs = memFileSystem();
+    const book = await newBook(fs);
+    for (let r = 1; r <= CHAPTER_HISTORY_CAP + 2; r += 1) {
+      await appendChapterVersion(fs, key, 'me', book.id, 'c1', versionOf(r, `text ${r}`));
+    }
+    const history = await getChapterHistory(fs, key, 'me', book.id, 'c1');
+    expect(history.versions).toHaveLength(CHAPTER_HISTORY_CAP);
+    // The two OLDEST (revisions 1 and 2) dropped off; the newest survives.
+    expect(history.versions[0]?.revision).toBe(3);
+    expect(history.versions[history.versions.length - 1]?.revision).toBe(CHAPTER_HISTORY_CAP + 2);
+  });
+
+  it('getChapterHistory is empty (never null) when nothing has been superseded yet', async () => {
+    const fs = memFileSystem();
+    expect(await getChapterHistory(fs, key, 'me', 'b1', 'c1')).toEqual({
+      schemaVersion: 1,
+      chapterId: 'c1',
+      versions: [],
+    });
+  });
+
+  it('restoreChapterVersion: archives the current text, restores the version, and re-enforces protection', async () => {
+    const fs = memFileSystem();
+    const book = await newBook(fs);
+    // The current chapter (revision 3) carries a protected block whose text is NOT in the older version.
+    await saveChapter(
+      fs,
+      key,
+      'me',
+      book.id,
+      chapterOf({
+        id: 'c1',
+        markdown: 'current text',
+        revision: 3,
+        status: 'reviewed',
+        protectedBlocks: [{ anchor: { paragraphId: 'p0' }, text: 'sacred' }],
+      }),
+    );
+    await appendChapterVersion(fs, key, 'me', book.id, 'c1', versionOf(2, 'older text'));
+
+    const restored = await restoreChapterVersion(fs, key, 'me', book.id, 'c1', 2, now);
+    expect(restored).not.toBeNull();
+    if (!restored) return;
+    // The version's text comes back — with the LATER-added protected block spliced in (never lost).
+    expect(restored.markdown).toContain('older text');
+    expect(restored.markdown).toContain('sacred');
+    expect(restored.revision).toBe(4); // a NEW revision, not a rollback of the counter
+    expect(restored.status).toBe('updated'); // the review flow sees it like any other change
+    expect(restored.previousMarkdown).toBe('current text'); // the What-changed diff shows the restore
+    expect(restored.sourceSignature).toBe('sig-2'); // the version's freshness fingerprint reinstated
+    expect(await getChapter(fs, key, 'me', book.id, 'c1')).toEqual(restored); // persisted
+
+    // Restoring is itself undoable: the replaced CURRENT text was archived first (reason `restore`).
+    const history = await getChapterHistory(fs, key, 'me', book.id, 'c1');
+    expect(history.versions.map((v) => v.reason)).toEqual(['rewrite', 'restore']);
+    expect(history.versions[1]).toMatchObject({ revision: 3, markdown: 'current text' });
+  });
+
+  it('restoreChapterVersion returns null for an unknown revision or a missing chapter', async () => {
+    const fs = memFileSystem();
+    const book = await newBook(fs);
+    await saveChapter(fs, key, 'me', book.id, chapterOf({ id: 'c1' }));
+    await appendChapterVersion(fs, key, 'me', book.id, 'c1', versionOf(1, 'old'));
+    expect(await restoreChapterVersion(fs, key, 'me', book.id, 'c1', 99, now)).toBeNull();
+    expect(await restoreChapterVersion(fs, key, 'me', book.id, 'nope', 1, now)).toBeNull();
+    // A refused restore changes nothing.
+    expect((await getChapterHistory(fs, key, 'me', book.id, 'c1')).versions).toHaveLength(1);
+  });
+});
+
+describe('archiveDraftState via rewriteBookFromScratch (64 §13.9)', () => {
+  it('raw-copies the whole drafted state into archive/<ts>/ before discarding it', async () => {
+    const fs = memFileSystem();
+    const book = await newBook(fs);
+    await applyFoundations(
+      fs,
+      key,
+      'me',
+      book.id,
+      { essence: 'a quiet man', outline, timeline },
+      now,
+    );
+    await saveChapter(fs, key, 'me', book.id, chapterOf({ id: 'c1', markdown: 'chapter one' }));
+    await saveChapter(
+      fs,
+      key,
+      'me',
+      book.id,
+      chapterOf({ id: 'c2', order: 1, title: 'After', markdown: 'chapter two' }),
+    );
+    await appendChapterVersion(fs, key, 'me', book.id, 'c1', versionOf(1, 'superseded text'));
+
+    // Capture the pre-rewrite ENCRYPTED bytes — the archive must be a verbatim raw copy, never a re-encrypt.
+    const dir = `people/me/story/books/${book.id}`;
+    const preBook = await fs.read(`${dir}/book.enc`);
+    const preOutline = await fs.read(`${dir}/outline.enc`);
+    const preChapter = await fs.read(`${dir}/chapters/c1.enc`);
+    const preHistory = await fs.read(`${dir}/history/c1.enc`);
+    expect(preBook && preOutline && preChapter && preHistory).toBeTruthy();
+
+    const later = new Date('2026-08-01T00:00:00.000Z');
+    await rewriteBookFromScratch(fs, key, 'me', book.id, later);
+
+    // The drafted state is gone from the live book…
+    expect(await listChapters(fs, key, 'me', book.id)).toEqual([]);
+    expect(await getOutline(fs, key, 'me', book.id)).toBeNull();
+    expect((await getChapterHistory(fs, key, 'me', book.id, 'c1')).versions).toEqual([]);
+
+    // …but survives byte-for-byte under archive/<timestamp>/.
+    const stamps = await fs.list(`${dir}/archive`);
+    expect(stamps).toEqual([later.toISOString().replace(/[:.]/g, '-')]);
+    const arch = `${dir}/archive/${stamps[0]}`;
+    expect(await fs.read(`${arch}/book.enc`)).toEqual(preBook);
+    expect(await fs.read(`${arch}/outline.enc`)).toEqual(preOutline);
+    expect(await fs.read(`${arch}/chapters/c1.enc`)).toEqual(preChapter);
+    expect(await fs.read(`${arch}/chapters/c2.enc`)).not.toBeNull();
+    expect(await fs.read(`${arch}/history/c1.enc`)).toEqual(preHistory);
+  });
+
+  it('keeps only the newest ARCHIVE_KEEP(3) archives across repeated rewrites', async () => {
+    const fs = memFileSystem();
+    const book = await newBook(fs);
+    await applyFoundations(fs, key, 'me', book.id, { essence: 'e', outline, timeline }, now);
+    const stampsRun: string[] = [];
+    for (let day = 1; day <= 4; day += 1) {
+      const at = new Date(`2026-08-0${day}T00:00:00.000Z`);
+      stampsRun.push(at.toISOString().replace(/[:.]/g, '-'));
+      await rewriteBookFromScratch(fs, key, 'me', book.id, at);
+    }
+    const kept = (await fs.list(`people/me/story/books/${book.id}/archive`)).sort();
+    expect(kept).toEqual(stampsRun.slice(1)); // the oldest archive dropped; the newest 3 kept
   });
 });

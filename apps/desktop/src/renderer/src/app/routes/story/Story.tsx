@@ -22,10 +22,14 @@ import { ImageStylePicker } from '../../../settings/ImageStyleControl';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryStore } from '../../../stores/storyStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
+import { useInsightStore } from '../../../stores/insightStore';
 import { useStoryRefresh } from '../../notifications/useStoryRefresh';
 import { useStoryInterview } from '../../notifications/useStoryInterview';
 import { useSetting } from '../../../settings/useSetting';
 import { aiKeyResolved } from '../../aiAvailability';
+import { AiUnavailableNotice, aiUnavailableMessage } from '../../AiUnavailableNotice';
+import { CrisisFooter } from '../sessions/CrisisFooter';
+import { aggregateCrisisSignal } from '@selfos/core/coaching';
 import { ImageProgress } from './ImageProgress';
 import { drawnFromChips, specimenFor } from './begin';
 import { downscaleImage } from '../sessions/downscaleImage';
@@ -33,6 +37,8 @@ import { AdminOnlyBadge } from '../../../design-system/components';
 import type {
   BookConfig,
   ChapterMarkup,
+  ChapterVersion,
+  StoryChapterHistoryView,
   BookMatter,
   CommentIntent,
   StoryBookBundle,
@@ -131,6 +137,24 @@ export function Story(): JSX.Element {
   const [reading, setReading] = useState<string | null>(null); // the open chapter's id (editor), or null
   const [sharedChapterId, setSharedChapterId] = useState<string | null>(null); // shared-reader page
 
+  // AI readiness for the BEGIN flow (§8.2 honest states): commissioning a book is the app's largest single
+  // AI spend, so the invitation/commission must gate on the resolved key + the ai.enabled setting instead of
+  // letting the create succeed and the draft strand the person on NeedsOutline with a role-blind error.
+  // `null` = still checking (render nothing rather than flash the wrong state — the CoverPanel lesson).
+  const [aiEnabled] = useSetting('ai.enabled');
+  const [keyReady, setKeyReady] = useState<boolean | null>(null);
+  useEffect(() => {
+    let live = true;
+    setKeyReady(null);
+    void aiKeyResolved('anthropic').then((ok) => {
+      if (live) setKeyReady(ok);
+    });
+    return () => {
+      live = false;
+    };
+  }, [activePersonId]);
+  const aiUnavailable = keyReady === false || aiEnabled === false;
+
   // The automatic living-book refresh cadence (§3.4) — nudges the bridge (daily-throttled + capped) for the
   // open book if its autoRefresh is on. Silent: it just re-stamps stale badges / weaves in new material.
   useStoryRefresh(bundle?.manifest.id ?? null, bundle?.manifest.config.autoRefresh ?? false);
@@ -222,6 +246,7 @@ export function Story(): JSX.Element {
         return (
           <div className={styles.page}>
             <ChapterReader bundle={bundle} chapter={openChapter} onBack={() => setReading(null)} />
+            <CrisisFooter />
           </div>
         );
       }
@@ -250,7 +275,9 @@ export function Story(): JSX.Element {
             bundle={bundle}
             onOpenChapter={setReading}
             onReadBook={() => navigate('/story/read')}
+            aiUnavailable={aiUnavailable}
           />
+          <CrisisFooter />
         </div>
       );
     }
@@ -258,15 +285,18 @@ export function Story(): JSX.Element {
     // retry) it, and surface any error, so it's never a silent dead-end.
     return (
       <div className={styles.page}>
+        {aiUnavailable ? <AiUnavailableNotice /> : null}
         <NeedsOutline
           bundle={bundle}
           error={error}
+          aiUnavailable={aiUnavailable}
           onGenerate={async () => {
             setError(null);
             const res = await draftBook(bundle.manifest.id);
             if (!res.ok && res.message) setError(res.message);
           }}
         />
+        <CrisisFooter />
       </div>
     );
   }
@@ -274,9 +304,11 @@ export function Story(): JSX.Element {
   if (mode === 'setup') {
     return (
       <div className={styles.page}>
+        {aiUnavailable ? <AiUnavailableNotice /> : null}
         <StorySetup
           titleHint={personName ? `e.g. The Story of ${personName}` : 'e.g. The Story of a Life'}
           personNameForPreview={personName}
+          aiUnavailable={aiUnavailable}
           onCancel={() => setMode('idle')}
           onCreate={async (title, config) => {
             setError(null);
@@ -288,14 +320,21 @@ export function Story(): JSX.Element {
           }}
         />
         {error ? <Banner tone="danger">{error}</Banner> : null}
+        <CrisisFooter />
       </div>
     );
   }
 
   return (
     <div className={styles.page}>
-      <StoryInvitation onBegin={() => setMode('setup')} error={error} />
+      {aiUnavailable ? <AiUnavailableNotice /> : null}
+      <StoryInvitation
+        onBegin={() => setMode('setup')}
+        error={error}
+        beginDisabled={aiUnavailable}
+      />
       <SharedWithYou />
+      <CrisisFooter />
     </div>
   );
 }
@@ -309,9 +348,13 @@ export function Story(): JSX.Element {
 function StoryInvitation({
   onBegin,
   error,
+  beginDisabled = false,
 }: {
   onBegin: () => void;
   error: string | null;
+  /** True when AI is unavailable (no key / AI off) — the commission can't draft, so Begin is disabled and
+   *  the role-aware AiUnavailableNotice above explains how to enable it (§8.2 honest states). */
+  beginDisabled?: boolean;
 }): JSX.Element {
   const corpusStats = useStoryStore((s) => s.corpusStats);
   const loadCorpusStats = useStoryStore((s) => s.loadCorpusStats);
@@ -373,7 +416,7 @@ function StoryInvitation({
           </Text>
           {error ? <Banner tone="danger">{error}</Banner> : null}
           <Inline>
-            <Button variant="primary" onClick={onBegin}>
+            <Button variant="primary" disabled={beginDisabled} onClick={onBegin}>
               Begin your book
             </Button>
           </Inline>
@@ -386,11 +429,14 @@ function StoryInvitation({
 function StorySetup({
   titleHint,
   personNameForPreview,
+  aiUnavailable = false,
   onCreate,
   onCancel,
 }: {
   titleHint: string;
   personNameForPreview: string;
+  /** AI unavailable → the create-and-draft CTA is disabled (the notice above the card explains why). */
+  aiUnavailable?: boolean;
   onCreate: (title: string, config: BookConfig) => void | Promise<void>;
   onCancel: () => void;
 }): JSX.Element {
@@ -505,11 +551,14 @@ function StorySetup({
         </Text>
         <Inline justify="flex-end">
           <Button onClick={onCancel}>Cancel</Button>
+          {/* Honest label (§8.2): this click commissions the WHOLE first draft (outline + every chapter),
+              the app's largest single AI run — not just an outline. */}
           <Button
             variant="primary"
+            disabled={aiUnavailable}
             onClick={() => onCreate(title.trim(), { voice, style, length, autoRefresh: true })}
           >
-            Create &amp; draft the outline
+            Write my book
           </Button>
         </Inline>
       </Stack>
@@ -520,10 +569,13 @@ function StorySetup({
 function NeedsOutline({
   bundle,
   error,
+  aiUnavailable = false,
   onGenerate,
 }: {
   bundle: StoryBookBundle;
   error: string | null;
+  /** AI unavailable → drafting can only fail; disable the CTA (the notice above explains how to enable). */
+  aiUnavailable?: boolean;
   onGenerate: () => void | Promise<void>;
 }): JSX.Element {
   const remove = useStoryStore((s) => s.remove);
@@ -541,7 +593,7 @@ function NeedsOutline({
       <Inline justify="space-between">
         <Button
           variant="primary"
-          disabled={busy}
+          disabled={busy || aiUnavailable}
           onClick={async () => {
             setBusy(true);
             await onGenerate();
@@ -1242,10 +1294,13 @@ function StudioLayout({
   bundle,
   onOpenChapter,
   onReadBook,
+  aiUnavailable = false,
 }: {
   bundle: StoryBookBundle;
   onOpenChapter: (chapterId: string) => void;
   onReadBook: () => void;
+  /** AI unavailable (no key / off) — drives the honest refresh copy (never "turn on AI" when it IS on). */
+  aiUnavailable?: boolean;
 }): JSX.Element {
   const generateChapters = useStoryStore((s) => s.generateChapters);
   const refreshBook = useStoryStore((s) => s.refreshBook);
@@ -1287,6 +1342,7 @@ function StudioLayout({
   const [interviewBusy, setInterviewBusy] = useState(false);
   const [titleDraft, setTitleDraft] = useState<string | null>(null); // non-null while renaming
   const [todoSheetOpen, setTodoSheetOpen] = useState(false);
+  const canManageAi = useSessionStore((s) => s.can('settings.manage'));
 
   useEffect(() => {
     void loadProposals(bookId);
@@ -1295,6 +1351,20 @@ function StudioLayout({
     void loadExclusions(bookId);
     void loadImages(bookId);
   }, [bookId, loadProposals, loadCompleteness, loadTodos, loadExclusions, loadImages]);
+
+  // The crisis-quiet state (§8.2/§13.4): while the person's own signals show recurring distress, the
+  // biographer's auto cadences pause host-side — SURFACE that instead of letting the pause read as broken.
+  // Renderer-computed from the person's own approved insights (the Home CrisisSupportBanner precedent).
+  const activePersonIdForCrisis = useSessionStore((s) => s.activePerson?.id);
+  const insights = useInsightStore((s) => s.insights);
+  useEffect(() => {
+    void useInsightStore.getState().load();
+  }, [activePersonIdForCrisis]);
+  const crisisQuiet = useMemo(() => {
+    const own = insights.filter((i) => i.approved && i.subjectPersonId === activePersonIdForCrisis);
+    return aggregateCrisisSignal({ insights: own, nightmareNudge: false, now: new Date() })
+      .recurring;
+  }, [insights, activePersonIdForCrisis]);
 
   // Resolve the data URLs the chapter cards use as their background: each chapter's own illustration where it
   // has one, otherwise the book cover — so the grid gets richer as art is added (§3.1 redesign).
@@ -1335,10 +1405,32 @@ function StudioLayout({
       bits.push(
         `Brought ${res.rewritten} chapter${res.rewritten === 1 ? '' : 's'} up to date with what’s new.`,
       );
-    else if (res.staled > 0)
+    // Honest reasons (§8.2): a pass that left stale chapters behind says WHY — the budget, the weekly cap,
+    // or AI being off — never a wrong "turn on AI" when the real cause was the budget.
+    if (res.budgetReached) {
+      // The budget stopped the pass — name the count only when chapters actually remain stale (a pass that
+      // rewrote everything it could before hitting the budget leaves none, so don't invent "some").
       bits.push(
-        `${res.staled} chapter${res.staled === 1 ? ' has' : 's have'} new material to fold in — turn on AI to update ${res.staled === 1 ? 'it' : 'them'}.`,
+        res.staled > 0
+          ? `The AI budget for this period is used up — ${res.staled} chapter${res.staled === 1 ? '' : 's'} with new material will update next period.`
+          : 'The AI budget for this period is used up — any remaining updates will pick up next period.',
       );
+    } else if (res.capped) {
+      bits.push(
+        'Your biographer has already rewritten its weekly allowance of chapters — the rest update next week.',
+      );
+    } else if (res.rewritten === 0 && res.staled > 0) {
+      // No flag → either AI is unavailable (the bridge ran mark-stale only) or the rewrites failed.
+      bits.push(
+        `${res.staled} chapter${res.staled === 1 ? ' has' : 's have'} new material to fold in — ${
+          aiUnavailable
+            ? canManageAi
+              ? 'turn on AI in Settings → AI to update ' + (res.staled === 1 ? 'it.' : 'them.')
+              : 'ask the person who set up this household to turn on AI.'
+            : 'the update didn’t finish; try again in a moment.'
+        }`,
+      );
+    }
     if (res.proposalsAdded)
       bits.push(
         `${res.proposalsAdded} suggested change${res.proposalsAdded === 1 ? '' : 's'} to review below.`,
@@ -1417,6 +1509,12 @@ function StudioLayout({
           {staleCount > 0 ? (
             <Text size="sm" tone="tertiary">
               {staleCount} chapter{staleCount === 1 ? ' has' : 's have'} new material to fold in.
+            </Text>
+          ) : null}
+          {crisisQuiet ? (
+            <Text size="sm" tone="tertiary">
+              Your biographer is resting while things are heavy — support comes first. The book
+              waits for you; nothing is lost.
             </Text>
           ) : null}
           {completeness && chapters.length > 0 ? <CompletenessMeter c={completeness} /> : null}
@@ -1506,14 +1604,29 @@ function StudioLayout({
           onFind={async () => {
             setInterviewBusy(true);
             try {
+              // Honest outcomes (§8.2): AI-off, the weekly cap, the back-off, and crisis each explain
+              // themselves — never a vague "check back later" for a state the person could act on.
               const res = await runInterviewCheck(bookId);
-              return res.outcome === 'minted'
-                ? 'Your biographer sent a few questions to your Inbox to fill a gap.'
-                : res.outcome === 'openCheckin'
-                  ? 'You already have questions from your biographer waiting in your Inbox.'
-                  : res.outcome === 'noGaps'
-                    ? 'Nothing new to ask right now — your story is well covered.'
-                    : 'No new questions right now — check back later.';
+              switch (res.outcome) {
+                case 'minted':
+                  return 'Your biographer sent a few questions to your Inbox to fill a gap.';
+                case 'openCheckin':
+                  return 'You already have questions from your biographer waiting in your Inbox.';
+                case 'noGaps':
+                  return 'Nothing new to ask right now — your story is well covered.';
+                case 'aiOff':
+                  return aiUnavailableMessage({ canManageAi });
+                case 'crisis':
+                  return 'Your biographer is resting while things are heavy — support comes first.';
+                case 'throttled':
+                  if (res.throttleReason === 'weeklyCap')
+                    return 'Your biographer has already taken stock twice this week — try again in a few days.';
+                  if (res.throttleReason === 'backoff')
+                    return 'The last questions expired unanswered, so your biographer is giving it a rest for now.';
+                  return 'No new questions right now — check back later.';
+                default:
+                  return 'No new questions right now — check back later.';
+              }
             } finally {
               setInterviewBusy(false);
             }
@@ -3253,8 +3366,14 @@ function ChapterReader({
   const [imageConsent] = useSetting('dreams.imageGenerationEnabled');
   const [aiEnabled] = useSetting('ai.enabled');
   const [hasImageKey, setHasImageKey] = useState(false);
+  // Gate the "turn on image generation" setup note on the ASYNC key check having resolved, so it never
+  // flashes for a fully-configured person (the CoverPanel `loading` lesson — same data, same behavior).
+  const [imageKeyChecked, setImageKeyChecked] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   const [illustrating, setIllustrating] = useState(false);
+  // The two-step "Rewrite this chapter" confirm (§8.2 spend legibility) + the History sheet (§13.9).
+  const [confirmRewrite, setConfirmRewrite] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [openSources, setOpenSources] = useState<number | null>(null);
   const [activePara, setActivePara] = useState<number | null>(null);
   const [activeQuote, setActiveQuote] = useState<string | null>(null);
@@ -3286,7 +3405,10 @@ function ChapterReader({
   }, [bookId, loadImages]);
 
   useEffect(() => {
-    void (async () => setHasImageKey(Boolean(await aiKeyResolved('openai'))))();
+    void (async () => {
+      setHasImageKey(Boolean(await aiKeyResolved('openai')));
+      setImageKeyChecked(true);
+    })();
   }, [bookId]);
 
   const imagesReady = imageConsent === true && aiEnabled !== false && hasImageKey;
@@ -3900,7 +4022,7 @@ function ChapterReader({
               </Select>
             ) : null}
           </Inline>
-          {!imagesReady ? (
+          {!imagesReady && imageKeyChecked ? (
             <Text tone="secondary" size="sm">
               {canManageAi
                 ? 'Turn on AI image generation and add your OpenAI key in Settings → Images to illustrate this chapter.'
@@ -3911,15 +4033,35 @@ function ChapterReader({
       </Card>
 
       <Inline justify="space-between">
-        <Button
-          disabled={busy}
-          onClick={async () => {
-            setError(null);
-            const res = await regenerateChapter(bookId, chapterId);
-            if (!res.ok) setError(res.message);
-          }}
-        >
-          {busy ? 'Rewriting…' : 'Rewrite this chapter'}
+        {confirmRewrite ? (
+          <Inline gap={2}>
+            <Text size="sm" tone="secondary">
+              Rewrite this whole chapter with your biographer? Your pinned passages and edits in
+              your own words are kept, and the current text is saved to History.
+            </Text>
+            <Button
+              variant="primary"
+              disabled={busy}
+              onClick={async () => {
+                setConfirmRewrite(false);
+                setError(null);
+                const res = await regenerateChapter(bookId, chapterId);
+                if (!res.ok) setError(res.message);
+              }}
+            >
+              Rewrite it
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirmRewrite(false)}>
+              Cancel
+            </Button>
+          </Inline>
+        ) : (
+          <Button disabled={busy} onClick={() => setConfirmRewrite(true)}>
+            {busy ? 'Rewriting…' : 'Rewrite this chapter'}
+          </Button>
+        )}
+        <Button variant="ghost" onClick={() => setHistoryOpen(true)}>
+          History
         </Button>
       </Inline>
 
@@ -3955,7 +4097,184 @@ function ChapterReader({
           onClose={() => setReviewOpen(false)}
         />
       ) : null}
+
+      {historyOpen ? (
+        <HistorySheet
+          bookId={bookId}
+          chapterId={chapterId}
+          currentMarkdown={chapter.markdown}
+          onClose={() => setHistoryOpen(false)}
+        />
+      ) : null}
     </Stack>
+  );
+}
+
+/** Human labels for why a version was archived (§13.9). */
+const VERSION_REASON_LABEL: Record<ChapterVersion['reason'], string> = {
+  rewrite: 'Before a rewrite',
+  revision: 'Before a revision',
+  restore: 'Before a restore',
+};
+
+/**
+ * The chapter History sheet (§13.9 — the draft vault): every archived version (newest first), each openable
+ * into a word-diff compare against the CURRENT text, with restore-any behind a two-step confirm. Restoring
+ * archives the current text first, so it is itself undoable. Reuses the shared `.sheet*` chrome.
+ */
+function HistorySheet({
+  bookId,
+  chapterId,
+  currentMarkdown,
+  onClose,
+}: {
+  bookId: string;
+  chapterId: string;
+  currentMarkdown: string;
+  onClose: () => void;
+}): JSX.Element {
+  const chapterHistory = useStoryStore((s) => s.chapterHistory);
+  const chapterVersion = useStoryStore((s) => s.chapterVersion);
+  const restoreChapterVersion = useStoryStore((s) => s.restoreChapterVersion);
+  const [history, setHistory] = useState<StoryChapterHistoryView | null>(null);
+  const [openRevision, setOpenRevision] = useState<number | null>(null);
+  const [openVersion, setOpenVersion] = useState<ChapterVersion | null>(null);
+  const [confirmRestore, setConfirmRestore] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    let live = true;
+    void chapterHistory(bookId, chapterId).then((h) => {
+      if (live) setHistory(h);
+    });
+    return () => {
+      live = false;
+    };
+  }, [bookId, chapterId, chapterHistory]);
+
+  const openCompare = async (revision: number): Promise<void> => {
+    setConfirmRestore(false);
+    if (openRevision === revision) {
+      setOpenRevision(null);
+      setOpenVersion(null);
+      return;
+    }
+    setOpenRevision(revision);
+    setOpenVersion(null);
+    const v = await chapterVersion(bookId, chapterId, revision);
+    setOpenVersion(v);
+    if (!v) setError('That version is no longer here.');
+  };
+
+  const restore = async (): Promise<void> => {
+    if (openRevision === null) return;
+    setBusy(true);
+    setError(null);
+    const ok = await restoreChapterVersion(bookId, chapterId, openRevision);
+    setBusy(false);
+    if (ok) onClose();
+    else setError('Couldn’t restore that version. Please try again.');
+  };
+
+  return (
+    <div className={styles.sheetWrap}>
+      <div className={styles.sheetBackdrop} onClick={onClose} aria-hidden="true" />
+      <aside className={styles.sheetPanel} role="dialog" aria-label="Chapter history">
+        <div className={styles.sheetHead}>
+          <Heading level={2}>History</Heading>
+          <button
+            type="button"
+            className={styles.sourcesToggle}
+            aria-label="Close"
+            onClick={onClose}
+          >
+            ✕ Close
+          </button>
+        </div>
+        <div className={styles.sheetBody}>
+          {error ? <Banner tone="danger">{error}</Banner> : null}
+          {!history ? (
+            <Text size="sm" tone="tertiary" aria-live="polite">
+              Loading versions…
+            </Text>
+          ) : history.versions.length === 0 ? (
+            <Text size="sm" tone="secondary">
+              No earlier versions yet. Every rewrite and revision saves the text it replaces here,
+              so nothing is ever lost.
+            </Text>
+          ) : (
+            <Stack gap={2}>
+              {history.versions.map((v) => (
+                <div key={v.revision} className={styles.reviewRow}>
+                  <div className={styles.reviewRowBody}>
+                    <Text size="sm">
+                      {VERSION_REASON_LABEL[v.reason]} ·{' '}
+                      {new Date(v.savedAt).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                      })}
+                    </Text>
+                    <Text size="sm" tone="tertiary">
+                      {v.words.toLocaleString()} words
+                    </Text>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.sourcesToggle}
+                    aria-expanded={openRevision === v.revision}
+                    onClick={() => void openCompare(v.revision)}
+                  >
+                    {openRevision === v.revision ? 'Hide' : 'Compare'}
+                  </button>
+                </div>
+              ))}
+              {openRevision !== null ? (
+                openVersion ? (
+                  <Stack gap={2}>
+                    <Text size="sm" tone="tertiary">
+                      What changed from that version to now:
+                    </Text>
+                    <WordDiff previous={openVersion.markdown} current={currentMarkdown} />
+                    {confirmRestore ? (
+                      <Inline gap={2}>
+                        <Text size="sm" tone="secondary">
+                          Restore this version? The current text is saved to History first.
+                        </Text>
+                        <Button variant="primary" disabled={busy} onClick={() => void restore()}>
+                          {busy ? 'Restoring…' : 'Restore'}
+                        </Button>
+                        <Button variant="ghost" onClick={() => setConfirmRestore(false)}>
+                          Cancel
+                        </Button>
+                      </Inline>
+                    ) : (
+                      <Inline>
+                        <Button onClick={() => setConfirmRestore(true)}>
+                          Restore this version
+                        </Button>
+                      </Inline>
+                    )}
+                  </Stack>
+                ) : (
+                  <Text size="sm" tone="tertiary" aria-live="polite">
+                    Loading that version…
+                  </Text>
+                )
+              ) : null}
+            </Stack>
+          )}
+        </div>
+      </aside>
+    </div>
   );
 }
 

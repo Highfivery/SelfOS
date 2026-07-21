@@ -520,7 +520,8 @@ export async function runStoryInterviewCadence(
         ...interview,
         openCheckinAssignmentId: undefined,
       });
-      return { outcome: 'throttled' }; // backed off; a future interval may mint a fresh gap
+      // Backed off (an ignored check-in just lapsed — don't pile on); a future interval may mint afresh.
+      return { outcome: 'throttled', throttleReason: 'backoff' };
     }
     // Resolved / gone → clear the flag so the loop can mint the next gap (the saves below own it).
   }
@@ -529,7 +530,7 @@ export async function runStoryInterviewCadence(
   if (args.auto && interview.lastGapPassAt) {
     const since = deps.now.getTime() - Date.parse(interview.lastGapPassAt);
     if (since < STORY_INTERVIEW_INTERVAL_DAYS * DAY_MS) {
-      return await clearOpenIfResolved(deps, args.bookId, interview, 'throttled');
+      return await clearOpenIfResolved(deps, args.bookId, interview, 'throttled', 'interval');
     }
   }
   // Both cadences are bounded by the weekly cap (protects the manual path from spamming the gap pass).
@@ -541,7 +542,9 @@ export async function runStoryInterviewCadence(
     type: 'story.interview',
   });
   if (passes.length >= STORY_INTERVIEW_WEEKLY_CAP) {
-    return await clearOpenIfResolved(deps, args.bookId, interview, 'throttled');
+    // The reason matters: the MANUAL "Find what's missing" hits this too, and "check back later" with no
+    // explanation reads as broken (the honest-states rule) — the UI says "already took stock twice this week".
+    return await clearOpenIfResolved(deps, args.bookId, interview, 'throttled', 'weeklyCap');
   }
 
   // Run the gap pass (persists coverage + lastGapPassAt).
@@ -589,6 +592,7 @@ async function clearOpenIfResolved(
   bookId: string,
   interview: Awaited<ReturnType<typeof getInterviewState>>,
   outcome: StoryInterviewOutcome,
+  throttleReason?: StoryInterviewCadenceResult['throttleReason'],
   completeness?: StoryCompleteness,
 ): Promise<StoryInterviewCadenceResult> {
   if (interview.openCheckinAssignmentId) {
@@ -601,5 +605,9 @@ async function clearOpenIfResolved(
       openCheckinAssignmentId: undefined,
     });
   }
-  return { outcome, ...(completeness ? { completeness } : {}) };
+  return {
+    outcome,
+    ...(throttleReason ? { throttleReason } : {}),
+    ...(completeness ? { completeness } : {}),
+  };
 }

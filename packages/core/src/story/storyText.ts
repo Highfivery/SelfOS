@@ -9,6 +9,13 @@ import type { ChapterProvenanceEntry, StorySourceRef } from '../schemas';
 
 export const SOURCE_MARKER = /\[\[SRC:([^\]]*)\]\]/g;
 
+/** Whitespace-token word count over a chapter's markdown — the History sheet's size cue (and the future
+ *  manuscript-metrics read). Pure; markers/markdown syntax count as words, which is fine for a cue. */
+export function countWords(markdown: string): number {
+  const trimmed = markdown.trim();
+  return trimmed.length === 0 ? 0 : trimmed.split(/\s+/).length;
+}
+
 /** Split a chapter's stored markdown into paragraphs (`p<index>` over blank-line-separated non-empty blocks).
  *  Both the anchoring (`stripSourceMarkers`, which calls this on the CLEANED text) and the draft-view renderer
  *  split through this exact rule, so a paragraph's sources always line up with its `p<index>`. */
@@ -29,9 +36,15 @@ export function stripSourceMarkers(
   markdown: string,
   tagToRef: Map<string, StorySourceRef>,
 ): { markdown: string; provenance: ChapterProvenanceEntry[] } {
+  // A reply truncated mid-marker leaves a dangling `[[SRC:s12` (no closing `]]`) at the very end of the
+  // text, which the marker regex can't match — it would persist and RENDER as literal text in the reader/
+  // published head/exports. Strip any unterminated `[[…` tail defensively (prose never legitimately ends
+  // with a bare `[[`; the model is instructed to emit only complete markers). The truncation continuation
+  // (aiCall) usually completes the reply — this guards the still-truncated tail.
+  const safe = markdown.replace(/\[\[[^\]]*$/, '');
   const provenance: ChapterProvenanceEntry[] = [];
   const outParagraphs: string[] = [];
-  for (const block of markdown.split(/\n{2,}/)) {
+  for (const block of safe.split(/\n{2,}/)) {
     const refs: StorySourceRef[] = [];
     const seen = new Set<string>();
     for (const match of block.matchAll(SOURCE_MARKER)) {

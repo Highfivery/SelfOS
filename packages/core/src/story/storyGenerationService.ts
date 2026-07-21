@@ -31,6 +31,7 @@ import { stripSourceMarkers } from './storyText';
 // Re-exported so existing importers (tests, the bridge) keep their `./storyGenerationService` entry points.
 export { chapterParagraphs, stripSourceMarkers } from './storyText';
 import {
+  appendChapterVersion,
   getBook,
   getChapter,
   getExclusions,
@@ -213,9 +214,11 @@ export type ChapterResult =
  * Generate (or regenerate) ONE chapter's prose from the corpus + its outline brief (§5.3). Reads the book +
  * outline, builds the corpus (or reuses a pre-built one — the orchestrator builds it once for the whole book),
  * runs the metered `story.chapter` pass, strips the citation markers into provenance, and PERSISTS the chapter.
- * A `reviewed` chapter's protected blocks + pinned quotes are carried forward (their code-enforcement is slice
- * C); status becomes `updated` on a regenerate, `new` on first write. Returns the saved chapter or an honest
- * failure. Never trusts model ids — the chapter id/partId/order/title come from the outline.
+ * Protected blocks + pinned quotes ride the prompt's PRESERVE list AND are code-enforced after the call
+ * (`enforceProtected` — the person's own words survive every rewrite path, not just revisions); the replaced
+ * text is archived to the chapter's version history first (§13.9). Status becomes `updated` on a regenerate,
+ * `new` on first write. Returns the saved chapter or an honest failure (incl. TRUNCATED — a half-finished
+ * chapter is never persisted). Never trusts model ids — id/partId/order/title come from the outline.
  */
 export async function generateChapter(
   deps: AiDeps,
@@ -250,6 +253,15 @@ export async function generateChapter(
       args.bookId,
       await getExclusions(deps.fs, deps.key, deps.personId, args.bookId),
     ));
+  // Read the existing chapter BEFORE the call — its protected blocks + pinned quotes go into the prompt's
+  // PRESERVE list, so a rewrite carries the person's own words in the prose (not just as metadata).
+  const existing = await getChapter(deps.fs, deps.key, deps.personId, args.bookId, args.chapterId);
+  const preserve = existing
+    ? [
+        ...existing.protectedBlocks.map((b) => b.text),
+        ...existing.pinnedQuotes.map((q) => q.text),
+      ].filter((t) => t.trim().length > 0)
+    : [];
   const tagged = tagCorpusItems(corpus);
   const tagToRef = new Map(tagged.map((t) => [t.tag, t.sourceRef]));
   const system = buildBiographerSystem(bookType, book.config, corpus.personName);
@@ -257,39 +269,72 @@ export async function generateChapter(
     chapter: target,
     outline,
     ...(book.essence ? { essence: book.essence } : {}),
+    ...(preserve.length > 0 ? { preserve } : {}),
   });
 
   const result = await runClaude(deps, system, user, 'story.chapter', CHAPTER_MAX_TOKENS);
   if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
+  // Still cut off after the bounded continuations: NEVER persist a half-finished chapter as if complete —
+  // a book chapter ending mid-scene with no warning is a silent integrity failure (the call is already
+  // metered; honesty beats salvage here, unlike the JSON passes where tolerant parsing salvages).
+  if (result.truncated) {
+    return {
+      ok: false,
+      reason: 'TRUNCATED',
+      message: 'The chapter was cut off before it finished. Please try again.',
+    };
+  }
 
   const { markdown, provenance } = stripSourceMarkers(result.text, tagToRef);
   if (markdown.trim().length === 0) {
     const { reason, message } = classifyParseOutcome(result.text, 'chapter');
     return { ok: false, reason, message };
   }
+  // Re-read the chapter LIVE after the slowest call in the app: a pin / markup / image placement made while
+  // the generation was in flight must not be reverted by the pre-call snapshot (mirrors applyMarkup below —
+  // `existing` above is the pre-call read, kept only to seed the prompt's PRESERVE list). Null on a first draft.
+  const live = await getChapter(deps.fs, deps.key, deps.personId, args.bookId, args.chapterId);
+  // Code-enforce the person's protected/pinned words on EVERY generation path — the PRESERVE list above is
+  // the first line of defense, this is the guarantee (§5.3/§5.4; previously only the revision path enforced,
+  // so a stale-chapter auto-rewrite could silently drop the person's own words). Enforce against the LIVE set
+  // so a passage pinned while the rewrite was in flight survives this rewrite too.
+  const enforced = live
+    ? enforceProtected(markdown, live.protectedBlocks, live.pinnedQuotes)
+    : { markdown, reinserted: 0 };
 
-  const existing = await getChapter(deps.fs, deps.key, deps.personId, args.bookId, args.chapterId);
+  // Drafts are sacred (§13.9): archive the text this rewrite replaces before overwriting it.
+  if (live && live.markdown.trim().length > 0) {
+    await appendChapterVersion(deps.fs, deps.key, deps.personId, args.bookId, args.chapterId, {
+      revision: live.revision,
+      markdown: live.markdown,
+      provenance: live.provenance,
+      sourceSignature: live.sourceSignature,
+      savedAt: deps.now.toISOString(),
+      reason: 'rewrite',
+    });
+  }
+
   const chapter: BookChapter = {
     id: target.id,
     schemaVersion: 1,
     partId,
     order: target.order,
     title: target.title,
-    markdown,
-    revision: (existing?.revision ?? 0) + 1,
-    status: existing ? 'updated' : 'new',
+    markdown: enforced.markdown,
+    revision: (live?.revision ?? 0) + 1,
+    status: live ? 'updated' : 'new',
     // Stamp the freshness fingerprint from the corpus it was just written against (§5.4), so a later source
     // change flags this chapter stale.
     sourceSignature: computeSourceSignature(corpus, { provenance }),
     provenance,
-    protectedBlocks: existing?.protectedBlocks ?? [], // preserved across regeneration (enforced in slice C)
-    pinnedQuotes: existing?.pinnedQuotes ?? [],
-    imagePlacements: existing?.imagePlacements ?? [],
+    protectedBlocks: live?.protectedBlocks ?? [],
+    pinnedQuotes: live?.pinnedQuotes ?? [],
+    imagePlacements: live?.imagePlacements ?? [],
     lastGeneratedAt: deps.now.toISOString(),
-    ...(existing?.lastReviewedAt ? { lastReviewedAt: existing.lastReviewedAt } : {}),
+    ...(live?.lastReviewedAt ? { lastReviewedAt: live.lastReviewedAt } : {}),
     // Keep the prior text so the "What changed" diff can show what a rewrite altered (§13.5). Only a rewrite of
     // existing prose has something to diff — a first draft ('new', no existing) carries none.
-    ...(existing?.markdown.trim() ? { previousMarkdown: existing.markdown } : {}),
+    ...(live?.markdown.trim() ? { previousMarkdown: live.markdown } : {}),
   };
   await saveChapter(deps.fs, deps.key, deps.personId, args.bookId, chapter);
   return { ok: true, chapter };
@@ -451,26 +496,48 @@ export async function applyMarkup(
 
   const result = await runClaude(deps, system, user, 'story.chapter', CHAPTER_MAX_TOKENS);
   if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
+  // A truncated revision is worse than a failed one: the model returns the FULL revised chapter, so a
+  // half-length reply would replace the whole text. Refuse honestly (already metered) — see generateChapter.
+  if (result.truncated) {
+    return {
+      ok: false,
+      reason: 'TRUNCATED',
+      message: 'The revision was cut off before it finished. Please try again.',
+    };
+  }
 
   const stripped = stripSourceMarkers(result.text, tagToRef);
   if (stripped.markdown.trim().length === 0) {
     const { reason, message } = classifyParseOutcome(result.text, 'chapter');
     return { ok: false, reason, message };
   }
-  // Code-enforce the person's protected/pinned words — the prompt asked, but the guarantee is code (§5.3/§5.4).
-  const enforced = enforceProtected(
-    stripped.markdown,
-    existing.protectedBlocks,
-    existing.pinnedQuotes,
-  );
 
   // Re-read both records before writing. `existing`/`markup` predate the chapter rewrite — the slowest
   // call in the app — so spreading them would revert whatever landed meanwhile: `imagePlacements`
   // (setImagePlacement), `order`/`partId` (syncPartChapterOrder), and any mark the user added during the
-  // revision. Only the rewritten text and its provenance are ours. (`generateChapter` above already reads
-  // AFTER its call; this path was the outlier.)
+  // revision. Only the rewritten text and its provenance are ours. (`generateChapter` above re-reads live
+  // after its call the same way.)
   const liveChapter =
     (await getChapter(deps.fs, deps.key, deps.personId, args.bookId, args.chapterId)) ?? existing;
+  // Code-enforce the person's protected/pinned words — the prompt asked, but the guarantee is code
+  // (§5.3/§5.4). Enforce against the LIVE chapter's set: a passage pinned while the slow revision call was
+  // in flight must survive this revision too, not just the next one.
+  const enforced = enforceProtected(
+    stripped.markdown,
+    liveChapter.protectedBlocks,
+    liveChapter.pinnedQuotes,
+  );
+  // Drafts are sacred (§13.9): archive the text this revision replaces before overwriting it.
+  if (liveChapter.markdown.trim().length > 0) {
+    await appendChapterVersion(deps.fs, deps.key, deps.personId, args.bookId, args.chapterId, {
+      revision: liveChapter.revision,
+      markdown: liveChapter.markdown,
+      provenance: liveChapter.provenance,
+      sourceSignature: liveChapter.sourceSignature,
+      savedAt: deps.now.toISOString(),
+      reason: 'revision',
+    });
+  }
   const chapter: BookChapter = {
     ...liveChapter,
     markdown: enforced.markdown,

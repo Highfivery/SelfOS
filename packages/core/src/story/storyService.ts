@@ -5,6 +5,7 @@ import {
   BookChapterSchema,
   BookManifestSchema,
   BookOutlineSchema,
+  ChapterHistorySchema,
   ChapterMarkupSchema,
   ExclusionListSchema,
   LifeTimelineSchema,
@@ -18,7 +19,9 @@ import {
   type BookManifest,
   type BookOutline,
   type BookTypeId,
+  type ChapterHistory,
   type ChapterMarkup,
+  type ChapterVersion,
   type ExclusionItem,
   type LifeTimeline,
   type PublishedManifest,
@@ -30,6 +33,7 @@ import {
   type StoryTodoList,
 } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
+import { enforceProtected } from './storyMarkup';
 
 /**
  * Your Story persistence (64-your-story §4/§5.7). A book lives under `people/<personId>/story/books/<bookId>/`
@@ -80,6 +84,17 @@ function publishedImageBytesPath(personId: string, bookId: string, imageId: stri
 }
 function markupPath(personId: string, bookId: string, chapterId: string): string {
   return `${bookDir(personId, bookId)}/markup/${chapterId}.enc`;
+}
+/** Chapter version history lives in its OWN dir (not `chapters/`) so `listChapters`' `.enc` scan never
+ *  tries to parse a history file as a chapter (one stray file must never brick the whole book). */
+function historyDir(personId: string, bookId: string): string {
+  return `${bookDir(personId, bookId)}/history`;
+}
+function chapterHistoryPath(personId: string, bookId: string, chapterId: string): string {
+  return `${historyDir(personId, bookId)}/${chapterId}.enc`;
+}
+function archiveDir(personId: string, bookId: string): string {
+  return `${bookDir(personId, bookId)}/archive`;
 }
 function todosPath(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/todos.enc`;
@@ -223,6 +238,49 @@ export async function deleteBook(fs: FileSystem, personId: string, bookId: strin
   await fs.remove(bookDir(personId, bookId));
 }
 
+/** Rewrite-from-scratch archives kept before the newest one drops off (each is a full drafted-state copy;
+ *  three covers "I rewrote twice and want the original back" without unbounded growth). */
+export const ARCHIVE_KEEP = 3;
+
+/** Raw-copy one already-encrypted file (no decrypt — the bytes move verbatim). Missing source → no-op. */
+async function copyRaw(fs: FileSystem, from: string, to: string): Promise<void> {
+  const bytes = await fs.read(from);
+  if (bytes) await fs.writeAtomic(to, bytes);
+}
+
+/**
+ * Archive the whole drafted state (manifest incl. essence/title, outline, timeline, every chapter + its
+ * version history) into `archive/<timestamp>/` before a from-scratch rewrite discards it (§13.9). Encrypted
+ * bytes are copied verbatim — nothing is decrypted. Keeps the newest `ARCHIVE_KEEP` archives. There is no UI
+ * over archives yet (deliberate: the safety net ships tonight, a browser can follow) — the data survives in
+ * the vault either way.
+ */
+export async function archiveDraftState(
+  fs: FileSystem,
+  personId: string,
+  bookId: string,
+  now: Date,
+): Promise<void> {
+  const stamp = now.toISOString().replace(/[:.]/g, '-');
+  const dest = `${archiveDir(personId, bookId)}/${stamp}`;
+  await copyRaw(fs, manifestPath(personId, bookId), `${dest}/book.enc`);
+  await copyRaw(fs, outlinePath(personId, bookId), `${dest}/outline.enc`);
+  await copyRaw(fs, timelinePath(personId, bookId), `${dest}/timeline.enc`);
+  for (const name of await fs.list(chaptersDir(personId, bookId))) {
+    if (!name.endsWith('.enc')) continue;
+    await copyRaw(fs, `${chaptersDir(personId, bookId)}/${name}`, `${dest}/chapters/${name}`);
+  }
+  for (const name of await fs.list(historyDir(personId, bookId))) {
+    if (!name.endsWith('.enc')) continue;
+    await copyRaw(fs, `${historyDir(personId, bookId)}/${name}`, `${dest}/history/${name}`);
+  }
+  // Prune to the newest ARCHIVE_KEEP (the timestamp names sort lexicographically = chronologically).
+  const archives = (await fs.list(archiveDir(personId, bookId))).sort();
+  for (const old of archives.slice(0, Math.max(0, archives.length - ARCHIVE_KEEP))) {
+    await fs.remove(`${archiveDir(personId, bookId)}/${old}`);
+  }
+}
+
 /**
  * Rewrite a book from scratch (64 §13.6.6) — reset it to the pre-draft state so the standard full-draft flow
  * writes a fresh outline + fresh chapters. Returns the reset manifest, or null if the book is gone.
@@ -245,11 +303,22 @@ export async function rewriteBookFromScratch(
   const existing = await getBook(fs, key, personId, bookId);
   if (!existing) return null;
 
+  // Drafts are sacred (§13.9): before anything is discarded, raw-copy the whole drafted state into
+  // `archive/<timestamp>/` — a from-scratch rewrite must never be the irreversible destruction of a book the
+  // person may have spent weeks shaping. Best-effort: an archive failure never blocks the rewrite itself.
+  try {
+    await archiveDraftState(fs, personId, bookId, now);
+  } catch {
+    // Archiving is a safety net over an explicitly-confirmed destructive action — proceed.
+  }
+
   // Everything that describes the DRAFTED book. Removing the chapters folder also discards each chapter's
   // protected blocks / pinned quotes / image placements (they live on the chapter). `fs.remove` is a
   // recursive, force delete — tolerant of a path that isn't there.
   await fs.remove(chaptersDir(personId, bookId));
   await fs.remove(`${bookDir(personId, bookId)}/markup`);
+  // Version history describes the discarded chapters — archived above, then dropped with them.
+  await fs.remove(historyDir(personId, bookId));
   await fs.remove(proposalsPath(personId, bookId));
   await fs.remove(outlinePath(personId, bookId));
   await fs.remove(timelinePath(personId, bookId));
@@ -504,6 +573,98 @@ export async function listChapters(
   }
   out.sort((a, b) => (a.partId === b.partId ? a.order - b.order : a.partId < b.partId ? -1 : 1));
   return out;
+}
+
+// --- Chapter version history (the draft vault, §13.9) ----------------------------------------------------
+
+/** Superseded versions kept per chapter. 20 rewrites of a 5,000-word chapter ≈ a few hundred KB encrypted —
+ *  bounded, and far past what anyone restores to in practice. The oldest drop off. */
+export const CHAPTER_HISTORY_CAP = 20;
+
+/** A chapter's archived versions (oldest→newest). Empty (never null) when nothing's been superseded yet. */
+export async function getChapterHistory(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  chapterId: string,
+): Promise<ChapterHistory> {
+  const raw = await readEncryptedJson(fs, chapterHistoryPath(personId, bookId, chapterId), key);
+  return raw ? ChapterHistorySchema.parse(raw) : { schemaVersion: 1, chapterId, versions: [] };
+}
+
+/**
+ * Archive the version a rewrite/revision/restore is about to replace (§13.9). Every path that overwrites a
+ * chapter's non-empty prose calls this FIRST, so no text the person has seen is ever silently destroyed.
+ * Capped: past `CHAPTER_HISTORY_CAP` the oldest versions drop off.
+ */
+export async function appendChapterVersion(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  chapterId: string,
+  version: ChapterVersion,
+): Promise<void> {
+  const history = await getChapterHistory(fs, key, personId, bookId, chapterId);
+  const versions = [...history.versions, version].slice(-CHAPTER_HISTORY_CAP);
+  await writeEncryptedJson(
+    fs,
+    chapterHistoryPath(personId, bookId, chapterId),
+    { ...history, chapterId, versions },
+    key,
+  );
+}
+
+/**
+ * Restore an archived version (§13.9): the CURRENT prose is archived first (reason `restore` — restoring is
+ * itself undoable), then the chapter takes the version's markdown + provenance + signature as a NEW revision
+ * (`status: 'updated'`, so the review flow sees it like any other change; `previousMarkdown` = the replaced
+ * text so the ribbon's What-changed diff shows exactly what the restore changed). Protected blocks + pinned
+ * quotes are re-enforced against the restored text — a block added AFTER that version was archived must still
+ * survive. Returns the restored chapter, or null when the chapter/version is gone.
+ */
+export async function restoreChapterVersion(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  chapterId: string,
+  revision: number,
+  now: Date,
+): Promise<BookChapter | null> {
+  const current = await getChapter(fs, key, personId, bookId, chapterId);
+  if (!current) return null;
+  const history = await getChapterHistory(fs, key, personId, bookId, chapterId);
+  const version = history.versions.find((v) => v.revision === revision);
+  if (!version) return null;
+  if (current.markdown.trim().length > 0) {
+    await appendChapterVersion(fs, key, personId, bookId, chapterId, {
+      revision: current.revision,
+      markdown: current.markdown,
+      provenance: current.provenance,
+      sourceSignature: current.sourceSignature,
+      savedAt: now.toISOString(),
+      reason: 'restore',
+    });
+  }
+  const enforced = enforceProtected(
+    version.markdown,
+    current.protectedBlocks,
+    current.pinnedQuotes,
+  );
+  const restored: BookChapter = {
+    ...current,
+    markdown: enforced.markdown,
+    revision: current.revision + 1,
+    status: 'updated',
+    provenance: version.provenance,
+    sourceSignature: version.sourceSignature,
+    lastGeneratedAt: now.toISOString(),
+    previousMarkdown: current.markdown,
+  };
+  await saveChapter(fs, key, personId, bookId, restored);
+  return restored;
 }
 
 // --- Published head (what readers see, §3.5) -------------------------------------------------------------

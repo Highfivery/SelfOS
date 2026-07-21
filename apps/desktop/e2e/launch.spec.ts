@@ -64,7 +64,7 @@ import {
   pairKeyFor,
   saveAgreement,
 } from '@selfos/core/together';
-import { getBook, listBooks } from '@selfos/core/story';
+import { getBook, getMarkup, getOutline, listBooks } from '@selfos/core/story';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
@@ -11918,6 +11918,67 @@ test('story (64): setup names the book, outline rename, chapters + sources, mark
       return bad;
     });
     expect(offenders).toEqual([]);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('story (64): the biographer answers a question about a passage (§3.3)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  // Seed one approved corpus insight so a written chapter cites a real source ([[SRC:s0]] resolves).
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+  const now = new Date().toISOString();
+  await saveInsight(fs, key, {
+    id: 'seed-portrait',
+    schemaVersion: 1,
+    source: 'intake',
+    subjectPersonId: 'owner-1',
+    summary: 'A quiet, careful person who grew up around machines.',
+    facts: [{ id: 'f1', text: 'Grew up in his father’s garage.', shareable: false }],
+    confidence: 'medium',
+    categories: [],
+    approved: true,
+    provenance: { intakeSection: 'basics', at: now },
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: 'Write my book' }).click();
+
+    // Open a drafted chapter and mark up its first paragraph with a QUESTION comment (the "Ask" intent).
+    await w.getByRole('button', { name: /The Garage/ }).click();
+    await expect(w.getByText(/cut pine/)).toBeVisible();
+    await w.getByRole('button', { name: 'Mark up' }).first().click();
+    await w.getByRole('button', { name: 'Comment' }).click();
+    await w.getByRole('button', { name: 'Ask', exact: true }).click(); // the question intent
+    await w.getByRole('textbox', { name: 'Comment' }).fill('Where did this come from?');
+    await w.getByRole('button', { name: 'Add comment' }).click();
+
+    // The question comment is no longer a dead end: "Ask your biographer" → a grounded answer renders at the
+    // paragraph (a metered `story.answer` call, faked here).
+    await w.getByRole('button', { name: 'Ask your biographer' }).click();
+    await expect(w.getByText(/came from a coaching session/)).toBeVisible();
+
+    // Decrypt the markup: the answer is persisted on the question mark (survives navigation).
+    const books = await listBooks(fs, key, 'owner-1');
+    const outline = await getOutline(fs, key, 'owner-1', books[0]!.id);
+    const chapterId = outline?.parts[0]?.chapters[0]?.id;
+    if (!chapterId) throw new Error('no chapter');
+    const markup = await getMarkup(fs, key, 'owner-1', books[0]!.id, chapterId);
+    const q = markup.marks.find((m) => m.kind === 'comment' && m.intent === 'question');
+    expect(q?.kind === 'comment' ? q.answer : undefined).toMatch(/coaching session/);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

@@ -5,11 +5,14 @@ import { memFileSystem } from '../host/memFileSystem';
 import { savePerson } from '../people';
 import { saveInsight } from '../insights';
 import {
+  createAssignment,
   getAssignment,
   getAssignmentSnapshot,
   listAssignments,
   updateAssignmentStatus,
 } from '../questionnaires/assignmentService';
+import { saveQuestionnaire } from '../questionnaires/questionnaireService';
+import { saveResponse } from '../questionnaires/responseService';
 import type { AiDeps } from '../questionnaires/generationService';
 import type {
   BookChapter,
@@ -29,15 +32,19 @@ import {
   getStoryGaps,
   listAnsweredStoryCheckIns,
   mintStoryCheckInFromTodo,
+  mintTodoCheckIn,
+  resolveSentQuestionTodos,
   runGapPass,
   runStoryInterviewCadence,
 } from './storyInterviewService';
 import { generateChapter } from './storyGenerationService';
+import { addMark } from './storyMarkupService';
 import {
   applyFoundations,
   approveOutline,
   createBook,
   getInterviewState,
+  getTodos,
   saveChapter,
 } from './storyService';
 
@@ -75,6 +82,30 @@ function routingClient(gap: string, questions: string): ClaudeClient {
       const t = pick(opts);
       onDelta(t);
       return Promise.resolve({ text: t, usage: USAGE });
+    },
+  };
+}
+/** The concatenated user-message text of a Claude call (never the system prompt). */
+function userTextOf(opts: { messages?: readonly { content?: unknown }[] }): string {
+  return (opts.messages ?? [])
+    .map((m) => (typeof m.content === 'string' ? m.content : ''))
+    .join('\n');
+}
+/** Records the user message of every call (so the de-dup reference reaching the model can be asserted). */
+function capturingClient(text: string): { client: ClaudeClient; messages: string[] } {
+  const messages: string[] = [];
+  return {
+    messages,
+    client: {
+      send: (opts) => {
+        messages.push(userTextOf(opts));
+        return Promise.resolve(text);
+      },
+      stream: (opts, onDelta) => {
+        messages.push(userTextOf(opts));
+        onDelta(text);
+        return Promise.resolve({ text, usage: USAGE });
+      },
     },
   };
 }
@@ -145,6 +176,63 @@ describe('mintStoryCheckInFromTodo (64 §5.5)', () => {
     const res = await mintStoryCheckInFromTodo(deps(fs, spyClient), { bookId: 'b1', focus: '   ' });
     expect(res.ok).toBe(false);
     expect(called).toBe(false);
+  });
+
+  it('de-dups against the self-recipient’s history — the reference reaches the model (§3.7 parity)', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, person);
+    // A prior questionnaire the person already answered (a self-send) — its Q→A is what the biographer must
+    // never re-ask, and it must reach the de-dup pass.
+    const def = await saveQuestionnaire(fs, key, {
+      title: 'Earlier',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: 'me' },
+      questions: [
+        { id: 'q1', type: 'shortText', prompt: 'What is your favorite color?', required: false },
+      ],
+    });
+    const prior = await createAssignment(fs, key, {
+      questionnaireId: def.id,
+      senderPersonId: 'me',
+      recipient: { kind: 'person', personId: 'me' },
+      channel: 'inApp',
+      privacy: 'standard',
+      senderVisibleToRecipient: true,
+    });
+    await saveResponse(fs, key, {
+      id: 'r1',
+      schemaVersion: 1,
+      assignmentId: prior.id,
+      answers: [{ questionId: 'q1', value: 'Blue' }],
+      submittedAt: now.toISOString(),
+    });
+
+    const { client, messages } = capturingClient(validQuestions);
+    const res = await mintStoryCheckInFromTodo(deps(fs, client), {
+      bookId: 'b1',
+      focus: 'the winter he got sick',
+    });
+    expect(res.ok).toBe(true);
+    // The onboarding-first de-dup reference reached the model (the semantic pass) — the biographer is told what
+    // the person already answered, so it won't re-ask it.
+    const all = messages.join('\n---\n');
+    expect(all).toContain('ALREADY ANSWERED in prior questionnaires');
+  });
+
+  it('passes NO de-dup reference for a person with no history (nothing to avoid)', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, person);
+    const { client, messages } = capturingClient(validQuestions);
+    const res = await mintStoryCheckInFromTodo(deps(fs, client), {
+      bookId: 'b1',
+      focus: 'a topic',
+    });
+    expect(res.ok).toBe(true);
+    const all = messages.join('\n---\n');
+    // No history → the reference is empty, so the semantic pass never runs + the "ALREADY …" framing is absent.
+    expect(all).not.toContain('ALREADY ANSWERED');
+    expect(all).not.toContain('ALREADY KNOWN / ALREADY ASKED');
   });
 });
 
@@ -575,10 +663,14 @@ describe('askGap — "Ask me about this" (64 §13.6.5)', () => {
     });
     if (!first.ok) throw new Error('first mint failed');
     await updateAssignmentStatus(fs, key, first.assignmentId, 'submitted');
-    // The prior check-in resolved → the next ask is free.
-    expect(
-      (await askGap(deps(fs, fakeClient(validQuestions)), { bookId, gapId: gaps[1]!.id })).ok,
-    ).toBe(true);
+    // The prior check-in resolved → the ≤1-open invariant RELEASES: asking a different gap is no longer
+    // blocked with "a check-in is already waiting". (Whether the mint then yields questions depends on the
+    // §3.7 de-dup pass, which needs a real model — not this constant fake — and is tested at the bridge.)
+    const second = await askGap(deps(fs, fakeClient(validQuestions)), {
+      bookId,
+      gapId: gaps[1]!.id,
+    });
+    expect(second.ok ? '' : second.message).not.toContain('already waiting');
   });
 
   it('refuses an unknown gap id', async () => {
@@ -588,6 +680,129 @@ describe('askGap — "Ask me about this" (64 §13.6.5)', () => {
     expect((await askGap(deps(fs, fakeClient(validQuestions)), { bookId, gapId: 'nope' })).ok).toBe(
       false,
     );
+  });
+
+  it('refuses re-asking an ALREADY-ANSWERED gap (no "Worth telling next" vs "Answered" contradiction, §3.7)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    await runGapPass(deps(fs, fakeClient(gapJson)), { bookId });
+    const gap = (await getStoryGaps(fs, key, 'me', bookId)).gaps[0]!;
+    const first = await askGap(deps(fs, fakeClient(validQuestions)), { bookId, gapId: gap.id });
+    if (!first.ok) throw new Error('first mint failed');
+    // Answer it → the gap's material is now in. Re-asking the SAME gap must be refused (not re-mint identical
+    // questions), even though the ≤1-open invariant has released.
+    await updateAssignmentStatus(fs, key, first.assignmentId, 'submitted');
+    const again = await askGap(deps(fs, fakeClient(validQuestions)), { bookId, gapId: gap.id });
+    expect(again.ok).toBe(false);
+    if (again.ok) return;
+    expect(again.message).toMatch(/already answered/i);
+  });
+});
+
+describe('getStoryGaps — the derived lifecycle status (64 §3.7/§13.6.5)', () => {
+  it('derives open → asked → answered per gap from the check-in it minted', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    await runGapPass(deps(fs, fakeClient(gapJson)), { bookId }); // persists two gaps
+    // Before any ask, every gap is open (askable).
+    let view = await getStoryGaps(fs, key, 'me', bookId);
+    expect(view.gaps.map((g) => g.status)).toEqual(['open', 'open']);
+
+    const askedId = view.gaps[0]!.id;
+    const untouchedId = view.gaps[1]!.id;
+    const minted = await askGap(deps(fs, fakeClient(validQuestions)), { bookId, gapId: askedId });
+    if (!minted.ok) throw new Error('mint failed');
+
+    // The asked gap is now `asked` (its check-in is waiting); the untouched one stays `open`.
+    view = await getStoryGaps(fs, key, 'me', bookId);
+    const byId = new Map(view.gaps.map((g) => [g.id, g]));
+    expect(byId.get(askedId)?.status).toBe('asked');
+    expect(byId.get(askedId)?.assignmentId).toBe(minted.assignmentId);
+    expect(byId.get(untouchedId)?.status).toBe('open');
+
+    // Submit its check-in → the gap becomes `answered` (derived on read, so it reflects an Inbox answer).
+    await updateAssignmentStatus(fs, key, minted.assignmentId, 'submitted');
+    view = await getStoryGaps(fs, key, 'me', bookId);
+    expect(view.gaps.find((g) => g.id === askedId)?.status).toBe('answered');
+  });
+
+  it('a gap whose check-in was declined falls back to open (askable again)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    await runGapPass(deps(fs, fakeClient(gapJson)), { bookId });
+    const gapId = (await getStoryGaps(fs, key, 'me', bookId)).gaps[0]!.id;
+    const minted = await askGap(deps(fs, fakeClient(validQuestions)), { bookId, gapId });
+    if (!minted.ok) throw new Error('mint failed');
+    await updateAssignmentStatus(fs, key, minted.assignmentId, 'declined');
+    const view = await getStoryGaps(fs, key, 'me', bookId);
+    expect(view.gaps.find((g) => g.id === gapId)?.status).toBe('open');
+  });
+});
+
+describe('resolveSentQuestionTodos (64 §3.7 — the coherence self-heal)', () => {
+  it('flips a questionsSent to-do to done once its check-in resolves, and reports the count', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    // Mint a real check-in so the to-do can carry a resolvable assignment id.
+    const mint = await mintStoryCheckInFromTodo(deps(fs, fakeClient(validQuestions)), {
+      bookId,
+      focus: 'the winter he got sick',
+    });
+    if (!mint.ok) throw new Error('mint failed');
+    // Record the "Turn into questions" hand-off shape (a questionsSent to-do carrying the assignment id).
+    await addMark(fs, key, 'me', bookId, 'c1', {
+      id: 'qs1',
+      kind: 'todo',
+      text: 'the winter he got sick',
+      todoKind: 'questions',
+      status: 'questionsSent',
+      assignmentId: mint.assignmentId,
+      createdAt: 'now',
+    });
+
+    // Before the check-in resolves the sweep is a no-op and the to-do stays questionsSent (still in "Needs you").
+    expect(await resolveSentQuestionTodos(fs, key, 'me', bookId)).toBe(0);
+    expect((await getTodos(fs, key, 'me', bookId)).todos[0]?.status).toBe('questionsSent');
+
+    // Answer it → the sweep flips the to-do to done and the roll-up reflects it (no longer stuck in the count).
+    await updateAssignmentStatus(fs, key, mint.assignmentId, 'submitted');
+    expect(await resolveSentQuestionTodos(fs, key, 'me', bookId)).toBe(1);
+    expect((await getTodos(fs, key, 'me', bookId)).todos[0]?.status).toBe('done');
+  });
+});
+
+describe('mintTodoCheckIn (64 §3.7 — the ≤1-open hand-off)', () => {
+  it('records the open check-in + the focus, then refuses a second while one is genuinely open', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    const first = await mintTodoCheckIn(deps(fs, fakeClient(validQuestions)), {
+      bookId,
+      focus: 'the garage fire',
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    // It stamps the open check-in id + records the focus so the gap pass won't re-propose the topic.
+    const state = await getInterviewState(fs, key, 'me', bookId);
+    expect(state.openCheckinAssignmentId).toBe(first.assignmentId);
+    expect(state.askedPrompts).toContain('the garage fire');
+
+    // A second mint while it's still open is refused BEFORE the model is called (the ≤1 invariant).
+    let called = false;
+    const spy: ClaudeClient = {
+      send: () => {
+        called = true;
+        return Promise.resolve('');
+      },
+      stream: () => {
+        called = true;
+        return Promise.resolve({ text: '', usage: USAGE });
+      },
+    };
+    const second = await mintTodoCheckIn(deps(fs, spy), { bookId, focus: 'something else' });
+    expect(second.ok).toBe(false);
+    if (second.ok) return;
+    expect(second.message).toMatch(/already waiting/i);
+    expect(called).toBe(false);
   });
 });
 

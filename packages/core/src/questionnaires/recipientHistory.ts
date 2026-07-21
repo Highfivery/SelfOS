@@ -105,6 +105,47 @@ export async function gatherRecipientAskedPrompts(
  * asked. Decrypts each `ResponseSet` host-side; author-blind (fed only to the de-dup pass, never returned).
  * This finally implements the §19.1 claim (prior answers, not just prompts). Household recipients only.
  */
+/**
+ * Assemble the DEDICATED, prioritized de-dup reference for the semantic pass (08-questionnaires §23.5b) from
+ * the four already-gathered sources — a PURE function so every mint path shares one budgeting rule and can't
+ * drift (the auto-checkin engine, the manual bridge, and Your Story's biographer check-ins all call it).
+ *
+ * Each section gets its OWN character budget so a heavy onboarding can't truncate away the prior-questionnaire
+ * answers or the session/dream/test insight facts (the §23.5b bug this exists to prevent). Onboarding leads
+ * because it is the authoritative "we already have data for this". Empty sections drop out.
+ */
+export function buildDedupReference(inputs: {
+  /** `formatIntakeForGeneration(session).text` — the recipient's raw onboarding answers. */
+  intakeText: string;
+  /** `gatherRecipientPriorAnswers` — raw Q→A from prior questionnaires. */
+  priorAnswers: string;
+  /** `gatherRecipientInsightFacts` — distilled facts from sessions/dreams/tests/etc. */
+  insightFacts: string;
+  /** `gatherRecipientAskedPrompts` — the exact prompts already asked. */
+  priorPrompts: readonly string[];
+}): string {
+  const cap = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n)}\n…` : s);
+  const intake = inputs.intakeText.trim();
+  const priorAnswers = inputs.priorAnswers.trim();
+  const insightFacts = inputs.insightFacts.trim();
+  return [
+    intake
+      ? `ALREADY ANSWERED in their onboarding — do NOT re-ask ANY of this, including specific sub-preferences, acts, positions, kinks, and options they selected (e.g. MMF/FFM, particular porn genres, yes/no on an act):\n${cap(intake, 8000)}`
+      : '',
+    priorAnswers
+      ? `ALREADY ANSWERED in prior questionnaires (do NOT re-ask any of this):\n${cap(priorAnswers, 4000)}`
+      : '',
+    insightFacts
+      ? `ALREADY KNOWN about them from sessions, reflections, tests, and dreams (do NOT re-ask these):\n${cap(insightFacts, 3000)}`
+      : '',
+    inputs.priorPrompts.length
+      ? `ALREADY ASKED in prior questionnaires:\n${cap(inputs.priorPrompts.map((p) => `- ${p}`).join('\n'), 2000)}`
+      : '',
+  ]
+    .filter((s) => s.trim() !== '')
+    .join('\n\n');
+}
+
 export async function gatherRecipientPriorAnswers(
   fs: FileSystem,
   key: Uint8Array,

@@ -1323,6 +1323,132 @@ describe('Story (64)', () => {
     expect(await screen.findByText(/sent a few questions to your Inbox/i)).toBeInTheDocument();
   });
 
+  it('the Interview tab renders each gap by its lifecycle status: answered ✓ / waiting / an Ask button (§3.7)', async () => {
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGaps: () =>
+        Promise.resolve({
+          gaps: [
+            {
+              id: 'g-open',
+              dimension: 'a',
+              label: 'An open thread',
+              focus: 'Tell me more.',
+              priority: 9,
+              status: 'open',
+            },
+            {
+              id: 'g-asked',
+              dimension: 'b',
+              label: 'A waiting thread',
+              focus: 'Waiting on you.',
+              priority: 8,
+              status: 'asked',
+            },
+            {
+              id: 'g-answered',
+              dimension: 'c',
+              label: 'A told thread',
+              focus: 'Already told.',
+              priority: 7,
+              status: 'answered',
+            },
+          ],
+          partCoverage: [{ partId: 'p1', score: 0.5 }],
+          hasOpenCheckin: false,
+        }),
+      storyAnsweredCheckIns: () => Promise.resolve([]), // keep the "Answered" heading out of the way
+    });
+    renderStory();
+    await openTab('Interview');
+    // All three gaps render.
+    expect(await screen.findByText('An open thread')).toBeInTheDocument();
+    expect(screen.getByText('A waiting thread')).toBeInTheDocument();
+    expect(screen.getByText('A told thread')).toBeInTheDocument();
+    // The answered gap reads "Answered ✓"; the asked gap "Waiting in your Inbox"; only the OPEN gap offers the
+    // Ask button (so the "Answered" gap never re-offers an identical re-ask, §3.7).
+    expect(screen.getByText(/Answered/)).toBeInTheDocument();
+    expect(screen.getByText('Waiting in your Inbox')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Ask me about this' })).toHaveLength(1);
+  });
+
+  it('answers the author from a question comment (§3.3): the Ask button calls the bridge + the answer renders', async () => {
+    const questionComment = (answer?: string): ChapterMarkup => ({
+      schemaVersion: 1,
+      chapterId: 'c1',
+      marks: [
+        {
+          id: 'q1',
+          kind: 'comment',
+          anchor: { paragraphId: 'p0', quote: 'cut pine' },
+          intent: 'question',
+          text: 'Where did this come from?',
+          status: 'open',
+          createdAt: 'now',
+          ...(answer ? { answer, answeredAt: '2026-07-16' } : {}),
+        },
+      ],
+    });
+    const storyAnswerQuestion = vi.fn(() =>
+      Promise.resolve({
+        ok: true as const,
+        answer: 'That came from a coaching session.',
+        markup: questionComment('That came from a coaching session.'),
+      }),
+    );
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> => Promise.resolve(questionComment()),
+      storyAnswerQuestion,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    // A question comment offers "Ask your biographer" (no answer yet).
+    await userEvent.click(await screen.findByRole('button', { name: 'Ask your biographer' }));
+    expect(storyAnswerQuestion).toHaveBeenCalledWith({
+      bookId: 'b1',
+      chapterId: 'c1',
+      markId: 'q1',
+    });
+    // The returned answer renders at the paragraph.
+    expect(await screen.findByText('That came from a coaching session.')).toBeInTheDocument();
+  });
+
+  it('renders an existing biographer answer on a question comment (no re-ask button, §3.3)', async () => {
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGetMarkup: (): Promise<ChapterMarkup> =>
+        Promise.resolve({
+          schemaVersion: 1,
+          chapterId: 'c1',
+          marks: [
+            {
+              id: 'q1',
+              kind: 'comment',
+              anchor: { paragraphId: 'p0', quote: 'cut pine' },
+              intent: 'question',
+              text: 'Where did this come from?',
+              status: 'open',
+              createdAt: 'now',
+              answer: 'From a dream you recorded.',
+              answeredAt: '2026-07-16',
+            },
+          ],
+        }),
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    expect(await screen.findByText('From a dream you recorded.')).toBeInTheDocument();
+    // Already answered → no "Ask your biographer" button.
+    expect(screen.queryByRole('button', { name: 'Ask your biographer' })).not.toBeInTheDocument();
+  });
+
   it('the interview cadence fires storyInterviewCheck({auto:true}) on mount', async () => {
     const storyInterviewCheck = vi.fn(() => Promise.resolve({ outcome: 'throttled' as const }));
     installStoryBridge({

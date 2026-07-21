@@ -1956,22 +1956,35 @@ function InterviewTab({
                       {gap.focus}
                     </Text>
                   </div>
-                  <Button
-                    disabled={hasOpenCheckin || busy || asking !== null}
-                    onClick={async () => {
-                      setAsking(gap.id);
-                      setNotice(null);
-                      const res = await askGap(bookId, gap.id);
-                      setAsking(null);
-                      setNotice(
-                        res.ok
-                          ? 'Your biographer sent a few questions to your Inbox.'
-                          : res.message,
-                      );
-                    }}
-                  >
-                    {asking === gap.id ? 'Asking…' : 'Ask me about this'}
-                  </Button>
+                  {/* Lifecycle-aware (§3.7): an answered gap shows "Answered ✓" (never re-offers an identical
+                      re-ask that contradicts the "Answered" card below); a gap whose check-in is waiting shows
+                      that; only an open gap offers "Ask me about this". */}
+                  {gap.status === 'answered' ? (
+                    <Text size="sm" tone="tertiary">
+                      Answered <span aria-hidden="true">✓</span>
+                    </Text>
+                  ) : gap.status === 'asked' ? (
+                    <Text size="sm" tone="tertiary">
+                      Waiting in your Inbox
+                    </Text>
+                  ) : (
+                    <Button
+                      disabled={hasOpenCheckin || busy || asking !== null}
+                      onClick={async () => {
+                        setAsking(gap.id);
+                        setNotice(null);
+                        const res = await askGap(bookId, gap.id);
+                        setAsking(null);
+                        setNotice(
+                          res.ok
+                            ? 'Your biographer sent a few questions to your Inbox.'
+                            : res.message,
+                        );
+                      }}
+                    >
+                      {asking === gap.id ? 'Asking…' : 'Ask me about this'}
+                    </Button>
+                  )}
                 </div>
               ))}
             </Stack>
@@ -1984,7 +1997,8 @@ function InterviewTab({
           <Stack gap={2}>
             <Heading level={3}>Answered</Heading>
             <Text tone="tertiary" size="sm">
-              The biographer questions you’ve answered — each one wove new material into your story.
+              The biographer questions you’ve answered — your biographer folds them into your story
+              as it writes.
             </Text>
             <Stack gap={1}>
               {answered.map((c) => (
@@ -2003,8 +2017,8 @@ function InterviewTab({
       ) : null}
 
       <Text tone="tertiary" size="sm">
-        Questions arrive in your Inbox under “Your biographer”. Answering them weaves new material
-        into your story.
+        Questions arrive in your Inbox under “Your biographer”. Your answers feed the book as it
+        keeps writing.
       </Text>
     </Stack>
   );
@@ -3346,6 +3360,7 @@ function ChapterReader({
   const editPassage = useStoryStore((s) => s.editPassage);
   const pinQuote = useStoryStore((s) => s.pinQuote);
   const todoToQuestions = useStoryStore((s) => s.todoToQuestions);
+  const answerQuestion = useStoryStore((s) => s.answerQuestion);
   const exclude = useStoryStore((s) => s.exclude);
   const busy = useStoryStore((s) => s.chaptersGenerating);
   // Image placement (§3.8, Phase H3).
@@ -3374,6 +3389,8 @@ function ChapterReader({
   // The two-step "Rewrite this chapter" confirm (§8.2 spend legibility) + the History sheet (§13.9).
   const [confirmRewrite, setConfirmRewrite] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Answer-the-author (§3.3): the id of the question comment currently being answered.
+  const [answering, setAnswering] = useState<string | null>(null);
   const [openSources, setOpenSources] = useState<number | null>(null);
   const [activePara, setActivePara] = useState<number | null>(null);
   const [activeQuote, setActiveQuote] = useState<string | null>(null);
@@ -3445,6 +3462,16 @@ function ChapterReader({
     if (res.ok) await placeImage(res.image.id);
     else setImageError(res.message);
     setImageBusy(false);
+  };
+
+  // Answer-the-author (§3.3): the biographer replies to a "question" comment, grounded in that paragraph's
+  // sources (a metered `story.answer` call). The reply is stored on the mark + adopted into the markup.
+  const askBiographer = async (markId: string): Promise<void> => {
+    setAnswering(markId);
+    setError(null);
+    const res = await answerQuestion(bookId, chapterId, markId);
+    setAnswering(null);
+    if (!res.ok) setError(res.message);
   };
 
   const closeMenu = (): void => {
@@ -3955,6 +3982,24 @@ function ChapterReader({
                           <Text size="sm" tone="secondary">
                             ☐ {TODO_KIND_LABEL[m.todoKind] ?? 'To-do'}: {m.text}
                           </Text>
+                        ) : null}
+                        {/* Answer-the-author (§3.3): a "question" comment gets a real, provenance-grounded
+                            reply from the biographer — no longer a dead end. */}
+                        {m.kind === 'comment' && m.intent === 'question' ? (
+                          m.answer ? (
+                            <div className={styles.questionAnswer}>
+                              <Text size="sm">{m.answer}</Text>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              className={styles.sourcesToggle}
+                              disabled={answering === m.id}
+                              onClick={() => void askBiographer(m.id)}
+                            >
+                              {answering === m.id ? 'Asking…' : 'Ask your biographer'}
+                            </button>
+                          )
                         ) : null}
                         {m.kind === 'todo' && m.todoKind === 'remind' ? (
                           <button

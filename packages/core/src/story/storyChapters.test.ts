@@ -16,6 +16,7 @@ import type {
   StorySourceRef,
 } from '../schemas';
 import {
+  answerAuthorQuestion,
   applyMarkup,
   chapterParagraphs,
   generateBookChapters,
@@ -520,6 +521,112 @@ describe('generateBookChapters — the orchestrator (64 §5.3)', () => {
     expect((await getChapter(fs, key, 'me', bookId, 'c1'))?.markdown).toContain('Original prose'); // untouched
     expect((await getChapter(fs, key, 'me', bookId, 'c1'))?.status).toBe('reviewed');
     expect((await getChapter(fs, key, 'me', bookId, 'c2'))?.markdown).toContain('Fresh rewrite');
+  });
+});
+
+describe('answerAuthorQuestion — answer the author (64 §3.3)', () => {
+  /** Records the user message of every call so the grounding can be asserted. */
+  function capturingClient(text: string): { client: ClaudeClient; calls: ClaudeStreamOptions[] } {
+    const calls: ClaudeStreamOptions[] = [];
+    return {
+      calls,
+      client: {
+        send: async () => text,
+        stream: async (options) => {
+          calls.push(options);
+          return { text, usage: USAGE };
+        },
+      },
+    };
+  }
+
+  /** Seed a written c1 (its p0 provenance cites the seeded insight i1) with a `question` comment on p0. */
+  async function seedChapterWithQuestion(fs: ReturnType<typeof memFileSystem>): Promise<string> {
+    const bookId = await seedApprovedBook(fs);
+    await generateChapter(deps(fs, fakeClient('His father’s shop was always cold. [[SRC:s0]]')), {
+      bookId,
+      chapterId: 'c1',
+    });
+    await addMark(fs, key, 'me', bookId, 'c1', {
+      id: 'q1',
+      kind: 'comment',
+      anchor: { paragraphId: 'p0', quote: 'His father’s shop' },
+      intent: 'question',
+      text: 'Where did this come from?',
+      status: 'open',
+      createdAt: 'now',
+    });
+    return bookId;
+  }
+
+  it('stores a provenance-grounded reply on the question mark (the biographer’s receipts reach the prompt)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedChapterWithQuestion(fs);
+    const { client, calls } = capturingClient(
+      'That came from a coaching session where you described your father’s lathe and the open door.',
+    );
+    const res = await answerAuthorQuestion(deps(fs, client), {
+      bookId,
+      chapterId: 'c1',
+      markId: 'q1',
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+
+    // The reply is stored on the comment mark (with a timestamp) so it renders at the paragraph.
+    const mark = (await getMarkup(fs, key, 'me', bookId, 'c1')).marks.find((m) => m.id === 'q1');
+    expect(mark?.kind).toBe('comment');
+    if (mark?.kind !== 'comment') return;
+    expect(mark.answer).toContain('coaching session');
+    expect(mark.answeredAt).toBeTruthy();
+
+    // Grounded: the prompt carried the cited source's text (the paragraph's provenance → corpus item) AND the
+    // person's question — so the biographer answers from the receipts, not thin air.
+    const user = calls[0]!.messages
+      .map((m) => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n');
+    expect(user).toContain('His father worked a lathe with the door open to the cold.'); // the i1 fact
+    expect(user).toContain('Where did this come from?');
+  });
+
+  it('refuses a non-question mark and stores nothing', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedApprovedBook(fs);
+    await generateChapter(deps(fs, fakeClient('Cold prose. [[SRC:s0]]')), {
+      bookId,
+      chapterId: 'c1',
+    });
+    // An addContext comment is dialogue-for-the-biographer, not a question to answer.
+    await addMark(fs, key, 'me', bookId, 'c1', {
+      id: 'c1m',
+      kind: 'comment',
+      anchor: { paragraphId: 'p0', quote: 'Cold prose' },
+      intent: 'addContext',
+      text: 'add the winter detail',
+      status: 'open',
+      createdAt: 'now',
+    });
+    const res = await answerAuthorQuestion(deps(fs, fakeClient('unused')), {
+      bookId,
+      chapterId: 'c1',
+      markId: 'c1m',
+    });
+    expect(res.ok).toBe(false);
+    const mark = (await getMarkup(fs, key, 'me', bookId, 'c1')).marks.find((m) => m.id === 'c1m');
+    expect(mark?.kind === 'comment' ? mark.answer : undefined).toBeUndefined();
+  });
+
+  it('an empty reply is an honest failure and stores nothing on the mark', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedChapterWithQuestion(fs);
+    const res = await answerAuthorQuestion(deps(fs, fakeClient('   ')), {
+      bookId,
+      chapterId: 'c1',
+      markId: 'q1',
+    });
+    expect(res.ok).toBe(false);
+    const mark = (await getMarkup(fs, key, 'me', bookId, 'c1')).marks.find((m) => m.id === 'q1');
+    expect(mark?.kind === 'comment' ? mark.answer : undefined).toBeUndefined();
   });
 });
 

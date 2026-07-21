@@ -3985,6 +3985,11 @@ export const CommentMarkSchema = z.object({
   createdAt: z.string(),
   appliedRevision: z.number().int().nonnegative().optional(),
   flagInsightId: z.string().optional(),
+  // Answer-the-author (§3.3): a `question`-intent comment ("why is this here / where did this come from?")
+  // gets a provenance-grounded reply from the biographer, stored here + rendered at the paragraph. Additive-
+  // optional (no schemaVersion bump); only ever set on a `question` comment.
+  answer: z.string().optional(),
+  answeredAt: z.string().optional(),
 });
 
 export const DeleteMarkSchema = z.object({
@@ -4102,6 +4107,10 @@ export const StoryGapSchema = z.object({
   label: z.string(),
   focus: z.string(),
   priority: z.number(),
+  // The check-in `askGap` minted from this gap (§3.7 lifecycle) — persisted so answered/open is derivable on
+  // read. Additive-optional (no schemaVersion bump). `status` is DERIVED on read, never persisted.
+  assignmentId: z.string().optional(),
+  status: z.enum(['open', 'asked', 'answered']).optional(),
 });
 /** Persisted per-part coverage (§13.6.4) for the life map. */
 export const StoryPartCoverageSchema = z.object({
@@ -4504,6 +4513,19 @@ export type StoryQuestionsResult =
   | { ok: true; markup: ChapterMarkup; assignmentId: string }
   | { ok: false; reason: AiFailureReason | 'AI_OFF'; message: string };
 
+/** `story:answerQuestion` — the biographer answers a `question`-intent comment about a passage (§3.3, answer
+ *  the author). Grounded in the paragraph's provenance; the reply is stored on the mark. */
+export const StoryAnswerQuestionInputSchema = StoryChapterRefSchema.extend({
+  markId: z.string().min(1),
+});
+export type StoryAnswerQuestionInput = z.infer<typeof StoryAnswerQuestionInputSchema>;
+
+/** The result of an answer-the-author call: the chapter's updated markup (the answer stored on the comment) +
+ *  the answer text, or an honest failure (nothing stored). */
+export type StoryAnswerResult =
+  | { ok: true; markup: ChapterMarkup; answer: string }
+  | { ok: false; reason: AiFailureReason | 'AI_OFF'; message: string };
+
 /** `story:refreshCheck` — the living-book pass (§3.4): mark stale chapters (free) + auto-rewrite them (metered,
  *  weekly-capped in the auto cadence). `auto` distinguishes the throttled launch/focus cadence from a manual
  *  "Refresh now". Crisis suppression of the auto rewrite is computed host-side (never renderer-supplied). */
@@ -4604,6 +4626,12 @@ export interface StoryGap {
   /** The FOCUS brief the check-in minter uses (`generateQuestions` FOCUS = this). */
   focus: string;
   priority: number;
+  /** The check-in `askGap` minted from this gap (§3.7 lifecycle) — persisted so its answered/open state can be
+   *  derived on read. Absent until the gap has been asked. */
+  assignmentId?: string;
+  /** DERIVED on read by `getStoryGaps` (never persisted): `open` = askable; `asked` = a check-in is waiting;
+   *  `answered` = it was answered (so "Ask me about this" is retired and the row shows "Answered ✓"). */
+  status?: 'open' | 'asked' | 'answered';
 }
 
 /** Per-part coverage for the life map (§13.6.4) — how richly told each outline part is, 0..1. */

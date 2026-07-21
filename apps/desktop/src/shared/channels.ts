@@ -25,6 +25,8 @@ import type {
   StoryPinInput,
   StoryRemoveMarkInput,
   StoryQuestionsResult,
+  StoryAnswerQuestionInput,
+  StoryAnswerResult,
   BookReader,
   SharedBookSummary,
   StoryCompleteness,
@@ -358,6 +360,7 @@ export const IpcChannels = {
   storyExclude: 'story:exclude',
   storyUnexclude: 'story:unexclude',
   storyTodoToQuestions: 'story:todoToQuestions',
+  storyAnswerQuestion: 'story:answerQuestion',
   storyRefreshCheck: 'story:refreshCheck',
   storyProposals: 'story:proposals',
   storyResolveProposal: 'story:resolveProposal',
@@ -1213,6 +1216,9 @@ export interface SelfosBridge {
   /** Turn a to-do into a story check-in (§3.3.2/§5.5): mint an in-app self-send from the focus + record a
    *  `questionsSent` to-do. The one AI call here — honest AI_OFF/NO_KEY/failure, nothing persisted on failure. */
   storyTodoToQuestions(input: StoryTodoToQuestionsInput): Promise<StoryQuestionsResult>;
+  /** Answer a `question`-intent comment (§3.3, answer the author): the biographer replies about a passage,
+   *  grounded in that paragraph's provenance; the answer is stored on the mark. Metered `story.answer`. */
+  storyAnswerQuestion(input: StoryAnswerQuestionInput): Promise<StoryAnswerResult>;
   /** The living-book refresh pass (§3.4): mark stale chapters (free) + auto-rewrite them (metered, weekly-
    *  capped in the auto cadence). Marking stale runs even with AI off; the rewrite needs AI + budget. */
   storyRefreshCheck(input: StoryRefreshInput): Promise<StoryRefreshViewResult>;

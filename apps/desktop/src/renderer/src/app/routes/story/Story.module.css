@@ -1531,6 +1531,15 @@
   text-decoration: line-through;
 }
 
+/* The biographer's answer to a "question" comment (§3.3, answer the author) — a quiet inset reply. */
+.questionAnswer {
+  margin-top: var(--space-1);
+  padding: var(--space-2);
+  border-left: 2px solid var(--color-border-strong);
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-sm);
+}
+
 /* The "also flag the source insight" checkbox on a Fix-this comment. */
 .flagRow {
   display: flex;

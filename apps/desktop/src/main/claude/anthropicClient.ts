@@ -456,6 +456,15 @@ export function fakeClaudeClient(): ClaudeClient {
         return Promise.resolve({ text: prose, usage: STORY_USAGE });
       }
 
+      // Answer-the-author (§3.3): the biographer replies to a "question" comment about a passage. Matched by
+      // its distinctive framing so it returns a plain, grounded answer (not JSON, not a rewrite).
+      if (userText.includes('asked you a question about one passage')) {
+        return Promise.resolve({
+          text: 'That line came from a coaching session where you described your father’s shop.',
+          usage: STORY_USAGE,
+        });
+      }
+
       // The gap pass (§3.7): coverage + one prioritized gap so "Find what's missing" mints a check-in.
       if (userText.includes('the biographer taking stock')) {
         captureStoryPrompt('gap', options.system ?? '', userText);

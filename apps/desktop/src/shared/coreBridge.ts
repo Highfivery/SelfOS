@@ -197,6 +197,7 @@ import {
   StoryRemoveMarkInputSchema,
   StoryResolveProposalInputSchema,
   StoryTodoToQuestionsInputSchema,
+  StoryAnswerQuestionInputSchema,
   StoryUnexcludeInputSchema,
   StoryUpdateInputSchema,
   StoryUpdateMarkInputSchema,
@@ -217,6 +218,7 @@ import {
   type ImageGenProgress,
   type StoryFoundationsResult,
   type StoryQuestionsResult,
+  type StoryAnswerResult,
   type StoryCompleteness,
   type StoryCorpusStats,
   type StoryHomeSignal,
@@ -415,6 +417,7 @@ import {
   addExclusion,
   addMark,
   applyFoundations,
+  answerAuthorQuestion,
   applyMarkup,
   approveOutline,
   createBook,
@@ -434,7 +437,8 @@ import {
   listBookTypes,
   listBooks,
   markStaleChapters,
-  mintStoryCheckInFromTodo,
+  mintTodoCheckIn,
+  resolveSentQuestionTodos,
   bookMentionsReader,
   buildDraftHtml,
   buildDraftMarkdown,
@@ -4878,6 +4882,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const personId = await activePersonId();
       if (!personId) return { schemaVersion: 1, todos: [] };
+      // Self-heal any "Questions sent" to-do whose check-in has since been answered/closed (§3.7) — it used to
+      // sit in the "Needs you" count forever. Free, no AI; the read reflects the fresh state.
+      await resolveSentQuestionTodos(ctx.fs, ctx.key, personId, bookId);
       return getTodos(ctx.fs, ctx.key, personId, bookId);
     },
     storyExclusions: async (input): Promise<ExclusionItem[]> => {
@@ -4927,7 +4934,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           message: 'Turn on AI in Settings to gather answers.',
         };
       }
-      const res = await mintStoryCheckInFromTodo(deps, { bookId, focus });
+      // Honors the ≤1-open-check-in invariant + records askedPrompts/openCheckin (§3.7) — so a "Turn into
+      // questions" to-do can't pile a second check-in on a gap check-in, and the gap pass won't re-ask its topic.
+      const res = await mintTodoCheckIn(deps, { bookId, focus });
       if (!res.ok) return { ok: false, reason: res.reason, message: res.message };
       // Record the to-do only AFTER the mint succeeds (so a failed mint leaves no dangling questionsSent to-do).
       const mark: MarkupMark = {
@@ -4942,6 +4951,19 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       };
       const markup = await addMark(deps.fs, deps.key, deps.personId, bookId, chapterId, mark);
       return { ok: true, markup, assignmentId: res.assignmentId };
+    },
+    storyAnswerQuestion: async (input): Promise<StoryAnswerResult> => {
+      const { bookId, chapterId, markId } = StoryAnswerQuestionInputSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to ask your biographer.',
+        };
+      }
+      return answerAuthorQuestion(deps, { bookId, chapterId, markId });
     },
     storyRefreshCheck: async (input): Promise<StoryRefreshViewResult> => {
       const { bookId, auto } = StoryRefreshInputSchema.parse(input);
@@ -7689,6 +7711,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         // so the count stays a monotonic "responses received" tally. Counting only 'submitted' would make
         // analyzing one a 2→1 decrease, which `onIncrease` never re-surfaces, hiding a still-pending one.
         if (a.status !== 'submitted' && a.status !== 'analyzed') continue;
+        // Skip a SELF-send (sender === recipient): a biographer story check-in and a self-targeted auto
+        // check-in are both self-sends, so counting them would raise a "<Your name> answered …" bell about
+        // yourself for answering your own questions. Their answers still reach the book/insights normally.
+        if (a.recipient.kind === 'person' && a.recipient.personId === personId) continue;
         counts.set(a.questionnaireId, (counts.get(a.questionnaireId) ?? 0) + 1);
         const cur = latest.get(a.questionnaireId);
         if (!cur || a.updatedAt > cur.updatedAt) latest.set(a.questionnaireId, a);

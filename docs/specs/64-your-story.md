@@ -1327,3 +1327,38 @@ holds (renderer-computed, the Home precedent) the Studio hero + Interview tab su
 
 **Adaptive-thinking fix.** The story AND dream image distillation calls now pass
 `extendedThinking: false` (a 400-token bounded output; the documented starvation class).
+
+### 13.10 Interview-loop coherence & answer-the-author (2026-07-20, BUILT)
+
+The audit's second cluster: the biographer interview loop contradicted itself and dead-ended. Fixed on
+`fix/story-interview-loop`.
+
+**De-dup parity (§3.7, closing the §23.5 drift).** A biographer check-in is a SELF-send, and
+`mintStoryCheckInFromTodo` passed `existingPrompts: []` with no `dedupReference` — so it could re-ask what
+onboarding or a prior questionnaire already answered ("reads like it hasn't read your file"). It now
+assembles the SAME budgeted reference the auto-checkin engine uses — extracted into ONE shared pure
+`buildDedupReference` (recipientHistory.ts) so the two can't drift — over the person's own history
+(onboarding-first) + the exact asked-prompt list, and passes them into `generateQuestions`. Author-blind.
+
+**Gap lifecycle (§3.7).** A `StoryGap` gains a persisted `assignmentId` (`askGap` stamps it) and a
+DERIVED `status` (`getStoryGaps` reads the check-in's state on the fly): `open` → askable; `asked` → a
+check-in is waiting; `answered` → it was answered. "Worth telling next" renders each honestly — an
+answered gap shows "Answered ✓" and never re-offers an identical re-ask that contradicted the "Answered"
+card; `askGap` refuses re-asking an already-answered gap. Corrected the moment a check-in is answered
+(from the Inbox, anywhere), not only at the next metered gap pass.
+
+**`questionsSent` to-dos resolve.** A "Turn into questions" to-do stamped `questionsSent` and nothing
+flipped it, so it sat in the Studio "Needs you" count forever. `resolveSentQuestionTodos` (free, no AI)
+flips it to `done` once its check-in resolves; the bridge runs it on the todos read, so the count
+self-heals. The to-do mint now routes through `mintTodoCheckIn`, which honors the ≤1-open-check-in
+invariant (can't pile a second check-in on a gap check-in) + records `askedPrompts`/`openCheckin`.
+
+**Self-send bell.** `notificationsResponsesArrived` skipped: a story check-in (and a self-targeted auto
+check-in) is a self-send, so answering it raised a "<Your name> answered …" bell about yourself. It now
+skips a send whose recipient is the sender.
+
+**Answer-the-author (§3.3).** The comment "Ask" intent was recorded and never answered — a dead end. Now
+`answerAuthorQuestion` (metered `story.answer`) replies to a `question` comment grounded in that
+paragraph's provenance (the corpus items it actually cited), so the biographer can honestly say "this came
+from a coaching session where you described…" — and plainly say when the record doesn't support an answer
+(never invent). The reply renders inline at the paragraph and persists on the mark.

@@ -76,7 +76,7 @@ export function TogetherSession(): JSX.Element {
 
   // Stream the coach reply into the live bubble; refresh on a synced partner message (§3.6).
   useEffect(() => {
-    const offChunk = window.selfos?.onTogetherChunk((delta) => appendTogetherChunk(delta));
+    const offChunk = window.selfos?.onTogetherChunk((chunk) => appendTogetherChunk(chunk));
     const offVault = window.selfos?.onVaultChanged(() => {
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => void refresh(), 400);

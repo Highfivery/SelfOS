@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { TogetherSessionView, TogetherTurnResult } from '@shared/schemas';
-import { useTogetherStore } from './togetherStore';
+import { appendTogetherChunk, useTogetherStore } from './togetherStore';
 import { useSessionStore } from './sessionStore';
 import { clearMockBridge, installMockBridge } from '../test-utils/bridge';
 
@@ -159,5 +159,24 @@ describe('togetherStore — no forced navigation when a turn resolves after swit
 
     expect(useTogetherStore.getState().open?.id).toBe('B');
     expect(useTogetherStore.getState().open?.topic).toBeUndefined();
+  });
+
+  it('appendTogetherChunk applies a delta only for the open+sending session, drops the rest', () => {
+    // Viewing B and actively sending in B.
+    useTogetherStore.setState({ open: view('B'), sending: true, streaming: '' });
+
+    // A chunk from a DIFFERENT session (A, still streaming in the background) is dropped — no bleed.
+    appendTogetherChunk({ sessionId: 'A', delta: 'from A' });
+    expect(useTogetherStore.getState().streaming).toBe('');
+
+    // A chunk for the open session is appended.
+    appendTogetherChunk({ sessionId: 'B', delta: 'hi ' });
+    appendTogetherChunk({ sessionId: 'B', delta: 'there' });
+    expect(useTogetherStore.getState().streaming).toBe('hi there');
+
+    // Once not sending (e.g. after navigating), even the open session's late deltas are ignored.
+    useTogetherStore.setState({ sending: false });
+    appendTogetherChunk({ sessionId: 'B', delta: '!' });
+    expect(useTogetherStore.getState().streaming).toBe('hi there');
   });
 });

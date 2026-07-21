@@ -148,6 +148,7 @@ import {
   type TogetherSessionSummary,
   type TogetherSessionView,
   type TogetherParticipant,
+  type TogetherChunk,
   type TogetherCreateResult,
   type TogetherTurnResult,
   TogetherSendMessageInputSchema,
@@ -762,8 +763,9 @@ export interface BridgeHost {
   emitDreamChunk(chunk: string): void;
   /** Deliver an intake interview reply chunk to the renderer (separate channel from chat/dreams). */
   emitIntakeChunk(chunk: string): void;
-  /** Deliver a Together couples-turn reply chunk to the renderer (separate sink from chat, 58 §5.4). */
-  emitTogetherChunk(chunk: string): void;
+  /** Deliver a Together couples-turn reply chunk to the renderer (separate sink from chat, 58 §5.4). The chunk
+   *  carries its `sessionId` so the renderer can drop deltas for a session the viewer navigated away from. */
+  emitTogetherChunk(chunk: TogetherChunk): void;
   /** Deliver a "Share a memory" biographer-chat reply chunk to the renderer (separate sink, 64 §14). */
   emitMemoryChunk(chunk: string): void;
   /** Deliver a Your Story create-and-draft progress update to the renderer (64 §3.2, its own channel). */
@@ -808,7 +810,7 @@ export interface BridgeHost {
   /** Subscribe to streamed intake interview chunks; the counterpart to `emitIntakeChunk`. */
   onIntakeChunk(listener: (delta: string) => void): () => void;
   /** Subscribe to streamed Together couples-turn chunks; the counterpart to `emitTogetherChunk`. */
-  onTogetherChunk(listener: (delta: string) => void): () => void;
+  onTogetherChunk(listener: (chunk: TogetherChunk) => void): () => void;
   /** Subscribe to streamed "Share a memory" chunks; the counterpart to `emitMemoryChunk`. */
   onMemoryChunk(listener: (delta: string) => void): () => void;
   /** Subscribe to Your Story draft-progress updates; the counterpart to `emitStoryProgress`. */
@@ -2696,7 +2698,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(privateAside ? { privateAside: true } : {}),
         ...(attachments && attachments.length > 0 ? { attachments } : {}),
         ...(allAdultAcked ? { allAdultAcked: true } : {}),
-        onDelta: (delta) => host.emitTogetherChunk(delta),
+        onDelta: (delta) => host.emitTogetherChunk({ sessionId, delta }),
         now: new Date(),
       });
       return togetherTurnResult(c.fs, c.key, session, c.personId, outcome);
@@ -2783,7 +2785,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         session,
         authorPersonId: c.personId,
         ...(allAdultAcked ? { allAdultAcked: true } : {}),
-        onDelta: (delta) => host.emitTogetherChunk(delta),
+        onDelta: (delta) => host.emitTogetherChunk({ sessionId, delta }),
         now: new Date(),
       });
       return togetherTurnResult(c.fs, c.key, session, c.personId, outcome);

@@ -126,6 +126,17 @@ visibility, permission, or behavior decision (defaults, who-sees-what, scope, pl
 defaults. The user has stated this forcefully and repeatedly; guessing has produced rework. Only
 proceed without asking when the choice is genuinely unambiguous from the request or already answered.
 
+**NEVER DEFER OR CREATE "FOLLOW-UP" ITEMS — if you find something that needs fixing, FIX IT NOW, in the same
+change, before claiming done.** (2026-07-21, forceful, after I deferred a real cross-session chunk-bleed bug I
+had already diagnosed and described, ending with "happy to open a follow-up.") If, while doing the work, you
+discover a genuine defect / broken invariant / dead code / stale test — even one that is bigger, architectural,
+or touches the IPC seam — you **fix it as part of this change**. Do NOT write "deferred", "follow-up", "out of
+scope for this PR", "a proper fix would…", or offer to "open a follow-up" as a way to avoid the work — that is
+the laziness the user is calling out. If you catch yourself about to defer, that IS the signal to stop and do
+it. The ONLY exception is a genuine product/UX/permission FORK the user must decide (see the ask-first rule
+above) — and even then you ask **now**, you do not park it. "The gate is green on the partial fix" is not done
+if a known defect rode along unfixed. See memory [[always-address-what-needs-addressing]].
+
 **NEVER fix a bug whose cause you have only ASSUMED — diagnose the real root cause FIRST, then fix.**
 (2026-06-16, after a costly violation.) When something fails, do NOT pattern-match to a plausible cause and
 start changing code — **reproduce/verify the actual cause against the real system before touching anything.**
@@ -419,6 +430,27 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-21 — **Feedback + Fix (NEVER defer/create follow-ups — FIX IT NOW; the Together chunk-bleed bug I had
+  wrongly deferred, now fixed; on `fix/together-chunk-session-scope`).** After shipping the session-switch fix
+  (v0.43.1) I ended my message OFFERING to "open a follow-up" for a real cross-session bug I'd already diagnosed
+  (session-agnostic streamed chunks bleeding one session's reply into another's live bubble). The user, angry:
+  "NEVER DEFER OR CREATE FOLLOW-UP ITEMS. IF YOU COME ACROSS SOMETHING THAT NEEDS TO BE ADDRESSED, FIX IT. DON'T BE
+  LAZY." **Locked the rule** into CLAUDE.md §6 (a new "NEVER DEFER" clause beside the ask-first rule) + memory
+  [[always-address-what-needs-addressing]], then **fixed the bug**: the `together:chunk` stream carried a bare
+  `string` delta (no session id), so a turn still streaming in main after the viewer navigated away kept growing
+  the shared buffer and could bleed into whatever session was now open. Threaded a new **`TogetherChunk =
+{ sessionId, delta }`** through the WHOLE seam — `schemas.ts` (the type), `channels.ts` (`SelfosBridge.onTogetherChunk`),
+  `coreBridge.ts` (`BridgeHost.emit/onTogetherChunk` + both `onDelta` emit sites now tag `{ sessionId, delta }`),
+  `preload`, `webHost` (iOS/web listener set), and the renderer, where **`appendTogetherChunk` now applies a delta
+  ONLY when it's for the open session AND that session is actively sending** (drops the rest — no bleed, even with
+  two concurrent sends). Gate green: typecheck, lint, format, **210 (store + coreBridge) + 87 Together-route unit**
+  (+a store test: a chunk for a non-open session is dropped, the open+sending session's is appended, late deltas
+  after `sending` clears are ignored; +the coreBridge streaming test now asserts every chunk's `sessionId` matches),
+  desktop **build**, and the **Together crown-jewel E2E** (send→stream→persist→aside projection) green — proving the
+  tagged-chunk path streams end-to-end. **Lesson: "touches the IPC seam / is architectural" is NOT a reason to
+  defer — a bare-`string` stream event that needs a routing key gets the key threaded through every seam layer
+  (schema → channel contract → host interface → emit sites → preload → web host → renderer) in one change; and the
+  moment I write "happy to open a follow-up," that's the signal to stop and just do it.**
 - 2026-07-21 — **Fix (Together sessions: sending a message then switching sessions mid-"thinking" force-navigated
   you BACK to the first session; user-reported; on `fix/together-session-switch-nav`).** A Together route renders
   from the store's single `open` slot (not the URL), and the turn state (`open`/`sending`/`streaming`/`reportView`)

@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IpcChannels, type AppPlatform, type SelfosBridge } from '../shared/channels';
+import type { TogetherChunk } from '../shared/schemas';
 
 // `process.platform` is available in the sandboxed preload (a subset of `process` is exposed). It
 // drives the titlebar's per-platform window-control layout (02-app-shell §13); anything unexpected
@@ -435,7 +436,7 @@ const bridge: SelfosBridge = {
     };
   },
   onTogetherChunk: (listener) => {
-    const handler = (_event: unknown, delta: string): void => listener(delta);
+    const handler = (_event: unknown, chunk: TogetherChunk): void => listener(chunk);
     ipcRenderer.on(IpcChannels.togetherChunk, handler);
     return () => {
       ipcRenderer.removeListener(IpcChannels.togetherChunk, handler);

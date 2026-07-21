@@ -182,6 +182,7 @@ import type {
   SessionStatus,
   SessionSummaryResult,
   TestResult,
+  TogetherChunk,
   TogetherCreateResult,
   TogetherSessionSummary,
   TogetherSessionView,
@@ -1516,8 +1517,9 @@ export interface SelfosBridge {
     sessionId: string;
     fromMessageId: string;
   }): Promise<TogetherSessionView | null>;
-  /** Subscribe to streamed couples-turn reply chunks (a separate sink from chat — §5.4). */
-  onTogetherChunk(listener: (delta: string) => void): () => void;
+  /** Subscribe to streamed couples-turn reply chunks (a separate sink from chat — §5.4). Each chunk carries
+   *  its `sessionId` so the consumer can drop deltas for a session the viewer has navigated away from. */
+  onTogetherChunk(listener: (chunk: TogetherChunk) => void): () => void;
   /** Open (or return) the caller's OWN private prep thread for a session (§3.7) — an ordinary conversation. */
   togetherPrepOpen(input: { sessionId: string }): Promise<Conversation | null>;
   /** Store an image attachment under the session's own folder (§6.1); a calm reject on mime/size. */

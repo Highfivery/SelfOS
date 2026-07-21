@@ -714,6 +714,15 @@ No open questions remain; the spec is Approved and ready for the Phase A slice (
 
 ## 12. Changelog
 
+- 2026-07-20 — **§13.9 Trust repairs & the draft vault BUILT** (`fix/story-trust-repairs`): protected
+  blocks/pinned quotes enforced (PRESERVE + `enforceProtected`) on EVERY generation path, not just
+  revisions; `runClaude` truncation continuation (66 §5.1) + honest `TRUNCATED` refusal for chapters
+  (never persist a half-finished chapter) + trailing `[[…` fragment strip; per-chapter version history
+  (`history/<id>.enc`, cap 20) + the History sheet (compare + restore-any, restore itself undoable) +
+  whole-draft `archive/<ts>/` (keep 3) before rewrite-from-scratch; honest outcome states (`aiOff`
+  outcome + `throttleReason`, budget/cap-aware refresh notices, begin-flow AI gating, the commission CTA
+  renamed "Write my book", a rewrite confirm); the §8.2 crisis footer + "biographer is resting" quiet
+  state finally on the surface; `extendedThinking: false` on the story + dream image distillation calls.
 - 2026-07-15 — created (Draft). Eight foundational decisions locked with the owner this date:
   all-data corpus with draft-level curation and one book (draft → published head); encrypted at
   rest with .md/PDF export; third-person default voice; hybrid auto updates; both interview
@@ -1262,3 +1271,59 @@ lastPublishedAtSeen }` (one writer: the reader; additive schema). The author's S
 4. **Single-book UI stays**; the bookshelf over the N-book backend is a named fast-follow.
 5. **Rewrite from scratch** semantics per §13.6.6.
 6. Reader typography details (drop cap, pull-quotes, three-step aA) ship as mocked.
+
+### 13.9 Trust repairs & the draft vault (2026-07-20, BUILT)
+
+A deep audit (2026-07-20) found four classes of silent trust breaks between the feature's promises and
+its wiring. All are fixed as one slice (`fix/story-trust-repairs`); the owner authorized the full set.
+
+**Protected words survive EVERY rewrite path.** `enforceProtected` previously ran only in `applyMarkup`,
+so a stale-chapter auto-rewrite or one-click "Rewrite this chapter" silently dropped the person's
+protected blocks/pinned quotes from the prose while the record still claimed them. Now `generateChapter`
+(a) reads the existing chapter first and carries its protected/pinned texts into the chapter prompt as a
+PRESERVE block (the same contract the revision prompt always had), and (b) code-enforces them after the
+call — §5.3's "after any (re)generation" is finally true. `applyMarkup` additionally enforces against
+the **live re-read** chapter, so a passage pinned during the slow revision call survives that revision.
+
+**Truncation is detected, continued, and never persisted as complete.** `runClaude` (every one-shot
+pass, story and questionnaires alike) now streams through `streamWithContinuation` (66 §5.1): a reply
+that stops at `max_tokens` is transparently continued (≤2 continuations, budget re-checked before each,
+usage summed into the one metered event). A reply STILL truncated after that surfaces
+`truncated: true`; `generateChapter`/`applyMarkup` refuse it honestly (`TRUNCATED`, nothing persisted) —
+a book chapter ending mid-scene must never save as finished. `stripSourceMarkers` also strips a
+trailing unterminated `[[…` fragment defensively so a half marker can never render.
+
+**The draft vault (chapter version history).** Drafts are sacred: every rewrite/revision archives the
+text it replaces to `history/<chapterId>.enc` (`ChapterVersion` = markdown + provenance + signature +
+reason `rewrite`/`revision`/`restore`, capped at `CHAPTER_HISTORY_CAP = 20`). The Shape surface gains a
+**History sheet** (the shared `.sheet*` chrome): versions newest-first (reason + date + word count),
+per-version **Compare** (the word-diff against the current text, prose fetched one version at a time via
+`story:chapterVersion` — list entries carry no prose) and **Restore** behind a two-step confirm.
+Restoring archives the current text first (reason `restore` — restoring is itself undoable), takes the
+version's markdown/provenance/signature as a new revision (`status: 'updated'`, `previousMarkdown` set
+so the ribbon diff shows what the restore changed), and re-enforces protected/pinned texts. Seam:
+`story:chapterHistory` / `story:chapterVersion` / `story:restoreChapterVersion`, gated `story.own` +
+active-person-scoped. **Rewrite-from-scratch archives the whole drafted state** (manifest incl.
+essence/title, outline, timeline, chapters + history — raw encrypted copies, nothing decrypted) into
+`archive/<timestamp>/` before discarding, keeping the newest `ARCHIVE_KEEP = 3`; no archive UI yet
+(deliberate — the safety net ships first, a browser can follow).
+
+**Honest states.** The interview check returns `aiOff` (distinct from `throttled`) when AI is off/no
+key, and `throttled` carries a `throttleReason` (`weeklyCap` / `interval` / `backoff`) — the Interview
+tab explains each (role-aware AI-unavailable copy; "already took stock twice this week"; the expired
+check-in back-off) instead of a false "check back later". The manual refresh notice distinguishes
+`budgetReached` ("the AI budget for this period is used up") and `capped` ("weekly allowance") from
+AI-off, and never says "turn on AI" when it is on. The begin flow gates on resolved AI readiness (the
+role-aware `AiUnavailableNotice`; Begin/commission disabled) instead of letting the create succeed and
+the draft strand the person on NeedsOutline; the commission CTA is renamed **"Write my book"** (the
+click commissions the whole first draft, not just an outline). "Rewrite this chapter" gains a two-step
+confirm stating what is kept (§8.2 spend legibility).
+
+**Crisis surfacing (§8.2, finally built).** The story surfaces render the standard `CrisisFooter`
+(invitation, commission, Studio, Shape, NeedsOutline, the writing screen — not inside the immersive
+reader, whose colophon carries the wellness line), and while `aggregateCrisisSignal(...).recurring`
+holds (renderer-computed, the Home precedent) the Studio hero + Interview tab surface the quiet state —
+"Your biographer is resting while things are heavy" — instead of the cadences silently pausing.
+
+**Adaptive-thinking fix.** The story AND dream image distillation calls now pass
+`extendedThinking: false` (a 400-token bounded output; the documented starvation class).

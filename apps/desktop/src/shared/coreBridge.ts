@@ -175,6 +175,7 @@ import {
   StoryAskGapInputSchema,
   StoryBookRefSchema,
   StoryChapterRefSchema,
+  StoryChapterVersionInputSchema,
   StoryExportInputSchema,
   StoryGenerateImageInputSchema,
   StoryImageRefSchema,
@@ -202,6 +203,8 @@ import {
   type BookManifest,
   type BookReader,
   type ChapterMarkup,
+  type ChapterVersion,
+  type StoryChapterHistoryView,
   type ExclusionItem,
   type MarkupMark,
   type SharedBookSummary,
@@ -424,6 +427,7 @@ import {
   getBook,
   getBookType,
   getChapter,
+  getChapterHistory,
   getExclusions,
   getMarkup,
   getTodos,
@@ -473,8 +477,10 @@ import {
   writeReadReceipt,
   runStoryInterviewCadence,
   removeMark,
+  restoreChapterVersion,
   saveChapter,
   saveOutline,
+  countWords,
   updateBook,
   updateMark,
 } from '@selfos/core/story';
@@ -4737,6 +4743,57 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       });
       return readBookBundle(ctx.fs, ctx.key, personId, bookId);
     },
+    // --- Chapter version history (§13.9) — non-AI, gated `story.own` + active-person-scoped ---
+    storyChapterHistory: async (input): Promise<StoryChapterHistoryView> => {
+      const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { chapterId, versions: [] };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { chapterId, versions: [] };
+      const history = await getChapterHistory(ctx.fs, ctx.key, personId, bookId, chapterId);
+      // Newest first, list entries only — a 20-deep history of 5,000-word chapters is a heavy payload, so
+      // the prose crosses IPC one version at a time via storyChapterVersion.
+      return {
+        chapterId,
+        versions: history.versions
+          .map((v) => ({
+            revision: v.revision,
+            savedAt: v.savedAt,
+            reason: v.reason,
+            words: countWords(v.markdown),
+          }))
+          .reverse(),
+      };
+    },
+    storyChapterVersion: async (input): Promise<ChapterVersion | null> => {
+      const { bookId, chapterId, revision } = StoryChapterVersionInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const history = await getChapterHistory(ctx.fs, ctx.key, personId, bookId, chapterId);
+      return history.versions.find((v) => v.revision === revision) ?? null;
+    },
+    storyRestoreChapterVersion: async (input): Promise<StoryBookBundle | null> => {
+      const { bookId, chapterId, revision } = StoryChapterVersionInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const restored = await restoreChapterVersion(
+        ctx.fs,
+        ctx.key,
+        personId,
+        bookId,
+        chapterId,
+        revision,
+        new Date(),
+      );
+      if (!restored) return null;
+      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
+    },
     // --- Markup layer (§3.3) — non-AI ops gated `story.own` + active-person-scoped ---
     storyGetMarkup: async (input): Promise<ChapterMarkup> => {
       const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
@@ -5032,11 +5089,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const personId = await activePersonId();
       if (!personId) return { outcome: 'noBook' };
-      // The gap pass + mint need a real key + AI on; without them, the cadence is a no-op (never a NO_KEY spend).
+      // The gap pass + mint need a real key + AI on; without them, the cadence is a no-op (never a NO_KEY
+      // spend). The outcome is the HONEST `aiOff` — a fully-clickable "Find what's missing" rendering as
+      // "check back later" with AI off is the prerequisite-absent-silence class the DoD forbids.
       const deps = await aiDeps('story.own');
       const aiReady =
         deps && deps.apiKey && (await readVaultSettingsValues(deps.fs))['ai.enabled'] !== false;
-      if (!deps || !aiReady) return { outcome: 'throttled' };
+      if (!deps || !aiReady) return { outcome: 'aiOff' };
       // The auto cadence never spends during recurring distress — computed HOST-SIDE from the person's own
       // approved insights (the storyRefreshCheck precedent), so it doesn't depend on the renderer.
       let crisis = false;

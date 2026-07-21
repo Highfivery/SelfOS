@@ -5,10 +5,13 @@ import type {
   AlignmentResult,
   BookManifest,
   ChapterMarkup,
+  ChapterVersion,
   ExclusionItem,
   StoryBookBundle,
   StoryBookTypeView,
   StoryChaptersResult,
+  StoryChapterHistoryView,
+  StoryChapterVersionInput,
   StoryDraftProgress,
   ImageGenProgress,
   StoryChapterRef,
@@ -340,6 +343,9 @@ export const IpcChannels = {
   storyGenerateChapters: 'story:generateChapters',
   storyRegenerateChapter: 'story:regenerateChapter',
   storyReviewChapter: 'story:reviewChapter',
+  storyChapterHistory: 'story:chapterHistory',
+  storyChapterVersion: 'story:chapterVersion',
+  storyRestoreChapterVersion: 'story:restoreChapterVersion',
   storyGetMarkup: 'story:getMarkup',
   storyMark: 'story:mark',
   storyUpdateMark: 'story:updateMark',
@@ -1173,6 +1179,14 @@ export interface SelfosBridge {
   storyRegenerateChapter(input: StoryChapterRef): Promise<StoryChaptersResult>;
   /** Mark a chapter reviewed (§3.3.1) — only Reviewed content publishes. Returns the fresh bundle. */
   storyReviewChapter(input: StoryChapterRef): Promise<StoryBookBundle | null>;
+  /** A chapter's archived versions, newest first (§13.9) — list entries only (no prose; fetch one via
+   *  `storyChapterVersion`). Empty when nothing's been superseded yet. */
+  storyChapterHistory(input: StoryChapterRef): Promise<StoryChapterHistoryView>;
+  /** One archived version in full (markdown + provenance) for the History sheet's compare. Null if gone. */
+  storyChapterVersion(input: StoryChapterVersionInput): Promise<ChapterVersion | null>;
+  /** Restore an archived version as a NEW revision (§13.9 — the current text is archived first, so restoring
+   *  is itself undoable). Returns the fresh bundle, or null when the chapter/version is gone. */
+  storyRestoreChapterVersion(input: StoryChapterVersionInput): Promise<StoryBookBundle | null>;
   /** The chapter's markup layer (the suggestion layer — comments, deletes, to-dos) for the draft view (§3.3). */
   storyGetMarkup(input: StoryChapterRef): Promise<ChapterMarkup>;
   /** Add a mark (comment · delete · to-do) to a chapter's suggestion layer. Returns the updated layer. */

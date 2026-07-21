@@ -3864,6 +3864,32 @@ export const BookChapterSchema = z.object({
 });
 export type BookChapter = z.infer<typeof BookChapterSchema>;
 
+// --- Chapter version history (the draft vault, 64 §13.9) --------------------------------------------------
+
+/** One SUPERSEDED version of a chapter's prose, archived the moment a rewrite/revision/restore replaces it.
+ *  Carries the provenance + freshness signature it had, so restoring a version reinstates a coherent chapter
+ *  (its source popovers + staleness keep working). `reason` = what replaced this version. */
+export const ChapterVersionSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  markdown: z.string(),
+  provenance: z.array(ChapterProvenanceEntrySchema).default([]),
+  sourceSignature: z.string().default(''),
+  savedAt: z.string(),
+  reason: z.enum(['rewrite', 'revision', 'restore']),
+});
+export type ChapterVersion = z.infer<typeof ChapterVersionSchema>;
+
+/** `history/<chapterId>.enc` — a chapter's superseded versions, oldest→newest, capped at
+ *  `CHAPTER_HISTORY_CAP` (the oldest drop off). Drafts are sacred: every AI rewrite and batch revision
+ *  archives the text it replaced, so nothing the biographer wrote (or the person shaped) is ever silently
+ *  destroyed — the History sheet lists these with compare + restore-any. */
+export const ChapterHistorySchema = z.object({
+  schemaVersion: z.literal(1),
+  chapterId: z.string().min(1),
+  versions: z.array(ChapterVersionSchema).default([]),
+});
+export type ChapterHistory = z.infer<typeof ChapterHistorySchema>;
+
 /** One part of the published TOC — the part title + its published chapter ids, in order (§3.6). */
 export const PublishedPartSchema = z.object({
   id: z.string().min(1),
@@ -4436,6 +4462,28 @@ export const StoryPinInputSchema = StoryChapterRefSchema.extend({
 });
 export type StoryPinInput = z.infer<typeof StoryPinInputSchema>;
 
+/** `story:chapterHistory` — the version list for the History sheet (64 §13.9). List entries carry NO prose
+ *  (a 20-deep history of 5,000-word chapters would be a heavy IPC payload); the sheet fetches one version's
+ *  full text via `story:chapterVersion` when the person opens a compare. Newest first. */
+export interface StoryChapterVersionInfo {
+  revision: number;
+  savedAt: string;
+  reason: 'rewrite' | 'revision' | 'restore';
+  /** Word count of that version — the at-a-glance size cue in the list. */
+  words: number;
+}
+export interface StoryChapterHistoryView {
+  chapterId: string;
+  versions: StoryChapterVersionInfo[];
+}
+
+/** `story:chapterVersion` / `story:restoreChapterVersion` — fetch/restore one archived version by its
+ *  revision number (revisions are unique within a chapter's history). */
+export const StoryChapterVersionInputSchema = StoryChapterRefSchema.extend({
+  revision: z.number().int().nonnegative(),
+});
+export type StoryChapterVersionInput = z.infer<typeof StoryChapterVersionInputSchema>;
+
 /** The renderer-facing result of the batch markup revision (§3.3.1): the fresh bundle + the chapter's updated
  *  markup layer on success, or an honest failure (incl. an honest no-op when nothing's pending). */
 export type StoryRevisionResult =
@@ -4619,9 +4667,16 @@ export type StoryInterviewOutcome =
   | 'throttled'
   | 'crisis'
   | 'noGaps'
-  | 'noBook';
+  | 'noBook'
+  // AI is off / no key — distinct from `throttled` so the UI can say HOW to enable it (the honest-states
+  // rule: a prerequisite-absent feature must never render as "check back later").
+  | 'aiOff';
 export interface StoryInterviewCadenceResult {
   outcome: StoryInterviewOutcome;
+  /** Why a `throttled` outcome throttled — the shared weekly cap, the auto-cadence interval, or the
+   *  ignored-check-in back-off — so the Interview tab can explain honestly instead of a vague "check back
+   *  later". */
+  throttleReason?: 'weeklyCap' | 'interval' | 'backoff';
   assignmentId?: string;
   completeness?: StoryCompleteness;
 }

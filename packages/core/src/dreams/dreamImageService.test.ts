@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
-import type { ClaudeClient, FileSystem, ImageClient, ImageGenerateOutcome } from '../host';
+import type {
+  ClaudeClient,
+  ClaudeStreamOptions,
+  FileSystem,
+  ImageClient,
+  ImageGenerateOutcome,
+} from '../host';
 import type { Dream, Person } from '../schemas';
 import { DreamSchema } from '../schemas';
 import type { Relationship } from '../schemas';
@@ -149,6 +155,26 @@ describe('generateDreamImage', () => {
     const usage = await allUsage();
     expect(usage.find((u) => u.type === 'dream.imagePrompt')?.costUsd).toBeGreaterThan(0);
     expect(usage.find((u) => u.type === 'dream.image')?.costUsd).toBeCloseTo(0.17);
+  });
+
+  it('disables adaptive thinking on the distillation call (the bounded-output rule)', async () => {
+    // Adaptive thinking SHARES the 400-token distillation budget and can starve the prompt to empty while
+    // still billing the call ([[adaptive-thinking-shares-maxtokens]]) — the option must be off.
+    await saveDream(fs, key, dream({ id: 'd1', personId: 'p1' }));
+    let streamOptions: ClaudeStreamOptions | undefined;
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options) => {
+        streamOptions = options;
+        return Promise.resolve({
+          text: 'a soft surreal dreamscape',
+          usage: { inputTokens: 20, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await generateDreamImage(deps({ claude: capturing }));
+    expect(result.ok).toBe(true);
+    expect(streamOptions?.extendedThinking).toBe(false);
   });
 
   it('threads the chosen style + Settings style notes into the distillation input (§15.2)', async () => {

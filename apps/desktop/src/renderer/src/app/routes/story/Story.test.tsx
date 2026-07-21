@@ -6,6 +6,7 @@ import type {
   BookManifest,
   BookOutline,
   ChapterMarkup,
+  Insight,
   StoryBookBundle,
   StoryBookTypeView,
   StoryMarkInput,
@@ -15,6 +16,7 @@ import type {
 import { Story, buildAnchor, countApplicable } from './Story';
 import { useStoryStore } from '../../../stores/storyStore';
 import { useSessionStore } from '../../../stores/sessionStore';
+import { useInsightStore } from '../../../stores/insightStore';
 import { clearMockBridge, elevateToOwner, installMockBridge } from '../../../test-utils/bridge';
 import { useSettingsStore } from '../../../settings/settingsStore';
 
@@ -115,6 +117,27 @@ function writtenBundle(status: 'new' | 'reviewed' = 'new'): StoryBookBundle {
   };
 }
 
+/**
+ * The Story suite's baseline is an AI-READY household (key resolved + AI on) — the begin flow now gates on
+ * that (§8.2 honest states), so the default mock's `resolvedReady: false` would disable "Begin your book" /
+ * "Write my book" in every setup test. Tests about the unavailable state override these explicitly.
+ */
+function installStoryBridge(
+  overrides: Parameters<typeof installMockBridge>[0] = {},
+): ReturnType<typeof installMockBridge> {
+  useSettingsStore.setState((s) => ({ values: { ...s.values, 'ai.enabled': true } }));
+  return installMockBridge({
+    aiKeyStatus: () =>
+      Promise.resolve({
+        hasSharedKey: true,
+        hasDeviceOverride: false,
+        resolvedReady: true,
+        source: 'shared' as const,
+      }),
+    ...overrides,
+  });
+}
+
 function renderStory(): void {
   render(
     <MemoryRouter>
@@ -142,6 +165,7 @@ function renderStoryAt(path: string): void {
 afterEach(() => {
   clearMockBridge();
   useStoryStore.getState().reset();
+  useInsightStore.getState().reset(); // the Studio's crisis-quiet read loads it (§13.4)
   useSessionStore.setState({ activePerson: null, access: null });
   useSettingsStore.setState((s) => ({
     values: {
@@ -155,7 +179,7 @@ afterEach(() => {
 
 describe('Story (64)', () => {
   it('shows the invitation empty state with a Begin your book action', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]),
     });
@@ -164,7 +188,7 @@ describe('Story (64)', () => {
   });
 
   it('setup drafts the whole book end-to-end and lands on the overview (no outline-review gate)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]),
       storyCreate: () => Promise.resolve(manifest()),
@@ -174,14 +198,14 @@ describe('Story (64)', () => {
     renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Begin your book' }));
     expect(await screen.findByLabelText('Title')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /Create .* draft the outline/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Write my book' }));
     // No outline-review gate — it drafts straight through to the finished, editable book.
     expect(await screen.findByRole('button', { name: /The Garage/ })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Review your outline' })).not.toBeInTheDocument();
   });
 
   it('shows the live writing progress screen while a draft runs (phase, chapter count, progress bar)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]),
     });
@@ -208,7 +232,7 @@ describe('Story (64)', () => {
 
   it('setup: title is optional (blank lets the biographer name it), Full is the default length, and the added styles are offered', async () => {
     let createdWith: { title: string; config: { length: string } } | null = null;
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]),
       storyCreate: (input) => {
@@ -223,7 +247,7 @@ describe('Story (64)', () => {
     // A new style register is offered in the Style card gallery.
     expect(await screen.findByRole('radio', { name: 'Cinematic' })).toBeInTheDocument();
     // The Create button is enabled with NO title typed — blank means the AI names it.
-    const create = screen.getByRole('button', { name: /Create .* draft the outline/ });
+    const create = screen.getByRole('button', { name: 'Write my book' });
     expect(create).toBeEnabled();
     await userEvent.click(create);
     await waitFor(() => expect(createdWith).not.toBeNull());
@@ -232,7 +256,7 @@ describe('Story (64)', () => {
   });
 
   it('invitation: shows the three-step promise + a "Drawn from" chip row with real counts (§13.3)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]),
       storyCorpusStats: () =>
@@ -255,7 +279,7 @@ describe('Story (64)', () => {
   });
 
   it('commission: the live preview specimen changes with the chosen style (§13.3)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]),
     });
@@ -271,7 +295,7 @@ describe('Story (64)', () => {
   });
 
   it('writing: the outline reveals itself as a chapter list with a "Browse SelfOS" exit (§13.3)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]),
     });
@@ -299,7 +323,7 @@ describe('Story (64)', () => {
 
   it('renames the book from the overview (title editable in place, no outline gate)', async () => {
     let updatedWith: { bookId: string; title?: string } | null = null;
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle()),
@@ -319,7 +343,7 @@ describe('Story (64)', () => {
   });
 
   it('renders chapters as cover-backed cards grouped by part, with number + status (§3.1 redesign)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('reviewed')),
@@ -336,7 +360,7 @@ describe('Story (64)', () => {
 
   it('Story settings: editing the book’s tone + image style persists to its config (§3.8)', async () => {
     const configs: unknown[] = [];
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle()),
@@ -368,7 +392,7 @@ describe('Story (64)', () => {
       timeline: { schemaVersion: 1, events: [] },
       chapters: [],
     };
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]),
       storyCreate: () => Promise.resolve(manifest()),
@@ -378,15 +402,13 @@ describe('Story (64)', () => {
     });
     renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Begin your book' }));
-    await userEvent.click(
-      await screen.findByRole('button', { name: /Create .* draft the outline/ }),
-    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Write my book' }));
     expect(await screen.findByText('Turn on AI in Settings.')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
 
   it('writes the chapters, then opens one to read the prose with its sources', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'drafting' })]),
       storyGet: () => Promise.resolve(bundle(true)), // approved, no chapters yet
@@ -417,7 +439,7 @@ describe('Story (64)', () => {
         },
       ],
     };
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -426,11 +448,13 @@ describe('Story (64)', () => {
     renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Rewrite this chapter' }));
+    // The metered rewrite sits behind a two-step confirm (§8.2 spend legibility).
+    await userEvent.click(await screen.findByRole('button', { name: 'Rewrite it' }));
     expect(await screen.findByText(/richer, rewritten scene/)).toBeInTheDocument();
   });
 
   it('surfaces an error when a rewrite fails (no silent dead-end)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -440,11 +464,12 @@ describe('Story (64)', () => {
     renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Rewrite this chapter' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Rewrite it' }));
     expect(await screen.findByText('AI budget reached.')).toBeInTheDocument();
   });
 
   it('surfaces an error when writing every chapter fails (no silent dead-end)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'drafting' })]),
       storyGet: () => Promise.resolve(bundle(true)), // approved, no chapters yet
@@ -459,7 +484,7 @@ describe('Story (64)', () => {
   });
 
   it('shows the rich chapter-writing progress INLINE on the overview (not a full-screen takeover)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'drafting' })]),
       storyGet: () => Promise.resolve(bundle(true)), // approved outline, no chapters → a pending write
@@ -486,7 +511,7 @@ describe('Story (64)', () => {
   });
 
   it('marks a chapter reviewed from the reader', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -510,7 +535,7 @@ describe('Story (64)', () => {
       markdown: 'The garage smelled of cedar.',
       previousMarkdown: 'The garage smelled of pine.',
     };
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(updated),
@@ -532,7 +557,7 @@ describe('Story (64)', () => {
   });
 
   it('a first-draft (new) chapter with no prior text offers no "What changed" toggle (§13.5)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')), // status 'new', no previousMarkdown
@@ -547,7 +572,7 @@ describe('Story (64)', () => {
     const staleBundle = writtenBundle('new');
     staleBundle.chapters[0] = { ...staleBundle.chapters[0]!, status: 'stale' };
     const storyReviewChapter = vi.fn(() => Promise.resolve(writtenBundle('reviewed')));
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(staleBundle),
@@ -566,7 +591,7 @@ describe('Story (64)', () => {
       (input: StoryMarkInput): Promise<ChapterMarkup> =>
         Promise.resolve({ schemaVersion: 1, chapterId: input.chapterId, marks: [input.mark] }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -594,7 +619,7 @@ describe('Story (64)', () => {
         Promise.resolve({ schemaVersion: 1, chapterId: input.chapterId, marks: [input.mark] }),
     );
     const insightsFlag = vi.fn(() => Promise.resolve(null));
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')), // p0 provenance carries insight i1
@@ -619,7 +644,7 @@ describe('Story (64)', () => {
   });
 
   it('does not offer the flag checkbox for a non-fix comment', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -641,7 +666,7 @@ describe('Story (64)', () => {
       (input: StoryMarkInput): Promise<ChapterMarkup> =>
         Promise.resolve({ schemaVersion: 1, chapterId: input.chapterId, marks: [input.mark] }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -675,7 +700,7 @@ describe('Story (64)', () => {
           markup: { schemaVersion: 1, chapterId: 'c1', marks: [] },
         }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -711,7 +736,7 @@ describe('Story (64)', () => {
       (): Promise<ChapterMarkup> =>
         Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -739,7 +764,7 @@ describe('Story (64)', () => {
 
   it('pins a passage in your own words', async () => {
     const storyPinQuote = vi.fn(() => Promise.resolve(writtenBundle('new')));
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -757,7 +782,7 @@ describe('Story (64)', () => {
   });
 
   it('does not count a question comment toward the apply bar', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -787,7 +812,7 @@ describe('Story (64)', () => {
 
   it('makes an instant inline edit', async () => {
     const storyEditPassage = vi.fn(() => Promise.resolve(writtenBundle('new')));
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -813,7 +838,7 @@ describe('Story (64)', () => {
       (input: StoryMarkInput): Promise<ChapterMarkup> =>
         Promise.resolve({ schemaVersion: 1, chapterId: input.chapterId, marks: [input.mark] }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -860,7 +885,7 @@ describe('Story (64)', () => {
         assignmentId: 'a1',
       }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -882,7 +907,7 @@ describe('Story (64)', () => {
   });
 
   it('an ask to-do counts toward the pending pill', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -910,7 +935,7 @@ describe('Story (64)', () => {
   });
 
   it('renders provenance as a numbered superscript that opens the sources popover (§13.5 R3)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')), // p0 carries one insight ref
@@ -929,7 +954,7 @@ describe('Story (64)', () => {
   });
 
   it('places a pending mark in the right-margin rail, not under the paragraph (§13.5 R3)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -994,7 +1019,7 @@ describe('Story (64)', () => {
           markup: { schemaVersion: 1, chapterId: 'c1', marks: [] },
         }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1072,7 +1097,7 @@ describe('Story (64)', () => {
       (): Promise<ChapterMarkup> =>
         Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1108,7 +1133,7 @@ describe('Story (64)', () => {
     const storyRefreshCheck = vi.fn(() =>
       Promise.resolve({ staled: 0, rewritten: 0, bundle: writtenBundle('new') }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')), // autoRefresh is on in the fixture
@@ -1127,7 +1152,7 @@ describe('Story (64)', () => {
     const storyRefreshCheck = vi.fn((input: { bookId: string; auto?: boolean }) =>
       Promise.resolve({ staled: 2, rewritten: 2, bundle: writtenBundle('new'), ...input }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1142,7 +1167,7 @@ describe('Story (64)', () => {
   });
 
   it('the refresh reports when the story is already up to date', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1169,7 +1194,7 @@ describe('Story (64)', () => {
     const storyResolveProposal = vi.fn(() =>
       Promise.resolve({ ok: true, proposals: [], bundle: writtenBundle('new') }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1186,7 +1211,7 @@ describe('Story (64)', () => {
   });
 
   it('the refresh reports newly-filed structural suggestions', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1204,7 +1229,7 @@ describe('Story (64)', () => {
   });
 
   it('shows the completeness meter as a warm stage + a bar, never a percentage (§3.6)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1225,7 +1250,7 @@ describe('Story (64)', () => {
         completeness: { stage: 'takingShape' as const, ratio: 0.25, covered: 3, total: 12 },
       }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1244,7 +1269,7 @@ describe('Story (64)', () => {
       (input: { bookId: string; gapId: string }) => Promise<{ ok: true; assignmentId: string }>
     >(() => Promise.resolve({ ok: true as const, assignmentId: 'a-new' }));
     let asked = false;
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1300,7 +1325,7 @@ describe('Story (64)', () => {
 
   it('the interview cadence fires storyInterviewCheck({auto:true}) on mount', async () => {
     const storyInterviewCheck = vi.fn(() => Promise.resolve({ outcome: 'throttled' as const }));
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1315,7 +1340,7 @@ describe('Story (64)', () => {
 
   it('publishes the book and reports what was shared (§3.5)', async () => {
     const storyPublish = vi.fn(() => Promise.resolve({ ok: true as const, publishedChapters: 1 }));
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1332,7 +1357,7 @@ describe('Story (64)', () => {
     const storyGrantReader = vi.fn(() =>
       Promise.resolve([{ personId: 'r1', displayName: 'Angel' }]),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1363,7 +1388,7 @@ describe('Story (64)', () => {
 
   it('saves the front/back matter (§3.6)', async () => {
     const storyUpdate = vi.fn(() => Promise.resolve(manifest({ status: 'ready' })));
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1415,7 +1440,7 @@ describe('Story (64)', () => {
         },
       ],
     };
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]), // no OWN book → the empty landing, where "Shared with you" shows
       storySharedBooks: () =>
@@ -1488,7 +1513,7 @@ describe('Story (64)', () => {
       },
       lastChapterId: null,
     };
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1515,7 +1540,7 @@ describe('Story (64)', () => {
   });
 
   it('“Read your story” from the Studio opens the immersive reader (§13.5)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('reviewed')),
@@ -1587,7 +1612,7 @@ describe('Story (64)', () => {
       },
       lastChapterId: null,
     };
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('reviewed')),
@@ -1610,7 +1635,7 @@ describe('Story (64)', () => {
 
   it('the export dialog exports the published head as Markdown, noting it leaves the vault (§13.6.1)', async () => {
     const storyExportMarkdown = vi.fn(() => Promise.resolve('/exports/The-Story-of-Ben.md'));
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () =>
@@ -1633,7 +1658,7 @@ describe('Story (64)', () => {
 
   it('the export dialog exports the DRAFT head (no publish needed) as PDF (§13.6.1)', async () => {
     const storyExportPdf = vi.fn(() => Promise.resolve('/exports/The-Story-of-Ben.pdf'));
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')), // NEVER published — no publishedAt
@@ -1652,7 +1677,7 @@ describe('Story (64)', () => {
   });
 
   it('the Sharing tab shows each reader’s read state, joined from their receipt (§13.6.8)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () =>
@@ -1690,7 +1715,7 @@ describe('Story (64)', () => {
         costUsd: 0.171,
       }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () =>
@@ -1722,7 +1747,7 @@ describe('Story (64)', () => {
   it('shows a calm setup note when AI images are not turned on (§3.8)', async () => {
     elevateToOwner(); // an owner sees the Settings path (a member sees "ask the owner")
     // consent stays off (afterEach default) → no "Create a cover" button, just the note.
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () =>
@@ -1746,7 +1771,7 @@ describe('Story (64)', () => {
       });
     });
     const storyAnswerPhoto = vi.fn(() => Promise.resolve());
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () =>
@@ -1784,7 +1809,7 @@ describe('Story (64)', () => {
   });
 
   it('renders the photo gallery — caption, the captured-memories chip, and the answered Q&A (§13.6)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () =>
@@ -1832,7 +1857,7 @@ describe('Story (64)', () => {
       Promise.resolve({ ok: true as const, afterAnchor: 'p0' }),
     );
     const storySetPlacement = vi.fn(() => Promise.resolve(placed));
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1871,7 +1896,7 @@ describe('Story (64)', () => {
       (): Promise<ChapterMarkup> =>
         Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1913,7 +1938,7 @@ describe('Story (64)', () => {
         staled: 1,
       }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1944,7 +1969,7 @@ describe('Story (64)', () => {
         staled: 0,
       }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1963,7 +1988,7 @@ describe('Story (64)', () => {
 
   it('lists exclusions on the overview and allows them again', async () => {
     const storyUnexclude = vi.fn(() => Promise.resolve([]));
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -1990,7 +2015,7 @@ describe('Story (64)', () => {
   });
 
   it('deep-links a tab from the URL and switches tabs from the tab bar (§13.2)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -2009,7 +2034,7 @@ describe('Story (64)', () => {
 
   it('the Danger zone deletes only after typing the book’s title (§13.6.7)', async () => {
     const storyDelete = vi.fn(() => Promise.resolve());
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -2035,7 +2060,7 @@ describe('Story (64)', () => {
     const storyGenerateFullDraft = vi.fn(() =>
       Promise.resolve({ ok: true as const, bundle: writtenBundle('new') }),
     );
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')),
@@ -2055,8 +2080,229 @@ describe('Story (64)', () => {
     await waitFor(() => expect(storyGenerateFullDraft).toHaveBeenCalledWith({ bookId: 'b1' }));
   });
 
+  it('the History sheet lists an archived version, compares it, and restores behind a two-step confirm (§13.9)', async () => {
+    const storyRestoreChapterVersion = vi.fn(() => Promise.resolve(writtenBundle('new')));
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyChapterHistory: () =>
+        Promise.resolve({
+          chapterId: 'c1',
+          versions: [
+            {
+              revision: 1,
+              savedAt: '2026-07-01T00:00:00.000Z',
+              reason: 'rewrite' as const,
+              words: 12,
+            },
+          ],
+        }),
+      storyChapterVersion: () =>
+        Promise.resolve({
+          revision: 1,
+          markdown: 'The old text.',
+          provenance: [],
+          sourceSignature: '',
+          savedAt: '2026-07-01T00:00:00.000Z',
+          reason: 'rewrite' as const,
+        }),
+      storyRestoreChapterVersion,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'History' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Chapter history' });
+    // The list row carries the human reason + the at-a-glance word count (never the prose itself).
+    expect(await within(sheet).findByText(/Before a rewrite/)).toBeInTheDocument();
+    expect(within(sheet).getByText('12 words')).toBeInTheDocument();
+    // Compare fetches the FULL version on demand and renders the word diff against the current text.
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Compare' }));
+    expect(
+      await within(sheet).findByRole('group', { name: 'What changed in this rewrite' }),
+    ).toBeInTheDocument();
+    // Restore is a two-step confirm; confirming calls the restore and the sheet closes on success.
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Restore this version' }));
+    expect(storyRestoreChapterVersion).not.toHaveBeenCalled(); // arming ≠ restoring
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Restore' }));
+    expect(storyRestoreChapterVersion).toHaveBeenCalledWith({
+      bookId: 'b1',
+      chapterId: 'c1',
+      revision: 1,
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Chapter history' })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('the History sheet shows a calm empty state when nothing has been superseded yet (§13.9)', async () => {
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyChapterHistory: () => Promise.resolve({ chapterId: 'c1', versions: [] }),
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'History' }));
+    expect(await screen.findByText(/No earlier versions yet/)).toBeInTheDocument();
+  });
+
+  it('the two-step Rewrite confirm never spends until "Rewrite it" — Cancel closes with no call (§8.2)', async () => {
+    const storyRegenerateChapter = vi.fn(() =>
+      Promise.resolve({ ok: true as const, generated: 1, bundle: writtenBundle('new') }),
+    );
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyRegenerateChapter,
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
+    // Opening the confirm does NOT spend; Cancel closes it with no call.
+    await userEvent.click(await screen.findByRole('button', { name: 'Rewrite this chapter' }));
+    expect(await screen.findByText(/current text is saved to History/)).toBeInTheDocument();
+    expect(storyRegenerateChapter).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('button', { name: 'Rewrite it' })).not.toBeInTheDocument();
+    expect(storyRegenerateChapter).not.toHaveBeenCalled();
+    // Only the explicit "Rewrite it" runs the metered rewrite.
+    await userEvent.click(screen.getByRole('button', { name: 'Rewrite this chapter' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Rewrite it' }));
+    expect(storyRegenerateChapter).toHaveBeenCalledWith({ bookId: 'b1', chapterId: 'c1' });
+  });
+
+  it('the refresh says honestly when the BUDGET stopped the pass — never a wrong "turn on AI" (§8.2)', async () => {
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyRefreshCheck: () =>
+        Promise.resolve({
+          staled: 2,
+          rewritten: 0,
+          budgetReached: true,
+          bundle: writtenBundle('new'),
+        }),
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Refresh from what’s new' }));
+    expect(await screen.findByText(/AI budget for this period is used up/)).toBeInTheDocument();
+  });
+
+  it('the refresh says honestly when the weekly CAP stopped the pass (§8.2)', async () => {
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyRefreshCheck: () =>
+        Promise.resolve({ staled: 0, rewritten: 3, capped: true, bundle: writtenBundle('new') }),
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Refresh from what’s new' }));
+    expect(await screen.findByText(/weekly allowance/)).toBeInTheDocument();
+  });
+
+  it('the interview check surfaces the role-aware AI-unavailable copy on an aiOff outcome (§8.2)', async () => {
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyInterviewCheck: () => Promise.resolve({ outcome: 'aiOff' as const }),
+    });
+    renderStory();
+    await openTab('Interview');
+    await userEvent.click(await screen.findByRole('button', { name: 'Find what’s missing' }));
+    // The baseline persona is NOT an owner (no settings.manage) → the member wording, never a key prompt.
+    expect(
+      await screen.findByText(
+        'AI isn’t set up yet — ask the person who set up this household to turn it on.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('the interview check explains the weekly cap on a throttled outcome (§8.2)', async () => {
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyInterviewCheck: () =>
+        Promise.resolve({ outcome: 'throttled' as const, throttleReason: 'weeklyCap' as const }),
+    });
+    renderStory();
+    await openTab('Interview');
+    await userEvent.click(await screen.findByRole('button', { name: 'Find what’s missing' }));
+    expect(await screen.findByText(/already taken stock twice this week/)).toBeInTheDocument();
+  });
+
+  it('the invitation disables "Begin your book" and explains when AI is unavailable (§8.2)', async () => {
+    installStoryBridge({
+      // Override the story baseline back to unavailable: no resolved key on this device or the household.
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: false,
+          resolvedReady: false,
+          source: 'none' as const,
+        }),
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([]),
+    });
+    renderStory();
+    const begin = await screen.findByRole('button', { name: 'Begin your book' });
+    await waitFor(() => expect(begin).toBeDisabled());
+    // The role-aware notice explains how to enable it (the baseline persona is not an owner).
+    expect(
+      screen.getByText(
+        'AI isn’t set up yet — ask the person who set up this household to turn it on.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('the Studio hero quiets honestly while the person’s own crisis signal is recurring (§13.4)', async () => {
+    const at = new Date().toISOString();
+    const crisisInsight = (id: string): Insight => ({
+      id,
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: 'me',
+      summary: 'A heavy stretch.',
+      facts: [],
+      confidence: 'medium',
+      categories: [],
+      approved: true,
+      crisisFlag: true,
+      provenance: { at },
+      createdAt: at,
+      updatedAt: at,
+    });
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      // ≥2 recent approved crisis-flagged own insights → aggregateCrisisSignal.recurring (40 §3.5).
+      insightsList: () => Promise.resolve([crisisInsight('i-a'), crisisInsight('i-b')]),
+    });
+    useSessionStore.setState({ activePerson: ACTIVE_PERSON }); // the signal is per active person
+    renderStory();
+    expect(
+      await screen.findByText(/Your biographer is resting while things are heavy/),
+    ).toBeInTheDocument();
+  });
+
+  it('the crisis footer is always present on the story surface, invitation included (§8.2)', async () => {
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([]),
+    });
+    renderStory();
+    await screen.findByRole('button', { name: 'Begin your book' });
+    expect(screen.getByRole('button', { name: 'Get help now' })).toBeInTheDocument();
+  });
+
   it('opens a book with an outline straight into the overview (no approval gate)', async () => {
-    installMockBridge({
+    installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'drafting' })]),
       storyGet: () => Promise.resolve(bundle(true)), // approved outline, no chapters yet

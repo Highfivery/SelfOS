@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
-import type { ClaudeClient, FileSystem, ImageClient, ImageGenerateOutcome } from '../host';
+import type {
+  ClaudeClient,
+  ClaudeStreamOptions,
+  FileSystem,
+  ImageClient,
+  ImageGenerateOutcome,
+} from '../host';
 import { memFileSystem } from '../host/memFileSystem';
 import { savePerson } from '../people';
 import type { BookChapter, BookConfig, Person } from '../schemas';
@@ -158,6 +164,26 @@ describe('generateStoryImage (§3.8)', () => {
     expect(noKey.ok === false && noKey.reason).toBe('NO_KEY');
     const noClaude = await generateStoryImage(deps({ bookId, anthropicApiKey: null }));
     expect(noClaude.ok === false && noClaude.reason).toBe('NO_KEY');
+  });
+
+  it('disables adaptive thinking on the distillation call (the bounded-output rule)', async () => {
+    // Adaptive thinking SHARES the 400-token distillation budget and can starve the prompt to empty while
+    // still billing the call ([[adaptive-thinking-shares-maxtokens]]) — the option must be off.
+    const bookId = await seed();
+    let streamOptions: ClaudeStreamOptions | undefined;
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options) => {
+        streamOptions = options;
+        return Promise.resolve({
+          text: 'a lone lantern on a dark road',
+          usage: { inputTokens: 20, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const res = await generateStoryImage(deps({ bookId, claude: capturing }));
+    expect(res.ok).toBe(true);
+    expect(streamOptions?.extendedThinking).toBe(false);
   });
 
   it('uses the book’s OWN image style + direction over the global fallback (§3.8)', async () => {

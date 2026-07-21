@@ -465,6 +465,7 @@ describe('runStoryInterviewCadence (64 §3.7 — the autonomous loop)', () => {
     };
     const res = await runStoryInterviewCadence(deps(fs, client), { bookId, auto: false });
     expect(res.outcome).toBe('throttled');
+    expect(res.throttleReason).toBe('weeklyCap'); // the UI says "already took stock twice this week"
     expect(streamed).toBe(false); // capped BEFORE the gap pass — no spend
   });
 
@@ -479,6 +480,7 @@ describe('runStoryInterviewCadence (64 §3.7 — the autonomous loop)', () => {
     const later = new Date(Date.parse(a!.createdAt) + 20 * 24 * 60 * 60 * 1000);
     const res = await runStoryInterviewCadence(depsAt(fs, client, later), { bookId, auto: false });
     expect(res.outcome).toBe('throttled'); // backed off — did NOT mint a second check-in
+    expect(res.throttleReason).toBe('backoff'); // an ignored check-in just lapsed — don't pile on
     expect((await getAssignment(fs, key, first.assignmentId!))?.status).toBe('expired');
     expect(
       (await getInterviewState(fs, key, 'me', bookId)).openCheckinAssignmentId,
@@ -494,6 +496,7 @@ describe('runStoryInterviewCadence (64 §3.7 — the autonomous loop)', () => {
     await updateAssignmentStatus(fs, key, first.assignmentId!, 'submitted');
     const res = await runStoryInterviewCadence(deps(fs, client), { bookId, auto: true });
     expect(res.outcome).toBe('throttled'); // lastGapPassAt is recent → auto throttled
+    expect(res.throttleReason).toBe('interval'); // the auto interval, not the cap
     expect(
       (await getInterviewState(fs, key, 'me', bookId)).openCheckinAssignmentId,
     ).toBeUndefined();

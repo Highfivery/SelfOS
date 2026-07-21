@@ -11830,7 +11830,7 @@ test('story (64): setup names the book, outline rename, chapters + sources, mark
     });
     expect(commissionOffenders).toEqual([]);
     await w.setViewportSize({ width: 1280, height: 800 });
-    const create = w.getByRole('button', { name: /Create .* draft the outline/ });
+    const create = w.getByRole('button', { name: 'Write my book' });
     await expect(create).toBeEnabled();
     await create.click();
 
@@ -11940,7 +11940,7 @@ test('story (64): living book — refresh proposes a structural change, approvin
     await w.getByRole('link', { name: 'Your Story' }).click();
     await w.getByRole('button', { name: 'Begin your book' }).click();
     await w.getByRole('textbox', { name: 'Title' }).fill('Living Book');
-    await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
+    await w.getByRole('button', { name: 'Write my book' }).click();
     // One-flow draft (no outline gate): read + outline (auto-approved) + every chapter, landing on the book.
     // Back on the overview once the chapters are written.
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
@@ -12028,7 +12028,7 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     await w.getByRole('link', { name: 'Your Story' }).click();
     await w.getByRole('button', { name: 'Begin your book' }).click();
     await w.getByRole('textbox', { name: 'Title' }).fill('Shared Life');
-    await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
+    await w.getByRole('button', { name: 'Write my book' }).click();
     // One-flow draft (no outline gate): read + outline (auto-approved) + every chapter, landing on the book.
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
 
@@ -12155,7 +12155,7 @@ test('story (64): a photo answer feeds the biographer’s corpus — it reaches 
     await w.getByRole('link', { name: 'Your Story' }).click();
     await w.getByRole('button', { name: 'Begin your book' }).click();
     await w.getByRole('textbox', { name: 'Title' }).fill('Photo Book');
-    await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
+    await w.getByRole('button', { name: 'Write my book' }).click();
     // One-flow draft (no outline gate): read + outline (auto-approved) + every chapter, landing on the book.
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
 
@@ -12230,7 +12230,7 @@ test('story (64): the Studio tabs deep-link, and the Danger zone deletes only af
     await w.getByRole('link', { name: 'Your Story' }).click();
     await w.getByRole('button', { name: 'Begin your book' }).click();
     await w.getByRole('textbox', { name: 'Title' }).fill('Studio Book');
-    await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
+    await w.getByRole('button', { name: 'Write my book' }).click();
     // Lands on the Studio (Chapters tab default): the hero title + the chapter grid.
     await expect(w.getByRole('heading', { name: 'Studio Book', level: 1 })).toBeVisible();
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
@@ -12285,7 +12285,7 @@ test('story (64): the owner reads their own book in the immersive reader — fro
     await w.getByRole('link', { name: 'Your Story' }).click();
     await w.getByRole('button', { name: 'Begin your book' }).click();
     await w.getByRole('textbox', { name: 'Title' }).fill('The Reading Book');
-    await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
+    await w.getByRole('button', { name: 'Write my book' }).click();
 
     // The Studio hero → the immersive reader (route /story/read).
     await expect(w.getByRole('heading', { name: 'The Reading Book', level: 1 })).toBeVisible();
@@ -12355,7 +12355,7 @@ test('story (64): the draft shows live progress, keeps writing in the background
     await w.getByRole('link', { name: 'Your Story' }).click();
     await w.getByRole('button', { name: 'Begin your book' }).click();
     await w.getByRole('textbox', { name: 'Title' }).fill('Background Book');
-    await w.getByRole('button', { name: /Create .* draft the outline/ }).click();
+    await w.getByRole('button', { name: 'Write my book' }).click();
 
     // The live writing screen appears — real progress + the "you can keep working" note.
     await expect(w.getByRole('heading', { name: 'Writing your story' })).toBeVisible();
@@ -12374,6 +12374,78 @@ test('story (64): the draft shows live progress, keeps writing in the background
     await w.getByRole('link', { name: 'Your Story', exact: true }).click();
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
     expect(await w.getByRole('heading', { name: 'Review your outline' }).count()).toBe(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('story (64): trust repairs — protected words survive a rewrite + history restores the old text', async () => {
+  test.setTimeout(90_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Trust Repairs');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible({ timeout: 30_000 });
+
+    // The crisis footer is always present on the story surface (§8.2).
+    await expect(w.getByRole('button', { name: 'Get help now' })).toBeVisible();
+
+    // Open the drafted chapter and rewrite its first paragraph IN THE PERSON'S OWN WORDS — an instant
+    // inline edit that records a protected block a later rewrite must preserve verbatim (§5.3).
+    await w.getByRole('button', { name: /The Garage/ }).click();
+    await expect(w.getByText(/cut pine and warm oil/)).toBeVisible();
+    await w.getByRole('button', { name: 'Mark up' }).first().click();
+    await w.getByRole('button', { name: 'Edit', exact: true }).click();
+    await w.getByRole('textbox', { name: 'Your words' }).fill('I kept these exact words.');
+    await w.getByRole('button', { name: 'Save my words' }).click();
+    await expect(w.getByText('I kept these exact words.').first()).toBeVisible();
+    await expect(w.getByText(/cut pine and warm oil/)).toHaveCount(0); // the paragraph was replaced
+
+    // Rewrite the whole chapter (behind the two-step confirm, §8.2). The canned fake prose does NOT
+    // contain the person's sentence — enforceProtected must splice it back. THE load-bearing assertion:
+    // it fails without the trust-repairs fix (the rewrite would silently drop the person's own words).
+    await w.getByRole('button', { name: 'Rewrite this chapter' }).click();
+    await expect(w.getByText(/current text is saved to History/)).toBeVisible();
+    await w.getByRole('button', { name: 'Rewrite it' }).click();
+    await expect(w.getByText(/cut pine and warm oil/).first()).toBeVisible({ timeout: 20_000 });
+    await expect(w.getByText(/I kept these exact words/).first()).toBeVisible();
+
+    // History (§13.9): the rewrite archived the replaced text — compare it, then restore it.
+    await w.getByRole('button', { name: 'History', exact: true }).click();
+    await expect(w.getByText(/Before a rewrite/)).toBeVisible();
+    await w.getByRole('button', { name: 'Compare', exact: true }).click();
+    await expect(w.getByText('What changed from that version to now:')).toBeVisible();
+    await w.getByRole('button', { name: 'Restore this version' }).click();
+    await w.getByRole('button', { name: 'Restore', exact: true }).click();
+
+    // The sheet closes and the pre-rewrite prose is back on screen: the person's paragraph leads again
+    // and the rewrite's "warm oil" line is gone from the chapter.
+    await expect(w.getByRole('dialog', { name: 'Chapter history' })).toHaveCount(0);
+    await expect(w.getByText(/I kept these exact words/).first()).toBeVisible();
+    await expect(w.getByText(/warm oil/)).toHaveCount(0);
+
+    // 360px: the chapter editor (with its ribbon + history affordance) scrolls vertically only (§12).
+    await w.setViewportSize({ width: 360, height: 780 });
+    const offenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(offenders).toEqual([]);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

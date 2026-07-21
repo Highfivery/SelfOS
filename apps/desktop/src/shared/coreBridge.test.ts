@@ -7080,6 +7080,85 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect((await bridge.storyReadOwnBook({ bookId }))?.lastChapterId).toBeNull();
   });
 
+  it('story: chapter history — a rewrite archives the replaced prose, restore re-enforces protected words, Guest denied (§13.9)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+    const original = chapters.bundle.chapters[0]!.markdown;
+
+    // A first draft has replaced nothing — no history yet (empty, never null).
+    expect(await bridge.storyChapterHistory({ bookId, chapterId })).toEqual({
+      chapterId,
+      versions: [],
+    });
+
+    // A rewrite archives the text it replaces (the real appendChapterVersion path, reason 'rewrite').
+    const rewrite = await bridge.storyRegenerateChapter({ bookId, chapterId });
+    expect(rewrite.ok).toBe(true);
+
+    // The person then rewrites the first paragraph in their own words (instant edit → a protected block),
+    // so the CURRENT text now differs from the archived version.
+    const edited = await bridge.storyEditPassage({
+      bookId,
+      chapterId,
+      anchor: { paragraphId: 'p0' },
+      newText: 'I kept these exact words.',
+    });
+    expect(edited?.chapters[0]?.markdown).toContain('I kept these exact words.');
+
+    // The list is newest-first and carries the word count but NO prose (the heavy-payload rule §13.9).
+    const history = await bridge.storyChapterHistory({ bookId, chapterId });
+    expect(history.versions.map((v) => v.reason)).toEqual(['rewrite']);
+    expect(history.versions[0]!.words).toBe(original.trim().split(/\s+/).length);
+    expect(history.versions[0]).not.toHaveProperty('markdown');
+
+    // The full prose crosses IPC one version at a time.
+    const v1 = await bridge.storyChapterVersion({
+      bookId,
+      chapterId,
+      revision: history.versions[0]!.revision,
+    });
+    expect(v1?.markdown).toBe(original);
+
+    // Restore: the pre-restore text is archived first (reason 'restore' — restoring is itself undoable),
+    // the chapter flips to the old prose, and the protected words added AFTER the version was archived are
+    // re-enforced into it (the person's own words survive a restore too).
+    const restored = await bridge.storyRestoreChapterVersion({
+      bookId,
+      chapterId,
+      revision: v1!.revision,
+    });
+    const chapter = restored?.chapters.find((c) => c.id === chapterId);
+    expect(chapter?.markdown).toContain('cut pine'); // the old prose is back
+    expect(chapter?.markdown).toContain('I kept these exact words.'); // protected words re-enforced
+    expect(chapter?.status).toBe('updated'); // a restore flows through the normal review lane
+    const after = await bridge.storyChapterHistory({ bookId, chapterId });
+    expect(after.versions.map((v) => v.reason)).toEqual(['restore', 'rewrite']); // newest first
+
+    // A Guest (no story.own) gets empty/null from all three — the bridge is the trust boundary.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.storyChapterHistory({ bookId, chapterId })).toEqual({
+      chapterId,
+      versions: [],
+    });
+    expect(await bridge.storyChapterVersion({ bookId, chapterId, revision: 1 })).toBeNull();
+    expect(await bridge.storyRestoreChapterVersion({ bookId, chapterId, revision: 1 })).toBeNull();
+  });
+
   it('story: readOwnBook + setReadPosition are denied for a person without story.own', async () => {
     const { bridge } = await freshOwner();
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });

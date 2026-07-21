@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.42.0](https://github.com/Highfivery/SelfOS/compare/v0.41.1...v0.42.0) (2026-07-21)
+
+
+### Features
+
+* **story:** share a memory — the biographer interview chat ([b7451c3](https://github.com/Highfivery/SelfOS/commit/b7451c34e3797db34669588379276044f5809b8b))
+
+
+### Bug Fixes
+
+* **story:** interview-loop coherence + answer-the-author ([#286](https://github.com/Highfivery/SelfOS/issues/286)) ([9ea26ed](https://github.com/Highfivery/SelfOS/commit/9ea26eda8a6e7170a9b7f06dd99fed6ca3d2c60e))
+* **story:** protect words on every rewrite, truncation handling, and the draft vault ([#284](https://github.com/Highfivery/SelfOS/issues/284)) ([f4d14ae](https://github.com/Highfivery/SelfOS/commit/f4d14ae5484d0f1864515eea489eb9677cc0fbad))
+
 ## [0.41.1](https://github.com/Highfivery/SelfOS/compare/v0.41.0...v0.41.1) (2026-07-20)
 
 

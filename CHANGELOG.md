@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.3](https://github.com/Highfivery/SelfOS/compare/v0.43.2...v0.43.3) (2026-07-21)
+
+
+### Bug Fixes
+
+* **questionnaires:** stop AI re-asking known data (topic + reliable de-dup) ([#312](https://github.com/Highfivery/SelfOS/issues/312)) ([d84add6](https://github.com/Highfivery/SelfOS/commit/d84add60f4979edc4b7bedfb8ee0227ce96d95e0))
+
 ## [0.43.2](https://github.com/Highfivery/SelfOS/compare/v0.43.1...v0.43.2) (2026-07-21)
 
 

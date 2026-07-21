@@ -1362,3 +1362,63 @@ skips a send whose recipient is the sender.
 paragraph's provenance (the corpus items it actually cited), so the biographer can honestly say "this came
 from a coaching session where you described…" — and plainly say when the record doesn't support an answer
 (never invent). The reply renders inline at the paragraph and persists on the mark.
+
+## 14. Share a memory (2026-07-20, BUILT)
+
+The conversational complement to the structured interview engine (§3.7): a person tells their biographer
+about a moment, the biographer asks and deepens (the McAdams deepening ladder — place → sensory → objects
+→ dialogue → the body → meaning), and when it has enough it synthesizes a structured **memory** the person
+commits with one tap. Owner decisions (2026-07-20): memories are **person-level**; save is a **one-tap
+confirm card**; the derived Insight is **partner-shared by default with trauma/intimacy restricted
+carve-outs**; the chat supports **full in-chat photo attachments**.
+
+**Architecture.** The dream-analysis chat, scoped under the book's owner. Storage:
+`people/<personId>/story/memories/<memoryId>/` — `memory.enc` (the `StoryMemory` record), `conversation.enc`
+(the interview transcript, reusing the `Conversation` schema, `id = memoryId`), and `attachments/` (encrypted
+in-chat photos). Person-level (NOT book-scoped), so a saved memory feeds EVERY book + the coach and survives
+a book delete/rewrite. The transcript lives beside the record (not in `conversations/`), so the Sessions
+surface never lists it — the same structural exclusion dreams use. `storyMemoryService.ts` reuses the whole
+shared spine: `streamWithContinuation`, persist-user-first (66 §3.2), meter-first (`story.memory`), the EMPTY
+fail-safe, `truncateMessages` rewind/regenerate, and the coach-speaks-first idempotent opener (static
+fallback so it always opens). `MEMORY_INTERVIEW_GUIDANCE` is the biographer's interviewing voice, wiring the
+McAdams deepening ladder (the research that never reached the gap pass); it never writes the memory up
+in-chat.
+
+**The readiness → confirm → save flow.** A `[[SELFOS:MEMORY_READY]]` marker (paired with the spoken
+"there's a whole memory here now, save it?" invitation) sets a durable `readyAt` on the record (survives
+navigation — the DREAM_READY §3.4 lesson) and lights a "Save this memory" affordance (never a gate — the
+button is available once there are exchanges). `synthesizeMemory` (a bounded `extendedThinking: false` JSON
+call, meter-before-parse, tolerant) produces the structured draft — title, a first-person `narrative` in the
+person's own voice, approximate date/era, places, people (linkable to household people), life areas,
+emotional texture, pull-quote candidates, an optional McAdams `scene` key, and a `sensitive` flag — rendered
+as a one-tap **confirm card** (editable title/date/narrative/texture). `saveMemory` commits it: status
+`saved`, and it distills into an `Insight` (`source: 'memory'`, `approved: true`) so it feeds coaching /
+Memory / Together / questionnaire de-dup like any session/dream insight. A normal memory's facts default
+partner-shared (`producedFactShare`); a **sensitive** memory's facts are `restricted` + `lifeArea:
+'Intimacy'` (own-context only, never partner-shared — the intake-restricted precedent). Saving is gated on
+the `sessions.memoryEnabled` toggle for the INSIGHT only — the memory still saves + feeds the book when
+memory is off. Re-save reuses the same `insightId`, carrying sharing forward.
+
+**Feeding the book.** A new first-class `StorySourceKind: 'memory'` — `buildStoryCorpus` emits one corpus
+item per SAVED memory (the first-person narrative + emotional texture), with real per-memory provenance, so a
+chapter paragraph can cite the specific memory it wove in, editing/deleting a memory stales the chapters that
+cite it, and the honesty note counts "memories you shared". A gathering/ready-but-unsaved memory feeds
+nothing (the photo-answers "wire the corpus read in the same slice" lesson).
+
+**Surfaces.** A "Share a memory" card leads the Interview tab; each gap gets a "Talk it through" that opens
+the chat seeded from the gap's focus; a photo gets "Tell the story of this photo" (seeded from its caption);
+a "Memories you've shared" collection lists every memory (title · era · people · "wove into <chapter>") with
+re-open / keep-talking / **delete-truly-forgets** (removes the record + transcript + attachments + the
+Insight, so the corpus + coach both forget it). The chat carries the standard `CrisisFooter` (memories
+surface trauma) and a `crisisFlag` on synthesis routes to support. Full in-chat photo attachments reuse the
+Sessions media machinery (path-guarded encrypted storage, mime/size re-validation, vision content blocks
+re-read per turn). Seam: `story:memoryList/Get/Open/Turn/Retry/Rewind/Regenerate/Synthesize/Save/Delete/
+StoreAttachment/GetAttachment` + a `story:memoryChunk` stream, all gated `story.own` + active-person-scoped;
+usage type `story.memory`; the AI key stays host-side.
+
+### 14.1 Decisions locked 2026-07-20
+
+1. **Person-level** memories (survive book delete/rewrite, feed every book + the coach).
+2. **One-tap confirm card** (editable) — synthesis then commit, not a Memory-dashboard review.
+3. Memory insight **partner-shared by default**, **trauma/intimacy restricted** (own-context only).
+4. **Full in-chat photo attachments** (the Sessions attachment machinery).

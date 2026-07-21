@@ -120,11 +120,34 @@ export function stripChallengeMarker(text: string): string {
   return out.replace(/\s+$/, '');
 }
 
-/** Strip all coach markers (wrap-up + step + challenge + agreement + private) — the single fn renderer + services use. */
+const MEMORY_READY_MARKER_RE = /\[\[SELFOS:MEMORY_READY\]\]/g;
+const MEMORY_READY_PREFIX = '[[SELFOS:MEMORY_READY]]';
+
+/**
+ * Remove the "Share a memory" readiness marker (64 §14) — and any trailing partial still mid-stream, e.g.
+ * '[[SELFOS:MEMORY_RE' — so it never flashes in the live streaming display or persists. The service strips it
+ * server-side before persist; this covers the renderer's live-stream render, where the real transport streams
+ * the token as the last delta (the offline fake withholds it, so only stripping HERE is verifiable).
+ */
+export function stripMemoryReadyMarker(text: string): string {
+  let out = text.replace(MEMORY_READY_MARKER_RE, '');
+  for (let i = MEMORY_READY_PREFIX.length - 1; i > 0; i--) {
+    const partial = MEMORY_READY_PREFIX.slice(0, i);
+    if (out.endsWith(partial)) {
+      out = out.slice(0, -partial.length);
+      break;
+    }
+  }
+  return out.replace(/\s+$/, '');
+}
+
+/** Strip all coach markers (wrap-up + step + challenge + agreement + private + suggest + memory-ready) — the single fn renderer + services use. */
 export function stripCoachMarkers(text: string): string {
-  return stripPrivateMarker(
-    stripSuggestMarker(
-      stripAgreementMarker(stripChallengeMarker(stripStepMarkers(stripWrapUpMarker(text)))),
+  return stripMemoryReadyMarker(
+    stripPrivateMarker(
+      stripSuggestMarker(
+        stripAgreementMarker(stripChallengeMarker(stripStepMarkers(stripWrapUpMarker(text)))),
+      ),
     ),
   );
 }

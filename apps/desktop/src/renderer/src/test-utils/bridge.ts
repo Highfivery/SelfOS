@@ -369,6 +369,25 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
     storyAnswerQuestion: () =>
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
+    storyMemoryList: () => Promise.resolve([]),
+    storyMemoryGet: () => Promise.resolve(null),
+    storyMemoryOpen: () => Promise.resolve(null),
+    storyMemoryTurn: () =>
+      Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
+    storyMemoryRetry: () =>
+      Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
+    storyMemoryRewind: () => Promise.resolve({ ok: false, reason: 'NOT_FOUND' as const }),
+    storyMemoryRegenerate: () =>
+      Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
+    storyMemorySynthesize: () =>
+      Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
+    storyMemorySave: () =>
+      Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
+    storyMemoryDelete: () => Promise.resolve(),
+    storyMemoryStoreAttachment: () =>
+      Promise.resolve({ ok: false as const, reason: 'UNSUPPORTED' as const, message: 'x' }),
+    storyMemoryGetAttachment: () => Promise.resolve(null),
+    onMemoryChunk: () => () => {},
     storyRefreshCheck: () => Promise.resolve({ staled: 0, rewritten: 0, bundle: null }),
     storyProposals: () => Promise.resolve([]),
     storyResolveProposal: () => Promise.resolve({ ok: true, proposals: [], bundle: null }),

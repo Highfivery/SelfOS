@@ -5,6 +5,7 @@ import {
   parseLatestStep,
   stripChallengeMarker,
   stripCoachMarkers,
+  stripMemoryReadyMarker,
   stripStepMarkers,
 } from './guidedSteps';
 
@@ -26,6 +27,20 @@ describe('guided step markers', () => {
   it('stripCoachMarkers removes both wrap-up and step markers', () => {
     expect(stripCoachMarkers('Bye. [[SELFOS:WRAPUP]] [[SELFOS:STEP:4]]')).toBe('Bye.');
     expect(stripCoachMarkers('Bye. [[SELFOS:WRAPUP]]')).toBe('Bye.');
+  });
+
+  it('strips the memory-ready marker complete AND partial, so it never flashes in the live stream (64 §14)', () => {
+    // The real transport streams the token as the last delta; the renderer's live render must keep it hidden.
+    expect(stripMemoryReadyMarker('A whole memory. [[SELFOS:MEMORY_READY]]')).toBe(
+      'A whole memory.',
+    );
+    expect(stripMemoryReadyMarker('A whole memory. [[SELFOS:MEMORY_RE')).toBe('A whole memory.');
+    expect(stripMemoryReadyMarker('A whole memory. [[SELFOS:')).toBe('A whole memory.');
+    expect(stripMemoryReadyMarker('no marker')).toBe('no marker');
+    // Composed into the single stripCoachMarkers the renderer uses for every streamed reply.
+    expect(stripCoachMarkers('There’s a whole memory here now. [[SELFOS:MEMORY_READY]]')).toBe(
+      'There’s a whole memory here now.',
+    );
   });
 
   it('buildStepInstruction lists the 0-based steps and the marker convention', () => {

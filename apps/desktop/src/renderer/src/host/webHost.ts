@@ -88,6 +88,7 @@ function createBridgeHost(parts: HostParts): BridgeHost {
   const dreamListeners = new Set<(delta: string) => void>();
   const intakeListeners = new Set<(delta: string) => void>();
   const togetherListeners = new Set<(delta: string) => void>();
+  const memoryListeners = new Set<(delta: string) => void>();
   const storyProgressListeners = new Set<(progress: StoryDraftProgress) => void>();
   const imageProgressListeners = new Set<(progress: ImageGenProgress) => void>();
 
@@ -168,6 +169,9 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     emitTogetherChunk: (chunk) => {
       for (const listener of togetherListeners) listener(chunk);
     },
+    emitMemoryChunk: (chunk) => {
+      for (const listener of memoryListeners) listener(chunk);
+    },
     emitStoryProgress: (progress) => {
       for (const listener of storyProgressListeners) listener(progress);
     },
@@ -233,6 +237,10 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     onTogetherChunk: (listener) => {
       togetherListeners.add(listener);
       return () => togetherListeners.delete(listener);
+    },
+    onMemoryChunk: (listener) => {
+      memoryListeners.add(listener);
+      return () => memoryListeners.delete(listener);
     },
     onStoryProgress: (listener) => {
       storyProgressListeners.add(listener);

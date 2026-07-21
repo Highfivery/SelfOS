@@ -25,6 +25,7 @@ const SOURCE_NOUN: Record<InsightSource, string> = {
   intake: 'onboarding',
   test: 'a self-assessment',
   together: 'a Together session',
+  memory: 'a memory you shared',
 };
 
 export function provenanceTarget(insight: Insight): ProvenanceTarget {
@@ -79,6 +80,16 @@ export function provenanceTarget(insight: Insight): ProvenanceTarget {
       label: title ? `From “${title}”` : label,
       to: qid ? `/questionnaires?focus=${encodeURIComponent(qid)}&view=results` : '/questionnaires',
       ...(title ? { sourceTitle: title } : {}),
+      source: { kind: 'other' },
+    };
+  }
+  if (insight.source === 'memory') {
+    // A shared memory (64 §14) deep-links to the memory chat on the Interview tab.
+    return {
+      label,
+      to: insight.provenance.memoryId
+        ? `/story/interview?memory=${encodeURIComponent(insight.provenance.memoryId)}`
+        : '/story/interview',
       source: { kind: 'other' },
     };
   }

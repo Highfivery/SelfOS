@@ -6,15 +6,21 @@ import type {
   BookManifest,
   BookOutline,
   ChapterMarkup,
+  ChatMessage,
+  Conversation,
   Insight,
   StoryBookBundle,
   StoryBookTypeView,
   StoryMarkInput,
+  StoryMemory,
+  StoryMemoryDetail,
+  StoryMemoryView,
   StoryRevisionResult,
   StructuralProposal,
 } from '@shared/schemas';
 import { Story, buildAnchor, countApplicable } from './Story';
 import { useStoryStore } from '../../../stores/storyStore';
+import { useStoryMemoryStore } from '../../../stores/storyMemoryStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useInsightStore } from '../../../stores/insightStore';
 import { clearMockBridge, elevateToOwner, installMockBridge } from '../../../test-utils/bridge';
@@ -165,6 +171,7 @@ function renderStoryAt(path: string): void {
 afterEach(() => {
   clearMockBridge();
   useStoryStore.getState().reset();
+  useStoryMemoryStore.getState().reset(); // "Share a memory" (§14) — per-person chat + collection state
   useInsightStore.getState().reset(); // the Studio's crisis-quiet read loads it (§13.4)
   useSessionStore.setState({ activePerson: null, access: null });
   useSettingsStore.setState((s) => ({
@@ -1372,6 +1379,272 @@ describe('Story (64)', () => {
     expect(screen.getByText(/Answered/)).toBeInTheDocument();
     expect(screen.getByText('Waiting in your Inbox')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Ask me about this' })).toHaveLength(1);
+  });
+
+  // --- "Share a memory" (§14): the biographer interview chat on the Interview tab ------------------
+
+  function memoryRecord(over: Partial<StoryMemory> = {}): StoryMemory {
+    return {
+      id: 'm1',
+      schemaVersion: 1,
+      personId: 'me',
+      status: 'gathering',
+      title: '',
+      narrative: '',
+      places: [],
+      people: [],
+      lifeAreas: [],
+      pullQuotes: [],
+      createdAt: 'now',
+      updatedAt: 'now',
+      ...over,
+    };
+  }
+
+  function memoryDetail(memory: StoryMemory, messages: ChatMessage[]): StoryMemoryDetail {
+    const conversation: Conversation = {
+      id: `mem-${memory.id}`,
+      schemaVersion: 1,
+      personId: memory.personId,
+      title: 'memory',
+      createdAt: 'now',
+      updatedAt: 'now',
+      messages,
+    };
+    return { memory, conversation };
+  }
+
+  it('the Interview tab shows the "Share a memory" invite and the "Memories you’ve shared" collection (§14)', async () => {
+    const memories: StoryMemoryView[] = [
+      {
+        id: 'm-saved',
+        status: 'saved',
+        title: 'The Blue Bicycle',
+        approxDate: 'the summer I was seven',
+        people: [{ name: 'my father' }],
+        updatedAt: '2026-07-19T00:00:00.000Z',
+        wroteIntoChapterTitle: 'Roots',
+      },
+      {
+        id: 'm-draft',
+        status: 'gathering',
+        title: 'A half-told afternoon',
+        people: [],
+        updatedAt: '2026-07-18T00:00:00.000Z',
+      },
+    ];
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyMemoryList: () => Promise.resolve(memories),
+    });
+    renderStory();
+    await openTab('Interview');
+    // The invite card leads with a "Share a memory" heading + a primary "Share a memory" button.
+    expect(await screen.findByRole('button', { name: 'Share a memory' })).toBeInTheDocument();
+    // The collection lists both memories; a saved one carries the chapter it wove into…
+    expect(
+      await screen.findByRole('heading', { name: 'Memories you’ve shared' }),
+    ).toBeInTheDocument();
+    // Anchor with `^` so we hit the row button (name starts with the title), not the "Remove the memory …" one.
+    const saved = screen.getByRole('button', { name: /^The Blue Bicycle/ });
+    expect(saved).toHaveTextContent('wove into “Roots”');
+    expect(within(saved).queryByText('Draft')).not.toBeInTheDocument();
+    // …while a still-gathering memory shows the "Draft" chip.
+    const draft = screen.getByRole('button', { name: /^A half-told afternoon/ });
+    expect(within(draft).getByText('Draft')).toBeInTheDocument();
+  });
+
+  it('clicking "Share a memory" opens the biographer chat panel (a new memory, storyMemoryOpen({})) (§14)', async () => {
+    // Signature-less spy: vi.fn still records the real bridge args (assertion below), and a `() => …` return is
+    // assignable to the bridge's `(input) => …` under exactOptionalPropertyTypes.
+    const storyMemoryOpen = vi.fn(() =>
+      Promise.resolve(
+        memoryDetail(memoryRecord(), [
+          {
+            role: 'assistant',
+            content: 'Take me back — where were you, and what do you picture?',
+            ts: '2026-07-19T00:00:00.000Z',
+          },
+        ]),
+      ),
+    );
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyMemoryOpen,
+    });
+    renderStory();
+    await openTab('Interview');
+    await userEvent.click(await screen.findByRole('button', { name: 'Share a memory' }));
+    // The panel replaces the tab body: a back affordance + the biographer's streamed opener.
+    expect(await screen.findByRole('button', { name: 'Back to your story' })).toBeInTheDocument();
+    expect(await screen.findByText(/Take me back/)).toBeInTheDocument();
+    // A NEW memory opens with no id (an empty payload) — never a resume of some other memory.
+    expect(storyMemoryOpen).toHaveBeenCalledWith({});
+  });
+
+  it('the chat → save flow: synthesize → confirm card → "Add to my story" saves the edited memory (§14)', async () => {
+    const readyMemory = memoryRecord({
+      status: 'ready',
+      title: 'The Blue Bicycle',
+      narrative: 'I was seven, and the bicycle was the blue of a summer sky.',
+      approxDate: 'the summer I was seven',
+      emotionalTexture: 'A first taste of freedom.',
+      people: [{ name: 'my father' }],
+      readyAt: '2026-07-19T00:00:00.000Z',
+    });
+    let saveArgs: { memoryId: string; edits?: unknown } | null = null;
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyMemoryList: () =>
+        Promise.resolve([
+          { id: 'm1', status: 'gathering', title: 'A memory', people: [], updatedAt: 'now' },
+        ]),
+      // Opening the existing memory yields a real user↔coach exchange, so "Save this memory" is offered.
+      storyMemoryOpen: () =>
+        Promise.resolve(
+          memoryDetail(memoryRecord({ status: 'gathering' }), [
+            { role: 'assistant', content: 'Tell me about it.', ts: '2026-07-19T00:00:01.000Z' },
+            {
+              role: 'user',
+              content: 'A blue bicycle, the summer I was seven.',
+              ts: '2026-07-19T00:00:02.000Z',
+            },
+            {
+              role: 'assistant',
+              content: 'That’s a whole memory.',
+              ts: '2026-07-19T00:00:03.000Z',
+            },
+          ]),
+        ),
+      storyMemorySynthesize: () => Promise.resolve({ ok: true as const, memory: readyMemory }),
+      storyMemorySave: (input) => {
+        saveArgs = input;
+        return Promise.resolve({ ok: true as const, memory: { ...readyMemory, status: 'saved' } });
+      },
+    });
+    renderStory();
+    await openTab('Interview');
+    // Open the existing memory from the collection (anchor `^` to skip the "Remove the memory …" button).
+    await userEvent.click(await screen.findByRole('button', { name: /^A memory/ }));
+    // With an exchange present, the "Save this memory" affordance is offered → synthesize.
+    await userEvent.click(await screen.findByRole('button', { name: /Save this memory/ }));
+    // The confirm card reads the synthesized memory back: the title lands in the editable Title field.
+    expect(
+      await screen.findByRole('heading', { name: 'Your memory, in your words' }),
+    ).toBeInTheDocument();
+    const titleField = screen.getByLabelText('Title');
+    expect(titleField).toHaveValue('The Blue Bicycle');
+    // Edit the title before committing, to prove the edited value is carried in the save payload.
+    await userEvent.clear(titleField);
+    await userEvent.type(titleField, 'The Sky-Blue Bicycle');
+    await userEvent.click(screen.getByRole('button', { name: 'Add to my story' }));
+    // The saved banner names the committed memory.
+    expect(await screen.findByText('Woven into your story.')).toBeInTheDocument();
+    await waitFor(() => expect(saveArgs).not.toBeNull());
+    expect(saveArgs!.memoryId).toBe('m1');
+    expect(saveArgs!.edits).toMatchObject({
+      title: 'The Sky-Blue Bicycle',
+      narrative: 'I was seven, and the bicycle was the blue of a summer sky.',
+    });
+  });
+
+  it('a gap’s "Talk it through" opens a NEW seeded biographer chat (storyMemoryOpen({seedFocus})) (§14)', async () => {
+    const storyMemoryOpen = vi.fn(() =>
+      Promise.resolve(
+        memoryDetail(memoryRecord(), [
+          {
+            role: 'assistant',
+            content: 'Tell me about the hardest thing you have faced.',
+            ts: '2026-07-19T00:00:00.000Z',
+          },
+        ]),
+      ),
+    );
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGaps: () =>
+        Promise.resolve({
+          gaps: [
+            {
+              id: 'g1',
+              dimension: 'challenges',
+              label: 'Your central struggle',
+              focus: 'Tell me about the hardest thing you have faced.',
+              priority: 9,
+              status: 'open',
+            },
+          ],
+          partCoverage: [{ partId: 'p1', score: 0.5 }],
+          hasOpenCheckin: false,
+        }),
+      storyMemoryOpen,
+    });
+    renderStory();
+    await openTab('Interview');
+    await userEvent.click(await screen.findByRole('button', { name: 'Talk it through' }));
+    // The chat opens seeded from the gap's focus — a NEW memory keyed to that thread.
+    expect(await screen.findByRole('button', { name: 'Back to your story' })).toBeInTheDocument();
+    expect(storyMemoryOpen).toHaveBeenCalledWith({
+      seedFocus: 'Tell me about the hardest thing you have faced.',
+    });
+  });
+
+  it('AI off: the invite still renders, but opening a memory shows the AI-unavailable state (no chat) (§14)', async () => {
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: false,
+          resolvedReady: false,
+          source: 'none' as const,
+        }),
+    });
+    // The Studio still renders (an existing ready book), but AI is unavailable for the chat.
+    useSettingsStore.setState((s) => ({ values: { ...s.values, 'ai.enabled': false } }));
+    renderStory();
+    await openTab('Interview');
+    // The invite card is still present.
+    await userEvent.click(await screen.findByRole('button', { name: 'Share a memory' }));
+    // Opening it shows the AI-off branch — the biographer heading + notice, and NO composer.
+    expect(
+      await screen.findByRole('heading', { name: 'Share a memory with your biographer' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
+  });
+
+  it('deep-link: /story/interview?memory=<id> opens that specific memory (§14)', async () => {
+    const storyMemoryOpen = vi.fn(() =>
+      Promise.resolve(
+        memoryDetail(memoryRecord({ id: 'm1' }), [
+          {
+            role: 'assistant',
+            content: 'Welcome back to this memory.',
+            ts: '2026-07-19T00:00:00.000Z',
+          },
+        ]),
+      ),
+    );
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyMemoryOpen,
+    });
+    renderStoryAt('/story/interview?memory=m1');
+    // The deep-link opens exactly that memory (a resume, by id).
+    expect(await screen.findByRole('button', { name: 'Back to your story' })).toBeInTheDocument();
+    await waitFor(() => expect(storyMemoryOpen).toHaveBeenCalledWith({ memoryId: 'm1' }));
   });
 
   it('answers the author from a question comment (§3.3): the Ask button calls the bridge + the answer renders', async () => {

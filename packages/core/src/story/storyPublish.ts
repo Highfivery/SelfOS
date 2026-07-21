@@ -48,6 +48,7 @@ const SOURCE_KIND_NOUN: Record<string, string> = {
   together: 'sessions with a partner',
   timeline: 'timeline moments',
   photo: 'photos',
+  memory: 'memories you shared',
 };
 
 /** The auto "A Note on this book" honesty page (§3.6) — built from what the published chapters ACTUALLY drew on

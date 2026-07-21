@@ -64,6 +64,7 @@ export function registerIpcHandlers(): void {
   let intakeSender: WebContents | undefined;
   let togetherSender: WebContents | undefined;
   let storySender: WebContents | undefined;
+  let memorySender: WebContents | undefined;
   let imageSender: WebContents | undefined;
   // E2E/dev: a deterministic in-memory relay (no real Cloudflare account/network), like SELFOS_FAKE_CLAUDE.
   const useFakeRelay = Boolean(process.env['SELFOS_FAKE_RELAY']);
@@ -132,6 +133,11 @@ export function registerIpcHandlers(): void {
     emitTogetherChunk: (chunk) => {
       if (togetherSender && !togetherSender.isDestroyed()) {
         togetherSender.send(IpcChannels.togetherChunk, chunk);
+      }
+    },
+    emitMemoryChunk: (chunk) => {
+      if (memorySender && !memorySender.isDestroyed()) {
+        memorySender.send(IpcChannels.storyMemoryChunk, chunk);
       }
     },
     emitStoryProgress: (progress) => {
@@ -240,6 +246,7 @@ export function registerIpcHandlers(): void {
     onDreamChunk: () => () => {},
     onIntakeChunk: () => () => {},
     onTogetherChunk: () => () => {},
+    onMemoryChunk: () => () => {},
     onStoryProgress: () => () => {},
     onImageProgress: () => () => {},
   };
@@ -732,6 +739,52 @@ export function registerIpcHandlers(): void {
       dreamSender = undefined;
     }
   });
+
+  // "Share a memory" (§14) — the biographer interview chat streams on its own sink (never the Sessions/
+  // Dreams/Intake streams). Same per-turn sender bind + reset. Open/turn/retry/regenerate stream; rewind
+  // writes only; the non-streaming ops (list/get/synthesize/save/delete/attachments) register via `handle`.
+  ipcMain.handle(IpcChannels.storyMemoryOpen, async (event, raw: unknown) => {
+    memorySender = event.sender;
+    try {
+      return await bridge.storyMemoryOpen(raw as never);
+    } finally {
+      memorySender = undefined;
+    }
+  });
+  ipcMain.handle(IpcChannels.storyMemoryTurn, async (event, raw: unknown) => {
+    memorySender = event.sender;
+    try {
+      return await bridge.storyMemoryTurn(raw as never);
+    } finally {
+      memorySender = undefined;
+    }
+  });
+  ipcMain.handle(IpcChannels.storyMemoryRetry, async (event, raw: unknown) => {
+    memorySender = event.sender;
+    try {
+      return await bridge.storyMemoryRetry(raw as never);
+    } finally {
+      memorySender = undefined;
+    }
+  });
+  ipcMain.handle(IpcChannels.storyMemoryRewind, async (_event, raw: unknown) =>
+    bridge.storyMemoryRewind(raw as never),
+  );
+  ipcMain.handle(IpcChannels.storyMemoryRegenerate, async (event, raw: unknown) => {
+    memorySender = event.sender;
+    try {
+      return await bridge.storyMemoryRegenerate(raw as never);
+    } finally {
+      memorySender = undefined;
+    }
+  });
+  handle(IpcChannels.storyMemoryList, bridge.storyMemoryList);
+  handle(IpcChannels.storyMemoryGet, bridge.storyMemoryGet);
+  handle(IpcChannels.storyMemorySynthesize, bridge.storyMemorySynthesize);
+  handle(IpcChannels.storyMemorySave, bridge.storyMemorySave);
+  handle(IpcChannels.storyMemoryDelete, bridge.storyMemoryDelete);
+  handle(IpcChannels.storyMemoryStoreAttachment, bridge.storyMemoryStoreAttachment);
+  handle(IpcChannels.storyMemoryGetAttachment, bridge.storyMemoryGetAttachment);
 
   // intakeRunTurn streams the interviewer reply on its own channel (kept separate from chat/dreams). Same
   // per-turn sender binding + reset as chatStream (18-personal-onboarding §6).

@@ -12,6 +12,17 @@ import type {
   StoryChaptersResult,
   StoryChapterHistoryView,
   StoryChapterVersionInput,
+  StoryMemoryView,
+  StoryMemoryDetail,
+  StoryMemoryRef,
+  StoryMemoryOpenInput,
+  StoryMemoryTurnInput,
+  StoryMemoryRewindInput,
+  StoryMemorySaveInput,
+  StoryMemorySynthesisResult,
+  StoryMemorySaveResult,
+  StoryMemoryStoreAttachmentInput,
+  StoryMemoryGetAttachmentInput,
   StoryDraftProgress,
   ImageGenProgress,
   StoryChapterRef,
@@ -361,6 +372,19 @@ export const IpcChannels = {
   storyUnexclude: 'story:unexclude',
   storyTodoToQuestions: 'story:todoToQuestions',
   storyAnswerQuestion: 'story:answerQuestion',
+  storyMemoryList: 'story:memoryList',
+  storyMemoryGet: 'story:memoryGet',
+  storyMemoryOpen: 'story:memoryOpen',
+  storyMemoryTurn: 'story:memoryTurn',
+  storyMemoryRetry: 'story:memoryRetry',
+  storyMemoryRewind: 'story:memoryRewind',
+  storyMemoryRegenerate: 'story:memoryRegenerate',
+  storyMemorySynthesize: 'story:memorySynthesize',
+  storyMemorySave: 'story:memorySave',
+  storyMemoryDelete: 'story:memoryDelete',
+  storyMemoryStoreAttachment: 'story:memoryStoreAttachment',
+  storyMemoryGetAttachment: 'story:memoryGetAttachment',
+  storyMemoryChunk: 'story:memoryChunk', // main → renderer event
   storyRefreshCheck: 'story:refreshCheck',
   storyProposals: 'story:proposals',
   storyResolveProposal: 'story:resolveProposal',
@@ -1219,6 +1243,38 @@ export interface SelfosBridge {
   /** Answer a `question`-intent comment (§3.3, answer the author): the biographer replies about a passage,
    *  grounded in that paragraph's provenance; the answer is stored on the mark. Metered `story.answer`. */
   storyAnswerQuestion(input: StoryAnswerQuestionInput): Promise<StoryAnswerResult>;
+  // --- Share a memory (§14) — the biographer interview chat + its synthesized memory ---
+  /** Every memory the person has shared, newest first, joined "wove into <chapter>" where derivable. */
+  storyMemoryList(): Promise<StoryMemoryView[]>;
+  /** A memory + its transcript (for resuming the chat / rendering the confirm card). */
+  storyMemoryGet(input: StoryMemoryRef): Promise<StoryMemoryDetail | null>;
+  /** Open (or resume) a memory chat — the biographer speaks first (streams via `onMemoryChunk`). `seedFocus`
+   *  optionally opens it from a gap or a photo. Creates the memory if `memoryId` is omitted. */
+  storyMemoryOpen(input: StoryMemoryOpenInput): Promise<StoryMemoryDetail | null>;
+  /** One chat turn (streams via `onMemoryChunk`); optional image attachments on the new message. */
+  storyMemoryTurn(input: StoryMemoryTurnInput): Promise<ChatTurnResult>;
+  /** Re-generate the reply after a failed/empty turn (streams via `onMemoryChunk`). */
+  storyMemoryRetry(input: StoryMemoryRef): Promise<ChatTurnResult>;
+  /** "Delete from here" — truncate the memory transcript at a message. */
+  storyMemoryRewind(input: StoryMemoryRewindInput): Promise<RewindResult>;
+  /** "Retry from here" — rewind then regenerate (streams via `onMemoryChunk`). */
+  storyMemoryRegenerate(input: StoryMemoryRewindInput): Promise<ChatTurnResult>;
+  /** Synthesize the chat into the structured memory draft (the confirm card reads it). Metered `story.memory`. */
+  storyMemorySynthesize(input: StoryMemoryRef): Promise<StoryMemorySynthesisResult>;
+  /** Commit the (edited) synthesized memory — feeds the book + the coach. */
+  storyMemorySave(input: StoryMemorySaveInput): Promise<StoryMemorySaveResult>;
+  /** Delete a memory (record + transcript + attachments + its Insight — truly forgets). */
+  storyMemoryDelete(input: StoryMemoryRef): Promise<void>;
+  /** Store an image attachment for a memory chat; returns a ref or a calm reject. */
+  storyMemoryStoreAttachment(
+    input: StoryMemoryStoreAttachmentInput,
+  ): Promise<AttachmentRef | { ok: false; reason: 'UNSUPPORTED' | 'TOO_LARGE'; message: string }>;
+  /** Read a stored memory attachment's bytes (base64). */
+  storyMemoryGetAttachment(
+    input: StoryMemoryGetAttachmentInput,
+  ): Promise<{ mime: string; dataBase64: string } | null>;
+  /** Subscribe to streamed memory-chat chunks; the counterpart to the main-side memory sink. */
+  onMemoryChunk(listener: (delta: string) => void): () => void;
   /** The living-book refresh pass (§3.4): mark stale chapters (free) + auto-rewrite them (metered, weekly-
    *  capped in the auto cadence). Marking stale runs even with AI off; the rewrite needs AI + budget. */
   storyRefreshCheck(input: StoryRefreshInput): Promise<StoryRefreshViewResult>;

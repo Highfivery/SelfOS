@@ -419,6 +419,42 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-21 — **Build (Your Story "Share a memory" — resume an unfinished chat later + a history list, like
+  Sessions; SPEC 64 §14.2; on `feat/story-memory-resume-history`).** After Share a memory shipped (v0.42.0), the
+  user asked that a memory chat be resumable — come back later to finish it, and keep a history of the chats.
+  **Diagnosed first (not assumed):** the backbone already existed — a memory persists the moment it's opened,
+  appears in the collection, and a row reopens the transcript — but it didn't _feel_ like Sessions (unfinished
+  drafts were unidentifiable, empty-draft clutter, no Continue affordance, and reopening a synthesized draft
+  re-ran synthesis). **Decisions locked (AskUserQuestion):** **auto working title** (an AI title, over a free
+  first-line snippet); **keep every started chat** (no reaping); **a "Continue" section on top + history below**;
+  **reopen a synthesized-but-unsaved draft → straight to the review card** (no re-spend). Built: **(1)** a cheap
+  best-effort `maybeGenerateWorkingTitle` hooked into `generateMemoryReply` — once there's been an exchange, an
+  untitled UNSAVED draft (`gathering` OR marker-`ready`-but-not-yet-synthesized) gets a short metered
+  `story.memory` title so the resume list can name it; it re-attempts only while the title is still empty then
+  stops, re-reads before the patch so it won't clobber a synthesis title, and a failure leaves the title empty
+  (the row falls back to "New memory"). `listMemoryViews` returns the raw title. **(2)** the Interview tab splits
+  into **"Pick up where you left off"** (resumable `status !== 'saved'` chats — each with an "In progress"/"Ready
+  to save" chip, a "Last worked on <when>" line, and a Continue affordance) above **"Memories you've shared"**
+  (the saved ones), via a shared `MemoryCollectionRow`. **(3)** the panel lands a reopened **synthesized** draft
+  directly on the editable confirm card (no new AI spend; "Keep talking" returns to chat). **The key correctness
+  fix (surfaced by the test-author's honest coverage note): `status: 'ready'` conflates two states** — the
+  biographer's `[[SELFOS:MEMORY_READY]]` marker (ready-to-save, NOT synthesized, empty title/narrative) AND an
+  actual synthesized draft. So (a) the working-title guard is `status !== 'saved'` (not `=== 'gathering'`) so a
+  memory shared in one turn — which flips straight to `ready` — still gets a resume label; and (b) the
+  reopen-to-review-card is gated on a non-empty synthesized `narrative`, NOT merely `status: 'ready'`, or a
+  marker-ready draft would reopen into an EMPTY confirm card — it correctly reopens into the chat with the Save
+  offer. No schema change. Gate green: typecheck, lint, format, **1606 core + 12 relay + 1409 desktop** unit
+  (+working-title generates/leaves-empty-on-failure/skips-already-titled + `listMemoryViews` raw title; +RTL
+  two-section split, reopen-`ready`→confirm-without-synthesize, the Continue section shows the working title),
+  **11 story E2E** (a new resume walk: start → leave mid-chat → the draft shows its auto working title "A Summer
+  Ride" under "Pick up where you left off" → Continue reopens the transcript → Save → it moves to the shared
+  history; the fake-Claude gained a working-title branch returning a title distinct from the synthesis title so
+  the E2E proves it). code-reviewer **ship** (only nits: the awaited title call's latency, and doc-precision on
+  the guard — both addressed in the wording). Spec 64 §14.2. **Lesson: a status enum that conflates "the model
+  signalled ready" with "a synthesized artifact exists" is a trap — the marker path and the synthesis path both
+  set `ready`, so every consumer (the working-title guard, the reopen-to-review-card, the list chip) must key off
+  the ACTUAL artifact (`narrative` present), not the status flag; the test-author's "the offline fake can't reach
+  this" finding was the tell that the guard was keyed on the wrong signal.**
 - 2026-07-21 — **Build (Your Story "Share a memory" — the biographer interview chat; SPEC 64 §14 written + BUILT;
   PR 3 of the overnight Your-Story overhaul; on `feat/story-share-a-memory`).** The user asked, under Interview,
   for a way to freeform-share a specific memory, have the biographer draw it out in an interactive chat (like a

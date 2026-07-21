@@ -465,6 +465,13 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // Share a memory (§14) — the cheap auto working title for an in-progress draft. Matched by its
+      // distinctive instruction; returns a title DIFFERENT from the synthesis title so an E2E can tell an
+      // in-progress draft's working title from the final saved title.
+      if (userText.includes('short working title')) {
+        return Promise.resolve({ text: 'A Summer Ride', usage: STORY_USAGE });
+      }
+
       // Share a memory (§14) — synthesis: the biographer captures the chat as a structured memory JSON. Must
       // precede the memory CHAT branch (both share the biographer system) and the generic "JSON object" branch.
       if (userText.includes('capture this memory as structured data')) {

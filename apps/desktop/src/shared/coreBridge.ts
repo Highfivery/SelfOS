@@ -581,12 +581,14 @@ import {
   hasSends,
   createRelaySend,
   drainRelaySend,
+  buildDedupReference,
   externalSendDisclosure,
   garbageCollectImages,
   gatherRecipientHistory,
   gatherRecipientAskedPrompts,
   gatherRecipientPriorAnswers,
   gatherRecipientInsightFacts,
+  gatherRecipientQuestionnaireTitles,
   generateQuestions,
   resolveInsightAbout,
   resolveInsightSource,
@@ -1498,27 +1500,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     ]
       .filter((s) => s.trim() !== '')
       .join('\n\n');
-    // The SEMANTIC-PASS reference (08 §23.5b/§24.3-A2/A3): a DEDICATED digest of the "already have data for this"
-    // material. Each section gets its OWN budget so a huge onboarding can't truncate away the prior-questionnaire
-    // answers or insight facts (Track A's whole point) — the §23.5b bug was onboarding buried last + truncated;
-    // per-section caps guarantee every authoritative source is represented. `…` marks a trimmed section.
-    const cap = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n)}\n…` : s);
-    const dedupReference = [
-      intake.text.trim()
-        ? `ALREADY ANSWERED in their onboarding — do NOT re-ask ANY of this, including specific sub-preferences, acts, positions, kinks, and options they selected (e.g. MMF/FFM, particular porn genres, yes/no on an act):\n${cap(intake.text.trim(), 8000)}`
-        : '',
-      priorAnswers.trim()
-        ? `ALREADY ANSWERED in prior questionnaires (do NOT re-ask any of this):\n${cap(priorAnswers.trim(), 4000)}`
-        : '',
-      insightFacts.trim()
-        ? `ALREADY KNOWN about them from sessions, reflections, tests, and dreams (do NOT re-ask these):\n${cap(insightFacts.trim(), 3000)}`
-        : '',
-      priorPrompts.length
-        ? `ALREADY ASKED in prior questionnaires:\n${cap(priorPrompts.map((p) => `- ${p}`).join('\n'), 2000)}`
-        : '',
-    ]
-      .filter((s) => s.trim() !== '')
-      .join('\n\n');
+    // The SEMANTIC-PASS reference (08 §23.5b/§24.3-A2/A3): a DEDICATED, per-section-budgeted digest of the
+    // "already have data for this" material, so a huge onboarding can't truncate away the prior-questionnaire
+    // answers or insight facts (Track A's whole point). Uses the SHARED `buildDedupReference` — the ONE
+    // budgeting rule the auto-checkin engine + Your Story's biographer also call, so the three can't drift.
+    const dedupReference = buildDedupReference({
+      intakeText: intake.text,
+      priorAnswers,
+      insightFacts,
+      priorPrompts,
+    });
     // The hard near-dup FILTER list: prior questionnaire prompts AND the answered onboarding question prompts,
     // so a generated question that verbatim re-asks an onboarding question is dropped deterministically too.
     const askedPrompts = [...priorPrompts, ...intake.prompts];
@@ -3896,11 +3887,19 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         deps.personId,
         recipientPersonId,
       );
+      // Topic-level de-dup (§23.5): avoid re-proposing an idea already SAVED here AND a questionnaire already
+      // SENT to this recipient — so "Suggest more" opens new ground instead of circling covered topics.
+      const priorTitles = await gatherRecipientQuestionnaireTitles(
+        deps.fs,
+        deps.key,
+        recipientPersonId,
+      );
+      const avoidSuggestions = [...existing.map((s) => s.title), ...priorTitles];
       const result = await suggestQuestionnaires(deps, {
         targetPersonId: recipientPersonId,
         recipientName: recipient.displayName,
         ...(recipientHistory ? { recipientHistory } : {}),
-        ...(existing.length ? { avoidSuggestions: existing.map((s) => s.title) } : {}),
+        ...(avoidSuggestions.length ? { avoidSuggestions } : {}),
       });
       if (!result.ok || !result.suggestions) {
         // A failed generate preserves the prior saved set (§18.5) — the panel keeps what it had.

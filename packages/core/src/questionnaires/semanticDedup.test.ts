@@ -22,6 +22,24 @@ function fakeClient(text: string): ClaudeClient {
   };
 }
 
+/** A client that returns each text in `texts` on successive stream calls (last one repeats). */
+function seqClient(texts: string[]): { client: ClaudeClient; calls: () => number } {
+  let i = 0;
+  const client: ClaudeClient = {
+    send: () => Promise.resolve(texts[0] ?? ''),
+    stream: (_o, onDelta) => {
+      const text = texts[Math.min(i, texts.length - 1)] ?? '';
+      i += 1;
+      onDelta(text);
+      return Promise.resolve({
+        text,
+        usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+      });
+    },
+  };
+  return { client, calls: () => i };
+}
+
 function deps(fs: FileSystem, client: ClaudeClient, apiKey: string | null = 'sk-x'): AiDeps {
   return { fs, key, client, apiKey, model: 'claude-sonnet-4-6', personId: 'p1', now };
 }
@@ -49,17 +67,50 @@ describe('semantic de-dup pass (08 §23.5 layer 3)', () => {
     expect(result.usage?.type).toBe('questionnaire.dedup');
   });
 
-  it('FAILS SAFE — keeps every candidate when there is no key (no dead-end)', async () => {
+  it('FAILS SAFE — keeps every candidate when there is no key, and FLAGS it degraded', async () => {
     const fs = memFileSystem();
     const result = await semanticDedupFilter(deps(fs, fakeClient('[1]'), null), CANDIDATES, 'ref');
     expect(result.kept).toHaveLength(3);
     expect(result.usage).toBeUndefined();
+    // The no-op is now observable — de-dup silently did nothing (the hole the reported bug hides in).
+    expect(result.degraded).toBe(true);
   });
 
-  it('treats an empty/garbled keep-list as a parse artifact and keeps all', async () => {
+  it('treats an empty keep-list as a parse artifact — keeps all, flags degraded (no retry on a valid [])', async () => {
     const fs = memFileSystem();
-    const result = await semanticDedupFilter(deps(fs, fakeClient('[]')), CANDIDATES, 'ref');
+    const seq = seqClient(['[]']);
+    const result = await semanticDedupFilter(deps(fs, seq.client), CANDIDATES, 'ref');
     expect(result.kept).toHaveLength(3);
+    expect(result.degraded).toBe(true);
+    expect(seq.calls()).toBe(1); // a valid empty array is a real signal, not a glitch → no retry
+  });
+
+  it('RETRIES ONCE on a garbled (unparseable) reply, then uses the retry’s valid indices', async () => {
+    const fs = memFileSystem();
+    const seq = seqClient(['sorry, here are the ones to keep: one and three', '[1,3]']);
+    const result = await semanticDedupFilter(deps(fs, seq.client), CANDIDATES, 'ref');
+    expect(seq.calls()).toBe(2); // garbled → retried
+    expect(result.kept.map((x) => x.prompt)).toEqual([
+      'What do you value most?',
+      'What scares you?',
+    ]);
+    expect(result.degraded).toBeUndefined(); // the retry produced a real signal
+  });
+
+  it('keeps all + flags degraded when BOTH the reply and the retry are unparseable', async () => {
+    const fs = memFileSystem();
+    const seq = seqClient(['no json here', 'still no json']);
+    const result = await semanticDedupFilter(deps(fs, seq.client), CANDIDATES, 'ref');
+    expect(seq.calls()).toBe(2);
+    expect(result.kept).toHaveLength(3);
+    expect(result.degraded).toBe(true);
+  });
+
+  it('does NOT flag degraded when the model legitimately keeps everything', async () => {
+    const fs = memFileSystem();
+    const result = await semanticDedupFilter(deps(fs, fakeClient('[1,2,3]')), CANDIDATES, 'ref');
+    expect(result.kept).toHaveLength(3);
+    expect(result.degraded).toBeUndefined();
   });
 
   it('skips the call entirely with ≤1 candidate (nothing to compare)', async () => {

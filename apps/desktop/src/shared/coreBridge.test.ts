@@ -2410,7 +2410,10 @@ describe('createCoreBridge', () => {
       send: () => Promise.resolve(''),
       stream: (options, onDelta) => {
         sentUserText = options.messages.map((m) => m.content).join('\n');
-        const second = sentUserText.includes('ALREADY proposed these');
+        // The FIRST call now also carries an avoid-list — the prior-SENT title "Earlier" (§23.5 topic
+        // de-dup: don't re-suggest an already-sent topic). So detect the "Suggest more" call by a SAVED
+        // idea title in the avoid-list, which only appears on the second call.
+        const second = sentUserText.includes('First idea');
         const titles = second ? ['Deeper dive'] : ['First idea', 'Second idea'];
         const json = JSON.stringify(
           titles.map((t) => ({
@@ -2435,6 +2438,7 @@ describe('createCoreBridge', () => {
     expect(first.saved?.map((s) => s.title)).toEqual(['First idea', 'Second idea']);
     expect(sentUserText).toContain('specifically for Mara'); // recipient-first tailoring
     expect(sentUserText).toContain('What is your secret codeword?'); // their history reaches the model
+    expect(sentUserText).toContain('Earlier'); // §23.5: the already-SENT topic is fed as an avoid on the first call
     expect(sentUserText).toMatch(/never quote, restate, reference/i); // the never-reveal safety clause
     // The recipient's private prior content is NEVER returned to the author — only generated ideas.
     expect(JSON.stringify(first.saved)).not.toContain('secret codeword');

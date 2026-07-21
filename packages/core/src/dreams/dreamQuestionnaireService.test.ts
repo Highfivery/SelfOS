@@ -5,7 +5,12 @@ import type { ClaudeClient } from '../host';
 import type { Dream, Person } from '../schemas';
 import { savePerson } from '../people';
 import { setAutoCheckinBlock } from '../autoCheckins/prefsService';
-import { listAssignments, listQuestionnaires } from '../questionnaires';
+import {
+  createAssignment,
+  listAssignments,
+  listQuestionnaires,
+  saveQuestionnaire,
+} from '../questionnaires';
 import { mintDreamQuestionnaires } from './dreamQuestionnaireService';
 
 const key = generateMasterKey();
@@ -86,6 +91,71 @@ describe('mintDreamQuestionnaires (66 §3.4)', () => {
     expect(assignments[0]?.recipient).toMatchObject({ kind: 'person', personId: 'p1' });
     // A self check-in is standard — there's no one to keep the answers from.
     expect(assignments[0]?.privacy).toBe('standard');
+  });
+
+  // 08 §23.5 — the dream path previously fed generation NO de-dup context, so it could re-ask what the
+  // recipient already answered. It now assembles the recipient's de-dup grounding (like the auto-checkin /
+  // bridge paths), so the "already asked" material reaches the model.
+  it('feeds the recipient’s de-dup grounding to generation (no longer a zero-de-dup path)', async () => {
+    const fs = memFileSystem();
+    await savePerson(fs, key, person('p1', 'Alex'));
+    // A questionnaire ALREADY sent to Alex, with a distinctive prompt that de-dup grounding should surface.
+    const def = await saveQuestionnaire(fs, key, {
+      title: 'Sleep & rest',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: 'p1' },
+      questions: [
+        {
+          id: 'q1',
+          type: 'shortText',
+          prompt: 'What is your relationship with sleep?',
+          required: false,
+        },
+      ],
+    });
+    await createAssignment(fs, key, {
+      questionnaireId: def.id,
+      senderPersonId: 'p1',
+      recipient: { kind: 'person', personId: 'p1' },
+      channel: 'inApp',
+      privacy: 'standard',
+      senderVisibleToRecipient: true,
+    });
+
+    let genUserText = '';
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        const userText = options.messages
+          .map((m) => (typeof m.content === 'string' ? m.content : ''))
+          .join('\n');
+        if (userText.includes('the JSON object with a short')) genUserText = userText;
+        const set = JSON.stringify({
+          title: 'A gentle check-in',
+          questions: [{ type: 'shortText', prompt: 'What stood out for you?', required: false }],
+        });
+        onDelta(set);
+        return Promise.resolve({
+          text: set,
+          usage: { inputTokens: 10, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    await mintDreamQuestionnaires({
+      deps: deps(fs, capturing),
+      fs,
+      key,
+      personId: 'p1',
+      dream: dream([]),
+      analysisId: 'a1',
+      proposals: [{ ...PROPOSAL, for: 'me' }],
+      now: NOW,
+    });
+
+    // The already-asked prompt reached the generation call as de-dup grounding — proof de-dup now flows.
+    expect(genUserText).toContain('What is your relationship with sleep?');
   });
 
   it('sends to a dream figure LINKED to the People graph, privately', async () => {

@@ -193,6 +193,74 @@ function captureStoryPrompt(name: string, system: string, user: string): void {
 }
 
 /** Offline stub (gated by SELFOS_FAKE_CLAUDE) so chat + the connection test are deterministic. */
+/** Content tokens of a string for the fake de-dup branch: lowercase, punctuation-stripped, short/filler
+ *  words dropped (mirrors `dedup.ts`'s intent). Kept local so the offline fake stays self-contained. */
+function fakeContentTokens(s: string): Set<string> {
+  const STOP = new Set([
+    'what',
+    'whats',
+    'how',
+    'when',
+    'where',
+    'why',
+    'who',
+    'which',
+    'that',
+    'this',
+    'your',
+    'you',
+    'the',
+    'and',
+    'for',
+    'with',
+    'about',
+    'have',
+    'has',
+    'had',
+    'are',
+    'was',
+    'were',
+    'would',
+    'could',
+    'should',
+    'can',
+    'will',
+    'like',
+    'feel',
+    'feels',
+    'felt',
+    'them',
+    'they',
+    'their',
+    'any',
+    'some',
+    'most',
+    'more',
+    'lately',
+    'these',
+    'those',
+    'been',
+    'from',
+    'into',
+    'over',
+  ]);
+  return new Set(
+    s
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 4 && !STOP.has(w)),
+  );
+}
+
+/** How many of `cand`'s distinctive tokens appear in `pool` (a fraction 0..1 of the candidate). */
+function fakeCoverage(cand: Set<string>, pool: Set<string>): { count: number; frac: number } {
+  if (cand.size === 0) return { count: 0, frac: 0 };
+  let count = 0;
+  for (const t of cand) if (pool.has(t)) count += 1;
+  return { count, frac: count / cand.size };
+}
+
 export function fakeClaudeClient(): ClaudeClient {
   return {
     send: () => Promise.resolve('ok'),
@@ -262,6 +330,43 @@ export function fakeClaudeClient(): ClaudeClient {
             ],
           }),
           usage: { inputTokens: 120, outputTokens: 60, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
+      // The semantic de-dup pass (08 §23.5) — the ONE layer that catches a re-ask of known info in different
+      // words. A no-op fake here (keep-all) hides whether the live pass works at all — the reported "AI re-asks
+      // things it already knows" bug, and the 37 §10 "fakes must not be no-ops" rule. So actually DROP a
+      // candidate whose distinctive content is substantially covered by the ALREADY-KNOWN reference, OR that
+      // near-duplicates an earlier kept candidate (intra-batch, #192). Conservative (≥3 shared distinctive
+      // tokens, or ≥2 that are ≥75% of the candidate) so a genuinely-new question is never dropped.
+      if (options.system.includes('strict de-duplication filter')) {
+        const candStart = userText.indexOf('CANDIDATE NEW QUESTIONS:');
+        const reference = candStart >= 0 ? userText.slice(0, candStart) : '';
+        const refTokens = fakeContentTokens(reference);
+        // Scan ONLY the candidate section for numbered lines — a multi-line onboarding answer in the
+        // reference could contain a "\n2. …" line and surface a phantom candidate otherwise (non-determinism).
+        const candBlock = candStart >= 0 ? userText.slice(candStart) : userText;
+        const candidates = [...candBlock.matchAll(/^\s*(\d+)\.\s*(.+)$/gm)].map((m) => ({
+          idx: Number(m[1]),
+          tokens: fakeContentTokens(m[2] ?? ''),
+        }));
+        const kept: number[] = [];
+        const keptTokens: Set<string>[] = [];
+        for (const c of candidates) {
+          if (c.tokens.size === 0) {
+            kept.push(c.idx);
+            continue;
+          }
+          const ref = fakeCoverage(c.tokens, refTokens);
+          const coveredByRef = ref.count >= 3 || (ref.count >= 2 && ref.frac >= 0.75);
+          const dupOfEarlier = keptTokens.some((k) => fakeCoverage(c.tokens, k).frac >= 0.75);
+          if (coveredByRef || dupOfEarlier) continue;
+          kept.push(c.idx);
+          keptTokens.push(c.tokens);
+        }
+        return Promise.resolve({
+          text: JSON.stringify(kept),
+          usage: { inputTokens: 200, outputTokens: 12, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
 

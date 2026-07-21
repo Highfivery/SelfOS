@@ -17,6 +17,7 @@ import {
   gatherRecipientHistory,
   gatherRecipientInsightFacts,
   gatherRecipientPriorAnswers,
+  gatherRecipientQuestionnaireTitles,
 } from '../questionnaires/recipientHistory';
 import type {
   AutoCheckinCreated,
@@ -158,6 +159,10 @@ export async function runAutoCheckins(input: RunAutoCheckinsInput): Promise<Auto
         ...(elig.isSelf ? {} : { targetPersonId: elig.recipientPersonId }),
         ...(elig.recipient.name ? { recipientName: elig.recipient.name } : {}),
         ...(bundle.recipientHistory ? { recipientHistory: bundle.recipientHistory } : {}),
+        // Topic-level de-dup (§23.5): the topics already sent to this recipient, so the daily gap-finder
+        // proposes a NEW area instead of circling the same ones — the previously-missing hard signal on the
+        // path that repeats most (a recurring daily send). Enforced deterministically in `suggestQuestionnaires`.
+        ...(bundle.priorTitles.length ? { avoidSuggestions: bundle.priorTitles } : {}),
       });
       if (sug.ok) suggestions = sug.suggestions ?? [];
       // A gap-finder miss (thin context / budget / refusal) isn't fatal — topical slots fall back to a
@@ -485,14 +490,17 @@ async function buildDedupBundle(
   dedupReference: string;
   recipientAskedPrompts: string[];
   coveredActs: { label: string; rating: string }[];
+  priorTitles: string[];
 }> {
-  const [history, priorPrompts, priorAnswers, insightFacts, session] = await Promise.all([
-    gatherRecipientHistory(fs, key, recipientId),
-    gatherRecipientAskedPrompts(fs, key, recipientId),
-    gatherRecipientPriorAnswers(fs, key, recipientId),
-    gatherRecipientInsightFacts(fs, key, recipientId),
-    getIntakeSession(fs, key, recipientId),
-  ]);
+  const [history, priorPrompts, priorAnswers, insightFacts, priorTitles, session] =
+    await Promise.all([
+      gatherRecipientHistory(fs, key, recipientId),
+      gatherRecipientAskedPrompts(fs, key, recipientId),
+      gatherRecipientPriorAnswers(fs, key, recipientId),
+      gatherRecipientInsightFacts(fs, key, recipientId),
+      gatherRecipientQuestionnaireTitles(fs, key, recipientId),
+      getIntakeSession(fs, key, recipientId),
+    ]);
   const intake = session
     ? formatIntakeForGeneration(session)
     : { text: '', coveredActs: [], prompts: [] };
@@ -518,5 +526,6 @@ async function buildDedupBundle(
     dedupReference,
     recipientAskedPrompts,
     coveredActs: intake.coveredActs.map((a) => ({ label: a.label, rating: a.rating })),
+    priorTitles,
   };
 }

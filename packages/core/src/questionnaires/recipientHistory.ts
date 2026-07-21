@@ -130,7 +130,7 @@ export function buildDedupReference(inputs: {
   const insightFacts = inputs.insightFacts.trim();
   return [
     intake
-      ? `ALREADY ANSWERED in their onboarding — do NOT re-ask ANY of this, including specific sub-preferences, acts, positions, kinks, and options they selected (e.g. MMF/FFM, particular porn genres, yes/no on an act):\n${cap(intake, 8000)}`
+      ? `ALREADY ANSWERED in their onboarding — do NOT re-ask ANY of this, including specific sub-preferences, acts, positions, kinks, and options they selected (e.g. MMF/FFM, particular porn genres, yes/no on an act):\n${cap(intake, 14000)}`
       : '',
     priorAnswers
       ? `ALREADY ANSWERED in prior questionnaires (do NOT re-ask any of this):\n${cap(priorAnswers, 4000)}`
@@ -144,6 +144,28 @@ export function buildDedupReference(inputs: {
   ]
     .filter((s) => s.trim() !== '')
     .join('\n\n');
+}
+
+/**
+ * The TITLES of every questionnaire already sent to a recipient (08-questionnaires §23.5 / gap-finder). A
+ * questionnaire's title captures its TOPIC, so this is the topic-level de-dup signal fed to the gap-finder as
+ * `avoidSuggestions` — so it proposes a genuinely NEW area instead of re-suggesting a covered one (the layer
+ * question-level de-dup can't help with: a whole questionnaire on an already-covered topic). Deduped,
+ * host-side, author-blind. Household recipients only.
+ */
+export async function gatherRecipientQuestionnaireTitles(
+  fs: FileSystem,
+  key: Uint8Array,
+  recipientPersonId: string,
+): Promise<string[]> {
+  const asked = await listAssignments(fs, key, { recipientPersonId });
+  const titles = new Set<string>();
+  for (const assignment of asked) {
+    const snapshot = await getAssignmentSnapshot(fs, key, assignment.id);
+    const title = snapshot?.title.trim();
+    if (title) titles.add(title);
+  }
+  return [...titles];
 }
 
 export async function gatherRecipientPriorAnswers(

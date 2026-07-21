@@ -3674,3 +3674,58 @@ pills, timing meta, and CTA at different heights. Fix: single-line sender row (n
 category eyebrow; the title clamped to + reserving 2 lines so titles line up across a row; the status pill + timing
 meta grouped tightly; the Received CTA bottom-pinned. Renderer-only (`Questionnaires.module.css` + `ReceivedCard`),
 verified by the redesign E2E (360px overflow guard) + a token-accurate visual QA.
+
+## 26. 2026-07-21 amendment — de-dup audit: make it observable, topic-level, complete, reliable — BUILT
+
+> **Status: BUILT** (`fix/questionnaire-dedup-audit`, NOT merged). A deep audit after the user reported AI
+> questionnaires STILL re-asking known things despite §17/§23/§23.5b/§24. Amends §23.5 (de-dup) + §13.3 (gap-finder).
+> Privacy boundary (§8.4/§17.4) UNCHANGED — de-dup material stays host-side/author-blind; only keep/drop indices +
+> generated questions come back.
+
+### 26.1 The audit finding (why prior fixes didn't end it)
+
+Every prior fix improved the DATA fed to the semantic de-dup pass. None addressed four structural gaps:
+
+1. **The topic selector had no real de-dup.** The gap-finder (`gapFinderService`) — which chooses what each
+   questionnaire is ABOUT — had only soft, model-trusted overlap avoidance, and the **auto check-in path passed no
+   avoid-list at all**. Question-level de-dup can't help when the whole questionnaire is on a covered topic. This
+   is the biggest driver of "same things over and over," especially for the daily auto check-ins.
+2. **The semantic pass was the sole meaning-level defense, and it was fragile + UNVERIFIED.** It's fail-safe (any
+   parse hiccup / AI-off / over-budget → silently keep everything), it truncated a full onboarding (~180 questions)
+   at 8000 chars, and **no test exercised it dropping a reworded duplicate** — every unit test scripted the drop
+   with literal indices, and the E2E fake had no de-dup branch (fell through → keep-all). So the real pass could be
+   a no-op and the whole suite stayed green (the §6 "fakes hide model-call bugs" trap).
+3. **Dream-derived questionnaires passed ZERO de-dup inputs** — even to another household member with full history.
+4. **DRY drift risk:** the bridge inlined its own copy of `buildDedupReference`.
+
+### 26.2 The fix (five slices)
+
+- **Observability (the linchpin).** The offline fake Claude (`anthropicClient` + `webStores`) gained a de-dup
+  branch that actually parses the numbered candidates + the ALREADY-KNOWN reference and DROPS a candidate whose
+  distinctive content is covered (conservative: ≥3 shared distinctive tokens, or ≥2 that are ≥75% of the
+  candidate). So the pass is finally exercised end-to-end; a new test drives `generateQuestions` through the fake
+  and proves a reference-covered candidate is removed. This is what turns a silent no-op into something a test can
+  catch.
+- **Reliability.** `semanticDedup`: the reference ceiling 16000→24000 + the onboarding cap 8000→14000 (so a full
+  intake isn't truncated — the §23.5b bug at full-intake scale); a **retry-once** on a genuinely-garbled
+  (no-array) reply before the keep-all fallback (usage summed, 66 §5.1); and an observable **`degraded`** flag set
+  whenever the pass fell back to keep-all with no real filter signal (AI-off/over-budget/unparseable-after-retry/
+  empty-`[]`) — the silent-degradation the bug hides behind is now inspectable.
+- **Topic-level de-dup.** New `gatherRecipientQuestionnaireTitles` (the topics already SENT to a recipient). The
+  gap-finder now ENFORCES `avoidSuggestions` deterministically (drops a returned suggestion whose title
+  near-duplicates a covered topic, via the same conservative `isNearDuplicate`), and when every proposal is a
+  covered-topic dup it returns a calm "nothing new" EMPTY STATE (no `reason` — the thin-context precedent), never a
+  data blame. The **auto check-in** path and the **bridge saved-suggestions** path both now pass prior-sent titles
+  as `avoidSuggestions`.
+- **Dream path.** `dreamQuestionnaireService` now assembles the recipient's de-dup bundle (history +
+  `dedupReference` via the shared `buildDedupReference` + `recipientAskedPrompts`) for the resolved recipient (self
+  OR a household member) and passes it to generation.
+- **DRY.** The bridge's `recipientKnownData` now calls the shared `buildDedupReference` (one budgeting rule the
+  bridge, the auto engine, and Your Story's biographer all share).
+
+### 26.3 Honest caveat (live-model tuning is a follow-up)
+
+The structural gaps above are fixed + verified from the code. Confirming whether the LIVE semantic pass's judgment
+is strong enough (vs. the structural gaps) needs a real-API run — the offline fake proves the plumbing + a
+reference-driven drop, not the live model's quality. Tuning `SEMANTIC_DEDUP_SYSTEM` against the live model is a
+separate follow-up; the `degraded` flag now makes a live no-op observable.

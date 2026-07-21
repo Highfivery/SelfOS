@@ -1,5 +1,10 @@
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
-import type { BootState, StoryDraftProgress, ImageGenProgress } from '@shared/schemas';
+import type {
+  BootState,
+  StoryDraftProgress,
+  ImageGenProgress,
+  TogetherChunk,
+} from '@shared/schemas';
 import type { ClaudeClient, FileSystem, ImageClient, SecretStore } from '@selfos/core/host';
 import { loadMasterKey } from '@selfos/core/crypto';
 import { uuid } from '@selfos/core/id';
@@ -87,7 +92,7 @@ function createBridgeHost(parts: HostParts): BridgeHost {
   const chatListeners = new Set<(delta: string) => void>();
   const dreamListeners = new Set<(delta: string) => void>();
   const intakeListeners = new Set<(delta: string) => void>();
-  const togetherListeners = new Set<(delta: string) => void>();
+  const togetherListeners = new Set<(chunk: TogetherChunk) => void>();
   const memoryListeners = new Set<(delta: string) => void>();
   const storyProgressListeners = new Set<(progress: StoryDraftProgress) => void>();
   const imageProgressListeners = new Set<(progress: ImageGenProgress) => void>();

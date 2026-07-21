@@ -43,6 +43,7 @@ import type {
   ImageGenProgress,
   Insight,
   StoryDraftProgress,
+  TogetherChunk,
 } from './schemas';
 import { createCoreBridge, type BridgeHost } from './coreBridge';
 
@@ -108,7 +109,7 @@ function makeHost(): {
   chunks: string[];
   dreamChunks: string[];
   intakeChunks: string[];
-  togetherChunks: string[];
+  togetherChunks: TogetherChunk[];
   memoryChunks: string[];
   storyProgress: StoryDraftProgress[];
   imageProgress: ImageGenProgress[];
@@ -134,7 +135,7 @@ function makeHost(): {
   const chunks: string[] = [];
   const dreamChunks: string[] = [];
   const intakeChunks: string[] = [];
-  const togetherChunks: string[] = [];
+  const togetherChunks: TogetherChunk[] = [];
   const memoryChunks: string[] = [];
   const storyProgress: StoryDraftProgress[] = [];
   const imageProgress: ImageGenProgress[] = [];
@@ -6107,6 +6108,9 @@ describe('createCoreBridge — Together (58) foundation', () => {
       expect(turn.view.messages[0]?.authorPersonId).toBe(angel);
     }
     expect(host.togetherChunks.length).toBeGreaterThan(0); // the coach reply streamed
+    // Every streamed chunk is tagged with its session (§3.6) so the renderer can drop deltas for a session
+    // the viewer has navigated away from — never bleeding one session's reply into another's live bubble.
+    expect(host.togetherChunks.every((c) => c.sessionId === sessionId)).toBe(true);
     await asPerson(host, ben);
     const benView = await bridge.togetherGet(sessionId);
     expect(benView?.messages.map((m) => m.role)).toEqual(['user', 'assistant']); // shared, both see it

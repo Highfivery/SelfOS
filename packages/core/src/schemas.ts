@@ -3420,6 +3420,17 @@ export type TogetherCreateResult =
       message: string;
     };
 
+/**
+ * A streamed couples-turn delta, tagged with the session it belongs to (§3.6). The chunk stream is global
+ * (one renderer subscription), so the `sessionId` lets the consumer drop deltas from a turn whose session the
+ * viewer has navigated away from — otherwise a turn still streaming in the main process after navigation would
+ * bleed its reply into whatever session is now open.
+ */
+export interface TogetherChunk {
+  sessionId: string;
+  delta: string;
+}
+
 /** The result of a couples turn (§5.1) — the refreshed viewer-projected view, or an honest failure (37). */
 export type TogetherTurnResult =
   | { ok: true; view: TogetherSessionView }

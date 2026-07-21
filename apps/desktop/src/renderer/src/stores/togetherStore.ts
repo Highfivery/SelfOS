@@ -6,6 +6,7 @@ import type {
   AttachmentRef,
   Person,
   TogetherCatalogEntry,
+  TogetherChunk,
   TogetherCreateResult,
   TogetherMessageView,
   TogetherReportView,
@@ -404,13 +405,15 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
 /**
  * Append a streamed chunk to the open session's live reply text (wired to `onTogetherChunk`).
  *
- * The chunk stream carries no session id (the IPC payload is a bare string), so a turn still streaming in the
- * main process after the viewer navigated away would otherwise keep growing the shared buffer and could bleed
- * into a different session's live bubble. Dropping deltas when nothing is `sending` contains the common case
- * (the only turn we're actively rendering set `sending` true). A full fix would tag chunks with a session id.
+ * Each chunk is tagged with the session it belongs to (§3.6), so a delta is applied ONLY when it's for the
+ * session currently open AND that session is actively sending. A turn still streaming in the main process
+ * after the viewer navigated to another session (or a concurrent turn in a different session) is dropped
+ * rather than bleeding into whatever session's live bubble is on screen.
  */
-export function appendTogetherChunk(delta: string): void {
-  useTogetherStore.setState((s) => (s.sending ? { streaming: s.streaming + delta } : {}));
+export function appendTogetherChunk(chunk: TogetherChunk): void {
+  useTogetherStore.setState((s) =>
+    s.sending && s.open?.id === chunk.sessionId ? { streaming: s.streaming + chunk.delta } : {},
+  );
 }
 
 /**

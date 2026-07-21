@@ -249,6 +249,45 @@ export function buildRevisionUserMessage(
 }
 
 /**
+ * The ANSWER-THE-AUTHOR user message (§3.3): the person asked their biographer a question ABOUT a passage
+ * ("where did this come from?", "why did you write it this way?"). Ground the reply in the SOURCE MATERIAL the
+ * paragraph actually drew on (its provenance, resolved to corpus items) so the biographer can answer honestly
+ * — "this came from a coaching session where you described…" — and say plainly when the record doesn't support
+ * an answer (never invent). A short, warm, first-person reply as the biographer; NOT a rewrite of the chapter.
+ */
+export function buildAnswerAuthorMessage(opts: {
+  personName: string;
+  chapterTitle: string;
+  paragraph: string;
+  question: string;
+  /** The corpus items the paragraph cited (resolved from its provenance) — the biographer's actual receipts. */
+  sources: CorpusItem[];
+}): string {
+  const { personName, chapterTitle, paragraph, question, sources } = opts;
+  const sourceLines =
+    sources.length > 0
+      ? sources
+          .map((s) => `- (${[s.label, s.date, s.lifeArea].filter(Boolean).join(' · ')}) ${s.text}`)
+          .join('\n')
+      : '(This passage cited no specific source — it was written around what the record leaves unsaid.)';
+  return [
+    `You are ${personName || 'this person'}'s biographer. They are reading their book and have asked you a question about one passage. Answer it directly, warmly, and honestly, in the first person as the biographer — do NOT rewrite the chapter, do NOT use any [[SRC]] markers, just reply in a sentence or two.`,
+    '',
+    `THE CHAPTER: "${chapterTitle}"`,
+    '',
+    'THE PASSAGE THEY ASKED ABOUT:',
+    paragraph,
+    '',
+    'THE SOURCE MATERIAL THIS PASSAGE DREW ON (your receipts — cite what it actually came from):',
+    sourceLines,
+    '',
+    `THEIR QUESTION: ${question}`,
+    '',
+    'Answer from the source material above. If it genuinely doesn’t say, tell them so plainly ("the record doesn’t say — that was written to bridge two moments") rather than inventing. Reply with ONLY your answer — no preamble, no markers.',
+  ].join('\n');
+}
+
+/**
  * The FOUNDATIONS user message (§3.2/§5.3): ask the model to read the whole corpus and return the book's
  * ESSENCE (what it is about, in Caro's sense), a proposed TIMELINE (the chronology spine), and a proposed
  * OUTLINE (parts + chapters, each with a one–two sentence brief). Structural JSON only — no prose chapters

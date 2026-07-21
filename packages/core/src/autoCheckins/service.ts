@@ -12,6 +12,7 @@ import { type AiDeps, generateQuestions } from '../questionnaires/generationServ
 import { suggestQuestionnaires } from '../questionnaires/gapFinderService';
 import { saveQuestionnaire, validateQuestionnaire } from '../questionnaires/questionnaireService';
 import {
+  buildDedupReference,
   gatherRecipientAskedPrompts,
   gatherRecipientHistory,
   gatherRecipientInsightFacts,
@@ -495,8 +496,6 @@ async function buildDedupBundle(
   const intake = session
     ? formatIntakeForGeneration(session)
     : { text: '', coveredActs: [], prompts: [] };
-  const cap = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n)}\n…` : s);
-
   const recipientHistory = [
     history,
     intake.text.trim() ? `What they have already answered in onboarding:\n${intake.text}` : '',
@@ -504,22 +503,14 @@ async function buildDedupBundle(
     .filter((s) => s.trim() !== '')
     .join('\n\n');
 
-  const dedupReference = [
-    intake.text.trim()
-      ? `ALREADY ANSWERED in their onboarding — do NOT re-ask ANY of this, including specific sub-preferences, acts, positions, kinks, and options they selected (e.g. MMF/FFM, particular porn genres, yes/no on an act):\n${cap(intake.text.trim(), 8000)}`
-      : '',
-    priorAnswers.trim()
-      ? `ALREADY ANSWERED in prior questionnaires (do NOT re-ask any of this):\n${cap(priorAnswers.trim(), 4000)}`
-      : '',
-    insightFacts.trim()
-      ? `ALREADY KNOWN about them from sessions, reflections, tests, and dreams (do NOT re-ask these):\n${cap(insightFacts.trim(), 3000)}`
-      : '',
-    priorPrompts.length
-      ? `ALREADY ASKED in prior questionnaires:\n${cap(priorPrompts.map((p) => `- ${p}`).join('\n'), 2000)}`
-      : '',
-  ]
-    .filter((s) => s.trim() !== '')
-    .join('\n\n');
+  // The budgeted semantic-pass reference is now the shared `buildDedupReference` (recipientHistory.ts) — the
+  // ONE budgeting rule Your Story's biographer check-ins reuse, so they can't drift out of lockstep.
+  const dedupReference = buildDedupReference({
+    intakeText: intake.text,
+    priorAnswers,
+    insightFacts,
+    priorPrompts,
+  });
 
   const recipientAskedPrompts = [...priorPrompts, ...intake.prompts];
   return {

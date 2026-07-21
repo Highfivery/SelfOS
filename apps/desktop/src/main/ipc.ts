@@ -416,6 +416,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyExclude, bridge.storyExclude);
   handle(IpcChannels.storyUnexclude, bridge.storyUnexclude);
   handle(IpcChannels.storyTodoToQuestions, bridge.storyTodoToQuestions);
+  handle(IpcChannels.storyAnswerQuestion, bridge.storyAnswerQuestion);
   handle(IpcChannels.storyRefreshCheck, bridge.storyRefreshCheck);
   handle(IpcChannels.storyProposals, bridge.storyProposals);
   handle(IpcChannels.storyResolveProposal, bridge.storyResolveProposal);

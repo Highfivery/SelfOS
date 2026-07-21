@@ -363,6 +363,14 @@ function makeHost(): {
           usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      // Answer-the-author (64 §3.3): the biographer replies to a "question" comment about a passage. Matched
+      // by its distinctive framing so it returns a plain answer, not JSON.
+      if (userText.includes('asked you a question about one passage')) {
+        return Promise.resolve({
+          text: 'That line came from a coaching session where you described the shop.',
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // Dream synthesis asks for a single JSON object — return a valid DreamAnalysis draft so the
       // synthesize path can parse it; every other turn just streams a short reply.
       const wantsJson = options.messages.some((m) =>
@@ -5427,6 +5435,49 @@ describe('notifications (35)', () => {
     expect(typeof summaries[0]?.at).toBe('string');
   });
 
+  it('excludes a SELF-send from responses-arrived (a story/auto self check-in never bells "you answered")', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const other = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: other.id, roleId: 'member', pin: null });
+
+    // A SELF-send (sender === recipient === the owner) — the shape a story/auto self check-in takes.
+    const selfQ = await bridge.questionnairesSave({
+      title: 'A few questions for your story',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: ownerId },
+      questions: [
+        { id: 'q1', type: 'shortText', prompt: 'What was that winter like?', required: false },
+      ],
+    });
+    const selfSend = await bridge.assignmentsCreate({ questionnaireId: selfQ.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: selfSend.assignment.id,
+      answers: [{ questionId: 'q1', value: 'Cold and quiet.' }],
+    });
+
+    // A normal send to SOMEONE ELSE, answered by them.
+    const otherQ = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: other.id },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
+    });
+    const otherSend = await bridge.assignmentsCreate({ questionnaireId: otherQ.id });
+    await bridge.sessionSetActive({ personId: other.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: otherSend.assignment.id,
+      answers: [{ questionId: 'q1', value: 'Doing well' }],
+    });
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+
+    // Only the send to someone else surfaces — the self-send is excluded (no bell about answering your own
+    // questions), while its answer still reaches the book/insights normally.
+    const summaries = await bridge.notificationsResponsesArrived();
+    expect(summaries.map((s) => s.questionnaireId)).toEqual([otherQ.id]);
+  });
+
   it('re-asks a household questionnaire in one action — a fresh send, no re-authoring (38 §3.3)', async () => {
     const { bridge, ownerId } = await freshOwner();
     const recipient = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
@@ -7272,6 +7323,94 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const reviewedChapter = reviewed?.chapters.find((c) => c.id === chapterId);
     expect(reviewedChapter?.status).toBe('reviewed');
     expect(reviewedChapter?.previousMarkdown).toBeUndefined();
+  });
+
+  it('story: answer-the-author — the biographer answers a question comment; the reply persists; Guest denied (§3.3)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+
+    // Ask the biographer a question about the first paragraph (a `question`-intent comment).
+    await bridge.storyMark({
+      bookId,
+      chapterId,
+      mark: {
+        id: 'q1',
+        kind: 'comment',
+        anchor: { paragraphId: 'p0', quote: 'cut pine' },
+        intent: 'question',
+        text: 'Where did this come from?',
+        status: 'open',
+        createdAt: '2026-07-16',
+      },
+    });
+    const res = await bridge.storyAnswerQuestion({ bookId, chapterId, markId: 'q1' });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const answered = res.markup.marks.find((m) => m.id === 'q1');
+    expect(answered?.kind === 'comment' ? answered.answer : undefined).toContain(
+      'coaching session',
+    );
+    // The answer is persisted on the mark (survives a re-read).
+    const persisted = (await bridge.storyGetMarkup({ bookId, chapterId })).marks.find(
+      (m) => m.id === 'q1',
+    );
+    expect(persisted?.kind === 'comment' ? persisted.answer : undefined).toBeTruthy();
+
+    // A Guest (no story.own) is denied — the answer is not regenerated for them.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect((await bridge.storyAnswerQuestion({ bookId, chapterId, markId: 'q1' })).ok).toBe(false);
+  });
+
+  it('story: a questionsSent to-do self-heals to done once its check-in is answered (§3.7)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+
+    const res = await bridge.storyTodoToQuestions({
+      bookId,
+      chapterId,
+      focus: 'the winter he got sick',
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    const todoId = res.markup.marks.find((m) => m.kind === 'todo')?.id;
+    // Before the check-in is answered, the roll-up shows the to-do stuck as questionsSent (in "Needs you").
+    expect((await bridge.storyTodos({ bookId })).todos.find((t) => t.id === todoId)?.status).toBe(
+      'questionsSent',
+    );
+
+    // Answer the self-send → storyTodos self-heals the to-do to done (it no longer sits in the count forever).
+    await bridge.assignmentsSubmit({ assignmentId: res.assignmentId, answers: [] });
+    expect((await bridge.storyTodos({ bookId })).todos.find((t) => t.id === todoId)?.status).toBe(
+      'done',
+    );
   });
 
   it('story: turn a to-do into questions — mints an Inbox self-send + records a questionsSent to-do', async () => {

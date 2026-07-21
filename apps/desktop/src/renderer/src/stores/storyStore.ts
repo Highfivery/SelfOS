@@ -17,6 +17,7 @@ import type {
   StoryFoundationsResult,
   StoryMarkPatch,
   StoryQuestionsResult,
+  StoryAnswerResult,
   BookMatter,
   BookReader,
   SharedBookSummary,
@@ -130,6 +131,9 @@ interface StoryState {
     focus: string,
     anchor?: TextAnchor,
   ) => Promise<StoryQuestionsResult>;
+  /** Answer a `question`-intent comment (§3.3) — the biographer replies about a passage; the answer is stored
+   *  on the mark and the fresh markup adopted on success. */
+  answerQuestion: (bookId: string, chapterId: string, markId: string) => Promise<StoryAnswerResult>;
   /** The book's exclusions ("never write about this again") — for the overview panel. */
   exclusions: ExclusionItem[];
   loadExclusions: (bookId: string) => Promise<void>;
@@ -242,6 +246,11 @@ const REVISION_NOT_AVAILABLE: StoryRevisionResult = {
   message: 'Not available.',
 };
 const QUESTIONS_NOT_AVAILABLE: StoryQuestionsResult = {
+  ok: false,
+  reason: 'ERROR',
+  message: 'Not available.',
+};
+const ANSWER_NOT_AVAILABLE: StoryAnswerResult = {
   ok: false,
   reason: 'ERROR',
   message: 'Not available.',
@@ -509,6 +518,13 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     } finally {
       set({ chaptersGenerating: false });
     }
+  },
+  answerQuestion: async (bookId, chapterId, markId) => {
+    const res =
+      (await window.selfos?.storyAnswerQuestion({ bookId, chapterId, markId })) ??
+      ANSWER_NOT_AVAILABLE;
+    if (res.ok) set({ markup: res.markup });
+    return res;
   },
   loadExclusions: async (bookId) => {
     const exclusions = (await window.selfos?.storyExclusions({ bookId })) ?? [];

@@ -16,18 +16,19 @@ import {
   type UsageEvent,
 } from '../schemas';
 import { getBookType, type BookType } from './bookTypes';
-import { buildStoryCorpus, type StoryCorpus } from './storyCorpus';
+import { buildStoryCorpus, type CorpusItem, type StoryCorpus } from './storyCorpus';
 import { computeSourceSignature } from './storyFreshness';
 import { enforceProtected } from './storyMarkup';
 import { syncChapterTodos } from './storyMarkupService';
 import {
+  buildAnswerAuthorMessage,
   buildBiographerSystem,
   buildChapterUserMessage,
   buildFoundationsUserMessage,
   buildRevisionUserMessage,
   tagCorpusItems,
 } from './storyPromptBuilder';
-import { stripSourceMarkers } from './storyText';
+import { chapterParagraphs, stripSourceMarkers } from './storyText';
 // Re-exported so existing importers (tests, the bridge) keep their `./storyGenerationService` entry points.
 export { chapterParagraphs, stripSourceMarkers } from './storyText';
 import {
@@ -565,4 +566,90 @@ export async function applyMarkup(
   await syncChapterTodos(deps.fs, deps.key, deps.personId, args.bookId, args.chapterId, marks);
 
   return { ok: true, chapter };
+}
+
+// --- Answer-the-author: the biographer answers a "question" comment (§3.3) -------------------------------
+
+/** A short, grounded reply — never a chapter. */
+const ANSWER_MAX_TOKENS = 800;
+
+export type AnswerAuthorResult =
+  | { ok: true; markup: ChapterMarkup; answer: string }
+  | { ok: false; reason: AiFailureReason; message: string };
+
+/**
+ * Answer a `question`-intent comment (§3.3 — "answer the author"): the person asked their biographer about a
+ * passage, and the biographer replies grounded in the SOURCE MATERIAL that paragraph actually drew on (its
+ * provenance, resolved to corpus items) — closing the dead-end where a question comment was recorded but never
+ * answered. Metered `story.answer`; the reply is stored on the comment mark (`answer` + `answeredAt`) so it
+ * renders at the paragraph and survives navigation. No chapter rewrite; a non-question mark is refused.
+ */
+export async function answerAuthorQuestion(
+  deps: AiDeps,
+  args: { bookId: string; chapterId: string; markId: string },
+): Promise<AnswerAuthorResult> {
+  const book = await getBook(deps.fs, deps.key, deps.personId, args.bookId);
+  if (!book) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+  const bookType = getBookType(book.type);
+  if (!bookType) return { ok: false, reason: 'ERROR', message: 'Unknown book type.' };
+  const chapter = await getChapter(deps.fs, deps.key, deps.personId, args.bookId, args.chapterId);
+  if (!chapter) return { ok: false, reason: 'ERROR', message: 'That chapter is no longer here.' };
+  const markup = await getMarkup(deps.fs, deps.key, deps.personId, args.bookId, args.chapterId);
+  const mark = markup.marks.find((m) => m.id === args.markId);
+  if (!mark || mark.kind !== 'comment' || mark.intent !== 'question') {
+    return { ok: false, reason: 'ERROR', message: 'That question is no longer here.' };
+  }
+
+  // Resolve the asked paragraph + the corpus items its provenance cited. The comment's anchor is paragraph-
+  // level (`p<i>`); map that paragraph's provenance refs to their corpus items so the reply is grounded.
+  const paras = chapterParagraphs(chapter.markdown);
+  const m = /^p(\d+)$/.exec(mark.anchor.paragraphId);
+  const paraIndex = m ? Number(m[1]) : -1;
+  const paragraph =
+    paraIndex >= 0 && paraIndex < paras.length ? paras[paraIndex]! : chapter.markdown;
+  const corpus = await buildStoryCorpus(
+    deps.fs,
+    deps.key,
+    deps.personId,
+    args.bookId,
+    await getExclusions(deps.fs, deps.key, deps.personId, args.bookId),
+  );
+  const byRefId = new Map(corpus.items.map((it) => [it.sourceRef.id, it]));
+  const citedIds = new Set(
+    chapter.provenance
+      .filter((p) => p.anchor === mark.anchor.paragraphId)
+      .flatMap((p) => p.refs.map((r) => r.id)),
+  );
+  const sources = [...citedIds]
+    .map((id) => byRefId.get(id))
+    .filter((it): it is CorpusItem => Boolean(it));
+
+  const system = buildBiographerSystem(bookType, book.config, corpus.personName);
+  const user = buildAnswerAuthorMessage({
+    personName: corpus.personName,
+    chapterTitle: chapter.title,
+    paragraph,
+    question: mark.text,
+    sources,
+  });
+  const result = await runClaude(deps, system, user, 'story.answer', ANSWER_MAX_TOKENS);
+  if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
+  const answer = result.text.trim();
+  if (answer.length === 0) {
+    const { reason, message } = classifyParseOutcome(result.text, 'answer');
+    return { ok: false, reason, message };
+  }
+
+  // Re-read + store the answer on the mark (the model call is slow; a mark may have been added meanwhile).
+  const live = await getMarkup(deps.fs, deps.key, deps.personId, args.bookId, args.chapterId);
+  const updated: ChapterMarkup = {
+    ...live,
+    marks: live.marks.map((mk) =>
+      mk.id === args.markId && mk.kind === 'comment'
+        ? { ...mk, answer, answeredAt: deps.now.toISOString() }
+        : mk,
+    ),
+  };
+  await saveMarkup(deps.fs, deps.key, deps.personId, args.bookId, updated);
+  return { ok: true, markup: updated, answer };
 }

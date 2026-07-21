@@ -2,6 +2,13 @@ import { z } from 'zod';
 import { classifyParseOutcome, extractJsonObject, tolerantArray } from '../ai';
 import { uuid } from '../id';
 import { listInsightsForPerson } from '../insights';
+import { formatIntakeForGeneration, getIntakeSession } from '../intake/intakeService';
+import {
+  buildDedupReference,
+  gatherRecipientAskedPrompts,
+  gatherRecipientInsightFacts,
+  gatherRecipientPriorAnswers,
+} from '../questionnaires/recipientHistory';
 import type {
   AiFailureReason,
   BookChapter,
@@ -40,10 +47,14 @@ import {
   getBook,
   getExclusions,
   getInterviewState,
+  getMarkup,
   getOutline,
+  getTodos,
   listChapters,
   saveInterviewState,
+  saveMarkup,
 } from './storyService';
+import { syncChapterTodos } from './storyMarkupService';
 
 /**
  * The Your Story interview bridge (64-your-story §3.3.2/§5.5) — the ONE path that turns a to-do into a targeted
@@ -72,6 +83,28 @@ export async function mintStoryCheckInFromTodo(
     return { ok: false, reason: 'ERROR', message: 'This to-do has no text to ask about.' };
   }
 
+  // De-dup parity with the manual + auto-checkin paths (64 §3.7, closing the §23.5 drift): a biographer
+  // check-in is a SELF-send, so the "recipient" whose history we must never re-ask is the person themselves.
+  // Assemble the same budgeted reference (onboarding-first) + the exact asked-prompt list, so the biographer
+  // never re-asks what onboarding or a prior questionnaire already answered ("reads like it hasn't read your
+  // file"). Author-blind — fed only to the model.
+  const [priorAnswers, insightFacts, priorPrompts, intakeSession] = await Promise.all([
+    gatherRecipientPriorAnswers(deps.fs, deps.key, deps.personId),
+    gatherRecipientInsightFacts(deps.fs, deps.key, deps.personId),
+    gatherRecipientAskedPrompts(deps.fs, deps.key, deps.personId),
+    getIntakeSession(deps.fs, deps.key, deps.personId),
+  ]);
+  const intake = intakeSession
+    ? formatIntakeForGeneration(intakeSession)
+    : { text: '', prompts: [] as string[] };
+  const dedupReference = buildDedupReference({
+    intakeText: intake.text,
+    priorAnswers,
+    insightFacts,
+    priorPrompts,
+  });
+  const recipientAskedPrompts = [...priorPrompts, ...intake.prompts];
+
   const gen = await generateQuestions(deps, {
     type: 'general',
     sensitivity: 'standard',
@@ -83,6 +116,8 @@ export async function mintStoryCheckInFromTodo(
       includeRelationship: false,
     },
     existingPrompts: [],
+    ...(dedupReference ? { dedupReference } : {}),
+    ...(recipientAskedPrompts.length > 0 ? { recipientAskedPrompts } : {}),
     count: STORY_CHECKIN_COUNT,
   });
   if (!gen.ok) {
@@ -334,9 +369,25 @@ export function computePartCoverage(
   });
 }
 
+/** Statuses that mean an open check-in has resolved (so "Ask me about this" is free again). */
+const RESOLVED_CHECKIN_STATUSES = new Set([
+  'submitted',
+  'analyzed',
+  'declined',
+  'expired',
+  'revoked',
+]);
+/** The subset of resolved statuses that mean the person actually ANSWERED (vs declined/expired/revoked) — an
+ *  answered gap shows "Answered ✓", a declined/expired one just re-opens for asking. */
+const ANSWERED_CHECKIN_STATUSES = new Set(['submitted', 'analyzed']);
+
 /**
  * The persisted gap-pass output for the Interview tab (§13.6.3) — FREE, no AI. Reads `interview.enc`; part
- * coverage falls back to the written/reviewed ratio when a pass hasn't persisted one yet.
+ * coverage falls back to the written/reviewed ratio when a pass hasn't persisted one yet. Each gap that was
+ * ASKED (`askGap` stamped its `assignmentId`) gets a DERIVED lifecycle status so "Worth telling next" never
+ * contradicts the "Answered" card: `asked` while its check-in is still open (re-ask disabled), `answered` once
+ * it's submitted. Derived on read (never persisted) so it stays correct even when the check-in is answered from
+ * the Inbox. A gap whose check-in was declined/expired falls back to `open` (askable again).
  */
 export async function getStoryGaps(
   fs: AiDeps['fs'],
@@ -352,22 +403,125 @@ export async function getStoryGaps(
   // the live written/reviewed ratio fills in.
   const partCoverage =
     interview.lastPartCoverage ?? (outline ? computePartCoverage(outline, chapters) : []);
+
+  const rawGaps = interview.lastGaps ?? [];
+  const gaps: StoryGap[] = [];
+  for (const gap of rawGaps) {
+    // The stored gap's `id`/`dimension`/`label`/`focus`/`priority` + its persisted `assignmentId` (kept via a
+    // conditional spread so exactOptionalPropertyTypes stays happy) + the DERIVED lifecycle status.
+    const base: StoryGap = {
+      id: gap.id,
+      dimension: gap.dimension,
+      label: gap.label,
+      focus: gap.focus,
+      priority: gap.priority,
+      ...(gap.assignmentId ? { assignmentId: gap.assignmentId } : {}),
+    };
+    if (!gap.assignmentId) {
+      gaps.push({ ...base, status: 'open' });
+      continue;
+    }
+    const a = await getAssignment(fs, key, gap.assignmentId);
+    const status: NonNullable<StoryGap['status']> = !a
+      ? 'open'
+      : ANSWERED_CHECKIN_STATUSES.has(a.status)
+        ? 'answered'
+        : RESOLVED_CHECKIN_STATUSES.has(a.status)
+          ? 'open' // declined / expired / revoked → askable again
+          : 'asked'; // sent / opened / inProgress
+    gaps.push({ ...base, status });
+  }
+
   return {
-    gaps: interview.lastGaps ?? [],
+    gaps,
     partCoverage,
     ...(interview.lastGapPassAt ? { lastGapPassAt: interview.lastGapPassAt } : {}),
     hasOpenCheckin: Boolean(interview.openCheckinAssignmentId),
   };
 }
 
-/** Statuses that mean an open check-in has resolved (so "Ask me about this" is free again). */
-const RESOLVED_CHECKIN_STATUSES = new Set([
-  'submitted',
-  'analyzed',
-  'declined',
-  'expired',
-  'revoked',
-]);
+/**
+ * Resolve any `questionsSent` to-do whose check-in has since been answered/closed (§3.7 coherence fix) — FREE,
+ * no AI. A "Turn into questions" to-do stamps `questionsSent` + `assignmentId`; nothing flipped it, so it sat in
+ * the Studio "Needs you" count forever. This sweep flips it to `done` once its assignment resolves. Reads the
+ * roll-up to find which chapters have a `questionsSent` to-do, then updates those chapters' markup. Returns how
+ * many it resolved. Called on the free todos read + the refresh cadence, so the count self-heals.
+ */
+export async function resolveSentQuestionTodos(
+  fs: AiDeps['fs'],
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<number> {
+  const roll = await getTodos(fs, key, personId, bookId);
+  const chapterIds = new Set(
+    roll.todos.filter((t) => t.status === 'questionsSent').map((t) => t.chapterId),
+  );
+  let resolved = 0;
+  for (const chapterId of chapterIds) {
+    const markup = await getMarkup(fs, key, personId, bookId, chapterId);
+    let changed = false;
+    const marks = await Promise.all(
+      markup.marks.map(async (m) => {
+        if (m.kind !== 'todo' || m.status !== 'questionsSent' || !m.assignmentId) return m;
+        const a = await getAssignment(fs, key, m.assignmentId);
+        if (a && RESOLVED_CHECKIN_STATUSES.has(a.status)) {
+          changed = true;
+          resolved += 1;
+          return { ...m, status: 'done' as const };
+        }
+        return m;
+      }),
+    );
+    if (changed) {
+      await saveMarkup(fs, key, personId, bookId, { ...markup, marks });
+      await syncChapterTodos(fs, key, personId, bookId, chapterId, marks);
+    }
+  }
+  return resolved;
+}
+
+/** The shared ≤1-open-check-in guard (§3.7): true when a check-in is GENUINELY still open (not resolved), so a
+ *  new mint must refuse. Every explicit mint path — `askGap`, the to-do hand-off — honors it, so a biographer
+ *  can never leave two check-ins waiting in the Inbox at once. */
+async function hasGenuinelyOpenCheckin(
+  deps: AiDeps,
+  interview: Awaited<ReturnType<typeof getInterviewState>>,
+): Promise<boolean> {
+  if (!interview.openCheckinAssignmentId) return false;
+  const open = await getAssignment(deps.fs, deps.key, interview.openCheckinAssignmentId);
+  return Boolean(open && !RESOLVED_CHECKIN_STATUSES.has(open.status));
+}
+
+/**
+ * Mint a check-in from a chapter to-do (§3.3.2/§3.7) — the "Turn into questions" hand-off. Unlike the raw
+ * `mintStoryCheckInFromTodo`, this honors the ≤1-open-check-in invariant (refuses while one is genuinely open,
+ * so it can't pile a second check-in on top of a gap check-in) AND records the focus into `askedPrompts` +
+ * stamps `openCheckinAssignmentId`, so the gap pass won't later re-propose the same topic. Returns the new
+ * assignment id (for the bridge to stamp the to-do mark) or an honest failure with nothing persisted.
+ */
+export async function mintTodoCheckIn(
+  deps: AiDeps,
+  args: { bookId: string; focus: string },
+): Promise<StoryCheckInResult> {
+  const interview = await getInterviewState(deps.fs, deps.key, deps.personId, args.bookId);
+  if (await hasGenuinelyOpenCheckin(deps, interview)) {
+    return {
+      ok: false,
+      reason: 'ERROR',
+      message: 'A check-in is already waiting in your Inbox — answer that one first.',
+    };
+  }
+  const mint = await mintStoryCheckInFromTodo(deps, { bookId: args.bookId, focus: args.focus });
+  if (!mint.ok) return mint;
+  const after = await getInterviewState(deps.fs, deps.key, deps.personId, args.bookId);
+  await saveInterviewState(deps.fs, deps.key, deps.personId, args.bookId, {
+    ...after,
+    askedPrompts: [...after.askedPrompts, args.focus.trim()].slice(-50),
+    openCheckinAssignmentId: mint.assignmentId,
+  });
+  return mint;
+}
 
 /**
  * "Ask me about this" (§13.6.5) — the EXPLICIT, user-triggered mint of a check-in from a specific persisted gap,
@@ -379,15 +533,12 @@ export async function askGap(
   args: { bookId: string; gapId: string },
 ): Promise<StoryCheckInResult> {
   const interview = await getInterviewState(deps.fs, deps.key, deps.personId, args.bookId);
-  if (interview.openCheckinAssignmentId) {
-    const open = await getAssignment(deps.fs, deps.key, interview.openCheckinAssignmentId);
-    if (open && !RESOLVED_CHECKIN_STATUSES.has(open.status)) {
-      return {
-        ok: false,
-        reason: 'ERROR',
-        message: 'A check-in is already waiting in your Inbox — answer that one first.',
-      };
-    }
+  if (await hasGenuinelyOpenCheckin(deps, interview)) {
+    return {
+      ok: false,
+      reason: 'ERROR',
+      message: 'A check-in is already waiting in your Inbox — answer that one first.',
+    };
   }
   const gap = (interview.lastGaps ?? []).find((g) => g.id === args.gapId);
   if (!gap) {
@@ -397,13 +548,30 @@ export async function askGap(
       message: 'That gap is no longer here — try “Find what’s missing” again.',
     };
   }
+  // A gap already answered must not re-mint identical questions (the "Worth telling next" vs "Answered"
+  // contradiction, §3.7): if its prior check-in was answered, refuse — the material is already in.
+  if (gap.assignmentId) {
+    const prior = await getAssignment(deps.fs, deps.key, gap.assignmentId);
+    if (prior && ANSWERED_CHECKIN_STATUSES.has(prior.status)) {
+      return {
+        ok: false,
+        reason: 'ERROR',
+        message: 'You’ve already answered this one — it’s woven into your story.',
+      };
+    }
+  }
   const mint = await mintStoryCheckInFromTodo(deps, { bookId: args.bookId, focus: gap.focus });
   if (!mint.ok) return mint;
-  // Re-read (the assignment write may have touched interview state elsewhere) then stamp the new open check-in.
+  // Re-read (the assignment write may have touched interview state elsewhere) then stamp the new open check-in
+  // AND the gap's assignmentId (so `getStoryGaps` derives 'asked'/'answered' and the row stops offering a
+  // re-ask the moment it's minted — corrected immediately, not only at the next metered gap pass).
   const after = await getInterviewState(deps.fs, deps.key, deps.personId, args.bookId);
   await saveInterviewState(deps.fs, deps.key, deps.personId, args.bookId, {
     ...after,
     askedPrompts: [...after.askedPrompts, gap.focus].slice(-50),
+    lastGaps: (after.lastGaps ?? []).map((g) =>
+      g.id === args.gapId ? { ...g, assignmentId: mint.assignmentId } : g,
+    ),
     openCheckinAssignmentId: mint.assignmentId,
   });
   return mint;

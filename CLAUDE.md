@@ -419,6 +419,43 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-20 — **Build (Your Story interview-loop coherence & answer-the-author — SPEC 64 §13.10 BUILT; PR 2 of the
+  overnight Your-Story overhaul; on `fix/story-interview-loop`, PR #285).** The deep review's second cluster: the
+  biographer interview loop contradicted itself and dead-ended. **(1) De-dup parity (§3.7, closing the §23.5
+  drift):** a biographer check-in is a SELF-send, but `mintStoryCheckInFromTodo` passed `existingPrompts: []` + no
+  `dedupReference`, so it could re-ask what onboarding/a prior questionnaire already answered. It now assembles the
+  SAME budgeted reference the auto-checkin engine uses — extracted into ONE shared pure `buildDedupReference`
+  (`recipientHistory.ts`) so the two can't drift (autoCheckins refactored onto it, byte-identical) — over the
+  person's own history (onboarding-first) + the asked-prompt list, passed into `generateQuestions`; author-blind.
+  **(2) Gap lifecycle (§3.7):** `StoryGap` gains a persisted `assignmentId` (`askGap` stamps it) + a DERIVED
+  `status` (`getStoryGaps` reads the check-in's state on the fly): open → asked → answered. "Worth telling next"
+  renders each honestly — an answered gap shows "Answered ✓" (never re-offers an identical re-ask that
+  contradicted the "Answered" card); `askGap` refuses re-asking an answered gap; corrected the moment a check-in
+  is answered, not only at the next metered pass. **(3) `questionsSent` to-dos resolve:** they sat in the Studio
+  "Needs you" count forever; `resolveSentQuestionTodos` (free) flips one to `done` once its check-in resolves, run
+  on the bridge's todos read so the count self-heals; the to-do mint routes through `mintTodoCheckIn` (honors the
+  ≤1-open invariant + records `askedPrompts`/`openCheckin`, sharing the `hasGenuinelyOpenCheckin` guard with
+  `askGap`). **(4) Self-send bell:** `notificationsResponsesArrived` now skips a send whose recipient is the
+  sender — a story (or self-targeted auto) check-in no longer bells "<Your name> answered …" about yourself.
+  **(5) Answer-the-author (§3.3):** the comment "Ask" intent was recorded and never answered (a dead end); new
+  `answerAuthorQuestion` (metered `story.answer`) replies to a `question` comment GROUNDED in that paragraph's
+  provenance (the corpus items it actually cited), so the biographer can honestly say where a line came from — and
+  plainly say when the record doesn't support one (never invent); the reply renders inline + persists on the mark
+  (new `story:answerQuestion` channel, `CommentMark.answer`/`answeredAt`, `StoryAnswerResult`). Gate green:
+  typecheck, lint, format, **1582 core + 12 relay + 1399 desktop** unit (+`buildDedupReference` ordering/caps,
+  +mint de-dup-reaches-model + gap-lifecycle open→asked→answered + declined-fallback + `resolveSentQuestionTodos`
+  self-heal + `mintTodoCheckIn` ≤1-open, +`answerAuthorQuestion` grounding/refuse/empty, +coreBridge answer
+  round-trip + Guest-denied + self-send-skip + todos self-heal, +RTL gap-status + answer button), **story E2E**
+  (a new "the biographer answers a question about a passage" walk, decrypt-asserted; the fake-Claude branch is
+  E2E-gated inside `fakeClaudeClient()`). code-reviewer **ship** (no blockers/should-fixes; dedup byte-identity,
+  no import cycle, grounding-only-on-the-cited-paragraph, meter-before-parse, and the self-send skip all verified).
+  **Lessons: (1) a self-send check-in must feed the person's OWN history as the de-dup "recipient" — extract the
+  budgeting rule into ONE pure function so the auto-checkin engine, the manual bridge, and the biographer can't
+  drift. (2) A gap's answered/asked state is best DERIVED on read from its stamped `assignmentId` (never persisted
+  as a status), so it stays correct when the check-in is answered from the Inbox — and a re-run gap pass that mints
+  fresh gap ids momentarily loses the stamp, which is fine because the global ≤1-open gate still prevents a
+  double-send. (3) Answer-the-author is the conversational complement the "Ask" intent always implied — ground it
+  in the paragraph's OWN provenance so it answers "where did this come from?" truthfully instead of inventing.**
 - 2026-07-20 — **Build (Your Story trust repairs & the draft vault — SPEC 64 §13.9 BUILT; PR 1 of an overnight
   autonomous Your-Story overhaul; on `fix/story-trust-repairs`).** A deep 10-agent review of Your Story (7 mappers +
   3 adversarial auditors) surfaced four classes of silent trust breaks between the feature's promises and its

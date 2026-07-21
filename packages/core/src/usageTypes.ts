@@ -30,6 +30,7 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'story.chapter': 'Your Story — chapter',
   'story.structure': 'Your Story — structure proposals',
   'story.interview': 'Your Story — interview questions',
+  'story.answer': 'Your Story — biographer answer',
   'story.imagePrompt': 'Your Story — image prompt',
   'story.image': 'Your Story — image',
   'story.vision': 'Your Story — photo caption',

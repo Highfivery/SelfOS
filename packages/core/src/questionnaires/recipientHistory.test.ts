@@ -6,7 +6,11 @@ import { saveInsight } from '../insights';
 import { saveQuestionnaire } from './questionnaireService';
 import { createAssignment } from './assignmentService';
 import { saveResponse } from './responseService';
-import { gatherRecipientHistory, gatherRecipientPriorAnswers } from './recipientHistory';
+import {
+  buildDedupReference,
+  gatherRecipientHistory,
+  gatherRecipientPriorAnswers,
+} from './recipientHistory';
 
 const key = generateMasterKey();
 const now = '2026-06-15T12:00:00.000Z';
@@ -147,5 +151,71 @@ describe('gatherRecipientPriorAnswers (08 §24.3-A1)', () => {
     expect(answers).toMatch(/A: A quiet hike\./); // the real answer is included
     expect(answers).not.toContain('What drained you?'); // the skipped question is not
     expect(answers).not.toContain('Skipped'); // and no "Skipped" leaks in as an answer
+  });
+});
+
+describe('buildDedupReference (08 §23.5b — the shared budgeting rule)', () => {
+  it('leads with the onboarding block, then prior answers, then insight facts, then asked prompts', async () => {
+    const ref = buildDedupReference({
+      intakeText: 'They said they love hiking and hate mornings.',
+      priorAnswers: 'From "Last week":\n  Q: What lifted you up?\n  A: A hike.',
+      insightFacts: 'Themes they have already explored:\n- Feeling stretched at work.',
+      priorPrompts: ['How was your week at work?'],
+    });
+    // Onboarding leads (the authoritative "we already have data for this"), followed by the other sections
+    // in priority order — asserted by their positions in the assembled reference.
+    const onboarding = ref.indexOf('ALREADY ANSWERED in their onboarding');
+    const answers = ref.indexOf('ALREADY ANSWERED in prior questionnaires');
+    const known = ref.indexOf('ALREADY KNOWN about them');
+    const asked = ref.indexOf('ALREADY ASKED in prior questionnaires');
+    expect(onboarding).toBeGreaterThanOrEqual(0);
+    expect(onboarding).toBeLessThan(answers);
+    expect(answers).toBeLessThan(known);
+    expect(known).toBeLessThan(asked);
+    // The actual material rides along under each heading.
+    expect(ref).toContain('love hiking and hate mornings');
+    expect(ref).toContain('How was your week at work?');
+  });
+
+  it('includes only the sections whose input is non-empty; a wholly-empty input is an empty reference', () => {
+    // Only prior answers present → only that block, nothing else.
+    const answersOnly = buildDedupReference({
+      intakeText: '   ',
+      priorAnswers: 'From "Last week":\n  Q: X?\n  A: Y.',
+      insightFacts: '',
+      priorPrompts: [],
+    });
+    expect(answersOnly).toContain('ALREADY ANSWERED in prior questionnaires');
+    expect(answersOnly).not.toContain('ALREADY ANSWERED in their onboarding');
+    expect(answersOnly).not.toContain('ALREADY KNOWN about them');
+    expect(answersOnly).not.toContain('ALREADY ASKED in prior questionnaires');
+    // Nothing on record at all → the reference is empty (so `willSemanticDedup` stays off for a fresh person).
+    expect(
+      buildDedupReference({ intakeText: '', priorAnswers: '', insightFacts: '', priorPrompts: [] }),
+    ).toBe('');
+  });
+
+  it('caps each section independently so a heavy onboarding can never truncate the other sections away', () => {
+    const bigIntake = 'i'.repeat(8100); // > the 8000 onboarding cap
+    const bigAnswers = 'a'.repeat(4100); // > the 4000 prior-answers cap
+    const bigFacts = 'f'.repeat(3100); // > the 3000 insight-facts cap
+    const manyPrompts = Array.from({ length: 200 }, (_, n) => `Prompt number ${n} about a thing`); // > 2000 chars joined
+    const ref = buildDedupReference({
+      intakeText: bigIntake,
+      priorAnswers: bigAnswers,
+      insightFacts: bigFacts,
+      priorPrompts: manyPrompts,
+    });
+    // Each over-long section is truncated with the "\n…" tail — but every section survives (independent budgets).
+    expect(ref).toContain('ALREADY ANSWERED in their onboarding');
+    expect(ref).toContain('ALREADY ANSWERED in prior questionnaires');
+    expect(ref).toContain('ALREADY KNOWN about them');
+    expect(ref).toContain('ALREADY ASKED in prior questionnaires');
+    // A truncated onboarding keeps only the first 8000 chars + the ellipsis marker.
+    expect(ref).toContain(`${'i'.repeat(8000)}\n…`);
+    expect(ref).not.toContain('i'.repeat(8001)); // never the full over-long block
+    // The lower-priority sections are truncated too (their own budgets), each ending in the ellipsis marker.
+    expect(ref).toContain(`${'a'.repeat(4000)}\n…`);
+    expect(ref).toContain(`${'f'.repeat(3000)}\n…`);
   });
 });

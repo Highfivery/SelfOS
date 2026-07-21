@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.2](https://github.com/Highfivery/SelfOS/compare/v0.43.1...v0.43.2) (2026-07-21)
+
+
+### Bug Fixes
+
+* **together:** tag streamed chunks with their session id so replies never bleed across sessions ([#310](https://github.com/Highfivery/SelfOS/issues/310)) ([52ef742](https://github.com/Highfivery/SelfOS/commit/52ef742e248970e6beaf58044e62d8ed90f09de6))
+
 ## [0.43.1](https://github.com/Highfivery/SelfOS/compare/v0.43.0...v0.43.1) (2026-07-21)
 
 

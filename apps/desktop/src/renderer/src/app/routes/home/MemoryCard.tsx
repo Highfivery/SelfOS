@@ -8,6 +8,7 @@ const SOURCE_LABEL: Record<string, string> = {
   session: 'From a session',
   dream: 'From a dream',
   questionnaire: 'From answers',
+  memory: 'From a memory',
 };
 
 /**

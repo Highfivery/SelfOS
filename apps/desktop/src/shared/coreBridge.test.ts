@@ -28,7 +28,7 @@ import { matrixRowKey } from '@selfos/core/schemas';
 import { saveGoal } from '@selfos/core/goals';
 import { listChallenges, recordCheckIn } from '@selfos/core/challenges';
 import { buildContext } from '@selfos/core/people';
-import { saveProposals } from '@selfos/core/story';
+import { buildStoryCorpus, corpusText, saveProposals } from '@selfos/core/story';
 import {
   captureJointChallengeFromMarker,
   captureSuggestionFromMarker,
@@ -109,6 +109,7 @@ function makeHost(): {
   dreamChunks: string[];
   intakeChunks: string[];
   togetherChunks: string[];
+  memoryChunks: string[];
   storyProgress: StoryDraftProgress[];
   imageProgress: ImageGenProgress[];
   device: () => DeviceState;
@@ -134,6 +135,7 @@ function makeHost(): {
   const dreamChunks: string[] = [];
   const intakeChunks: string[] = [];
   const togetherChunks: string[] = [];
+  const memoryChunks: string[] = [];
   const storyProgress: StoryDraftProgress[] = [];
   const imageProgress: ImageGenProgress[] = [];
   const claude: ClaudeClient = {
@@ -371,6 +373,29 @@ function makeHost(): {
           usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
+      // Share a memory synthesis (64 §14): the SYNTHESIS_INSTRUCTION starts "Now capture this memory as
+      // structured data…" (it also contains the generic phrase "JSON object", so match it FIRST). Return a
+      // valid StoryMemory synthesis draft. A transcript carrying the token SENSITIVEMEMORY flips `sensitive`,
+      // so the bridge test can assert the derived Insight's facts are restricted.
+      if (userText.includes('capture this memory as structured data')) {
+        const sensitive = userText.includes('SENSITIVEMEMORY');
+        return Promise.resolve({
+          text: JSON.stringify({
+            title: 'The kitchen that morning',
+            narrative:
+              'I stood at the counter while the rain came down and my mother hummed a tune.',
+            approxDate: '1994',
+            places: ['the kitchen'],
+            people: [{ name: 'my mother' }],
+            lifeAreas: sensitive ? ['Intimacy'] : ['Family'],
+            emotionalTexture: 'Warm then, bittersweet now.',
+            pullQuotes: ["You'll be fine, kiddo."],
+            scene: 'positiveChildhood',
+            ...(sensitive ? { sensitive: true } : {}),
+          }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // Dream synthesis asks for a single JSON object — return a valid DreamAnalysis draft so the
       // synthesize path can parse it; every other turn just streams a short reply.
       const wantsJson = options.messages.some((m) =>
@@ -455,6 +480,7 @@ function makeHost(): {
     emitDreamChunk: (chunk) => dreamChunks.push(chunk),
     emitIntakeChunk: (chunk) => intakeChunks.push(chunk),
     emitTogetherChunk: (chunk) => togetherChunks.push(chunk),
+    emitMemoryChunk: (chunk) => memoryChunks.push(chunk),
     getBootState: () => Promise.resolve(bootFromDevice()),
     refreshBootState: () => Promise.resolve(bootFromDevice()),
     selectVaultFolder: () => Promise.resolve(null),
@@ -472,6 +498,7 @@ function makeHost(): {
     onDreamChunk: () => () => {},
     onIntakeChunk: () => () => {},
     onTogetherChunk: () => () => {},
+    onMemoryChunk: () => () => {},
     onStoryProgress: () => () => {},
     onImageProgress: () => () => {},
   };
@@ -482,6 +509,7 @@ function makeHost(): {
     dreamChunks,
     intakeChunks,
     togetherChunks,
+    memoryChunks,
     storyProgress,
     imageProgress,
     device: () => device,
@@ -7249,6 +7277,77 @@ describe('createCoreBridge — Together (58) foundation', () => {
       reflections: 0,
       dreams: 0,
     });
+  });
+
+  it('story: Share a memory — open → turn → synthesize → save round-trips + feeds the corpus; Guest denied (§14)', async () => {
+    const { bridge, ownerId, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+
+    // Open the biographer chat: it creates the memory and streams an opener (a chunk reaches the host).
+    const opened = await bridge.storyMemoryOpen({});
+    expect(opened).toBeTruthy();
+    const memoryId = opened!.memory.id;
+    expect(opened!.memory.status).toBe('gathering');
+    expect(host.memoryChunks.length).toBeGreaterThan(0);
+
+    // One chat turn appends a reply.
+    const turn = await bridge.storyMemoryTurn({ memoryId, text: 'I stood in the kitchen.' });
+    expect(turn.ok).toBe(true);
+
+    // Synthesize → the fake returns a valid memory JSON, so the memory becomes ready.
+    const synth = await bridge.storyMemorySynthesize({ memoryId });
+    expect(synth.ok).toBe(true);
+    if (synth.ok) expect(synth.memory.status).toBe('ready');
+
+    // Save → committed, feeds the coach, and shows in the collection.
+    const saved = await bridge.storyMemorySave({ memoryId });
+    expect(saved.ok).toBe(true);
+    if (saved.ok) expect(saved.memory.status).toBe('saved');
+    const list = await bridge.storyMemoryList();
+    expect(list.find((m) => m.id === memoryId)?.status).toBe('saved');
+
+    // The saved memory reaches the biographer's corpus (decrypt-level, via the core builder).
+    const ctx = (await host.host.vaultAndKey())!;
+    const corpus = await buildStoryCorpus(ctx.fs, ctx.key, ownerId, 'b1');
+    expect(corpusText(corpus)).toContain('the rain came down'); // the synthesized narrative
+
+    // A Guest (no story.own) sees nothing and can act on nothing — the bridge is the trust boundary.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.storyMemoryList()).toEqual([]);
+    expect(await bridge.storyMemoryGet({ memoryId })).toBeNull();
+    expect((await bridge.storyMemoryTurn({ memoryId, text: 'x' })).ok).toBe(false);
+    expect((await bridge.storyMemorySynthesize({ memoryId })).ok).toBe(false);
+    expect((await bridge.storyMemorySave({ memoryId })).ok).toBe(false);
+  });
+
+  it('story: a SENSITIVE memory’s Insight is restricted, never partner-shared (§14)', async () => {
+    const { bridge, ownerId, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+
+    const opened = await bridge.storyMemoryOpen({});
+    const memoryId = opened!.memory.id;
+    // The transcript carries the fake's sensitive trigger, so the synthesis marks the memory sensitive.
+    await bridge.storyMemoryTurn({ memoryId, text: 'Something private. SENSITIVEMEMORY' });
+    const synth = await bridge.storyMemorySynthesize({ memoryId });
+    expect(synth.ok && synth.memory.sensitive).toBe(true);
+    const saved = await bridge.storyMemorySave({ memoryId });
+    expect(saved.ok).toBe(true);
+
+    // Decrypt the derived Insight: its facts are restricted (own-context only), never partner-shared.
+    const ctx = (await host.host.vaultAndKey())!;
+    const insight = (await listInsightsForPerson(ctx.fs, ctx.key, ownerId)).find(
+      (i) => i.source === 'memory',
+    );
+    expect(insight).toBeTruthy();
+    for (const fact of insight!.facts) {
+      expect(fact.restricted).toBe(true);
+      expect(fact.shareableTypes).toBeUndefined();
+      expect(fact.lifeArea).toBe('Intimacy');
+    }
   });
 
   it('story: markup layer — mark, instant edit/pin, apply the batch revision', async () => {

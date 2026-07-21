@@ -35,6 +35,7 @@ import { useDreamStore } from '../stores/dreamStore';
 import { useInsightStore } from '../stores/insightStore';
 import { useGoalStore } from '../stores/goalStore';
 import { useStoryStore } from '../stores/storyStore';
+import { useStoryMemoryStore } from '../stores/storyMemoryStore';
 import { useChallengeStore } from '../stores/challengeStore';
 import { useTestStore } from '../stores/testStore';
 import { useDreamAnalysisStore } from '../stores/dreamAnalysisStore';
@@ -164,6 +165,7 @@ export function AppShell(): JSX.Element {
     useDiscoveryStore.getState().reset(); // orientation/tip dismissals are per-person, device-local (41 §4)
     useTogetherStore.getState().reset(); // Together sessions are per-person (58 §5.3)
     useStoryStore.getState().reset(); // Your Story books are per-person (64 §5.7)
+    useStoryMemoryStore.getState().reset(); // "Share a memory" chats are per-person (64 §14)
     void useNotificationStore.getState().load();
     void useDiscoveryStore.getState().load();
     void useConversationStore.getState().load();

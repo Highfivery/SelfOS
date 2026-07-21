@@ -23,6 +23,7 @@ import {
   type StorySourceRef,
 } from '../schemas';
 import { getPhotoAnswers, getStoryImageIndex } from './storyService';
+import { listMemories } from './storyMemoryService';
 
 /**
  * The Your Story corpus builder (64-your-story §5.1) — the deterministic, AI-free "read EVERYTHING about the
@@ -99,6 +100,8 @@ function insightLabel(source: InsightSource): string {
       return 'From a questionnaire';
     case 'together':
       return 'From a session with your partner';
+    case 'memory':
+      return 'From a memory you shared';
     default:
       return 'From your history';
   }
@@ -312,6 +315,31 @@ export async function buildStoryCorpus(
         ...(at ? { date: at } : {}),
       });
     }
+  }
+
+  // 7b) Shared memories (§14) — every SAVED "Share a memory" told to the biographer, its first-person
+  //     narrative + emotional texture, with real per-memory provenance so a chapter can cite the specific
+  //     memory it wove in. Person-level (feeds every book). Exclusion-filtered via `add()` (a `source`
+  //     exclusion on the memoryId drops it). A gathering/ready-but-unsaved memory feeds nothing.
+  const memories = await safely(() => listMemories(fs, key, personId), []);
+  for (const memory of memories) {
+    if (memory.status !== 'saved') continue;
+    const narrative = memory.narrative.trim();
+    if (narrative.length === 0) continue;
+    const text = memory.emotionalTexture?.trim()
+      ? `${narrative}\n\nHow it felt: ${memory.emotionalTexture.trim()}`
+      : narrative;
+    add({
+      sourceRef: {
+        kind: 'memory',
+        id: memory.id,
+        ...(memory.savedAt ? { at: memory.savedAt } : {}),
+      },
+      label: 'From a memory you shared',
+      text,
+      ...(memory.lifeAreas[0] ? { lifeArea: memory.lifeAreas[0] } : {}),
+      ...(memory.approxDate ? { date: memory.approxDate } : {}),
+    });
   }
 
   // 8) Other people as characters — ONLY the facts they SHARE to this viewer (§5.1). The single gate

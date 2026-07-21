@@ -643,6 +643,10 @@ export const InsightSourceSchema = z.enum([
   // A Together couples-session wrap-up twin (58 §3.8) — one per partner, subject = that partner, feeding
   // ONLY their own coaching context. The enum is closed; this is a deliberate, listed amendment.
   'together',
+  // A memory the person shared with their biographer ("Share a memory", 64 §14) — the interviewed +
+  // synthesized memory becomes an Insight so it feeds coaching / Memory / Together / questionnaire de-dup,
+  // exactly like a session/dream insight. A deliberate, listed amendment.
+  'memory',
 ]);
 export type InsightSource = z.infer<typeof InsightSourceSchema>;
 
@@ -757,6 +761,7 @@ export const InsightProvenanceSchema = z.object({
   testId: z.string().optional(), // set for test-sourced insights → deep-link to /you/:testId (50 §4.4)
   testResultId: z.string().optional(), // the specific TestResult this insight was built from (50 §4.4)
   challengeId: z.string().optional(), // set for a challenge reflection's insight → deep-link to the Challenge (52 §4.4)
+  memoryId: z.string().optional(), // set for a shared-memory insight ("Share a memory", 64 §14)
   // The ResponseSet.revision this analysis was built from (56-answer-review-edit §4). Lets the sender detect a
   // stale analysis (`response.revision > analyzedRevision`) after a recipient edits + resubmits. Absent on a
   // pre-56 insight → treated as 1, so an un-edited send is never falsely flagged stale.
@@ -3780,6 +3785,9 @@ export const StorySourceKindSchema = z.enum([
   'together',
   'timeline',
   'photo',
+  // A memory the person shared with their biographer (64 §14) — a first-class corpus source with real
+  // per-memory provenance (a chapter paragraph can cite the specific memory it wove in).
+  'memory',
 ]);
 export type StorySourceKind = z.infer<typeof StorySourceKindSchema>;
 export const StorySourceRefSchema = z.object({
@@ -4138,6 +4146,152 @@ export const StoryInterviewStateSchema = z.object({
   openCheckinAssignmentId: z.string().optional(),
 });
 export type StoryInterviewState = z.infer<typeof StoryInterviewStateSchema>;
+
+// --- Share a memory (64 §14) — the biographer interview chat + its synthesized memory ---------------------
+
+/** A person present in a memory — a free name, optionally linked to a real household `Person` (like a dream's
+ *  people-present), so the biographer can connect the memory to a real relationship. */
+export const StoryMemoryPersonSchema = z.object({
+  name: z.string(),
+  personId: z.string().optional(),
+});
+export type StoryMemoryPerson = z.infer<typeof StoryMemoryPersonSchema>;
+
+/** `gathering` = the interview chat is open, not yet synthesized; `ready` = the biographer signaled it has
+ *  enough (a synthesis can be created); `saved` = synthesized + committed (feeds the book + the coach). */
+export const StoryMemoryStatusSchema = z.enum(['gathering', 'ready', 'saved']);
+export type StoryMemoryStatus = z.infer<typeof StoryMemoryStatusSchema>;
+
+/**
+ * `people/<personId>/story/memories/<memoryId>/memory.enc` — a memory the person shared with their biographer
+ * (64 §14). PERSON-level (not book-scoped), so it survives book delete/rewrite and feeds every book + the
+ * coach. The interview transcript lives beside it in `conversation.enc` (the dream-analysis precedent); the
+ * synthesized fields below are written by `synthesizeMemory` and committed by `saveMemory`. All additive;
+ * `schemaVersion: 1`.
+ */
+export const StoryMemorySchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.literal(1),
+  personId: z.string().min(1),
+  status: StoryMemoryStatusSchema,
+  /** A short, evocative title for the memory (synthesized; editable on the confirm card). */
+  title: z.string().default(''),
+  /** The distilled FIRST-PERSON narrative — the person's memory told back in their voice, fed to the book. */
+  narrative: z.string().default(''),
+  /** An approximate date/era ("1994", "my mid-twenties", "the summer after college") when derivable. */
+  approxDate: z.string().optional(),
+  /** Places the memory happened in. */
+  places: z.array(z.string()).default([]),
+  /** People present — free names, optionally linked to household people. */
+  people: z.array(StoryMemoryPersonSchema).default([]),
+  /** Life areas the memory touches (normalized against LIFE_AREAS). */
+  lifeAreas: z.array(z.string()).default([]),
+  /** The emotional texture — what it felt like, then and now. */
+  emotionalTexture: z.string().optional(),
+  /** Verbatim lines worth quoting — pull-quote candidates in the person's own words. */
+  pullQuotes: z.array(z.string()).default([]),
+  /** A McAdams scene key this memory covers, if it clearly is one (highPoint/lowPoint/turningPoint/…) — lets
+   *  a rich memory mark framework coverage without a gap pass. */
+  scene: z.string().optional(),
+  /** Trauma/intimacy content → the derived Insight's facts are `restricted` (own-context only), never
+   *  partner-shared (the intake-restricted precedent). */
+  sensitive: z.boolean().optional(),
+  /** Set when the synthesis detected acute distress — routes to the crisis affordance, never fed as content. */
+  crisisFlag: z.boolean().optional(),
+  /** The Insight this memory was committed into (once saved) — so re-save updates rather than duplicates. */
+  insightId: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  /** When the biographer first signaled "I have enough" (durable, survives navigation — the DREAM_READY
+   *  precedent). */
+  readyAt: z.string().optional(),
+  savedAt: z.string().optional(),
+});
+export type StoryMemory = z.infer<typeof StoryMemorySchema>;
+
+/** A crypto-free list view of a memory for the "Memories you've shared" collection + entry surfaces. */
+export interface StoryMemoryView {
+  id: string;
+  status: StoryMemoryStatus;
+  title: string;
+  approxDate?: string;
+  people: StoryMemoryPerson[];
+  updatedAt: string;
+  /** The chapter this memory wove into, when derivable (the answered-check-in linkage precedent). */
+  wroteIntoChapterTitle?: string;
+}
+
+/** `story:memoryOpen`/`memoryGet` — the memory + its transcript for the chat panel. */
+export interface StoryMemoryDetail {
+  memory: StoryMemory;
+  conversation: Conversation | null;
+}
+
+/** The synthesized memory the confirm card shows before it's committed (the editable draft). */
+export type StoryMemorySynthesisResult =
+  | { ok: true; memory: StoryMemory }
+  | { ok: false; reason: AiFailureReason | 'AI_OFF'; message: string };
+
+/** `story:memorySave` — commit the (possibly edited) synthesized memory into the book + the coach. */
+export type StoryMemorySaveResult =
+  | { ok: true; memory: StoryMemory }
+  | { ok: false; reason: AiFailureReason | 'AI_OFF' | 'MEMORY_DISABLED'; message: string };
+
+/** The editable fields the confirm card sends back on save (all optional — only what the person changed). */
+export const StoryMemoryEditsSchema = z.object({
+  title: z.string().optional(),
+  narrative: z.string().optional(),
+  approxDate: z.string().optional(),
+  emotionalTexture: z.string().optional(),
+});
+export type StoryMemoryEdits = z.infer<typeof StoryMemoryEditsSchema>;
+
+export const StoryMemoryRefSchema = z.object({ memoryId: z.string().min(1) });
+export type StoryMemoryRef = z.infer<typeof StoryMemoryRefSchema>;
+
+/** `story:memoryOpen` — open (or resume) a memory chat. `seed` optionally kicks it off from a gap focus or a
+ *  photo ("Tell the story of this photo"), so the biographer opens referencing it instead of a blank prompt. */
+export const StoryMemoryOpenInputSchema = z.object({
+  memoryId: z.string().optional(),
+  seedFocus: z.string().optional(),
+});
+export type StoryMemoryOpenInput = z.infer<typeof StoryMemoryOpenInputSchema>;
+
+/** `story:memoryTurn` — one chat turn (with optional image attachments on the new user message). */
+export const StoryMemoryTurnInputSchema = StoryMemoryRefSchema.extend({
+  text: z.string(),
+  attachments: z.array(AttachmentRefSchema).optional(),
+});
+export type StoryMemoryTurnInput = z.infer<typeof StoryMemoryTurnInputSchema>;
+
+/** `story:memorySave` — commit a synthesized memory, carrying the confirm card's edits. */
+export const StoryMemorySaveInputSchema = StoryMemoryRefSchema.extend({
+  edits: StoryMemoryEditsSchema.optional(),
+});
+export type StoryMemorySaveInput = z.infer<typeof StoryMemorySaveInputSchema>;
+
+/** `story:memoryRewind` / `story:memoryRegenerate` — truncate/regenerate at a message (the rewind precedent). */
+export const StoryMemoryRewindInputSchema = StoryMemoryRefSchema.extend({
+  index: z.number().int().nonnegative(),
+  expect: MessageStampSchema,
+});
+export type StoryMemoryRewindInput = z.infer<typeof StoryMemoryRewindInputSchema>;
+
+/** `story:memoryStoreAttachment` — an image on a memory-chat message (the Sessions attachment precedent). */
+export const StoryMemoryStoreAttachmentInputSchema = StoryMemoryRefSchema.extend({
+  dataBase64: z.string(),
+  mime: z.string(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+});
+export type StoryMemoryStoreAttachmentInput = z.infer<typeof StoryMemoryStoreAttachmentInputSchema>;
+
+/** `story:memoryGetAttachment` — read a stored memory attachment's bytes. */
+export const StoryMemoryGetAttachmentInputSchema = StoryMemoryRefSchema.extend({
+  path: z.string(),
+  mime: z.string(),
+});
+export type StoryMemoryGetAttachmentInput = z.infer<typeof StoryMemoryGetAttachmentInputSchema>;
 
 /** `images/index.enc` — metadata for every book image (bytes live in `images/<imageId>.enc` via
  *  `encryptBytes`). `cover` is the book cover; `generated` an AI illustration; `uploaded` a user photo. */

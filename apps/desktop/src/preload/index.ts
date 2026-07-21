@@ -232,6 +232,27 @@ const bridge: SelfosBridge = {
   storyUnexclude: (input) => ipcRenderer.invoke(IpcChannels.storyUnexclude, input),
   storyTodoToQuestions: (input) => ipcRenderer.invoke(IpcChannels.storyTodoToQuestions, input),
   storyAnswerQuestion: (input) => ipcRenderer.invoke(IpcChannels.storyAnswerQuestion, input),
+  storyMemoryList: () => ipcRenderer.invoke(IpcChannels.storyMemoryList),
+  storyMemoryGet: (input) => ipcRenderer.invoke(IpcChannels.storyMemoryGet, input),
+  storyMemoryOpen: (input) => ipcRenderer.invoke(IpcChannels.storyMemoryOpen, input),
+  storyMemoryTurn: (input) => ipcRenderer.invoke(IpcChannels.storyMemoryTurn, input),
+  storyMemoryRetry: (input) => ipcRenderer.invoke(IpcChannels.storyMemoryRetry, input),
+  storyMemoryRewind: (input) => ipcRenderer.invoke(IpcChannels.storyMemoryRewind, input),
+  storyMemoryRegenerate: (input) => ipcRenderer.invoke(IpcChannels.storyMemoryRegenerate, input),
+  storyMemorySynthesize: (input) => ipcRenderer.invoke(IpcChannels.storyMemorySynthesize, input),
+  storyMemorySave: (input) => ipcRenderer.invoke(IpcChannels.storyMemorySave, input),
+  storyMemoryDelete: (input) => ipcRenderer.invoke(IpcChannels.storyMemoryDelete, input),
+  storyMemoryStoreAttachment: (input) =>
+    ipcRenderer.invoke(IpcChannels.storyMemoryStoreAttachment, input),
+  storyMemoryGetAttachment: (input) =>
+    ipcRenderer.invoke(IpcChannels.storyMemoryGetAttachment, input),
+  onMemoryChunk: (listener) => {
+    const handler = (_event: unknown, delta: string): void => listener(delta);
+    ipcRenderer.on(IpcChannels.storyMemoryChunk, handler);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.storyMemoryChunk, handler);
+    };
+  },
   storyRefreshCheck: (input) => ipcRenderer.invoke(IpcChannels.storyRefreshCheck, input),
   storyProposals: (input) => ipcRenderer.invoke(IpcChannels.storyProposals, input),
   storyResolveProposal: (input) => ipcRenderer.invoke(IpcChannels.storyResolveProposal, input),

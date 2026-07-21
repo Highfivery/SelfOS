@@ -1835,3 +1835,135 @@
     transform: none;
   }
 }
+
+/* ---- Share a memory (§14) — the biographer interview chat + its confirm card + the collection ---- */
+.memLayout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.memBack {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  padding: var(--space-2) var(--space-2) var(--space-2) 0;
+  border: none;
+  background: transparent;
+  color: var(--color-accent-text);
+  font: inherit;
+  cursor: pointer;
+}
+.memBack:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+.memThread {
+  display: flex;
+  flex-direction: column;
+  max-height: 440px;
+  overflow-y: auto;
+  padding-right: var(--space-2);
+}
+/* max-width/alignment apply to a standalone bubble; inside a MessageRow the row owns them. */
+.memUserMsg,
+.memCoachMsg {
+  max-width: 80%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.memUserMsg {
+  align-self: flex-end;
+  margin-left: auto;
+  background: var(--color-accent-solid);
+  color: var(--color-accent-solid-text);
+}
+.memCoachMsg {
+  align-self: flex-start;
+  background: var(--color-surface-alt);
+  color: var(--color-text-primary);
+}
+.memThinking {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+.memSaveRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding-top: var(--space-2);
+}
+.memAttachGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+/* The confirm card — the synthesized memory the person edits before committing. */
+.memPeople {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.memPersonChip {
+  font-size: var(--text-xs);
+  color: var(--color-accent-text);
+  background: var(--color-accent-subtle-bg);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+}
+.memConfirmActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+/* The invite card at the top of the Interview tab. */
+.memInvite {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+/* A row in the "Memories you've shared" collection. */
+.memRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+.memRowMain {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  padding: 0;
+}
+.memRowMain:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+.memRowMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.memRowActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}

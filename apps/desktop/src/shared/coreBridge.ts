@@ -176,6 +176,13 @@ import {
   StoryBookRefSchema,
   StoryChapterRefSchema,
   StoryChapterVersionInputSchema,
+  StoryMemoryRefSchema,
+  StoryMemoryOpenInputSchema,
+  StoryMemoryTurnInputSchema,
+  StoryMemorySaveInputSchema,
+  StoryMemoryRewindInputSchema,
+  StoryMemoryStoreAttachmentInputSchema,
+  StoryMemoryGetAttachmentInputSchema,
   StoryExportInputSchema,
   StoryGenerateImageInputSchema,
   StoryImageRefSchema,
@@ -206,6 +213,10 @@ import {
   type ChapterMarkup,
   type ChapterVersion,
   type StoryChapterHistoryView,
+  type StoryMemoryView,
+  type StoryMemoryDetail,
+  type StoryMemorySynthesisResult,
+  type StoryMemorySaveResult,
   type ExclusionItem,
   type MarkupMark,
   type SharedBookSummary,
@@ -487,6 +498,20 @@ import {
   countWords,
   updateBook,
   updateMark,
+  listMemoryViews,
+  getMemory,
+  getMemoryConversation,
+  openMemoryChat,
+  runMemoryTurn,
+  retryMemoryReply,
+  rewindMemoryConversation,
+  regenerateMemoryFrom,
+  synthesizeMemory,
+  saveMemory,
+  deleteMemory,
+  storeMemoryAttachment,
+  getMemoryAttachment,
+  type StoreMemoryAttachmentResult,
 } from '@selfos/core/story';
 import {
   clearSuggestion,
@@ -739,6 +764,8 @@ export interface BridgeHost {
   emitIntakeChunk(chunk: string): void;
   /** Deliver a Together couples-turn reply chunk to the renderer (separate sink from chat, 58 §5.4). */
   emitTogetherChunk(chunk: string): void;
+  /** Deliver a "Share a memory" biographer-chat reply chunk to the renderer (separate sink, 64 §14). */
+  emitMemoryChunk(chunk: string): void;
   /** Deliver a Your Story create-and-draft progress update to the renderer (64 §3.2, its own channel). */
   emitStoryProgress(progress: StoryDraftProgress): void;
   /** Deliver a single-image / vision generation phase update to the renderer (its own channel), so every
@@ -782,6 +809,8 @@ export interface BridgeHost {
   onIntakeChunk(listener: (delta: string) => void): () => void;
   /** Subscribe to streamed Together couples-turn chunks; the counterpart to `emitTogetherChunk`. */
   onTogetherChunk(listener: (delta: string) => void): () => void;
+  /** Subscribe to streamed "Share a memory" chunks; the counterpart to `emitMemoryChunk`. */
+  onMemoryChunk(listener: (delta: string) => void): () => void;
   /** Subscribe to Your Story draft-progress updates; the counterpart to `emitStoryProgress`. */
   onStoryProgress(listener: (progress: StoryDraftProgress) => void): () => void;
   /** Subscribe to image/vision generation phase updates; the counterpart to `emitImageProgress`. */
@@ -1634,6 +1663,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     onDreamChunk: (listener) => host.onDreamChunk(listener),
     onIntakeChunk: (listener) => host.onIntakeChunk(listener),
     onTogetherChunk: (listener) => host.onTogetherChunk(listener),
+    onMemoryChunk: (listener) => host.onMemoryChunk(listener),
     onStoryProgress: (listener) => host.onStoryProgress(listener),
     onImageProgress: (listener) => host.onImageProgress(listener),
     platform: host.platform,
@@ -4964,6 +4994,211 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         };
       }
       return answerAuthorQuestion(deps, { bookId, chapterId, markId });
+    },
+    // --- Share a memory (§14) — the biographer interview chat + its synthesized memory ---
+    storyMemoryList: async (): Promise<StoryMemoryView[]> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      return listMemoryViews(ctx.fs, ctx.key, personId);
+    },
+    storyMemoryGet: async (input): Promise<StoryMemoryDetail | null> => {
+      const { memoryId } = StoryMemoryRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const memory = await getMemory(ctx.fs, ctx.key, personId, memoryId);
+      if (!memory) return null;
+      return {
+        memory,
+        conversation: await getMemoryConversation(ctx.fs, ctx.key, personId, memoryId),
+      };
+    },
+    storyMemoryOpen: async (input): Promise<StoryMemoryDetail | null> => {
+      const { memoryId, seedFocus } = StoryMemoryOpenInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      const person = await getPerson(ctx.fs, ctx.key, personId);
+      const res = await openMemoryChat({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        personId,
+        personName: person?.displayName ?? '',
+        ...(memoryId ? { memoryId } : {}),
+        ...(seedFocus ? { seedFocus } : {}),
+        onDelta: (text) => host.emitMemoryChunk(text),
+        now: new Date(),
+      });
+      return { memory: res.memory, conversation: res.conversation };
+    },
+    storyMemoryTurn: async (input): Promise<ChatTurnResult> => {
+      const { memoryId, text, attachments } = StoryMemoryTurnInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      const person = await getPerson(ctx.fs, ctx.key, personId);
+      return runMemoryTurn({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        personId,
+        personName: person?.displayName ?? '',
+        memoryId,
+        userText: text,
+        ...(attachments ? { attachments } : {}),
+        onDelta: (text2) => host.emitMemoryChunk(text2),
+        now: new Date(),
+      });
+    },
+    storyMemoryRetry: async (input): Promise<ChatTurnResult> => {
+      const { memoryId } = StoryMemoryRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      const person = await getPerson(ctx.fs, ctx.key, personId);
+      return retryMemoryReply({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        personId,
+        personName: person?.displayName ?? '',
+        memoryId,
+        onDelta: (text) => host.emitMemoryChunk(text),
+        now: new Date(),
+      });
+    },
+    storyMemoryRewind: async (input): Promise<RewindResult> => {
+      const { memoryId, index, expect } = StoryMemoryRewindInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, reason: 'NOT_FOUND' };
+      }
+      return rewindMemoryConversation(ctx.fs, ctx.key, personId, memoryId, index, expect);
+    },
+    storyMemoryRegenerate: async (input): Promise<ChatTurnResult> => {
+      const { memoryId, index, expect } = StoryMemoryRewindInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      const person = await getPerson(ctx.fs, ctx.key, personId);
+      return regenerateMemoryFrom(
+        {
+          fs: ctx.fs,
+          key: ctx.key,
+          client: host.claude,
+          apiKey,
+          model: await host.activeModel(),
+          personId,
+          personName: person?.displayName ?? '',
+          memoryId,
+          onDelta: (text) => host.emitMemoryChunk(text),
+          now: new Date(),
+        },
+        index,
+        expect,
+      );
+    },
+    storyMemorySynthesize: async (input): Promise<StoryMemorySynthesisResult> => {
+      const { memoryId } = StoryMemoryRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      if ((await readVaultSettingsValues(ctx.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to save this memory.',
+        };
+      }
+      const apiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
+      const person = await getPerson(ctx.fs, ctx.key, personId);
+      return synthesizeMemory({
+        fs: ctx.fs,
+        key: ctx.key,
+        client: host.claude,
+        apiKey,
+        model: await host.activeModel(),
+        personId,
+        personName: person?.displayName ?? '',
+        memoryId,
+        now: new Date(),
+      });
+    },
+    storyMemorySave: async (input): Promise<StoryMemorySaveResult> => {
+      const { memoryId, edits } = StoryMemorySaveInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
+      }
+      // A saved memory feeds the coach only when memory is on — it rides the SESSIONS master memory toggle
+      // (`sessions.memoryEnabled`, the Together/sessions precedent, NOT dreams' own `dreams.memoryEnabled`).
+      // The memory itself still saves + feeds the book regardless.
+      const memoryEnabled =
+        (await readVaultSettingsValues(ctx.fs))['sessions.memoryEnabled'] !== false;
+      return saveMemory({
+        fs: ctx.fs,
+        key: ctx.key,
+        personId,
+        memoryId,
+        ...(edits ? { edits } : {}),
+        memoryEnabled,
+        now: new Date(),
+      });
+    },
+    storyMemoryDelete: async (input): Promise<void> => {
+      const { memoryId } = StoryMemoryRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return;
+      await deleteMemory(ctx.fs, ctx.key, personId, memoryId);
+    },
+    storyMemoryStoreAttachment: async (input): Promise<StoreMemoryAttachmentResult> => {
+      const { memoryId, dataBase64, mime, width, height } =
+        StoryMemoryStoreAttachmentInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, reason: 'UNSUPPORTED', message: 'Not permitted.' };
+      }
+      const bytes = fromBase64(dataBase64);
+      return storeMemoryAttachment(ctx.fs, ctx.key, personId, memoryId, bytes, mime, {
+        ...(width !== undefined ? { width } : {}),
+        ...(height !== undefined ? { height } : {}),
+      });
+    },
+    storyMemoryGetAttachment: async (
+      input,
+    ): Promise<{ mime: string; dataBase64: string } | null> => {
+      const { memoryId, path, mime } = StoryMemoryGetAttachmentInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      // Scope the read to THIS person's memory attachments (the path guard + the active-person prefix).
+      if (!path.startsWith(`people/${personId}/story/memories/${memoryId}/`)) return null;
+      const bytes = await getMemoryAttachment(ctx.fs, ctx.key, path);
+      return bytes ? { mime, dataBase64: toBase64(bytes) } : null;
     },
     storyRefreshCheck: async (input): Promise<StoryRefreshViewResult> => {
       const { bookId, auto } = StoryRefreshInputSchema.parse(input);

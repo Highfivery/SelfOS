@@ -419,6 +419,58 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-21 — **Build (Your Story "Share a memory" — the biographer interview chat; SPEC 64 §14 written + BUILT;
+  PR 3 of the overnight Your-Story overhaul; on `feat/story-share-a-memory`).** The user asked, under Interview,
+  for a way to freeform-share a specific memory, have the biographer draw it out in an interactive chat (like a
+  session), then analyze + store it so it feeds Your Story AND the whole app (sessions, Together, insights,
+  questionnaires, dreams). Built end-to-end. **Decisions locked (AskUserQuestion) before building:** memory scope =
+  **person-level**; save = **one-tap editable confirm card**; insights = **partner-shared by default with
+  trauma/intimacy restricted carve-outs**; chat = **full in-chat photo attachments**; the "Ask" comment intent =
+  **answerable** (answer-the-author, shipped in PR 2). **The core (`storyMemoryService.ts`):** a new per-person
+  memory chat that reuses the dream-analysis architecture wholesale — persist-user-message-first (66 §3.2),
+  `streamWithContinuation`, meter-before-parse (`story.memory`), the EMPTY fail-safe, a `[[SELFOS:MEMORY_READY]]`
+  readiness marker + a durable `status` (gathering→ready→saved) stamp, a coach-speaks-first idempotent opener
+  (McAdams deepening ladder), retry/rewind/regenerate. **Synthesis** (`extendedThinking: false`, tolerant
+  `SynthesisDraftSchema`, SCENE_KEYS validated, life-areas filtered) writes the structured `StoryMemory`; **save**
+  applies the confirm-card edits, marks it `saved`, and distills an approved `Insight` (`source: 'memory'`) via
+  `producedFactShare(restricted)` — **partner-shared by default**, but a **SENSITIVE** memory's facts are
+  `restricted` + `lifeArea:'Intimacy'` (own-context + intimacy-topic only, never partner-shared), the §50/§62
+  relevance-gate carve-out; re-save reuses the stable insightId + carries sharing forward; `memoryEnabled` (the
+  SESSIONS master toggle `sessions.memoryEnabled`) gates the Insight only — the memory still SAVES (it feeds the
+  book) when memory is off. A saved memory emits into `buildStoryCorpus` as a `{kind:'memory'}` item so generation
+  weaves it in, and `listMemoryViews` joins each memory to the chapter its Insight is cited by ("wove into
+  <chapter>", deterministic, free). **In-chat photo attachments** (`storeMemoryAttachment`/`getMemoryAttachment`,
+  path-guarded by `isMemoryAttachmentPath` in core + a person/memory prefix in the bridge, mime/size validated,
+  re-read per turn as Claude vision `ContentBlock`s). `deleteMemory` purges the whole folder AND the Insight — a
+  deleted memory truly forgets. **Additive schema (no version bump):** `InsightSource += 'memory'`,
+  `StorySourceKind += 'memory'`, `InsightProvenance += memoryId`, new `StoryMemory`/views/results/edits +
+  attachment inputs. **Seam:** 13 handlers (`storyMemory{List,Get,Open,Turn,Retry,Rewind,Regenerate,Synthesize,
+Save,Delete,StoreAttachment,GetAttachment}`), `emitMemoryChunk`/`onMemoryChunk` streaming (per-turn-bound sender),
+  all gated `story.own` + active-person-scoped. **Renderer:** the `ShareMemoryPanel` (streaming biographer chat
+  reusing the Sessions `Composer` + `CrisisFooter`, photo attachments, the editable `MemoryConfirmCard`, saved
+  state) + a per-person `storyMemoryStore` (reset in AppShell), surfaced on the Interview tab (invite card + a
+  "Memories you've shared" collection + each gap's "Talk it through" + the PhotosPanel "Tell the story of this
+  photo" seed + a `/story/interview?memory=<id>` deep-link from Memory). code-reviewer **fix-first** — the one
+  should-fix applied: the `[[SELFOS:MEMORY_READY]]` marker **flashed in the live streaming display** on the real
+  transport (the offline fake withheld it from the stream, hiding the bug — the exact §6 "fakes hide model-call
+  bugs" trap + the Together B1 streaming-marker regression); fixed by composing a `stripMemoryReadyMarker`
+  (full + trailing-partial) into the shared `stripCoachMarkers`, and the E2E fake now STREAMS the marker so the
+  strip is actually exercised (+ an E2E assertion the raw token never reaches the thread + a unit test). Gate green:
+  typecheck, lint, format, **1602 core + 12 relay + 1407 desktop** unit (+19 core storyMemoryService:
+  open/turn/synthesize/save/corpus/delete/attachments/wove-into; +2 coreBridge: full open→turn→synthesize→save
+  round-trip [decrypt-level corpus + Guest denial] + a SENSITIVE memory's Insight is restricted, never
+  partner-shared; +6 Story RTL; +stripMemoryReadyMarker unit), **story E2E** (a new "share a memory" walk: invite →
+  streamed opener → a turn → "Save this memory" → confirm card → "Add to my story" → decrypt-asserts the saved
+  memory + its partner-shared Insight, + a chat-mode + saved-mode 360px guard; the fake-Claude memory branches are
+  E2E-gated in `anthropicClient.ts`). **Lessons: (1) a "share a memory" chat is the dream-analysis architecture
+  re-pointed at a new entity — reuse persist-user-first + streamWithContinuation + the readiness-marker +
+  durable-status pattern; the only genuinely new work is the synthesis→Insight distillation + the corpus emission.
+  (2) The partner-shared default is safe because SENSITIVE is a structural carve-out at the fact level (restricted +
+  `lifeArea:'Intimacy'`), the §62 producedFactShare precedent — a memory feeds the coach with the same privacy
+  rails as a session insight. (3) A new streamed marker MUST be stripped on the LIVE render (in the shared
+  `stripCoachMarkers`), and the offline fake MUST stream it — a fake that appends the marker only to the returned
+  text passes a green E2E while the real transport flashes it (§6); make the fake do what the transport does so the
+  strip is verifiable.**
 - 2026-07-20 — **Build (Your Story interview-loop coherence & answer-the-author — SPEC 64 §13.10 BUILT; PR 2 of the
   overnight Your-Story overhaul; on `fix/story-interview-loop`, PR #285).** The deep review's second cluster: the
   biographer interview loop contradicted itself and dead-ended. **(1) De-dup parity (§3.7, closing the §23.5

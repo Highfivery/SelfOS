@@ -34,6 +34,7 @@ export const SOURCE_EYEBROW: Record<Insight['source'], string> = {
   questionnaire: 'Questionnaire',
   test: 'Self-assessment',
   together: 'Together session',
+  memory: 'Shared memory',
 };
 
 /** At or below this many facts, an insight shows its facts inline; above it, they collapse behind a

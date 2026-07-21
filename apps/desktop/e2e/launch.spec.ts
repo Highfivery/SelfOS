@@ -64,7 +64,7 @@ import {
   pairKeyFor,
   saveAgreement,
 } from '@selfos/core/together';
-import { getBook, getMarkup, getOutline, listBooks } from '@selfos/core/story';
+import { getBook, getMarkup, getOutline, listBooks, listMemories } from '@selfos/core/story';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
@@ -12045,6 +12045,101 @@ test('story (64): living book — refresh proposes a structural change, approvin
     // The check-in lands in the Inbox with a "Your biographer" eyebrow so the ask is never mysterious (§5.5).
     await w.getByRole('link', { name: 'Inbox' }).click();
     await expect(w.getByText(/Your biographer ·/)).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('story (64): share a memory — the biographer interviews, synthesizes, and weaves it into your story (§14)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    // The one-flow draft lands on the finished, editable book.
+    await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
+
+    // The Interview tab hosts "Share a memory" — an inline biographer chat.
+    await w.getByRole('tab', { name: 'Interview' }).click();
+    await w.getByRole('button', { name: 'Share a memory' }).click();
+
+    // The biographer speaks first (streamed): its opener invites the memory.
+    await expect(w.getByText(/Take me back/)).toBeVisible();
+
+    // Tell the biographer the memory; after ONE exchange it has enough to write it.
+    await w
+      .getByRole('textbox', { name: 'Message' })
+      .fill('I got a blue bicycle the summer I was seven and rode it down our gravel drive.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/enough here to write it/)).toBeVisible();
+
+    // The readiness turn STREAMS the `[[SELFOS:MEMORY_READY]]` marker as its last token (the fake now does what
+    // the real transport does) — the live-stream strip must keep the raw token out of the thread (CLAUDE.md §6:
+    // the marker-flash bug the offline fake used to hide, the Together B1 regression).
+    await expect(w.getByText(/SELFOS:MEMORY_READY/)).toHaveCount(0);
+
+    // 360px in CHAT mode: the biographer thread + composer + save row render with no horizontal scroller (§12).
+    await w.setViewportSize({ width: 360, height: 800 });
+    const chatOffenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(chatOffenders).toEqual([]);
+    await w.setViewportSize({ width: 1280, height: 900 });
+
+    // "Save this memory" → synthesize → the editable confirm card, pre-filled with the biographer's title.
+    await w.getByRole('button', { name: /Save this memory/ }).click();
+    await expect(w.getByRole('heading', { name: 'Your memory, in your words' })).toBeVisible();
+    await expect(w.getByRole('textbox', { name: 'Title' })).toHaveValue('The Blue Bicycle');
+
+    // Commit it → the memory is woven into the story (the saved banner names it).
+    await w.getByRole('button', { name: 'Add to my story' }).click();
+    await expect(w.getByText('Woven into your story.')).toBeVisible();
+    await expect(w.getByText(/The Blue Bicycle/)).toBeVisible();
+
+    // 360px: the panel (saved state) scrolls vertically only — no horizontal scrollbar / inner scroller (§12).
+    await w.setViewportSize({ width: 360, height: 800 });
+    const offenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(offenders).toEqual([]);
+
+    // Decrypt the vault: the memory record persisted as `saved` with the synthesized title…
+    const memories = await listMemories(fs, key, 'owner-1');
+    const saved = memories.find((m) => m.title === 'The Blue Bicycle');
+    expect(saved?.status).toBe('saved');
+    expect(saved?.approxDate).toBe('the summer I was seven');
+
+    // …and it distilled into an approved `source:'memory'` Insight whose facts are partner-shared (a non-sensitive
+    // memory follows the standing owner rule), so the memory reaches the coach + a partner's context (§14).
+    const insights = await listInsightsForPerson(fs, key, 'owner-1');
+    const memoryInsight = insights.find((i) => i.source === 'memory');
+    expect(memoryInsight?.approved).toBe(true);
+    expect(memoryInsight?.facts.some((f) => f.shareableTypes?.includes('partner'))).toBe(true);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

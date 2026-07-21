@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { wordDiff } from '@selfos/core/story-diff';
 import {
   Banner,
@@ -21,7 +21,9 @@ import {
 import { ImageStylePicker } from '../../../settings/ImageStyleControl';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryStore } from '../../../stores/storyStore';
+import { useStoryMemoryStore } from '../../../stores/storyMemoryStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
+import { ShareMemoryPanel } from './ShareMemoryPanel';
 import { useInsightStore } from '../../../stores/insightStore';
 import { useStoryRefresh } from '../../notifications/useStoryRefresh';
 import { useStoryInterview } from '../../notifications/useStoryInterview';
@@ -900,6 +902,7 @@ function CoverPanel({
  * Claude key (the app already requires AI), so a failed analyze surfaces its reason calmly.
  */
 function PhotosPanel({ bookId }: { bookId: string }): JSX.Element {
+  const navigate = useNavigate();
   const images = useStoryStore((s) => s.images);
   const imageUrls = useStoryStore((s) => s.imageUrls);
   const photoAnswers = useStoryStore((s) => s.photoAnswers);
@@ -1063,6 +1066,19 @@ function PhotosPanel({ bookId }: { bookId: string }): JSX.Element {
                     <Inline gap={2} className={styles.photoCardActions}>
                       <Button variant="ghost" disabled={busy} onClick={() => analyze(p.id)}>
                         {p.caption ? 'Ask more' : 'Caption & ask about this'}
+                      </Button>
+                      {/* Seed the biographer memory chat (§14) from this photo — jump to the Interview tab. */}
+                      <Button
+                        variant="ghost"
+                        onClick={() =>
+                          navigate(
+                            `/story/interview?seed=${encodeURIComponent(
+                              p.caption ?? 'the story of this photo',
+                            )}`,
+                          )
+                        }
+                      >
+                        Tell the story of this photo
                       </Button>
                       <button
                         type="button"
@@ -1896,15 +1912,70 @@ function InterviewTab({
   const [notice, setNotice] = useState<string | null>(null);
   const [asking, setAsking] = useState<string | null>(null);
 
+  // "Share a memory" (§14) — an inline biographer chat that swaps the tab body. Driven by the invite card, a
+  // gap's "Talk it through", the collection, and the `/story/interview?memory=<id>` deep-link.
+  const memories = useStoryMemoryStore((s) => s.memories);
+  const loadMemories = useStoryMemoryStore((s) => s.loadMemories);
+  const deleteMemory = useStoryMemoryStore((s) => s.deleteMemory);
+  const [panel, setPanel] = useState<{ memoryId?: string; seedFocus?: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
   useEffect(() => {
     void loadGaps(bookId);
     void loadAnswered(bookId);
-  }, [bookId, loadGaps, loadAnswered]);
+    void loadMemories();
+  }, [bookId, loadGaps, loadAnswered, loadMemories]);
+
+  // Deep-link: `?memory=<id>` opens that memory; `?seed=<focus>` starts a new seeded one (the photo entry). The
+  // param is consumed once (cleared) so closing the panel doesn't reopen it.
+  const memoryParam = searchParams.get('memory');
+  const seedParam = searchParams.get('seed');
+  useEffect(() => {
+    if (memoryParam) {
+      setPanel({ memoryId: memoryParam });
+      setSearchParams({}, { replace: true });
+    } else if (seedParam) {
+      setPanel({ seedFocus: seedParam });
+      setSearchParams({}, { replace: true });
+    }
+  }, [memoryParam, seedParam, setSearchParams]);
+
+  const closePanel = (): void => {
+    setPanel(null);
+    void loadMemories(); // a just-saved memory joins the collection
+  };
 
   const hasOpenCheckin = gaps?.hasOpenCheckin ?? false;
 
+  if (panel) {
+    return (
+      <ShareMemoryPanel
+        key={panel.memoryId ?? panel.seedFocus ?? 'new'}
+        {...(panel.memoryId ? { memoryId: panel.memoryId } : {})}
+        {...(panel.seedFocus ? { seedFocus: panel.seedFocus } : {})}
+        onBack={closePanel}
+      />
+    );
+  }
+
   return (
     <Stack gap={3}>
+      <Card>
+        <Stack gap={2}>
+          <Heading level={2}>Share a memory</Heading>
+          <Text tone="secondary" size="sm">
+            Tell your biographer about a moment — a place, a person, a turning point — and it will
+            ask, listen, and write it into your story in your own words.
+          </Text>
+          <div className={styles.memInvite}>
+            <Button variant="primary" onClick={() => setPanel({})}>
+              Share a memory
+            </Button>
+          </div>
+        </Stack>
+      </Card>
+
       <Card>
         <Stack gap={3}>
           <Heading level={2}>What’s missing</Heading>
@@ -1959,32 +2030,39 @@ function InterviewTab({
                   {/* Lifecycle-aware (§3.7): an answered gap shows "Answered ✓" (never re-offers an identical
                       re-ask that contradicts the "Answered" card below); a gap whose check-in is waiting shows
                       that; only an open gap offers "Ask me about this". */}
-                  {gap.status === 'answered' ? (
-                    <Text size="sm" tone="tertiary">
-                      Answered <span aria-hidden="true">✓</span>
-                    </Text>
-                  ) : gap.status === 'asked' ? (
-                    <Text size="sm" tone="tertiary">
-                      Waiting in your Inbox
-                    </Text>
-                  ) : (
-                    <Button
-                      disabled={hasOpenCheckin || busy || asking !== null}
-                      onClick={async () => {
-                        setAsking(gap.id);
-                        setNotice(null);
-                        const res = await askGap(bookId, gap.id);
-                        setAsking(null);
-                        setNotice(
-                          res.ok
-                            ? 'Your biographer sent a few questions to your Inbox.'
-                            : res.message,
-                        );
-                      }}
-                    >
-                      {asking === gap.id ? 'Asking…' : 'Ask me about this'}
+                  <Inline gap={2}>
+                    {/* Talk it through: open the biographer chat seeded with this gap — a live alternative to
+                        (or a companion of) sending questions to the Inbox. */}
+                    <Button variant="ghost" onClick={() => setPanel({ seedFocus: gap.focus })}>
+                      Talk it through
                     </Button>
-                  )}
+                    {gap.status === 'answered' ? (
+                      <Text size="sm" tone="tertiary">
+                        Answered <span aria-hidden="true">✓</span>
+                      </Text>
+                    ) : gap.status === 'asked' ? (
+                      <Text size="sm" tone="tertiary">
+                        Waiting in your Inbox
+                      </Text>
+                    ) : (
+                      <Button
+                        disabled={hasOpenCheckin || busy || asking !== null}
+                        onClick={async () => {
+                          setAsking(gap.id);
+                          setNotice(null);
+                          const res = await askGap(bookId, gap.id);
+                          setAsking(null);
+                          setNotice(
+                            res.ok
+                              ? 'Your biographer sent a few questions to your Inbox.'
+                              : res.message,
+                          );
+                        }}
+                      >
+                        {asking === gap.id ? 'Asking…' : 'Ask me about this'}
+                      </Button>
+                    )}
+                  </Inline>
                 </div>
               ))}
             </Stack>
@@ -2009,6 +2087,87 @@ function InterviewTab({
                       ? `wove into “${c.wroteIntoChapterTitle}”`
                       : new Date(c.answeredAt).toLocaleDateString()}
                   </Text>
+                </div>
+              ))}
+            </Stack>
+          </Stack>
+        </Card>
+      ) : null}
+
+      {memories.length > 0 ? (
+        <Card>
+          <Stack gap={2}>
+            <Heading level={3}>Memories you’ve shared</Heading>
+            <Text tone="tertiary" size="sm">
+              Moments you’ve told your biographer — open one to re-read it or keep talking. Your
+              biographer weaves them into your story.
+            </Text>
+            <Stack gap={1}>
+              {memories.map((m) => (
+                <div key={m.id} className={styles.memRow}>
+                  <button
+                    type="button"
+                    className={styles.memRowMain}
+                    onClick={() => setPanel({ memoryId: m.id })}
+                  >
+                    <Text size="sm" weight={500}>
+                      {m.title || 'Untitled memory'}
+                    </Text>
+                    <div className={styles.memRowMeta}>
+                      {m.status !== 'saved' ? (
+                        <span className={styles.memPersonChip}>Draft</span>
+                      ) : null}
+                      {m.approxDate ? (
+                        <Text size="sm" tone="tertiary">
+                          {m.approxDate}
+                        </Text>
+                      ) : null}
+                      {m.people.slice(0, 3).map((p, i) => (
+                        <span key={`${p.name}-${i}`} className={styles.memPersonChip}>
+                          {p.name}
+                        </span>
+                      ))}
+                      {m.wroteIntoChapterTitle ? (
+                        <Text size="sm" tone="tertiary">
+                          wove into “{m.wroteIntoChapterTitle}”
+                        </Text>
+                      ) : null}
+                    </div>
+                  </button>
+                  <div className={styles.memRowActions}>
+                    {confirmDelete === m.id ? (
+                      <>
+                        <Text size="sm" tone="tertiary">
+                          Remove?
+                        </Text>
+                        <Button
+                          variant="ghost"
+                          onClick={async () => {
+                            setConfirmDelete(null);
+                            await deleteMemory(m.id);
+                          }}
+                        >
+                          Remove
+                        </Button>
+                        <button
+                          type="button"
+                          className={styles.sourcesToggle}
+                          onClick={() => setConfirmDelete(null)}
+                        >
+                          Keep
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className={styles.sourcesToggle}
+                        aria-label={`Remove the memory “${m.title || 'Untitled memory'}”`}
+                        onClick={() => setConfirmDelete(m.id)}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </Stack>

@@ -465,6 +465,45 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // Share a memory (§14) — synthesis: the biographer captures the chat as a structured memory JSON. Must
+      // precede the memory CHAT branch (both share the biographer system) and the generic "JSON object" branch.
+      if (userText.includes('capture this memory as structured data')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            title: 'The Blue Bicycle',
+            narrative:
+              'I was seven, and the bicycle was the blue of a summer sky. I rode it down our gravel ' +
+              'drive while my father watched from the porch, and for the first time I felt the wind ' +
+              'do the work.',
+            approxDate: 'the summer I was seven',
+            places: ['our gravel driveway'],
+            people: [{ name: 'my father' }],
+            lifeAreas: ['Family', 'Childhood'],
+            emotionalTexture: 'A first taste of freedom, and my father’s quiet pride.',
+            pullQuotes: ['for the first time I felt the wind do the work'],
+            scene: 'positiveChildhood',
+          }),
+          usage: STORY_USAGE,
+        });
+      }
+
+      // Share a memory (§14) — the biographer interview chat (streaming). Matched by the guidance phrase in the
+      // system prompt. The OPENER (its instruction ends "just warmly begin") gets a plain opening question; a
+      // real person turn gets a warm reply PLUS the readiness marker, so the E2E reaches the "save" offer after
+      // one exchange. The marker rides `result.text` (not the stream) so it never flashes but IS detected.
+      if ((options.system ?? '').includes('they want to tell you about a memory')) {
+        const isOpener = userText.includes('just warmly begin');
+        const spoken = isOpener
+          ? 'I’d love to hear it. Take me back — where were you, and what’s the first thing you picture?'
+          : 'That’s a whole memory, vivid and yours. It feels like there’s enough here to write it into ' +
+            'your story now — though we can keep going if there’s more you want to bring.';
+        // A real person turn appends the readiness marker as the LAST token — and streams it (the real
+        // transport does), so the E2E exercises the live-stream marker-strip rather than a fake that hides it.
+        const text = isOpener ? spoken : `${spoken}\n\n[[SELFOS:MEMORY_READY]]`;
+        for (const word of text.split(' ')) onDelta(`${word} `);
+        return Promise.resolve({ text, usage: STORY_USAGE });
+      }
+
       // The gap pass (§3.7): coverage + one prioritized gap so "Find what's missing" mints a check-in.
       if (userText.includes('the biographer taking stock')) {
         captureStoryPrompt('gap', options.system ?? '', userText);

@@ -419,6 +419,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-21 — **Fix (Together sessions: sending a message then switching sessions mid-"thinking" force-navigated
+  you BACK to the first session; user-reported; on `fix/together-session-switch-nav`).** A Together route renders
+  from the store's single `open` slot (not the URL), and the turn state (`open`/`sending`/`streaming`/`reportView`)
+  is GLOBAL, not per-session. So: send in A → the turn awaits; navigate to B → `openSession('B')` sets `open` to B;
+  A's turn resolves → `sendMessage`'s completion did `set({ open: result.view })` UNCONDITIONALLY, clobbering `open`
+  back to A → the screen snapped to A with no user action. Every other mutating action already guarded with
+  `get().open?.id === id`; `sendMessage`/`retry` didn't. **Fix:** capture `sessionId` up front and gate every
+  completion `set` in `sendMessage`/`retry`/`rewind` on the session still being open (the turn is persisted
+  regardless — reopening the session shows it); reset the leaked `sending`/`streaming`/`wrappingUp` in
+  `openSession`/`closeSession` (+ `reportView` in `closeSession`, which the effect-cleanup runs BEFORE the new
+  open — resetting it in `openSession` would race the mount-time `loadReport`). **Code-review fix-first found the
+  guard was incomplete — the same clobber lived in three more async paths** and all landed in this PR: `refresh`
+  (the vault-watcher re-fetch — `!sending` doesn't protect against NAVIGATION, only a concurrent send — now
+  re-checks `get().open?.id === open.id`), `wrapUp` (a multi-second pass whose unguarded `loadReport(A)` leaked A's
+  reflection/agreements into B's `reportView` — now gated on still-open), and `appendTogetherChunk` (session-agnostic
+  chunks kept growing the shared stream after navigation — now dropped when nothing's `sending`; a full fix needs
+  session-tagged chunks, noted). Gate green: typecheck, lint, format, **86 Together (store + route) unit** (+4 store
+  regression tests reproducing the race with a deferred "coach thinking" turn — proven to FAIL without the guards:
+  send/retry don't clobber `open`, refresh doesn't clobber mid-navigation, and the same-session happy path still
+  applies). No new user-facing surface, so the store unit tests (a faithful reproduction of the mid-stream
+  navigation race) are the right level — an E2E would need a two-session partner household + a slow streaming turn
+  to interleave, which is flaky/heavy for a store-race. **Lesson: when a route renders from a store's single `open`
+  slot rather than the URL param, EVERY async action that writes `open`/`reportView`/streaming must re-check the
+  session is still the one being viewed on completion — a `!sending` guard protects only against a concurrent send,
+  NOT against the user navigating away mid-await; audit all sibling async paths, not just the reported one.**
 - 2026-07-21 — **Build (Your Story "Share a memory" — resume an unfinished chat later + a history list, like
   Sessions; SPEC 64 §14.2; on `feat/story-memory-resume-history`).** After Share a memory shipped (v0.42.0), the
   user asked that a memory chat be resumable — come back later to finish it, and keep a history of the chats.

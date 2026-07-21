@@ -181,15 +181,31 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
     const open = get().open;
     if (open && !get().sending) {
       const fresh = (await window.selfos?.togetherGet(open.id)) ?? null;
-      if (fresh && !get().sending) set({ open: fresh });
+      // Re-check the session is STILL open (and not now sending): the vault-watcher debounce means the
+      // user can navigate away during the `togetherGet` await, and writing `fresh` (session A) would
+      // clobber whatever they've since opened — the same cross-session clobber `sendMessage` guards.
+      if (fresh && get().open?.id === open.id && !get().sending) set({ open: fresh });
     }
   },
   openSession: async (id) => {
     const open = (await window.selfos?.togetherGet(id)) ?? null;
-    set({ open, streaming: '', error: null });
+    // Reset the per-session view state too: a freshly opened session is never mid-send/mid-wrap-up from the
+    // viewer's standpoint, and another session's in-flight turn must not leave this one showing "thinking" /
+    // a disabled composer / stray streamed text (the global streaming state doesn't belong to it).
+    // `reportView` is cleared in `closeSession` (the effect cleanup runs BEFORE this) — resetting it here
+    // would race the mount-time `loadReport(id)` that runs alongside this open.
+    set({ open, streaming: '', sending: false, wrappingUp: false, error: null });
     if (open) void window.selfos?.togetherMarkRead({ sessionId: id, at: new Date().toISOString() });
   },
-  closeSession: () => set({ open: null, streaming: '', error: null }),
+  closeSession: () =>
+    set({
+      open: null,
+      streaming: '',
+      sending: false,
+      wrappingUp: false,
+      reportView: EMPTY_REPORT,
+      error: null,
+    }),
   create: async (partnerPersonId, topic, guideId) => {
     const result = (await window.selfos?.togetherCreate({
       partnerPersonId,
@@ -219,6 +235,8 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
   sendMessage: async (text, privateAside, pending) => {
     const open = get().open;
     if (!open) return NOT_ALLOWED;
+    // The turn runs against THIS session; the user may navigate to another while the coach is thinking.
+    const sessionId = open.id;
     // Show the author's message IMMEDIATELY (so it's clear it was sent) rather than waiting for the coach to
     // finish — the couples turn persists the author's message first (05 §4.1), so this optimistic bubble matches
     // what's on disk; on success `result.view` replaces it, on failure it stays (with the error + Try again).
@@ -243,7 +261,7 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
       const attachments: AttachmentRef[] = [];
       for (const p of pending ?? []) {
         const stored = await window.selfos?.togetherStoreAttachment({
-          sessionId: open.id,
+          sessionId,
           base64: p.base64,
           mime: p.mime,
           width: p.width,
@@ -253,20 +271,25 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
       }
       const result =
         (await window.selfos?.togetherSendMessage({
-          sessionId: open.id,
+          sessionId,
           text,
           ...(privateAside ? { privateAside: true } : {}),
           ...(attachments.length > 0 ? { attachments } : {}),
         })) ?? NOT_ALLOWED;
+      // If the user navigated to another session while the coach was thinking, do NOT write this turn's
+      // result into the shared view state — that would yank them back to this session (the view renders
+      // from `open`, not the URL). The turn is persisted regardless; reopening this session shows it.
+      if (get().open?.id !== sessionId) return result;
       if (result.ok) {
         set({ open: result.view, sending: false, streaming: '' });
         // A shared (non-aside) turn may have captured an agreement (§6.4) or moved the report's staleness —
         // refresh the ledger/report so it stays live. An aside mints no shared artifacts (§3.6), so skip it.
-        if (!privateAside) await get().loadReport(open.id);
+        if (!privateAside) await get().loadReport(sessionId);
       } else set({ sending: false, streaming: '', error: result.message });
       return result;
     } catch {
-      set({ sending: false, streaming: '', error: TURN_ERROR.message });
+      if (get().open?.id === sessionId)
+        set({ sending: false, streaming: '', error: TURN_ERROR.message });
       return TURN_ERROR;
     }
   },
@@ -275,24 +298,31 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
     // tombstone both partners see. Core owns the span + privacy rules; the store just refreshes.
     const open = get().open;
     if (!open || get().sending) return;
+    const sessionId = open.id;
     const view = await window.selfos?.togetherRewind({
-      sessionId: open.id,
+      sessionId,
       fromMessageId,
     });
+    // Don't apply to another session the user may have navigated to during the await.
+    if (get().open?.id !== sessionId) return;
     if (view) set({ open: view, error: null });
     else set({ error: 'Couldn’t remove those messages.' });
   },
   retry: async () => {
     const open = get().open;
     if (!open) return NOT_ALLOWED;
+    const sessionId = open.id;
     set({ sending: true, streaming: '', error: null });
     try {
-      const result = (await window.selfos?.togetherRetry({ sessionId: open.id })) ?? NOT_ALLOWED;
+      const result = (await window.selfos?.togetherRetry({ sessionId })) ?? NOT_ALLOWED;
+      // As with sendMessage: don't clobber the view if the user has moved to another session mid-turn.
+      if (get().open?.id !== sessionId) return result;
       if (result.ok) set({ open: result.view, sending: false, streaming: '' });
       else set({ sending: false, streaming: '', error: result.message });
       return result;
     } catch {
-      set({ sending: false, streaming: '', error: TURN_ERROR.message });
+      if (get().open?.id === sessionId)
+        set({ sending: false, streaming: '', error: TURN_ERROR.message });
       return TURN_ERROR;
     }
   },
@@ -325,9 +355,13 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
       (await window.selfos?.togetherWrapUp({ sessionId, ...(mode ? { mode } : {}) })) ??
       WRAP_NOT_READY;
     set({ wrappingUp: false });
-    // Refresh the report + the open session (its status may derive to complete).
-    await get().loadReport(sessionId);
-    if (get().open?.id === sessionId) await get().refresh();
+    // Refresh the report + the open session (its status may derive to complete) — but only if the viewer is
+    // STILL on this session: a wrap-up is a multi-second pass, and refreshing A's report into the shared
+    // `reportView` while they're now on B would show A's reflection/agreements under B.
+    if (get().open?.id === sessionId) {
+      await get().loadReport(sessionId);
+      await get().refresh();
+    }
     return result;
   },
   saveAgreement: async (input) => {
@@ -367,9 +401,16 @@ export const useTogetherStore = create<TogetherState>((set, get) => ({
     }),
 }));
 
-/** Append a streamed chunk to the open session's live reply text (wired to `onTogetherChunk`). */
+/**
+ * Append a streamed chunk to the open session's live reply text (wired to `onTogetherChunk`).
+ *
+ * The chunk stream carries no session id (the IPC payload is a bare string), so a turn still streaming in the
+ * main process after the viewer navigated away would otherwise keep growing the shared buffer and could bleed
+ * into a different session's live bubble. Dropping deltas when nothing is `sending` contains the common case
+ * (the only turn we're actively rendering set `sending` true). A full fix would tag chunks with a session id.
+ */
 export function appendTogetherChunk(delta: string): void {
-  useTogetherStore.setState((s) => ({ streaming: s.streaming + delta }));
+  useTogetherStore.setState((s) => (s.sending ? { streaming: s.streaming + delta } : {}));
 }
 
 /**

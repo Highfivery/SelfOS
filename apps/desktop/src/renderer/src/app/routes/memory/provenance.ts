@@ -84,12 +84,14 @@ export function provenanceTarget(insight: Insight): ProvenanceTarget {
     };
   }
   if (insight.source === 'memory') {
-    // A shared memory (64 §14) deep-links to the memory chat on the Interview tab.
+    // A shared memory (64 §14) deep-links to the book-INDEPENDENT memories route (§15.1). Memories are
+    // person-level and survive a book delete, so this must never point inside the book Studio — the
+    // Interview tab stranded the link on "Begin your book" once the person's last book was gone (#288).
     return {
       label,
       to: insight.provenance.memoryId
-        ? `/story/interview?memory=${encodeURIComponent(insight.provenance.memoryId)}`
-        : '/story/interview',
+        ? `/story/memories?memory=${encodeURIComponent(insight.provenance.memoryId)}`
+        : '/story/memories',
       source: { kind: 'other' },
     };
   }

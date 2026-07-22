@@ -365,7 +365,8 @@ export function ShareMemoryPanel({
     <div className={styles.memLayout}>
       <button type="button" className={styles.memBack} onClick={onBack}>
         <ArrowLeft size={16} aria-hidden="true" />
-        Back to your story
+        {/* Neutral: this returns to the memory collection, and on `/story/memories` there may be no book. */}
+        Back to your memories
       </button>
       <Heading level={2}>Share a memory</Heading>
 

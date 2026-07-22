@@ -1442,3 +1442,129 @@ chat is kept as history.
 - **Reopen a synthesized-but-unsaved draft → straight to the review card** (owner decision) — a `ready`
   memory reopens directly on the editable confirm card built from the draft it already wrote (no new AI
   spend); "Keep talking" returns to the chat.
+
+---
+
+## 15. Backlog batch 0 — correctness & hygiene (2026-07-22, PROPOSED)
+
+The first batch of the groomed Your Story backlog (GitHub #288, #305, #289): one real dead-end bug, two
+honesty/granularity gaps in what the corpus claims vs what it feeds, and the streaming-sink refactor the
+§14 memory chat's fifth copy finally justified. Nothing here changes what the biographer writes — it makes
+the app tell the truth about its own material and stops the seam growing a sixth copy of the same plumbing.
+
+### 15.1 Memories without a book (#288 — bug)
+
+**The dead-end.** A memory is **person-level** by design (§14, decision 1) — it survives a book delete and
+feeds every future book plus the coach. Its derived Insight is permanent. But `provenance.ts` links a
+`source:'memory'` insight to `/story/interview?memory=<id>`, and the Interview tab lives _inside_ the book
+Studio. A person who deletes their only book keeps the memory and the insight, and the Memory card's "view
+source" link lands them on "Begin your book" — the memory is unreachable, permanently, from the one surface
+that still cites it.
+
+**Decision (owner, 2026-07-22): keep the memories, give them a book-independent home.** Memories are NOT
+reaped when the last book goes — that would silently forget material the coach is actively using, and the
+delete-a-book confirm has no business deleting unrelated life material.
+
+**The surface.** A new book-independent route **`/story/memories`** — titled **"Your memories"** — rendering
+the SAME two sections the Interview tab already has ("Pick up where you left off" + the saved collection,
+§14.2), extracted into one shared component so the two surfaces cannot drift. (The page title deliberately
+differs from the "Memories you've shared" section heading inside it — two headings reading identically on one
+screen is the §7 label collision.) It renders identically with a
+book, with several books, or with none; opening/continuing a memory chat works with no book (the backend
+already does — `buildMemorySystem` falls back to the warm/third default config when `listBooks` is empty).
+
+- The memory deep-link becomes **`/story/memories?memory=<id>`** unconditionally — correct in every book
+  state, so the dead-end closes by construction rather than by a has-a-book branch.
+- The Interview tab keeps its sections (a memory is part of the interview loop when you have a book) and
+  gains a quiet "See all memories →" to the route.
+- Entry with no book: reachable from the Memory card's provenance link AND from a quiet "Your memories"
+  action on the story invitation — the latter is load-bearing, not decoration, because an unsaved draft
+  memory produces no Insight and so has no provenance link to arrive by. That action is never disabled by
+  AI state: sharing a NEW memory needs AI, but reaching one you already told the biographer must not.
+- The collection reloads on an active-person switch (keyed on the active person, the `Story.tsx`
+  convention): AppShell resets the per-person memory store but the standalone route does not unmount, so a
+  mount-only load would leave the next person on a permanently blank surface.
+- When the multi-book shelf lands (#299), `/story/memories` is already the right shape — person-level, not
+  book-scoped.
+
+**No schema, no new IPC, no backend change.** `storyMemoryList/Open/Turn/...` are all already
+`story.own`-gated + active-person-scoped and book-free.
+
+### 15.2 Corpus honesty & granularity (#305)
+
+**(a) "Drawn from N conversations" overstates.** The invitation chip row (`drawnFromChips`, §13.3) reports
+`stats.conversations` — a raw `listConversations` count — but `buildStoryCorpus` **never reads a transcript**.
+Sessions reach the biographer only through their derived, approved insights. A person with 40 chatty
+sessions and no analysis sees "40 sessions" on a promise the book cannot keep.
+
+`getStoryCorpusStats` is re-derived from **what actually feeds**: it counts the corpus sources it really
+emits — reflections (approved, feedable insights), dreams that inform context, saved memories, answered
+questionnaires/check-ins, answered photos, goals + challenges — and drops the bare conversation count. The
+chips read as material, not activity. The year span keeps its existing dated-everything derivation (a
+conversation's date is still legitimate chronology even when its transcript isn't source material).
+
+**(b) The response corpus item is one lumped block.** `buildStoryCorpus` emits every answer the person ever
+gave as a SINGLE item with `sourceRef {kind:'response', id: personId}`, so a paragraph woven from one
+answer to one check-in cites "all your answers, ever" — the provenance popover can't name the questionnaire,
+`storyDiff`/freshness can't tell which answer changed, and a `source` exclusion can only drop the lot.
+
+A new `gatherRecipientPriorAnswersByAssignment` (the per-assignment sibling of the existing
+`gatherRecipientPriorAnswers`, sharing its per-question decline filter so a skip is still never fed as
+biography material) returns one block per answered assignment, and the corpus emits **one item per
+questionnaire** — `sourceRef {kind:'response', id: assignmentId, at: submittedAt}`, label `From "<title>"`,
+dated so it lands in chronology. The existing `response` source kind is unchanged; only its `id` grows more
+precise, so a per-questionnaire `source` exclusion now works and stale provenance degrades exactly the way
+every other missing source already does.
+
+### 15.3 One generic streaming channel (#289 — refactor, behavior-preserving)
+
+`emitMemoryChunk`/`onMemoryChunk` was the **fifth** hand-rolled copy of the same sink (chat · dream · intake
+· together · memory) across `BridgeHost`, `coreBridge`, `ipc.ts`, `preload`, `webHost` and the test host —
+five near-identical emit methods, five subscribe methods, five `IpcChannels` entries, five module-scoped
+`WebContents` senders with their own bind/reset. A sixth streamed surface should need none of it.
+
+**The design.** One surface-keyed channel with a typed payload map:
+
+```ts
+export interface StreamChunkMap {
+  chat: string;
+  dream: string;
+  intake: string;
+  together: TogetherChunk;
+  memory: string;
+}
+export type StreamSurface = keyof StreamChunkMap;
+```
+
+- `BridgeHost` gains `emitStreamChunk<K extends StreamSurface>(surface: K, chunk: StreamChunkMap[K])` and
+  loses the five emit methods; `coreBridge`'s call sites become `host.emitStreamChunk('memory', text)` etc.
+- One IPC channel `stream:chunk` carrying `{ surface, chunk }`. `ipc.ts` keeps ONE
+  `Map<StreamSurface, WebContents | null>` and one `bindStreamSender(surface, sender)`; the per-turn bind +
+  `finally` reset semantics are preserved **exactly** (a stream must never outlive its turn or leak into
+  another window — the `together:chunk` session-bleed lesson).
+- The renderer-facing `SelfosBridge` keeps `onChatChunk`/`onDreamChunk`/`onIntakeChunk`/`onTogetherChunk`/
+  `onMemoryChunk` as thin one-line delegations over a single `onStreamChunk(surface, listener)`, so **no
+  store, component, or test changes** — the collapse is entirely below the renderer API. Preload keeps one
+  `ipcRenderer.on(IpcChannels.streamChunk, ...)` that fans out by surface, and stays **zod-free** (the
+  sandboxed-preload rule): `StreamSurface` is a plain string union, the payload passes through untyped at
+  the wire and is typed at both ends.
+- Adding a streamed surface is then: one line in `StreamChunkMap`, one `onXChunk` delegation. No host part,
+  no channel, no sender, no preload entry.
+
+Not in scope: `emitImageProgress` / `story:progress` are _progress_ streams with a different contract; the
+typed map can absorb them later, but this slice does not touch them.
+
+### 15.4 Decisions locked 2026-07-22
+
+1. **#288 = keep the memories** — a book-independent `/story/memories` route, never reap on last-book delete.
+2. **#305(a)** — corpus stats count what actually **feeds** generation, not raw activity.
+3. **#305(b)** — the response corpus item splits **per answered questionnaire** (assignment id as provenance).
+4. **#289** — the renderer-facing `onXChunk` API is **kept** (thin delegations); only the transport collapses.
+
+### 15.5 Build slices (each its own PR, standard §6/§7 cadence)
+
+| Slice | Issue | Scope                                                                                                                                                                                                                                                                                                                                                                    | Tests                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B0-1  | #288  | Extract the shared memory-collection component; add the `/story/memories` route + the story-store wiring; re-point `provenanceTarget` unconditionally; "See all memories →" on the Interview tab + "Your memories" on the invitation. Carries the Interview tab's pre-existing 360px `.gapRow` overflow fix (same surface, so it lands here rather than as a follow-up). | RTL: the route renders both sections with **no book**; the deep-link opens that memory; an empty state, never a blank page; the collection reloads on a person switch; the invitation entry works. Unit: the provenance target is book-independent. E2E: share + save a memory → delete the only book → the Memory insight's "view source" opens the memory (the dead-end, verified to FAIL before the fix) → 360px guard. |
+| B0-2  | #305  | `getStoryCorpusStats` re-derived from feeding sources; `gatherRecipientPriorAnswersByAssignment`; per-questionnaire corpus items.                                                                                                                                                                                                                                        | Core: stats ignore transcript-only conversations + count memories/answers; one item per answered assignment with its assignment id + date; a declined answer still never feeds; a `source` exclusion on one assignment drops only that one. RTL: chips read the new stats.                                                                                                                                                 |
+| B0-3  | #289  | `StreamChunkMap` + `emitStreamChunk`/`onStreamChunk` through `BridgeHost` → `coreBridge` → `ipc.ts` → preload → `webHost` → test host; delete the ten per-surface methods.                                                                                                                                                                                               | Existing streaming tests are the regression proof (chat/dream/intake/together/memory all still stream). New: a chunk emitted for one surface reaches only that surface's listeners; the per-turn sender is reset in `finally`; a Together chunk keeps its `sessionId`. E2E: the Sessions send-a-reply + Together crown-jewel streams stay green.                                                                           |

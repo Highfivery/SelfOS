@@ -477,11 +477,18 @@ function makeHost(): {
       loadBundle: () => Promise.resolve({ script: 'export default {}', version: '1' }),
       currentVersion: '1',
     },
-    emitChatChunk: (chunk) => chunks.push(chunk),
-    emitDreamChunk: (chunk) => dreamChunks.push(chunk),
-    emitIntakeChunk: (chunk) => intakeChunks.push(chunk),
-    emitTogetherChunk: (chunk) => togetherChunks.push(chunk),
-    emitMemoryChunk: (chunk) => memoryChunks.push(chunk),
+    // ONE sink, keyed by surface (64 §15.3) — fanned back out into the per-surface arrays the assertions
+    // read, so every existing streaming test still pins its own surface.
+    emitStreamChunk: (surface, chunk) => {
+      if (surface === 'chat') chunks.push(chunk as string);
+      else if (surface === 'dream') dreamChunks.push(chunk as string);
+      else if (surface === 'intake') intakeChunks.push(chunk as string);
+      else if (surface === 'together') togetherChunks.push(chunk as TogetherChunk);
+      else if (surface === 'memory') memoryChunks.push(chunk as string);
+      // A new surface added to `StreamChunkMap` without a line here would otherwise vanish into nothing
+      // while the suite stayed green — the "tests green for the wrong reason" trap.
+      else throw new Error(`test host: unhandled stream surface "${String(surface)}"`);
+    },
     getBootState: () => Promise.resolve(bootFromDevice()),
     refreshBootState: () => Promise.resolve(bootFromDevice()),
     selectVaultFolder: () => Promise.resolve(null),
@@ -495,11 +502,7 @@ function makeHost(): {
     onVaultChanged: () => () => {},
     emitStoryProgress: (p) => storyProgress.push(p),
     emitImageProgress: (p) => imageProgress.push(p),
-    onChatChunk: () => () => {},
-    onDreamChunk: () => () => {},
-    onIntakeChunk: () => () => {},
-    onTogetherChunk: () => () => {},
-    onMemoryChunk: () => () => {},
+    onStreamChunk: () => () => {},
     onStoryProgress: () => () => {},
     onImageProgress: () => () => {},
   };
@@ -843,7 +846,7 @@ describe('createCoreBridge', () => {
     expect((await bridge.sessionSetActive({ personId: ownerId, pin: '1234' })).ok).toBe(true);
   });
 
-  it('streams a chat turn through emitChatChunk and persists the conversation', async () => {
+  it('streams a chat turn through the chat stream sink and persists the conversation', async () => {
     const { bridge, host } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
     const result = await bridge.chatStream({ conversationId: 'c1', userText: 'hello' });

@@ -215,6 +215,38 @@ import type { TestForm, TestNarrateResponse, TestSummary } from '@selfos/core/te
  */
 export type AppPlatform = 'darwin' | 'win32' | 'linux' | 'ios' | 'web' | 'unknown';
 
+/**
+ * Every streamed-reply surface and the shape of its chunk (64 §15.3). One typed map + one IPC channel
+ * replaces what used to be a hand-rolled sink per surface (emit + subscribe + channel + a module-scoped
+ * `WebContents` + a preload entry, five times over) — adding a streamed surface is now a line here plus a
+ * one-line delegation on the bridge.
+ *
+ * Types only, so this stays safe for the sandboxed preload (no zod, no runtime import).
+ */
+export interface StreamChunkMap {
+  /** A coaching-session reply delta (05). */
+  chat: string;
+  /** A dream guided-analysis reply delta (12). */
+  dream: string;
+  /** An onboarding-interview reply delta (18). */
+  intake: string;
+  /** A couples-turn delta, carrying its session id so the renderer can drop deltas for a session the
+   *  viewer navigated away from (58 §5.4). */
+  together: TogetherChunk;
+  /** A "Share a memory" biographer-chat reply delta (64 §14). */
+  memory: string;
+}
+export type StreamSurface = keyof StreamChunkMap;
+
+/**
+ * The wire payload on the single `stream:chunk` channel: which surface, and its chunk. A mapped UNION, not
+ * `{surface: StreamSurface; chunk: StreamChunkMap[StreamSurface]}` — the latter widens to
+ * `string | TogetherChunk` and would happily accept a Together chunk labelled `chat`.
+ */
+export type StreamChunkEnvelope = {
+  [K in StreamSurface]: { surface: K; chunk: StreamChunkMap[K] };
+}[StreamSurface];
+
 export const IpcChannels = {
   getBootState: 'app:getBootState',
   refreshBootState: 'app:refreshBootState',
@@ -275,7 +307,8 @@ export const IpcChannels = {
   conversationsRewind: 'conversations:rewind',
   /** 66 §6 — truncate then re-generate ("retry from here"), in one call so no half-rewound state shows. */
   chatRegenerateFrom: 'chat:regenerateFrom',
-  chatChunk: 'chat:chunk', // main → renderer event
+  /** The ONE main → renderer streamed-chunk event, keyed by surface (64 §15.3). */
+  streamChunk: 'stream:chunk',
   conversationStoreAttachment: 'conversation:storeAttachment',
   conversationGetAttachment: 'conversation:getAttachment',
   conversationExportAttachment: 'conversation:exportAttachment',
@@ -385,7 +418,6 @@ export const IpcChannels = {
   storyMemoryDelete: 'story:memoryDelete',
   storyMemoryStoreAttachment: 'story:memoryStoreAttachment',
   storyMemoryGetAttachment: 'story:memoryGetAttachment',
-  storyMemoryChunk: 'story:memoryChunk', // main → renderer event
   storyRefreshCheck: 'story:refreshCheck',
   storyProposals: 'story:proposals',
   storyResolveProposal: 'story:resolveProposal',
@@ -452,7 +484,6 @@ export const IpcChannels = {
   togetherRetry: 'together:retry',
   /** 66 §3.3 — remove a span of messages, leaving a "removed" tombstone for both partners. */
   togetherRewind: 'together:rewind',
-  togetherChunk: 'together:chunk', // main → renderer event
   togetherPrepOpen: 'together:prepOpen',
   togetherStoreAttachment: 'together:storeAttachment',
   togetherGetAttachment: 'together:getAttachment',
@@ -513,7 +544,6 @@ export const IpcChannels = {
   dreamRewind: 'dreams:rewind',
   /** 66 §3.3 — truncate then re-generate ("retry from here"). */
   dreamRegenerateFrom: 'dreams:regenerateFrom',
-  dreamChunk: 'dreams:chunk', // main → renderer event
   dreamGetAnalysis: 'dreams:getAnalysis',
   dreamGetConversation: 'dreams:getConversation',
   dreamSynthesize: 'dreams:synthesize',
@@ -544,7 +574,6 @@ export const IpcChannels = {
   intakeRewind: 'intake:rewind',
   /** 66 §3.3 — truncate then re-generate ("retry from here"). */
   intakeRegenerateFrom: 'intake:regenerateFrom',
-  intakeChunk: 'intake:chunk', // main → renderer event
   intakeSkipSection: 'intake:skipSection',
   intakeSubmitForm: 'intake:submitForm',
   intakeAcknowledgeAdult: 'intake:acknowledgeAdult',
@@ -826,7 +855,7 @@ export interface SelfosBridge {
   /**
    * Re-generate the coach's reply for a session whose last message is an unanswered user message (05 §4.1) —
    * an empty/failed turn, or a re-opened session that ended on the user. Adds no new user message (no
-   * duplication); streams via `chat:chunk`. Scoped to the active person in the bridge.
+   * duplication); streams via the `chat` stream surface. Scoped to the active person in the bridge.
    */
   chatRetry(conversationId: string): Promise<ChatTurnResult>;
   /**

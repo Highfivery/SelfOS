@@ -43,7 +43,7 @@ export function PrepPanel({
     };
   }, [sessionId]);
 
-  // Stream the coach reply into the live bubble (prep uses the solo chat:chunk sink).
+  // Stream the coach reply into the live bubble (prep uses the solo `chat` stream surface).
   useEffect(() => window.selfos?.onChatChunk(appendChunk), [appendChunk]);
 
   return (

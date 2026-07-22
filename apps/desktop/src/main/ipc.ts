@@ -10,7 +10,12 @@ import {
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { IpcChannels, type AppPlatform } from '../shared/channels';
+import {
+  IpcChannels,
+  type AppPlatform,
+  type StreamChunkEnvelope,
+  type StreamSurface,
+} from '../shared/channels';
 import { BootStateSchema, type BootState } from '../shared/schemas';
 import { createCoreBridge, readVaultSettingsValues, type BridgeHost } from '../shared/coreBridge';
 import { computeBootState } from './boot';
@@ -56,15 +61,22 @@ async function currentBootState(): Promise<BootState> {
  * watcher / stream target the invoking `WebContents`.
  */
 export function registerIpcHandlers(): void {
-  // The device-local secret store + the renderers to stream chat / dream-analysis chunks back to (each
-  // set per turn, on the dedicated channel).
   const secrets = createNodeSecretStore(userDataDir(), encryptor);
-  let chatSender: WebContents | undefined;
-  let dreamSender: WebContents | undefined;
-  let intakeSender: WebContents | undefined;
-  let togetherSender: WebContents | undefined;
+  // ONE per-surface sender map (64 §15.3) replaces five module-scoped WebContents. Each entry is bound for
+  // the duration of ONE turn and cleared in a `finally` — a stream must never outlive its turn or leak into
+  // another window (the Together session-bleed lesson).
+  const streamSenders = new Map<StreamSurface, WebContents>();
+  /** Bind the invoking window for this turn; the returned fn clears it (call it in `finally`). */
+  const bindStream = (surface: StreamSurface, sender: WebContents): (() => void) => {
+    streamSenders.set(surface, sender);
+    // Identity-guarded: if a second window bound this surface while our turn ran, its binding stands. (The
+    // old per-surface variable released unconditionally; with one window that's the same behaviour, but the
+    // `together:chunk` session-bleed lesson says don't leave the sharper edge lying around.)
+    return () => {
+      if (streamSenders.get(surface) === sender) streamSenders.delete(surface);
+    };
+  };
   let storySender: WebContents | undefined;
-  let memorySender: WebContents | undefined;
   let imageSender: WebContents | undefined;
   // E2E/dev: a deterministic in-memory relay (no real Cloudflare account/network), like SELFOS_FAKE_CLAUDE.
   const useFakeRelay = Boolean(process.env['SELFOS_FAKE_RELAY']);
@@ -115,29 +127,10 @@ export function registerIpcHandlers(): void {
           loadBundle: loadRelayBundle,
           currentVersion: RELAY_VERSION,
         },
-    emitChatChunk: (chunk) => {
-      if (chatSender && !chatSender.isDestroyed()) {
-        chatSender.send(IpcChannels.chatChunk, chunk);
-      }
-    },
-    emitDreamChunk: (chunk) => {
-      if (dreamSender && !dreamSender.isDestroyed()) {
-        dreamSender.send(IpcChannels.dreamChunk, chunk);
-      }
-    },
-    emitIntakeChunk: (chunk) => {
-      if (intakeSender && !intakeSender.isDestroyed()) {
-        intakeSender.send(IpcChannels.intakeChunk, chunk);
-      }
-    },
-    emitTogetherChunk: (chunk) => {
-      if (togetherSender && !togetherSender.isDestroyed()) {
-        togetherSender.send(IpcChannels.togetherChunk, chunk);
-      }
-    },
-    emitMemoryChunk: (chunk) => {
-      if (memorySender && !memorySender.isDestroyed()) {
-        memorySender.send(IpcChannels.storyMemoryChunk, chunk);
+    emitStreamChunk: (surface, chunk) => {
+      const sender = streamSenders.get(surface);
+      if (sender && !sender.isDestroyed()) {
+        sender.send(IpcChannels.streamChunk, { surface, chunk } as StreamChunkEnvelope);
       }
     },
     emitStoryProgress: (progress) => {
@@ -242,11 +235,7 @@ export function registerIpcHandlers(): void {
     // On Electron the renderer subscribes to these over IPC in the preload, not via the in-process
     // bridge — so the bridge's own subscriptions are unused in main (they exist for the iOS host).
     onVaultChanged: () => () => {},
-    onChatChunk: () => () => {},
-    onDreamChunk: () => () => {},
-    onIntakeChunk: () => () => {},
-    onTogetherChunk: () => () => {},
-    onMemoryChunk: () => () => {},
+    onStreamChunk: () => () => {},
     onStoryProgress: () => () => {},
     onImageProgress: () => () => {},
   };
@@ -510,21 +499,21 @@ export function registerIpcHandlers(): void {
   // The couples turn streams on its own channel (kept separate from chat/dreams so streams never cross, §5.4).
   // Same per-turn sender binding + reset as chatStream.
   ipcMain.handle(IpcChannels.togetherSendMessage, async (event, raw: unknown) => {
-    togetherSender = event.sender;
+    const release = bindStream('together', event.sender);
     try {
       return await bridge.togetherSendMessage(
         raw as { sessionId: string; text: string; privateAside?: boolean },
       );
     } finally {
-      togetherSender = undefined;
+      release();
     }
   });
   ipcMain.handle(IpcChannels.togetherRetry, async (event, raw: unknown) => {
-    togetherSender = event.sender;
+    const release = bindStream('together', event.sender);
     try {
       return await bridge.togetherRetry(raw as { sessionId: string });
     } finally {
-      togetherSender = undefined;
+      release();
     }
   });
   handle(IpcChannels.togetherPrepOpen, bridge.togetherPrepOpen);
@@ -647,25 +636,26 @@ export function registerIpcHandlers(): void {
     return bridge.unlinkVault();
   });
 
-  // chatStream streams reply chunks back to the invoking window via emitChatChunk → IPC event. The
-  // sender is bound for the turn only — reset afterwards so no stale WebContents lingers between turns.
+  // chatStream streams reply chunks back to the invoking window via emitStreamChunk('chat') → the one
+  // `stream:chunk` event. The sender is bound for the turn only — released in `finally`, so no stale
+  // WebContents lingers between turns (64 §15.3).
   ipcMain.handle(IpcChannels.chatStream, async (event, raw: unknown) => {
-    chatSender = event.sender;
+    const release = bindStream('chat', event.sender);
     try {
       return await bridge.chatStream(
         raw as { conversationId: string; userText: string; attachments?: never },
       );
     } finally {
-      chatSender = undefined;
+      release();
     }
   });
   // chatRetry re-generates a reply for an unanswered turn — same per-turn sender binding as chatStream (05 §4.1).
   ipcMain.handle(IpcChannels.chatRetry, async (event, raw: unknown) => {
-    chatSender = event.sender;
+    const release = bindStream('chat', event.sender);
     try {
       return await bridge.chatRetry(raw as string);
     } finally {
-      chatSender = undefined;
+      release();
     }
   });
   // Session image attachments (45) — thin delegates; the bridge owns validation + active-person scoping.
@@ -680,13 +670,13 @@ export function registerIpcHandlers(): void {
     ),
   );
   ipcMain.handle(IpcChannels.chatRegenerateFrom, async (event, raw: unknown) => {
-    chatSender = event.sender;
+    const release = bindStream('chat', event.sender);
     try {
       return await bridge.chatRegenerateFrom(
         raw as { conversationId: string; index: number; expect: { role: 'user'; ts: string } },
       );
     } finally {
-      chatSender = undefined;
+      release();
     }
   });
 
@@ -694,28 +684,28 @@ export function registerIpcHandlers(): void {
   // separate from chat so the Sessions and Dreams streams never cross). Same per-turn sender binding +
   // reset as chatStream — the coach's opener streams too (12 §15.4).
   ipcMain.handle(IpcChannels.dreamStartReflection, async (event, raw: unknown) => {
-    dreamSender = event.sender;
+    const release = bindStream('dream', event.sender);
     try {
       return await bridge.dreamStartReflection(raw as { dreamId: string });
     } finally {
-      dreamSender = undefined;
+      release();
     }
   });
   ipcMain.handle(IpcChannels.dreamAnalyzeTurn, async (event, raw: unknown) => {
-    dreamSender = event.sender;
+    const release = bindStream('dream', event.sender);
     try {
       return await bridge.dreamAnalyzeTurn(raw as { dreamId: string; userText: string });
     } finally {
-      dreamSender = undefined;
+      release();
     }
   });
   // 66 §3.2 — the retry re-generates a reply and streams it on the same dream sink.
   ipcMain.handle(IpcChannels.dreamRetryTurn, async (event, raw: unknown) => {
-    dreamSender = event.sender;
+    const release = bindStream('dream', event.sender);
     try {
       return await bridge.dreamRetryTurn(raw as { dreamId: string });
     } finally {
-      dreamSender = undefined;
+      release();
     }
   });
   // 66 §3.3 — Together rewind writes only (no regeneration), so no sender binding.
@@ -730,13 +720,13 @@ export function registerIpcHandlers(): void {
     ),
   );
   ipcMain.handle(IpcChannels.dreamRegenerateFrom, async (event, raw: unknown) => {
-    dreamSender = event.sender;
+    const release = bindStream('dream', event.sender);
     try {
       return await bridge.dreamRegenerateFrom(
         raw as { dreamId: string; index: number; expect: { role: 'user'; ts: string } },
       );
     } finally {
-      dreamSender = undefined;
+      release();
     }
   });
 
@@ -744,38 +734,38 @@ export function registerIpcHandlers(): void {
   // Dreams/Intake streams). Same per-turn sender bind + reset. Open/turn/retry/regenerate stream; rewind
   // writes only; the non-streaming ops (list/get/synthesize/save/delete/attachments) register via `handle`.
   ipcMain.handle(IpcChannels.storyMemoryOpen, async (event, raw: unknown) => {
-    memorySender = event.sender;
+    const release = bindStream('memory', event.sender);
     try {
       return await bridge.storyMemoryOpen(raw as never);
     } finally {
-      memorySender = undefined;
+      release();
     }
   });
   ipcMain.handle(IpcChannels.storyMemoryTurn, async (event, raw: unknown) => {
-    memorySender = event.sender;
+    const release = bindStream('memory', event.sender);
     try {
       return await bridge.storyMemoryTurn(raw as never);
     } finally {
-      memorySender = undefined;
+      release();
     }
   });
   ipcMain.handle(IpcChannels.storyMemoryRetry, async (event, raw: unknown) => {
-    memorySender = event.sender;
+    const release = bindStream('memory', event.sender);
     try {
       return await bridge.storyMemoryRetry(raw as never);
     } finally {
-      memorySender = undefined;
+      release();
     }
   });
   ipcMain.handle(IpcChannels.storyMemoryRewind, async (_event, raw: unknown) =>
     bridge.storyMemoryRewind(raw as never),
   );
   ipcMain.handle(IpcChannels.storyMemoryRegenerate, async (event, raw: unknown) => {
-    memorySender = event.sender;
+    const release = bindStream('memory', event.sender);
     try {
       return await bridge.storyMemoryRegenerate(raw as never);
     } finally {
-      memorySender = undefined;
+      release();
     }
   });
   handle(IpcChannels.storyMemoryList, bridge.storyMemoryList);
@@ -789,20 +779,20 @@ export function registerIpcHandlers(): void {
   // intakeRunTurn streams the interviewer reply on its own channel (kept separate from chat/dreams). Same
   // per-turn sender binding + reset as chatStream (18-personal-onboarding §6).
   ipcMain.handle(IpcChannels.intakeRunTurn, async (event, raw: unknown) => {
-    intakeSender = event.sender;
+    const release = bindStream('intake', event.sender);
     try {
       return await bridge.intakeRunTurn(raw as { sectionId: string; userText: string });
     } finally {
-      intakeSender = undefined;
+      release();
     }
   });
   // 66 §3.2 — the retry re-generates a reply and streams it on the same intake sink.
   ipcMain.handle(IpcChannels.intakeRetryTurn, async (event, raw: unknown) => {
-    intakeSender = event.sender;
+    const release = bindStream('intake', event.sender);
     try {
       return await bridge.intakeRetryTurn(raw as { sectionId: string });
     } finally {
-      intakeSender = undefined;
+      release();
     }
   });
   // 66 §3.3 — rewind writes only; regenerate also streams, so it binds the intake sender.
@@ -812,13 +802,13 @@ export function registerIpcHandlers(): void {
     ),
   );
   ipcMain.handle(IpcChannels.intakeRegenerateFrom, async (event, raw: unknown) => {
-    intakeSender = event.sender;
+    const release = bindStream('intake', event.sender);
     try {
       return await bridge.intakeRegenerateFrom(
         raw as { sectionId: string; index: number; expect: { role: 'user'; ts: string } },
       );
     } finally {
-      intakeSender = undefined;
+      release();
     }
   });
 }

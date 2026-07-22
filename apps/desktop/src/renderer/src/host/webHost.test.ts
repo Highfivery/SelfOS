@@ -89,6 +89,48 @@ function fakePlugin(overrides: Partial<VaultFsPlugin> = {}): VaultFsPlugin {
 
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
+describe('createWebHost — the surface-keyed stream sink (64 §15.3)', () => {
+  it('delivers a chunk ONLY to its own surface’s listeners', () => {
+    const host = createWebHost({ factory });
+    const chat: string[] = [];
+    const memory: string[] = [];
+    host.onStreamChunk('chat', (c) => chat.push(c));
+    host.onStreamChunk('memory', (c) => memory.push(c));
+
+    host.emitStreamChunk('chat', 'hello');
+    host.emitStreamChunk('memory', 'a memory');
+
+    // Two live streams must never cross — the whole reason each surface kept its own sink before.
+    expect(chat).toEqual(['hello']);
+    expect(memory).toEqual(['a memory']);
+  });
+
+  it('carries the Together chunk’s sessionId through unchanged', () => {
+    const host = createWebHost({ factory });
+    const seen: { sessionId: string; delta: string }[] = [];
+    host.onStreamChunk('together', (c) => seen.push(c));
+
+    host.emitStreamChunk('together', { sessionId: 's-1', delta: 'hi' });
+
+    // The renderer drops deltas for a session the viewer navigated away from, so the id must survive.
+    expect(seen).toEqual([{ sessionId: 's-1', delta: 'hi' }]);
+  });
+
+  it('unsubscribing one listener leaves the rest of the surface intact', () => {
+    const host = createWebHost({ factory });
+    const first: string[] = [];
+    const second: string[] = [];
+    const stop = host.onStreamChunk('chat', (c) => first.push(c));
+    host.onStreamChunk('chat', (c) => second.push(c));
+
+    stop();
+    host.emitStreamChunk('chat', 'after');
+
+    expect(first).toEqual([]);
+    expect(second).toEqual(['after']);
+  });
+});
+
 describe('createCapacitorHost', () => {
   it('selectVaultFolder returns the picked folder bookmark', async () => {
     const host = createCapacitorHost(fakePlugin());

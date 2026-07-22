@@ -1,6 +1,30 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IpcChannels, type AppPlatform, type SelfosBridge } from '../shared/channels';
-import type { TogetherChunk } from '../shared/schemas';
+import {
+  IpcChannels,
+  type AppPlatform,
+  type SelfosBridge,
+  type StreamChunkEnvelope,
+  type StreamChunkMap,
+  type StreamSurface,
+} from '../shared/channels';
+
+/**
+ * Subscribe to ONE streamed surface over the single `stream:chunk` channel (64 §15.3). Each caller gets its
+ * own `ipcRenderer` listener that ignores envelopes for other surfaces, so two live streams never cross and
+ * unsubscribing one leaves the others intact.
+ */
+function onStreamChunk<K extends StreamSurface>(
+  surface: K,
+  listener: (chunk: StreamChunkMap[K]) => void,
+): () => void {
+  const handler = (_event: unknown, envelope: StreamChunkEnvelope): void => {
+    if (envelope.surface === surface) listener(envelope.chunk as StreamChunkMap[K]);
+  };
+  ipcRenderer.on(IpcChannels.streamChunk, handler);
+  return () => {
+    ipcRenderer.removeListener(IpcChannels.streamChunk, handler);
+  };
+}
 
 // `process.platform` is available in the sandboxed preload (a subset of `process` is exposed). It
 // drives the titlebar's per-platform window-control layout (02-app-shell §13); anything unexpected
@@ -86,13 +110,7 @@ const bridge: SelfosBridge = {
   chatRetry: (conversationId) => ipcRenderer.invoke(IpcChannels.chatRetry, conversationId),
   conversationsRewind: (input) => ipcRenderer.invoke(IpcChannels.conversationsRewind, input),
   chatRegenerateFrom: (input) => ipcRenderer.invoke(IpcChannels.chatRegenerateFrom, input),
-  onChatChunk: (listener) => {
-    const handler = (_event: unknown, delta: string): void => listener(delta);
-    ipcRenderer.on(IpcChannels.chatChunk, handler);
-    return () => {
-      ipcRenderer.removeListener(IpcChannels.chatChunk, handler);
-    };
-  },
+  onChatChunk: (listener) => onStreamChunk('chat', listener),
   conversationStoreAttachment: (input) =>
     ipcRenderer.invoke(IpcChannels.conversationStoreAttachment, input),
   conversationGetAttachment: (input) =>
@@ -247,13 +265,7 @@ const bridge: SelfosBridge = {
     ipcRenderer.invoke(IpcChannels.storyMemoryStoreAttachment, input),
   storyMemoryGetAttachment: (input) =>
     ipcRenderer.invoke(IpcChannels.storyMemoryGetAttachment, input),
-  onMemoryChunk: (listener) => {
-    const handler = (_event: unknown, delta: string): void => listener(delta);
-    ipcRenderer.on(IpcChannels.storyMemoryChunk, handler);
-    return () => {
-      ipcRenderer.removeListener(IpcChannels.storyMemoryChunk, handler);
-    };
-  },
+  onMemoryChunk: (listener) => onStreamChunk('memory', listener),
   storyRefreshCheck: (input) => ipcRenderer.invoke(IpcChannels.storyRefreshCheck, input),
   storyProposals: (input) => ipcRenderer.invoke(IpcChannels.storyProposals, input),
   storyResolveProposal: (input) => ipcRenderer.invoke(IpcChannels.storyResolveProposal, input),
@@ -395,13 +407,7 @@ const bridge: SelfosBridge = {
   dreamRetryTurn: (input) => ipcRenderer.invoke(IpcChannels.dreamRetryTurn, input),
   dreamRewind: (input) => ipcRenderer.invoke(IpcChannels.dreamRewind, input),
   dreamRegenerateFrom: (input) => ipcRenderer.invoke(IpcChannels.dreamRegenerateFrom, input),
-  onDreamChunk: (listener) => {
-    const handler = (_event: unknown, delta: string): void => listener(delta);
-    ipcRenderer.on(IpcChannels.dreamChunk, handler);
-    return () => {
-      ipcRenderer.removeListener(IpcChannels.dreamChunk, handler);
-    };
-  },
+  onDreamChunk: (listener) => onStreamChunk('dream', listener),
   dreamGetAnalysis: (dreamId) => ipcRenderer.invoke(IpcChannels.dreamGetAnalysis, dreamId),
   dreamGetConversation: (dreamId) => ipcRenderer.invoke(IpcChannels.dreamGetConversation, dreamId),
   dreamSynthesize: (input) => ipcRenderer.invoke(IpcChannels.dreamSynthesize, input),
@@ -428,20 +434,8 @@ const bridge: SelfosBridge = {
   intakeRetryTurn: (input) => ipcRenderer.invoke(IpcChannels.intakeRetryTurn, input),
   intakeRewind: (input) => ipcRenderer.invoke(IpcChannels.intakeRewind, input),
   intakeRegenerateFrom: (input) => ipcRenderer.invoke(IpcChannels.intakeRegenerateFrom, input),
-  onIntakeChunk: (listener) => {
-    const handler = (_event: unknown, delta: string): void => listener(delta);
-    ipcRenderer.on(IpcChannels.intakeChunk, handler);
-    return () => {
-      ipcRenderer.removeListener(IpcChannels.intakeChunk, handler);
-    };
-  },
-  onTogetherChunk: (listener) => {
-    const handler = (_event: unknown, chunk: TogetherChunk): void => listener(chunk);
-    ipcRenderer.on(IpcChannels.togetherChunk, handler);
-    return () => {
-      ipcRenderer.removeListener(IpcChannels.togetherChunk, handler);
-    };
-  },
+  onIntakeChunk: (listener) => onStreamChunk('intake', listener),
+  onTogetherChunk: (listener) => onStreamChunk('together', listener),
   intakeSkipSection: (input) => ipcRenderer.invoke(IpcChannels.intakeSkipSection, input),
   intakeSubmitForm: (input) => ipcRenderer.invoke(IpcChannels.intakeSubmitForm, input),
   intakeAcknowledgeAdult: () => ipcRenderer.invoke(IpcChannels.intakeAcknowledgeAdult),

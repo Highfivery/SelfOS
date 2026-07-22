@@ -13,7 +13,10 @@ import {
   profileLines,
   relationshipTypesFromSubjectToViewer,
 } from '../people';
-import { gatherRecipientPriorAnswers } from '../questionnaires';
+import {
+  countAnsweredQuestionnaires,
+  gatherRecipientPriorAnswersByAssignment,
+} from '../questionnaires';
 import {
   factSharedWithViewer,
   type ExclusionItem,
@@ -276,15 +279,26 @@ export async function buildStoryCorpus(
 
   // 6) Raw questionnaire / check-in answers the person gave (their own answers to anything sent to them,
   //    including their auto check-ins — the verbatim material beneath the distilled questionnaire insights).
-  //    A single lumped block (per-assignment provenance is a later refinement).
-  const priorAnswers = (
-    await safely(() => gatherRecipientPriorAnswers(fs, key, personId), '')
-  ).trim();
-  if (priorAnswers) {
+  //    ONE item per answered questionnaire (§15.2): a paragraph can cite the specific check-in it wove in,
+  //    freshness can tell which answers changed, and a `source` exclusion can drop one questionnaire rather
+  //    than the person's entire answer history (which the old lumped `id: personId` block forced).
+  // Legacy compat (§15.2): before the split, the whole answer history was ONE item keyed by `personId`, so
+  // a person who excluded it then has `{kind:'source', value: personId}` persisted. After the re-key nothing
+  // matches that id, which would silently re-admit content they told us never to write about — an exclusion
+  // must never quietly stop applying (§3.3). Honour it as "exclude every answer".
+  const allAnswersExcluded = exclusions.some((e) => e.kind === 'source' && e.value === personId);
+  for (const block of allAnswersExcluded
+    ? []
+    : await safely(() => gatherRecipientPriorAnswersByAssignment(fs, key, personId), [])) {
     add({
-      sourceRef: { kind: 'response', id: personId },
-      label: 'Answers you gave to check-ins',
-      text: priorAnswers,
+      sourceRef: {
+        kind: 'response',
+        id: block.assignmentId,
+        ...(block.submittedAt ? { at: block.submittedAt } : {}),
+      },
+      label: `From "${block.title}"`,
+      text: block.text,
+      ...(block.submittedAt ? { date: block.submittedAt } : {}),
     });
   }
 
@@ -381,22 +395,57 @@ export async function buildStoryCorpus(
 
 /**
  * Deterministic, no-AI counts for the "before you begin" invitation (§13.6.10) — how much material the
- * biographer will draw from, with the span of years it touches. Never any content, just counts + a year range,
- * so it's cheap + safe to show before a book exists. Each source is read behind its own guard (§7 resilience).
+ * biographer will draw from, with the span of years it touches. Never any content, just counts + a year
+ * range, so it's safe to show before a book exists. Each source is read behind its own guard (§7 resilience).
+ *
+ * Every count is material that ACTUALLY FEEDS `buildStoryCorpus` (§15.2), mirroring its drops (a muted
+ * dream, a wholly-flagged insight, an unsaved or empty memory, a wholly-declined response) — the chips must
+ * never promise a book the corpus can't keep. Deliberately NOT counted, though they do feed: the onboarding
+ * intake (its portrait already rides in under `reflections`), goals, challenges, and photo answers (which
+ * are book-scoped, while this runs before a book exists). The intent is a human read of the material, not
+ * an audit.
+ *
+ * NOT free: it decrypts one response per questionnaire the person was sent (plus a dream file per
+ * dream-sourced insight), so a long auto-check-in history (spec 63) makes this grow. Kept as cheap as an
+ * exact count allows — `countAnsweredQuestionnaires` skips the snapshot decrypt the corpus itself needs.
  */
 export async function getStoryCorpusStats(
   fs: FileSystem,
   key: Uint8Array,
   personId: string,
 ): Promise<StoryCorpusStats> {
+  // Counted the way `buildStoryCorpus` actually reads them, so the invitation can't promise material the
+  // book will never see (§15.2): feeding insights, unmuted dreams, SAVED memories, answered questionnaires.
   const conversations = await safely(() => listConversations(fs, key, personId), []);
-  const insights = (await safely(() => listInsightsForPerson(fs, key, personId), [])).filter(
-    (insight) => insight.approved,
+  const insights = (
+    await safely(
+      async () =>
+        feedableInsights(
+          fs,
+          key,
+          (await listInsightsForPerson(fs, key, personId)).filter((insight) => insight.approved),
+        ),
+      [],
+    )
+  )
+    // `feedableInsights` gates a muted dream's insight, but the WHOLLY-flagged drop lives in the corpus
+    // loop below — mirror it here or the chips promise material the biographer never sees.
+    .filter(
+      (insight) => !(insight.facts.length > 0 && insight.facts.every((f) => f.flaggedInaccurate)),
+    );
+  const dreams = (await safely(() => listDreams(fs, key, personId), [])).filter(
+    (dream) => dream.informsContext !== false,
   );
-  const dreams = await safely(() => listDreams(fs, key, personId), []);
+  const memories = (await safely(() => listMemories(fs, key, personId), [])).filter(
+    // Saved AND written up — the corpus emits nothing for a saved-but-empty narrative.
+    (memory) => memory.status === 'saved' && memory.narrative.trim().length > 0,
+  );
+  const answers = await safely(() => countAnsweredQuestionnaires(fs, key, personId), 0);
 
   // The year span across everything dated — a conversation's createdAt, a dream's dreamDate/createdAt, an
-  // insight's provenance timestamp. A malformed/absent date just doesn't widen the span.
+  // insight's provenance timestamp. Conversations still count HERE (unlike the material counts above): a
+  // session's date is real chronology for the life, even though its transcript is never source material.
+  // A malformed/absent date just doesn't widen the span.
   const years: number[] = [];
   const addYear = (iso: string | undefined): void => {
     if (!iso) return;
@@ -410,9 +459,10 @@ export async function getStoryCorpusStats(
   for (const i of insights) addYear(i.provenance.at);
 
   const stats: StoryCorpusStats = {
-    conversations: conversations.length,
     reflections: insights.length,
     dreams: dreams.length,
+    memories: memories.length,
+    answers,
   };
   if (years.length > 0) {
     stats.yearFrom = Math.min(...years);

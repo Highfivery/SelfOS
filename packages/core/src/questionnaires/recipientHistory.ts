@@ -227,13 +227,32 @@ export async function gatherRecipientMaterialSignals(
   return newest !== undefined ? { newMaterialAt: newest } : {};
 }
 
-export async function gatherRecipientPriorAnswers(
+/** One answered questionnaire's Q→A block, with the provenance a corpus item needs (64 §15.2). */
+export interface RecipientAnswerBlock {
+  /** The send this came from — the stable id a `StorySourceRef {kind:'response'}` cites. */
+  assignmentId: string;
+  /** The as-sent title (from the frozen snapshot), e.g. for the corpus label. */
+  title: string;
+  /** When they submitted it, when known — chronology for the biography. */
+  submittedAt?: string;
+  /** The formatted `Q: … / A: …` lines for this questionnaire (never empty). */
+  text: string;
+}
+
+/**
+ * Every answered questionnaire the person has responded to, ONE block each (64 §15.2). Declined questions
+ * (§25.5) carry no answer content and are dropped — never fed as biography material or as "known data".
+ *
+ * This is the granular read; `gatherRecipientPriorAnswers` joins it for the de-dup path, so the two can
+ * never drift.
+ */
+export async function gatherRecipientPriorAnswersByAssignment(
   fs: FileSystem,
   key: Uint8Array,
   recipientPersonId: string,
-): Promise<string> {
+): Promise<RecipientAnswerBlock[]> {
   const asked = await listAssignments(fs, key, { recipientPersonId });
-  const blocks: string[] = [];
+  const blocks: RecipientAnswerBlock[] = [];
   for (const assignment of asked) {
     const snapshot = await getAssignmentSnapshot(fs, key, assignment.id);
     if (!snapshot) continue;
@@ -249,7 +268,46 @@ export async function gatherRecipientPriorAnswers(
       const display = formatAnswerForDisplay(q, byId.get(q.id)).trim();
       if (display) lines.push(`  Q: ${q.prompt}\n  A: ${display}`);
     }
-    if (lines.length > 0) blocks.push(`From "${snapshot.title}":\n${lines.join('\n')}`);
+    if (lines.length > 0) {
+      blocks.push({
+        assignmentId: assignment.id,
+        title: snapshot.title,
+        ...(response.submittedAt ? { submittedAt: response.submittedAt } : {}),
+        text: lines.join('\n'),
+      });
+    }
   }
-  return blocks.join('\n\n');
+  return blocks;
+}
+
+/**
+ * How many questionnaires the person actually ANSWERED (64 §15.2) — the cheap count behind the invitation's
+ * chip row. Deliberately does NOT decrypt each frozen snapshot the way
+ * `gatherRecipientPriorAnswersByAssignment` must: a count only needs to know a response exists and carries
+ * at least one non-declined answer, which halves the reads on a person with a long auto-check-in history.
+ */
+export async function countAnsweredQuestionnaires(
+  fs: FileSystem,
+  key: Uint8Array,
+  recipientPersonId: string,
+): Promise<number> {
+  const asked = await listAssignments(fs, key, { recipientPersonId });
+  let count = 0;
+  for (const assignment of asked) {
+    const response = await getResponse(fs, key, assignment.id);
+    if (!response) continue;
+    // A wholly-declined response feeds nothing, so it isn't material the book can draw on (§25.5).
+    if (response.answers.some((a) => !isDeclined(a.value))) count += 1;
+  }
+  return count;
+}
+
+/** The whole answer history as ONE string (the de-dup reference). Byte-identical to the pre-§15.2 output. */
+export async function gatherRecipientPriorAnswers(
+  fs: FileSystem,
+  key: Uint8Array,
+  recipientPersonId: string,
+): Promise<string> {
+  const blocks = await gatherRecipientPriorAnswersByAssignment(fs, key, recipientPersonId);
+  return blocks.map((b) => `From "${b.title}":\n${b.text}`).join('\n\n');
 }

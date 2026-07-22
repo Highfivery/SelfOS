@@ -1,25 +1,41 @@
 import { describe, expect, it } from 'vitest';
 import { drawnFromChips, specimenFor } from './begin';
 
-describe('drawnFromChips (§13.3)', () => {
+describe('drawnFromChips (§13.3/§15.2)', () => {
   it('shows only non-zero counts, pluralized, plus a year range', () => {
     expect(
-      drawnFromChips({ conversations: 3, reflections: 1, dreams: 0, yearFrom: 2019, yearTo: 2026 }),
-    ).toEqual(['3 sessions', '1 reflection', '2019–2026']);
+      drawnFromChips({
+        reflections: 1,
+        dreams: 0,
+        memories: 2,
+        answers: 3,
+        yearFrom: 2019,
+        yearTo: 2026,
+      }),
+    ).toEqual(['1 reflection', '2 memories', '3 answered questionnaires', '2019–2026']);
   });
 
   it('collapses a single-year span to one year and omits zero counts', () => {
     expect(
-      drawnFromChips({ conversations: 1, reflections: 0, dreams: 2, yearFrom: 2026, yearTo: 2026 }),
-    ).toEqual(['1 session', '2 dreams', '2026']);
+      drawnFromChips({
+        reflections: 0,
+        dreams: 2,
+        memories: 0,
+        answers: 1,
+        yearFrom: 2026,
+        yearTo: 2026,
+      }),
+    ).toEqual(['2 dreams', '1 answered questionnaire', '2026']);
   });
 
   it('is empty when there is nothing on record', () => {
-    expect(drawnFromChips({ conversations: 0, reflections: 0, dreams: 0 })).toEqual([]);
+    expect(drawnFromChips({ reflections: 0, dreams: 0, memories: 0, answers: 0 })).toEqual([]);
   });
 
   it('omits the year chip when no span is known', () => {
-    expect(drawnFromChips({ conversations: 2, reflections: 0, dreams: 0 })).toEqual(['2 sessions']);
+    expect(drawnFromChips({ reflections: 2, dreams: 0, memories: 0, answers: 0 })).toEqual([
+      '2 reflections',
+    ]);
   });
 });
 

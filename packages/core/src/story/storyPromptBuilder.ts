@@ -381,9 +381,9 @@ export function buildGapPassUserMessage(
  */
 export function buildStructureUserMessage(
   corpus: StoryCorpus,
-  opts: { outline: BookOutline; essence?: string },
+  opts: { outline: BookOutline; essence?: string; timeline?: string[] },
 ): string {
-  const { outline, essence } = opts;
+  const { outline, essence, timeline } = opts;
   const structure = outline.parts
     .map((part) => {
       const chapters = part.chapters
@@ -405,12 +405,20 @@ export function buildStructureUserMessage(
     'THE CURRENT OUTLINE (use these exact ids in any proposal):',
     structure,
     '',
+    // The person's own chronology (§16.2) — corrected dates are theirs, so ordering follows them.
+    ...(timeline && timeline.length > 0
+      ? [
+          'THEIR TIMELINE (their own chronology — trust these dates over anything you infer):',
+          timeline.map((line) => `  - ${line}`).join('\n'),
+          '',
+        ]
+      : []),
     renderCorpusForPrompt(corpus),
     '',
     'Return ONE JSON object: { "proposals": [ … ] }. Propose a change ONLY when the material clearly warrants it — an empty array is the right answer for a book that is already well-shaped. Each proposal is one of:',
     '- { "kind": "newChapter", "rationale": one sentence on why, "partId": an existing part id, "afterChapterId"?: an existing chapter id to insert after (omit for the end of the part), "title": an evocative title, "brief": 1–2 sentences, "eraFrom"?: "YYYY", "eraTo"?: "YYYY", "lifeAreas"?: string[] } — for an era/theme the current chapters don\'t hold.',
     '- { "kind": "splitChapter", "rationale": …, "chapterId": an existing chapter id, "firstTitle", "firstBrief", "secondTitle", "secondBrief" } — when one chapter has grown to cover two distinct things.',
-    '- { "kind": "reorder", "rationale": …, "partId": an existing part id, "order": [every chapter id in that part, in the new order] } — when the sequence reads out of order.',
+    '- { "kind": "reorder", "rationale": …, "partId": an existing part id, "order": [every chapter id in that part, in the new order] } — when the sequence reads out of order (their timeline is the authority on when things happened).',
     '- { "kind": "prologueRewrite", "rationale": …, "chapterId": the opening chapter\'s id } — when the opening no longer fits the book it became.',
     'Keep the total to at most a few of the most valuable changes. Return ONLY the JSON object — no prose, no markdown fences.',
   ].join('\n');

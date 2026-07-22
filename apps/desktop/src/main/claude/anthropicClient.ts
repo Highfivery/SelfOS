@@ -675,6 +675,9 @@ export function fakeClaudeClient(): ClaudeClient {
       // The structure pass (§3.4): propose one new chapter, referencing the REAL part id parsed from the
       // prompt (the service re-validates ids against the current outline).
       if (userText.includes('reviewing the SHAPE')) {
+        // §16.2: the structure pass is where a corrected timeline date must actually reach the model, so
+        // capture it — the prompt is the only place that wiring is observable end-to-end.
+        captureStoryPrompt('structure', options.system ?? '', userText);
         const partId = /\[part ([^\]]+)\]/.exec(userText)?.[1];
         return Promise.resolve({
           text: JSON.stringify({

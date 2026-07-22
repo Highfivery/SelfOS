@@ -19,10 +19,12 @@ import {
   getExclusions,
   getOutline,
   getProposals,
+  getTimeline,
   saveChapter,
   saveOutline,
   saveProposals,
 } from './storyService';
+import { timelineLines } from './storyTimeline';
 
 /**
  * The Your Story STRUCTURE engine (64-your-story §3.4/§5.4) — the freshness engine's structural half. When new
@@ -196,9 +198,19 @@ export async function generateStructuralProposals(
       await getExclusions(deps.fs, deps.key, deps.personId, args.bookId),
     ));
   const system = buildBiographerSystem(bookType, book.config, corpus.personName);
-  const user = buildStructureUserMessage(corpus, {
+  // The chronology is grounding for ORDERING (§16.2) — the pass still only ever PROPOSES; a corrected date
+  // never silently rearranges a drafted outline.
+  const timeline = timelineLines(await getTimeline(deps.fs, deps.key, deps.personId, args.bookId));
+  // The chronology gets its own framed block below, so drop the corpus copies — otherwise every structure
+  // pass carries the whole timeline TWICE, growing with an uncapped user-authored list.
+  const corpusForStructure: StoryCorpus = {
+    ...corpus,
+    items: corpus.items.filter((item) => item.sourceRef.kind !== 'timeline'),
+  };
+  const user = buildStructureUserMessage(corpusForStructure, {
     outline,
     ...(book.essence ? { essence: book.essence } : {}),
+    ...(timeline.length > 0 ? { timeline } : {}),
   });
 
   const result = await runClaude(deps, system, user, 'story.structure', STRUCTURE_MAX_TOKENS);

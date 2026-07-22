@@ -25,6 +25,8 @@ import type {
   StoryCorpusStats,
   StoryOutlineEditInput,
   StoryOutlineEditResult,
+  StoryTimelineEditInput,
+  StoryTimelineEditResult,
   StoryImageEntry,
   StoryImageResult,
   StoryImageTarget,
@@ -154,6 +156,11 @@ interface StoryState {
     bookId: string,
     edit: StoryOutlineEditInput['edit'],
   ) => Promise<StoryOutlineEditResult>;
+  /** The timeline studio (§16.2) — deterministic, no AI. Adopts the fresh chronology on success. */
+  editTimeline: (
+    bookId: string,
+    edit: StoryTimelineEditInput['edit'],
+  ) => Promise<StoryTimelineEditResult>;
   /** Deterministic, no-AI corpus counts for the "before you begin" invitation (§13.6.10). */
   corpusStats: StoryCorpusStats | null;
   loadCorpusStats: () => Promise<void>;
@@ -562,6 +569,16 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     };
     // The outline AND the chapter records can both have moved, so adopt the whole fresh bundle.
     if (res.bundle) set({ bundle: res.bundle });
+    return res;
+  },
+  editTimeline: async (bookId, edit) => {
+    const res = (await window.selfos?.storyEditTimeline({ bookId, edit })) ?? {
+      ok: false,
+      timeline: null,
+    };
+    // Keep the open bundle's timeline in step, so the view re-sorts the moment a date is corrected.
+    const bundle = get().bundle;
+    if (res.timeline && bundle) set({ bundle: { ...bundle, timeline: res.timeline } });
     return res;
   },
   resolveProposal: async (bookId, proposalId, action) => {

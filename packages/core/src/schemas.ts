@@ -3984,6 +3984,10 @@ export type TimelineEvent = z.infer<typeof TimelineEventSchema>;
 export const LifeTimelineSchema = z.object({
   schemaVersion: z.literal(1),
   events: z.array(TimelineEventSchema).default([]),
+  /** Normalized labels of moments the person REMOVED (64 §16.2) — a tombstone list, so a later generation
+   *  pass can't re-propose something they deliberately took out. Additive-optional: absent on every
+   *  pre-§16.2 timeline, which simply has nothing tombstoned. */
+  removed: z.array(z.string()).optional(),
 });
 export type LifeTimeline = z.infer<typeof LifeTimelineSchema>;
 
@@ -4805,6 +4809,37 @@ export type StoryOutlineEditInput = z.infer<typeof StoryOutlineEditInputSchema>;
 export interface StoryOutlineEditResult {
   ok: boolean;
   bundle: StoryBookBundle | null;
+  message?: string;
+}
+
+/**
+ * `story:editTimeline` — the timeline studio (§16.2). Deterministic and AI-free; every edit stamps
+ * `userEdited`, which is what stops a later foundations/refresh pass from reverting a correction.
+ */
+export const StoryTimelineEditInputSchema = StoryBookRefSchema.extend({
+  edit: z.discriminatedUnion('op', [
+    z.object({
+      op: z.literal('add'),
+      label: z.string(),
+      date: z.string().optional(),
+      approx: z.string().optional(),
+    }),
+    z.object({
+      op: z.literal('update'),
+      eventId: z.string().min(1),
+      label: z.string().optional(),
+      date: z.string().optional(),
+      approx: z.string().optional(),
+    }),
+    z.object({ op: z.literal('remove'), eventId: z.string().min(1) }),
+  ]),
+});
+export type StoryTimelineEditInput = z.infer<typeof StoryTimelineEditInputSchema>;
+
+/** The fresh timeline after an edit (chronologically sorted), or an honest refusal. */
+export interface StoryTimelineEditResult {
+  ok: boolean;
+  timeline: LifeTimeline | null;
   message?: string;
 }
 

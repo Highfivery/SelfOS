@@ -25,7 +25,8 @@ import {
   type StoryPhotoAnswer,
   type StorySourceRef,
 } from '../schemas';
-import { getPhotoAnswers, getStoryImageIndex } from './storyService';
+import { getPhotoAnswers, getStoryImageIndex, getTimeline } from './storyService';
+import { sortTimeline } from './storyTimeline';
 import { listMemories } from './storyMemoryService';
 
 /**
@@ -299,6 +300,25 @@ export async function buildStoryCorpus(
       label: `From "${block.title}"`,
       text: block.text,
       ...(block.submittedAt ? { date: block.submittedAt } : {}),
+    });
+  }
+
+  // 6b) The timeline (§16.2) — the chronology spine, editable since B1-2. Dated moments are what let the
+  //     biographer place a scene in the right year instead of inferring it; before this the timeline was
+  //     generated, stored, shipped to the renderer and read by NOTHING.
+  for (const event of sortTimeline(
+    (await safely(() => getTimeline(fs, key, personId, bookId), null))?.events ?? [],
+  )) {
+    const when = event.date?.trim() || event.approx?.trim();
+    add({
+      sourceRef: { kind: 'timeline', id: event.id, ...(event.date ? { at: event.date } : {}) },
+      // A generated moment is the biographer's own earlier inference — corpus items are introduced as
+      // "source material; never invent beyond it", so it must not read as something the person vouched for.
+      label: event.userEdited
+        ? 'A date they confirmed themselves'
+        : 'A moment your biographer placed',
+      text: when ? `${when} — ${event.label}` : event.label,
+      ...(event.date ? { date: event.date } : {}),
     });
   }
 

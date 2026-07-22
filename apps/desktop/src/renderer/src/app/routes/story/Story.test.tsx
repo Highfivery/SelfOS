@@ -1475,6 +1475,77 @@ describe('Story (64)', () => {
     return { memory, conversation };
   }
 
+  // --- §16.2/#292: the timeline studio ----------------------------------------------------------------
+
+  it('shows the timeline and sends a corrected date (§16.2)', async () => {
+    const edits: { edit: Record<string, unknown> }[] = [];
+    const withTimeline = (): StoryBookBundle => ({
+      ...writtenBundle('reviewed'),
+      timeline: {
+        schemaVersion: 1,
+        events: [
+          { id: 't1', label: 'Born in Ohio', date: '1985', userEdited: false },
+          { id: 't2', label: 'Moved west', approx: 'mid-90s', userEdited: true },
+        ],
+      },
+    });
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(withTimeline()),
+      storyEditTimeline: (input: unknown) => {
+        edits.push(input as { edit: Record<string, unknown> });
+        return Promise.resolve({ ok: true, timeline: withTimeline().timeline });
+      },
+    });
+    renderStory();
+
+    expect(await screen.findByRole('heading', { name: 'Your timeline' })).toBeInTheDocument();
+    const when = screen.getByLabelText('When “Born in Ohio” happened');
+    await userEvent.clear(when);
+    await userEvent.type(when, '1987');
+    await userEvent.tab();
+
+    await waitFor(() => expect(edits).toHaveLength(1));
+    // A bare year is a real date; the fuzzy field is cleared so the two can't disagree.
+    expect(edits[0]!.edit).toMatchObject({
+      op: 'update',
+      eventId: 't1',
+      date: '1987',
+      approx: '',
+    });
+  });
+
+  it('a fuzzy era goes to `approx`, not `date` (§16.2)', async () => {
+    const edits: { edit: Record<string, unknown> }[] = [];
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () =>
+        Promise.resolve({
+          ...writtenBundle('reviewed'),
+          timeline: { schemaVersion: 1, events: [] },
+        }),
+      storyEditTimeline: (input: unknown) => {
+        edits.push(input as { edit: Record<string, unknown> });
+        return Promise.resolve({ ok: true, timeline: { schemaVersion: 1, events: [] } });
+      },
+    });
+    renderStory();
+
+    await userEvent.type(await screen.findByLabelText('What happened'), 'We moved west');
+    await userEvent.type(screen.getByLabelText('When it happened'), 'sometime in the 90s');
+    await userEvent.click(screen.getByRole('button', { name: 'Add a moment' }));
+
+    await waitFor(() => expect(edits).toHaveLength(1));
+    expect(edits[0]!.edit).toMatchObject({
+      op: 'add',
+      label: 'We moved west',
+      approx: 'sometime in the 90s',
+    });
+    expect(edits[0]!.edit).not.toHaveProperty('date');
+  });
+
   // --- §16.1/#291: manual outline control ------------------------------------------------------------
 
   it('the Chapters tab opens a manual outline editor and sends a rename (§16.1)', async () => {

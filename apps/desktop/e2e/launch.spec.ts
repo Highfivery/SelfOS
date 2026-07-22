@@ -69,6 +69,7 @@ import {
   getChapter,
   getMarkup,
   getOutline,
+  getTimeline,
   listBooks,
   listMemories,
 } from '@selfos/core/story';
@@ -12709,6 +12710,96 @@ test('story (64): a photo answer feeds the biographer’s corpus — it reaches 
     const gapPrompt = await readFile(join(promptDir, 'story-gap-prompt.txt'), 'utf8');
     expect(gapPrompt).toContain('My father did, in his workshop.'); // the answer reached the corpus
     expect(gapPrompt).toContain('A quiet afternoon in the workshop.'); // and so did the vision caption
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+    await rm(promptDir, { recursive: true, force: true });
+  }
+});
+
+test('story (64): the timeline is editable, and a corrected date reaches the biographer (§16.2, #292)', async () => {
+  test.setTimeout(90_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+  const promptDir = await mkdtemp(join(tmpdir(), 'selfos-e2e-timeline-prompt-'));
+
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    // No autonomous interview cadence racing our own passes (the §13.6.2 lesson).
+    env: { ...e2eEnv(), SELFOS_FAKE_PROMPT_DIR: promptDir, SELFOS_FAKE_STORY_NO_CADENCE: '1' },
+  });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('The Dated Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'The Dated Book', level: 1 })).toBeVisible();
+
+    // The timeline is ON SCREEN at last — before §16.2 it was generated, stored, shipped to the renderer
+    // and rendered nowhere.
+    await expect(w.getByRole('heading', { name: 'Your timeline' })).toBeVisible();
+    const when = w.getByLabel('When “Born in Ohio” happened');
+    await expect(when).toHaveValue('1985');
+
+    // The person corrects the year, and adds a moment of their own.
+    await when.fill('1987');
+    await when.blur();
+    const bookId = (await listBooks(fs, key, 'owner-1'))[0]!.id;
+    await expect
+      .poll(async () => (await getTimeline(fs, key, 'owner-1', bookId))?.events[0]?.date)
+      .toBe('1987');
+    // Stamped as theirs — that flag is what stops a later pass reverting it.
+    expect((await getTimeline(fs, key, 'owner-1', bookId))?.events[0]?.userEdited).toBe(true);
+
+    await w.getByLabel('What happened', { exact: true }).fill('We moved west');
+    await w.getByLabel('When it happened', { exact: true }).fill('mid-90s');
+    await w.getByRole('button', { name: 'Add a moment' }).click();
+    await expect
+      .poll(async () => (await getTimeline(fs, key, 'owner-1', bookId))?.events.length)
+      .toBe(2);
+    // A fuzzy era is stored as `approx`, not a bogus `date`.
+    const moved = (await getTimeline(fs, key, 'owner-1', bookId))?.events.find(
+      (e) => e.label === 'We moved west',
+    );
+    expect(moved?.approx).toBe('mid-90s');
+    expect(moved?.date).toBeUndefined();
+
+    // THE WIRING (#292): the chronology must actually REACH the biographer. The refresh runs the structure
+    // pass, which rebuilds the corpus + sends it — assert the corrected date is in the captured prompt.
+    // Clear the capture the INITIAL draft wrote, so the poll below can't pass on a stale prompt from
+    // before the correction (the file is overwritten per pass, not appended).
+    await rm(join(promptDir, 'story-structure-prompt.txt'), { force: true });
+    await w.getByRole('button', { name: /Refresh from what’s new/ }).click();
+    await expect
+      .poll(async () => (await readdir(promptDir)).includes('story-structure-prompt.txt'), {
+        timeout: 20_000,
+      })
+      .toBe(true);
+    const prompt = await readFile(join(promptDir, 'story-structure-prompt.txt'), 'utf8');
+    expect(prompt).toContain('1987 — Born in Ohio'); // THEIR year, not the model's 1985
+    expect(prompt).not.toContain('1985 — Born in Ohio');
+    expect(prompt).toContain('mid-90s — We moved west');
+    expect(prompt).toContain('THEIR TIMELINE');
+
+    // 360px: the timeline rows wrap rather than forcing a horizontal scroller (§12).
+    await w.setViewportSize({ width: 360, height: 800 });
+    const offenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(offenders).toEqual([]);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

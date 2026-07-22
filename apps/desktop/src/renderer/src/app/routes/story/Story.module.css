@@ -2059,3 +2059,36 @@
 .dangerAction {
   color: var(--color-danger);
 }
+
+/* The timeline studio (64 §16.2) — reads as a chronology: a narrow WHEN column, the moment beside it, and
+   the actions trailing. Not two full-width fields stacked, which reads as a pile of forms, not a timeline. */
+.tlRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+.tlWhen {
+  flex: 0 1 9rem;
+  min-width: 0;
+}
+.tlWhat {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+.tlActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+}
+/* The "yours" marker: quiet, but it explains why a later pass won't overwrite this moment. */
+.tlMine {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}

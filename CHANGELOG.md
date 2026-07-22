@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.43.4](https://github.com/Highfivery/SelfOS/compare/v0.43.3...v0.43.4) (2026-07-22)
+
+
+### Bug Fixes
+
+* **questionnaires:** stop intimacy check-ins re-mining covered ground; never send filler ([#314](https://github.com/Highfivery/SelfOS/issues/314)) ([#315](https://github.com/Highfivery/SelfOS/issues/315)) ([717bfb3](https://github.com/Highfivery/SelfOS/commit/717bfb3b463e64340f8f28ca4b7bc105befb8160))
+
 ## [0.43.3](https://github.com/Highfivery/SelfOS/compare/v0.43.2...v0.43.3) (2026-07-21)
 
 

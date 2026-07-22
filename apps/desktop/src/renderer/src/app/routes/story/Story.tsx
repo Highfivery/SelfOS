@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { wordDiff } from '@selfos/core/story-diff';
 import { BOOK_BOUNDARY_LINE, colophonLines, missingMatter } from '@selfos/core/story-matter';
+import { manuscriptMetrics } from '@selfos/core/story-metrics';
 import {
   Banner,
   Button,
@@ -1530,6 +1531,7 @@ function StudioLayout({
     .map((c) => writtenById.get(c.id))
     .filter((c): c is (typeof chapters)[number] => Boolean(c));
   const pending = outlineChapters.filter((c) => !writtenById.has(c.id)).length;
+  const metrics = manuscriptMetrics(chapters);
   const staleCount = chapters.filter((c) => c.status === 'stale').length;
   const toReview = writtenInOrder.filter((c) => c.status === 'new' || c.status === 'updated');
   const openTodos = todos.filter((t) => t.status === 'open' || t.status === 'questionsSent');
@@ -1674,6 +1676,16 @@ function StudioLayout({
             </Text>
           ) : null}
           {completeness && chapters.length > 0 ? <CompletenessMeter c={completeness} /> : null}
+          {metrics.totalWords > 0 ? (
+            <Text size="sm" tone="tertiary">
+              {metrics.totalWords.toLocaleString()} words across {metrics.writtenCount} written
+              chapter{metrics.writtenCount === 1 ? '' : 's'}
+              {metrics.writtenCount > 1
+                ? ` · about ${metrics.averageWords.toLocaleString()} words each`
+                : ''}
+              .
+            </Text>
+          ) : null}
 
           {error ? <Banner tone="danger">{error}</Banner> : null}
           {refreshNotice ? <Banner tone="info">{refreshNotice}</Banner> : null}
@@ -1881,6 +1893,8 @@ function ChaptersTab({
   const firstUnwrittenPart = outline.parts.findIndex((p) =>
     p.chapters.some((c) => !chapters.some((w) => w.id === c.id && w.markdown.trim().length > 0)),
   );
+  // Per-chapter length + pacing (§16.5) — keyed by id so each card reads its own share/outlier.
+  const metricById = new Map(manuscriptMetrics(chapters).chapters.map((m) => [m.id, m]));
 
   return (
     <Stack gap={5}>
@@ -1968,6 +1982,20 @@ function ChaptersTab({
                     <span className={styles.chapterCardBody}>
                       <span className={styles.chNum}>{numLabel}</span>
                       <span className={styles.chTitle}>{chapter.title}</span>
+                      {(() => {
+                        const m = metricById.get(chapter.id);
+                        if (!m || m.words === 0) return null;
+                        return (
+                          <span className={styles.chMeta}>
+                            {m.words.toLocaleString()} words · {Math.round(m.share * 100)}%
+                            {m.outlier === 'long' ? (
+                              <span className={styles.chOutlier}> · much longer</span>
+                            ) : m.outlier === 'short' ? (
+                              <span className={styles.chOutlier}> · much shorter</span>
+                            ) : null}
+                          </span>
+                        );
+                      })()}
                       <span className={styles.chReveal}>Read ›</span>
                     </span>
                   </button>

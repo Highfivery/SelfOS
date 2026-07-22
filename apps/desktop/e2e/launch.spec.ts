@@ -12945,6 +12945,10 @@ test('story (64): the Studio tabs deep-link, and the Danger zone deletes only af
     await expect(w.getByRole('heading', { name: 'Studio Book', level: 1 })).toBeVisible();
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
 
+    // The manuscript-metrics read (§16.5) is wired end-to-end (real core → renderer via the lean subpath):
+    // once a chapter is written, the hero shows the whole-book length.
+    await expect(w.getByText(/\d+ words across \d+ written chapter/)).toBeVisible();
+
     // The five tabs exist; deep-linking is real (the URL carries the tab). Switch to Settings → the danger zone.
     await w.getByRole('tab', { name: 'Settings' }).click();
     await expect(w.getByRole('heading', { name: 'Danger zone' })).toBeVisible();

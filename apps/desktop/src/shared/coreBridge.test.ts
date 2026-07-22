@@ -2157,7 +2157,100 @@ describe('createCoreBridge', () => {
     expect(sentUserText).toMatch(/go DEEPER/i);
     // …but the raw rating text is NEVER returned to the author (author-blind §17.4/§19.1).
     expect(JSON.stringify(result)).not.toContain('Receiving oral (blowjob)');
+    // The coverage map reaches the prompt too, so a MANUAL intimacy draft is bounded by the same rule as an
+    // auto check-in (#314) — nothing worked-through yet here, so new ground simply leads.
+    expect(sentUserText).toMatch(/GROUND TO OPEN THIS TIME/);
     expect(ownerId).toBeTruthy();
+  });
+
+  // #314 — the manual "Draft with AI" path shares `explicitFraming`, so it must be bounded too: once a
+  // category has been worked through it goes off-limits and its rated acts stop being re-mined.
+  it('a manual intimacy draft drops worked-through ground — unless the author explicitly asks for it (§27)', async () => {
+    const { host, bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    const ctx = (await host.host.vaultAndKey())!;
+    await submitSectionForm(
+      ctx.fs,
+      ctx.key,
+      mara.id,
+      'intimacy',
+      {
+        getSpecific: true,
+        ownAnatomy: 'Cock (penis)',
+        partnerAnatomy: ['Pussy (vulva)'],
+        activities: { 'oral-receiving': 5 },
+      },
+      new Date(),
+    );
+
+    // Three prior INTIMACY questionnaires about oral → that category is worked through.
+    for (let i = 0; i < 3; i += 1) {
+      const q = await bridge.questionnairesSave({
+        title: `Oral check-in ${i + 1}`,
+        type: 'intimacy',
+        sensitivity: 'unfiltered',
+        recipient: { kind: 'person', personId: mara.id },
+        questions: [
+          {
+            id: `q-${i}`,
+            type: 'shortText',
+            prompt: 'What do you like most about receiving oral?',
+            required: false,
+          },
+        ],
+      });
+      await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'private' });
+    }
+
+    let sentUserText = '';
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        sentUserText = options.messages.map((m) => m.content).join('\n');
+        const json = JSON.stringify({
+          title: 'X',
+          questions: [{ type: 'shortText', prompt: 'Somewhere new?', required: true }],
+        });
+        onDelta(json);
+        return Promise.resolve({
+          text: json,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    await bridge.questionnairesGenerate({
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      existingPrompts: [],
+      recipientPersonId: mara.id,
+    });
+    // Worked-through ground is off-limits, and its rated act is no longer offered for "go deeper".
+    expect(sentUserText).toMatch(/ALREADY EXPLORED THOROUGHLY/);
+    expect(sentUserText).not.toContain('Receiving oral (blowjob) (Love it)');
+
+    // ...but an EXPLICIT author brief naming that ground RE-OPENS it (§27.4) — the fix must never refuse a
+    // direct request, which would be the opposite of the intent.
+    sentUserText = '';
+    await bridge.questionnairesGenerate({
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      existingPrompts: [],
+      recipientPersonId: mara.id,
+      brief: 'Go deeper on receiving oral specifically.',
+    });
+    expect(sentUserText).not.toMatch(/ALREADY EXPLORED THOROUGHLY[^\n]*Oral/i);
+    // Positive proof the re-open really happened (not just that the off-limits block moved): the rated act is
+    // offered for deepening again.
+    expect(sentUserText).toContain('Receiving oral (blowjob) (Love it)');
+    // ...and the prompt must not then steer AWAY from what was just asked for. The requested ground LEADS the
+    // named ground, so "build this set around …" and the author's brief agree instead of conflicting (§27.3).
+    // (Suppressing the block on a brief would have been wrong: `intimacySpec` always sets one, so that would
+    // silently disable the steering on the auto path — the very path #314 was reported on.)
+    const groundLine = sentUserText.split('\n').find((l) => l.includes('GROUND TO OPEN THIS TIME'));
+    expect(groundLine).toBeDefined();
+    expect(groundLine ?? '').toMatch(/in this order: Oral/i);
   });
 
   it('the SEMANTIC de-dup pass receives the recipient’s onboarding answers, led + untruncated (§23.5b)', async () => {

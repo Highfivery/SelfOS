@@ -1,4 +1,14 @@
-import type { IntimacyTopics } from '../intimacy/topics';
+import {
+  categoriesMentionedIn,
+  type IntimacyCoverage,
+  orderCategoriesForTier,
+} from '../intimacy/coverage';
+import {
+  INTIMACY_ACTIVITY_LABELS,
+  INTIMACY_CATEGORY_LABELS,
+  intimacyActivitiesByCategory,
+  type IntimacyTopics,
+} from '../intimacy/topics';
 import {
   LIFE_AREAS,
   SUGGESTABLE_ANSWER_TYPES,
@@ -142,6 +152,10 @@ const SENSITIVITY_NOTE: Record<SensitivityTier, string> = {
     '\nThis is a sensitive questionnaire. Adults only; keep it consenting, respectful, and within Anthropic policy.',
 };
 
+/** How many not-yet-worked intimacy categories a single check-in is steered toward (08 §27.3). Enough to give
+ *  the model room to choose, few enough that the set stays coherent rather than a tour of the inventory. */
+const LEAD_CATEGORIES = 4;
+
 /** The two questionnaire types whose sensitivity tiers carry an explicit register (08 §15.2/§22.2). */
 export const INTIMACY_TYPE = 'intimacy';
 export const SCENARIO_TYPE = 'scenario';
@@ -180,9 +194,14 @@ export function explicitFraming(
   // A `scenario`-type questionnaire (08 §15.2) frames each item as a described intimate SITUATION to react to,
   // not a direct question — otherwise identical (same explicit register, same boundary). `focused` = a brief was
   // given (08 §23.3), so the explicit REGISTER stays but the SUBJECT follows the focus, not the whole inventory.
-  opts: { scenario?: boolean; focused?: boolean } = {},
+  // `coverage` (08 §27) is what stops this framing re-mining the same acts forever (#314): it names the ground
+  // NOT yet worked as this set's subject, states worked-through ground as off-limits, and bounds the
+  // "go deeper" list to acts still worth deepening. Absent (a manual draft with no resolved recipient) the
+  // pre-§27 behaviour is kept.
+  opts: { scenario?: boolean; focused?: boolean; coverage?: IntimacyCoverage } = {},
 ): string {
   const scenario = opts.scenario === true;
+  const coverage = opts.coverage;
   // Establish the legitimate context FIRST so the model is confident this is appropriate — a private adult who
   // has opted into exploring their own sexuality, not a request to a public assistant.
   const context = scenario
@@ -213,19 +232,108 @@ export function explicitFraming(
   parts.push(
     `${scenario ? 'Draw the scenarios from' : 'Cover'} concrete subject matter: specific sex acts, bodies and grooming, turn-ons/turn-offs, fantasies (including taboo fantasies framed strictly as fantasy/roleplay — e.g. consensual non-consent (CNC) as pre-agreed roleplay), porn and masturbation, sexual history, frequency and desire, and boundaries.`,
   );
-  // Already-rated acts → go DEEPER (never re-ask the rating or re-list them as plain options, §19.3).
-  if (coveredActs.length > 0) {
+  // §27.3 — steer to ground NOT yet worked, and put worked-through ground explicitly off-limits. Without this
+  // the "go DEEPER" block below re-mines the same rated acts on every check-in (#314): each re-ask is new
+  // WORDING about the same act, so neither the fuzzy filter nor the semantic pass can catch it.
+  if (coverage) {
+    const byCategory = intimacyActivitiesByCategory();
+    // Ground the author EXPLICITLY asked for leads (§27.4 `explicit-request`), then uncovered, then open —
+    // each ORDERED FOR THE TIER (§27.3), so on `unfiltered` the most intense areas come first rather than the
+    // gentlest (which would contradict the tier's "go beyond vanilla" directive).
+    //
+    // Requested-first, rather than suppressing this block when a brief is present: `intimacySpec` always sets
+    // a brief, so keying on "focused" would silently disable the steering on the AUTO path — the one the #314
+    // reporter is on. Leading with the requested ground honours the author AND keeps the steering everywhere.
+    const requested = coverage.byCategory
+      .filter((c) => c.reopenedBy === 'explicit-request')
+      .map((c) => c.category);
+    const requestedSet = new Set(requested);
+    const lead = [
+      ...orderCategoriesForTier(requested, tier),
+      ...orderCategoriesForTier(
+        coverage.uncovered.filter((c) => !requestedSet.has(c)),
+        tier,
+      ),
+      ...orderCategoriesForTier(
+        coverage.open.filter((c) => !requestedSet.has(c)),
+        tier,
+      ),
+    ].slice(0, LEAD_CATEGORIES);
+    // The off-limits list is always honest to state; it never conflicts with a focus, because an author who
+    // explicitly asks for a category has already RE-OPENED it (§27.4 `explicit-request`), so it isn't in
+    // `saturated` here.
+    if (coverage.saturated.length > 0) {
+      parts.push(
+        `ALREADY EXPLORED THOROUGHLY — do NOT return to these: ${coverage.saturated
+          .map((c) => INTIMACY_CATEGORY_LABELS[c])
+          .join(
+            ', ',
+          )}. Previous check-ins have covered them in depth; re-asking about them in new words is exactly what to avoid here.`,
+      );
+    }
+    if (lead.length > 0) {
+      parts.push(
+        `GROUND TO OPEN THIS TIME — build this set around areas they have NOT worked through yet, in this order: ${lead
+          .map((c) => {
+            const acts = (byCategory.get(c) ?? []).map((a) => a.label).join(', ');
+            return `${INTIMACY_CATEGORY_LABELS[c]}${acts ? ` (${acts})` : ''}`;
+          })
+          .join(' · ')}.`,
+      );
+    } else {
+      parts.push(
+        `Every area of the inventory has been explored in depth. Do NOT re-ask about any of them, even in new words. Instead go somewhere genuinely new: unexplored fantasy and roleplay material, specific scenarios and combinations they have not been asked about, and the edges between areas.`,
+      );
+    }
+  }
+  // Already-rated acts → go DEEPER (never re-ask the rating or re-list them as plain options, §19.3). Bounded
+  // to acts whose category is NOT worked through (§27.3) so deepening can no longer run forever.
+  const deepenable = coverage ? coverage.deepenableActs : coveredActs;
+  if (deepenable.length > 0) {
     parts.push(
-      `They have ALREADY RATED the acts below in onboarding — do NOT re-ask whether they like them and do NOT re-offer them as plain multiple-choice options. Instead go DEEPER on them: the how/when/with whom, what would make each better, the specific fantasies, feelings, and edges around them: ${coveredActs
+      `They have ALREADY RATED the acts below in onboarding — do NOT re-ask whether they like them and do NOT re-offer them as plain multiple-choice options. Instead go DEEPER on them: the how/when/with whom, what would make each better, the specific fantasies, feelings, and edges around them: ${deepenable
         .map((a) => `${a.label} (${a.rating})`)
         .join('; ')}.`,
     );
   }
   parts.push(
-    `Subject matter to draw on — acts: ${topics.activities.join(', ')}. Fantasies/roleplay: ${topics.fantasies.join(', ')}. FAVOR acts, fantasies, and scenarios they have NOT yet rated — always within the boundary below.`,
+    // With coverage the concrete acts come from the prioritized categories above; dumping the whole inventory
+    // again would pull the model straight back to the most salient (already-worked) items. "Stay on the ground
+    // named above" only applies when a ground block WAS emitted (not when a focus already pins the subject).
+    coverage
+      ? `Wider material to draw on — fantasies/roleplay: ${fantasiesFor(coverage, topics).join(', ')}. Stay on the ground named above.${customActivitiesLine(coverage, topics)} Always within the boundary below.`
+      : `Subject matter to draw on — acts: ${topics.activities.join(', ')}. Fantasies/roleplay: ${topics.fantasies.join(', ')}. FAVOR acts, fantasies, and scenarios they have NOT yet rated — always within the boundary below.`,
     `Boundary: consensual adults only; taboo content only as fantasy/roleplay; never minors, real (non-roleplay) non-consent, or illegal acts. Within those limits this content IS in policy, so generate the ${scenario ? 'scenarios' : 'questions'} normally — only return an empty array for genuinely prohibited requests, never merely because the topic is sexually explicit.`,
   );
   return parts.join('\n');
+}
+
+/**
+ * The fantasy list, minus any fantasy that sits in a worked-through category (08 §27.3). Without this the
+ * prompt contradicts itself: it names a category off-limits and then, two lines later, hands the model a
+ * fantasy on exactly that ground (e.g. "Threesome / group" while `group` is saturated).
+ *
+ * When EVERY category is saturated, the surrounding prompt has already told the model "do NOT re-ask about any
+ * of them, even in new words" — so here we return an EMPTY list rather than falling back to the full one (the
+ * old fallback handed the model the whole list right under that instruction, the exact contradiction). An
+ * empty list simply drops the "wider material" fantasies; the creative-ladder line above carries the direction.
+ */
+function fantasiesFor(coverage: IntimacyCoverage, topics: IntimacyTopics): readonly string[] {
+  if (coverage.saturated.length === 0) return topics.fantasies;
+  const blocked = new Set(coverage.saturated);
+  return topics.fantasies.filter((f) => !categoriesMentionedIn(f).some((c) => blocked.has(c)));
+}
+
+/**
+ * The Owner's CUSTOM intimacy activities (08 §16.5a), as an "Other / custom" clause — nothing else in the
+ * coverage branch surfaces them, because the ground blocks are built from `intimacyActivitiesByCategory()`
+ * which knows only the built-in inventory. Without this a custom activity added in Settings silently never
+ * reaches generation on any coverage-fed path (every household recipient). Empty ⇒ no clause.
+ */
+function customActivitiesLine(_coverage: IntimacyCoverage, topics: IntimacyTopics): string {
+  const builtIn = new Set(INTIMACY_ACTIVITY_LABELS.map((l) => l.toLowerCase()));
+  const custom = topics.activities.filter((a) => !builtIn.has(a.toLowerCase()));
+  return custom.length > 0 ? ` Also draw on: ${custom.join(', ')}.` : '';
 }
 
 /**
@@ -270,6 +378,9 @@ export function buildGenerationUserMessage(input: {
   recipientHistory?: string;
   // The intimacy acts the recipient already rated in onboarding (08 §19.3) — reframes the intimacy seeding.
   coveredIntimacyActs?: readonly { label: string; rating: string }[];
+  // Which intimacy ground has already been worked (08 §27.2) — steers this set to areas not yet covered and
+  // puts worked-through ones off-limits. Absent → the pre-§27 behaviour.
+  intimacyCoverage?: IntimacyCoverage;
   // Who the questionnaire is FOR (08 §24.4): name + pronouns + the author↔recipient relationship — so questions
   // read as written for this specific person, in the right register for the relationship.
   recipient?: {
@@ -312,7 +423,11 @@ export function buildGenerationUserMessage(input: {
         input.intimacyTopics,
         input.coveredIntimacyActs ?? [],
         // With a focus, keep the explicit register but let the SUBJECT follow the focus (08 §23.3).
-        { scenario: input.type === SCENARIO_TYPE, focused: focus != null },
+        {
+          scenario: input.type === SCENARIO_TYPE,
+          focused: focus != null,
+          ...(input.intimacyCoverage ? { coverage: input.intimacyCoverage } : {}),
+        },
       ),
     );
   } else if (isSensitiveType && input.sensitivity === 'intimacyGeneral') {

@@ -684,3 +684,62 @@ ensureSeed/run`, owner-gated other-targets, crisis + throttle stamp), the per-pe
 true })`; and when a concurrent session's uncommitted spec-64 commits contaminate the shared checkout, isolate
   the finishing pass onto a fresh worktree off `origin/main` and re-apply only your hunks (the `schemas.ts` edits
   anchor on already-released lines, so they graft cleanly).**
+
+---
+
+## 13. 2026-07-22 amendment — no filler sends; intimacy steered to uncovered ground — BUILT
+
+> **Status: BUILT** (`fix/intimacy-topic-coverage`). Owner-approved 2026-07-22 before implementation. The engine half of [`08 §27`](08-questionnaires.md), from
+> [#314](https://github.com/Highfivery/SelfOS/issues/314). Amends §3.5 (slot allocation) + §3.6 (generation)
+>
+> - §7 (states). The cadence, queue caps, back-off, crisis/budget gates and the **intimacy slot's frequency**
+>   are all UNCHANGED — the owner's explicit decision was to keep the pace and fix _what_ it asks about.
+
+### 13.1 What changes
+
+1. **The generic-brief fallback is removed.** `topicalSpec` no longer substitutes `INTENT_RATIONALE[intent]`
+   when the gap-finder returns nothing for a slot. The slot is **skipped**. A run may emit fewer check-ins,
+   or none — silence is the correct output when there is no new ground, and it is what the reporter asked
+   for ("don't just keep sending me check-ins to send me a check-in"). This applies to the §26 _"nothing new
+   to suggest"_ empty state, a thin-context miss, and a refusal alike.
+2. **The intimacy slot is steered, not re-paced.** `reserveIntimacy` and `hasPendingIntimacy` are untouched.
+   `intimacySpec` now names the **specific uncovered intimacy category** this check-in should open
+   (rotating through `uncovered`, then `open`), sourced from the [`08 §27.2`](08-questionnaires.md) coverage
+   map, and `buildDedupBundle` carries that map alongside `coveredActs`.
+3. **`coveredActs` becomes bounded.** It now carries the stable act `key` (for category resolution) and is
+   filtered to **non-saturated** acts before reaching the prompt — so the "go deeper" instruction can no
+   longer re-mine an act indefinitely.
+4. **Skips are recorded.** A skipped topical slot pushes `no-new-topic` onto the existing
+   `AutoCheckinRunResult.skipped` array (no schema change), so a quiet run is inspectable rather than
+   indistinguishable from a broken one — and the panel's run note distinguishes "no new ground" from "your
+   queue is already topped up" instead of misreporting one as the other (§27.6). There is deliberately **no**
+   `intimacy-saturated` reason: the intimacy slot's frequency is unchanged, so it is never skipped — an
+   all-saturated inventory steers it to the creative ladder instead (§13.2).
+
+### 13.2 States
+
+| State                                          | Behaviour                                                                              |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Gap-finder returns its honest EMPTY state      | Slot skipped, `no-new-topic` recorded. **No send.**                                    |
+| Gap-finder FAILS (refusal / transport)         | Skipped as `gapfinder:<reason>` — never reported as "no new ground" (§27.6)            |
+| Gap-finder is over budget                      | `gapfinder:BUDGET` recorded; the run stops (the next slot would only fail too)         |
+| Every topical slot skipped, intimacy eligible  | Only the intimacy check-in is sent                                                     |
+| Every slot skipped                             | Run completes having sent nothing; panel shows the calm "no new ground right now" note |
+| Intimacy eligible, uncovered categories remain | Intimacy check-in opens an uncovered category                                          |
+| Intimacy eligible, all categories saturated    | Steered to the tier's creative ladder — never re-mining                                |
+
+### 13.3 Testing
+
+Engine-level: a slot with no suggestion is skipped (not filled); a run with no suggestions and no intimacy
+eligibility sends nothing and records why; the intimacy slot's brief names an uncovered category. **The
+coverage map must be asserted to REACH THE MODEL on the auto path** (a capturing client + the generated user
+message) — asserting only how many check-ins were created cannot tell a working fix from one whose
+`intimacyCoverage` argument was dropped, which is how a neutered build passed 368 green tests during this
+work. E2E: a recipient with heavily-asked intimacy ground gets a check-in on **uncovered** ground
+(prompt-asserted via `SELFOS_FAKE_PROMPT_DIR`).
+
+**`SELFOS_FAKE_NO_AUTO_CHECKIN_CADENCE`** (main-only, the `SELFOS_FAKE_STORY_NO_CADENCE` precedent) disables
+the **automatic** run only — a manual "Run now" is untouched. Without it, the launch cadence tops the queue up
+on mount, leaving the manual run ~1 slot whose questions the offline fake repeats verbatim; the hard
+already-asked filter then empties the batch (`generate:MALFORMED`), so an E2E ends up measuring the fixture's
+ordering rather than the behaviour under test.

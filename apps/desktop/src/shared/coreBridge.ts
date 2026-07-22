@@ -550,8 +550,10 @@ import {
   setAutoCheckinConfig,
 } from '@selfos/core/auto-checkins';
 import {
+  buildIntimacyCoverage,
   INTIMACY_ACTIVITIES,
   INTIMACY_FANTASIES,
+  type IntimacyCoverage,
   mergedIntimacyTopics,
   suggestIntimacyTopics,
 } from '@selfos/core/intimacy';
@@ -588,6 +590,8 @@ import {
   gatherRecipientAskedPrompts,
   gatherRecipientPriorAnswers,
   gatherRecipientInsightFacts,
+  gatherRecipientIntimacyAsks,
+  gatherRecipientMaterialSignals,
   gatherRecipientQuestionnaireTitles,
   generateQuestions,
   resolveInsightAbout,
@@ -662,6 +666,7 @@ import {
 } from '@selfos/core/dreams';
 import {
   ensureIntakeSession,
+  type CoveredAct,
   formatIntakeForGeneration,
   getIntakeSection,
   getIntakeSession,
@@ -1472,11 +1477,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     fs: FileSystem,
     key: Uint8Array,
     recipientPersonId: string,
+    /** The author's brief, when there is one — the §27.4 explicit-request signal (see below). */
+    brief?: string,
   ): Promise<{
     history: string;
-    coveredActs: { label: string; rating: string }[];
+    coveredActs: CoveredAct[];
     askedPrompts: string[];
     dedupReference: string;
+    /** Which intimacy ground has already been worked (08 §27.2) — bounds the "go deeper" framing so a manual
+     *  intimacy draft can't re-mine the same rated acts either (#314). */
+    intimacyCoverage: IntimacyCoverage;
   }> => {
     const history = await gatherRecipientHistory(fs, key, recipientPersonId);
     // The structured already-asked prompts (08 §23.5) drive the deterministic hard near-dup filter in core.
@@ -1490,9 +1500,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       ? formatIntakeForGeneration(session)
       : {
           text: '',
-          coveredActs: [] as { label: string; rating: string }[],
+          coveredActs: [] as CoveredAct[],
           prompts: [] as string[],
         };
+    const [intimacyAsks, signals] = await Promise.all([
+      gatherRecipientIntimacyAsks(fs, key, recipientPersonId),
+      gatherRecipientMaterialSignals(fs, key, recipientPersonId),
+    ]);
     // The generation SOFT grounding (the whole blob) — onboarding appended, as before.
     const combined = [
       history,
@@ -1513,7 +1527,25 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     // The hard near-dup FILTER list: prior questionnaire prompts AND the answered onboarding question prompts,
     // so a generated question that verbatim re-asks an onboarding question is dropped deterministically too.
     const askedPrompts = [...priorPrompts, ...intake.prompts];
-    return { history: combined, coveredActs: intake.coveredActs, askedPrompts, dedupReference };
+    // §27.2 — the intimacy coverage map, in lockstep with the auto engine's `buildDedupBundle`. The author's
+    // BRIEF is the `explicitFocus` (§27.4): an author who explicitly asks for ground must be able to get it
+    // even when that ground is otherwise worked through — otherwise this fix would silently refuse a direct
+    // request, which is the opposite of the intent.
+    const intimacyCoverage = buildIntimacyCoverage({
+      coveredActs: intake.coveredActs,
+      askedIntimacy: intimacyAsks,
+      ...(signals.newMaterialAt !== undefined ? { newMaterialAt: signals.newMaterialAt } : {}),
+      ...(session?.updatedAt ? { profileEditedAt: session.updatedAt } : {}),
+      ...(brief && brief.trim() ? { explicitFocus: brief } : {}),
+      now: new Date(),
+    });
+    return {
+      history: combined,
+      coveredActs: intake.coveredActs,
+      askedPrompts,
+      dedupReference,
+      intimacyCoverage,
+    };
   };
 
   /**
@@ -3784,8 +3816,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Knowledge-aware de-dup (08 §19): the recipient's history + RAW onboarding answers, and the intimacy
       // acts already rated — so generation goes deeper instead of repeating what's known. Author-blind.
       const known = recipientIsHousehold
-        ? await recipientKnownData(deps.fs, deps.key, p.recipientPersonId as string)
-        : { history: '', coveredActs: [], askedPrompts: [], dedupReference: '' };
+        ? await recipientKnownData(deps.fs, deps.key, p.recipientPersonId as string, p.brief)
+        : {
+            history: '',
+            coveredActs: [],
+            askedPrompts: [],
+            dedupReference: '',
+            intimacyCoverage: undefined,
+          };
       // Who it's FOR (08 §24.4): the recipient's name/pronouns + the author↔recipient relationship (type +
       // closeness), so generation adopts the right register (partner vs coworker vs child) and personalizes.
       let recipientFraming:
@@ -3839,6 +3877,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(known.dedupReference ? { dedupReference: known.dedupReference } : {}),
         ...(known.askedPrompts.length ? { recipientAskedPrompts: known.askedPrompts } : {}),
         ...(known.coveredActs.length ? { coveredIntimacyActs: known.coveredActs } : {}),
+        // §27.3 — bounds the "go deeper" framing to ground not yet worked through (#314).
+        ...(known.intimacyCoverage ? { intimacyCoverage: known.intimacyCoverage } : {}),
         ...(p.intimacyMode !== undefined ? { intimacyMode: p.intimacyMode } : {}),
         ...(p.count !== undefined ? { count: p.count } : {}),
         ...(recipientFraming ? { recipient: recipientFraming } : {}),
@@ -3992,6 +4032,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         // standard-tier, so this is inert here today. Passed for symmetry (de-dup still runs via `history`)
         // and so it works automatically if a future materialize carries the suggestion's sensitivity.
         ...(known.coveredActs.length ? { coveredIntimacyActs: known.coveredActs } : {}),
+        // §27.3 — bounds the "go deeper" framing to ground not yet worked through (#314).
+        ...(known.intimacyCoverage ? { intimacyCoverage: known.intimacyCoverage } : {}),
       });
     },
 
@@ -4399,6 +4441,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     autoCheckinsRun: async (input): Promise<AutoCheckinRunResult> => {
       const { auto = true } = AutoCheckinRunSchema.parse(input ?? {});
+      // E2E determinism (63 §13) — the `SELFOS_FAKE_STORY_NO_CADENCE` sibling. Disables ONLY the autonomous
+      // launch cadence, so a test can observe a MANUAL "Run now" against a known queue state: otherwise the
+      // cadence fires on mount, tops the stream up to TARGET_DEPTH, and the later manual run has nothing left
+      // to do (and, with the offline fake returning identical questions, its one remaining slot is emptied by
+      // the near-dup filter). `globalThis` read so this still typechecks under the web lib.
+      const testEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+        .process?.env;
+      if (auto && testEnv?.['SELFOS_FAKE_NO_AUTO_CHECKIN_CADENCE']) {
+        return { ok: false, reason: 'SKIPPED', message: 'Auto check-ins already ran recently.' };
+      }
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (

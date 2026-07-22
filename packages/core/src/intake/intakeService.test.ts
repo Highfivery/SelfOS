@@ -603,11 +603,13 @@ describe('intakeService', () => {
     expect(text).toContain('What do you do for work?: nurse');
     expect(text).toContain('Receiving oral (blowjob): Love it');
     expect(text).toContain('Going down on her (oral): Like it');
-    // The covered acts are extracted structurally (label + rating) for the intimacy framing reframe.
+    // The covered acts are extracted structurally for the intimacy framing reframe — carrying the STABLE key
+    // (08 §27.2) as well as the resolved label, because the coverage map resolves a category from the key and
+    // an anatomy-resolved label ("Going down on her") cannot be reverse-mapped reliably.
     expect(coveredActs).toEqual(
       expect.arrayContaining([
-        { label: 'Receiving oral (blowjob)', rating: 'Love it' },
-        { label: 'Going down on her (oral)', rating: 'Like it' },
+        { key: 'oral-receiving', label: 'Receiving oral (blowjob)', rating: 'Love it' },
+        { key: 'oral-giving-vulva', label: 'Going down on her (oral)', rating: 'Like it' },
       ]),
     );
     // The answered question prompts feed the hard near-dup filter (08 §23.5) so a verbatim re-ask is dropped.

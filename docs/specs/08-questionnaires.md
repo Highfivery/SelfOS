@@ -3729,3 +3729,113 @@ The structural gaps above are fixed + verified from the code. Confirming whether
 is strong enough (vs. the structural gaps) needs a real-API run — the offline fake proves the plumbing + a
 reference-driven drop, not the live model's quality. Tuning `SEMANTIC_DEDUP_SYSTEM` against the live model is a
 separate follow-up; the `degraded` flag now makes a live no-op observable.
+
+---
+
+## 27. 2026-07-22 amendment — intimacy topic coverage: steer to new ground, never send filler — BUILT
+
+> **Status: BUILT** (`fix/intimacy-topic-coverage`). Owner-approved 2026-07-22 before implementation. Reported in [#314](https://github.com/Highfivery/SelfOS/issues/314)
+> by a household member, AFTER §26 shipped (v0.43.3): _"how many more ways it wants me to describe Ben giving
+> me oral or my thoughts on anal… once a topic is covered thoroughly, let's move on unless something triggers
+> it from a new perspective. Don't just keep sending me intimacy check-ins to just send me a check-in."_
+> Amends §19.3 (`coveredIntimacyActs`) + §22 (`explicitFraming`) here, and [`63 §13`](63-auto-checkins.md)
+> for the engine. Privacy boundary (§8.4/§17.4) UNCHANGED — coverage is assembled host-side, author-blind.
+
+### 27.1 Root cause — two independent bugs, neither fixed by §26
+
+§26 made the **topic selector** de-dup (the gap-finder's `avoidSuggestions`) and the **question-level**
+semantic pass reliable. Neither touches the two mechanisms actually producing this report.
+
+**Bug 1 — the covered-acts block re-mines the same acts forever.** `explicitFraming` (`aiPrompts.ts`) tells
+the model, on **every** intimacy check-in:
+
+> _"They have ALREADY RATED the acts below… **go DEEPER on them**: the how/when/with whom, what would make
+> each better, the specific fantasies, feelings, and edges around them: `<the rated acts>`"_
+
+There is **no saturation limit and no memory of what has already been asked** — so the handful of acts the
+person rated in onboarding (oral, anal, …) is re-mined indefinitely, exactly as reported. The only
+counter-steer is a soft `FAVOR acts … they have NOT yet rated` clause competing with that forceful
+directive, while the model is handed the **entire ~94-label inventory flat**, with no covered/uncovered
+structure to steer by. De-dup can't fix this: each "go deeper" question is genuinely _new wording_ about the
+same act, so it passes both the fuzzy filter and the semantic pass. **The prompt is the bug.**
+
+**Bug 2 — a generic-filler fallback keeps the cadence alive with nothing to say.** When the gap-finder yields
+no suggestion for a topical slot — including §26's new _"nothing new to suggest"_ empty state — `topicalSpec`
+falls back to `INTENT_RATIONALE[intent]` and the engine **generates and sends anyway**
+(`autoCheckins/service.ts`). The check-in exists because the toggle is on, not because there is something to
+learn. That is the reporter's second sentence, verbatim.
+
+**Owner decisions (2026-07-22, asked before design):** intimacy **frequency stays as is** — the fix is that a
+fully-covered intimacy topic gives way to ones not yet covered; **never use a fallback** — "there should
+ALWAYS be new things worth asking, that's why AI is used"; and a covered topic re-opens on **any** of the
+four new-material signals in §27.4.
+
+### 27.2 Structured intimacy coverage (new `intimacy/coverage.ts`)
+
+A per-recipient coverage map over the **14 `INTIMACY_CATEGORIES`** already defined by [`49`](49-intimacy-activities-inventory.md)
+— the structure that exists but generation has never been given. Assembled host-side, author-blind, from:
+
+- **Rated** — the onboarding `activities` matrix, by **stable key** → `categoryForKey`. Requires widening
+  `CoveredAct` with its `key` (today `parseCoveredActs` discards it, keeping only the display label, which is
+  lossy for the anatomy-resolved oral rows).
+- **Asked** — prior **intimacy** questionnaire prompts + titles already sent to this recipient
+  (`gatherRecipientAskedPrompts` / `gatherRecipientQuestionnaireTitles`), matched against inventory
+  labels/keys. This is the signal that has never existed: today nothing records _which intimacy ground has
+  already been worked_.
+
+Per category it yields `{ category, rated, askedCount, lastAskedAt }`, and three derived sets:
+
+| Set             | Meaning                                                                                       |
+| --------------- | --------------------------------------------------------------------------------------------- |
+| **`uncovered`** | never rated, never asked — the ground to go to first                                          |
+| **`open`**      | rated or lightly asked (`askedCount < SATURATION_ASKS`) — deepening still has somewhere to go |
+| **`saturated`** | `askedCount >= SATURATION_ASKS` (default **3**) and not re-opened by §27.4                    |
+
+### 27.3 Steering — replaces the unbounded "go deeper"
+
+`explicitFraming` takes the coverage map and changes from _"here is everything, go deeper on what they
+rated"_ to a **bounded, structured brief**:
+
+1. **Uncovered categories lead** — named explicitly as this set's subject matter, with their concrete acts,
+   instead of the flat 94-label dump. This is what makes "start exploring new ones it hasn't covered" real.
+2. **Saturated categories are off-limits, deterministically stated** — _"already explored thoroughly; do NOT
+   return to these unless something new has come up."_
+3. **The "go DEEPER" block is scoped to `open` (non-saturated) rated acts only**, so deepening remains
+   possible but bounded — a rated act stops being re-mined once it has been worked `SATURATION_ASKS` times.
+4. **All-saturated (rare)** — fall through to the tier's creative ladder (fantasy / scenario / edge space),
+   **never** back to re-mining. With 14 categories, ~94 acts and 13 fantasies, this is a long way off.
+
+### 27.4 Re-opening a saturated topic (the four new-material signals)
+
+A saturated category re-opens — becomes `open` again — when **any** of these is true (all four confirmed by
+the owner):
+
+- a **new answer / insight / dream / session signal** touching that category landed since `lastAskedAt`;
+- the recipient **edited onboarding, profile, or the intimacy inventory** since `lastAskedAt`;
+- an **explicit request** — the author changed `explorationFocus`, or asked for that ground directly;
+- **dormancy** — `lastAskedAt` older than `DORMANT_DAYS` (**90**), revisited once from a fresh angle.
+
+This is the reporter's own rule ("unless something triggers it from a new perspective") made deterministic.
+
+### 27.5 No generic fallback (engine — see [`63 §13`](63-auto-checkins.md))
+
+`topicalSpec` no longer invents a brief. **A topical slot with no gap-finder suggestion is SKIPPED**, and the
+run records why (`no-new-topic`). A run may therefore emit fewer check-ins — or none. That is correct: the
+engine's job is to _find_ new ground (the coverage map + the §26 avoid-list are what make that real), not to
+paper over its absence with filler. The intimacy slot is unaffected in frequency (§27.1 decision) but is now
+steered by §27.3, so it keeps having genuinely new ground for a long time.
+
+### 27.6 Observability & honesty
+
+`AutoCheckinRunResult` records skipped slots with a reason, and the Auto check-ins panel shows a calm
+_"no new ground to cover right now"_ note so a quiet run reads as deliberate, not broken.
+
+### 27.7 Testing
+
+- **Coverage unit** — rated/asked/saturated/uncovered classification; the stable-key → category path incl.
+  the anatomy-resolved oral rows and legacy keys; each of the four re-open signals.
+- **Prompt unit** — a saturated category is stated off-limits and its acts are ABSENT from the "go deeper"
+  block; uncovered categories are named; all-saturated does not re-mine.
+- **Engine unit** — a topical slot with no suggestion is skipped, not filled; the run result records it.
+- **E2E** — an auto run for a recipient with heavily-asked intimacy ground produces an intimacy check-in on
+  an **uncovered** category (decrypt-asserted), and a run with no new topic sends nothing.

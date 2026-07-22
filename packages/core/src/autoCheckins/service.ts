@@ -1,5 +1,15 @@
 import { getGuidancePrefs } from '../conversations/guidanceService';
-import { formatIntakeForGeneration, getIntakeSession } from '../intake/intakeService';
+import {
+  type CoveredAct,
+  formatIntakeForGeneration,
+  getIntakeSession,
+} from '../intake/intakeService';
+import {
+  buildIntimacyCoverage,
+  type IntimacyCoverage,
+  nextIntimacyCategory,
+} from '../intimacy/coverage';
+import { INTIMACY_CATEGORY_LABELS } from '../intimacy/topics';
 import { ageFromBirthday } from '../people/buildContext';
 import { getPerson, listPeople } from '../people/peopleService';
 import { listRelationships } from '../people/relationshipService';
@@ -16,6 +26,8 @@ import {
   gatherRecipientAskedPrompts,
   gatherRecipientHistory,
   gatherRecipientInsightFacts,
+  gatherRecipientIntimacyAsks,
+  gatherRecipientMaterialSignals,
   gatherRecipientPriorAnswers,
   gatherRecipientQuestionnaireTitles,
 } from '../questionnaires/recipientHistory';
@@ -150,10 +162,22 @@ export async function runAutoCheckins(input: RunAutoCheckinsInput): Promise<Auto
     const intents = allocateIntents(plan.slots, { reserveIntimacy });
 
     // Gather the recipient's de-dup bundle ONCE per stream (never re-ask, go deeper — §3.7).
-    const bundle = await buildDedupBundle(fs, key, elig.recipientPersonId);
+    const bundle = await buildDedupBundle(
+      fs,
+      key,
+      elig.recipientPersonId,
+      target.explorationFocus,
+      now,
+    );
 
     // Run the gap-finder once if any topical slot needs it; its rationale'd ideas seed those slots.
     let suggestions: QuestionnaireSuggestion[] = [];
+    // Why a topical slot with no suggestion was skipped. A gap-finder EMPTY state (thin context / "nothing new")
+    // carries no `reason` — that is a genuine "no new ground" (§27.5). A `reason` (BUDGET / refusal / error)
+    // must NOT be reported as "no new ground" (§27.6): it's a real failure the note has to distinguish, or the
+    // engine tells the user "nothing worth asking" when the truth is "AI budget exhausted". A BUDGET miss also
+    // stops the run — the same slot would only fail again.
+    let topicalSkipReason = 'no-new-topic';
     if (intents.some((i) => i !== 'intimacy')) {
       const sug = await suggestQuestionnaires(input, {
         ...(elig.isSelf ? {} : { targetPersonId: elig.recipientPersonId }),
@@ -164,17 +188,31 @@ export async function runAutoCheckins(input: RunAutoCheckinsInput): Promise<Auto
         // path that repeats most (a recurring daily send). Enforced deterministically in `suggestQuestionnaires`.
         ...(bundle.priorTitles.length ? { avoidSuggestions: bundle.priorTitles } : {}),
       });
-      if (sug.ok) suggestions = sug.suggestions ?? [];
-      // A gap-finder miss (thin context / budget / refusal) isn't fatal — topical slots fall back to a
-      // generic intent brief; a BUDGET miss surfaces below on the first generate call.
+      if (sug.ok) {
+        suggestions = sug.suggestions ?? [];
+      } else if (sug.reason === 'BUDGET') {
+        budgetHit = true;
+        skipped.push({ targetId: target.id, reason: 'gapfinder:BUDGET' });
+        break;
+      } else if (sug.reason) {
+        // A real gap-finder failure (refusal / transport) — record it honestly, never as "no new ground".
+        topicalSkipReason = `gapfinder:${sug.reason}`;
+      }
+      // sug.ok:false with NO reason = the honest EMPTY state → `topicalSkipReason` stays `no-new-topic`.
     }
 
     let sugIndex = 0;
     for (const intent of intents) {
       const spec =
         intent === 'intimacy'
-          ? intimacySpec(target.explorationFocus)
-          : topicalSpec(suggestions[sugIndex++], target.explorationFocus, intent);
+          ? intimacySpec(target.explorationFocus, bundle.intimacyCoverage)
+          : topicalSpec(suggestions[sugIndex++], target.explorationFocus);
+
+      // §27.5 — no filler. Silence is the correct output when there is no new ground to cover.
+      if (!spec) {
+        skipped.push({ targetId: target.id, reason: topicalSkipReason });
+        continue;
+      }
 
       const gen = await generateQuestions(input, {
         type: spec.type,
@@ -199,6 +237,8 @@ export async function runAutoCheckins(input: RunAutoCheckinsInput): Promise<Auto
         ...(intent === 'intimacy' && bundle.coveredActs.length
           ? { coveredIntimacyActs: bundle.coveredActs }
           : {}),
+        // §27.3 — steer this set to intimacy ground not yet worked, and put worked-through ground off-limits.
+        ...(intent === 'intimacy' ? { intimacyCoverage: bundle.intimacyCoverage } : {}),
         recipient: elig.recipient,
       });
 
@@ -433,13 +473,21 @@ interface SlotSpec {
   rationale: string;
 }
 
+/**
+ * A topical slot's spec — or `undefined` when the gap-finder found no new ground for it (§27.5).
+ *
+ * Before #314 this fell back to a generic `INTENT_RATIONALE[intent]` brief and the engine generated + sent a
+ * check-in anyway, so a run produced questionnaires simply because the toggle was on. There is deliberately NO
+ * fallback now: no suggestion → no slot → no send.
+ */
 function topicalSpec(
   suggestion: QuestionnaireSuggestion | undefined,
   focus: string,
-  intent: AutoCheckinIntent,
-): SlotSpec {
+): SlotSpec | undefined {
+  const rationale = suggestion?.rationale?.trim();
+  if (!suggestion || !rationale) return undefined;
   const briefParts: string[] = [];
-  briefParts.push(suggestion?.rationale?.trim() || INTENT_RATIONALE[intent]);
+  briefParts.push(rationale);
   if (focus.trim()) briefParts.push(`Focus especially on: ${focus.trim()}.`);
   // A topical slot is never sensitive — coerce an intimacy/scenario suggestion type back to a general one.
   const suggestedType = suggestion?.type?.trim();
@@ -451,14 +499,26 @@ function topicalSpec(
     type,
     sensitivity: 'standard',
     brief: briefParts.join(' '),
-    ...(suggestion?.title ? { title: suggestion.title } : {}),
-    rationale: suggestion?.rationale?.trim() || INTENT_RATIONALE[intent],
+    ...(suggestion.title ? { title: suggestion.title } : {}),
+    rationale,
   };
 }
 
-function intimacySpec(focus: string): SlotSpec {
+/**
+ * The intimacy slot's spec. Its FREQUENCY is deliberately unchanged (the owner's #314 decision) — what changes
+ * is WHERE it goes: the brief now names the specific category this check-in should open, taken from the
+ * coverage map (§27.3), instead of the old generic "prefer topics not yet covered" hint that the model was
+ * free to ignore while the prompt simultaneously told it to go deeper on the same rated acts.
+ */
+function intimacySpec(focus: string, coverage?: IntimacyCoverage): SlotSpec {
+  // The auto intimacy slot is always the  tier (below), so order the ground for that register.
+  // The auto intimacy slot is always the `unfiltered` tier (below), so order the ground for THAT register —
+  // otherwise the gentlest uncovered areas lead and contradict the tier's "go beyond vanilla" directive.
+  const next = coverage ? nextIntimacyCategory(coverage, 'unfiltered') : undefined;
   const briefParts = [
-    'Explore desire, intimacy, and sexuality openly. Prefer topics not yet covered so this goes somewhere new.',
+    next
+      ? `Explore desire, intimacy, and sexuality openly, focusing on ${INTIMACY_CATEGORY_LABELS[next]} — ground they have not worked through yet. Do not revisit areas already covered in depth.`
+      : 'Explore desire, intimacy, and sexuality openly. Prefer topics not yet covered so this goes somewhere new.',
   ];
   if (focus.trim()) briefParts.push(`Focus especially on: ${focus.trim()}.`);
   return {
@@ -485,22 +545,37 @@ async function buildDedupBundle(
   fs: AiDeps['fs'],
   key: Uint8Array,
   recipientId: string,
+  /** The stream's exploration focus — an EXPLICIT request that re-opens the ground it names (§27.4). */
+  explorationFocus: string,
+  now: Date,
 ): Promise<{
   recipientHistory: string;
   dedupReference: string;
   recipientAskedPrompts: string[];
-  coveredActs: { label: string; rating: string }[];
+  coveredActs: CoveredAct[];
   priorTitles: string[];
+  /** Which intimacy ground has already been worked (08 §27.2) — steers the intimacy slot to new ground. */
+  intimacyCoverage: IntimacyCoverage;
 }> {
-  const [history, priorPrompts, priorAnswers, insightFacts, priorTitles, session] =
-    await Promise.all([
-      gatherRecipientHistory(fs, key, recipientId),
-      gatherRecipientAskedPrompts(fs, key, recipientId),
-      gatherRecipientPriorAnswers(fs, key, recipientId),
-      gatherRecipientInsightFacts(fs, key, recipientId),
-      gatherRecipientQuestionnaireTitles(fs, key, recipientId),
-      getIntakeSession(fs, key, recipientId),
-    ]);
+  const [
+    history,
+    priorPrompts,
+    priorAnswers,
+    insightFacts,
+    priorTitles,
+    session,
+    intimacyAsks,
+    signals,
+  ] = await Promise.all([
+    gatherRecipientHistory(fs, key, recipientId),
+    gatherRecipientAskedPrompts(fs, key, recipientId),
+    gatherRecipientPriorAnswers(fs, key, recipientId),
+    gatherRecipientInsightFacts(fs, key, recipientId),
+    gatherRecipientQuestionnaireTitles(fs, key, recipientId),
+    getIntakeSession(fs, key, recipientId),
+    gatherRecipientIntimacyAsks(fs, key, recipientId),
+    gatherRecipientMaterialSignals(fs, key, recipientId),
+  ]);
   const intake = session
     ? formatIntakeForGeneration(session)
     : { text: '', coveredActs: [], prompts: [] };
@@ -521,11 +596,24 @@ async function buildDedupBundle(
   });
 
   const recipientAskedPrompts = [...priorPrompts, ...intake.prompts];
+
+  // §27.2 — the coverage map. `profileEditedAt` comes from the session we already loaded (the gatherer can't
+  // read it without forming a `questionnaires → intake` cycle).
+  const intimacyCoverage = buildIntimacyCoverage({
+    coveredActs: intake.coveredActs,
+    askedIntimacy: intimacyAsks,
+    ...(signals.newMaterialAt !== undefined ? { newMaterialAt: signals.newMaterialAt } : {}),
+    ...(session?.updatedAt ? { profileEditedAt: session.updatedAt } : {}),
+    ...(explorationFocus.trim() ? { explicitFocus: explorationFocus } : {}),
+    now,
+  });
+
   return {
     recipientHistory,
     dedupReference,
     recipientAskedPrompts,
-    coveredActs: intake.coveredActs.map((a) => ({ label: a.label, rating: a.rating })),
+    coveredActs: intake.coveredActs,
     priorTitles,
+    intimacyCoverage,
   };
 }

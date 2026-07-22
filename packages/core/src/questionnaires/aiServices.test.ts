@@ -3,6 +3,7 @@ import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient, FileSystem } from '../host';
 import { saveInsight } from '../insights';
+import { buildIntimacyCoverage } from '../intimacy/coverage';
 import { upsertPerson } from '../people/peopleService';
 import { upsertRelationship } from '../people/relationshipService';
 import { setAppBudget } from '../usage/budgetService';
@@ -723,6 +724,119 @@ describe('generateQuestions', () => {
     expect(sentUserText).toMatch(/do NOT re-ask whether they like them/i);
     expect(sentUserText).toMatch(/FAVOR acts, fantasies, and scenarios they have NOT yet rated/i);
     expect(sentUserText).toMatch(/never minors/i); // the safety boundary is unchanged
+  });
+
+  // #314 — the reported bug: the framing above told the model to "go DEEPER" on every rated act on EVERY
+  // intimacy check-in, forever. With a coverage map, worked-through ground drops out and new ground leads.
+  it('steers to UNCOVERED ground and puts worked-through ground off-limits (08 §27.3)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    let sentUserText = '';
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        sentUserText = options.messages.map((m) => m.content).join('\n');
+        const text = JSON.stringify({
+          title: 'X',
+          questions: [{ type: 'shortText', prompt: 'A question on new ground?', required: true }],
+        });
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    // Oral has been worked through (3 prior intimacy check-ins); anal has been rated but not worked.
+    const coverage = buildIntimacyCoverage({
+      coveredActs: [
+        { key: 'oral-receiving', label: 'Receiving oral (blowjob)', rating: 'Love it' },
+        { key: 'anal-receiving', label: 'Anal (receiving)', rating: 'Like it' },
+      ],
+      askedIntimacy: Array.from({ length: 3 }, () => ({
+        text: 'More about receiving oral',
+        at: '2026-07-01T00:00:00.000Z',
+      })),
+      now: new Date('2026-07-22T00:00:00.000Z'),
+    });
+
+    const result = await generateQuestions(deps(fs, capturing, author), {
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      context: {
+        authorPersonId: author,
+        includeAuthor: false,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+      coveredIntimacyActs: [
+        { label: 'Receiving oral (blowjob)', rating: 'Love it' },
+        { label: 'Anal (receiving)', rating: 'Like it' },
+      ],
+      intimacyCoverage: coverage,
+    });
+    expect(result.ok).toBe(true);
+
+    // The worked-through category is named off-limits...
+    expect(sentUserText).toMatch(/ALREADY EXPLORED THOROUGHLY/);
+    expect(sentUserText).toMatch(/do NOT return to these:[^\n]*Oral/i);
+    // ...and its rated act is GONE from the "go deeper" list — the actual #314 regression guard.
+    expect(sentUserText).not.toContain('Receiving oral (blowjob) (Love it)');
+    // The still-open one survives, so deepening is bounded, not abolished.
+    expect(sentUserText).toContain('Anal (receiving) (Like it)');
+    // New ground leads the set.
+    expect(sentUserText).toMatch(/GROUND TO OPEN THIS TIME/);
+    // The safety boundary is untouched by any of this.
+    expect(sentUserText).toMatch(/never minors/i);
+  });
+
+  it('does not hand back a fantasy on ground it just called off-limits (08 §27.3)', async () => {
+    // Self-contradiction guard: naming a category off-limits and then listing a fantasy on exactly that
+    // ground in the next breath is precisely the mixed signal that let the model keep circling.
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    let sentUserText = '';
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        sentUserText = options.messages.map((m) => m.content).join('\n');
+        const text = JSON.stringify({
+          title: 'X',
+          questions: [{ type: 'shortText', prompt: 'Elsewhere?', required: true }],
+        });
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const coverage = buildIntimacyCoverage({
+      coveredActs: [],
+      askedIntimacy: Array.from({ length: 3 }, () => ({
+        text: 'Tell me about a threesome',
+        at: '2026-07-01T00:00:00.000Z',
+      })),
+      now: new Date('2026-07-22T00:00:00.000Z'),
+    });
+    expect(coverage.saturated).toContain('group');
+
+    await generateQuestions(deps(fs, capturing, author), {
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      context: {
+        authorPersonId: author,
+        includeAuthor: false,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+      intimacyCoverage: coverage,
+    });
+    // The group category is off-limits, so the group fantasy must not be offered as material either.
+    expect(sentUserText).toMatch(/ALREADY EXPLORED THOROUGHLY/);
+    expect(sentUserText).not.toMatch(/fantasies\/roleplay:[^\n]*Threesome/);
   });
 });
 

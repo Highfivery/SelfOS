@@ -102,6 +102,7 @@ let fakeChatEmptyServed = false;
 // is one-shot + haiku-gated, so Together needs a separate flag).
 let fakeTogetherEmptyServed = false;
 let togetherPromptSeq = 0;
+let generationPromptSeq = 0;
 // 66 §10 — the truncation hook. `SELFOS_FAKE_TRUNCATE=1` truncates the FIRST prose reply once (the
 // continuation then completes it); `=always` truncates every call, so a test can drive the continuation
 // CAP. Module-level like `fakeChatEmptyServed` so it survives client re-instantiation within a launch.
@@ -187,6 +188,27 @@ function captureStoryPrompt(name: string, system: string, user: string): void {
   try {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `story-${name}-prompt.txt`), `SYSTEM:\n${system}\n\nUSER:\n${user}\n`);
+  } catch {
+    // Capture is a test aid — never let it break the turn.
+  }
+}
+
+/**
+ * 08-questionnaires §27 — capture each QUESTION-GENERATION prompt (system + user) to `SELFOS_FAKE_PROMPT_DIR`,
+ * the same mechanism as the couples/story captures. The intimacy-coverage fix (#314) is a change to what the
+ * generation prompt SAYS (the ground to open / the worked-through ground / the bounded go-deeper list), so the
+ * prompt itself is the only place the fix is observable end-to-end. Best-effort; never throws into the turn.
+ */
+function captureGenerationPrompt(system: string, user: string): void {
+  const dir = process.env['SELFOS_FAKE_PROMPT_DIR'];
+  if (!dir) return;
+  try {
+    mkdirSync(dir, { recursive: true });
+    generationPromptSeq += 1;
+    writeFileSync(
+      join(dir, `generation-prompt-${generationPromptSeq}.txt`),
+      `SYSTEM:\n${system}\n\nUSER:\n${user}\n`,
+    );
   } catch {
     // Capture is a test aid — never let it break the turn.
   }
@@ -313,6 +335,7 @@ export function fakeClaudeClient(): ClaudeClient {
       // Question generation (08 §3.1/§16.4) asks for a {title, questions} JSON object. Return a small,
       // valid set deterministically. Must come BEFORE the generic "JSON object" branch below.
       if (userText.includes('the JSON object with a short')) {
+        captureGenerationPrompt(options.system ?? '', userText);
         return Promise.resolve({
           text: JSON.stringify({
             title: 'A gentle weekly check-in',

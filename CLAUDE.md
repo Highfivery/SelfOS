@@ -430,6 +430,54 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-22 — **Fix (auto check-ins were repetitive on intimacy + fired "just because the toggle was on";
+  member-reported [#314]; SPEC 08 §27 + 63 §13 written, approved, BUILT; on `fix/intimacy-topic-coverage`).**
+  The reporter: _"I don't know how many more ways it wants me to describe Ben giving me oral or my thoughts on
+  anal… once a topic is covered thoroughly, let's move on unless something triggers it from a new perspective.
+  Don't just keep sending me intimacy check-ins to just send me a check-in."_ Reported AFTER the §26 de-dup
+  audit shipped (v0.43.3) — because **neither cause is a de-dup problem**. **Diagnosed against the shipped
+  code, not assumed:** (1) `explicitFraming` told the model, on EVERY intimacy check-in, to _"go DEEPER on"_
+  every act rated in onboarding, with **no saturation limit and no memory of what had already been worked** —
+  so the handful of rated acts was re-mined forever. De-dup structurally cannot catch this: each re-ask is
+  genuinely new WORDING about the same act, so it passes the fuzzy filter AND the semantic pass. **The prompt
+  was the bug.** (2) `topicalSpec` fell back to a generic `INTENT_RATIONALE` brief whenever the gap-finder found
+  nothing and **sent anyway** — the check-in existed because the toggle was on. **Owner decisions (asked
+  first):** intimacy **frequency unchanged** (fix WHERE it goes, not how often); **never a fallback** ("there
+  should ALWAYS be new things worth asking — that's why AI is used"); a covered topic re-opens on **any** of
+  four signals. **Built:** new pure `intimacy/coverage.ts` — a per-recipient map over the **14
+  `INTIMACY_CATEGORIES` spec 49 already defines** (the structure existed; generation had never been given it),
+  classifying each `uncovered`/`open`/`saturated` (≥3 asks) with the four re-open signals (new insight, profile
+  edit, explicit request, 90-day dormancy); `CoveredAct` widened with its **stable key** (the anatomy-resolved
+  oral labels can't be reverse-mapped); new `gatherRecipientIntimacyAsks` (one entry per prior intimacy
+  questionnaire — the signal that never existed). `explicitFraming` now leads with **uncovered ground**, states
+  worked-through ground **off-limits**, bounds "go deeper" to non-saturated acts, orders the lead **for the
+  tier** (on `unfiltered`, most-intense-first — the gentlest-first order reproduced the 2026-07-14 tame-output
+  tension), filters saturated-category fantasies, and keeps owner-custom activities. The engine's filler
+  fallback is **deleted** (skip + `no-new-topic`); a gap-finder FAILURE is recorded as `gapfinder:<reason>` and
+  never misreported as "no new ground". The manual Draft-with-AI path gets the same bounding, with the author's
+  **brief as the explicit-request signal** so a direct "ask about X" **re-opens** X and LEADS the named ground.
+  code-reviewer **fix-first** — and it caught a **blocker 368 green tests structurally could not see**: the
+  `intimacyCoverage` argument had been dropped from the auto path (a leftover from the E2E's negative check),
+  so the fix shipped neutered on the exact path the reporter is on, because **every auto check-in test asserted
+  only how many check-ins were CREATED, never what reached the model**. Added the missing prompt-capture guard
+  (verified: fails when neutered, passes when restored) + all should-fixes (honesty, focus contradiction,
+  dropped custom activities, the `gangbang` keyword gap + the all-saturated fantasy hole, the false docstring
+  claims + a real inventory-wide invariant, tier-aware ordering). **The E2E work also exposed two tests that had
+  been green for the WRONG reason** — the old run-note collapsed a real `generate:MALFORMED` into "Nothing new
+  right now", so their decrypt assertions were never reached; a new main-only
+  `SELFOS_FAKE_NO_AUTO_CHECKIN_CADENCE` (the `SELFOS_FAKE_STORY_NO_CADENCE` precedent) stops the launch cadence
+  pre-empting the manual run. Gate green: typecheck (4 packages), lint, format, **1639 core + 12 relay + 1420
+  desktop** unit, **4/4 auto check-in E2E** (8/8 under `--repeat-each=2`) + 20 questionnaire E2E. **Verified by
+  reading the actual prompt** for the reported scenario, not just assertions: with oral+anal worked through the
+  "go DEEPER" block is GONE, both are named off-limits, new ground leads — explicit register + safety boundary
+  byte-unchanged. **Lessons: (1) when a fix changes what a model is TOLD, a test that asserts only the OUTCOME
+  COUNT cannot distinguish a working fix from a deleted argument — assert the PROMPT on every path, or you can
+  ship a neutered fix under a fully green suite. (2) An honest error message is a testing tool: replacing a
+  catch-all "nothing new" note with three distinct outcomes immediately exposed two E2Es that had been passing
+  on a swallowed generation failure. (3) Keying prompt behaviour on "a brief is present" is a trap when an
+  ENGINE always sets one — `intimacySpec` does, so suppressing the steering when `focused` silently disabled it
+  on the auto path; lead with the requested ground instead of suppressing.**
+
 - 2026-07-21 — **Audit + Fix (questionnaire AI de-dup — it STILL re-asked known things despite §17/§23/§23.5b/§24;
   SPEC 08 §26; on `fix/questionnaire-dedup-audit`, a worktree off origin/main, NOT merged).** The user reported AI
   questionnaires keep asking the same/similar questions the app already has answers for. **Deep audit first (mapped

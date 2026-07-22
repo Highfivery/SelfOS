@@ -16,6 +16,7 @@ import {
   type UsageEvent,
 } from '../schemas';
 import { getBookType, type BookType } from './bookTypes';
+import { CHAPTER_CORPUS_TOKEN_BUDGET, budgetCorpus, sliceCorpusForChapter } from './corpusBudget';
 import { buildStoryCorpus, type CorpusItem, type StoryCorpus } from './storyCorpus';
 import { computeSourceSignature } from './storyFreshness';
 import { enforceProtected } from './storyMarkup';
@@ -127,12 +128,8 @@ export async function generateFoundations(
   deps: AiDeps,
   opts: { bookId: string; bookType: BookType; config: BookConfig; exclusions?: ExclusionItem[] },
 ): Promise<FoundationsResult> {
-  const corpus = await buildStoryCorpus(
-    deps.fs,
-    deps.key,
-    deps.personId,
-    opts.bookId,
-    opts.exclusions ?? [],
+  const corpus = budgetCorpus(
+    await buildStoryCorpus(deps.fs, deps.key, deps.personId, opts.bookId, opts.exclusions ?? []),
   );
   const system = buildBiographerSystem(opts.bookType, opts.config, corpus.personName);
   const user = buildFoundationsUserMessage(corpus, opts.bookType);
@@ -266,10 +263,14 @@ export async function generateChapter(
         ...existing.pinnedQuotes.map((q) => q.text),
       ].filter((t) => t.trim().length > 0)
     : [];
-  const tagged = tagCorpusItems(corpus);
+  // Slice the corpus to what's most relevant to THIS chapter, within a token budget (§17.1) — so a long life
+  // neither blows the window nor dilutes the chapter. The freshness signature below stays over the FULL corpus
+  // (a chapter is fresh against the whole life state), so a budget/relevance tweak never stales every chapter.
+  const slice = sliceCorpusForChapter(corpus, target);
+  const tagged = tagCorpusItems(slice);
   const tagToRef = new Map(tagged.map((t) => [t.tag, t.sourceRef]));
   const system = buildBiographerSystem(bookType, book.config, corpus.personName);
-  const user = buildChapterUserMessage(corpus, tagged, {
+  const user = buildChapterUserMessage(slice, tagged, {
     chapter: target,
     outline,
     ...(book.essence ? { essence: book.essence } : {}),
@@ -489,10 +490,19 @@ export async function applyMarkup(
 
   const exclusions = await getExclusions(deps.fs, deps.key, deps.personId, args.bookId);
   const corpus = await buildStoryCorpus(deps.fs, deps.key, deps.personId, args.bookId, exclusions);
-  const tagged = tagCorpusItems(corpus);
+  // Revising ONE chapter — slice to that chapter's relevant material within budget (§17.1); if the outline
+  // entry is somehow gone, still cap the whole corpus so a long life can't blow the window.
+  const outline = await getOutline(deps.fs, deps.key, deps.personId, args.bookId);
+  const outlineChapter = outline?.parts
+    .flatMap((p) => p.chapters)
+    .find((c) => c.id === args.chapterId);
+  const source = outlineChapter
+    ? sliceCorpusForChapter(corpus, outlineChapter)
+    : budgetCorpus(corpus, { tokenBudget: CHAPTER_CORPUS_TOKEN_BUDGET });
+  const tagged = tagCorpusItems(source);
   const tagToRef = new Map(tagged.map((t) => [t.tag, t.sourceRef]));
   const system = buildBiographerSystem(bookType, book.config, corpus.personName);
-  const user = buildRevisionUserMessage(corpus, tagged, {
+  const user = buildRevisionUserMessage(source, tagged, {
     chapter: existing,
     marks: pending,
     exclusions,

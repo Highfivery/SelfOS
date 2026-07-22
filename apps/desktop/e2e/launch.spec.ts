@@ -2864,7 +2864,7 @@ test('usage: the dashboard shows recorded usage and accepts a budget, without ov
     await expect(w.getByText('Tester, this month')).toBeVisible();
 
     await w.getByLabel('Everyone (app) limit (USD)').fill('5');
-    await w.getByRole('button', { name: 'Save' }).first().click();
+    await w.getByRole('button', { name: 'Save front and back matter' }).click();
     await expect(w.getByText(/\$5\.00/)).toBeVisible(); // app-cap progress reflects the limit (admin sees $)
 
     const overflow = await w.evaluate(() => {
@@ -12567,6 +12567,12 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     await w.getByRole('button', { name: 'Looks good' }).click();
     await w.getByRole('button', { name: /Back to the book/ }).click();
 
+    // Structured matter (§16.3): the author writes an about-the-author + a colophon before publishing.
+    await w.getByRole('tab', { name: 'Settings' }).click();
+    await w.getByLabel('About the author').fill('Ben grew up in Ohio and never left the garage.');
+    await w.getByLabel('Colophon').fill('Set in Lora, over one winter.');
+    await w.getByRole('button', { name: 'Save' }).first().click();
+
     // Publish + readers + export live in the Sharing tab (§13.4).
     await w.getByRole('tab', { name: 'Sharing' }).click();
 
@@ -12580,6 +12586,16 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
         return md ? readFile(join(saveDir, md), 'utf8') : '';
       })
       .toContain('Shared Life');
+    // The exported copy carries the new matter — AND the wellness boundary, which the person's colophon is
+    // added to, never a replacement for (§16.3/§8.2): an export leaves the vault, so it can't end without it.
+    const exported = await (async () => {
+      const md = (await readdir(saveDir)).find((f) => f.endsWith('.md'))!;
+      return readFile(join(saveDir, md), 'utf8');
+    })();
+    expect(exported).toContain('About the author');
+    expect(exported).toContain('Ben grew up in Ohio and never left the garage.');
+    expect(exported).toContain('Set in Lora, over one winter.');
+    expect(exported).toContain('not a medical record');
     await w.getByRole('button', { name: 'Close' }).click();
 
     // Publish the reviewed chapter + grant the household reader.
@@ -12616,8 +12632,17 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     // head prose (never the working draft) via the unified reader (§13.5).
     await card.click();
     await expect(w.getByRole('heading', { name: 'Shared Life' })).toBeVisible();
+    // The §8.2 boundary is on the title page too (§16.3) — seen on the way IN, not only after the last
+    // chapter, so a reader who never reaches the end still sees what the book is and isn't.
+    await expect(w.getByText(/not a medical record/)).toBeVisible();
     await w.getByRole('button', { name: /Begin reading/ }).click();
     await expect(w.getByText(/cut pine/)).toBeVisible();
+
+    // The READER sees the author's back matter too, closing with their colophon AND the boundary (§16.3).
+    await expect(w.getByRole('heading', { name: 'About the author' })).toBeVisible();
+    await expect(w.getByText('Ben grew up in Ohio and never left the garage.')).toBeVisible();
+    await expect(w.getByText('Set in Lora, over one winter.')).toBeVisible();
+    await expect(w.getByText(/not a medical record/)).toBeVisible();
 
     // Back → the open was recorded (device-local read progress), so the "New" marker is gone.
     await w.getByRole('button', { name: 'Back', exact: true }).click();

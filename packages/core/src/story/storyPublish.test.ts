@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BOOK_BOUNDARY_LINE } from './storyMatter';
 import { generateMasterKey } from '../crypto';
 import type { ClaudeClient, ClaudeUsage } from '../host';
 import { memFileSystem } from '../host/memFileSystem';
@@ -431,6 +432,62 @@ describe('export (64 §3.9)', () => {
     expect(md).toContain('## Acknowledgments');
     expect(md).toContain('*Drawn from your record — never invented.*');
     expect(exportFileStem('The Story of Ben!')).toBe('The-Story-of-Ben');
+  });
+
+  it('renders about-the-author + a colophon, and NEVER without the boundary line (§16.3/§8.2)', () => {
+    const manifest: PublishedManifest = {
+      schemaVersion: 1,
+      publishedAt: 'now',
+      title: 'The Story of Ben',
+      matter: {
+        dedication: 'For my mother',
+        aboutAuthor: 'Ben grew up in Ohio and never left the garage.',
+        colophon: 'Set in Lora, over one winter.',
+      },
+      noteOnBook: 'Drawn from your record — never invented.',
+      parts: [{ id: 'p1', title: 'Roots', chapterIds: ['c1'] }],
+      chapterOrder: ['c1'],
+      images: [],
+    };
+    const md = bookToMarkdown(manifest, [
+      {
+        id: 'c1',
+        title: 'The Garage',
+        markdown: 'The garage smelled of pine.',
+        imagePlacements: [],
+      },
+    ]);
+    expect(md).toContain('## About the author');
+    expect(md).toContain('Ben grew up in Ohio and never left the garage.');
+    expect(md).toContain('Set in Lora, over one winter.');
+    // Their colophon is ADDED to the standing boundary, never a replacement — an exported copy leaves the
+    // vault, so it can't end without saying what SelfOS is and isn't (§8.2).
+    expect(md).toContain(BOOK_BOUNDARY_LINE);
+
+    const html = bookToHtml(manifest, [
+      {
+        id: 'c1',
+        title: 'The Garage',
+        markdown: 'The garage smelled of pine.',
+        imagePlacements: [],
+      },
+    ]);
+    expect(html).toContain('About the author');
+    expect(html).toContain(BOOK_BOUNDARY_LINE);
+  });
+
+  it('a book with NO colophon still closes with the boundary line (§8.2)', () => {
+    const manifest: PublishedManifest = {
+      schemaVersion: 1,
+      publishedAt: 'now',
+      title: 'Plain',
+      parts: [{ id: 'p1', title: 'Roots', chapterIds: ['c1'] }],
+      chapterOrder: ['c1'],
+      images: [],
+    };
+    const plain = [{ id: 'c1', title: 'The Garage', markdown: 'Prose.', imagePlacements: [] }];
+    expect(bookToMarkdown(manifest, plain)).toContain(BOOK_BOUNDARY_LINE);
+    expect(bookToHtml(manifest, plain)).toContain(BOOK_BOUNDARY_LINE);
   });
 
   it('builds Markdown from the published head, null before publishing', async () => {

@@ -1546,6 +1546,36 @@ describe('Story (64)', () => {
     expect(edits[0]!.edit).not.toHaveProperty('date');
   });
 
+  // --- §16.3/#296: structured front & back matter -----------------------------------------------------
+
+  it('saves about-the-author and a colophon, and nudges about what’s missing (§16.3)', async () => {
+    let saved: { matter?: Record<string, string> } | null = null;
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+      storyUpdate: (input: unknown) => {
+        saved = input as { matter?: Record<string, string> };
+        return Promise.resolve(manifest({ status: 'ready' }));
+      },
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+
+    // The nudge names what's absent — a prompt, never a gate.
+    expect(await screen.findByText(/Your book doesn’t have/)).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('About the author'), 'Ben grew up in Ohio.');
+    await userEvent.type(screen.getByLabelText('Colophon'), 'Set in Lora.');
+    await userEvent.click(screen.getByRole('button', { name: 'Save front and back matter' }));
+
+    await waitFor(() => expect(saved).not.toBeNull());
+    expect(saved!.matter).toMatchObject({
+      aboutAuthor: 'Ben grew up in Ohio.',
+      colophon: 'Set in Lora.',
+    });
+  });
+
   // --- §16.1/#291: manual outline control ------------------------------------------------------------
 
   it('the Chapters tab opens a manual outline editor and sends a rename (§16.1)', async () => {
@@ -2343,7 +2373,7 @@ describe('Story (64)', () => {
     renderStory();
     await openTab('Settings');
     await userEvent.type(await screen.findByLabelText('Dedication'), 'For my mother');
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save front and back matter' }));
     expect(storyUpdate).toHaveBeenCalledWith(
       expect.objectContaining({
         bookId: 'b1',

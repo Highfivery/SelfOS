@@ -1,3 +1,4 @@
+import { colophonLines, mdSafeMatter } from './storyMatter';
 import type { FileSystem } from '../host';
 import { toBase64 } from '../encoding';
 import type { PublishedManifest, ReaderChapter } from '../schemas';
@@ -56,9 +57,20 @@ export function bookToMarkdown(
     }
   }
   if (manifest.matter?.acknowledgments) {
-    lines.push('## Acknowledgments', '', manifest.matter.acknowledgments.trim(), '');
+    lines.push('## Acknowledgments', '', mdSafeMatter(manifest.matter.acknowledgments.trim()), '');
+  }
+  if (manifest.matter?.aboutAuthor) {
+    lines.push('## About the author', '', mdSafeMatter(manifest.matter.aboutAuthor.trim()), '');
   }
   if (manifest.noteOnBook) lines.push('---', '', `*${manifest.noteOnBook}*`, '');
+  // The colophon closes the book — the person's own line (if any) plus the standing boundary, which is
+  // never theirs to remove (§8.2). An exported copy can leave the vault, so it must carry it.
+  lines.push(
+    '---',
+    '',
+    ...colophonLines(manifest.matter).map((line) => `*${mdSafeMatter(line)}*`),
+    '',
+  );
   return `${lines.join('\n').trim()}\n`;
 }
 
@@ -268,9 +280,18 @@ export function bookToHtml(
   if (manifest.matter?.acknowledgments) {
     body.push(`<h2>Acknowledgments</h2>${matterHtml(manifest.matter.acknowledgments)}`);
   }
+  if (manifest.matter?.aboutAuthor) {
+    body.push(`<h2>About the author</h2>${matterHtml(manifest.matter.aboutAuthor)}`);
+  }
   if (manifest.noteOnBook) {
     body.push(`<hr/><p class="note"><em>${escapeHtml(manifest.noteOnBook)}</em></p>`);
   }
+  // The colophon closes the book (§8.2) — their line, then the boundary that always renders.
+  body.push(
+    `<hr/><p class="note">${colophonLines(manifest.matter)
+      .map((line) => `<em>${escapeHtml(line)}</em>`)
+      .join('<br/>')}</p>`,
+  );
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${escapeHtml(
     manifest.title,
   )}</title><style>${PRINT_CSS}</style></head><body>${body.join('\n')}</body></html>`;

@@ -1576,6 +1576,58 @@ describe('Story (64)', () => {
     });
   });
 
+  // --- §16.4/#302: the title workshop -----------------------------------------------------------------
+
+  it('suggests alternative titles and commits a pick (clearing titleAuto) (§16.4)', async () => {
+    let committed: { title?: string } | null = null;
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+      storySuggestTitles: () =>
+        Promise.resolve({ ok: true, titles: ['The Weight of Quiet', 'Learning to Speak Up'] }),
+      storyUpdate: (input: unknown) => {
+        committed = input as { title?: string };
+        return Promise.resolve(manifest({ status: 'ready' }));
+      },
+    });
+    renderStory();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Title workshop' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Suggest titles' }));
+    expect(await screen.findByText('The Weight of Quiet')).toBeInTheDocument();
+    expect(screen.getByText('Learning to Speak Up')).toBeInTheDocument();
+    // "Suggest again" is offered (a fresh pass).
+    expect(screen.getByRole('button', { name: 'Suggest again' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Use this' })[0]!);
+    // The commit goes through update (which clears titleAuto host-side) — never a second AI call.
+    expect(committed).toMatchObject({ title: 'The Weight of Quiet' });
+  });
+
+  it('regenerates the essence on its own — keep or discard, no chapter touched (§16.4)', async () => {
+    let committed: { essence?: string } | null = null;
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+      storyRegenerateEssence: () =>
+        Promise.resolve({ ok: true, essence: 'A quiet man finding his voice.' }),
+      storyUpdate: (input: unknown) => {
+        committed = input as { essence?: string };
+        return Promise.resolve(manifest({ status: 'ready' }));
+      },
+    });
+    renderStory();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Title workshop' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Rewrite the essence' }));
+    expect(await screen.findByText('A quiet man finding his voice.')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Keep this essence' }));
+    expect(committed).toMatchObject({ essence: 'A quiet man finding his voice.' });
+  });
+
   // --- §16.1/#291: manual outline control ------------------------------------------------------------
 
   it('the Chapters tab opens a manual outline editor and sends a rename (§16.1)', async () => {

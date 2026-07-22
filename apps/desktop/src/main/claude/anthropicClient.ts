@@ -532,6 +532,26 @@ export function fakeClaudeClient(): ClaudeClient {
         cacheReadTokens: 0,
       };
 
+      // The title workshop (§16.4): candidate titles + a regenerated essence.
+      if (userText.includes('possible titles for this book')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            titles: [
+              { title: 'Studio Book' },
+              { title: 'The Long Way Home' },
+              { title: 'A Quiet Kind of Courage' },
+            ],
+          }),
+          usage: STORY_USAGE,
+        });
+      }
+      if (userText.includes('name the through-line of this book')) {
+        return Promise.resolve({
+          text: JSON.stringify({ essence: 'A quiet man finding his voice, one page at a time.' }),
+          usage: STORY_USAGE,
+        });
+      }
+
       // Foundations (§5.3): a proposed title + essence + timeline + a small outline (two chapters).
       if (userText.includes('plan a biography of')) {
         return Promise.resolve({

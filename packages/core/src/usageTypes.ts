@@ -29,6 +29,8 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'story.outline': 'Your Story — outline',
   'story.chapter': 'Your Story — chapter',
   'story.structure': 'Your Story — structure proposals',
+  'story.title': 'Your Story — title suggestions',
+  'story.essence': 'Your Story — essence',
   'story.interview': 'Your Story — interview questions',
   'story.answer': 'Your Story — biographer answer',
   'story.memory': 'Your Story — shared memory',

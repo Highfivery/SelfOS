@@ -46,6 +46,8 @@ import type {
   StoryOutlineEditResult,
   StoryTimelineEditInput,
   StoryTimelineEditResult,
+  StoryTitlesResult,
+  StoryEssenceResult,
   StoryHomeSignal,
   StoryImageEntry,
   StoryImageResult,
@@ -429,6 +431,9 @@ export const IpcChannels = {
   storyEditOutline: 'story:editOutline',
   /** The timeline studio — add/correct/remove a moment, AI-free (64 §16.2). */
   storyEditTimeline: 'story:editTimeline',
+  /** The title workshop (§16.4) — N title candidates + standalone essence regeneration, both metered. */
+  storySuggestTitles: 'story:suggestTitles',
+  storyRegenerateEssence: 'story:regenerateEssence',
   storyHomeSignal: 'story:homeSignal',
   storyCorpusStats: 'story:corpusStats',
   storyCompleteness: 'story:completeness',
@@ -1326,6 +1331,10 @@ export interface SelfosBridge {
   storyEditOutline(input: StoryOutlineEditInput): Promise<StoryOutlineEditResult>;
   /** Edit the book's chronology by hand (64 §16.2) — deterministic, no AI. Returns the fresh timeline. */
   storyEditTimeline(input: StoryTimelineEditInput): Promise<StoryTimelineEditResult>;
+  /** Propose N alternative titles in one metered pass (§16.4). */
+  storySuggestTitles(input: { bookId: string }): Promise<StoryTitlesResult>;
+  /** Regenerate just the book's essence in its own metered pass (§16.4). */
+  storyRegenerateEssence(input: { bookId: string }): Promise<StoryEssenceResult>;
   /** The living-book Home signal (§5.6) for the active person's book — computed host-side, no AI. Feeds the
    *  `story-living` "For you" card. Gated `story.own`; `hasBook:false` when denied or there's no book. */
   storyHomeSignal(): Promise<StoryHomeSignal>;

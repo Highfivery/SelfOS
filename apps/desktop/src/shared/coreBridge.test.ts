@@ -286,6 +286,25 @@ function makeHost(): {
       }
       // Your Story foundations (64 §5.3): "plan a biography of" → a valid foundations JSON (essence +
       // timeline + outline). Must precede the generic `JSON object` branch (the message contains that phrase).
+      // The title workshop (64 §16.4): candidate titles + a regenerated essence.
+      if (userText.includes('possible titles for this book')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            titles: [
+              { title: 'The Story of Ben' },
+              { title: 'The Weight of Quiet' },
+              { title: 'Learning to Speak Up' },
+            ],
+          }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+      if (userText.includes('name the through-line of this book')) {
+        return Promise.resolve({
+          text: JSON.stringify({ essence: 'A quiet man finding his voice.' }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       if (userText.includes('plan a biography of')) {
         return Promise.resolve({
           text: JSON.stringify({
@@ -7836,6 +7855,46 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const manual = await bridge.storyRefreshCheck({ bookId, auto: false });
     expect(manual.rewritten).toBeGreaterThan(0);
     expect(manual.bundle?.chapters.find((c) => c.id === chapterId)?.status).not.toBe('stale');
+  });
+
+  it('story: the title workshop — N candidates + essence regen, gated + honest AI-off (§16.4)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    await bridge.storyGenerateFoundations({ bookId });
+
+    // The fake claude returns a fixed candidate set for the "propose … titles" prompt.
+    const titles = await bridge.storySuggestTitles({ bookId });
+    expect(titles.ok).toBe(true);
+    expect(titles.titles.length).toBeGreaterThan(0);
+    expect(titles.titles).not.toContain('The Story of Ben'); // the current title is dropped
+
+    // Committing a candidate goes through storyUpdate, which clears titleAuto (never re-titled later).
+    await bridge.storyUpdate({ bookId, title: titles.titles[0]! });
+    const after = await bridge.storyGet({ bookId });
+    expect(after!.manifest.title).toBe(titles.titles[0]);
+    expect(after!.manifest.titleAuto).toBeFalsy();
+
+    // Essence regen returns a line; committing it doesn't touch chapters.
+    const essence = await bridge.storyRegenerateEssence({ bookId });
+    expect(essence.ok).toBe(true);
+    expect(essence.essence).toBeTruthy();
+  });
+
+  it('story: the title workshop is refused without story.own (§16.4)', async () => {
+    const { bridge } = await freshOwner();
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    const denied = await bridge.storySuggestTitles({ bookId: 'whatever' });
+    expect(denied.ok).toBe(false);
+    expect(denied.titles).toEqual([]);
   });
 
   it('story: the timeline studio — correct a date, it survives a later foundations pass (§16.2)', async () => {

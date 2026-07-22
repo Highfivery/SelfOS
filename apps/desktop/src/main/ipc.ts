@@ -418,6 +418,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyResolveProposal, bridge.storyResolveProposal);
   handle(IpcChannels.storyEditOutline, bridge.storyEditOutline);
   handle(IpcChannels.storyEditTimeline, bridge.storyEditTimeline);
+  handle(IpcChannels.storySuggestTitles, bridge.storySuggestTitles);
+  handle(IpcChannels.storyRegenerateEssence, bridge.storyRegenerateEssence);
   handle(IpcChannels.storyHomeSignal, bridge.storyHomeSignal);
   handle(IpcChannels.storyCorpusStats, bridge.storyCorpusStats);
   handle(IpcChannels.storyCompleteness, bridge.storyCompleteness);

@@ -4579,6 +4579,8 @@ export const StoryUpdateInputSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   config: BookConfigSchema.optional(),
   matter: BookMatterSchema.optional(),
+  /** The book's through-line, re-derived by the title workshop (§16.4). */
+  essence: z.string().max(500).optional(),
 });
 export type StoryUpdateInput = z.infer<typeof StoryUpdateInputSchema>;
 
@@ -4845,6 +4847,19 @@ export type StoryTimelineEditInput = z.infer<typeof StoryTimelineEditInputSchema
 export interface StoryTimelineEditResult {
   ok: boolean;
   timeline: LifeTimeline | null;
+  message?: string;
+}
+
+/** `story:suggestTitles` / `story:regenerateEssence` — the title workshop (§16.4), a metered read that
+ *  returns candidates/a line for the person to accept; the commit goes through `story:update`. */
+export interface StoryTitlesResult {
+  ok: boolean;
+  titles: string[];
+  message?: string;
+}
+export interface StoryEssenceResult {
+  ok: boolean;
+  essence: string | null;
   message?: string;
 }
 

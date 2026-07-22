@@ -1414,6 +1414,158 @@ describe('Story (64)', () => {
     return { memory, conversation };
   }
 
+  // --- §15.1/#288: the book-independent /story/memories route ---------------------------------------
+
+  it('renders the memory collection at /story/memories with NO book (the #288 dead-end)', async () => {
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([]), // the person deleted their only book
+      storyMemoryList: () =>
+        Promise.resolve([
+          {
+            id: 'm-saved',
+            status: 'saved' as const,
+            title: 'The Blue Bicycle',
+            people: [],
+            updatedAt: '2026-07-19T00:00:00.000Z',
+          },
+          {
+            id: 'm-draft',
+            status: 'gathering' as const,
+            title: 'A half-told afternoon',
+            people: [],
+            updatedAt: '2026-07-18T00:00:00.000Z',
+          },
+        ]),
+    });
+    renderStoryAt('/story/memories');
+
+    // Both sections render — with no book at all, so the memory is never stranded behind "Begin your book".
+    expect(
+      await screen.findByRole('heading', { name: 'Pick up where you left off' }),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Your memories' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 3, name: 'Memories you’ve shared' }),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: /Re-read the memory “The Blue Bicycle”/ }),
+    ).toBeInTheDocument();
+    // The Studio never rendered, so the invitation's "Begin your book" is nowhere on screen.
+    expect(screen.queryByRole('button', { name: /Begin your book/ })).not.toBeInTheDocument();
+    // With no book there is nothing to go back to.
+    expect(screen.queryByRole('button', { name: 'Back to your book' })).not.toBeInTheDocument();
+  });
+
+  it('the /story/memories?memory=<id> deep-link opens that memory chat with no book', async () => {
+    let openedWith: unknown = 'never called';
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([]),
+      storyMemoryList: () =>
+        Promise.resolve([
+          {
+            id: 'm1',
+            status: 'gathering' as const,
+            title: 'A half-told afternoon',
+            people: [],
+            updatedAt: '2026-07-18T00:00:00.000Z',
+          },
+        ]),
+      storyMemoryOpen: (payload: unknown) => {
+        openedWith = payload;
+        return Promise.resolve(
+          memoryDetail(memoryRecord({ id: 'm1', status: 'gathering' }), [
+            { role: 'assistant', content: 'Tell me about it.', ts: '2026-07-18T00:00:00.000Z' },
+          ]),
+        );
+      },
+    });
+    renderStoryAt('/story/memories?memory=m1');
+
+    expect(await screen.findByText('Tell me about it.')).toBeInTheDocument();
+    expect(openedWith).toMatchObject({ memoryId: 'm1' });
+  });
+
+  it('shows an empty state (not a blank page) at /story/memories with no memories yet', async () => {
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([]),
+      storyMemoryList: () => Promise.resolve([]),
+    });
+    renderStoryAt('/story/memories');
+
+    expect(await screen.findByText(/haven’t shared a memory yet/)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Share a memory' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { level: 3, name: 'Memories you’ve shared' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('reloads the collection when the active person switches (never a blank forever) (§15.1)', async () => {
+    // AppShell resets the memory store on a person switch, but the standalone route does NOT unmount (the
+    // switcher doesn't navigate) — so the load must be keyed on the active person, or the new person sees a
+    // blank area behind the not-yet-loaded gate.
+    const byPerson: Record<string, StoryMemoryView[]> = {
+      me: [
+        {
+          id: 'm-a',
+          status: 'saved' as const,
+          title: 'Ben’s bicycle',
+          people: [],
+          updatedAt: '2026-07-19T00:00:00.000Z',
+        },
+      ],
+      other: [
+        {
+          id: 'm-b',
+          status: 'saved' as const,
+          title: 'Angel’s harbour',
+          people: [],
+          updatedAt: '2026-07-19T00:00:00.000Z',
+        },
+      ],
+    };
+    useSessionStore.setState({ activePerson: ACTIVE_PERSON });
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([]),
+      storyMemoryList: () =>
+        Promise.resolve(byPerson[useSessionStore.getState().activePerson?.id ?? 'me'] ?? []),
+    });
+    renderStoryAt('/story/memories');
+    expect(
+      await screen.findByRole('button', { name: /Re-read the memory “Ben’s bicycle”/ }),
+    ).toBeInTheDocument();
+
+    // The switch, exactly as AppShell drives it: reset the per-person store, then flip the active person.
+    act(() => {
+      useStoryMemoryStore.getState().reset();
+      useSessionStore.setState({ activePerson: { ...ACTIVE_PERSON, id: 'other' } });
+    });
+
+    expect(
+      await screen.findByRole('button', { name: /Re-read the memory “Angel’s harbour”/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Re-read the memory “Ben’s bicycle”/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('offers a way into your memories from the no-book invitation (§15.1)', async () => {
+    // A draft memory produces no Insight, so the provenance link cannot reach it — without this entry a
+    // person who deleted their book has no path to their unfinished memory chats at all.
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([]),
+      storyMemoryList: () => Promise.resolve([]),
+    });
+    renderStoryAt('/story');
+    await userEvent.click(await screen.findByRole('button', { name: 'Your memories' }));
+    expect(await screen.findByRole('heading', { name: 'Your memories' })).toBeInTheDocument();
+    expect(await screen.findByText(/haven’t shared a memory yet/)).toBeInTheDocument();
+  });
+
   it('the Interview tab splits memories into "Pick up where you left off" (in-progress) and "Memories you’ve shared" (saved) (§14)', async () => {
     const memories: StoryMemoryView[] = [
       {
@@ -1496,7 +1648,9 @@ describe('Story (64)', () => {
     await openTab('Interview');
     await userEvent.click(await screen.findByRole('button', { name: 'Share a memory' }));
     // The panel replaces the tab body: a back affordance + the biographer's streamed opener.
-    expect(await screen.findByRole('button', { name: 'Back to your story' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: 'Back to your memories' }),
+    ).toBeInTheDocument();
     expect(await screen.findByText(/Take me back/)).toBeInTheDocument();
     // A NEW memory opens with no id (an empty payload) — never a resume of some other memory.
     expect(storyMemoryOpen).toHaveBeenCalledWith({});
@@ -1609,7 +1763,9 @@ describe('Story (64)', () => {
     await openTab('Interview');
     await userEvent.click(await screen.findByRole('button', { name: 'Talk it through' }));
     // The chat opens seeded from the gap's focus — a NEW memory keyed to that thread.
-    expect(await screen.findByRole('button', { name: 'Back to your story' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: 'Back to your memories' }),
+    ).toBeInTheDocument();
     expect(storyMemoryOpen).toHaveBeenCalledWith({
       seedFocus: 'Tell me about the hardest thing you have faced.',
     });
@@ -1661,7 +1817,9 @@ describe('Story (64)', () => {
     });
     renderStoryAt('/story/interview?memory=m1');
     // The deep-link opens exactly that memory (a resume, by id).
-    expect(await screen.findByRole('button', { name: 'Back to your story' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('button', { name: 'Back to your memories' }),
+    ).toBeInTheDocument();
     await waitFor(() => expect(storyMemoryOpen).toHaveBeenCalledWith({ memoryId: 'm1' }));
   });
 

@@ -1307,9 +1307,11 @@
   }
 }
 
-/* A gap invitation row on the Interview tab (§13.6.5). */
+/* A gap invitation row on the Interview tab (§13.6.5). Wraps at narrow widths: the "Ask me about this"
+   button has a fixed intrinsic width, so a non-wrapping row overflowed the pane at 360px (§12). */
 .gapRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-3);
@@ -1317,6 +1319,7 @@
   border-top: 1px solid var(--color-border);
 }
 .gapText {
+  flex: 1 1 200px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -1922,12 +1925,13 @@
   gap: var(--space-2);
   align-items: center;
 }
-/* The invite card at the top of the Interview tab. */
+/* The invite card at the top of the Interview tab (and the standalone memories route, §15.1). Wraps rather
+   than stacking, so the two-button cluster reads as one intentional row and still fits at 360px. */
 .memInvite {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: var(--space-2);
-  align-items: flex-start;
+  align-items: center;
 }
 /* A row in the "Memories you've shared" collection. */
 .memRow {

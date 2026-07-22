@@ -102,8 +102,14 @@ function readyFromMemory(memory: StoryMemory): boolean {
 export const useStoryMemoryStore = create<StoryMemoryState>((set, get) => ({
   ...EMPTY,
   loadMemories: async () => {
-    const memories = (await window.selfos?.storyMemoryList()) ?? [];
-    set({ memories, memoriesLoaded: true });
+    // Always settle `memoriesLoaded` — a rejected read (decrypt/transport) must degrade to the empty state,
+    // never leave the collection blank forever behind its not-yet-loaded gate.
+    try {
+      const memories = (await window.selfos?.storyMemoryList()) ?? [];
+      set({ memories, memoriesLoaded: true });
+    } catch {
+      set({ memories: [], memoriesLoaded: true });
+    }
   },
   deleteMemory: async (memoryId) => {
     await window.selfos?.storyMemoryDelete({ memoryId });

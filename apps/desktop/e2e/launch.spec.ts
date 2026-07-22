@@ -12387,6 +12387,105 @@ test('story (64): share a memory — the biographer interviews, synthesizes, and
   }
 });
 
+test('story (64): a memory outlives its book — the insight deep-link still opens it after the last book is deleted (§15.1, #288)', async () => {
+  test.setTimeout(90_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // 1) Commission a book and share a memory with the biographer, all the way to saved.
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('The Doomed Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'The Doomed Book', level: 1 })).toBeVisible();
+
+    await w.getByRole('tab', { name: 'Interview' }).click();
+    await w.getByRole('button', { name: 'Share a memory' }).click();
+    // `.first()`: mid-handoff the streaming bubble AND the persisted message both match (the standing rule).
+    await expect(w.getByText(/Take me back/).first()).toBeVisible();
+    await w
+      .getByRole('textbox', { name: 'Message' })
+      .fill('I got a blue bicycle the summer I was seven and rode it down our gravel drive.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: /Save this memory/ }).click();
+    await w.getByRole('button', { name: 'Add to my story' }).click();
+    await expect(w.getByText('Woven into your story.')).toBeVisible();
+
+    // 2) Delete the ONLY book, through the real Danger-zone flow (type-to-confirm).
+    await w.getByRole('button', { name: 'Back to your memories' }).first().click();
+    await w.getByRole('tab', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Delete this book…' }).click();
+    await w.getByLabel(/Type the book’s title/).fill('The Doomed Book');
+    await w.getByRole('button', { name: 'Delete forever' }).click();
+    await expect(w.getByRole('button', { name: 'Begin your book' })).toBeVisible();
+    await expect.poll(async () => (await listBooks(fs, key, 'owner-1')).length).toBe(0);
+
+    // The memory + its insight SURVIVE the book (they are person-level, §14 decision 1 — never reaped).
+    const memories = await listMemories(fs, key, 'owner-1');
+    expect(memories.find((m) => m.title === 'The Blue Bicycle')?.status).toBe('saved');
+    const insights = await listInsightsForPerson(fs, key, 'owner-1');
+    expect(insights.some((i) => i.source === 'memory')).toBe(true);
+
+    // 3) THE BUG (#288): the memory insight's "view source" must still reach the memory. Before the fix this
+    //    pointed at /story/interview — inside the book Studio — so with no book it dead-ended on the
+    //    "Begin your book" invitation and the memory was unreachable from the surface still citing it.
+    await w.getByRole('link', { name: 'Memory' }).click();
+    // Memory's life-area sections start collapsed (62 §13) — expand until the memory's insight card shows.
+    // Section headers only: `:not([aria-haspopup])` keeps the TopBar's usage-ring popover out of this. Polled
+    // rather than a one-shot sweep, since under load the sections may not have rendered yet when we arrive.
+    const collapsed = w.locator('main button[aria-expanded="false"]:not([aria-haspopup]):visible');
+    const provLink = w.getByRole('button', { name: /From a memory you shared/ }).first();
+    await expect
+      .poll(
+        async () => {
+          if (await provLink.isVisible()) return true;
+          if ((await collapsed.count()) > 0) await collapsed.first().click();
+          return false;
+        },
+        { timeout: 20_000 },
+      )
+      .toBe(true);
+    await provLink.click();
+
+    // It lands on the book-independent memories route, with THAT memory's chat open — not the invitation.
+    await expect(w.getByRole('button', { name: 'Begin your book' })).toHaveCount(0);
+    await expect(w.getByText(/blue bicycle/i).first()).toBeVisible();
+
+    // Back to the collection: the saved memory is listed, with no book anywhere in sight.
+    await w.getByRole('button', { name: /Back/ }).first().click();
+    await expect(w.getByRole('heading', { name: 'Your memories' })).toBeVisible();
+    await expect(
+      w.getByRole('button', { name: /Re-read the memory “The Blue Bicycle”/ }),
+    ).toBeVisible();
+
+    // 360px: the standalone route scrolls vertically only — no horizontal scroller, inner ones included (§12).
+    await w.setViewportSize({ width: 360, height: 800 });
+    const offenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(offenders).toEqual([]);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('story (64): a cover, publish to a household reader who reads the shared book, and export leaves the vault', async () => {
   test.setTimeout(90_000);
   const { userData, vault } = await seedReadyVault({
@@ -12877,7 +12976,7 @@ test('story (64): resume an unfinished memory later — pick up where you left o
     await expect(w.getByText(/enough here to write it/)).toBeVisible();
 
     // Leave WITHOUT saving — the memory becomes a resumable, unfinished draft.
-    await w.getByRole('button', { name: 'Back to your story' }).click();
+    await w.getByRole('button', { name: 'Back to your memories' }).click();
 
     // "Pick up where you left off" (§14) — the unfinished draft is listed under its AUTO WORKING TITLE ("A
     // Summer Ride", generated after the exchange so the draft is identifiable) with a Continue cue, so it can be

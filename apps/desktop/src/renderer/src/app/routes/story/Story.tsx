@@ -21,9 +21,10 @@ import {
 import { ImageStylePicker } from '../../../settings/ImageStyleControl';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryStore } from '../../../stores/storyStore';
-import { useStoryMemoryStore } from '../../../stores/storyMemoryStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { ShareMemoryPanel } from './ShareMemoryPanel';
+import { MemoryCollection } from './MemoryCollection';
+import { StoryMemories } from './StoryMemories';
 import { useInsightStore } from '../../../stores/insightStore';
 import { useStoryRefresh } from '../../notifications/useStoryRefresh';
 import { useStoryInterview } from '../../notifications/useStoryInterview';
@@ -49,7 +50,6 @@ import type {
   StoryPartCoverage,
   StoryDraftProgress,
   StoryReaderView,
-  StoryMemoryView,
   StoryTodoEntry,
   StructuralProposal,
   TextAnchor,
@@ -133,6 +133,9 @@ export function Story(): JSX.Element {
   // The read route: `/story/read` (front matter) or `/story/read/<chapterId>` — the immersive Book view (§13.5).
   const splat = useParams()['*'] ?? '';
   const readMode = splat === 'read' || splat.startsWith('read/');
+  // `/story/memories` — the book-independent memory collection (§15.1). Checked before every book-shaped
+  // branch below, so it renders identically with a book, with several, or with none (the #288 dead-end).
+  const memoriesMode = splat === 'memories';
   const routeChapterId = splat.startsWith('read/') ? splat.slice('read/'.length) : null;
 
   const [mode, setMode] = useState<'idle' | 'setup'>('idle');
@@ -184,8 +187,10 @@ export function Story(): JSX.Element {
   // can't race the create → draft sequence or open a book into a dead-end mid-generation).
   useEffect(() => {
     const first = books[0];
-    if (loaded && first && !bundle && !progress) void open(first.id);
-  }, [loaded, books, bundle, progress, open]);
+    // Not on `/story/memories` — that surface shows no book, so opening one only decrypts a bundle nobody
+    // renders and arms the living-book cadences on a screen they don't belong to.
+    if (loaded && first && !bundle && !progress && !memoriesMode) void open(first.id);
+  }, [loaded, books, bundle, progress, open, memoriesMode]);
 
   // Load the owner's own-book reader view when on the read route (and not editing). Re-runs when the editor
   // closes (`reading` → null) so returning from an edit shows the fresh prose. Clears it when leaving the route.
@@ -196,6 +201,10 @@ export function Story(): JSX.Element {
   }, [readMode, reading, bookId, openOwnBook, clearOwnReader]);
 
   if (!loaded) return <div className={styles.page} aria-busy="true" />;
+
+  // Memories are person-level (§14) and outlive every book, so this route must not sit behind any
+  // has-a-book branch — that coupling is exactly what stranded a memory's insight deep-link (#288).
+  if (memoriesMode) return <StoryMemories hasBook={books.length > 0} />;
 
   // Reading a book someone shared with you takes over the surface (the published head, read-only) — the same
   // immersive reader, unified (§13.5).
@@ -333,6 +342,7 @@ export function Story(): JSX.Element {
       {aiUnavailable ? <AiUnavailableNotice /> : null}
       <StoryInvitation
         onBegin={() => setMode('setup')}
+        onMemories={() => navigate('/story/memories')}
         error={error}
         beginDisabled={aiUnavailable}
       />
@@ -350,10 +360,14 @@ export function Story(): JSX.Element {
  */
 function StoryInvitation({
   onBegin,
+  onMemories,
   error,
   beginDisabled = false,
 }: {
   onBegin: () => void;
+  /** Opens the book-independent memory collection (§15.1) — the only path to an in-progress memory chat for
+   *  someone with no book (a draft memory produces no Insight, so it has no provenance link to arrive by). */
+  onMemories: () => void;
   error: string | null;
   /** True when AI is unavailable (no key / AI off) — the commission can't draft, so Begin is disabled and
    *  the role-aware AiUnavailableNotice above explains how to enable it (§8.2 honest states). */
@@ -421,6 +435,11 @@ function StoryInvitation({
           <Inline>
             <Button variant="primary" disabled={beginDisabled} onClick={onBegin}>
               Begin your book
+            </Button>
+            {/* Never disabled by AI state: sharing a memory needs AI, but REACHING one you already told the
+                biographer must not depend on it (§8.2 — the surface explains itself once you're there). */}
+            <Button variant="ghost" onClick={onMemories}>
+              Your memories
             </Button>
           </Inline>
         </div>
@@ -1887,120 +1906,6 @@ function LifeMap({
   );
 }
 
-/** A friendly "last worked on" label for an in-progress memory row (§14) — today/yesterday, else a short date. */
-function formatMemoryWhen(iso: string): string {
-  const then = new Date(iso);
-  if (Number.isNaN(then.getTime())) return '';
-  const now = new Date();
-  const startOfDay = (d: Date): number =>
-    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((startOfDay(now) - startOfDay(then)) / 86_400_000);
-  if (days <= 0) return 'today';
-  if (days === 1) return 'yesterday';
-  const sameYear = then.getFullYear() === now.getFullYear();
-  return then.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    ...(sameYear ? {} : { year: 'numeric' }),
-  });
-}
-
-/** One memory row in the collection (§14) — `progress` (resumable, shows a Continue cue + last-activity) or
- *  `saved` (re-read only, shows where it wove into the book). The whole row opens the chat; a two-step Remove. */
-function MemoryCollectionRow({
-  m,
-  variant,
-  confirmDelete,
-  onOpen,
-  onArmDelete,
-  onCancelDelete,
-  onConfirmDelete,
-}: {
-  m: StoryMemoryView;
-  variant: 'progress' | 'saved';
-  confirmDelete: string | null;
-  onOpen: () => void;
-  onArmDelete: () => void;
-  onCancelDelete: () => void;
-  onConfirmDelete: () => void | Promise<void>;
-}): JSX.Element {
-  const title = m.title || (variant === 'progress' ? 'New memory' : 'Untitled memory');
-  return (
-    <div className={styles.memRow}>
-      <button
-        type="button"
-        className={styles.memRowMain}
-        aria-label={
-          variant === 'progress'
-            ? `Continue the memory “${title}”`
-            : `Re-read the memory “${title}”`
-        }
-        onClick={onOpen}
-      >
-        <Text size="sm" weight={500}>
-          {title}
-        </Text>
-        <div className={styles.memRowMeta}>
-          {variant === 'progress' ? (
-            <span className={styles.memDraftChip}>
-              {m.status === 'ready' ? 'Ready to save' : 'In progress'}
-            </span>
-          ) : null}
-          {variant === 'progress' ? (
-            <Text size="sm" tone="tertiary">
-              Last worked on {formatMemoryWhen(m.updatedAt)}
-            </Text>
-          ) : null}
-          {m.approxDate ? (
-            <Text size="sm" tone="tertiary">
-              {m.approxDate}
-            </Text>
-          ) : null}
-          {m.people.slice(0, 3).map((p, i) => (
-            <span key={`${p.name}-${i}`} className={styles.memPersonChip}>
-              {p.name}
-            </span>
-          ))}
-          {m.wroteIntoChapterTitle ? (
-            <Text size="sm" tone="tertiary">
-              wove into “{m.wroteIntoChapterTitle}”
-            </Text>
-          ) : null}
-        </div>
-      </button>
-      {variant === 'progress' ? (
-        <span className={styles.memRowContinue} aria-hidden="true">
-          Continue →
-        </span>
-      ) : null}
-      <div className={styles.memRowActions}>
-        {confirmDelete === m.id ? (
-          <>
-            <Text size="sm" tone="tertiary">
-              Remove?
-            </Text>
-            <Button variant="ghost" onClick={onConfirmDelete}>
-              Remove
-            </Button>
-            <button type="button" className={styles.sourcesToggle} onClick={onCancelDelete}>
-              Keep
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            className={styles.sourcesToggle}
-            aria-label={`Remove the memory “${title}”`}
-            onClick={onArmDelete}
-          >
-            Remove
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /**
  * The Interview tab (§13.4/§13.6) — the completeness stage + the life map + the biographer's gap invitations
  * ("Ask me about this"), the open check-in, and the answered history. The gaps + coverage render FREE (no AI);
@@ -2026,21 +1931,18 @@ function InterviewTab({
   const loadAnswered = useStoryStore((s) => s.loadAnsweredCheckIns);
   const [notice, setNotice] = useState<string | null>(null);
   const [asking, setAsking] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   // "Share a memory" (§14) — an inline biographer chat that swaps the tab body. Driven by the invite card, a
-  // gap's "Talk it through", the collection, and the `/story/interview?memory=<id>` deep-link.
-  const memories = useStoryMemoryStore((s) => s.memories);
-  const loadMemories = useStoryMemoryStore((s) => s.loadMemories);
-  const deleteMemory = useStoryMemoryStore((s) => s.deleteMemory);
+  // gap's "Talk it through", the collection, and the `/story/interview?memory=<id>` deep-link. The collection
+  // itself is the shared `MemoryCollection` (§15.1), which owns its own load + delete.
   const [panel, setPanel] = useState<{ memoryId?: string; seedFocus?: string } | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     void loadGaps(bookId);
     void loadAnswered(bookId);
-    void loadMemories();
-  }, [bookId, loadGaps, loadAnswered, loadMemories]);
+  }, [bookId, loadGaps, loadAnswered]);
 
   // Deep-link: `?memory=<id>` opens that memory; `?seed=<focus>` starts a new seeded one (the photo entry). The
   // param is consumed once (cleared) so closing the panel doesn't reopen it.
@@ -2056,10 +1958,8 @@ function InterviewTab({
     }
   }, [memoryParam, seedParam, setSearchParams]);
 
-  const closePanel = (): void => {
-    setPanel(null);
-    void loadMemories(); // a just-saved memory joins the collection
-  };
+  // Closing the panel remounts the collection, which reloads itself — so a just-saved memory joins it.
+  const closePanel = (): void => setPanel(null);
 
   const hasOpenCheckin = gaps?.hasOpenCheckin ?? false;
 
@@ -2086,6 +1986,10 @@ function InterviewTab({
           <div className={styles.memInvite}>
             <Button variant="primary" onClick={() => setPanel({})}>
               Share a memory
+            </Button>
+            {/* Memories are person-level and outlive any book (§15.1) — the standalone route is their home. */}
+            <Button variant="ghost" onClick={() => navigate('/story/memories')}>
+              See all memories →
             </Button>
           </div>
         </Stack>
@@ -2209,70 +2113,9 @@ function InterviewTab({
         </Card>
       ) : null}
 
-      {(() => {
-        // "Pick up where you left off" = the resumable, not-yet-saved chats (gathering + synthesized-not-saved);
-        // "Memories you've shared" = the finished, saved ones. Both newest-first (listMemoryViews order).
-        const inProgress = memories.filter((m) => m.status !== 'saved');
-        const shared = memories.filter((m) => m.status === 'saved');
-        const rowHandlers = (m: StoryMemoryView) => ({
-          onOpen: () => setPanel({ memoryId: m.id }),
-          onArmDelete: () => setConfirmDelete(m.id),
-          onCancelDelete: () => setConfirmDelete(null),
-          onConfirmDelete: async () => {
-            setConfirmDelete(null);
-            await deleteMemory(m.id);
-          },
-        });
-        return (
-          <>
-            {inProgress.length > 0 ? (
-              <Card>
-                <Stack gap={2}>
-                  <Heading level={3}>Pick up where you left off</Heading>
-                  <Text tone="tertiary" size="sm">
-                    Memory chats you haven’t finished — open one to keep talking, or review a draft
-                    your biographer has already written.
-                  </Text>
-                  <Stack gap={1}>
-                    {inProgress.map((m) => (
-                      <MemoryCollectionRow
-                        key={m.id}
-                        m={m}
-                        variant="progress"
-                        confirmDelete={confirmDelete}
-                        {...rowHandlers(m)}
-                      />
-                    ))}
-                  </Stack>
-                </Stack>
-              </Card>
-            ) : null}
-
-            {shared.length > 0 ? (
-              <Card>
-                <Stack gap={2}>
-                  <Heading level={3}>Memories you’ve shared</Heading>
-                  <Text tone="tertiary" size="sm">
-                    Moments you’ve told your biographer — open one to re-read it. Your biographer
-                    weaves them into your story.
-                  </Text>
-                  <Stack gap={1}>
-                    {shared.map((m) => (
-                      <MemoryCollectionRow
-                        key={m.id}
-                        m={m}
-                        variant="saved"
-                        confirmDelete={confirmDelete}
-                        {...rowHandlers(m)}
-                      />
-                    ))}
-                  </Stack>
-                </Stack>
-              </Card>
-            ) : null}
-          </>
-        );
-      })()}
+      {/* The two memory sections (§14.2), shared verbatim with the book-independent `/story/memories`
+          route (§15.1) so they can never drift. */}
+      <MemoryCollection onOpen={(memoryId) => setPanel({ memoryId })} />
 
       <Text tone="tertiary" size="sm">
         Questions arrive in your Inbox under “Your biographer”. Your answers feed the book as it

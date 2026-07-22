@@ -23,3 +23,5 @@ export * from './storyTitleService';
 export * from './storyTimeline';
 // `chapterParagraphs`/`stripSourceMarkers` already re-export via storyGenerationService; countWords is new.
 export { countWords } from './storyText';
+export { manuscriptMetrics, readerWordCount } from './manuscriptMetrics';
+export type { ManuscriptMetrics, ChapterMetric, ChapterOutlier } from './manuscriptMetrics';

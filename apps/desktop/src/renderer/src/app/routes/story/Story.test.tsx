@@ -1306,8 +1306,11 @@ describe('Story (64)', () => {
     });
     renderStory();
     expect(await screen.findByText('Taking shape')).toBeInTheDocument();
-    expect(screen.getByRole('progressbar')).toBeInTheDocument();
-    expect(screen.queryByText(/%/)).toBeNull(); // never a bare percentage (owner decision)
+    const meter = screen.getByRole('progressbar');
+    expect(meter).toBeInTheDocument();
+    // Never a bare percentage IN THE COMPLETENESS METER (owner decision, §3.6) — a warm stage + a bar. Scoped
+    // to the meter region: the manuscript-metrics share (§16.5) legitimately shows a per-chapter percentage.
+    expect(within(meter.parentElement!).queryByText(/%/)).toBeNull();
   });
 
   it('runs a manual gap check + reports a minted check-in', async () => {
@@ -1655,6 +1658,52 @@ describe('Story (64)', () => {
     expect(edits[0]).toMatchObject({
       edit: { op: 'renameChapter', chapterId: 'c1', title: 'The Shed' },
     });
+  });
+
+  it('shows the whole-book length on the hero and flags pacing outliers per chapter (§16.5)', async () => {
+    const words = (n: number): string => Array.from({ length: n }, () => 'w').join(' ');
+    const base = writtenBundle('reviewed');
+    const metricsBundle: StoryBookBundle = {
+      ...base,
+      outline: {
+        schemaVersion: 1,
+        approved: true,
+        parts: [
+          {
+            id: 'p1',
+            title: 'Roots',
+            chapters: [
+              { id: 'c1', title: 'The Long One', brief: '', lifeAreas: [], order: 0 },
+              { id: 'c2', title: 'The Short One', brief: '', lifeAreas: [], order: 1 },
+              { id: 'c3', title: 'The Middle One', brief: '', lifeAreas: [], order: 2 },
+            ],
+          },
+        ],
+      },
+      chapters: [
+        { ...base.chapters[0]!, id: 'c1', order: 0, title: 'The Long One', markdown: words(600) },
+        { ...base.chapters[0]!, id: 'c2', order: 1, title: 'The Short One', markdown: words(40) },
+        { ...base.chapters[0]!, id: 'c3', order: 2, title: 'The Middle One', markdown: words(200) },
+      ],
+    };
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(metricsBundle),
+    });
+    renderStory();
+
+    // Whole-book read on the hero: total + written count + a rounded average.
+    expect(
+      await screen.findByText(/840 words across 3 written chapters · about 280 words each/),
+    ).toBeInTheDocument();
+
+    // Per-chapter pacing: the long one is flagged long, the short one short, the middle one neither.
+    expect(await screen.findByText(/much longer/)).toBeInTheDocument();
+    expect(screen.getByText(/much shorter/)).toBeInTheDocument();
+    // Each written card shows its own word count + share.
+    expect(screen.getByText(/600 words · 71%/)).toBeInTheDocument();
+    expect(screen.getByText(/200 words · 24%/)).toBeInTheDocument();
   });
 
   it('a delete confirms first, and a merge does not (it keeps both chapters’ writing) (§16.1)', async () => {

@@ -1809,6 +1809,19 @@
   opacity: 1;
   transform: none;
 }
+/* Per-chapter length + pacing (§16.5) — quiet white-on-cover, with a warm tint when it's an outlier. */
+.chMeta {
+  font-size: 12px;
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.78);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+.chOutlier {
+  /* A warm amber that stays legible over an arbitrary cover image (like the white text above it); no
+     semantic token holds contrast on an unknown background, so this overlay context is a deliberate one-off. */
+  color: #ffd9a8;
+  font-weight: 600;
+}
 /* An approved-but-unwritten chapter shell — a calm dashed placeholder, not a clickable blank. */
 .notYetCard {
   position: relative;

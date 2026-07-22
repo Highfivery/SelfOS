@@ -40,7 +40,8 @@
     "./updates": "./src/updates/index.ts",
     "./story": "./src/story/index.ts",
     "./story-diff": "./src/story/storyDiff.ts",
-    "./story-matter": "./src/story/storyMatter.ts"
+    "./story-matter": "./src/story/storyMatter.ts",
+    "./story-metrics": "./src/story/manuscriptMetrics.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",

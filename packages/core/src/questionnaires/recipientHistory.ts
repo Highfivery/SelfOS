@@ -168,6 +168,65 @@ export async function gatherRecipientQuestionnaireTitles(
   return [...titles];
 }
 
+/**
+ * The INTIMACY questionnaires already sent to a recipient, one entry each, as `{ text, at }` — the signal the
+ * intimacy coverage map (08 §27.2) uses to work out which ground has already been covered.
+ *
+ * One entry per questionnaire (title + all its prompts joined), NOT per question: coverage counts how many
+ * CHECK-INS worked a category, so `SATURATION_ASKS` means "three check-ins on this ground", not three
+ * questions. Sensitive types/tiers only — a general check-in that happens to mention a body part is not
+ * intimacy ground. Host-side, author-blind. Household recipients only.
+ */
+export async function gatherRecipientIntimacyAsks(
+  fs: FileSystem,
+  key: Uint8Array,
+  recipientPersonId: string,
+): Promise<{ text: string; at?: string }[]> {
+  const asked = await listAssignments(fs, key, { recipientPersonId });
+  const out: { text: string; at?: string }[] = [];
+  for (const assignment of asked) {
+    const snapshot = await getAssignmentSnapshot(fs, key, assignment.id);
+    if (!snapshot) continue;
+    const sensitive =
+      snapshot.type === 'intimacy' ||
+      snapshot.type === 'scenario' ||
+      snapshot.sensitivity === 'explicit' ||
+      snapshot.sensitivity === 'unfiltered' ||
+      snapshot.sensitivity === 'intimacyGeneral';
+    if (!sensitive) continue;
+    const text = [snapshot.title, ...snapshot.questions.map((q) => q.prompt)]
+      .map((s) => s.trim())
+      .filter((s) => s !== '')
+      .join(' ');
+    if (text === '') continue;
+    out.push({ text, ...(assignment.createdAt ? { at: assignment.createdAt } : {}) });
+  }
+  return out;
+}
+
+/**
+ * The recipient's newest Insight timestamp — the "new material has landed" signal that RE-OPENS worked-through
+ * intimacy ground (08 §27.4). An Insight is the distilled layer fed by intake/sessions/dreams/questionnaires,
+ * so its newest timestamp covers all four sources in one cheap read. Absent → that re-open signal never fires.
+ *
+ * The sibling `profileEditedAt` signal is supplied by the CALLER from the intake session's `updatedAt` — it is
+ * not read here because `questionnaires → intake` would be an import cycle (intake already imports this
+ * package's `answering`), and every caller already loads the session for `formatIntakeForGeneration`.
+ */
+export async function gatherRecipientMaterialSignals(
+  fs: FileSystem,
+  key: Uint8Array,
+  recipientPersonId: string,
+): Promise<{ newMaterialAt?: string }> {
+  const insights = await listInsightsForPerson(fs, key, recipientPersonId);
+  let newest: string | undefined;
+  for (const insight of insights) {
+    const at = insight.updatedAt || insight.createdAt;
+    if (at && (newest === undefined || at > newest)) newest = at;
+  }
+  return newest !== undefined ? { newMaterialAt: newest } : {};
+}
+
 export async function gatherRecipientPriorAnswers(
   fs: FileSystem,
   key: Uint8Array,

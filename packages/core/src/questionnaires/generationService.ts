@@ -16,6 +16,7 @@ import {
   type RelationshipType,
   type SensitivityTier,
 } from '../schemas';
+import type { IntimacyCoverage } from '../intimacy/coverage';
 import { mergedIntimacyTopics } from '../intimacy/topics';
 import {
   buildGenerationUserMessage,
@@ -124,6 +125,9 @@ export interface GenerateRequest {
   // The intimacy acts the recipient already rated in onboarding (08 §19.3) — reframes the intimacy seeding so
   // it goes deeper on rated acts instead of re-asking them.
   coveredIntimacyActs?: readonly { label: string; rating: string }[];
+  // Which intimacy ground has already been worked (08 §27.2). This is what bounds the "go deeper" above so it
+  // stops re-mining the same acts forever (#314) and steers each set to genuinely new ground.
+  intimacyCoverage?: IntimacyCoverage;
   // Who the questionnaire is FOR (08 §24.4): name + pronouns + the author↔recipient relationship, so questions
   // read as written for this specific person in the right register. Assembled host-side by the bridge.
   recipient?: {
@@ -172,6 +176,9 @@ export async function generateQuestions(
       : {}),
     ...(request.coveredIntimacyActs !== undefined
       ? { coveredIntimacyActs: request.coveredIntimacyActs }
+      : {}),
+    ...(request.intimacyCoverage !== undefined
+      ? { intimacyCoverage: request.intimacyCoverage }
       : {}),
     ...(request.recipient !== undefined ? { recipient: request.recipient } : {}),
   });

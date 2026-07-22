@@ -70,13 +70,27 @@ export const useAutoCheckinStore = create<AutoCheckinStoreState>((set) => ({
     const result = await window.selfos?.autoCheckinsRun(opts ?? {});
     if (result?.ok) {
       const n = result.created.length;
+      // §27.6 — a run that created nothing must read as deliberate, not broken, and must not MISREPORT the
+      // reason. Since §27.5 removed the generic filler, "created nothing" has three distinct causes: genuinely
+      // nothing new worth asking (`no-new-topic`), a real hiccup (the AI refused / errored / budget-capped, any
+      // `gapfinder:*` / `generate:*` reason), or the queue simply already being full (no skips at all). Telling
+      // someone "no new ground" when the AI actually failed is the dishonesty this section exists to prevent.
+      const reasons = result.skipped.map((s) => s.reason);
+      const noNewGround = reasons.includes('no-new-topic');
+      const hadTrouble = reasons.some(
+        (r) => r.startsWith('gapfinder:') || r.startsWith('generate:'),
+      );
       set({
         running: false,
         lastRunNote: opts?.auto
           ? null
           : n > 0
             ? `Added ${n} new check-in${n === 1 ? '' : 's'} to your inbox.`
-            : 'Nothing new right now — your queue is already topped up.',
+            : hadTrouble
+              ? 'Couldn’t put a check-in together just now — try again in a bit.'
+              : noNewGround
+                ? 'No new ground to cover right now — nothing worth asking yet.'
+                : 'Nothing new right now — your queue is already topped up.',
       });
       // A run may have spent budget + added inbox items — refresh both so the ring + badge stay current.
       await useBudgetStore.getState().refresh();

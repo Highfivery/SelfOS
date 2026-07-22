@@ -5,8 +5,12 @@ import type { ClaudeClient, FileSystem } from '../host';
 import { memFileSystem } from '../host/memFileSystem';
 import { upsertPerson } from '../people/peopleService';
 import { upsertRelationship } from '../people/relationshipService';
-import { listAssignments } from '../questionnaires/assignmentService';
-import { getQuestionnaire, listQuestionnaires } from '../questionnaires/questionnaireService';
+import { createAssignment, listAssignments } from '../questionnaires/assignmentService';
+import {
+  getQuestionnaire,
+  listQuestionnaires,
+  saveQuestionnaire,
+} from '../questionnaires/questionnaireService';
 import type { AutoCheckinTarget, RelationshipType } from '../schemas';
 import { setAppBudget } from '../usage/budgetService';
 import { recordUsage } from '../usage/usageStore';
@@ -26,15 +30,72 @@ const GEN_JSON = JSON.stringify({
   questions: [{ type: 'shortText', prompt: 'What has been on your mind lately?' }],
 });
 
-function fakeClient(text = GEN_JSON): ClaudeClient {
+/** What the gap-finder returns — the ground a topical slot is built from. Since §27.5 there is NO generic
+ *  fallback, so a fake that answers every call with `GEN_JSON` yields NO topical check-ins at all. The fake
+ *  therefore has to answer the gap-finder call faithfully, exactly as the real one does. */
+const SUGGEST_JSON = JSON.stringify([
+  {
+    title: 'How work has been landing',
+    type: 'general',
+    rationale: 'You mentioned a stretch at work but never unpacked how it felt.',
+    questions: [{ type: 'shortText', prompt: 'What part of work has felt heaviest?' }],
+  },
+  {
+    title: 'What rest looks like now',
+    type: 'general',
+    rationale: 'Nothing on record about how you actually recover.',
+    questions: [{ type: 'shortText', prompt: 'What actually restores you?' }],
+  },
+]);
+
+/** A gap-finder call is identified by its system prompt (the real client sees the same distinction). */
+function isGapFinderCall(system: string): boolean {
+  return system.includes('You suggest the NEXT questionnaires');
+}
+
+function fakeClient(text = GEN_JSON, suggestText = SUGGEST_JSON): ClaudeClient {
+  const pick = (system: string | undefined): string =>
+    isGapFinderCall(system ?? '') ? suggestText : text;
   return {
-    send: () => Promise.resolve(text),
-    stream: (_options, onDelta) => {
-      onDelta(text);
+    send: (options) => Promise.resolve(pick(options.system)),
+    stream: (options, onDelta) => {
+      const out = pick(options.system);
+      onDelta(out);
       return Promise.resolve({
-        text,
+        text: out,
         usage: { inputTokens: 10, outputTokens: 20, cacheWriteTokens: 0, cacheReadTokens: 0 },
       });
+    },
+  };
+}
+
+/**
+ * The genuine "no new ground" state (§27.5) is the gap-finder's HONEST empty state — its pre-call
+ * thin-context bail, or every suggestion being a covered-topic dup. Both carry NO `reason`. A literal `[]`
+ * reply is NOT that: it classifies as a parse failure and is now reported distinctly (§27.6), so tests for
+ * the empty path drive it with a thin-context person (`seedPerson({ thin: true })`) instead of a fake reply.
+ */
+
+/**
+ * A client that RECORDS every user message it is sent, so a test can assert what actually reached the model
+ * on the auto path. Without this the engine's prompt wiring is untestable here: the existing tests assert
+ * only how many check-ins were created, so removing the `intimacyCoverage` argument entirely left the whole
+ * suite green while the reported bug (#314) survived on the one path the reporter is actually on.
+ */
+function capturingClient(): { client: ClaudeClient; prompts: string[] } {
+  const prompts: string[] = [];
+  const base = fakeClient();
+  return {
+    prompts,
+    client: {
+      send: (options) => {
+        prompts.push(options.messages.map((m) => m.content).join('\n'));
+        return base.send(options);
+      },
+      stream: (options, onDelta) => {
+        prompts.push(options.messages.map((m) => m.content).join('\n'));
+        return base.stream(options, onDelta);
+      },
     },
   };
 }
@@ -59,13 +120,17 @@ async function seedIntakeComplete(fs: FileSystem, personId: string): Promise<voi
 /** A person who has finished onboarding (+ optionally acked 18+ / has a birthday). */
 async function seedPerson(
   fs: FileSystem,
-  opts: { name: string; birthday?: string; ack?: boolean },
+  opts: { name: string; birthday?: string; ack?: boolean; thin?: boolean },
 ): Promise<string> {
   const person = await upsertPerson(fs, key, {
     displayName: opts.name,
     isSubject: true,
     tags: [],
     pronouns: 'they/them',
+    // Substantive context so the gap-finder's PRE-CALL thin-context guard doesn't bail before the model is
+    // ever asked. Without this a seeded person has only identity boilerplate, so since §27.5 (no filler) every
+    // topical slot would be skipped and the test would be asserting the empty path by accident.
+    ...(opts.thin ? {} : { notes: 'Has been stretched thin at work lately and sleeping badly.' }),
     ...(opts.birthday ? { birthday: opts.birthday } : {}),
   });
   await seedIntakeComplete(fs, person.id);
@@ -243,6 +308,140 @@ describe('runAutoCheckins — self stream', () => {
     await setAutoCheckinConfig(fs, key, author, { enabled: false, targets: [selfTarget()] });
     const result = await runAutoCheckins(runInput(fs, author));
     expect(result).toMatchObject({ ok: false, reason: 'SKIPPED' });
+  });
+});
+
+// #314 — the engine used to fill a topical slot with a generic brief whenever the gap-finder found nothing,
+// so it produced check-ins simply because the toggle was on. There is no fallback now (08 §27.5).
+describe('runAutoCheckins — no filler when there is no new ground (08 §27.5)', () => {
+  it('SKIPS a topical slot when the gap-finder finds nothing, and records why', async () => {
+    const fs = memFileSystem();
+    // 18+ NOT acked, so there is no intimacy slot — every slot this run is topical. A `thin` person has no
+    // substantive context, so the gap-finder honestly bails pre-call: the real "no new ground" state.
+    const author = await seedPerson(fs, { name: 'Ben', thin: true });
+    await setAutoCheckinConfig(fs, key, author, {
+      enabled: true,
+      targets: [selfTarget({ includeIntimacy: false })],
+    });
+
+    const result = await runAutoCheckins(runInput(fs, author));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Nothing sent — the correct output when there is nothing new to ask.
+    expect(result.created).toHaveLength(0);
+    expect(await listAssignments(fs, key, { recipientPersonId: author })).toHaveLength(0);
+    // ...and the quiet run is inspectable rather than indistinguishable from a broken one.
+    expect(result.skipped.some((s) => s.reason === 'no-new-topic')).toBe(true);
+  });
+
+  // THE regression guard for #314 on the path the reporter is actually on. Every other test here asserts
+  // only how many check-ins were created, so dropping the `intimacyCoverage` argument to `generateQuestions`
+  // left the entire suite green while the bug survived. Assert what reaches the MODEL, not just the counts.
+  it('sends the coverage map to the model, so worked-through ground is off-limits (08 §27.3)', async () => {
+    const fs = memFileSystem();
+    const author = await seedPerson(fs, { name: 'Ben', ack: true });
+    // Rate an oral act in onboarding, then work that ground through with SATURATION_ASKS intimacy sends.
+    await writeEncryptedJson(
+      fs,
+      `people/${author}/intake/session.enc`,
+      {
+        id: `intake-${author}`,
+        schemaVersion: 1,
+        personId: author,
+        status: 'complete',
+        sections: [
+          {
+            id: 'intimacy',
+            status: 'complete',
+            restricted: true,
+            messages: [],
+            answers: {
+              getSpecific: true,
+              ownAnatomy: 'Cock (penis)',
+              partnerAnatomy: ['Pussy (vulva)'],
+              activities: { 'oral-receiving': 5 },
+            },
+          },
+        ],
+        startedAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      },
+      key,
+    );
+    for (let i = 0; i < 3; i += 1) {
+      const q = await saveQuestionnaire(fs, key, {
+        title: `Oral check-in ${i + 1}`,
+        type: 'intimacy',
+        sensitivity: 'unfiltered',
+        recipient: { kind: 'person', personId: author },
+        questions: [
+          {
+            id: `q-${i}`,
+            type: 'shortText',
+            prompt: 'What do you like most about receiving oral?',
+            required: false,
+          },
+        ],
+      });
+      await createAssignment(fs, key, {
+        questionnaireId: q.id,
+        senderPersonId: author,
+        recipient: { kind: 'person', personId: author },
+        channel: 'inApp',
+        privacy: 'private',
+        senderVisibleToRecipient: true,
+      });
+    }
+
+    await setAutoCheckinConfig(fs, key, author, { enabled: true, targets: [selfTarget()] });
+    const { client, prompts } = capturingClient();
+    const result = await runAutoCheckins(runInput(fs, author, { client }));
+    expect(result.ok).toBe(true);
+
+    // The intimacy generation call is the one carrying the explicit framing.
+    const intimacyPrompt = prompts.find((p) => p.includes('GROUND TO OPEN THIS TIME'));
+    expect(intimacyPrompt).toBeDefined();
+    // Oral is worked through → stated off-limits, and its rated act is NOT offered for deepening.
+    expect(intimacyPrompt).toMatch(/ALREADY EXPLORED THOROUGHLY[^\n]*Oral/i);
+    const goDeeperLine = (intimacyPrompt ?? '')
+      .split('\n')
+      .find((l) => l.includes('ALREADY RATED'));
+    expect(goDeeperLine ?? '').not.toMatch(/oral/i);
+  });
+
+  it('records a gap-finder FAILURE distinctly, never as "no new ground" (§27.6)', async () => {
+    // Honesty guard: with no intimacy slot, a failed gap-finder means `generateQuestions` is never called, so
+    // nothing else can surface the failure. Reporting it as "nothing worth asking" would be a false statement
+    // about the user's data — exactly what §27.6 exists to prevent.
+    const fs = memFileSystem();
+    const author = await seedPerson(fs, { name: 'Ben' });
+    await setAutoCheckinConfig(fs, key, author, {
+      enabled: true,
+      targets: [selfTarget({ includeIntimacy: false })],
+    });
+    // A reply with no JSON at all → the gap-finder classifies it as a real failure, not an empty state.
+    const client = fakeClient(GEN_JSON, 'I cannot help with that.');
+    const result = await runAutoCheckins(runInput(fs, author, { client }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.created).toHaveLength(0);
+    expect(result.skipped.some((s) => s.reason.startsWith('gapfinder:'))).toBe(true);
+    expect(result.skipped.some((s) => s.reason === 'no-new-topic')).toBe(false);
+  });
+
+  it('still sends the intimacy check-in when only the topical ground is exhausted', async () => {
+    // The owner's #314 decision: intimacy FREQUENCY is unchanged. A run with no topical ground still
+    // delivers the intimacy slot — it just no longer pads the rest with filler.
+    const fs = memFileSystem();
+    const author = await seedPerson(fs, { name: 'Ben', ack: true, thin: true });
+    await setAutoCheckinConfig(fs, key, author, { enabled: true, targets: [selfTarget()] });
+
+    const result = await runAutoCheckins(runInput(fs, author));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.created).toHaveLength(1);
+    expect(result.created[0]?.intent).toBe('intimacy');
+    expect(result.skipped.some((s) => s.reason === 'no-new-topic')).toBe(true);
   });
 });
 

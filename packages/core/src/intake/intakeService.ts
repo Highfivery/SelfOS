@@ -1007,8 +1007,14 @@ function formAnswersMessages(session: IntakeSession): { role: 'user'; content: s
 }
 
 /** A single rated intimacy act from the onboarding activity matrix (label + the chosen feeling), used to tell
- * generation what's already covered so it goes DEEPER instead of re-asking the rating (08 §19.3). */
+ * generation what's already covered so it goes DEEPER instead of re-asking the rating (08 §19.3).
+ *
+ * `key` is the STABLE, anatomy-independent matrix-row key (46 §4.2) — it must be carried, not just the
+ * resolved display label, because the intimacy coverage map (08 §27.2) resolves a category from it
+ * (`categoryForKey`). Reverse-mapping an anatomy-resolved label ("Receiving oral (blowjob)") back to a key
+ * is lossy, so the key is the only reliable path. */
 export interface CoveredAct {
+  key: string;
   label: string;
   rating: string;
 }
@@ -1025,7 +1031,11 @@ function parseCoveredActs(q: Question, value: IntakeAnswerValue | undefined): Co
   const out: CoveredAct[] = [];
   for (const [key, point] of Object.entries(map)) {
     if (typeof point !== 'number') continue;
-    out.push({ label: labelByKey.get(key) ?? key, rating: labels[point - min] ?? String(point) });
+    out.push({
+      key,
+      label: labelByKey.get(key) ?? key,
+      rating: labels[point - min] ?? String(point),
+    });
   }
   return out;
 }

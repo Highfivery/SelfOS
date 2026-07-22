@@ -11529,8 +11529,29 @@ test('auto check-ins (63): a completed onboarding seeds an on self stream that g
   if (!key) throw new Error('auto check-ins e2e: master key missing');
   // Onboarding complete → the self stream is eligible AND the cadence hook seeds it on by default (§5.1).
   await seedCompletedIntake(fs, key, 'owner-1');
+  // …and real context to draw on. Since §27.5 there is NO generic filler brief: a slot the gap-finder found
+  // nothing for is SKIPPED rather than sent, so a person the app knows nothing about correctly produces
+  // nothing. This test is about the plan → generate → deliver loop, so give it something to ask about.
+  await savePerson(fs, key, {
+    id: 'owner-1',
+    schemaVersion: 1,
+    displayName: 'Tester',
+    isSubject: true,
+    tags: [],
+    notes:
+      'A nurse on rotating night shifts, trying to protect more downtime and get back to long hikes. ' +
+      'Married eleven years and slowly rebuilding closeness after a hard year.',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
 
-  const app = await launch(userData);
+  // The autonomous launch cadence is disabled so this test observes the MANUAL "Run now" against a known
+  // queue state (63 §13) — otherwise the cadence tops the stream up on mount and the forced run has nothing
+  // left to do. The cadence itself is covered by its own core/planner tests.
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_NO_AUTO_CHECKIN_CADENCE: '1' },
+  });
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Home' }).waitFor();
@@ -11645,7 +11666,13 @@ test('auto check-ins (63): an owner streams check-ins to a partner, including un
     key,
   );
 
-  const app = await launch(userData);
+  // The autonomous launch cadence is disabled so this test observes the MANUAL "Run now" against a known
+  // queue state (63 §13) — otherwise the cadence tops the stream up on mount and the forced run has nothing
+  // left to do. The cadence itself is covered by its own core/planner tests.
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_NO_AUTO_CHECKIN_CADENCE: '1' },
+  });
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Home' }).waitFor();
@@ -11755,6 +11782,219 @@ test('auto check-ins (63): a recurring crisis signal pauses generation entirely'
     await app.close();
     await rm(userData, { recursive: true, force: true });
     await rm(vault, { recursive: true, force: true });
+  }
+});
+
+/** Every captured question-generation prompt (08 §27 `SELFOS_FAKE_PROMPT_DIR`), newest-numbered last. */
+async function readGenerationPrompts(dir: string): Promise<string[]> {
+  const names = (await readdir(dir)).filter((n) => n.startsWith('generation-prompt-')).sort();
+  return Promise.all(names.map((n) => readFile(join(dir, n), 'utf8')));
+}
+
+test('auto check-ins (63 §13 / 08 §27): a worked-through intimacy category is off-limits — the next check-in opens NEW ground (#314)', async () => {
+  test.setTimeout(60_000);
+  const promptDir = await mkdtemp(join(tmpdir(), 'selfos-e2e-intimacy-prompt-'));
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('intimacy coverage e2e: master key missing');
+  const at = (daysAgo: number): string =>
+    new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
+
+  // The owner: an adult with the 18+ ack + substantive profile context (so the gap-finder's thin-context
+  // guard doesn't bail before the topical slots are planned).
+  await savePerson(fs, key, {
+    id: 'owner-1',
+    schemaVersion: 1,
+    displayName: 'Tester',
+    isSubject: true,
+    tags: [],
+    birthday: '1988-05-04',
+    notes:
+      'Works as a nurse on rotating night shifts and is trying to protect more downtime. Married eleven years; ' +
+      'they have been rebuilding closeness after a hard year. Plays guitar badly and loves long hikes.',
+    createdAt: at(400),
+    updatedAt: at(400),
+  });
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/guidance/prefs.enc',
+    { schemaVersion: 1, adultAcknowledged: true },
+    key,
+  );
+
+  // Onboarding complete, with the 18+ intimacy specifics opted into and the activity matrix rated: an ORAL
+  // act (the ground about to be worked through) and a SENSUAL one (which must stay deepenable).
+  // Every catalog section + the catalog snapshot are seeded so `ensureIntakeSession` has nothing to reconcile
+  // on boot — a reconcile would restamp `updatedAt` to NOW, and that is the §27.4 `profile-edit` signal, which
+  // would legitimately re-open the saturated ground and quietly defeat what this test asserts.
+  const snapshot = intakeCatalogSnapshot();
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/intake/session.enc',
+    {
+      id: 'intake-owner-1',
+      schemaVersion: 1,
+      personId: 'owner-1',
+      status: 'complete',
+      sections: snapshot.sectionIds.map((id) => ({
+        id,
+        status: id === 'intimacy' ? 'complete' : 'notStarted',
+        restricted: id === 'intimacy',
+        messages: [],
+        answers:
+          id === 'intimacy'
+            ? { getSpecific: true, activities: { 'oral-receiving': 5, 'sensual-massage': 4 } }
+            : {},
+      })),
+      knownSectionIds: snapshot.sectionIds,
+      knownQuestionKeys: snapshot.questionKeys,
+      startedAt: at(300),
+      // Older than the intimacy asks below, so the §27.4 `profile-edit` signal can't re-open the ground.
+      updatedAt: at(300),
+      completedAt: at(300),
+    },
+    key,
+  );
+
+  // Three prior INTIMACY questionnaires to this person, all unmistakably about ORAL → `askedCount` reaches
+  // SATURATION_ASKS (3) for that category, so it is worked through. They carry no auto-checkin provenance,
+  // so they belong to no stream and can't be mistaken for a pending intimacy send.
+  for (const n of [1, 2, 3]) {
+    const q = await saveQuestionnaire(
+      fs,
+      key,
+      {
+        title: `Going deeper on oral (${n})`,
+        type: 'intimacy',
+        sensitivity: 'unfiltered',
+        recipient: { kind: 'person', personId: 'owner-1' },
+        questions: [
+          {
+            id: `q${n}a`,
+            type: 'longText',
+            prompt: 'What makes receiving oral land best for you?',
+            required: false,
+          },
+          {
+            id: `q${n}b`,
+            type: 'shortText',
+            prompt: 'Anything about giving a blowjob you want more of?',
+            required: false,
+          },
+        ],
+      },
+      'owner-1',
+    );
+    await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'owner-1',
+      recipient: { kind: 'person', personId: 'owner-1' },
+      channel: 'inApp',
+      privacy: 'standard',
+      senderVisibleToRecipient: true,
+    });
+  }
+
+  // One older approved insight: gap-finder context + the §27.4 `new-material` signal, deliberately dated
+  // BEFORE the intimacy asks so it cannot re-open the saturated category either.
+  await saveInsight(fs, key, {
+    id: 'seed-portrait',
+    schemaVersion: 1,
+    source: 'intake',
+    subjectPersonId: 'owner-1',
+    summary: 'Steady, private, and slowly learning to ask for what they want.',
+    facts: [
+      { id: 'f1', text: 'Finds it hard to ask directly for what they need.', shareable: false },
+    ],
+    confidence: 'medium',
+    categories: ['Emotions & patterns'],
+    approved: true,
+    provenance: { intakeSection: 'your-story', at: at(120) },
+    createdAt: at(120),
+    updatedAt: at(120),
+  });
+
+  // A self stream with intimacy on (write-once, so the default self-seed is skipped). No exploration focus —
+  // a focus naming the worked ground would legitimately re-open it (§27.4).
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/questionnaires/autoCheckins.enc',
+    {
+      schemaVersion: 1,
+      enabled: true,
+      targets: [
+        {
+          id: 't-self',
+          target: { kind: 'self' },
+          enabled: true,
+          includeIntimacy: true,
+          explorationFocus: '',
+          cadence: 'daily',
+        },
+      ],
+    },
+    key,
+  );
+
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: {
+      ...e2eEnv(),
+      SELFOS_FAKE_PROMPT_DIR: promptDir,
+      // Observe the MANUAL run against a known queue (see the hook's note in `coreBridge.autoCheckinsRun`).
+      SELFOS_FAKE_NO_AUTO_CHECKIN_CADENCE: '1',
+    },
+  });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Home' }).waitFor();
+    await w.getByRole('link', { name: /Questionnaires/ }).click();
+    await w.getByRole('tab', { name: /Auto check-ins/ }).click();
+    await expect(w.getByRole('heading', { name: 'Auto check-ins' })).toBeVisible();
+    await w.getByRole('button', { name: /Run now/ }).click();
+    await expect(w.getByText(/Added \d+ new check-in/)).toBeVisible({ timeout: 30_000 });
+
+    // The intimacy generation prompt is the ONLY place the fix is observable end-to-end: #314 is a change to
+    // what generation is TOLD, and the offline model can't be asked to prove it obeyed. `GROUND TO OPEN THIS
+    // TIME` is emitted only when coverage reaches `explicitFraming`, so it identifies the intimacy pass.
+    const findIntimacyPrompt = async (): Promise<string> =>
+      (await readGenerationPrompts(promptDir)).find((p) =>
+        p.includes('GROUND TO OPEN THIS TIME'),
+      ) ?? '';
+    await expect.poll(findIntimacyPrompt, { timeout: 30_000 }).not.toBe('');
+    const intimacyPrompt = await findIntimacyPrompt();
+
+    // 1. The worked-through ground is named OFF-LIMITS — the direct fix for "it keeps asking about the same
+    //    thing in new words", which de-dup structurally cannot catch.
+    expect(intimacyPrompt).toContain('ALREADY EXPLORED THOROUGHLY — do NOT return to these:');
+    expect(/ALREADY EXPLORED THOROUGHLY[^\n]*\bOral\b/.test(intimacyPrompt)).toBe(true);
+
+    // 2. …and the set is steered at ground NOT yet worked. The lead list must not re-offer Oral.
+    const groundLine = /^GROUND TO OPEN THIS TIME[^\n]*$/m.exec(intimacyPrompt)?.[0] ?? '';
+    expect(groundLine).not.toBe('');
+    expect(/\boral\b/i.test(groundLine)).toBe(false);
+
+    // 3. The "go DEEPER on the acts they rated" list — the actual #314 mechanism — is now BOUNDED to acts
+    //    whose category isn't worked through: the rated sensual act survives, the rated oral one is gone.
+    //    (Scoped to that line: the rated oral act legitimately still appears in the avoid-only known-data
+    //    reference, which is what stops it being re-asked as a fresh rating.)
+    const deeperLine =
+      /^They have ALREADY RATED the acts below[^\n]*$/m.exec(intimacyPrompt)?.[0] ?? '';
+    expect(deeperLine).not.toBe('');
+    expect(deeperLine).toContain('Sensual massage');
+    expect(/\boral\b/i.test(deeperLine)).toBe(false);
+
+    // ~360px: the Auto check-ins surface still has no horizontal scrollbar / inner overflow (§7/§12).
+    await w.setViewportSize({ width: 360, height: 800 });
+    await expectNoInnerOverflow(w);
+    await w.setViewportSize({ width: 1280, height: 900 });
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+    await rm(promptDir, { recursive: true, force: true });
   }
 });
 

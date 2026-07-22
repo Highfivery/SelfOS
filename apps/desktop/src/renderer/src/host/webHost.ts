@@ -1,10 +1,6 @@
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
-import type {
-  BootState,
-  StoryDraftProgress,
-  ImageGenProgress,
-  TogetherChunk,
-} from '@shared/schemas';
+import type { BootState, StoryDraftProgress, ImageGenProgress } from '@shared/schemas';
+import type { StreamSurface } from '@shared/channels';
 import type { ClaudeClient, FileSystem, ImageClient, SecretStore } from '@selfos/core/host';
 import { loadMasterKey } from '@selfos/core/crypto';
 import { uuid } from '@selfos/core/id';
@@ -89,11 +85,15 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     return fs;
   };
 
-  const chatListeners = new Set<(delta: string) => void>();
-  const dreamListeners = new Set<(delta: string) => void>();
-  const intakeListeners = new Set<(delta: string) => void>();
-  const togetherListeners = new Set<(chunk: TogetherChunk) => void>();
-  const memoryListeners = new Set<(delta: string) => void>();
+  // One listener set per streamed surface (64 §15.3) — a chunk reaches only its own surface's listeners.
+  const streamListeners = new Map<StreamSurface, Set<(chunk: never) => void>>();
+  const listenersFor = (surface: StreamSurface): Set<(chunk: never) => void> => {
+    const existing = streamListeners.get(surface);
+    if (existing) return existing;
+    const created = new Set<(chunk: never) => void>();
+    streamListeners.set(surface, created);
+    return created;
+  };
   const storyProgressListeners = new Set<(progress: StoryDraftProgress) => void>();
   const imageProgressListeners = new Set<(progress: ImageGenProgress) => void>();
 
@@ -162,20 +162,10 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     // controls on either (02-app-shell §13.2).
     platform: Capacitor.isNativePlatform() ? 'ios' : 'web',
     relay: parts.relay,
-    emitChatChunk: (chunk) => {
-      for (const listener of chatListeners) listener(chunk);
-    },
-    emitDreamChunk: (chunk) => {
-      for (const listener of dreamListeners) listener(chunk);
-    },
-    emitIntakeChunk: (chunk) => {
-      for (const listener of intakeListeners) listener(chunk);
-    },
-    emitTogetherChunk: (chunk) => {
-      for (const listener of togetherListeners) listener(chunk);
-    },
-    emitMemoryChunk: (chunk) => {
-      for (const listener of memoryListeners) listener(chunk);
+    emitStreamChunk: (surface, chunk) => {
+      // The map key is the ONLY thing correlating a listener's parameter type with this chunk, and
+      // `listenersFor` is its sole accessor — so the cast is contained to this one line.
+      for (const listener of listenersFor(surface)) (listener as (c: unknown) => void)(chunk);
     },
     emitStoryProgress: (progress) => {
       for (const listener of storyProgressListeners) listener(progress);
@@ -227,25 +217,12 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     // PDF rendering uses Electron's offscreen printToPDF — not available on the web/iOS host (§3.9).
     printToPdf: () => Promise.resolve(null),
     onVaultChanged: parts.onVaultChanged,
-    onChatChunk: (listener) => {
-      chatListeners.add(listener);
-      return () => chatListeners.delete(listener);
-    },
-    onDreamChunk: (listener) => {
-      dreamListeners.add(listener);
-      return () => dreamListeners.delete(listener);
-    },
-    onIntakeChunk: (listener) => {
-      intakeListeners.add(listener);
-      return () => intakeListeners.delete(listener);
-    },
-    onTogetherChunk: (listener) => {
-      togetherListeners.add(listener);
-      return () => togetherListeners.delete(listener);
-    },
-    onMemoryChunk: (listener) => {
-      memoryListeners.add(listener);
-      return () => memoryListeners.delete(listener);
+    onStreamChunk: (surface, listener) => {
+      const set = listenersFor(surface);
+      set.add(listener);
+      return () => {
+        set.delete(listener);
+      };
     },
     onStoryProgress: (listener) => {
       storyProgressListeners.add(listener);

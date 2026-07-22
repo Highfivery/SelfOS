@@ -180,7 +180,7 @@ export const useDreamAnalysisStore = create<DreamAnalysisState>((set, get) => ({
   },
   regenerateFrom: async (index) => {
     // "Retry from here" — truncate + re-generate in ONE bridge call, so the thread never flashes a
-    // half-rewound state. Streams back through the same dreams:chunk sink.
+    // half-rewound state. Streams back through the same `dream` stream surface.
     const { dreamId, messages, sending } = get();
     const target = messages[index];
     if (!dreamId || sending || !target) return;

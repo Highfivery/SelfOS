@@ -345,7 +345,7 @@ export const useConversationStore = create<ConversationState>((set, get) => ({
   },
   regenerateFrom: async (index) => {
     // "Retry from here" — truncate + re-generate in ONE bridge call, so the thread never flashes a
-    // half-rewound state. Streams back through the same chat:chunk sink as a normal turn.
+    // half-rewound state. Streams back through the same `chat` stream surface as a normal turn.
     const state = get();
     const target = state.messages[index];
     if (state.sending || !state.activeId || !target) return;

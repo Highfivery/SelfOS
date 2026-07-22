@@ -29,6 +29,8 @@ import {
   type SelfosBridge,
   type SetActiveResult,
   type SettingsValues,
+  type StreamChunkMap,
+  type StreamSurface,
   type UsageSummary,
 } from './channels';
 import {
@@ -148,7 +150,6 @@ import {
   type TogetherSessionSummary,
   type TogetherSessionView,
   type TogetherParticipant,
-  type TogetherChunk,
   type TogetherCreateResult,
   type TogetherTurnResult,
   TogetherSendMessageInputSchema,
@@ -764,17 +765,12 @@ export interface BridgeHost {
   };
 
   // --- Streaming sink ---
-  /** Deliver a chat reply chunk to the renderer (Electron → IPC event; iOS → in-webview listener). */
-  emitChatChunk(chunk: string): void;
-  /** Deliver a dream-analysis reply chunk to the renderer (separate channel from chat). */
-  emitDreamChunk(chunk: string): void;
-  /** Deliver an intake interview reply chunk to the renderer (separate channel from chat/dreams). */
-  emitIntakeChunk(chunk: string): void;
-  /** Deliver a Together couples-turn reply chunk to the renderer (separate sink from chat, 58 §5.4). The chunk
-   *  carries its `sessionId` so the renderer can drop deltas for a session the viewer navigated away from. */
-  emitTogetherChunk(chunk: TogetherChunk): void;
-  /** Deliver a "Share a memory" biographer-chat reply chunk to the renderer (separate sink, 64 §14). */
-  emitMemoryChunk(chunk: string): void;
+  /**
+   * Deliver a streamed reply chunk for one surface to the renderer (Electron → IPC event; iOS → in-webview
+   * listener). ONE sink for every streamed surface (64 §15.3) — the surface key selects the payload type, so
+   * a new streamed surface needs a line in `StreamChunkMap` and nothing here.
+   */
+  emitStreamChunk<K extends StreamSurface>(surface: K, chunk: StreamChunkMap[K]): void;
   /** Deliver a Your Story create-and-draft progress update to the renderer (64 §3.2, its own channel). */
   emitStoryProgress(progress: StoryDraftProgress): void;
   /** Deliver a single-image / vision generation phase update to the renderer (its own channel), so every
@@ -810,16 +806,12 @@ export interface BridgeHost {
   printToPdf(html: string): Promise<Uint8Array | null>;
   /** Subscribe to external vault changes (the host's watcher); returns an unsubscribe. */
   onVaultChanged(listener: () => void): () => void;
-  /** Subscribe to streamed chat chunks; the renderer-facing counterpart to `emitChatChunk`. */
-  onChatChunk(listener: (delta: string) => void): () => void;
-  /** Subscribe to streamed dream-analysis chunks; the counterpart to `emitDreamChunk`. */
-  onDreamChunk(listener: (delta: string) => void): () => void;
-  /** Subscribe to streamed intake interview chunks; the counterpart to `emitIntakeChunk`. */
-  onIntakeChunk(listener: (delta: string) => void): () => void;
-  /** Subscribe to streamed Together couples-turn chunks; the counterpart to `emitTogetherChunk`. */
-  onTogetherChunk(listener: (chunk: TogetherChunk) => void): () => void;
-  /** Subscribe to streamed "Share a memory" chunks; the counterpart to `emitMemoryChunk`. */
-  onMemoryChunk(listener: (delta: string) => void): () => void;
+  /** Subscribe to one surface's streamed chunks; the counterpart to `emitStreamChunk`. A listener hears
+   *  ONLY its own surface, so two live streams can never cross. */
+  onStreamChunk<K extends StreamSurface>(
+    surface: K,
+    listener: (chunk: StreamChunkMap[K]) => void,
+  ): () => void;
   /** Subscribe to Your Story draft-progress updates; the counterpart to `emitStoryProgress`. */
   onStoryProgress(listener: (progress: StoryDraftProgress) => void): () => void;
   /** Subscribe to image/vision generation phase updates; the counterpart to `emitImageProgress`. */
@@ -1684,11 +1676,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     revealVault: () => host.revealVault(),
     onVaultChanged: (listener) => host.onVaultChanged(listener),
-    onChatChunk: (listener) => host.onChatChunk(listener),
-    onDreamChunk: (listener) => host.onDreamChunk(listener),
-    onIntakeChunk: (listener) => host.onIntakeChunk(listener),
-    onTogetherChunk: (listener) => host.onTogetherChunk(listener),
-    onMemoryChunk: (listener) => host.onMemoryChunk(listener),
+    // The renderer-facing API is unchanged (§15.3) — five named subscriptions, now thin delegations over
+    // the one surface-keyed channel, so no store/component/test had to move for the collapse.
+    onChatChunk: (listener) => host.onStreamChunk('chat', listener),
+    onDreamChunk: (listener) => host.onStreamChunk('dream', listener),
+    onIntakeChunk: (listener) => host.onStreamChunk('intake', listener),
+    onTogetherChunk: (listener) => host.onStreamChunk('together', listener),
+    onMemoryChunk: (listener) => host.onStreamChunk('memory', listener),
     onStoryProgress: (listener) => host.onStoryProgress(listener),
     onImageProgress: (listener) => host.onImageProgress(listener),
     platform: host.platform,
@@ -2412,7 +2406,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         conversationId,
         userText,
         ...(attachments && attachments.length > 0 ? { attachments } : {}),
-        onDelta: (text) => host.emitChatChunk(text),
+        onDelta: (text) => host.emitStreamChunk('chat', text),
         ...(depthAsk ? { depthAsk } : {}),
         ...(goalRaise ? { goalRaise } : {}),
         now,
@@ -2421,7 +2415,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     chatRetry: async (conversationId): Promise<ChatTurnResult> => {
       // 05 §4.1 — re-generate a reply for a session whose last message is an unanswered user message (an
       // empty/failed turn, or a re-opened session that ended on the user). Never adds a new user message, so
-      // it can't duplicate; the cached topic keeps the context relevant. Streams via the same chat:chunk sink.
+      // it can't duplicate; the cached topic keeps the context relevant. Streams via the same `chat` stream surface.
       // The optional in-session nudges (depth-ask 29 §3.5, goal-raise 40 §3.1) are intentionally omitted on a
       // recovery turn — a retry should just deliver the missing reply, not surface a fresh proactive invitation.
       const cid = z.string().min(1).parse(conversationId);
@@ -2439,7 +2433,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         model: await host.activeModel(),
         personId,
         conversationId: cid,
-        onDelta: (text) => host.emitChatChunk(text),
+        onDelta: (text) => host.emitStreamChunk('chat', text),
         now: new Date(),
       });
     },
@@ -2457,7 +2451,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     chatRegenerateFrom: async (input): Promise<ChatTurnResult> => {
       // 66 §3.3 — "retry from here": truncate + re-generate in ONE call, so the renderer never observes a
-      // half-rewound transcript. Streams on the existing chat:chunk sink.
+      // half-rewound transcript. Streams on the existing `chat` stream surface.
       const { conversationId, index, expect } = RewindConversationSchema.parse(input);
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
@@ -2474,7 +2468,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           model: await host.activeModel(),
           personId,
           conversationId,
-          onDelta: (text) => host.emitChatChunk(text),
+          onDelta: (text) => host.emitStreamChunk('chat', text),
           now: new Date(),
         },
         index,
@@ -2721,7 +2715,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(privateAside ? { privateAside: true } : {}),
         ...(attachments && attachments.length > 0 ? { attachments } : {}),
         ...(allAdultAcked ? { allAdultAcked: true } : {}),
-        onDelta: (delta) => host.emitTogetherChunk({ sessionId, delta }),
+        onDelta: (delta) => host.emitStreamChunk('together', { sessionId, delta }),
         now: new Date(),
       });
       return togetherTurnResult(c.fs, c.key, session, c.personId, outcome);
@@ -2808,7 +2802,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         session,
         authorPersonId: c.personId,
         ...(allAdultAcked ? { allAdultAcked: true } : {}),
-        onDelta: (delta) => host.emitTogetherChunk({ sessionId, delta }),
+        onDelta: (delta) => host.emitStreamChunk('together', { sessionId, delta }),
         now: new Date(),
       });
       return togetherTurnResult(c.fs, c.key, session, c.personId, outcome);
@@ -5084,7 +5078,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personName: person?.displayName ?? '',
         ...(memoryId ? { memoryId } : {}),
         ...(seedFocus ? { seedFocus } : {}),
-        onDelta: (text) => host.emitMemoryChunk(text),
+        onDelta: (text) => host.emitStreamChunk('memory', text),
         now: new Date(),
       });
       return { memory: res.memory, conversation: res.conversation };
@@ -5109,7 +5103,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         memoryId,
         userText: text,
         ...(attachments ? { attachments } : {}),
-        onDelta: (text2) => host.emitMemoryChunk(text2),
+        onDelta: (text2) => host.emitStreamChunk('memory', text2),
         now: new Date(),
       });
     },
@@ -5131,7 +5125,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personId,
         personName: person?.displayName ?? '',
         memoryId,
-        onDelta: (text) => host.emitMemoryChunk(text),
+        onDelta: (text) => host.emitStreamChunk('memory', text),
         now: new Date(),
       });
     },
@@ -5163,7 +5157,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           personId,
           personName: person?.displayName ?? '',
           memoryId,
-          onDelta: (text) => host.emitMemoryChunk(text),
+          onDelta: (text) => host.emitStreamChunk('memory', text),
           now: new Date(),
         },
         index,
@@ -7346,7 +7340,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         model: await host.activeModel(),
         personId,
         dreamId,
-        onDelta: (text) => host.emitDreamChunk(text),
+        onDelta: (text) => host.emitStreamChunk('dream', text),
         now: new Date(),
       });
     },
@@ -7369,7 +7363,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personId,
         dreamId,
         userText,
-        onDelta: (text) => host.emitDreamChunk(text),
+        onDelta: (text) => host.emitStreamChunk('dream', text),
         now: new Date(),
       });
     },
@@ -7389,7 +7383,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         model: await host.activeModel(),
         personId,
         dreamId,
-        onDelta: (text) => host.emitDreamChunk(text),
+        onDelta: (text) => host.emitStreamChunk('dream', text),
         now: new Date(),
       });
     },
@@ -7419,7 +7413,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           model: await host.activeModel(),
           personId,
           dreamId,
-          onDelta: (text) => host.emitDreamChunk(text),
+          onDelta: (text) => host.emitStreamChunk('dream', text),
           now: new Date(),
         },
         index,
@@ -7738,7 +7732,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personId,
         sectionId,
         userText,
-        onDelta: (text) => host.emitIntakeChunk(text),
+        onDelta: (text) => host.emitStreamChunk('intake', text),
         now: new Date(),
       });
     },
@@ -7758,7 +7752,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         model: await host.activeModel(),
         personId,
         sectionId,
-        onDelta: (text) => host.emitIntakeChunk(text),
+        onDelta: (text) => host.emitStreamChunk('intake', text),
         now: new Date(),
       });
     },
@@ -7788,7 +7782,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           model: await host.activeModel(),
           personId,
           sectionId,
-          onDelta: (text) => host.emitIntakeChunk(text),
+          onDelta: (text) => host.emitStreamChunk('intake', text),
           now: new Date(),
         },
         index,

@@ -17,6 +17,7 @@ import {
 } from '../schemas';
 import { writeEncryptedJson } from '../vault';
 import { saveConversation } from '../conversations/conversationService';
+import { createAssignment, saveQuestionnaire, saveResponse } from '../questionnaires';
 import { buildStoryCorpus, corpusText, getStoryCorpusStats } from './storyCorpus';
 import { addPhotoAnswer, addUploadedPhoto, setStoryImageAnalysis } from './storyService';
 
@@ -452,18 +453,143 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
     await saveDream(fs, key, dream('d-1', 'me', { dreamDate: '2020-01-01T00:00:00.000Z' }));
 
     const stats = await getStoryCorpusStats(fs, key, 'me');
-    expect(stats.conversations).toBe(1);
     expect(stats.reflections).toBe(2); // the two approved, not the draft
     expect(stats.dreams).toBe(1);
+    // A raw transcript never feeds generation (only its derived insight does), so the session is NOT counted
+    // as material (§15.2) — but its DATE still widens the span, because that is real chronology.
+    expect(stats).not.toHaveProperty('conversations');
     expect(stats.yearFrom).toBe(2019); // the session
     expect(stats.yearTo).toBe(2026); // the latest insight
+  });
+
+  it('getStoryCorpusStats counts only material that FEEDS: a muted dream and an unsaved memory do not (§15.2)', async () => {
+    const fs = fresh();
+    await savePerson(fs, key, person('me', 'Ben'));
+    await saveDream(fs, key, dream('d-live', 'me', { dreamDate: '2020-01-01T00:00:00.000Z' }));
+    await saveDream(
+      fs,
+      key,
+      dream('d-muted', 'me', { dreamDate: '2020-02-01T00:00:00.000Z', informsContext: false }),
+    );
+
+    const stats = await getStoryCorpusStats(fs, key, 'me');
+    expect(stats.dreams).toBe(1); // the muted one contributes nothing, so it isn't promised
+    expect(stats.memories).toBe(0);
+    expect(stats.answers).toBe(0);
+  });
+
+  // --- §15.2: the answers corpus splits per questionnaire ------------------------------------------
+
+  /** Seed two answered check-ins for `personId`, returning their assignment ids. */
+  async function seedAnsweredCheckIns(
+    fs: ReturnType<typeof memFileSystem>,
+    personId: string,
+  ): Promise<string[]> {
+    const ids: string[] = [];
+    for (const [i, spec] of [
+      { title: 'Money check-in', prompt: 'How are you feeling about money?', answer: 'Tight.' },
+      { title: 'Rest check-in', prompt: 'How did you rest?', answer: 'Badly.' },
+    ].entries()) {
+      const def = await saveQuestionnaire(fs, key, {
+        title: spec.title,
+        type: 'general',
+        sensitivity: 'standard',
+        recipient: { kind: 'person', personId },
+        questions: [{ id: 'q1', type: 'shortText', prompt: spec.prompt, required: true }],
+      });
+      const assignment = await createAssignment(fs, key, {
+        questionnaireId: def.id,
+        senderPersonId: personId,
+        recipient: { kind: 'person', personId },
+        channel: 'inApp',
+        privacy: 'private',
+        senderVisibleToRecipient: true,
+      });
+      await saveResponse(fs, key, {
+        id: `r${i}`,
+        schemaVersion: 1,
+        assignmentId: assignment.id,
+        answers: [{ questionId: 'q1', value: spec.answer }],
+        submittedAt: '2026-06-01T00:00:00.000Z',
+      });
+      ids.push(assignment.id);
+    }
+    return ids;
+  }
+
+  it('emits ONE response item per answered questionnaire, cited by its assignment id (§15.2)', async () => {
+    const fs = fresh();
+    await savePerson(fs, key, person('me', 'Ben'));
+    const ids = await seedAnsweredCheckIns(fs, 'me');
+
+    const corpus = await buildStoryCorpus(fs, key, 'me', 'book-1');
+    const responses = corpus.items.filter((i) => i.sourceRef.kind === 'response');
+    expect(responses).toHaveLength(2);
+    // Cited by the SEND, not lumped under the person — so a paragraph can name the check-in it wove in.
+    expect(responses.map((r) => r.sourceRef.id).sort()).toEqual([...ids].sort());
+    expect(responses.every((r) => r.sourceRef.id !== 'me')).toBe(true);
+    // Dated + labelled from the frozen snapshot title, so it lands in chronology and reads honestly.
+    expect(responses.every((r) => r.date === '2026-06-01T00:00:00.000Z')).toBe(true);
+    expect(responses.map((r) => r.label).sort()).toEqual([
+      'From "Money check-in"',
+      'From "Rest check-in"',
+    ]);
+    const money = responses.find((r) => r.label === 'From "Money check-in"');
+    expect(money?.text).toContain('Tight.');
+    expect(money?.text).not.toContain('Badly.');
+  });
+
+  it('a source exclusion on ONE questionnaire drops only that one (§15.2/§3.3)', async () => {
+    const fs = fresh();
+    await savePerson(fs, key, person('me', 'Ben'));
+    const [moneyId] = await seedAnsweredCheckIns(fs, 'me');
+
+    const corpus = await buildStoryCorpus(fs, key, 'me', 'book-1', [
+      { id: 'e-money', kind: 'source', value: moneyId!, createdAt: 'now' },
+    ]);
+    const text = corpusText(corpus);
+    // Before §15.2 this was impossible: the single lumped block meant excluding one check-in took the
+    // person's ENTIRE answer history with it.
+    expect(text).not.toContain('Tight.');
+    expect(text).toContain('Badly.');
+  });
+
+  it('honours a PRE-split exclusion of the whole answer history (keyed by personId) (§15.2)', async () => {
+    const fs = fresh();
+    await savePerson(fs, key, person('me', 'Ben'));
+    await seedAnsweredCheckIns(fs, 'me');
+
+    // Before the split the answers were ONE item keyed by the person, so this is what an exclusion made
+    // then looks like on disk. It must still exclude everything — an exclusion never silently lapses (§3.3).
+    const corpus = await buildStoryCorpus(fs, key, 'me', 'book-1', [
+      { id: 'e-legacy', kind: 'source', value: 'me', createdAt: 'now' },
+    ]);
+    const text = corpusText(corpus);
+    expect(text).not.toContain('Tight.');
+    expect(text).not.toContain('Badly.');
+    expect(corpus.items.some((i) => i.sourceRef.kind === 'response')).toBe(false);
+  });
+
+  it('getStoryCorpusStats mirrors the corpus drops: a wholly-flagged insight is not promised (§15.2)', async () => {
+    const fs = fresh();
+    await savePerson(fs, key, person('me', 'Ben'));
+    await saveInsight(fs, key, insight('i-live', 'me', { facts: [fact('Still true')] }));
+    await saveInsight(
+      fs,
+      key,
+      insight('i-dead', 'me', { facts: [fact('Wrong about me', { flaggedInaccurate: true })] }),
+    );
+
+    // The wholly-flagged insight contributes NOTHING to the corpus, so counting it would overstate.
+    const stats = await getStoryCorpusStats(fs, key, 'me');
+    expect(stats.reflections).toBe(1);
   });
 
   it('getStoryCorpusStats returns zeros + no year span for an empty vault', async () => {
     const fs = fresh();
     await savePerson(fs, key, person('me', 'Ben'));
     const stats = await getStoryCorpusStats(fs, key, 'me');
-    expect(stats).toEqual({ conversations: 0, reflections: 0, dreams: 0 });
+    expect(stats).toEqual({ reflections: 0, dreams: 0, memories: 0, answers: 0 });
   });
 
   it("surfaces the subject's own profile and name", async () => {

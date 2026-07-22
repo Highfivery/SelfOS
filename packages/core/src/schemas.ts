@@ -4806,14 +4806,21 @@ export interface StoryPartCoverage {
 }
 
 /** `story:corpusStats` — deterministic, no-AI counts for the "before you begin" invitation (§13.6.10): how much
- *  material the biographer will draw from. Crypto-free (a plain projection); never any content, just counts. */
+ *  material the biographer will draw from. Crypto-free (a plain projection); never any content, just counts.
+ *
+ *  Every count is material that ACTUALLY FEEDS generation (§15.2): raw transcripts never reach the
+ *  Biographer — sessions arrive only as their derived reflections — so a bare conversation count promised
+ *  a book the corpus could not keep, and is deliberately absent. */
 export interface StoryCorpusStats {
-  /** Coaching sessions on record. */
-  conversations: number;
-  /** Distilled reflections (approved insights from sessions/dreams/tests/questionnaires/Together/onboarding). */
+  /** Distilled reflections (approved, context-feeding insights — sessions/dreams/tests/questionnaires/
+   *  Together/onboarding/memories all arrive here). */
   reflections: number;
-  /** Dreams recorded. */
+  /** Dreams that inform context (a muted dream feeds nothing, so it isn't counted). */
   dreams: number;
+  /** Memories the person told their biographer and SAVED (a draft feeds nothing). */
+  memories: number;
+  /** Questionnaires / check-ins they answered — the verbatim answers beneath the distilled insights. */
+  answers: number;
   /** The span of years the material touches, when derivable (earliest → latest dated item). */
   yearFrom?: number;
   yearTo?: number;

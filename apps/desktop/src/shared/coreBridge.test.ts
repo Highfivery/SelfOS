@@ -7352,11 +7352,13 @@ describe('createCoreBridge — Together (58) foundation', () => {
 
   it('story: corpusStats is a gated, person-scoped no-AI read (§13.6.10)', async () => {
     const { bridge } = await freshOwner();
-    // An owner with no material yet gets a valid zeroed shape.
+    // An owner with no material yet gets a valid zeroed shape. No `conversations` count: a raw transcript
+    // never feeds generation, so promising one would overstate what the book can draw on (§15.2).
     expect(await bridge.storyCorpusStats()).toEqual({
-      conversations: 0,
       reflections: 0,
       dreams: 0,
+      memories: 0,
+      answers: 0,
     });
     // Saving a dream is reflected in the counts.
     await bridge.dreamSave({
@@ -7374,9 +7376,10 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
     expect(await bridge.storyCorpusStats()).toEqual({
-      conversations: 0,
       reflections: 0,
       dreams: 0,
+      memories: 0,
+      answers: 0,
     });
   });
 

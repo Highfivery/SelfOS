@@ -1497,16 +1497,28 @@ already does — `buildMemorySystem` falls back to the warm/third default config
 Sessions reach the biographer only through their derived, approved insights. A person with 40 chatty
 sessions and no analysis sees "40 sessions" on a promise the book cannot keep.
 
-`getStoryCorpusStats` is re-derived from **what actually feeds**: it counts the corpus sources it really
-emits — reflections (approved, feedable insights), dreams that inform context, saved memories, answered
-questionnaires/check-ins, answered photos, goals + challenges — and drops the bare conversation count. The
-chips read as material, not activity. The year span keeps its existing dated-everything derivation (a
-conversation's date is still legitimate chronology even when its transcript isn't source material).
+`getStoryCorpusStats` is re-derived from **what actually feeds**, mirroring every drop `buildStoryCorpus`
+itself makes: **reflections** (approved insights that pass `feedableInsights` — and, mirrored explicitly
+here, never a wholly-flagged one, whose material the corpus discards), **dreams** that inform context,
+**saved** memories with a written narrative, and **answered** questionnaires (a wholly-declined response
+feeds nothing, so it doesn't count). The bare conversation count is gone.
+
+Deliberately NOT counted, though they do feed: the **onboarding intake** (its portrait already rides in
+under `reflections`), **goals**, **challenges**, and **photo answers** (book-scoped, while the invitation is
+pre-book). The chip row is a human read of the material, not an audit. The year span keeps its existing
+dated-everything derivation, conversations included: a session's **date** is real chronology for the life
+even though its transcript is never source material.
+
+Cost, honestly: this is no longer free — it decrypts one response per questionnaire the person was sent, so
+a long auto-check-in history (spec 63) makes it grow. `countAnsweredQuestionnaires` keeps it as cheap as an
+exact count allows by skipping the frozen-snapshot decrypt the corpus itself needs.
 
 **(b) The response corpus item is one lumped block.** `buildStoryCorpus` emits every answer the person ever
 gave as a SINGLE item with `sourceRef {kind:'response', id: personId}`, so a paragraph woven from one
-answer to one check-in cites "all your answers, ever" — the provenance popover can't name the questionnaire,
-`storyDiff`/freshness can't tell which answer changed, and a `source` exclusion can only drop the lot.
+answer to one check-in cites "all your answers, ever" — freshness can't tell which answers changed, the item
+carries no date so it never lands in chronology, and a `source` exclusion can only drop the lot. (The
+provenance popover still reads the generic "a check-in answer": `StorySourceRef` carries only `{kind,id,at}`,
+so naming the questionnaire in the UI is a follow-on, not part of this slice.)
 
 A new `gatherRecipientPriorAnswersByAssignment` (the per-assignment sibling of the existing
 `gatherRecipientPriorAnswers`, sharing its per-question decline filter so a skip is still never fed as
@@ -1515,6 +1527,13 @@ questionnaire** — `sourceRef {kind:'response', id: assignmentId, at: submitted
 dated so it lands in chronology. The existing `response` source kind is unchanged; only its `id` grows more
 precise, so a per-questionnaire `source` exclusion now works and stale provenance degrades exactly the way
 every other missing source already does.
+
+Two migration consequences, both handled deliberately. **An exclusion must never silently lapse** (§3.3): a
+person who excluded the old lumped block has `{kind:'source', value: <personId>}` on disk, which after the
+re-key would match nothing and quietly re-admit every answer they said never to write about — so a
+`personId` source exclusion is honoured as "exclude every answer", with a regression test. And a chapter
+citing the old ref **one-time stales** (its freshness signature drifts, as it does for any vanished source);
+with `autoRefresh` on that converts into one metered rewrite.
 
 ### 15.3 One generic streaming channel (#289 — refactor, behavior-preserving)
 

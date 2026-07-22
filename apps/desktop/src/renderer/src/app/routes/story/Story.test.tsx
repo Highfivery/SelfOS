@@ -268,9 +268,10 @@ describe('Story (64)', () => {
       storyList: () => Promise.resolve([]),
       storyCorpusStats: () =>
         Promise.resolve({
-          conversations: 3,
           reflections: 5,
           dreams: 2,
+          memories: 1,
+          answers: 3,
           yearFrom: 2019,
           yearTo: 2026,
         }),
@@ -279,10 +280,16 @@ describe('Story (64)', () => {
     expect(await screen.findByRole('button', { name: 'Begin your book' })).toBeInTheDocument();
     expect(screen.getByText('It reads')).toBeInTheDocument();
     expect(screen.getByText('It keeps writing')).toBeInTheDocument();
-    // The "Drawn from" chips reflect the deterministic corpus counts + the year span.
-    expect(await screen.findByText('3 sessions')).toBeInTheDocument();
-    expect(screen.getByText('5 reflections')).toBeInTheDocument();
+    // The "Drawn from" chips reflect the deterministic corpus counts + the year span — and only material
+    // that actually feeds generation, never a raw session count (§15.2).
+    expect(await screen.findByText('5 reflections')).toBeInTheDocument();
+    expect(screen.getByText('1 memory')).toBeInTheDocument();
+    expect(screen.getByText('3 answered questionnaires')).toBeInTheDocument();
     expect(screen.getByText('2019–2026')).toBeInTheDocument();
+    // No session chip: the type no longer carries a conversation count, and a raw transcript never feeds
+    // generation. (Scoped to the chip row — the invitation copy is free to mention sessions in prose.)
+    const chipRow = screen.getByText('5 reflections').parentElement;
+    expect(chipRow?.textContent ?? '').not.toMatch(/session/i);
   });
 
   it('commission: the live preview specimen changes with the chosen style (§13.3)', async () => {

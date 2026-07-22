@@ -10,6 +10,7 @@ import {
   buildDedupReference,
   gatherRecipientHistory,
   gatherRecipientPriorAnswers,
+  gatherRecipientPriorAnswersByAssignment,
   gatherRecipientQuestionnaireTitles,
 } from './recipientHistory';
 
@@ -152,6 +153,109 @@ describe('gatherRecipientPriorAnswers (08 §24.3-A1)', () => {
     expect(answers).toMatch(/A: A quiet hike\./); // the real answer is included
     expect(answers).not.toContain('What drained you?'); // the skipped question is not
     expect(answers).not.toContain('Skipped'); // and no "Skipped" leaks in as an answer
+  });
+});
+
+describe('gatherRecipientPriorAnswersByAssignment (64 §15.2 — per-questionnaire provenance)', () => {
+  /** Two answered questionnaires for one recipient, so the split is observable. */
+  async function seedTwo(
+    fs: ReturnType<typeof memFileSystem>,
+    personId: string,
+  ): Promise<string[]> {
+    const ids: string[] = [];
+    for (const [i, spec] of [
+      { title: 'Money check-in', prompt: 'How are you feeling about money?', answer: 'Tight.' },
+      { title: 'Rest check-in', prompt: 'How did you rest?', answer: 'Badly.' },
+    ].entries()) {
+      const def = await saveQuestionnaire(fs, key, {
+        title: spec.title,
+        type: 'general',
+        sensitivity: 'standard',
+        recipient: { kind: 'person', personId },
+        questions: [{ id: 'q1', type: 'shortText', prompt: spec.prompt, required: true }],
+      });
+      const assignment = await createAssignment(fs, key, {
+        questionnaireId: def.id,
+        senderPersonId: 'owner',
+        recipient: { kind: 'person', personId },
+        channel: 'inApp',
+        privacy: 'private',
+        senderVisibleToRecipient: true,
+      });
+      await saveResponse(fs, key, {
+        id: `r${i}`,
+        schemaVersion: 1,
+        assignmentId: assignment.id,
+        answers: [{ questionId: 'q1', value: spec.answer }],
+        submittedAt: now,
+      });
+      ids.push(assignment.id);
+    }
+    return ids;
+  }
+
+  it('returns ONE block per answered questionnaire, carrying its assignment id, title and submit date', async () => {
+    const fs = memFileSystem();
+    const mara = await upsertPerson(fs, key, { displayName: 'Mara', isSubject: true, tags: [] });
+    const ids = await seedTwo(fs, mara.id);
+
+    const blocks = await gatherRecipientPriorAnswersByAssignment(fs, key, mara.id);
+    expect(blocks).toHaveLength(2);
+    expect(blocks.map((b) => b.assignmentId).sort()).toEqual([...ids].sort());
+    expect(blocks.map((b) => b.title).sort()).toEqual(['Money check-in', 'Rest check-in']);
+    expect(blocks.every((b) => b.submittedAt === now)).toBe(true);
+    // Each block holds ONLY its own questionnaire's answers — that's the whole point of the split.
+    const money = blocks.find((b) => b.title === 'Money check-in');
+    expect(money?.text).toMatch(/A: Tight\./);
+    expect(money?.text).not.toContain('Badly.');
+  });
+
+  it('joins byte-identically to the lumped de-dup reference, so the two paths cannot drift', async () => {
+    const fs = memFileSystem();
+    const mara = await upsertPerson(fs, key, { displayName: 'Mara', isSubject: true, tags: [] });
+    await seedTwo(fs, mara.id);
+
+    const blocks = await gatherRecipientPriorAnswersByAssignment(fs, key, mara.id);
+    expect(blocks.map((b) => `From "${b.title}":\n${b.text}`).join('\n\n')).toBe(
+      await gatherRecipientPriorAnswers(fs, key, mara.id),
+    );
+  });
+
+  it('drops a declined answer here too — a skip is never biography material (§25.5)', async () => {
+    const fs = memFileSystem();
+    const mara = await upsertPerson(fs, key, { displayName: 'Mara', isSubject: true, tags: [] });
+    const def = await saveQuestionnaire(fs, key, {
+      title: 'Last week',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [
+        { id: 'q1', type: 'shortText', prompt: 'What lifted you up?', required: true },
+        { id: 'q2', type: 'shortText', prompt: 'What drained you?', required: false },
+      ],
+    });
+    const assignment = await createAssignment(fs, key, {
+      questionnaireId: def.id,
+      senderPersonId: 'owner',
+      recipient: { kind: 'person', personId: mara.id },
+      channel: 'inApp',
+      privacy: 'private',
+      senderVisibleToRecipient: true,
+    });
+    await saveResponse(fs, key, {
+      id: 'r1',
+      schemaVersion: 1,
+      assignmentId: assignment.id,
+      answers: [
+        { questionId: 'q1', value: 'A quiet hike.' },
+        { questionId: 'q2', value: { declined: true, reason: 'Prefer not to say' } },
+      ],
+      submittedAt: now,
+    });
+
+    const [block] = await gatherRecipientPriorAnswersByAssignment(fs, key, mara.id);
+    expect(block?.text).toMatch(/A: A quiet hike\./);
+    expect(block?.text).not.toContain('What drained you?');
   });
 });
 

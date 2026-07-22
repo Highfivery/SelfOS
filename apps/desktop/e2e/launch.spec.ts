@@ -12983,6 +12983,63 @@ test('story (64): the Studio tabs deep-link, and the Danger zone deletes only af
   }
 });
 
+test('story (64): the title workshop offers alternative titles + a fresh essence without a rewrite (§16.4)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Studio Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'Studio Book', level: 1 })).toBeVisible();
+
+    // Open the workshop and ask for alternatives — ONE pass returns a set (the current title deduped out).
+    await w.getByRole('button', { name: 'Title workshop' }).click();
+    await w.getByRole('button', { name: 'Suggest titles' }).click();
+    await expect(w.getByText('The Long Way Home')).toBeVisible();
+    await expect(w.getByText('A Quiet Kind of Courage')).toBeVisible();
+    // "Studio Book" is the current title → dropped, so it never appears as a candidate row.
+    await expect(w.getByRole('button', { name: 'Suggest again' })).toBeVisible();
+
+    // Use one → the hero title updates (committed through update, which clears titleAuto — no second AI call).
+    await w
+      .getByText('The Long Way Home')
+      .locator('..')
+      .getByRole('button', { name: 'Use this' })
+      .click();
+    await expect(w.getByRole('heading', { name: 'The Long Way Home', level: 1 })).toBeVisible();
+    await expect
+      .poll(async () => (await listBooks(fs, key, 'owner-1'))[0]?.title)
+      .toBe('The Long Way Home');
+
+    // Rewrite the essence on its own — no chapter is touched (the point of #302). Committing a title closed
+    // the panel, so reopen the workshop.
+    await w.getByRole('button', { name: 'Title workshop' }).click();
+    await w.getByRole('button', { name: 'Rewrite the essence' }).click();
+    await expect(w.getByText('A quiet man finding his voice, one page at a time.')).toBeVisible();
+    await w.getByRole('button', { name: 'Keep this essence' }).click();
+    await expect
+      .poll(
+        async () =>
+          (await getBook(fs, key, 'owner-1', (await listBooks(fs, key, 'owner-1'))[0]!.id))
+            ?.essence,
+      )
+      .toBe('A quiet man finding his voice, one page at a time.');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('story (64): the owner reads their own book in the immersive reader — front matter → chapter → edit; text size; 360px clean (§13.5)', async () => {
   test.setTimeout(60_000);
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });

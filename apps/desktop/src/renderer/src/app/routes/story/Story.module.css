@@ -2100,3 +2100,35 @@
   color: var(--color-text-tertiary);
   max-width: 30rem;
 }
+
+/* The title workshop (64 §16.4) — a compact inline panel under the hero title. */
+.workshop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  max-width: 40rem;
+}
+.workshopHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.workshopRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.workshopRow > :first-child {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.workshopEssence {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}

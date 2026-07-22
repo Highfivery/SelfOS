@@ -238,6 +238,8 @@ import {
   type StoryCorpusStats,
   type StoryOutlineEditResult,
   type StoryTimelineEditResult,
+  type StoryTitlesResult,
+  type StoryEssenceResult,
   type StoryHomeSignal,
   type StoryImageEntry,
   type StoryImageResult,
@@ -532,6 +534,8 @@ import {
   removeTimelineEvent,
   sortTimeline,
   updateTimelineEvent,
+  regenerateEssence,
+  suggestTitles,
 } from '@selfos/core/story';
 import {
   clearSuggestion,
@@ -1579,6 +1583,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
   };
 
   /** Build the deps for an AI authoring call, gated by `capability`; null if not permitted. */
+  const aiUnavailableTitleMessage = 'Connect Claude in Settings → AI to use the title workshop.';
   const aiDeps = async (
     capability: CapabilityKey = 'questionnaires.create',
   ): Promise<AiDeps | null> => {
@@ -4729,6 +4734,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           ...(p.title !== undefined ? { title: p.title, titleAuto: false } : {}),
           ...(p.config !== undefined ? { config: p.config } : {}),
           ...(p.matter !== undefined ? { matter: p.matter } : {}),
+          ...(p.essence !== undefined ? { essence: p.essence } : {}),
         },
         new Date(),
       );
@@ -5407,6 +5413,28 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Hand back the chronologically sorted view, so a corrected date lands in the right place at once.
       const timeline = stored ? { ...stored, events: sortTimeline(stored.events) } : null;
       return { ok: res.ok, timeline, ...(res.message ? { message: res.message } : {}) };
+    },
+    storySuggestTitles: async (input): Promise<StoryTitlesResult> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      // `story.own`-gated + active-person-scoped; a metered read (the workshop returns candidates, the
+      // person commits the pick through `storyUpdate`). AI-off / no key surface honestly.
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, titles: [], message: 'Not permitted.' };
+      if (!deps.apiKey) return { ok: false, titles: [], message: aiUnavailableTitleMessage };
+      const res = await suggestTitles(deps, bookId);
+      return res.ok
+        ? { ok: true, titles: res.titles }
+        : { ok: false, titles: [], message: res.message };
+    },
+    storyRegenerateEssence: async (input): Promise<StoryEssenceResult> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, essence: null, message: 'Not permitted.' };
+      if (!deps.apiKey) return { ok: false, essence: null, message: aiUnavailableTitleMessage };
+      const res = await regenerateEssence(deps, bookId);
+      return res.ok
+        ? { ok: true, essence: res.essence }
+        : { ok: false, essence: null, message: res.message };
     },
     storyResolveProposal: async (input): Promise<StoryResolveProposalResult> => {
       const { bookId, proposalId, action } = StoryResolveProposalInputSchema.parse(input);

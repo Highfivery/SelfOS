@@ -27,6 +27,8 @@ import type {
   StoryOutlineEditResult,
   StoryTimelineEditInput,
   StoryTimelineEditResult,
+  StoryTitlesResult,
+  StoryEssenceResult,
   StoryImageEntry,
   StoryImageResult,
   StoryImageTarget,
@@ -181,9 +183,12 @@ interface StoryState {
   /** The answered biographer check-ins (§13.6.5), newest-first. */
   answeredCheckIns: StoryAnsweredCheckIn[];
   loadAnsweredCheckIns: (bookId: string) => Promise<void>;
+  /** The title workshop (§16.4): metered reads that return candidates; committing goes through `update`. */
+  suggestTitles: (bookId: string) => Promise<StoryTitlesResult>;
+  regenerateEssence: (bookId: string) => Promise<StoryEssenceResult>;
   update: (
     bookId: string,
-    patch: { title?: string; config?: BookConfig; matter?: BookMatter },
+    patch: { title?: string; config?: BookConfig; matter?: BookMatter; essence?: string },
   ) => Promise<void>;
   /** Publishing & readers (§3.5) — the "Share & readers" panel. */
   readers: BookReader[];
@@ -627,6 +632,18 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   loadAnsweredCheckIns: async (bookId) => {
     set({ answeredCheckIns: (await window.selfos?.storyAnsweredCheckIns({ bookId })) ?? [] });
   },
+  suggestTitles: async (bookId) =>
+    (await window.selfos?.storySuggestTitles({ bookId })) ?? {
+      ok: false,
+      titles: [],
+      message: 'Not available.',
+    },
+  regenerateEssence: async (bookId) =>
+    (await window.selfos?.storyRegenerateEssence({ bookId })) ?? {
+      ok: false,
+      essence: null,
+      message: 'Not available.',
+    },
   update: async (bookId, patch) => {
     await window.selfos?.storyUpdate({ bookId, ...patch });
     await get().open(bookId);

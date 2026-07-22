@@ -2092,3 +2092,11 @@
   color: var(--color-text-tertiary);
   font-size: var(--font-size-xs);
 }
+
+/* The wellness boundary on the reader's title page (64 §16.3/§8.2) — quiet, but present on the way in. */
+.titleBoundary {
+  margin-top: var(--space-6);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  max-width: 30rem;
+}

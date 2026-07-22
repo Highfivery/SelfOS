@@ -3756,6 +3756,11 @@ export const BookMatterSchema = z.object({
   dedication: z.string().optional(),
   epigraph: z.string().optional(),
   acknowledgments: z.string().optional(),
+  /** "About the author" — the person's own note about themselves, in the back matter (64 §16.3). */
+  aboutAuthor: z.string().optional(),
+  /** A closing colophon line (how the book was made, a printer's note, a thank-you). It is ADDED to the
+   *  standing wellness boundary, never a replacement for it — §8.2's line always renders. */
+  colophon: z.string().optional(),
 });
 export type BookMatter = z.infer<typeof BookMatterSchema>;
 

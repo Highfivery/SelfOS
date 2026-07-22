@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { wordDiff } from '@selfos/core/story-diff';
+import { BOOK_BOUNDARY_LINE, colophonLines, missingMatter } from '@selfos/core/story-matter';
 import {
   Banner,
   Button,
@@ -2806,12 +2807,20 @@ function ShareReadersPanel({
   );
 }
 
-/** The front/back matter editor (§3.6) — the person's own dedication, epigraph, and acknowledgments. */
+/** The front/back matter editor (§3.6/§16.3) — dedication, epigraph, acknowledgments, about-the-author and
+ *  a colophon. The colophon is ADDED to SelfOS's own closing boundary line, never a replacement (§8.2). */
 function MatterEditor({ bookId, matter }: { bookId: string; matter?: BookMatter }): JSX.Element {
   const update = useStoryStore((s) => s.update);
   const [dedication, setDedication] = useState(matter?.dedication ?? '');
   const [epigraph, setEpigraph] = useState(matter?.epigraph ?? '');
   const [acknowledgments, setAcknowledgments] = useState(matter?.acknowledgments ?? '');
+  const [aboutAuthor, setAboutAuthor] = useState(matter?.aboutAuthor ?? '');
+  const [colophon, setColophon] = useState(matter?.colophon ?? '');
+  // `missingMatter` trims, so pass the raw values — one computation, not one per render branch.
+  const missing = useMemo(
+    () => missingMatter({ dedication, epigraph, acknowledgments, aboutAuthor }),
+    [dedication, epigraph, acknowledgments, aboutAuthor],
+  );
   const [saved, setSaved] = useState(false);
   const touch = (setter: (v: string) => void) => (v: string) => {
     setter(v);
@@ -2857,14 +2866,53 @@ function MatterEditor({ bookId, matter }: { bookId: string; matter?: BookMatter 
             />
           )}
         </Field>
+        <Text tone="tertiary" size="sm">
+          Anyone you’ve shared the book with sees these when you publish again.
+        </Text>
+        <Field label="About the author">
+          {(p) => (
+            <Textarea
+              {...p}
+              value={aboutAuthor}
+              rows={3}
+              placeholder="A few lines about you, for the back of the book…"
+              onChange={(e) => touch(setAboutAuthor)(e.target.value)}
+            />
+          )}
+        </Field>
+        <Field
+          label="Colophon"
+          help="A closing line — how the book was made, or a last word. SelfOS always adds its own note that this book is reflection, not assessment."
+        >
+          {(p) => (
+            <Textarea
+              {...p}
+              value={colophon}
+              rows={2}
+              placeholder="Set in Lora. Written over the winter of…"
+              onChange={(e) => touch(setColophon)(e.target.value)}
+            />
+          )}
+        </Field>
+        {/* A light nudge, never a gate (§16.3) — a book with nothing out front is still a book. */}
+        {missing.length > 0 ? (
+          <Text tone="tertiary" size="sm">
+            Your book doesn’t have{' '}
+            {new Intl.ListFormat(undefined, { style: 'long', type: 'conjunction' }).format(missing)}{' '}
+            yet — all optional.
+          </Text>
+        ) : null}
         <Inline>
           <Button
+            aria-label="Save front and back matter"
             onClick={async () => {
               await update(bookId, {
                 matter: {
                   ...(dedication.trim() ? { dedication: dedication.trim() } : {}),
                   ...(epigraph.trim() ? { epigraph: epigraph.trim() } : {}),
                   ...(acknowledgments.trim() ? { acknowledgments: acknowledgments.trim() } : {}),
+                  ...(aboutAuthor.trim() ? { aboutAuthor: aboutAuthor.trim() } : {}),
+                  ...(colophon.trim() ? { colophon: colophon.trim() } : {}),
                 },
               });
               setSaved(true);
@@ -3122,6 +3170,14 @@ function BookReader({
                       </div>
                     </section>
                   ) : null}
+                  {manifest.matter?.aboutAuthor ? (
+                    <section className={styles.readerBack}>
+                      <Heading level={3}>About the author</Heading>
+                      <div className={styles.prose}>
+                        <Markdown>{manifest.matter.aboutAuthor}</Markdown>
+                      </div>
+                    </section>
+                  ) : null}
                   {manifest.noteOnBook ? (
                     <section className={styles.readerBack}>
                       <Heading level={3}>A note on this book</Heading>
@@ -3135,9 +3191,14 @@ function BookReader({
                       day: 'numeric',
                     })}{' '}
                     · {manifest.title}
-                    <br />
-                    SelfOS is a wellness companion, not a medical record — this book is reflection,
-                    not assessment.
+                    {/* Their colophon (when written) then the standing boundary — one shared helper, so
+                        the reader and both exports can't drift on the line that must always be there. */}
+                    {colophonLines(manifest.matter).map((line) => (
+                      <span key={line}>
+                        <br />
+                        {line}
+                      </span>
+                    ))}
                   </div>
                 </>
               ) : null}
@@ -3185,6 +3246,9 @@ function BookReader({
                   {owner ? `The story of ${authorName}` : `by ${authorName}`}
                 </div>
                 {manifest.essence ? <div className={styles.ess}>{manifest.essence}</div> : null}
+                {/* The §8.2 boundary on the way IN as well as out — a reader who never reaches the last
+                    chapter (or a draft with none written) still sees what this book is and isn't. */}
+                <div className={styles.titleBoundary}>{BOOK_BOUNDARY_LINE}</div>
               </div>
               {manifest.matter?.dedication ? (
                 <p className={styles.frontDed}>{manifest.matter.dedication}</p>

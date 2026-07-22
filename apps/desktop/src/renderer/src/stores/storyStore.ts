@@ -23,6 +23,8 @@ import type {
   SharedBookSummary,
   StoryCompleteness,
   StoryCorpusStats,
+  StoryOutlineEditInput,
+  StoryOutlineEditResult,
   StoryImageEntry,
   StoryImageResult,
   StoryImageTarget,
@@ -147,6 +149,11 @@ interface StoryState {
     proposalId: string,
     action: 'approve' | 'dismiss',
   ) => Promise<StoryResolveProposalResult>;
+  /** Manual outline control (§16.1) — deterministic, no AI. Adopts the fresh bundle on success. */
+  editOutline: (
+    bookId: string,
+    edit: StoryOutlineEditInput['edit'],
+  ) => Promise<StoryOutlineEditResult>;
   /** Deterministic, no-AI corpus counts for the "before you begin" invitation (§13.6.10). */
   corpusStats: StoryCorpusStats | null;
   loadCorpusStats: () => Promise<void>;
@@ -547,6 +554,15 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   loadProposals: async (bookId) => {
     const proposals = (await window.selfos?.storyProposals({ bookId })) ?? [];
     set({ proposals });
+  },
+  editOutline: async (bookId, edit) => {
+    const res = (await window.selfos?.storyEditOutline({ bookId, edit })) ?? {
+      ok: false,
+      bundle: null,
+    };
+    // The outline AND the chapter records can both have moved, so adopt the whole fresh bundle.
+    if (res.bundle) set({ bundle: res.bundle });
+    return res;
   },
   resolveProposal: async (bookId, proposalId, action) => {
     const res = (await window.selfos?.storyResolveProposal({ bookId, proposalId, action })) ?? {

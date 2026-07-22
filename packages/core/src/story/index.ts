@@ -17,6 +17,7 @@ export * from './storyMarkupService';
 export * from './storyMemoryService';
 export * from './storyRefreshService';
 export * from './storyService';
+export * from './storyOutline';
 export * from './storyStructureService';
 // `chapterParagraphs`/`stripSourceMarkers` already re-export via storyGenerationService; countWords is new.
 export { countWords } from './storyText';

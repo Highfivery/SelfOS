@@ -1987,3 +1987,75 @@
   color: var(--color-accent-text);
   white-space: nowrap;
 }
+
+/* Manual outline control (64 §16.1) — a plain, dense editing list; the grid is for reading, this is for
+   restructuring. Rows wrap so the action cluster never forces a horizontal scroller at phone width (§12). */
+.outlineEditBar {
+  display: flex;
+  justify-content: flex-end;
+}
+.outlineEditHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+/* The intro text must SHARE the line with Done, not claim the whole width and push it below (§12). */
+.outlineEditHead > :first-child {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.outlineEditPart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.outlineEditPartHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.outlineEditPartHead > :first-child {
+  flex: 1 1 200px;
+  min-width: 0;
+  max-width: 26rem;
+}
+.outlineEditRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+.outlineEditRow > :first-child {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+/* One tight cluster, so the move arrows read as a pair rather than drifting among the word buttons. */
+.outlineEditActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  /* Shrinkable, so the cluster wraps INTERNALLY at phone width instead of forcing a scroller (§12). */
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.outlineMergeRow {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) 0 0;
+}
+
+/* Destructive outline actions read as destructive — never visually identical to Split/Merge (§12). */
+.dangerAction {
+  color: var(--color-danger);
+}

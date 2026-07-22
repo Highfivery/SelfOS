@@ -5,13 +5,12 @@ import { type AiDeps, runClaude } from '../questionnaires';
 import {
   LIFE_AREAS,
   type AiFailureReason,
-  type BookChapter,
   type BookOutline,
-  type OutlineChapter,
   type StructuralProposal,
   type UsageEvent,
 } from '../schemas';
 import { getBookType } from './bookTypes';
+import { chapterShell, syncPartChapterOrder } from './storyOutline';
 import { buildStoryCorpus, type StoryCorpus } from './storyCorpus';
 import { buildBiographerSystem, buildStructureUserMessage } from './storyPromptBuilder';
 import {
@@ -157,24 +156,6 @@ function draftToProposal(
 }
 
 /** An un-written chapter shell: `stale` so the next refresh writes it (owner decision — approve never spends). */
-function chapterShell(id: string, partId: string, order: number, title: string): BookChapter {
-  return {
-    id,
-    schemaVersion: 1,
-    partId,
-    order,
-    title,
-    markdown: '',
-    revision: 0,
-    status: 'stale',
-    sourceSignature: '',
-    provenance: [],
-    protectedBlocks: [],
-    pinnedQuotes: [],
-    imagePlacements: [],
-  };
-}
-
 export type StructureGenResult =
   | { ok: true; proposals: StructuralProposal[]; added: number; usage?: UsageEvent }
   | { ok: false; reason: AiFailureReason; message: string };
@@ -269,23 +250,6 @@ export async function listStructuralProposals(
 ): Promise<StructuralProposal[]> {
   const list = await getProposals(fs, key, personId, bookId);
   return list.proposals.filter((p) => p.status === 'pending');
-}
-
-/** Re-sync every existing draft-head chapter in a part to the outline's order (an insert/reorder shifts them). */
-async function syncPartChapterOrder(
-  fs: AiDeps['fs'],
-  key: Uint8Array,
-  personId: string,
-  bookId: string,
-  part: { id: string; chapters: OutlineChapter[] },
-): Promise<void> {
-  for (let i = 0; i < part.chapters.length; i += 1) {
-    const oc = part.chapters[i]!;
-    const bc = await getChapter(fs, key, personId, bookId, oc.id);
-    if (bc && (bc.order !== i || bc.partId !== part.id)) {
-      await saveChapter(fs, key, personId, bookId, { ...bc, order: i, partId: part.id });
-    }
-  }
 }
 
 /** Apply an approved proposal — mutate the outline (+ create/mark chapter shells stale). Never writes prose. */

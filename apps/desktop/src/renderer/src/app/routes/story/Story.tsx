@@ -25,6 +25,7 @@ import { usePeopleStore } from '../../../stores/peopleStore';
 import { ShareMemoryPanel } from './ShareMemoryPanel';
 import { MemoryCollection } from './MemoryCollection';
 import { StoryMemories } from './StoryMemories';
+import { OutlineEditor } from './OutlineEditor';
 import { useInsightStore } from '../../../stores/insightStore';
 import { useStoryRefresh } from '../../notifications/useStoryRefresh';
 import { useStoryInterview } from '../../notifications/useStoryInterview';
@@ -1751,14 +1752,24 @@ function ChaptersTab({
   const imageUrls = useStoryStore((s) => s.imageUrls);
   const { manifest, outline, chapters } = bundle;
   const outlineChapters = outline ? outline.parts.flatMap((p) => p.chapters) : [];
+  // Manual outline control (§16.1) — the structure is the author's, not only the model's.
+  const [editingOutline, setEditingOutline] = useState(false);
 
   if (!outline) return <div />;
+  if (editingOutline) {
+    return <OutlineEditor bundle={bundle} onDone={() => setEditingOutline(false)} />;
+  }
   const firstUnwrittenPart = outline.parts.findIndex((p) =>
     p.chapters.some((c) => !chapters.some((w) => w.id === c.id && w.markdown.trim().length > 0)),
   );
 
   return (
     <Stack gap={5}>
+      <div className={styles.outlineEditBar}>
+        <Button variant="ghost" onClick={() => setEditingOutline(true)}>
+          Edit outline
+        </Button>
+      </div>
       {outline.parts.map((part, pi) => {
         const partWritten = part.chapters.filter((c) =>
           chapters.some((w) => w.id === c.id && w.markdown.trim().length > 0),

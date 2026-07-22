@@ -4753,6 +4753,61 @@ export interface StoryResolveProposalResult {
   message?: string;
 }
 
+/**
+ * `story:editOutline` — manual outline control (§16.1). ONE channel carrying a discriminated op, so adding a
+ * mutation is a member here rather than a new channel through five layers. Every op is deterministic and
+ * AI-free; the lossy ones (`deleteChapter`, `deletePart`) are confirmed in the UI before they're sent.
+ */
+export const StoryOutlineEditInputSchema = StoryBookRefSchema.extend({
+  edit: z.discriminatedUnion('op', [
+    z.object({ op: z.literal('addPart'), title: z.string() }),
+    z.object({ op: z.literal('renamePart'), partId: z.string().min(1), title: z.string() }),
+    z.object({ op: z.literal('deletePart'), partId: z.string().min(1) }),
+    z.object({
+      op: z.literal('addChapter'),
+      partId: z.string().min(1),
+      title: z.string(),
+      brief: z.string().optional(),
+      afterChapterId: z.string().optional(),
+    }),
+    z.object({
+      op: z.literal('renameChapter'),
+      chapterId: z.string().min(1),
+      title: z.string(),
+      brief: z.string().optional(),
+    }),
+    z.object({
+      op: z.literal('moveChapter'),
+      chapterId: z.string().min(1),
+      toPartId: z.string().min(1),
+      toIndex: z.number().int(),
+    }),
+    z.object({
+      op: z.literal('splitChapter'),
+      chapterId: z.string().min(1),
+      firstTitle: z.string(),
+      secondTitle: z.string(),
+      firstBrief: z.string().optional(),
+      secondBrief: z.string().optional(),
+    }),
+    z.object({
+      op: z.literal('mergeChapters'),
+      chapterId: z.string().min(1),
+      intoChapterId: z.string().min(1),
+      title: z.string().optional(),
+    }),
+    z.object({ op: z.literal('deleteChapter'), chapterId: z.string().min(1) }),
+  ]),
+});
+export type StoryOutlineEditInput = z.infer<typeof StoryOutlineEditInputSchema>;
+
+/** The fresh bundle after a manual outline edit (the outline AND chapter records may both have moved). */
+export interface StoryOutlineEditResult {
+  ok: boolean;
+  bundle: StoryBookBundle | null;
+  message?: string;
+}
+
 /** `story:homeSignal` — the living-book Home presence (§5.6), computed host-side (no AI). Feeds the ONE
  *  `story-living` "For you" card. `signature` drives the dismissal so a NEW signal re-surfaces. */
 export interface StoryHomeSignal {

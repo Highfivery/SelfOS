@@ -269,6 +269,7 @@ const bridge: SelfosBridge = {
   storyRefreshCheck: (input) => ipcRenderer.invoke(IpcChannels.storyRefreshCheck, input),
   storyProposals: (input) => ipcRenderer.invoke(IpcChannels.storyProposals, input),
   storyResolveProposal: (input) => ipcRenderer.invoke(IpcChannels.storyResolveProposal, input),
+  storyEditOutline: (input) => ipcRenderer.invoke(IpcChannels.storyEditOutline, input),
   storyHomeSignal: () => ipcRenderer.invoke(IpcChannels.storyHomeSignal),
   storyCorpusStats: () => ipcRenderer.invoke(IpcChannels.storyCorpusStats),
   storyCompleteness: (input) => ipcRenderer.invoke(IpcChannels.storyCompleteness, input),

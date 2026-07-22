@@ -7838,6 +7838,94 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(manual.bundle?.chapters.find((c) => c.id === chapterId)?.status).not.toBe('stale');
   });
 
+  it('story: manual outline control — reorder + rename + merge, gated + person-scoped (§16.1)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.storyGenerateChapters({ bookId });
+
+    // The fake foundations outline has ONE chapter; add a second BY HAND (exercising the new op) and draft
+    // it, so the merge below has two chapters with real prose to preserve.
+    const seeded = await bridge.storyGet({ bookId });
+    const partId = seeded!.outline!.parts[0]!.id;
+    const added = await bridge.storyEditOutline({
+      bookId,
+      edit: {
+        op: 'addChapter',
+        partId,
+        title: 'What the House Held',
+        brief: 'The quiet after dark.',
+      },
+    });
+    expect(added.ok).toBe(true);
+    await bridge.storyGenerateChapters({ bookId });
+
+    const before = await bridge.storyGet({ bookId });
+    const ids = before!.outline!.parts[0]!.chapters.map((c) => c.id);
+    expect(ids.length).toBe(2);
+
+    // Rename — mirrored onto the draft record, and the prose is NOT staled (no metered rewrite provoked).
+    const renamed = await bridge.storyEditOutline({
+      bookId,
+      edit: { op: 'renameChapter', chapterId: ids[0]!, title: 'The Shed' },
+    });
+    expect(renamed.ok).toBe(true);
+    expect(renamed.bundle!.chapters.find((c) => c.id === ids[0])?.title).toBe('The Shed');
+
+    // Reorder — the outline AND the chapter records agree afterwards.
+    const moved = await bridge.storyEditOutline({
+      bookId,
+      edit: { op: 'moveChapter', chapterId: ids[1]!, toPartId: partId, toIndex: 0 },
+    });
+    expect(moved.ok).toBe(true);
+    expect(moved.bundle!.outline!.parts[0]!.chapters[0]!.id).toBe(ids[1]);
+    expect(moved.bundle!.chapters.find((c) => c.id === ids[1])?.order).toBe(0);
+
+    // Merge — both chapters' prose survives in the target (§13.9), and the source is gone.
+    const sourceText = moved.bundle!.chapters.find((c) => c.id === ids[0])?.markdown ?? '';
+    const targetText = moved.bundle!.chapters.find((c) => c.id === ids[1])?.markdown ?? '';
+    expect(sourceText.trim()).not.toBe('');
+    const merged = await bridge.storyEditOutline({
+      bookId,
+      edit: { op: 'mergeChapters', chapterId: ids[0]!, intoChapterId: ids[1]! },
+    });
+    expect(merged.ok).toBe(true);
+    const survivor = merged.bundle!.chapters.find((c) => c.id === ids[1]);
+    expect(survivor?.markdown).toContain(sourceText.trim());
+    expect(survivor?.markdown).toContain(targetText.trim());
+    expect(merged.bundle!.chapters.some((c) => c.id === ids[0])).toBe(false);
+
+    // A vanished id degrades honestly rather than throwing.
+    const ghost = await bridge.storyEditOutline({
+      bookId,
+      edit: { op: 'deleteChapter', chapterId: 'ghost' },
+    });
+    expect(ghost.ok).toBe(false);
+    expect(ghost.message).toBeTruthy();
+  });
+
+  it('story: manual outline control is refused without story.own (§16.1)', async () => {
+    const { bridge } = await freshOwner();
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    const denied = await bridge.storyEditOutline({
+      bookId: 'whatever',
+      edit: { op: 'addPart', title: 'Sneaky' },
+    });
+    expect(denied.ok).toBe(false);
+    expect(denied.bundle).toBeNull();
+  });
+
   it('story: structural proposals — list pending, approve (restructures the outline), dismiss', async () => {
     const { host, bridge, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });

@@ -42,6 +42,8 @@ import type {
   SharedBookSummary,
   StoryCompleteness,
   StoryCorpusStats,
+  StoryOutlineEditInput,
+  StoryOutlineEditResult,
   StoryHomeSignal,
   StoryImageEntry,
   StoryImageResult,
@@ -421,6 +423,8 @@ export const IpcChannels = {
   storyRefreshCheck: 'story:refreshCheck',
   storyProposals: 'story:proposals',
   storyResolveProposal: 'story:resolveProposal',
+  /** Manual outline control — add/rename/move/split/merge/delete, AI-free (64 §16.1). */
+  storyEditOutline: 'story:editOutline',
   storyHomeSignal: 'story:homeSignal',
   storyCorpusStats: 'story:corpusStats',
   storyCompleteness: 'story:completeness',
@@ -1314,6 +1318,8 @@ export interface SelfosBridge {
   /** Approve (apply the restructure — new/split chapters land un-written, drafted next refresh) or dismiss a
    *  pending structural proposal. No AI spend. Returns the remaining pending proposals + the fresh bundle. */
   storyResolveProposal(input: StoryResolveProposalInput): Promise<StoryResolveProposalResult>;
+  /** Edit the outline by hand (64 §16.1) — deterministic, no AI, no metering. Returns the fresh bundle. */
+  storyEditOutline(input: StoryOutlineEditInput): Promise<StoryOutlineEditResult>;
   /** The living-book Home signal (§5.6) for the active person's book — computed host-side, no AI. Feeds the
    *  `story-living` "For you" card. Gated `story.own`; `hasBook:false` when denied or there's no book. */
   storyHomeSignal(): Promise<StoryHomeSignal>;

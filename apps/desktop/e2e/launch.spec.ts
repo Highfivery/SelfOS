@@ -64,7 +64,14 @@ import {
   pairKeyFor,
   saveAgreement,
 } from '@selfos/core/together';
-import { getBook, getMarkup, getOutline, listBooks, listMemories } from '@selfos/core/story';
+import {
+  getBook,
+  getChapter,
+  getMarkup,
+  getOutline,
+  listBooks,
+  listMemories,
+} from '@selfos/core/story';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 
@@ -12707,6 +12714,98 @@ test('story (64): a photo answer feeds the biographer’s corpus — it reaches 
     await rm(userData, { recursive: true, force: true });
     await rm(vault, { recursive: true, force: true });
     await rm(promptDir, { recursive: true, force: true });
+  }
+});
+
+test('story (64): the author edits the outline by hand — rename + reorder + merge keep the prose (§16.1, #291)', async () => {
+  test.setTimeout(90_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('The Shaped Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
+
+    // The outline is the AUTHOR's — reachable without asking the model for a suggestion (#291).
+    await w.getByRole('button', { name: 'Edit outline' }).click();
+    await expect(w.getByRole('heading', { name: 'Edit your outline' })).toBeVisible();
+
+    // Rename through the real input (commits on blur).
+    const title = w.getByLabel('Chapter title: The Garage');
+    await title.fill('The Shed');
+    await title.blur();
+    await expect(w.getByLabel('Chapter title: The Shed')).toBeVisible();
+
+    // Reorder: send the first chapter down, then read the persisted outline back.
+    const chapters = await getOutline(
+      fs,
+      key,
+      'owner-1',
+      (await listBooks(fs, key, 'owner-1'))[0]!.id,
+    );
+    const firstId = chapters!.parts[0]!.chapters[0]!.id;
+    await w.getByRole('button', { name: /Move “The Shed” down/ }).click();
+    // Poll the chapter RECORD, not the outline: the outline is saved first and the records re-sync after,
+    // so an outline-only poll can win the race while the draft head is still catching up. The record
+    // agreeing IS the invariant (§16.1) — the outline and the draft head must never disagree.
+    const bookId = (await listBooks(fs, key, 'owner-1'))[0]!.id;
+    await expect
+      .poll(async () => (await getChapter(fs, key, 'owner-1', bookId, firstId))?.order)
+      .toBe(1);
+    const o = await getOutline(fs, key, 'owner-1', bookId);
+    expect(o!.parts[0]!.chapters.map((c) => c.id).indexOf(firstId)).toBe(1);
+
+    const moved = await getChapter(fs, key, 'owner-1', bookId, firstId);
+    expect(moved?.title).toBe('The Shed');
+    // A rename + reorder must NOT stale the chapter — that would provoke a pointless metered rewrite.
+    expect(moved?.status).not.toBe('stale');
+    const otherId = (await getOutline(fs, key, 'owner-1', bookId))!.parts[0]!.chapters[0]!.id;
+    const otherText = (await getChapter(fs, key, 'owner-1', bookId, otherId))?.markdown ?? '';
+    const movedText = moved?.markdown ?? '';
+    expect(movedText.trim()).not.toBe('');
+
+    // Merge: both chapters' writing survives in the survivor (§13.9 — drafts are sacred).
+    // Address the buttons by their chapter, not by row order — the rendered list re-orders as edits land,
+    // so a positional `.first()` can pick a different chapter than the one the vault poll just confirmed.
+    // The secondary actions live in a kebab and the merge target is a space-filling Select (§12).
+    await w.getByRole('button', { name: 'More actions for “What the House Held”' }).click();
+    await w
+      .getByRole('menuitem', { name: 'Merge “What the House Held” into another chapter' })
+      .click();
+    await w.getByLabel('Merge “What the House Held” into').selectOption({ label: 'The Shed' });
+    await expect
+      .poll(async () => (await getOutline(fs, key, 'owner-1', bookId))!.parts[0]!.chapters.length)
+      .toBe(1);
+    const survivor = await getChapter(fs, key, 'owner-1', bookId, firstId);
+    expect(survivor?.markdown).toContain(movedText.trim().slice(0, 24));
+    expect(survivor?.markdown).toContain(otherText.trim().slice(0, 24));
+
+    // 360px: the editing rows wrap rather than forcing a horizontal scroller (§12).
+    await w.setViewportSize({ width: 360, height: 800 });
+    const offenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+          bad.push(`${el.tagName}.${el.className}`);
+        }
+      });
+      return bad;
+    });
+    expect(offenders).toEqual([]);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
   }
 });
 

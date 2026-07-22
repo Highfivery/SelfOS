@@ -204,6 +204,7 @@ import {
   StoryReaderGrantInputSchema,
   StoryRefreshInputSchema,
   StoryRemoveMarkInputSchema,
+  StoryOutlineEditInputSchema,
   StoryResolveProposalInputSchema,
   StoryTodoToQuestionsInputSchema,
   StoryAnswerQuestionInputSchema,
@@ -234,6 +235,7 @@ import {
   type StoryAnswerResult,
   type StoryCompleteness,
   type StoryCorpusStats,
+  type StoryOutlineEditResult,
   type StoryHomeSignal,
   type StoryImageEntry,
   type StoryImageResult,
@@ -514,6 +516,15 @@ import {
   storeMemoryAttachment,
   getMemoryAttachment,
   type StoreMemoryAttachmentResult,
+  addChapter,
+  addPart,
+  deleteChapter,
+  deletePart,
+  mergeChapters,
+  moveChapter,
+  renameChapter,
+  renamePart,
+  splitChapter,
 } from '@selfos/core/story';
 import {
   clearSuggestion,
@@ -5329,6 +5340,42 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return [];
       return listStructuralProposals(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyEditOutline: async (input): Promise<StoryOutlineEditResult> => {
+      const { bookId, edit } = StoryOutlineEditInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, bundle: null, message: 'Not permitted.' };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { ok: false, bundle: null };
+      // Deterministic outline surgery — no AI, no metering. The op union is exhaustive, so a new member
+      // is a compile error here rather than a silently ignored edit.
+      const at = [ctx.fs, ctx.key, personId, bookId] as const;
+      const res = await (async (): Promise<{ ok: boolean; message?: string }> => {
+        switch (edit.op) {
+          case 'addPart':
+            return addPart(...at, edit);
+          case 'renamePart':
+            return renamePart(...at, edit);
+          case 'deletePart':
+            return deletePart(...at, edit);
+          case 'addChapter':
+            return addChapter(...at, edit);
+          case 'renameChapter':
+            return renameChapter(...at, edit);
+          case 'moveChapter':
+            return moveChapter(...at, edit);
+          case 'splitChapter':
+            return splitChapter(...at, edit);
+          case 'mergeChapters':
+            return mergeChapters(...at, edit);
+          case 'deleteChapter':
+            return deleteChapter(...at, edit);
+        }
+      })();
+      const bundle = await readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      return { ok: res.ok, bundle, ...(res.message ? { message: res.message } : {}) };
     },
     storyResolveProposal: async (input): Promise<StoryResolveProposalResult> => {
       const { bookId, proposalId, action } = StoryResolveProposalInputSchema.parse(input);

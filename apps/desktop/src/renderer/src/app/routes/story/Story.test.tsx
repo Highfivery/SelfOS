@@ -144,6 +144,60 @@ function installStoryBridge(
   });
 }
 
+/** Two parts, so the ↑/↓ part-boundary logic is observable (§16.1). */
+function twoPartBundle(): StoryBookBundle {
+  const base = writtenBundle('reviewed');
+  return {
+    ...base,
+    outline: {
+      schemaVersion: 1,
+      approved: true,
+      parts: [
+        {
+          id: 'p1',
+          title: 'Roots',
+          chapters: [{ id: 'c1', title: 'The Garage', brief: '', lifeAreas: [], order: 0 }],
+        },
+        {
+          id: 'p2',
+          title: 'Leaving',
+          chapters: [{ id: 'c3', title: 'The Move West', brief: '', lifeAreas: [], order: 0 }],
+        },
+      ],
+    },
+    chapters: [
+      ...base.chapters,
+      { ...base.chapters[0]!, id: 'c3', partId: 'p2', order: 0, title: 'The Move West' },
+    ],
+  };
+}
+
+/** Two written chapters in one part — the shape the merge/reorder paths need (§16.1). */
+function twoChapterBundle(): StoryBookBundle {
+  const base = writtenBundle('reviewed');
+  return {
+    ...base,
+    outline: {
+      schemaVersion: 1,
+      approved: true,
+      parts: [
+        {
+          id: 'p1',
+          title: 'Roots',
+          chapters: [
+            { id: 'c1', title: 'The Garage', brief: '', lifeAreas: [], order: 0 },
+            { id: 'c2', title: 'The House', brief: '', lifeAreas: [], order: 1 },
+          ],
+        },
+      ],
+    },
+    chapters: [
+      ...base.chapters,
+      { ...base.chapters[0]!, id: 'c2', order: 1, title: 'The House', markdown: 'It was quiet.' },
+    ],
+  };
+}
+
 function renderStory(): void {
   render(
     <MemoryRouter>
@@ -1420,6 +1474,154 @@ describe('Story (64)', () => {
     };
     return { memory, conversation };
   }
+
+  // --- §16.1/#291: manual outline control ------------------------------------------------------------
+
+  it('the Chapters tab opens a manual outline editor and sends a rename (§16.1)', async () => {
+    const edits: unknown[] = [];
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+      storyEditOutline: (input: unknown) => {
+        edits.push(input);
+        return Promise.resolve({ ok: true, bundle: writtenBundle('reviewed') });
+      },
+    });
+    renderStory();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit outline' }));
+    expect(await screen.findByRole('heading', { name: 'Edit your outline' })).toBeInTheDocument();
+
+    const title = screen.getByLabelText('Chapter title: The Garage');
+    await userEvent.clear(title);
+    await userEvent.type(title, 'The Shed');
+    await userEvent.tab(); // commit on blur
+
+    await waitFor(() => expect(edits).toHaveLength(1));
+    expect(edits[0]).toMatchObject({
+      edit: { op: 'renameChapter', chapterId: 'c1', title: 'The Shed' },
+    });
+  });
+
+  it('a delete confirms first, and a merge does not (it keeps both chapters’ writing) (§16.1)', async () => {
+    const edits: { edit: { op: string } }[] = [];
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(twoChapterBundle()),
+      storyEditOutline: (input: unknown) => {
+        edits.push(input as { edit: { op: string } });
+        return Promise.resolve({ ok: true, bundle: twoChapterBundle() });
+      },
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit outline' }));
+
+    // The secondary actions live in a kebab (§12), not a wrapping button pile.
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'More actions for “The Garage”' }),
+    );
+    // Delete is a two-step: choosing it only arms the confirm, so drafted prose is never one tap from gone.
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete “The Garage”' }));
+    expect(edits).toHaveLength(0);
+    expect(screen.getByText('Delete it and its writing?')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Keep' }));
+    expect(edits).toHaveLength(0);
+
+    // Merge needs no confirm — nothing is lost, both texts survive. The target is a space-filling Select.
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for “The Garage”' }));
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Merge “The Garage” into another chapter' }),
+    );
+    await userEvent.selectOptions(await screen.findByLabelText('Merge “The Garage” into'), 'c2');
+    expect(edits.map((e) => e.edit.op)).toEqual(['mergeChapters']);
+  });
+
+  it('the ↑/↓ edges move a chapter ACROSS parts, not just within one (§16.1)', async () => {
+    const edits: { edit: Record<string, unknown> }[] = [];
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(twoPartBundle()),
+      storyEditOutline: (input: unknown) => {
+        edits.push(input as { edit: Record<string, unknown> });
+        return Promise.resolve({ ok: true, bundle: twoPartBundle() });
+      },
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit outline' }));
+
+    // Last chapter of part one, moved DOWN → the START of part two.
+    await userEvent.click(screen.getByRole('button', { name: 'Move “The Garage” down' }));
+    expect(edits[0]!.edit).toMatchObject({
+      op: 'moveChapter',
+      chapterId: 'c1',
+      toPartId: 'p2',
+      toIndex: 0,
+    });
+
+    // First chapter of part two, moved UP → the END of part one.
+    await userEvent.click(screen.getByRole('button', { name: 'Move “The Move West” up' }));
+    expect(edits[1]!.edit).toMatchObject({
+      op: 'moveChapter',
+      chapterId: 'c3',
+      toPartId: 'p1',
+      toIndex: 1,
+    });
+  });
+
+  it('a split collects both halves’ briefs — a title-only split would rewrite the same chapter (§16.1)', async () => {
+    const edits: { edit: Record<string, unknown> }[] = [];
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+      storyEditOutline: (input: unknown) => {
+        edits.push(input as { edit: Record<string, unknown> });
+        return Promise.resolve({ ok: true, bundle: writtenBundle('reviewed') });
+      },
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit outline' }));
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for “The Garage”' }));
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Split “The Garage” in two' }),
+    );
+
+    // Split stays disabled until the new chapter is actually named.
+    const split = screen.getByRole('button', { name: 'Split in two' });
+    expect(split).toBeDisabled();
+    await userEvent.type(screen.getByLabelText('Second chapter title'), 'The Engine');
+    await userEvent.type(screen.getByLabelText('Second chapter is about'), 'Only the engine.');
+    await userEvent.clear(screen.getByLabelText('First chapter is about'));
+    await userEvent.type(screen.getByLabelText('First chapter is about'), 'Only the machine.');
+    await userEvent.click(split);
+
+    expect(edits[0]!.edit).toMatchObject({
+      op: 'splitChapter',
+      chapterId: 'c1',
+      secondTitle: 'The Engine',
+      firstBrief: 'Only the machine.',
+      secondBrief: 'Only the engine.',
+    });
+  });
+
+  it('surfaces a refused edit instead of silently doing nothing (§16.1)', async () => {
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+      storyEditOutline: () =>
+        Promise.resolve({ ok: false, bundle: null, message: 'That chapter is no longer here.' }),
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit outline' }));
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for “The Garage”' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete “The Garage”' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(await screen.findByText('That chapter is no longer here.')).toBeInTheDocument();
+  });
 
   // --- §15.1/#288: the book-independent /story/memories route ---------------------------------------
 

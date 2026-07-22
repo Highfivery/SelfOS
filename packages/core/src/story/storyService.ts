@@ -546,6 +546,25 @@ export async function saveChapter(
   await writeEncryptedJson(fs, chapterPath(personId, bookId, chapter.id), chapter, key);
 }
 
+/**
+ * Delete a chapter's draft-head record, its markup and its version history (64 §16.1). Lossy by definition —
+ * the caller confirms first. Tolerant of anything already absent, so a partial delete can be re-run.
+ */
+export async function deleteChapterRecord(
+  fs: FileSystem,
+  personId: string,
+  bookId: string,
+  chapterId: string,
+): Promise<void> {
+  for (const path of [
+    chapterPath(personId, bookId, chapterId),
+    markupPath(personId, bookId, chapterId),
+    chapterHistoryPath(personId, bookId, chapterId),
+  ]) {
+    await fs.remove(path).catch(() => undefined);
+  }
+}
+
 export async function getChapter(
   fs: FileSystem,
   key: Uint8Array,

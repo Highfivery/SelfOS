@@ -1591,3 +1591,116 @@ typed map can absorb them later, but this slice does not touch them.
 | B0-1  | #288  | Extract the shared memory-collection component; add the `/story/memories` route + the story-store wiring; re-point `provenanceTarget` unconditionally; "See all memories →" on the Interview tab + "Your memories" on the invitation. Carries the Interview tab's pre-existing 360px `.gapRow` overflow fix (same surface, so it lands here rather than as a follow-up). | RTL: the route renders both sections with **no book**; the deep-link opens that memory; an empty state, never a blank page; the collection reloads on a person switch; the invitation entry works. Unit: the provenance target is book-independent. E2E: share + save a memory → delete the only book → the Memory insight's "view source" opens the memory (the dead-end, verified to FAIL before the fix) → 360px guard.                                                                                                                                                                                                                 |
 | B0-2  | #305  | `getStoryCorpusStats` re-derived from feeding sources; `gatherRecipientPriorAnswersByAssignment`; per-questionnaire corpus items.                                                                                                                                                                                                                                        | Core: stats ignore transcript-only conversations + count memories/answers; one item per answered assignment with its assignment id + date; a declined answer still never feeds; a `source` exclusion on one assignment drops only that one. RTL: chips read the new stats.                                                                                                                                                                                                                                                                                                                                                                 |
 | B0-3  | #289  | `StreamChunkMap` + `emitStreamChunk`/`onStreamChunk` through `BridgeHost` → `coreBridge` → `ipc.ts` → preload → `webHost` → test host; delete the ten per-surface methods.                                                                                                                                                                                               | The existing streaming tests are the regression proof (the 206-test coreBridge suite drives chat/dream/intake/together/memory through the collapsed sink unchanged). New host tests: a chunk reaches ONLY its own surface's listeners; a Together chunk keeps its `sessionId`; unsubscribing one listener leaves the surface's others intact. The per-turn sender lifecycle lives in `ipc.ts`, which has no unit harness (it needs Electron) — it's covered end-to-end instead: **74 E2E across all five streamed surfaces** (Sessions, dreams, onboarding, Together, memory), each of which would fail on a mis-bound or un-reset sender. |
+
+---
+
+## 16. Backlog batch 1 — authoring control (2026-07-22, PROPOSED)
+
+The second batch of the groomed backlog (GitHub #291, #292, #296, #302, #301): the gaps an author hits
+while actually working on their book. Every one is a place where the app decides something the person
+should — the outline is AI-proposed-only, the timeline is captured then never shown, the front matter is
+three free-text boxes, the title is a one-shot, and nothing anywhere counts a word. None of them needs a new
+engine; four of the five reuse machinery that already exists behind an AI-proposal wrapper.
+
+### 16.1 Manual outline control (#291)
+
+**Today.** `applyStructuralProposal` (`storyStructureService.ts`) performs _some_ of the mutations an author
+wants — insert a chapter, split one, reorder a part — keeping the draft-head chapters aligned via
+`syncPartChapterOrder`. But they are reachable **only** by approving an AI proposal: a person who knows their
+own life better than the model cannot move a chapter without asking the model to suggest it. And the proposal
+union (`newChapter | splitChapter | reorder | prologueRewrite`) has no **merge**, **rename**, **delete**,
+**add/delete part** or **cross-part move** at all — those are genuinely new logic here, which is why the merge
+invariant below needs its own guarantees rather than inheriting the proposal path's.
+
+**The change.** Expose those mutations directly as a small, deterministic, **AI-free** API — add part / add
+chapter / rename / reorder (within and across parts) / split / merge / delete — and give the Chapters tab a
+manual editing affordance. The rules the proposal path already enforces are the same rules here, extracted
+so both callers share them rather than the manual path re-implementing them:
+
+- **A chapter with prose is never silently destroyed.** Delete is the only discarding operation and it
+  confirms; **merge is non-lossy by construction** — it concatenates both chapters' prose (joined by a blank
+  line) and carries the person's protected blocks, pinned quotes, image placements, markup marks, to-dos and
+  version history onto the survivor, so it needs no confirm. Critically, the target may be **outlined but
+  never drafted** (routine after a budget-stopped draft pass, which leaves later chapters with no record at
+  all): the merge starts from a fresh shell in that case rather than skipping the write, because skipping it
+  would delete the source and take its prose with it while reporting success — the §13.9 loss this op exists
+  to prevent.
+- **A removed chapter is forgotten everywhere.** One `forgetChapter` path clears the record, its markup, its
+  history, its entries in the book-level to-do roll-up (otherwise a phantom "Needs you" item survives forever
+  — nothing could re-sync it away, since its markup file is gone) and its rows in the image index.
+- **Order stays consistent by construction:** every mutation re-numbers its part and calls
+  `syncPartChapterOrder`, so an outline edit can never leave a chapter orphaned or double-ordered.
+- Reordering and renaming **do not** stale a chapter (its material didn't change). A merge does. A split
+  stales **only when the first half's brief actually narrows** — a title-only split leaves the chapter still
+  supposed to say everything it already says, so staling would provoke a metered rewrite that reproduces the
+  same chapter. The split form therefore collects both halves' titles _and_ briefs.
+
+### 16.2 Timeline studio (#292)
+
+**Today.** `Book.timeline` is generated by the foundations pass, written to `timeline.enc`, carried to the
+renderer inside the bundle — and read by nothing. The only reference in the entire renderer is a provenance
+_label_ string. `TimelineEvent.userEdited` exists specifically to protect a hand-fixed event from AI
+overwrite, and nothing has ever set it. It is write-only dead data.
+
+**The change (decision, 2026-07-22): the timeline becomes load-bearing — grounding AND chapter ordering.**
+
+- A **timeline view** on the Studio (chronological, grouped by era) with add / edit / remove / re-date, each
+  edit stamping `userEdited: true`.
+- **Grounding:** `buildStoryCorpus` emits dated timeline events as corpus items (`kind: 'timeline'` —
+  already in `StorySourceKind`, never used), so the biographer can place a scene in the right year instead
+  of inferring it.
+- **Chapter ordering:** the structure pass reads the timeline when proposing/ordering chapters and stamping
+  `eraFrom`/`eraTo`, so correcting a date actually re-shapes the book. It **proposes**, never silently
+  re-orders a drafted outline — an existing outline changes only through the normal proposal review.
+- **A `userEdited` event is never overwritten by a later foundations/refresh pass** — that's what the flag
+  was always for; this is the first code to honour it.
+
+### 16.3 Structured front & back matter (#296)
+
+**Today.** `BookMatter` is three optional free-text strings (dedication, epigraph, acknowledgments).
+
+**The change (decision, 2026-07-22):** the audit's five — **dedication, epigraph, acknowledgments,
+about-the-author, colophon**. The three existing fields keep their names and values (additive-optional, no
+migration, no `schemaVersion` bump); `aboutAuthor` and `colophon` are new. The **colophon carries the
+existing not-medical line** (the reader already renders it — this makes it an editable, snapshot-able field
+rather than hard-coded chrome, and it can never be emptied to nothing: a blank colophon falls back to the
+standard line, §8.2).
+
+Light completeness prompts on the Settings tab ("your book has no dedication yet") — never a gate, never a
+nag. Matter is **snapshotted at publish** with the rest of the head, so a reader sees the matter as it was
+when published, not as it is now.
+
+### 16.4 Title workshop (#302)
+
+**Today.** The AI title is one-shot and only while `titleAuto`; there is no way to see alternatives or ask
+again, and the essence regenerates only via a full rewrite-from-scratch (which discards every chapter).
+
+**The change (decision, 2026-07-22): one metered pass returns N alternatives (~5), and "suggest again" is a
+new pass.** Cheapest per title, and the person compares a set rather than judging one at a time. Plus a
+**standalone essence regeneration** — its own small pass, so re-reading the book's through-line no longer
+requires destroying the draft. Choosing a title (AI or hand-written) clears `titleAuto`, so the app never
+silently re-titles a book the person named.
+
+### 16.5 Manuscript metrics (#301)
+
+Deterministic, **no AI, no new storage**: per-chapter and whole-book **word counts**, and a **pacing /
+balance** read (each chapter's share of the book, flagging the outliers — "this chapter is 4× the average").
+Rendered on the Studio hero (whole-book) and the Chapters tab (per chapter). Counts come from the drafted
+markdown with markup stripped, so a chapter's count matches what a reader would actually read.
+
+### 16.6 Decisions locked 2026-07-22
+
+1. **#292** — the timeline feeds **grounding AND chapter ordering** (not display-only).
+2. **#296** — five matter fields: dedication, epigraph, acknowledgments, about-the-author, colophon.
+3. **#302** — **one pass returns N alternatives**; "suggest again" is a new pass.
+4. Release cadence: Batch 0 + Batch 1 ship together (the open release PR accumulates them).
+
+### 16.7 Build slices (each its own PR, standard §6/§7 cadence)
+
+| Slice | Issue | Scope                                                                                                                                                                                                                                                                                                                 | Tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B1-1  | #291  | A shared AI-free outline API (`storyOutline.ts`) — the extracted `chapterShell`/`syncPartChapterOrder` the proposal path now imports, plus the genuinely new merge/rename/delete/part ops; the Chapters tab manual editor (↑/↓ reorder, secondary actions in a kebab, merge target as a Select, lossy ops confirmed). | Core: every mutation keeps order + `partId` consistent with no orphaned records; merge keeps BOTH chapters' prose **including into an undrafted target** (verified to fail without the shell fallback) and carries marks/to-dos; delete clears its to-dos; a title-only split does NOT stale. RTL: the kebab actions, the cross-part ↑/↓ payloads, the split form's briefs, a refused edit surfacing. E2E: rename + reorder + merge through the real UI → decrypt asserts the outline AND chapter records agree and the prose survived. |
+| B1-2  | #292  | Timeline view + editor (`userEdited` stamped); corpus emits dated `timeline` items; the structure pass reads it; a `userEdited` event survives a refresh.                                                                                                                                                             | Core: a hand-edited event survives a foundations/refresh pass; timeline events reach the corpus dated; ordering proposals reflect a corrected date. E2E: correct a date → it reaches a captured generation prompt.                                                                                                                                                                                                                                                                                                                      |
+| B1-3  | #296  | `aboutAuthor` + `colophon` on `BookMatter`; the Settings matter editor; reader + export render them; colophon falls back to the not-medical line; snapshot at publish.                                                                                                                                                | Core: additive schema round-trips, blank colophon falls back, publish snapshots matter. RTL: the editor. E2E: set matter → publish → the reader sees it.                                                                                                                                                                                                                                                                                                                                                                                |
+| B1-4  | #302  | `suggestTitles` (one metered pass, N alternatives) + standalone essence regeneration; the workshop UI; choosing clears `titleAuto`.                                                                                                                                                                                   | Core: one pass yields N distinct titles, metered once, meter-before-parse, honest failure; essence regen doesn't touch chapters. RTL: pick → title set + `titleAuto` cleared.                                                                                                                                                                                                                                                                                                                                                           |
+| B1-5  | #301  | Pure `manuscriptMetrics` (per-chapter + whole-book counts, share-of-book, outlier flags); Studio hero + Chapters tab.                                                                                                                                                                                                 | Core: counts strip markup; outlier detection; empty book is zeros not NaN. RTL: renders counts + the outlier note.                                                                                                                                                                                                                                                                                                                                                                                                                      |

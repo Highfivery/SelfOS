@@ -206,6 +206,7 @@ import {
   StoryRemoveMarkInputSchema,
   StoryOutlineEditInputSchema,
   StoryResolveProposalInputSchema,
+  StoryTimelineEditInputSchema,
   StoryTodoToQuestionsInputSchema,
   StoryAnswerQuestionInputSchema,
   StoryUnexcludeInputSchema,
@@ -236,6 +237,7 @@ import {
   type StoryCompleteness,
   type StoryCorpusStats,
   type StoryOutlineEditResult,
+  type StoryTimelineEditResult,
   type StoryHomeSignal,
   type StoryImageEntry,
   type StoryImageResult,
@@ -525,6 +527,11 @@ import {
   renameChapter,
   renamePart,
   splitChapter,
+  addTimelineEvent,
+  getTimeline,
+  removeTimelineEvent,
+  sortTimeline,
+  updateTimelineEvent,
 } from '@selfos/core/story';
 import {
   clearSuggestion,
@@ -5376,6 +5383,30 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       })();
       const bundle = await readBookBundle(ctx.fs, ctx.key, personId, bookId);
       return { ok: res.ok, bundle, ...(res.message ? { message: res.message } : {}) };
+    },
+    storyEditTimeline: async (input): Promise<StoryTimelineEditResult> => {
+      const { bookId, edit } = StoryTimelineEditInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, timeline: null, message: 'Not permitted.' };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { ok: false, timeline: null };
+      const at = [ctx.fs, ctx.key, personId, bookId] as const;
+      const res = await (async (): Promise<{ ok: boolean; message?: string }> => {
+        switch (edit.op) {
+          case 'add':
+            return addTimelineEvent(...at, edit);
+          case 'update':
+            return updateTimelineEvent(...at, edit);
+          case 'remove':
+            return removeTimelineEvent(...at, edit);
+        }
+      })();
+      const stored = await getTimeline(ctx.fs, ctx.key, personId, bookId);
+      // Hand back the chronologically sorted view, so a corrected date lands in the right place at once.
+      const timeline = stored ? { ...stored, events: sortTimeline(stored.events) } : null;
+      return { ok: res.ok, timeline, ...(res.message ? { message: res.message } : {}) };
     },
     storyResolveProposal: async (input): Promise<StoryResolveProposalResult> => {
       const { bookId, proposalId, action } = StoryResolveProposalInputSchema.parse(input);

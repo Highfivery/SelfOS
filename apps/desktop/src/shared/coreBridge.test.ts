@@ -7838,6 +7838,64 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(manual.bundle?.chapters.find((c) => c.id === chapterId)?.status).not.toBe('stale');
   });
 
+  it('story: the timeline studio — correct a date, it survives a later foundations pass (§16.2)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Dated Book',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+
+    // The fake foundations proposes "Born in Ohio" at 1985. The person knows it was 1987.
+    const generated = gen.bundle.timeline!.events[0]!;
+    expect(generated.date).toBe('1985');
+    const fixed = await bridge.storyEditTimeline({
+      bookId,
+      edit: { op: 'update', eventId: generated.id, date: '1987' },
+    });
+    expect(fixed.ok).toBe(true);
+    expect(fixed.timeline!.events[0]).toMatchObject({ date: '1987', userEdited: true });
+
+    // A LATER pass re-proposes its own version — the correction must stand (the promise `userEdited`
+    // has always encoded and nothing honoured until §16.2).
+    const again = await bridge.storyGenerateFoundations({ bookId });
+    if (!again.ok) throw new Error('second foundations failed');
+    const born = again.bundle.timeline!.events.filter((e) => e.label === 'Born in Ohio');
+    expect(born).toHaveLength(1);
+    expect(born[0]!.date).toBe('1987');
+
+    // Adding + removing round-trip, and a vanished moment degrades honestly.
+    const added = await bridge.storyEditTimeline({
+      bookId,
+      edit: { op: 'add', label: 'Moved west', approx: 'mid-90s' },
+    });
+    expect(added.timeline!.events.some((e) => e.label === 'Moved west')).toBe(true);
+    const ghost = await bridge.storyEditTimeline({
+      bookId,
+      edit: { op: 'remove', eventId: 'ghost' },
+    });
+    expect(ghost.ok).toBe(false);
+    expect(ghost.message).toBeTruthy();
+  });
+
+  it('story: the timeline studio is refused without story.own (§16.2)', async () => {
+    const { bridge } = await freshOwner();
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    const denied = await bridge.storyEditTimeline({
+      bookId: 'whatever',
+      edit: { op: 'add', label: 'Sneaky' },
+    });
+    expect(denied.ok).toBe(false);
+    expect(denied.timeline).toBeNull();
+  });
+
   it('story: manual outline control — reorder + rename + merge, gated + person-scoped (§16.1)', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });

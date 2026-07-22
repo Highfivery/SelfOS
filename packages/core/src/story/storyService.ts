@@ -34,6 +34,7 @@ import {
 } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { enforceProtected } from './storyMarkup';
+import { mergeGeneratedTimeline } from './storyTimeline';
 
 /**
  * Your Story persistence (64-your-story §4/§5.7). A book lives under `people/<personId>/story/books/<bookId>/`
@@ -321,7 +322,20 @@ export async function rewriteBookFromScratch(
   await fs.remove(historyDir(personId, bookId));
   await fs.remove(proposalsPath(personId, bookId));
   await fs.remove(outlinePath(personId, bookId));
-  await fs.remove(timelinePath(personId, bookId));
+  // The chronology is THEIRS, not the draft's (§16.2): keep every moment the person added or corrected, and
+  // drop only what the biographer proposed. Deleting the file outright was fine when the timeline was
+  // invisible AI output — now it is user-authored content, and the confirm dialog promises it's kept.
+  const chronology = await getTimeline(fs, key, personId, bookId);
+  const mine = (chronology?.events ?? []).filter((event) => event.userEdited);
+  if (mine.length > 0 || (chronology?.removed?.length ?? 0) > 0) {
+    await saveTimeline(fs, key, personId, bookId, {
+      schemaVersion: 1,
+      events: mine,
+      ...(chronology?.removed?.length ? { removed: chronology.removed } : {}),
+    });
+  } else {
+    await fs.remove(timelinePath(personId, bookId));
+  }
   // `todos.enc` is a DENORMALIZED roll-up keyed by chapterId (syncChapterTodos maintains it per chapter); the
   // fresh redraft makes new chapter ids with no marks, so without clearing it the roll-up would keep every
   // pre-rewrite to-do forever, each pointing at a deleted chapter (a phantom "Needs you" entry). To-dos are
@@ -949,7 +963,19 @@ export async function applyFoundations(
   );
   if (!manifest) return null;
   await saveOutline(fs, key, personId, bookId, { ...foundations.outline, approved: false });
-  await saveTimeline(fs, key, personId, bookId, foundations.timeline);
+  // Fold the generated chronology into the stored one, KEEPING every hand-edited moment (§16.2): a person
+  // who corrected a date must never have that correction quietly reverted by a later pass. This is the
+  // promise `TimelineEvent.userEdited` has always encoded — until now nothing honoured it.
+  await saveTimeline(
+    fs,
+    key,
+    personId,
+    bookId,
+    mergeGeneratedTimeline(
+      await getTimeline(fs, key, personId, bookId),
+      foundations.timeline.events,
+    ),
+  );
   return manifest;
 }
 

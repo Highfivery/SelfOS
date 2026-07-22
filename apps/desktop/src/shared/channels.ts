@@ -44,6 +44,8 @@ import type {
   StoryCorpusStats,
   StoryOutlineEditInput,
   StoryOutlineEditResult,
+  StoryTimelineEditInput,
+  StoryTimelineEditResult,
   StoryHomeSignal,
   StoryImageEntry,
   StoryImageResult,
@@ -425,6 +427,8 @@ export const IpcChannels = {
   storyResolveProposal: 'story:resolveProposal',
   /** Manual outline control — add/rename/move/split/merge/delete, AI-free (64 §16.1). */
   storyEditOutline: 'story:editOutline',
+  /** The timeline studio — add/correct/remove a moment, AI-free (64 §16.2). */
+  storyEditTimeline: 'story:editTimeline',
   storyHomeSignal: 'story:homeSignal',
   storyCorpusStats: 'story:corpusStats',
   storyCompleteness: 'story:completeness',
@@ -1320,6 +1324,8 @@ export interface SelfosBridge {
   storyResolveProposal(input: StoryResolveProposalInput): Promise<StoryResolveProposalResult>;
   /** Edit the outline by hand (64 §16.1) — deterministic, no AI, no metering. Returns the fresh bundle. */
   storyEditOutline(input: StoryOutlineEditInput): Promise<StoryOutlineEditResult>;
+  /** Edit the book's chronology by hand (64 §16.2) — deterministic, no AI. Returns the fresh timeline. */
+  storyEditTimeline(input: StoryTimelineEditInput): Promise<StoryTimelineEditResult>;
   /** The living-book Home signal (§5.6) for the active person's book — computed host-side, no AI. Feeds the
    *  `story-living` "For you" card. Gated `story.own`; `hasBook:false` when denied or there's no book. */
   storyHomeSignal(): Promise<StoryHomeSignal>;

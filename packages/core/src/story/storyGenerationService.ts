@@ -29,6 +29,7 @@ import {
   tagCorpusItems,
 } from './storyPromptBuilder';
 import { chapterParagraphs, stripSourceMarkers } from './storyText';
+import { generatedEventId } from './storyTimeline';
 // Re-exported so existing importers (tests, the bridge) keep their `./storyGenerationService` entry points.
 export { chapterParagraphs, stripSourceMarkers } from './storyText';
 import {
@@ -184,7 +185,9 @@ export async function generateFoundations(
   const timeline: LifeTimeline = {
     schemaVersion: 1,
     events: draft.timeline.map((event) => ({
-      id: uuid(),
+      // Stable across passes (§16.2) — a fresh uuid per pass would defeat the merge on a rename, orphan a
+      // `source` exclusion, and stale every chapter citing the moment.
+      id: generatedEventId(event.label),
       label: event.label.trim(),
       ...(event.date ? { date: event.date } : {}),
       ...(event.approx ? { approx: event.approx } : {}),

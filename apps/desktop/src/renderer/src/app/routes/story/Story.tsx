@@ -26,6 +26,7 @@ import { ShareMemoryPanel } from './ShareMemoryPanel';
 import { MemoryCollection } from './MemoryCollection';
 import { StoryMemories } from './StoryMemories';
 import { OutlineEditor } from './OutlineEditor';
+import { TimelinePanel } from './TimelinePanel';
 import { useInsightStore } from '../../../stores/insightStore';
 import { useStoryRefresh } from '../../notifications/useStoryRefresh';
 import { useStoryInterview } from '../../notifications/useStoryInterview';
@@ -1858,6 +1859,10 @@ function ChaptersTab({
           </section>
         );
       })}
+
+      {/* The chronology sits with the structure it shapes (§16.2) — the outline says what the book holds,
+          the timeline says when it happened. */}
+      <TimelinePanel bundle={bundle} />
     </Stack>
   );
 }
@@ -2455,6 +2460,10 @@ function DangerZone({ bookId, title }: { bookId: string; title: string }): JSX.E
                   <li>
                     <span className={styles.dzKeep}>Keeps</span> your exclusions, title, voice &amp;
                     style
+                  </li>
+                  <li>
+                    <span className={styles.dzKeep}>Keeps</span> the moments you added or corrected
+                    on your timeline
                   </li>
                   <li>
                     <span className={styles.dzLose}>Discards</span> every chapter, edit, pin and

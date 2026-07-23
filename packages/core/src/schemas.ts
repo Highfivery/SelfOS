@@ -3761,8 +3761,34 @@ export const BookMatterSchema = z.object({
   /** A closing colophon line (how the book was made, a printer's note, a thank-you). It is ADDED to the
    *  standing wellness boundary, never a replacement for it — §8.2's line always renders. */
   colophon: z.string().optional(),
+  /** Opt-in (§17.2): publish the cast register as a "dramatis personae" front-matter section. Off by default —
+   *  the register is built internally for continuity; real names appear in the book only when this is set. */
+  castPublished: z.boolean().optional(),
 });
 export type BookMatter = z.infer<typeof BookMatterSchema>;
+
+/** One person in the book's cast (§17.2). The PUBLISHED shape: just a name + a human relationship label — no
+ *  personId, no private data. A reader can't recompute the subject's private graph, so this is frozen at
+ *  publish when the author opts in. */
+export const CastMemberSchema = z.object({
+  name: z.string(),
+  relationship: z.string().optional(),
+});
+export type CastMember = z.infer<typeof CastMemberSchema>;
+
+/** The internal cast register (§17.2) — the richer Studio read: who recurs, how they relate, and how often the
+ *  book names them. Crypto-free view type (crosses IPC via `story:castRegister`); never carries private facts. */
+export interface CastEntry {
+  name: string;
+  /** The linked household person, when this cast member is one (from the People graph or a linked memory). */
+  personId?: string;
+  /** A human relationship label ("partner", "mother", a custom label), when known. */
+  relationship?: string;
+  /** How many corpus items name this person (the prominence signal). */
+  mentions: number;
+  /** Where the register learned of them (a person can come from more than one). */
+  sources: ('graph' | 'memory' | 'mention')[];
+}
 
 /** `book.enc` — the book's top-level record (64 §4). `sharedWith` = the household person ids granted read
  *  access (re-checked at every read, §3.5); `publishedAt` present once the person has published a head. */
@@ -3936,6 +3962,9 @@ export const PublishedManifestSchema = z.object({
   essence: z.string().optional(),
   coverImageId: z.string().optional(),
   matter: BookMatterSchema.optional(),
+  /** The cast register frozen at publish, ONLY when the author opted in (`matter.castPublished`). A shared
+   *  reader can't recompute the subject's private graph, so the "dramatis personae" is snapshotted here. */
+  cast: z.array(CastMemberSchema).optional(),
   /** The auto-generated honesty page ("Drawn from N conversations, M reflections…"), computed at publish. */
   noteOnBook: z.string().optional(),
   parts: z.array(PublishedPartSchema).default([]),

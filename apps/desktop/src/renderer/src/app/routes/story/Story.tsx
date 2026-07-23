@@ -3053,11 +3053,17 @@ function ShareReadersPanel({
  *  a colophon. The colophon is ADDED to SelfOS's own closing boundary line, never a replacement (§8.2). */
 function MatterEditor({ bookId, matter }: { bookId: string; matter?: BookMatter }): JSX.Element {
   const update = useStoryStore((s) => s.update);
+  const castRegister = useStoryStore((s) => s.castRegister);
+  const loadCastRegister = useStoryStore((s) => s.loadCastRegister);
   const [dedication, setDedication] = useState(matter?.dedication ?? '');
   const [epigraph, setEpigraph] = useState(matter?.epigraph ?? '');
   const [acknowledgments, setAcknowledgments] = useState(matter?.acknowledgments ?? '');
   const [aboutAuthor, setAboutAuthor] = useState(matter?.aboutAuthor ?? '');
   const [colophon, setColophon] = useState(matter?.colophon ?? '');
+  const [castPublished, setCastPublished] = useState(matter?.castPublished ?? false);
+  useEffect(() => {
+    void loadCastRegister(bookId);
+  }, [bookId, loadCastRegister]);
   // `missingMatter` trims, so pass the raw values — one computation, not one per render branch.
   const missing = useMemo(
     () => missingMatter({ dedication, epigraph, acknowledgments, aboutAuthor }),
@@ -3136,6 +3142,37 @@ function MatterEditor({ bookId, matter }: { bookId: string; matter?: BookMatter 
             />
           )}
         </Field>
+        {/* Dramatis personae (§17.2) — an opt-in cast list, built from your people. Off by default; the register
+            is only ever used behind the scenes for consistency unless you publish it here. */}
+        <div className={styles.castEditor}>
+          <Inline justify="space-between" align="center">
+            <Text size="sm">Publish a cast list (“The people in this book”)</Text>
+            <Switch
+              checked={castPublished}
+              onChange={(v) => {
+                setCastPublished(v);
+                setSaved(false);
+              }}
+              aria-label="Publish a cast list"
+            />
+          </Inline>
+          <Text tone="tertiary" size="sm">
+            {castRegister.length > 0
+              ? `Built from your people — ${castRegister.length} so far. It appears in the front of the book only when this is on.`
+              : 'Once your book knows a few recurring people, they’ll appear here. It’s published only when this is on.'}
+          </Text>
+          {castPublished && castRegister.length > 0 ? (
+            <ul className={styles.castPreview}>
+              {castRegister.slice(0, 8).map((m) => (
+                <li key={m.name}>
+                  <strong>{m.name}</strong>
+                  {m.relationship ? ` — ${m.relationship}` : ''}
+                </li>
+              ))}
+              {castRegister.length > 8 ? <li>…and {castRegister.length - 8} more</li> : null}
+            </ul>
+          ) : null}
+        </div>
         {/* A light nudge, never a gate (§16.3) — a book with nothing out front is still a book. */}
         {missing.length > 0 ? (
           <Text tone="tertiary" size="sm">
@@ -3155,6 +3192,7 @@ function MatterEditor({ bookId, matter }: { bookId: string; matter?: BookMatter 
                   ...(acknowledgments.trim() ? { acknowledgments: acknowledgments.trim() } : {}),
                   ...(aboutAuthor.trim() ? { aboutAuthor: aboutAuthor.trim() } : {}),
                   ...(colophon.trim() ? { colophon: colophon.trim() } : {}),
+                  ...(castPublished ? { castPublished: true } : {}),
                 },
               });
               setSaved(true);
@@ -3497,6 +3535,19 @@ function BookReader({
               ) : null}
               {manifest.matter?.epigraph ? (
                 <blockquote className={styles.frontEpi}>{manifest.matter.epigraph}</blockquote>
+              ) : null}
+              {manifest.cast && manifest.cast.length > 0 ? (
+                <section className={styles.castList} aria-label="The people in this book">
+                  <h2>The people in this book</h2>
+                  <ul>
+                    {manifest.cast.map((m) => (
+                      <li key={m.name}>
+                        <strong>{m.name}</strong>
+                        {m.relationship ? ` — ${m.relationship}` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
               ) : null}
               {manifest.parts.length > 0 ? (
                 <nav className={styles.contents} aria-label="Contents">

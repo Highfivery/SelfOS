@@ -24,6 +24,7 @@ import type {
   BookReader,
   SharedBookSummary,
   StoryCompleteness,
+  CastEntry,
   StoryCorpusStats,
   StoryOutlineEditInput,
   StoryOutlineEditResult,
@@ -168,6 +169,8 @@ interface StoryState {
   /** Deterministic, no-AI corpus counts for the "before you begin" invitation (§13.6.10). */
   corpusStats: StoryCorpusStats | null;
   loadCorpusStats: () => Promise<void>;
+  castRegister: CastEntry[];
+  loadCastRegister: (bookId: string) => Promise<void>;
   /** How far along the book is (§3.6) — a qualitative stage + subtle ratio, from the stored coverage. */
   completeness: StoryCompleteness | null;
   loadCompleteness: (bookId: string) => Promise<void>;
@@ -292,6 +295,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   exclusions: [],
   proposals: [],
   corpusStats: null,
+  castRegister: [],
   completeness: null,
   readers: [],
   images: [],
@@ -607,6 +611,9 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     const corpusStats = (await window.selfos?.storyCorpusStats()) ?? null;
     set({ corpusStats });
   },
+  loadCastRegister: async (bookId) => {
+    set({ castRegister: (await window.selfos?.storyCastRegister({ bookId })) ?? [] });
+  },
   loadCompleteness: async (bookId) => {
     const completeness = (await window.selfos?.storyCompleteness({ bookId })) ?? null;
     set({ completeness });
@@ -821,6 +828,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       exclusions: [],
       proposals: [],
       corpusStats: null,
+      castRegister: [],
       completeness: null,
       gaps: null,
       answeredCheckIns: [],

@@ -1,5 +1,6 @@
 import type { FileSystem } from '../host';
 import { getPerson, listPeople } from '../people';
+import { castForPublication, getCastRegister } from './castRegister';
 import type {
   BookChapter,
   BookReader,
@@ -132,6 +133,12 @@ export async function publishBook(
   await prunePublishedImages(fs, personId, bookId, referenced);
   const images = index.images.filter((img) => referenced.has(img.id));
 
+  // Freeze the cast register into the published head ONLY when the author opted in (§17.2). A shared reader
+  // can't recompute the subject's private graph, so the "dramatis personae" is snapshotted here.
+  const cast = book.matter?.castPublished
+    ? castForPublication(await getCastRegister(fs, key, personId, bookId))
+    : [];
+
   const publishedManifest: PublishedManifest = {
     schemaVersion: 1,
     publishedAt: now.toISOString(),
@@ -139,6 +146,7 @@ export async function publishBook(
     ...(book.essence ? { essence: book.essence } : {}),
     ...(book.coverImageId ? { coverImageId: book.coverImageId } : {}),
     ...(book.matter ? { matter: book.matter } : {}),
+    ...(cast.length > 0 ? { cast } : {}),
     noteOnBook: noteOnBook(publishedChapters),
     parts,
     chapterOrder,
@@ -472,6 +480,11 @@ export async function readOwnBook(
   }));
 
   const index = await getStoryImageIndex(fs, key, personId, bookId);
+  // The owner reads their OWN draft, so compute the cast LIVE when opted in — they see the dramatis personae as
+  // it will publish (a shared reader gets the frozen `PublishedManifest.cast` instead).
+  const draftCast = book.matter?.castPublished
+    ? castForPublication(await getCastRegister(fs, key, personId, bookId))
+    : [];
   const manifest: PublishedManifest = {
     schemaVersion: 1,
     // Not actually published — the draft's own timestamp so the reader has a stable colophon date.
@@ -480,6 +493,7 @@ export async function readOwnBook(
     ...(book.essence ? { essence: book.essence } : {}),
     ...(book.coverImageId ? { coverImageId: book.coverImageId } : {}),
     ...(book.matter ? { matter: book.matter } : {}),
+    ...(draftCast.length > 0 ? { cast: draftCast } : {}),
     noteOnBook: noteOnBook(orderedChapters),
     parts,
     chapterOrder,

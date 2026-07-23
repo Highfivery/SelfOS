@@ -18,6 +18,7 @@ export * from './storyMemoryService';
 export * from './storyRefreshService';
 export * from './storyService';
 export * from './storyQuotes';
+export * from './castRegister';
 export * from './storyOutline';
 export * from './storyStructureService';
 export * from './storyTitleService';

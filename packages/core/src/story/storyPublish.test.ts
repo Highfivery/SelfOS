@@ -4,7 +4,7 @@ import { generateMasterKey } from '../crypto';
 import type { ClaudeClient, ClaudeUsage } from '../host';
 import { memFileSystem } from '../host/memFileSystem';
 import { saveInsight } from '../insights';
-import { savePerson } from '../people';
+import { savePerson, saveRelationship } from '../people';
 import type { AiDeps } from '../questionnaires';
 import type { BookChapter, BookOutline, Insight, LifeTimeline, Person } from '../schemas';
 import { generateChapter } from './storyGenerationService';
@@ -42,7 +42,9 @@ import {
   getBook,
   getChapter,
   getPublishedImageBytes,
+  getPublishedManifest,
   saveChapter,
+  updateBook,
 } from './storyService';
 
 const key = generateMasterKey();
@@ -151,6 +153,30 @@ describe('publishBook (64 §3.5)', () => {
     await generateChapter(deps(fs), { bookId: book.id, chapterId: 'c1' }); // status 'new', not reviewed
     const res = await publishBook(fs, key, 'author', book.id, now);
     expect(res.ok).toBe(false);
+  });
+
+  it('freezes the cast register into the published head ONLY when the author opts in (§17.2)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs); // seeds author + reader (Angel)
+    await saveRelationship(fs, key, {
+      id: 'r-author-reader',
+      schemaVersion: 2,
+      fromPersonId: 'author',
+      toPersonId: 'reader',
+      type: 'partner',
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+
+    // Opt OUT (default): no cast is published even though the graph has a partner.
+    await publishBook(fs, key, 'author', bookId, now);
+    expect((await getPublishedManifest(fs, key, 'author', bookId))?.cast).toBeUndefined();
+
+    // Opt IN: the cast is frozen into the published head, naming the partner.
+    await updateBook(fs, key, 'author', bookId, { matter: { castPublished: true } }, now);
+    await publishBook(fs, key, 'author', bookId, now);
+    const cast = (await getPublishedManifest(fs, key, 'author', bookId))?.cast;
+    expect(cast?.find((m) => m.name === 'Angel')).toMatchObject({ relationship: 'partner' });
   });
 
   it('snapshots ONLY Reviewed chapters; a later draft edit does not leak into the published head', async () => {
@@ -474,6 +500,30 @@ describe('export (64 §3.9)', () => {
     ]);
     expect(html).toContain('About the author');
     expect(html).toContain(BOOK_BOUNDARY_LINE);
+  });
+
+  it('renders the dramatis-personae cast list in both exports when present (§17.2)', () => {
+    const manifest: PublishedManifest = {
+      schemaVersion: 1,
+      publishedAt: 'now',
+      title: 'The Story of Ben',
+      cast: [{ name: 'Angel', relationship: 'partner' }, { name: 'Pat' }],
+      parts: [{ id: 'p1', title: 'Roots', chapterIds: ['c1'] }],
+      chapterOrder: ['c1'],
+      images: [],
+    };
+    const chapters = [{ id: 'c1', title: 'The Garage', markdown: 'Prose.', imagePlacements: [] }];
+    const md = bookToMarkdown(manifest, chapters);
+    expect(md).toContain('## The people in this book');
+    expect(md).toContain('**Angel** — partner');
+    expect(md).toContain('**Pat**');
+    const html = bookToHtml(manifest, chapters);
+    expect(html).toContain('The people in this book');
+    expect(html).toContain('<strong>Angel</strong> — partner');
+    // A book with NO cast (opt-out) renders no such section.
+    expect(bookToMarkdown({ ...manifest, cast: undefined }, chapters)).not.toContain(
+      'The people in this book',
+    );
   });
 
   it('a book with NO colophon still closes with the boundary line (§8.2)', () => {

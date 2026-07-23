@@ -365,6 +365,9 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         staled: 0,
       }),
     storyUnexclude: () => Promise.resolve([]),
+    storyQuoteCandidates: () => Promise.resolve([]),
+    storyMineQuotes: () => Promise.resolve([]),
+    storySetQuoteStatus: () => Promise.resolve([]),
     storyTodoToQuestions: () =>
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
     storyAnswerQuestion: () =>

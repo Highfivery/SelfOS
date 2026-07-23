@@ -10,6 +10,7 @@ import {
   ExclusionListSchema,
   LifeTimelineSchema,
   PublishedManifestSchema,
+  QuoteListSchema,
   StoryImageIndexSchema,
   StoryInterviewStateSchema,
   StoryProposalListSchema,
@@ -25,6 +26,7 @@ import {
   type ExclusionItem,
   type LifeTimeline,
   type PublishedManifest,
+  type QuoteCandidate,
   type StoryBookBundle,
   type StoryImageEntry,
   type StoryImageIndex,
@@ -61,6 +63,9 @@ function timelinePath(personId: string, bookId: string): string {
 }
 function exclusionsPath(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/exclusions.enc`;
+}
+function quotesPath(personId: string, bookId: string): string {
+  return `${bookDir(personId, bookId)}/quotes.enc`;
 }
 function chaptersDir(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/chapters`;
@@ -416,6 +421,26 @@ export async function saveExclusions(
   items: ExclusionItem[],
 ): Promise<void> {
   await writeEncryptedJson(fs, exclusionsPath(personId, bookId), { schemaVersion: 1, items }, key);
+}
+
+export async function getQuotes(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<QuoteCandidate[]> {
+  const raw = await readEncryptedJson(fs, quotesPath(personId, bookId), key);
+  return raw ? QuoteListSchema.parse(raw).items : [];
+}
+
+export async function saveQuotes(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  items: QuoteCandidate[],
+): Promise<void> {
+  await writeEncryptedJson(fs, quotesPath(personId, bookId), { schemaVersion: 1, items }, key);
 }
 
 // --- Markup (the per-chapter suggestion layer) + the book-level to-do roll-up (§3.3) ---------------------

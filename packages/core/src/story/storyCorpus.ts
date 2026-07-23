@@ -25,7 +25,7 @@ import {
   type StoryPhotoAnswer,
   type StorySourceRef,
 } from '../schemas';
-import { getPhotoAnswers, getStoryImageIndex, getTimeline } from './storyService';
+import { getPhotoAnswers, getQuotes, getStoryImageIndex, getTimeline } from './storyService';
 import { sortTimeline } from './storyTimeline';
 import { listMemories } from './storyMemoryService';
 
@@ -373,6 +373,26 @@ export async function buildStoryCorpus(
       text,
       ...(memory.lifeAreas[0] ? { lifeArea: memory.lifeAreas[0] } : {}),
       ...(memory.approxDate ? { date: memory.approxDate } : {}),
+    });
+  }
+
+  // 7.5) Approved quotes (§17.4) — verbatim lines the person actually said, mined + author-APPROVED. Only
+  //      `status:'approved'` items are emitted (the single funnel: a pending/rejected candidate never reaches
+  //      the corpus, so it can't be generated into a chapter or exported). Exclusion-filtered via `add()`.
+  const quotes = await safely(() => getQuotes(fs, key, personId, bookId), []);
+  for (const quote of quotes) {
+    if (quote.status !== 'approved') continue;
+    const text = quote.text.trim();
+    if (text.length === 0) continue;
+    add({
+      sourceRef: {
+        kind: 'quote',
+        id: quote.id,
+        ...(quote.messageTs ? { at: quote.messageTs } : {}),
+      },
+      label: 'In their own words',
+      text,
+      ...(quote.messageTs ? { date: quote.messageTs } : {}),
     });
   }
 

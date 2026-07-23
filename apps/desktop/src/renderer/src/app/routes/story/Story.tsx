@@ -2091,6 +2091,11 @@ function InterviewTab({
   const askGap = useStoryStore((s) => s.askGap);
   const answered = useStoryStore((s) => s.answeredCheckIns);
   const loadAnswered = useStoryStore((s) => s.loadAnsweredCheckIns);
+  const quotes = useStoryStore((s) => s.quotes);
+  const loadQuotes = useStoryStore((s) => s.loadQuotes);
+  const mineQuotes = useStoryStore((s) => s.mineQuotes);
+  const setQuoteStatus = useStoryStore((s) => s.setQuoteStatus);
+  const [mining, setMining] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [asking, setAsking] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -2104,7 +2109,8 @@ function InterviewTab({
   useEffect(() => {
     void loadGaps(bookId);
     void loadAnswered(bookId);
-  }, [bookId, loadGaps, loadAnswered]);
+    void loadQuotes(bookId);
+  }, [bookId, loadGaps, loadAnswered, loadQuotes]);
 
   // Deep-link: `?memory=<id>` opens that memory; `?seed=<focus>` starts a new seeded one (the photo entry). The
   // param is consumed once (cleared) so closing the panel doesn't reopen it.
@@ -2278,6 +2284,97 @@ function InterviewTab({
       {/* The two memory sections (§14.2), shared verbatim with the book-independent `/story/memories`
           route (§15.1) so they can never drift. */}
       <MemoryCollection onOpen={(memoryId) => setPanel({ memoryId })} />
+
+      {/* In your own words (§17.4) — mine verbatim lines the person said, approve each before it can be
+          cited. A pending/rejected candidate never reaches a chapter or an export. */}
+      <Card>
+        <Stack gap={3}>
+          <Heading level={2}>In your own words</Heading>
+          <Text tone="secondary" size="sm">
+            Your biographer can gather striking lines you actually said — in your coaching sessions
+            and with your partner — so your book can quote you word-for-word. Nothing is used until
+            you approve it.
+          </Text>
+          <Inline>
+            <Button
+              variant="secondary"
+              disabled={mining}
+              onClick={async () => {
+                setMining(true);
+                try {
+                  await mineQuotes(bookId);
+                } finally {
+                  setMining(false);
+                }
+              }}
+            >
+              {mining ? 'Looking…' : 'Find lines I said'}
+            </Button>
+          </Inline>
+          {(() => {
+            const pending = quotes.filter((q) => q.status === 'pending');
+            const approved = quotes.filter((q) => q.status === 'approved');
+            return (
+              <Stack gap={3}>
+                {pending.length > 0 ? (
+                  <Stack gap={2}>
+                    <Text size="sm" className={styles.rowTitle}>
+                      To review ({pending.length})
+                    </Text>
+                    {pending.map((q) => (
+                      <div key={q.id} className={styles.quoteRow}>
+                        <Text size="sm" className={styles.quoteText}>
+                          “{q.text}”
+                        </Text>
+                        <Inline gap={1}>
+                          <Button
+                            variant="ghost"
+                            onClick={() => void setQuoteStatus(bookId, q.id, 'approved')}
+                          >
+                            Use it
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            onClick={() => void setQuoteStatus(bookId, q.id, 'rejected')}
+                          >
+                            Skip
+                          </Button>
+                        </Inline>
+                      </div>
+                    ))}
+                  </Stack>
+                ) : null}
+                {approved.length > 0 ? (
+                  <Stack gap={2}>
+                    <Text size="sm" className={styles.rowTitle}>
+                      Your book can quote these ({approved.length})
+                    </Text>
+                    {approved.map((q) => (
+                      <div key={q.id} className={styles.quoteRow}>
+                        <Text size="sm" className={styles.quoteText}>
+                          “{q.text}”
+                        </Text>
+                        <Button
+                          variant="ghost"
+                          onClick={() => void setQuoteStatus(bookId, q.id, 'rejected')}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                  </Stack>
+                ) : null}
+                {quotes.length === 0 && !mining ? (
+                  <Text tone="tertiary" size="sm">
+                    No lines gathered yet. Once you’ve had a few sessions, “Find lines I said” will
+                    surface the vivid ones to approve.
+                  </Text>
+                ) : null}
+              </Stack>
+            );
+          })()}
+        </Stack>
+      </Card>
 
       <Text tone="tertiary" size="sm">
         Questions arrive in your Inbox under “Your biographer”. Your answers feed the book as it
@@ -3517,6 +3614,8 @@ const SOURCE_KIND_LABEL: Record<string, string> = {
   together: 'a session with your partner',
   timeline: 'your timeline',
   photo: 'a photo',
+  memory: 'a memory you shared',
+  quote: 'your own words',
 };
 
 /** Split a chapter's markdown into paragraphs the SAME way the core anchors provenance (`p<index>` over

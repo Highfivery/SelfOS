@@ -9,6 +9,7 @@ import type {
   ChatMessage,
   Conversation,
   Insight,
+  QuoteCandidate,
   StoryBookBundle,
   StoryBookTypeView,
   StoryMarkInput,
@@ -1443,6 +1444,48 @@ describe('Story (64)', () => {
     expect(screen.getByText(/Answered/)).toBeInTheDocument();
     expect(screen.getByText('Waiting in your Inbox')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Ask me about this' })).toHaveLength(1);
+  });
+
+  it('the Interview tab mines quotes into a review queue and approving moves one to "can quote" (§17.4)', async () => {
+    const now = new Date().toISOString();
+    let store: QuoteCandidate[] = [
+      {
+        id: 'q1',
+        text: 'I finally understood that I was allowed to want things.',
+        source: 'session',
+        conversationId: 'c1',
+        messageTs: now,
+        status: 'pending',
+        createdAt: now,
+      },
+    ];
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')),
+      storyGaps: () => Promise.resolve({ gaps: [], partCoverage: [], hasOpenCheckin: false }),
+      storyAnsweredCheckIns: () => Promise.resolve([]),
+      storyQuoteCandidates: () => Promise.resolve(store),
+      storyMineQuotes: () => Promise.resolve(store),
+      storySetQuoteStatus: (input: unknown) => {
+        const { quoteId, status } = input as { quoteId: string; status: 'approved' | 'rejected' };
+        store = store.map((q) => (q.id === quoteId ? { ...q, status } : q));
+        return Promise.resolve(store);
+      },
+    });
+    renderStory();
+    await openTab('Interview');
+
+    // The pending candidate shows for review with Use it / Skip.
+    expect(await screen.findByText(/allowed to want things/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Use it' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Skip' })).toBeInTheDocument();
+
+    // Approve it → it moves to the "can quote" list (a Remove action, no longer Use it/Skip).
+    await userEvent.click(screen.getByRole('button', { name: 'Use it' }));
+    expect(await screen.findByText(/Your book can quote these/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Use it' })).not.toBeInTheDocument();
   });
 
   // --- "Share a memory" (§14): the biographer interview chat on the Interview tab ------------------

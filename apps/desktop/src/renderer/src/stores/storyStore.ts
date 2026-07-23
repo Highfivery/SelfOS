@@ -8,6 +8,8 @@ import type {
   StoryChapterHistoryView,
   ExclusionItem,
   ExclusionKind,
+  QuoteCandidate,
+  QuoteStatus,
   MarkupMark,
   StoryBookBundle,
   StoryBookTypeView,
@@ -183,6 +185,11 @@ interface StoryState {
   /** The answered biographer check-ins (§13.6.5), newest-first. */
   answeredCheckIns: StoryAnsweredCheckIn[];
   loadAnsweredCheckIns: (bookId: string) => Promise<void>;
+  /** Quote mining (§17.4): the "In your own words" review queue — mined candidates the author approves. */
+  quotes: QuoteCandidate[];
+  loadQuotes: (bookId: string) => Promise<void>;
+  mineQuotes: (bookId: string) => Promise<void>;
+  setQuoteStatus: (bookId: string, quoteId: string, status: QuoteStatus) => Promise<void>;
   /** The title workshop (§16.4): metered reads that return candidates; committing goes through `update`. */
   suggestTitles: (bookId: string) => Promise<StoryTitlesResult>;
   regenerateEssence: (bookId: string) => Promise<StoryEssenceResult>;
@@ -632,6 +639,17 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   loadAnsweredCheckIns: async (bookId) => {
     set({ answeredCheckIns: (await window.selfos?.storyAnsweredCheckIns({ bookId })) ?? [] });
   },
+  quotes: [],
+  loadQuotes: async (bookId) => {
+    set({ quotes: (await window.selfos?.storyQuoteCandidates({ bookId })) ?? [] });
+  },
+  mineQuotes: async (bookId) => {
+    set({ quotes: (await window.selfos?.storyMineQuotes({ bookId })) ?? get().quotes });
+  },
+  setQuoteStatus: async (bookId, quoteId, status) => {
+    const quotes = await window.selfos?.storySetQuoteStatus({ bookId, quoteId, status });
+    if (quotes) set({ quotes });
+  },
   suggestTitles: async (bookId) =>
     (await window.selfos?.storySuggestTitles({ bookId })) ?? {
       ok: false,
@@ -806,6 +824,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       completeness: null,
       gaps: null,
       answeredCheckIns: [],
+      quotes: [],
       readers: [],
       images: [],
       imageUrls: {},

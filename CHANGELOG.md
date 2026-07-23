@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.44.0](https://github.com/Highfivery/SelfOS/compare/v0.43.4...v0.44.0) (2026-07-23)
+
+
+### Features
+
+* **story:** a cast register — the book knows its people ([#328](https://github.com/Highfivery/SelfOS/issues/328)) ([3bd3a7b](https://github.com/Highfivery/SelfOS/commit/3bd3a7bf230c872a0610e05101c162adffd475ae))
+* **story:** a title workshop — alternatives + a fresh essence without a rewrite ([#324](https://github.com/Highfivery/SelfOS/issues/324)) ([0dd01d0](https://github.com/Highfivery/SelfOS/commit/0dd01d0c8f0b3e51e941cd0e387e53cd404fa8b0))
+* **story:** corpus budgeting + per-chapter relevance slicing for generation ([#326](https://github.com/Highfivery/SelfOS/issues/326)) ([b5bb9d3](https://github.com/Highfivery/SelfOS/commit/b5bb9d3bb414d3d48c1d4ab4ed4c31fe2346d35f))
+* **story:** cross-chapter continuity checks + an opt-in line-edit ([#329](https://github.com/Highfivery/SelfOS/issues/329)) ([0241837](https://github.com/Highfivery/SelfOS/commit/024183707b9f12c1cbc2bea98a3b99369165276a))
+* **story:** manuscript metrics — how long the book is, and whether it's balanced ([#325](https://github.com/Highfivery/SelfOS/issues/325)) ([e909682](https://github.com/Highfivery/SelfOS/commit/e909682281467ba58fae89ea0ffc9985dbc8ae40))
+* **story:** quote mining — your own words, in your own book ([#327](https://github.com/Highfivery/SelfOS/issues/327)) ([06969f6](https://github.com/Highfivery/SelfOS/commit/06969f6976c767d6372ac88ce96b29115b712d30))
+* **story:** structured front & back matter — with an unremovable wellness line ([#323](https://github.com/Highfivery/SelfOS/issues/323)) ([26746e3](https://github.com/Highfivery/SelfOS/commit/26746e345682ab70998c654510e9a29cb690347d))
+* **story:** the author edits their own outline — no AI in the loop ([#321](https://github.com/Highfivery/SelfOS/issues/321)) ([27a373e](https://github.com/Highfivery/SelfOS/commit/27a373e360cbbcc3166bfbadae93c9c300d113f1))
+* **story:** the timeline stops being dead data — and what you fix stays fixed ([#322](https://github.com/Highfivery/SelfOS/issues/322)) ([cce2414](https://github.com/Highfivery/SelfOS/commit/cce24141c1c0052ee3462f5d312ed59028b203ba))
+
+
+### Bug Fixes
+
+* **story:** a memory outlives its book — book-independent /story/memories route ([#317](https://github.com/Highfivery/SelfOS/issues/317)) ([fbdef61](https://github.com/Highfivery/SelfOS/commit/fbdef61971ec4130b003ace004e826406f1a9088))
+* **story:** count only what feeds the book, and cite answers per questionnaire ([#319](https://github.com/Highfivery/SelfOS/issues/319)) ([836ca26](https://github.com/Highfivery/SelfOS/commit/836ca262d7705efeb089771f87ab75c92888c1e5))
+
 ## [0.43.4](https://github.com/Highfivery/SelfOS/compare/v0.43.3...v0.43.4) (2026-07-22)
 
 

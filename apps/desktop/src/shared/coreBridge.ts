@@ -177,6 +177,7 @@ import {
   StoryAskGapInputSchema,
   StoryBookRefSchema,
   StorySetQuoteStatusInputSchema,
+  StoryResolveContinuityInputSchema,
   StoryChapterRefSchema,
   StoryChapterVersionInputSchema,
   StoryMemoryRefSchema,
@@ -225,6 +226,8 @@ import {
   type ExclusionItem,
   type QuoteCandidate,
   type CastEntry,
+  type ContinuityFinding,
+  type StoryContinuityResult,
   type MarkupMark,
   type SharedBookSummary,
   type StoryBookBundle,
@@ -483,6 +486,10 @@ import {
   getPhotoAnswers,
   getStoryCompleteness,
   getCastRegister,
+  checkContinuity,
+  listContinuityFindings,
+  resolveContinuityFinding,
+  lineEditChapter,
   getStoryCorpusStats,
   getStoryGaps,
   getStoryImage,
@@ -5484,6 +5491,55 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         bundle,
         ...(res.message ? { message: res.message } : {}),
       };
+    },
+    storyContinuityCheck: async (input): Promise<StoryContinuityResult> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps)
+        return { ok: false, findings: [], reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          findings: [],
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to check continuity.',
+        };
+      }
+      return checkContinuity(deps, bookId);
+    },
+    storyContinuity: async (input): Promise<ContinuityFinding[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return listContinuityFindings(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyResolveContinuity: async (input): Promise<ContinuityFinding[]> => {
+      const { bookId, findingId, action } = StoryResolveContinuityInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return resolveContinuityFinding(ctx.fs, ctx.key, personId, { bookId, findingId, action });
+    },
+    storyLineEdit: async (input): Promise<StoryRevisionResult> => {
+      const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to polish a chapter.',
+        };
+      }
+      const res = await lineEditChapter(deps, { bookId, chapterId });
+      if (!res.ok) return { ok: false, reason: res.reason, message: res.message };
+      const bundle = await readBookBundle(deps.fs, deps.key, deps.personId, bookId);
+      if (!bundle) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
+      const markup = await getMarkup(deps.fs, deps.key, deps.personId, bookId, chapterId);
+      return { ok: true, bundle, markup };
     },
     storyHomeSignal: async (): Promise<StoryHomeSignal> => {
       const empty: StoryHomeSignal = {

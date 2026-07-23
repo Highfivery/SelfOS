@@ -67,11 +67,13 @@ import {
 import {
   getBook,
   getChapter,
+  getChapterHistory,
   getMarkup,
   getOutline,
   getQuotes,
   getTimeline,
   listBooks,
+  listChapters,
   listMemories,
 } from '@selfos/core/story';
 
@@ -13139,6 +13141,50 @@ test('story (64): the cast register — a recurring person appears, opt-in publi
     // Decrypt: the opt-in persisted, so a publish would freeze the cast into the book.
     await expect
       .poll(async () => (await listBooks(fs, key, 'owner-1'))[0]?.matter?.castPublished)
+      .toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('story (64): opt-in line-edit polishes a chapter and is reversible via History (§17.3)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Polish Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'Polish Book', level: 1 })).toBeVisible();
+
+    // Open the chapter editor, polish the writing (a two-step confirm), and see the prose change.
+    await w.getByRole('button', { name: /The Garage/ }).click();
+    await w.getByRole('button', { name: 'Polish the writing' }).click();
+    await w.getByRole('button', { name: 'Polish it' }).click();
+    await expect(w.getByText(/he said nothing at all/)).toBeVisible();
+
+    // History carries the pre-polish text under "Before a polish" — reversible.
+    await w.getByRole('button', { name: 'History' }).click();
+    await expect(w.getByText('Before a polish')).toBeVisible();
+
+    // Decrypt: the pre-edit text is archived with reason 'lineEdit'.
+    await expect
+      .poll(async () => {
+        const bookId = (await listBooks(fs, key, 'owner-1'))[0]!.id;
+        const chapters = await listChapters(fs, key, 'owner-1', bookId);
+        const history = await getChapterHistory(fs, key, 'owner-1', bookId, chapters[0]!.id);
+        return history.versions.some((v) => v.reason === 'lineEdit');
+      })
       .toBe(true);
   } finally {
     await app.close();

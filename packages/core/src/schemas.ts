@@ -3929,7 +3929,7 @@ export const ChapterVersionSchema = z.object({
   provenance: z.array(ChapterProvenanceEntrySchema).default([]),
   sourceSignature: z.string().default(''),
   savedAt: z.string(),
-  reason: z.enum(['rewrite', 'revision', 'restore']),
+  reason: z.enum(['rewrite', 'revision', 'restore', 'lineEdit']),
 });
 export type ChapterVersion = z.infer<typeof ChapterVersionSchema>;
 
@@ -4510,6 +4510,48 @@ export const StoryProposalListSchema = z.object({
 });
 export type StoryProposalList = z.infer<typeof StoryProposalListSchema>;
 
+// --- Cross-chapter continuity (64 §17.3) — inconsistencies surfaced as REVIEW ITEMS, never auto-fixed -----
+
+/** What kind of inconsistency a continuity finding flags. */
+export const ContinuityKindSchema = z.enum(['name', 'date', 'fact', 'other']);
+export type ContinuityKind = z.infer<typeof ContinuityKindSchema>;
+
+export const ContinuityStatusSchema = z.enum(['pending', 'resolved', 'dismissed']);
+export type ContinuityStatus = z.infer<typeof ContinuityStatusSchema>;
+
+export const ContinuityFindingSchema = z.object({
+  id: z.string().min(1),
+  kind: ContinuityKindSchema,
+  /** A one-line statement of the inconsistency (e.g. "Her name is 'Ana' in ch.2 but 'Anna' in ch.5"). */
+  summary: z.string(),
+  /** The chapter titles the finding spans (for the author to jump to; display-only). */
+  chapters: z.array(z.string()).default([]),
+  status: ContinuityStatusSchema,
+  createdAt: z.string(),
+});
+export type ContinuityFinding = z.infer<typeof ContinuityFindingSchema>;
+
+export const StoryContinuityListSchema = z.object({
+  schemaVersion: z.literal(1),
+  findings: z.array(ContinuityFindingSchema).default([]),
+});
+export type StoryContinuityList = z.infer<typeof StoryContinuityListSchema>;
+
+export const StoryResolveContinuityInputSchema = z.object({
+  bookId: z.string().min(1),
+  findingId: z.string().min(1),
+  action: z.enum(['resolve', 'dismiss']),
+});
+export type StoryResolveContinuityInput = z.infer<typeof StoryResolveContinuityInputSchema>;
+
+/** A metered continuity pass — the surviving pending findings (zero is a valid, healthy result). */
+export interface StoryContinuityResult {
+  ok: boolean;
+  findings: ContinuityFinding[];
+  reason?: AiFailureReason | 'AI_OFF';
+  message?: string;
+}
+
 // --- Your Story IPC view types + input schemas (§5.6) ----------------------------------------------------
 
 /** The composite a book detail view needs in one read (§5.7). Crypto-free (defined here in the schemas
@@ -4725,7 +4767,7 @@ export type StoryPinInput = z.infer<typeof StoryPinInputSchema>;
 export interface StoryChapterVersionInfo {
   revision: number;
   savedAt: string;
-  reason: 'rewrite' | 'revision' | 'restore';
+  reason: 'rewrite' | 'revision' | 'restore' | 'lineEdit';
   /** Word count of that version — the at-a-glance size cue in the list. */
   words: number;
 }

@@ -74,6 +74,9 @@ import type {
   StoryResolveProposalResult,
   StructuralProposal,
   StoryRevisionResult,
+  StoryContinuityResult,
+  ContinuityFinding,
+  StoryResolveContinuityInput,
   StoryTodoList,
   StoryTodoToQuestionsInput,
   StoryUnexcludeInput,
@@ -433,6 +436,10 @@ export const IpcChannels = {
   storyRefreshCheck: 'story:refreshCheck',
   storyProposals: 'story:proposals',
   storyResolveProposal: 'story:resolveProposal',
+  storyContinuityCheck: 'story:continuityCheck',
+  storyContinuity: 'story:continuity',
+  storyResolveContinuity: 'story:resolveContinuity',
+  storyLineEdit: 'story:lineEdit',
   /** Manual outline control — add/rename/move/split/merge/delete, AI-free (64 §16.1). */
   storyEditOutline: 'story:editOutline',
   /** The timeline studio — add/correct/remove a moment, AI-free (64 §16.2). */
@@ -1344,6 +1351,14 @@ export interface SelfosBridge {
   /** Approve (apply the restructure — new/split chapters land un-written, drafted next refresh) or dismiss a
    *  pending structural proposal. No AI spend. Returns the remaining pending proposals + the fresh bundle. */
   storyResolveProposal(input: StoryResolveProposalInput): Promise<StoryResolveProposalResult>;
+  /** Run a cross-chapter continuity check (§17.3) — a metered AI pass returning name/date/fact findings. */
+  storyContinuityCheck(input: { bookId: string }): Promise<StoryContinuityResult>;
+  /** The book's pending continuity findings (no AI). */
+  storyContinuity(input: { bookId: string }): Promise<ContinuityFinding[]>;
+  /** Resolve or dismiss a continuity finding (no AI). Returns the remaining pending findings. */
+  storyResolveContinuity(input: StoryResolveContinuityInput): Promise<ContinuityFinding[]>;
+  /** Opt-in line-edit of ONE chapter (§17.3) — a metered polish, reversible via History. Returns the bundle. */
+  storyLineEdit(input: StoryChapterRef): Promise<StoryRevisionResult>;
   /** Edit the outline by hand (64 §16.1) — deterministic, no AI, no metering. Returns the fresh bundle. */
   storyEditOutline(input: StoryOutlineEditInput): Promise<StoryOutlineEditResult>;
   /** Edit the book's chronology by hand (64 §16.2) — deterministic, no AI. Returns the fresh timeline. */

@@ -10,6 +10,8 @@ import type {
   ExclusionKind,
   QuoteCandidate,
   QuoteStatus,
+  ContinuityFinding,
+  StoryContinuityResult,
   MarkupMark,
   StoryBookBundle,
   StoryBookTypeView,
@@ -151,6 +153,15 @@ interface StoryState {
   /** The book's PENDING structural proposals (§3.4) — the overview "Suggested changes" panel. */
   proposals: StructuralProposal[];
   loadProposals: (bookId: string) => Promise<void>;
+  continuity: ContinuityFinding[];
+  loadContinuity: (bookId: string) => Promise<void>;
+  checkContinuity: (bookId: string) => Promise<StoryContinuityResult>;
+  resolveContinuity: (
+    bookId: string,
+    findingId: string,
+    action: 'resolve' | 'dismiss',
+  ) => Promise<void>;
+  lineEdit: (bookId: string, chapterId: string) => Promise<StoryRevisionResult>;
   resolveProposal: (
     bookId: string,
     proposalId: string,
@@ -294,6 +305,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   todos: [],
   exclusions: [],
   proposals: [],
+  continuity: [],
   corpusStats: null,
   castRegister: [],
   completeness: null,
@@ -607,6 +619,40 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     set({ proposals: res.proposals, ...(res.bundle ? { bundle: res.bundle } : {}) });
     return res;
   },
+  loadContinuity: async (bookId) => {
+    set({ continuity: (await window.selfos?.storyContinuity({ bookId })) ?? [] });
+  },
+  checkContinuity: async (bookId) => {
+    set({ chaptersGenerating: true });
+    try {
+      const res = (await window.selfos?.storyContinuityCheck({ bookId })) ?? {
+        ok: false as const,
+        findings: [],
+        reason: 'ERROR' as const,
+        message: 'SelfOS isn’t ready yet.',
+      };
+      if (res.ok) set({ continuity: res.findings });
+      return res;
+    } finally {
+      set({ chaptersGenerating: false });
+    }
+  },
+  resolveContinuity: async (bookId, findingId, action) => {
+    const findings =
+      (await window.selfos?.storyResolveContinuity({ bookId, findingId, action })) ?? [];
+    set({ continuity: findings });
+  },
+  lineEdit: async (bookId, chapterId) => {
+    set({ chaptersGenerating: true });
+    try {
+      const result =
+        (await window.selfos?.storyLineEdit({ bookId, chapterId })) ?? REVISION_NOT_AVAILABLE;
+      if (result.ok) set({ bundle: result.bundle, markup: result.markup });
+      return result;
+    } finally {
+      set({ chaptersGenerating: false });
+    }
+  },
   loadCorpusStats: async () => {
     const corpusStats = (await window.selfos?.storyCorpusStats()) ?? null;
     set({ corpusStats });
@@ -827,6 +873,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       todos: [],
       exclusions: [],
       proposals: [],
+      continuity: [],
       corpusStats: null,
       castRegister: [],
       completeness: null,

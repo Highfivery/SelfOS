@@ -532,6 +532,29 @@ export function fakeClaudeClient(): ClaudeClient {
         cacheReadTokens: 0,
       };
 
+      // Continuity check (§17.3): return one name-inconsistency finding.
+      if (userText.includes('PROOFREADING this book for CONTINUITY')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            findings: [
+              {
+                kind: 'name',
+                summary: "Her name is 'Ana' in one chapter but 'Anna' in another",
+                chapters: ['The Garage'],
+              },
+            ],
+          }),
+          usage: STORY_USAGE,
+        });
+      }
+      // Line-edit (§17.3): return the polished chapter prose.
+      if (userText.includes('Line-edit this ONE chapter')) {
+        return Promise.resolve({
+          text: 'The garage smelled of cut pine, and he said nothing at all.',
+          usage: STORY_USAGE,
+        });
+      }
+
       // The title workshop (§16.4): candidate titles + a regenerated essence.
       if (userText.includes('possible titles for this book')) {
         return Promise.resolve({

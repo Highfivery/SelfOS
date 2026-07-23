@@ -1622,6 +1622,61 @@ describe('Story (64)', () => {
     });
   });
 
+  it('checks continuity → a finding shows with Mark fixed / Dismiss; resolving removes it (§17.3)', async () => {
+    const now = new Date().toISOString();
+    let findings = [
+      {
+        id: 'cf1',
+        kind: 'name' as const,
+        summary: "'Ana' vs 'Anna'",
+        chapters: ['The Garage'],
+        status: 'pending' as const,
+        createdAt: now,
+      },
+    ];
+    // A two-chapter written bundle so "Check continuity" appears (needs ≥2 written).
+    const base = writtenBundle('reviewed');
+    const twoChapters: StoryBookBundle = {
+      ...base,
+      outline: {
+        schemaVersion: 1,
+        approved: true,
+        parts: [
+          {
+            id: 'p1',
+            title: 'Roots',
+            chapters: [
+              { id: 'c1', title: 'The Garage', brief: '', lifeAreas: [], order: 0 },
+              { id: 'c2', title: 'The Road', brief: '', lifeAreas: [], order: 1 },
+            ],
+          },
+        ],
+      },
+      chapters: [
+        base.chapters[0]!,
+        { ...base.chapters[0]!, id: 'c2', order: 1, title: 'The Road', markdown: 'It was quiet.' },
+      ],
+    };
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(twoChapters),
+      storyContinuity: () => Promise.resolve(findings),
+      storyContinuityCheck: () => Promise.resolve({ ok: true as const, findings }),
+      storyResolveContinuity: (input: unknown) => {
+        const { findingId } = input as { findingId: string };
+        findings = findings.filter((f) => f.id !== findingId);
+        return Promise.resolve(findings);
+      },
+    });
+    renderStory();
+    // Chapters tab is the default landing.
+    await userEvent.click(await screen.findByRole('button', { name: 'Check continuity' }));
+    expect(await screen.findByText("'Ana' vs 'Anna'")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Mark fixed' }));
+    await waitFor(() => expect(screen.queryByText("'Ana' vs 'Anna'")).not.toBeInTheDocument());
+  });
+
   it('publishes the cast list only when toggled on, showing the register preview (§17.2)', async () => {
     let saved: { matter?: Record<string, unknown> } | null = null;
     installStoryBridge({

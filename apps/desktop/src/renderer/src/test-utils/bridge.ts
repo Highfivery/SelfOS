@@ -398,6 +398,11 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     storyRegenerateEssence: () => Promise.resolve({ ok: true, essence: null }),
     storyEditTimeline: () => Promise.resolve({ ok: true, timeline: null }),
     storyResolveProposal: () => Promise.resolve({ ok: true, proposals: [], bundle: null }),
+    storyContinuityCheck: () => Promise.resolve({ ok: true, findings: [] }),
+    storyContinuity: () => Promise.resolve([]),
+    storyResolveContinuity: () => Promise.resolve([]),
+    storyLineEdit: () =>
+      Promise.resolve({ ok: false as const, reason: 'ERROR' as const, message: 'not in test' }),
     storyHomeSignal: () =>
       Promise.resolve({
         hasBook: false,

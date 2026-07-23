@@ -11,6 +11,7 @@ import {
   LifeTimelineSchema,
   PublishedManifestSchema,
   QuoteListSchema,
+  StoryContinuityListSchema,
   StoryImageIndexSchema,
   StoryInterviewStateSchema,
   StoryProposalListSchema,
@@ -27,6 +28,7 @@ import {
   type LifeTimeline,
   type PublishedManifest,
   type QuoteCandidate,
+  type StoryContinuityList,
   type StoryBookBundle,
   type StoryImageEntry,
   type StoryImageIndex,
@@ -107,6 +109,9 @@ function todosPath(personId: string, bookId: string): string {
 }
 function proposalsPath(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/proposals.enc`;
+}
+function continuityPath(personId: string, bookId: string): string {
+  return `${bookDir(personId, bookId)}/continuity.enc`;
 }
 function interviewPath(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/interview.enc`;
@@ -510,6 +515,26 @@ export async function saveProposals(
   list: StoryProposalList,
 ): Promise<void> {
   await writeEncryptedJson(fs, proposalsPath(personId, bookId), list, key);
+}
+
+export async function getContinuity(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<StoryContinuityList> {
+  const raw = await readEncryptedJson(fs, continuityPath(personId, bookId), key);
+  return raw ? StoryContinuityListSchema.parse(raw) : { schemaVersion: 1, findings: [] };
+}
+
+export async function saveContinuity(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  list: StoryContinuityList,
+): Promise<void> {
+  await writeEncryptedJson(fs, continuityPath(personId, bookId), list, key);
 }
 
 // --- Interview state (the gap engine, §5.5) --------------------------------------------------------------

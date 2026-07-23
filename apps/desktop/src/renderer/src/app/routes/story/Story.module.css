@@ -1141,6 +1141,17 @@
   font-style: italic;
 }
 
+/* Continuity review rows (§17.3) — the finding fills the row; Mark fixed / Dismiss sit at the end. */
+.continuityRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+
 /* Shape mode (§13.5): the prose reads at a ~70% measure with pending marks living in the RIGHT MARGIN beside
    it on wide containers, stacking under the paragraph below that. The container query keys off the content
    area (not the viewport), so the rail appears exactly when there's room for it. `.shapeBody` is the query

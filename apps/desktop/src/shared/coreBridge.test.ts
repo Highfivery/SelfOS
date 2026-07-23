@@ -286,6 +286,24 @@ function makeHost(): {
       }
       // Your Story foundations (64 §5.3): "plan a biography of" → a valid foundations JSON (essence +
       // timeline + outline). Must precede the generic `JSON object` branch (the message contains that phrase).
+      // Continuity check (§17.3): one name-inconsistency finding.
+      if (userText.includes('PROOFREADING this book for CONTINUITY')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            findings: [
+              { kind: 'name', summary: "'Ana' here vs 'Anna' there", chapters: ['The Garage'] },
+            ],
+          }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+      // Line-edit (§17.3): the polished chapter prose.
+      if (userText.includes('Line-edit this ONE chapter')) {
+        return Promise.resolve({
+          text: 'The garage smelled of cut pine, and he said nothing at all.',
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
       // The title workshop (64 §16.4): candidate titles + a regenerated essence.
       if (userText.includes('possible titles for this book')) {
         return Promise.resolve({
@@ -7812,6 +7830,66 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
     expect(await bridge.storyCastRegister({ bookId: book!.id })).toEqual([]);
+  });
+
+  it('story: continuity check surfaces a finding + resolve removes it; line-edit polishes reversibly (§17.3)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'Continuity Book',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    // A continuity check needs ≥2 written chapters — the fake outline has one, so add a second and write both.
+    const partId = gen.bundle.outline!.parts[0]!.id;
+    await bridge.storyEditOutline({
+      bookId,
+      edit: { op: 'addChapter', partId, title: 'The Road', brief: 'Leaving home.' },
+    });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+    const before = chapters.bundle.chapters[0]!.markdown;
+    expect(chapters.bundle.chapters.filter((c) => c.markdown.trim().length > 0).length).toBe(2);
+
+    // Continuity: the metered pass surfaces a pending finding; resolving it clears the list.
+    const check = await bridge.storyContinuityCheck({ bookId });
+    expect(check.ok).toBe(true);
+    expect(check.findings.length).toBeGreaterThanOrEqual(1);
+    expect(await bridge.storyContinuity({ bookId })).toHaveLength(check.findings.length);
+    const remaining = await bridge.storyResolveContinuity({
+      bookId,
+      findingId: check.findings[0]!.id,
+      action: 'resolve',
+    });
+    expect(remaining.find((f) => f.id === check.findings[0]!.id)).toBeUndefined();
+
+    // Line-edit: the polish revises the chapter (status 'updated') and is archived to History (reversible).
+    const edit = await bridge.storyLineEdit({ bookId, chapterId });
+    expect(edit.ok).toBe(true);
+    if (!edit.ok) throw new Error('line edit failed');
+    const polished = edit.bundle.chapters.find((c) => c.id === chapterId)!;
+    expect(polished.markdown).not.toBe(before);
+    expect(polished.status).toBe('updated');
+    const history = await bridge.storyChapterHistory({ bookId, chapterId });
+    expect(history.versions.some((v) => v.reason === 'lineEdit')).toBe(true);
+  });
+
+  it('story: continuity + line-edit refused without story.own (§17.3)', async () => {
+    const { bridge } = await freshOwner();
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.storyContinuity({ bookId: 'x' })).toEqual([]);
+    const check = await bridge.storyContinuityCheck({ bookId: 'x' });
+    expect(check.ok).toBe(false);
+    const edit = await bridge.storyLineEdit({ bookId: 'x', chapterId: 'c' });
+    expect(edit.ok).toBe(false);
   });
 
   it('story: quote mining is refused without story.own (§17.4)', async () => {

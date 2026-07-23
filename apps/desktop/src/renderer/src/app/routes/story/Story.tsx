@@ -1882,9 +1882,21 @@ function ChaptersTab({
 }): JSX.Element {
   const imageUrls = useStoryStore((s) => s.imageUrls);
   const { manifest, outline, chapters } = bundle;
+  const bookId = manifest.id;
   const outlineChapters = outline ? outline.parts.flatMap((p) => p.chapters) : [];
   // Manual outline control (§16.1) — the structure is the author's, not only the model's.
   const [editingOutline, setEditingOutline] = useState(false);
+  // Cross-chapter continuity (§17.3) — a metered check that surfaces name/date/fact conflicts as review items.
+  const continuity = useStoryStore((s) => s.continuity);
+  const loadContinuity = useStoryStore((s) => s.loadContinuity);
+  const runContinuity = useStoryStore((s) => s.checkContinuity);
+  const resolveContinuity = useStoryStore((s) => s.resolveContinuity);
+  const busy = useStoryStore((s) => s.chaptersGenerating);
+  const [continuityNote, setContinuityNote] = useState<string | null>(null);
+  useEffect(() => {
+    void loadContinuity(bookId);
+  }, [bookId, loadContinuity]);
+  const writtenCount = chapters.filter((c) => c.markdown.trim().length > 0).length;
 
   if (!outline) return <div />;
   if (editingOutline) {
@@ -1902,7 +1914,60 @@ function ChaptersTab({
         <Button variant="ghost" onClick={() => setEditingOutline(true)}>
           Edit outline
         </Button>
+        {writtenCount >= 2 ? (
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onClick={async () => {
+              setContinuityNote(null);
+              const res = await runContinuity(bookId);
+              if (!res.ok) setContinuityNote(res.message ?? 'The continuity check couldn’t run.');
+              else if (res.findings.length === 0)
+                setContinuityNote('No continuity issues found — your names and dates line up.');
+            }}
+          >
+            {busy ? 'Checking…' : 'Check continuity'}
+          </Button>
+        ) : null}
       </div>
+      {continuityNote ? <Banner tone="info">{continuityNote}</Banner> : null}
+      {continuity.length > 0 ? (
+        <Card>
+          <Stack gap={2}>
+            <Heading level={2}>Continuity to review</Heading>
+            <Text tone="secondary" size="sm">
+              Places where names, dates, or facts don’t line up across chapters. Fix them in the
+              chapters, then mark each resolved — nothing is changed for you.
+            </Text>
+            {continuity.map((f) => (
+              <div key={f.id} className={styles.continuityRow}>
+                <Text size="sm">
+                  <strong>{f.summary}</strong>
+                  {f.chapters.length > 0 ? (
+                    <Text tone="tertiary" size="sm">
+                      {f.chapters.join(' · ')}
+                    </Text>
+                  ) : null}
+                </Text>
+                <Inline gap={1}>
+                  <Button
+                    variant="ghost"
+                    onClick={() => void resolveContinuity(bookId, f.id, 'resolve')}
+                  >
+                    Mark fixed
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => void resolveContinuity(bookId, f.id, 'dismiss')}
+                  >
+                    Dismiss
+                  </Button>
+                </Inline>
+              </div>
+            ))}
+          </Stack>
+        </Card>
+      ) : null}
       {outline.parts.map((part, pi) => {
         const partWritten = part.chapters.filter((c) =>
           chapters.some((w) => w.id === c.id && w.markdown.trim().length > 0),
@@ -3828,6 +3893,7 @@ function ChapterReader({
   onBack: () => void;
 }): JSX.Element {
   const regenerateChapter = useStoryStore((s) => s.regenerateChapter);
+  const lineEdit = useStoryStore((s) => s.lineEdit);
   const reviewChapter = useStoryStore((s) => s.reviewChapter);
   const markup = useStoryStore((s) => s.markup);
   const loadMarkup = useStoryStore((s) => s.loadMarkup);
@@ -3868,6 +3934,8 @@ function ChapterReader({
   const [illustrating, setIllustrating] = useState(false);
   // The two-step "Rewrite this chapter" confirm (§8.2 spend legibility) + the History sheet (§13.9).
   const [confirmRewrite, setConfirmRewrite] = useState(false);
+  // The opt-in "Polish the writing" (§17.3) — a light line-edit, reversible via History.
+  const [confirmPolish, setConfirmPolish] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   // Answer-the-author (§3.3): the id of the question comment currently being answered.
   const [answering, setAnswering] = useState<string | null>(null);
@@ -4580,10 +4648,37 @@ function ChapterReader({
               Cancel
             </Button>
           </Inline>
+        ) : confirmPolish ? (
+          <Inline gap={2}>
+            <Text size="sm" tone="secondary">
+              Polish the writing with your biographer — grammar and flow only, keeping your meaning
+              and your own words. The current text is saved to History, so you can undo it.
+            </Text>
+            <Button
+              variant="primary"
+              disabled={busy}
+              onClick={async () => {
+                setConfirmPolish(false);
+                setError(null);
+                const res = await lineEdit(bookId, chapterId);
+                if (!res.ok) setError(res.message);
+              }}
+            >
+              Polish it
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirmPolish(false)}>
+              Cancel
+            </Button>
+          </Inline>
         ) : (
-          <Button disabled={busy} onClick={() => setConfirmRewrite(true)}>
-            {busy ? 'Rewriting…' : 'Rewrite this chapter'}
-          </Button>
+          <Inline gap={2}>
+            <Button disabled={busy} onClick={() => setConfirmRewrite(true)}>
+              {busy ? 'Working…' : 'Rewrite this chapter'}
+            </Button>
+            <Button variant="ghost" disabled={busy} onClick={() => setConfirmPolish(true)}>
+              Polish the writing
+            </Button>
+          </Inline>
         )}
         <Button variant="ghost" onClick={() => setHistoryOpen(true)}>
           History
@@ -4640,6 +4735,7 @@ const VERSION_REASON_LABEL: Record<ChapterVersion['reason'], string> = {
   rewrite: 'Before a rewrite',
   revision: 'Before a revision',
   restore: 'Before a restore',
+  lineEdit: 'Before a polish',
 };
 
 /**

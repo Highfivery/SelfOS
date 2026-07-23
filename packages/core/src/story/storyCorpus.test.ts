@@ -19,7 +19,12 @@ import { writeEncryptedJson } from '../vault';
 import { saveConversation } from '../conversations/conversationService';
 import { createAssignment, saveQuestionnaire, saveResponse } from '../questionnaires';
 import { buildStoryCorpus, corpusText, getStoryCorpusStats } from './storyCorpus';
-import { addPhotoAnswer, addUploadedPhoto, setStoryImageAnalysis } from './storyService';
+import {
+  addPhotoAnswer,
+  addUploadedPhoto,
+  saveQuotes,
+  setStoryImageAnalysis,
+} from './storyService';
 
 const key = generateMasterKey();
 
@@ -178,6 +183,50 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
     expect(ctx).not.toContain('own restricted session fact'); // buildContext unchanged — withheld
     const corpus = corpusText(await buildStoryCorpus(fs, key, 'me', 'book-1'));
     expect(corpus).toContain('own restricted session fact'); // corpus includes it
+  });
+
+  it('emits an APPROVED quote as a source, but never a pending or rejected one (§17.4)', async () => {
+    const fs = fresh();
+    await savePerson(fs, key, person('me', 'Ben'));
+    await saveQuotes(fs, key, 'me', 'book-1', [
+      {
+        id: 'q1',
+        text: 'I chose to stay, and I never regretted it.',
+        source: 'session',
+        conversationId: 'c1',
+        messageTs: '2026-05-01',
+        status: 'approved',
+        createdAt: 'now',
+      },
+      {
+        id: 'q2',
+        text: 'a pending line no one approved',
+        source: 'session',
+        conversationId: 'c1',
+        messageTs: '2026-05-02',
+        status: 'pending',
+        createdAt: 'now',
+      },
+      {
+        id: 'q3',
+        text: 'a rejected line the author skipped',
+        source: 'together',
+        conversationId: 's1',
+        messageTs: '2026-05-03',
+        status: 'rejected',
+        createdAt: 'now',
+      },
+    ]);
+    const corpus = await buildStoryCorpus(fs, key, 'me', 'book-1');
+    const text = corpusText(corpus);
+    expect(text).toContain('I chose to stay'); // approved → citable
+    expect(text).not.toContain('a pending line'); // pending → invisible to generation/export
+    expect(text).not.toContain('a rejected line');
+    // The approved quote is a first-class provenance-carrying source.
+    expect(corpus.items.find((i) => i.sourceRef.kind === 'quote')).toMatchObject({
+      sourceRef: { kind: 'quote', id: 'q1' },
+      label: 'In their own words',
+    });
   });
 
   it('excludes a flaggedInaccurate fact (wrong, not private)', async () => {

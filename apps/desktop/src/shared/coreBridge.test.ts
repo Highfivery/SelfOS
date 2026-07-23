@@ -7753,6 +7753,55 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(await bridge.storyExclusions({ bookId })).toEqual([]);
   });
 
+  it('story: quote mining — mine the subject’s own line, approve it, and it becomes a corpus source (§17.4)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    // Seed a session with a quotable first-person line the person actually said.
+    await bridge.chatStream({
+      conversationId: 'q-conv',
+      userText: 'I finally understood that I was allowed to want things.',
+    });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'Quoted Book',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+
+    // Empty queue → mine surfaces the line as a pending candidate.
+    expect(await bridge.storyQuoteCandidates({ bookId })).toEqual([]);
+    const mined = await bridge.storyMineQuotes({ bookId });
+    const candidate = mined.find((q) => q.text.includes('allowed to want things'));
+    expect(candidate).toMatchObject({ status: 'pending', source: 'session' });
+
+    // Before approval the quote is NOT citable; after approval it is a corpus source.
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    const updated = await bridge.storySetQuoteStatus({
+      bookId,
+      quoteId: candidate!.id,
+      status: 'approved',
+    });
+    expect(updated.find((q) => q.id === candidate!.id)?.status).toBe('approved');
+    // Re-reading the queue reflects the approval (persisted).
+    expect(
+      (await bridge.storyQuoteCandidates({ bookId })).find((q) => q.id === candidate!.id)?.status,
+    ).toBe('approved');
+  });
+
+  it('story: quote mining is refused without story.own (§17.4)', async () => {
+    const { bridge } = await freshOwner();
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.storyQuoteCandidates({ bookId: 'x' })).toEqual([]);
+    expect(await bridge.storyMineQuotes({ bookId: 'x' })).toEqual([]);
+    expect(
+      await bridge.storySetQuoteStatus({ bookId: 'x', quoteId: 'y', status: 'approved' }),
+    ).toEqual([]);
+  });
+
   it('story: refreshCheck returns a fresh bundle and no-ops when nothing drifted', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });

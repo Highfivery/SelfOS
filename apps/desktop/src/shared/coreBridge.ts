@@ -176,6 +176,7 @@ import {
   StoryCreateInputSchema,
   StoryAskGapInputSchema,
   StoryBookRefSchema,
+  StorySetQuoteStatusInputSchema,
   StoryChapterRefSchema,
   StoryChapterVersionInputSchema,
   StoryMemoryRefSchema,
@@ -222,6 +223,7 @@ import {
   type StoryMemorySynthesisResult,
   type StoryMemorySaveResult,
   type ExclusionItem,
+  type QuoteCandidate,
   type MarkupMark,
   type SharedBookSummary,
   type StoryBookBundle,
@@ -452,8 +454,11 @@ import {
   getChapterHistory,
   getExclusions,
   getMarkup,
+  getQuotes,
   getTodos,
   listBookTypes,
+  mineQuoteCandidates,
+  setQuoteStatus,
   listBooks,
   markStaleChapters,
   mintTodoCheckIn,
@@ -5023,6 +5028,30 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return [];
       return removeExclusion(ctx.fs, ctx.key, personId, bookId, itemId);
+    },
+    storyQuoteCandidates: async (input): Promise<QuoteCandidate[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return getQuotes(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyMineQuotes: async (input): Promise<QuoteCandidate[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return mineQuoteCandidates(ctx.fs, ctx.key, personId, bookId, new Date());
+    },
+    storySetQuoteStatus: async (input): Promise<QuoteCandidate[]> => {
+      const { bookId, quoteId, status } = StorySetQuoteStatusInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return setQuoteStatus(ctx.fs, ctx.key, personId, bookId, quoteId, status);
     },
     storyTodoToQuestions: async (input): Promise<StoryQuestionsResult> => {
       const { bookId, chapterId, focus, anchor } = StoryTodoToQuestionsInputSchema.parse(input);

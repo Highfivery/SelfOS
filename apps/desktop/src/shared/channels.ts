@@ -7,6 +7,8 @@ import type {
   ChapterMarkup,
   ChapterVersion,
   ExclusionItem,
+  QuoteCandidate,
+  QuoteStatus,
   StoryBookBundle,
   StoryBookTypeView,
   StoryChaptersResult,
@@ -410,6 +412,9 @@ export const IpcChannels = {
   storyExclusions: 'story:exclusions',
   storyExclude: 'story:exclude',
   storyUnexclude: 'story:unexclude',
+  storyQuoteCandidates: 'story:quoteCandidates',
+  storyMineQuotes: 'story:mineQuotes',
+  storySetQuoteStatus: 'story:setQuoteStatus',
   storyTodoToQuestions: 'story:todoToQuestions',
   storyAnswerQuestion: 'story:answerQuestion',
   storyMemoryList: 'story:memoryList',
@@ -1280,6 +1285,16 @@ export interface SelfosBridge {
   storyExclude(input: StoryExcludeInput): Promise<StoryExcludeResult>;
   /** Remove an exclusion (written chapters unchanged). Returns the updated list. */
   storyUnexclude(input: StoryUnexcludeInput): Promise<ExclusionItem[]>;
+  /** The book's mined quote candidates for the "In your own words" review queue (§17.4). */
+  storyQuoteCandidates(input: { bookId: string }): Promise<QuoteCandidate[]>;
+  /** Mine new candidate quotes from the subject's own sessions + Together lines (append as pending). */
+  storyMineQuotes(input: { bookId: string }): Promise<QuoteCandidate[]>;
+  /** Approve or reject a candidate — only an approved quote is ever cited. Returns the updated list. */
+  storySetQuoteStatus(input: {
+    bookId: string;
+    quoteId: string;
+    status: QuoteStatus;
+  }): Promise<QuoteCandidate[]>;
   /** Turn a to-do into a story check-in (§3.3.2/§5.5): mint an in-app self-send from the focus + record a
    *  `questionsSent` to-do. The one AI call here — honest AI_OFF/NO_KEY/failure, nothing persisted on failure. */
   storyTodoToQuestions(input: StoryTodoToQuestionsInput): Promise<StoryQuestionsResult>;

@@ -125,6 +125,8 @@ export function sliceCorpusForChapter(
  *  raw intake (whose distilled portrait rides in as an insight) is trimmed first. */
 const FOUNDATIONS_PRIORITY: Record<StorySourceKind, number> = {
   timeline: 9,
+  // A verbatim line the person said, already author-approved — gold for a biography, so it survives a long life.
+  quote: 8,
   memory: 8,
   insight: 7,
   goal: 6,

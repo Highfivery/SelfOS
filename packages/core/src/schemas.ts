@@ -3804,6 +3804,10 @@ export const StorySourceKindSchema = z.enum([
   // A memory the person shared with their biographer (64 §14) — a first-class corpus source with real
   // per-memory provenance (a chapter paragraph can cite the specific memory it wove in).
   'memory',
+  // A verbatim line the person actually said (a mined + author-APPROVED quote, 64 §17.4) — their own words,
+  // citable in the prose. Only ever emitted for an approved quote; a pending/rejected candidate never reaches
+  // the corpus.
+  'quote',
 ]);
 export type StorySourceKind = z.infer<typeof StorySourceKindSchema>;
 export const StorySourceRefSchema = z.object({
@@ -4105,6 +4109,37 @@ export const ExclusionListSchema = z.object({
   items: z.array(ExclusionItemSchema).default([]),
 });
 export type ExclusionList = z.infer<typeof ExclusionListSchema>;
+
+// --- Quote mining (64 §17.4) — the person's own vivid, verbatim lines, mined into a review queue -----------
+
+/** Where a mined quote came from — the subject's OWN coaching session or their OWN Together lines (a
+ *  partner's line is never mined). */
+export const QuoteSourceSchema = z.enum(['session', 'together']);
+export type QuoteSource = z.infer<typeof QuoteSourceSchema>;
+
+/** A mined candidate is pending until the author acts; only an APPROVED quote can be cited in the book. */
+export const QuoteStatusSchema = z.enum(['pending', 'approved', 'rejected']);
+export type QuoteStatus = z.infer<typeof QuoteStatusSchema>;
+
+export const QuoteCandidateSchema = z.object({
+  id: z.string().min(1),
+  /** The verbatim line, exactly as the person said it. */
+  text: z.string().min(1),
+  source: QuoteSourceSchema,
+  /** The session conversation id (session) or the Together session id — for provenance + de-dup. */
+  conversationId: z.string().min(1),
+  /** The message timestamp it was said at (dedup key + chronology). */
+  messageTs: z.string(),
+  status: QuoteStatusSchema,
+  createdAt: z.string(),
+});
+export type QuoteCandidate = z.infer<typeof QuoteCandidateSchema>;
+
+export const QuoteListSchema = z.object({
+  schemaVersion: z.literal(1),
+  items: z.array(QuoteCandidateSchema).default([]),
+});
+export type QuoteList = z.infer<typeof QuoteListSchema>;
 
 // --- Interview state & images ----------------------------------------------------------------------------
 
@@ -4486,6 +4521,14 @@ export type StoryCreateInput = z.infer<typeof StoryCreateInputSchema>;
 /** A bare book reference (get / generate / delete). */
 export const StoryBookRefSchema = z.object({ bookId: z.string().min(1) });
 export type StoryBookRef = z.infer<typeof StoryBookRefSchema>;
+
+/** `story:setQuoteStatus` — approve/reject a mined quote candidate (§17.4). */
+export const StorySetQuoteStatusInputSchema = z.object({
+  bookId: z.string().min(1),
+  quoteId: z.string().min(1),
+  status: QuoteStatusSchema,
+});
+export type StorySetQuoteStatusInput = z.infer<typeof StorySetQuoteStatusInputSchema>;
 
 /** `story:exportMarkdown`/`:exportPdf` — export the DRAFT head or the PUBLISHED head (§13.6.1); draft needs no
  *  publish, published is unchanged. Defaults to `published`. */

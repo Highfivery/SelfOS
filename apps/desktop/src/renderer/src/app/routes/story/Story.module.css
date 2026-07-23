@@ -1094,6 +1094,22 @@
   white-space: nowrap;
 }
 
+/* Quote review rows (§17.4) — the verbatim line fills the row; the approve/skip actions sit at the end. */
+.quoteRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+.quoteText {
+  flex: 1 1 16rem;
+  min-width: 0;
+  font-style: italic;
+}
+
 /* Shape mode (§13.5): the prose reads at a ~70% measure with pending marks living in the RIGHT MARGIN beside
    it on wide containers, stacking under the paragraph below that. The container query keys off the content
    area (not the viewport), so the rail appears exactly when there's room for it. `.shapeBody` is the query

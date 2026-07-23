@@ -69,6 +69,7 @@ import {
   getChapter,
   getMarkup,
   getOutline,
+  getQuotes,
   getTimeline,
   listBooks,
   listMemories,
@@ -13037,6 +13038,51 @@ test('story (64): the title workshop offers alternative titles + a fresh essence
             ?.essence,
       )
       .toBe('A quiet man finding his voice, one page at a time.');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('story (64): quote mining — approve a line you said so the book can quote you (§17.4)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Seed a session with a quotable first-person line (persisted before the reply, 05 §4.1).
+    await w.getByRole('link', { name: 'Sessions' }).click();
+    await w.getByLabel('Message').fill('I finally understood that I was allowed to want things.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/allowed to want things/).first()).toBeVisible();
+
+    // Create a book, open the Interview tab, mine the queue, and approve the line.
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Quoted Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'Quoted Book', level: 1 })).toBeVisible();
+    await w.getByRole('tab', { name: 'Interview' }).click();
+    await w.getByRole('button', { name: 'Find lines I said' }).click();
+    await expect(w.getByText(/allowed to want things/).first()).toBeVisible();
+    await w.getByRole('button', { name: 'Use it' }).click();
+    await expect(w.getByText(/Your book can quote these/)).toBeVisible();
+
+    // Decrypt: the quote persisted as APPROVED — so the corpus will cite it. A pending/rejected one never would.
+    await expect
+      .poll(async () => {
+        const bookId = (await listBooks(fs, key, 'owner-1'))[0]!.id;
+        const quotes = await getQuotes(fs, key, 'owner-1', bookId);
+        return quotes.find((q) => q.text.includes('allowed to want things'))?.status;
+      })
+      .toBe('approved');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

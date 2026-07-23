@@ -13090,6 +13090,63 @@ test('story (64): quote mining — approve a line you said so the book can quote
   }
 });
 
+test('story (64): the cast register — a recurring person appears, opt-in publishes the list (§17.2)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+  // Seed a partner in the People graph, so the cast register has someone to know.
+  const nowIso = '2026-07-22T00:00:00.000Z';
+  await savePerson(fs, key, {
+    id: 'angel-1',
+    schemaVersion: 1,
+    displayName: 'Angel',
+    isSubject: true,
+    tags: [],
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  });
+  await saveRelationship(fs, key, {
+    id: 'rel-cast',
+    schemaVersion: 2,
+    fromPersonId: 'owner-1',
+    toPersonId: 'angel-1',
+    type: 'partner',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Cast Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'Cast Book', level: 1 })).toBeVisible();
+
+    await w.getByRole('tab', { name: 'Settings' }).click();
+    // The register knows the partner; the preview appears only once the opt-in is on.
+    await expect(w.getByText(/Built from your people/)).toBeVisible();
+    await expect(w.getByText('Angel')).toBeHidden();
+    await w.getByRole('switch', { name: 'Publish a cast list' }).click();
+    await expect(w.getByText('Angel')).toBeVisible();
+    await w.getByRole('button', { name: 'Save front and back matter' }).click();
+
+    // Decrypt: the opt-in persisted, so a publish would freeze the cast into the book.
+    await expect
+      .poll(async () => (await listBooks(fs, key, 'owner-1'))[0]?.matter?.castPublished)
+      .toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('story (64): the owner reads their own book in the immersive reader — front matter → chapter → edit; text size; 360px clean (§13.5)', async () => {
   test.setTimeout(60_000);
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });

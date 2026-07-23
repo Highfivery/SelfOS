@@ -39,6 +39,18 @@ export function bookToMarkdown(
   if (cover) lines.push(`![Cover](${dataUri(cover)})`, '');
   if (manifest.matter?.epigraph) lines.push(`> ${manifest.matter.epigraph}`, '');
   if (manifest.matter?.dedication) lines.push(`*${manifest.matter.dedication}*`, '');
+  // Dramatis personae (§17.2) — the opt-in cast list, frozen at publish.
+  if (manifest.cast && manifest.cast.length > 0) {
+    lines.push('## The people in this book', '');
+    for (const member of manifest.cast) {
+      lines.push(
+        member.relationship
+          ? `- **${mdSafeMatter(member.name)}** — ${mdSafeMatter(member.relationship)}`
+          : `- **${mdSafeMatter(member.name)}**`,
+      );
+    }
+    lines.push('');
+  }
   for (const part of manifest.parts) {
     lines.push(`## ${part.title}`, '');
     for (const id of part.chapterIds) {
@@ -266,6 +278,17 @@ export function bookToHtml(
   }
   if (manifest.matter?.epigraph) {
     body.push(`<blockquote class="epigraph">${escapeHtml(manifest.matter.epigraph)}</blockquote>`);
+  }
+  // Dramatis personae (§17.2) — the opt-in cast list, frozen at publish.
+  if (manifest.cast && manifest.cast.length > 0) {
+    const rows = manifest.cast
+      .map((m) =>
+        m.relationship
+          ? `<li><strong>${escapeHtml(m.name)}</strong> — ${escapeHtml(m.relationship)}</li>`
+          : `<li><strong>${escapeHtml(m.name)}</strong></li>`,
+      )
+      .join('');
+    body.push(`<section class="cast"><h2>The people in this book</h2><ul>${rows}</ul></section>`);
   }
   for (const part of manifest.parts) {
     body.push(`<h2>${escapeHtml(part.title)}</h2>`);

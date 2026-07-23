@@ -224,6 +224,7 @@ import {
   type StoryMemorySaveResult,
   type ExclusionItem,
   type QuoteCandidate,
+  type CastEntry,
   type MarkupMark,
   type SharedBookSummary,
   type StoryBookBundle,
@@ -481,6 +482,7 @@ import {
   generateStoryImage,
   getPhotoAnswers,
   getStoryCompleteness,
+  getCastRegister,
   getStoryCorpusStats,
   getStoryGaps,
   getStoryImage,
@@ -5504,6 +5506,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return empty;
       return getStoryCorpusStats(ctx.fs, ctx.key, personId);
+    },
+    storyCastRegister: async (input): Promise<CastEntry[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return getCastRegister(ctx.fs, ctx.key, personId, bookId);
     },
     storyCompleteness: async (input): Promise<StoryCompleteness> => {
       const { bookId } = StoryBookRefSchema.parse(input);

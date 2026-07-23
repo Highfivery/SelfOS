@@ -340,6 +340,37 @@
   font-style: italic;
   color: var(--color-text-secondary);
 }
+/* Dramatis personae (§17.2) — the opt-in cast list on the reader's front matter. */
+.castList {
+  margin: 0 0 var(--space-8);
+}
+.castList h2 {
+  font-family: var(--font-serif);
+  font-size: var(--font-size-lg);
+  margin: 0 0 var(--space-2);
+}
+.castList ul {
+  margin: 0;
+  padding-left: var(--space-4);
+  color: var(--color-text-secondary);
+}
+.castList li {
+  margin: 2px 0;
+}
+/* The publish-a-cast-list control + preview in the matter editor. */
+.castEditor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+}
+.castPreview {
+  margin: 0;
+  padding-left: var(--space-4);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
 .contents {
   border-top: 1px solid var(--color-border);
   padding-top: var(--space-6);

@@ -1622,6 +1622,41 @@ describe('Story (64)', () => {
     });
   });
 
+  it('publishes the cast list only when toggled on, showing the register preview (§17.2)', async () => {
+    let saved: { matter?: Record<string, unknown> } | null = null;
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+      storyCastRegister: () =>
+        Promise.resolve([
+          {
+            name: 'Angel',
+            personId: 'a',
+            relationship: 'partner',
+            mentions: 4,
+            sources: ['graph'],
+          },
+        ]),
+      storyUpdate: (input: unknown) => {
+        saved = input as { matter?: Record<string, unknown> };
+        return Promise.resolve(manifest({ status: 'ready' }));
+      },
+    });
+    renderStory();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+
+    // The register count shows; the preview list appears only once the toggle is on.
+    expect(await screen.findByText(/Built from your people — 1 so far/)).toBeInTheDocument();
+    expect(screen.queryByText('Angel')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('switch', { name: 'Publish a cast list' }));
+    expect(await screen.findByText('Angel')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save front and back matter' }));
+    await waitFor(() => expect(saved).not.toBeNull());
+    expect(saved!.matter).toMatchObject({ castPublished: true });
+  });
+
   // --- §16.4/#302: the title workshop -----------------------------------------------------------------
 
   it('suggests alternative titles and commits a pick (clearing titleAuto) (§16.4)', async () => {

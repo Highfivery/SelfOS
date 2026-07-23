@@ -43,6 +43,7 @@ import type {
   BookReader,
   SharedBookSummary,
   StoryCompleteness,
+  CastEntry,
   StoryCorpusStats,
   StoryOutlineEditInput,
   StoryOutlineEditResult,
@@ -441,6 +442,7 @@ export const IpcChannels = {
   storyRegenerateEssence: 'story:regenerateEssence',
   storyHomeSignal: 'story:homeSignal',
   storyCorpusStats: 'story:corpusStats',
+  storyCastRegister: 'story:castRegister',
   storyCompleteness: 'story:completeness',
   storyInterviewCheck: 'story:interviewCheck',
   storyGaps: 'story:gaps',
@@ -1357,6 +1359,8 @@ export interface SelfosBridge {
    *  biographer will draw from + the year span. No content, just counts. Gated `story.own`, active-person-scoped;
    *  zeroed when denied. */
   storyCorpusStats(): Promise<StoryCorpusStats>;
+  /** The book's cast register (§17.2) — recurring people from the graph + memories + named mentions. */
+  storyCastRegister(input: { bookId: string }): Promise<CastEntry[]>;
   /** How far along the book is (§3.6) — a qualitative stage + a subtle ratio, from the stored coverage. A cheap
    *  no-AI read. Gated `story.own`, active-person-scoped. */
   storyCompleteness(input: { bookId: string }): Promise<StoryCompleteness>;

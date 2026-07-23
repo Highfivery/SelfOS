@@ -7790,6 +7790,30 @@ describe('createCoreBridge — Together (58) foundation', () => {
     ).toBe('approved');
   });
 
+  it('story: the cast register — recurring people from the graph, refused without story.own (§17.2)', async () => {
+    const { bridge } = await freshOwner();
+    const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    const owner = await bridge.getActivePerson();
+    await bridge.relationshipsSave({
+      fromPersonId: owner!.id,
+      toPersonId: angel.id,
+      type: 'partner',
+    });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'Cast Book',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const register = await bridge.storyCastRegister({ bookId: book!.id });
+    expect(register.find((c) => c.name === 'Angel')).toMatchObject({ relationship: 'partner' });
+
+    // A Guest (no story.own) gets nothing — the bridge is the trust boundary.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.storyCastRegister({ bookId: book!.id })).toEqual([]);
+  });
+
   it('story: quote mining is refused without story.own (§17.4)', async () => {
     const { bridge } = await freshOwner();
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });

@@ -25,3 +25,11 @@ export * from './storyTimeline';
 export { countWords } from './storyText';
 export { manuscriptMetrics, readerWordCount } from './manuscriptMetrics';
 export type { ManuscriptMetrics, ChapterMetric, ChapterOutlier } from './manuscriptMetrics';
+export {
+  budgetCorpus,
+  sliceCorpusForChapter,
+  scoreItemForChapter,
+  estimateTokens,
+  CHAPTER_CORPUS_TOKEN_BUDGET,
+  FOUNDATIONS_CORPUS_TOKEN_BUDGET,
+} from './corpusBudget';

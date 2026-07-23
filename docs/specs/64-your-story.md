@@ -1744,3 +1744,64 @@ markdown with markup stripped, so a chapter's count matches what a reader would 
 | B1-3  | #296  | `aboutAuthor` + `colophon` on `BookMatter` (additive, no bump); the Settings matter editor + a light missing-matter nudge; reader + both exports render them through one shared `colophonLines()`; matter rides the existing publish snapshot.                                                                                                                                                                                                                                                                                                             | Core: the boundary line renders with a colophon, without one, and with a whitespace-only one; `missingMatter` names the gaps and ignores whitespace; both exporters emit about-the-author AND the boundary. RTL: the editor saves both fields and shows the nudge. E2E: the author writes both → the exported Markdown carries them **and** the boundary → the READER sees them at the end of the book.                                                                                                                                                                                   |
 | B1-4  | #302  | `suggestTitles` (one metered `story.title` pass, N alternatives, current title + case-dups dropped) + a standalone `regenerateEssence` (`story.essence`); the `TitleWorkshop` UI (Suggest titles → Use this / Suggest again; Rewrite the essence → Keep / Discard). Both passes **return, never write** — the caller commits the pick through `update`, which clears `titleAuto` — so a metered pass never mutates behind a failed save.                                                                                                                   | Core: one pass yields N distinct titles, metered once, meter-before-parse, honest failure (NO_KEY/MALFORMED); a second call spends again; essence regen touches no chapter. RTL: pick → title set + commit; essence keep → commit, no chapter touched. E2E: Suggest titles → the current title is deduped out → Use this updates the hero + decrypted book title → Rewrite the essence → Keep persists the new through-line.                                                                                                                                                              |
 | B1-5  | #301  | Pure `manuscriptMetrics(chapters)` (per-chapter reader-visible word count, share-of-book, `'long'`/`'short'` pacing outliers vs the mean; only WRITTEN chapters count; balance flags fire only with ≥3 written) reusing the shared `countWords`, exposed to the renderer through the lean `@selfos/core/story-metrics` subpath (the `story-diff`/`story-matter` precedent — no crypto barrel). Studio hero shows the whole-book length (total / written count / average); the Chapters tab shows each written card's word count + share + an outlier note. | Core: `readerWordCount` strips inline emphasis; empty book is all zeros (never NaN); unwritten shells contribute nothing and are never flagged; share + average correct; no balance flags under 3 written; a chapter ≥2× the mean is long, ≤0.4× is short; order preserved. RTL: the hero length line + per-chapter word/share + long/short notes render. E2E: after writing a book the hero shows the whole-book length end-to-end (real core → renderer via the lean subpath).                                                                                                          |
+
+## 17. Backlog batch 2 — the biographer's craft (2026-07-22, PROPOSED)
+
+The third batch of the groomed backlog (GitHub #297, #295, #294, #304): the machinery a real biographer relies
+on — feeding each chapter the _relevant_ material within a budget, knowing the book's recurring people, keeping
+facts consistent across chapters, and citing the person's own vivid lines. All decisions below were locked with
+the owner on 2026-07-22 (AskUserQuestion) before any code.
+
+### 17.1 Corpus budgeting + per-chapter relevance slicing (#297) — BUILT (B2-1)
+
+**Today.** `generateChapter` laid the WHOLE corpus into every chapter prompt: a long life both blew the context
+window and diluted a chapter with material from unrelated eras/areas — "no corpus budgeting" (MAJOR).
+
+**The change.** Two pure, AI-free, no-storage passes in `corpusBudget.ts`:
+
+- **`sliceCorpusForChapter(corpus, chapter, {tokenBudget})`** — score each source item's relevance to the
+  chapter (a life-area match weighs most: +3; falling in the chapter's era: +2; keyword overlap with its
+  title + brief: up to +3), then keep the best within a token budget (`CHAPTER_CORPUS_TOKEN_BUDGET = 8000`),
+  ordered by relevance then chronology. A large item never blocks the smaller ones after it (best-effort
+  packing). A chapter with no strong matches still fills to budget in time order — relevance only reorders, so
+  a thin corpus stays usable (§7). Wired into `generateChapter` AND the `applyMarkup` revision path (both write
+  ONE chapter); the freshness signature stays over the FULL corpus, so a budget/relevance tweak never stales
+  every chapter.
+- **`budgetCorpus(corpus, {tokenBudget})`** — a whole-corpus cap for the foundations pass, which needs breadth
+  not a single chapter's slice. Under budget it's returned unchanged; over budget
+  (`FOUNDATIONS_CORPUS_TOKEN_BUDGET = 40000`) it keeps the outline-critical distilled/dated spine first
+  (timeline > memory > insight > goal > … , chronologically within a priority) and trims the bulk raw intake
+  first (its distilled portrait rides in as an insight anyway).
+
+Token counts are a rough estimate (~4 chars/token) — only ever used to BOUND a prompt, never billed. The
+profile is always kept in full and never counted. The budgets are documented cost/quality knobs, not a
+user-facing setting.
+
+### 17.2 Cast register (#295)
+
+**Decision: internal + opt-in front matter.** Build a cast register automatically (from the People graph +
+memory people + named mentions) to keep names/relationships consistent across chapters; the author may
+_optionally_ publish it as a "dramatis personae" front-matter section. Real names appear in the book only if
+the author opts in.
+
+### 17.3 Cross-chapter continuity + line-edit (#294)
+
+**Decision: review items + opt-in line-edit.** A continuity checker reconciles names/dates/facts across
+chapters and surfaces conflicts as review items the author resolves (consistent with how Story already surfaces
+proposals — never an automatic rewrite). The line-edit pass is an opt-in, per-chapter suggestion.
+
+### 17.4 Quote mining (#304)
+
+**Decision: review queue, author approves.** Mining surfaces candidate verbatim first-person lines (from
+Sessions/Together) as a review queue; nothing is cited until the author approves each one. No private line
+reaches a chapter — or a shared/exported book — without an explicit OK. Approved quotes become citable corpus
+material with real provenance.
+
+### 17.5 Build slices (each its own PR, standard §6/§7 cadence)
+
+| Slice | Issue | Scope                                                                                                                                                                                                                                                                                            | Tests                                                                                                                                                                                                                                                                                                                                                                                          |
+| ----- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B2-1  | #297  | Pure `corpusBudget.ts`: `sliceCorpusForChapter` (life-area/era/keyword relevance within `CHAPTER_CORPUS_TOKEN_BUDGET`) + `budgetCorpus` (whole-corpus cap by outline-criticality). Wired into `generateChapter`, `applyMarkup`, and `generateFoundations`; freshness stays over the full corpus. | Core: token estimate; relevance scoring (area/era/keyword, no-signal = 0, out-of-era = 0); slice keeps the relevant within budget, packs around a large item, and fills chronologically with no signal; `budgetCorpus` no-op under budget, keeps the spine + trims raw intake over budget, total on empty. Regression: the generation E2E still writes valid chapters through the sliced path. |
+| B2-2  | #304  | Quote-mining review queue: mine candidate verbatim lines (opt-in), author approves each; approved quotes become citable corpus material with provenance; never in a shared/exported book unapproved.                                                                                             | Core + bridge + RTL + E2E (approve → cited with provenance; unapproved never exported).                                                                                                                                                                                                                                                                                                        |
+| B2-3  | #295  | Cast register (People graph + memory + named mentions) for continuity; opt-in "dramatis personae" front matter.                                                                                                                                                                                  | Core + bridge + RTL + E2E (register built; opt-in publishes names, off keeps them out).                                                                                                                                                                                                                                                                                                        |
+| B2-4  | #294  | Continuity checker (cross-chapter name/date/fact reconciliation as review items) + opt-in per-chapter line-edit.                                                                                                                                                                                 | Core + bridge + RTL + E2E (a conflict surfaces as a review item; a line-edit is opt-in, reversible).                                                                                                                                                                                                                                                                                           |

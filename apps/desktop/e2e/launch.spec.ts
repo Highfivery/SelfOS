@@ -12637,6 +12637,19 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     expect(epubHead.toString('latin1')).toContain('application/epub+zip');
     await w.getByRole('button', { name: 'Close' }).click();
 
+    // Export the PUBLISHED book as Word (.docx) (§18.3) — a valid OOXML ZIP naming the document part.
+    await w.getByRole('button', { name: 'Export…' }).click();
+    await w.getByRole('button', { name: 'Word' }).click();
+    await w.getByRole('button', { name: 'Export', exact: true }).click();
+    await expect
+      .poll(async () => (await readdir(saveDir).catch(() => [])).some((f) => f.endsWith('.docx')))
+      .toBe(true);
+    const docxName = (await readdir(saveDir)).find((f) => f.endsWith('.docx'))!;
+    const docxBytes = await readFile(join(saveDir, docxName));
+    expect(docxBytes[0]).toBe(0x50); // ZIP signature
+    expect(docxBytes.toString('latin1')).toContain('word/document.xml');
+    await w.getByRole('button', { name: 'Close' }).click();
+
     // The reader signs in: the first share raises a one-time notification + a "New" marker on the card (§3.6).
     await switchTogetherPerson(w, 'Reader');
     await w.getByRole('link', { name: 'Your Story' }).click();

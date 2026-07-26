@@ -28,10 +28,12 @@ import {
 } from './storyPublish';
 import { setImagePlacement } from './storyPlacementService';
 import {
+  bookToDocx,
   bookToHtml,
   bookToMarkdown,
   buildDraftHtml,
   buildDraftMarkdown,
+  buildPublishedDocx,
   buildPublishedEpub,
   buildPublishedHtml,
   buildPublishedMarkdown,
@@ -810,6 +812,62 @@ describe('export (64 §3.9)', () => {
     expect(back).toContain('Sources');
     expect(back).toContain('drawn from');
     expect(back).toContain(BOOK_BOUNDARY_LINE); // the §8.2 boundary always closes the book
+  });
+
+  it('builds a valid .docx — OOXML parts, WordprocessingML body, Sources + boundary (§18.3)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    expect(await buildPublishedDocx(fs, key, 'author', bookId)).toBeNull(); // not published yet
+    await publishBook(fs, key, 'author', bookId, now);
+    const built = await buildPublishedDocx(fs, key, 'author', bookId);
+    expect(built?.title).toBe('The Story of Ben');
+    const files = readStoreZip(built!.bytes);
+    // The OPC package parts a Word reader needs.
+    expect(files['[Content_Types].xml']).toBeDefined();
+    expect(files['_rels/.rels']).toBeDefined();
+    expect(files['word/styles.xml']).toBeDefined();
+    const doc = new TextDecoder().decode(files['word/document.xml']!);
+    expect(doc).toContain('<w:document');
+    expect(doc).toContain('http://schemas.openxmlformats.org/wordprocessingml/2006/main');
+    expect(doc).toContain('The Story of Ben'); // the Title paragraph
+    expect(doc).toContain('The Garage'); // the published chapter heading
+    expect(doc).toContain('Sources'); // the generic Sources appendix heading
+    expect(doc).toContain('drawn from');
+    expect(doc).toContain(BOOK_BOUNDARY_LINE); // the §8.2 boundary always closes the book
+    const ct = new TextDecoder().decode(files['[Content_Types].xml']!);
+    expect(ct).toContain('wordprocessingml.document.main+xml');
+  });
+
+  it('bookToDocx escapes body text + emits bold/italic runs (§18.3)', () => {
+    const manifest: PublishedManifest = {
+      schemaVersion: 1,
+      publishedAt: 'now',
+      title: 'The Story of Ben',
+      parts: [{ id: 'p1', title: 'Roots', chapterIds: ['c1'] }],
+      chapterOrder: ['c1'],
+      images: [],
+    };
+    // Hostile prose: an angle bracket must be escaped; **bold** and *italic* become runs.
+    const doc = new TextDecoder().decode(
+      readStoreZip(
+        bookToDocx(
+          manifest,
+          [
+            {
+              id: 'c1',
+              title: 'The Garage',
+              markdown: 'He said **yes** to a <b>tag</b>.',
+              imagePlacements: [],
+            },
+          ],
+          {},
+          { authorName: 'Ben' },
+        ),
+      )['word/document.xml']!,
+    );
+    expect(doc).toContain('&lt;b&gt;tag&lt;/b&gt;'); // the raw tag is escaped, never live XML
+    expect(doc).not.toContain('<b>tag</b>');
+    expect(doc).toContain('<w:b/>'); // **yes** became a bold run
   });
 
   it('draft export works WITHOUT publishing and includes every written chapter (§13.6.1)', async () => {

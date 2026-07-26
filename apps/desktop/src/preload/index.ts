@@ -306,6 +306,7 @@ const bridge: SelfosBridge = {
   storyExportMarkdown: (input) => ipcRenderer.invoke(IpcChannels.storyExportMarkdown, input),
   storyExportPdf: (input) => ipcRenderer.invoke(IpcChannels.storyExportPdf, input),
   storyExportEpub: (input) => ipcRenderer.invoke(IpcChannels.storyExportEpub, input),
+  storyExportDocx: (input) => ipcRenderer.invoke(IpcChannels.storyExportDocx, input),
   storyImages: (input) => ipcRenderer.invoke(IpcChannels.storyImages, input),
   storyGenerateImage: (input) => ipcRenderer.invoke(IpcChannels.storyGenerateImage, input),
   storyGetImage: (input) => ipcRenderer.invoke(IpcChannels.storyGetImage, input),

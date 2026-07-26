@@ -238,6 +238,7 @@ interface StoryState {
   exportMarkdown: (bookId: string, head: 'draft' | 'published') => Promise<string | null>;
   exportPdf: (bookId: string, head: 'draft' | 'published') => Promise<string | null>;
   exportEpub: (bookId: string, head: 'draft' | 'published') => Promise<string | null>;
+  exportDocx: (bookId: string, head: 'draft' | 'published') => Promise<string | null>;
   /** Images (§3.8) — cover + chapter illustrations. `imageUrls` caches decrypted data URLs by image id. */
   images: StoryImageEntry[];
   imageUrls: Record<string, string>;
@@ -796,6 +797,8 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     (await window.selfos?.storyExportPdf({ bookId, head })) ?? null,
   exportEpub: async (bookId, head) =>
     (await window.selfos?.storyExportEpub({ bookId, head })) ?? null,
+  exportDocx: async (bookId, head) =>
+    (await window.selfos?.storyExportDocx({ bookId, head })) ?? null,
   loadImages: async (bookId) => {
     const images = (await window.selfos?.storyImages({ bookId })) ?? [];
     set({ images });

@@ -12624,6 +12624,19 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
       .toBe(true);
     await w.getByRole('button', { name: 'Close' }).click();
 
+    // Export the PUBLISHED book as EPUB (§18.3) — a valid EPUB is a ZIP whose first bytes carry the mimetype.
+    await w.getByRole('button', { name: 'Export…' }).click();
+    await w.getByRole('button', { name: 'EPUB' }).click();
+    await w.getByRole('button', { name: 'Export', exact: true }).click();
+    await expect
+      .poll(async () => (await readdir(saveDir).catch(() => [])).some((f) => f.endsWith('.epub')))
+      .toBe(true);
+    const epubName = (await readdir(saveDir)).find((f) => f.endsWith('.epub'))!;
+    const epubHead = (await readFile(join(saveDir, epubName))).subarray(0, 60);
+    expect(epubHead[0]).toBe(0x50); // 'P' — the ZIP local-file-header signature (PK\x03\x04)
+    expect(epubHead.toString('latin1')).toContain('application/epub+zip');
+    await w.getByRole('button', { name: 'Close' }).click();
+
     // The reader signs in: the first share raises a one-time notification + a "New" marker on the card (§3.6).
     await switchTogetherPerson(w, 'Reader');
     await w.getByRole('link', { name: 'Your Story' }).click();

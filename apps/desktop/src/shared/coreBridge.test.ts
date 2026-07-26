@@ -8664,6 +8664,39 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(new TextDecoder().decode(saved[0]!.bytes)).toContain('%PDF-fake');
   });
 
+  it('story: exports the published book as an EPUB file outside the vault (§18.3)', async () => {
+    const { bridge, host } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const saved: { name: string; bytes: Uint8Array; mime?: string }[] = [];
+    host.host.saveImageFile = (name, bytes, mime) => {
+      saved.push({ name, bytes, mime });
+      return Promise.resolve(`/exports/${name}`);
+    };
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+
+    // Not published yet → nothing to export.
+    expect(await bridge.storyExportEpub({ bookId })).toBeNull();
+    // …but the DRAFT export works without publishing (§13.6.1).
+    const draftPath = await bridge.storyExportEpub({ bookId, head: 'draft' });
+    expect(draftPath).toBe('/exports/The-Story-of-Ben.epub');
+    expect(saved[0]!.mime).toBe('application/epub+zip');
+    // A valid EPUB is a ZIP whose FIRST entry is a verbatim `mimetype` of `application/epub+zip`.
+    const bytes = saved[0]!.bytes;
+    expect(new DataView(bytes.buffer, bytes.byteOffset).getUint32(0, true)).toBe(0x04034b50);
+    expect(new TextDecoder().decode(bytes.subarray(0, 200))).toContain('application/epub+zip');
+  });
+
   it('story: generates a cover behind the shared image consent + key, encrypted, then serves it (§3.8)', async () => {
     const { bridge, host } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });

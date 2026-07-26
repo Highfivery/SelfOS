@@ -11,6 +11,7 @@ import {
   LifeTimelineSchema,
   PublishedManifestSchema,
   QuoteListSchema,
+  BookConsentListSchema,
   StoryContinuityListSchema,
   StoryImageIndexSchema,
   StoryInterviewStateSchema,
@@ -28,6 +29,7 @@ import {
   type LifeTimeline,
   type PublishedManifest,
   type QuoteCandidate,
+  type BookConsentList,
   type StoryContinuityList,
   type StoryBookBundle,
   type StoryImageEntry,
@@ -112,6 +114,9 @@ function proposalsPath(personId: string, bookId: string): string {
 }
 function continuityPath(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/continuity.enc`;
+}
+function consentPath(personId: string, bookId: string): string {
+  return `${bookDir(personId, bookId)}/consent.enc`;
 }
 function interviewPath(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/interview.enc`;
@@ -535,6 +540,26 @@ export async function saveContinuity(
   list: StoryContinuityList,
 ): Promise<void> {
   await writeEncryptedJson(fs, continuityPath(personId, bookId), list, key);
+}
+
+export async function getConsent(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<BookConsentList> {
+  const raw = await readEncryptedJson(fs, consentPath(personId, bookId), key);
+  return raw ? BookConsentListSchema.parse(raw) : { schemaVersion: 1, entries: [] };
+}
+
+export async function saveConsent(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  list: BookConsentList,
+): Promise<void> {
+  await writeEncryptedJson(fs, consentPath(personId, bookId), list, key);
 }
 
 // --- Interview state (the gap engine, §5.5) --------------------------------------------------------------

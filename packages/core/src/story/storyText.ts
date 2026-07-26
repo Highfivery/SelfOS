@@ -70,3 +70,24 @@ export function stripSourceMarkers(
   }
   return { markdown: outParagraphs.join('\n\n').trim(), provenance };
 }
+
+/** Escape a string for literal use inside a RegExp. */
+export function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Substitute names in text with their pseudonyms (64 §17.5) — whole-word, case-insensitive, so "Ana" replaces
+ * the name but not the middle of "Banana". Longest names first, so a compound name ("Mary Ann") is replaced
+ * before its parts ("Mary"). Pure; an empty map returns the text unchanged.
+ */
+export function applyPseudonyms(text: string, map: Record<string, string>): string {
+  const names = Object.keys(map)
+    .filter((n) => n.trim().length > 0 && map[n]?.trim())
+    .sort((a, b) => b.length - a.length);
+  let out = text;
+  for (const name of names) {
+    out = out.replace(new RegExp(`\\b${escapeRegExp(name)}\\b`, 'gi'), map[name]!.trim());
+  }
+  return out;
+}

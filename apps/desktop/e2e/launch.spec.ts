@@ -68,6 +68,7 @@ import {
   getBook,
   getChapter,
   getChapterHistory,
+  getConsent,
   getMarkup,
   getOutline,
   getQuotes,
@@ -13142,6 +13143,70 @@ test('story (64): the cast register — a recurring person appears, opt-in publi
     await expect
       .poll(async () => (await listBooks(fs, key, 'owner-1'))[0]?.matter?.castPublished)
       .toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('story (64): the consent center sets a pseudonym + warns before publishing under a real name (§17.5)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+  // Seed a partner so the book names someone in its cast/consent register.
+  const nowIso = '2026-07-22T00:00:00.000Z';
+  await savePerson(fs, key, {
+    id: 'angel-1',
+    schemaVersion: 1,
+    displayName: 'Angel',
+    isSubject: true,
+    tags: [],
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  });
+  await saveRelationship(fs, key, {
+    id: 'rel-consent',
+    schemaVersion: 2,
+    fromPersonId: 'owner-1',
+    toPersonId: 'angel-1',
+    type: 'partner',
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Consent Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'Consent Book', level: 1 })).toBeVisible();
+
+    // Sharing tab: the warning names the person who'd appear under their real name.
+    await w.getByRole('tab', { name: 'Sharing' }).click();
+    await expect(w.getByText(/Angel appears/)).toBeVisible();
+
+    // Settings → the consent center → give them a pseudonym (commits on blur).
+    await w.getByRole('tab', { name: 'Settings' }).click();
+    await w.getByLabel('Pseudonym for Angel').fill('A.');
+    await w.getByLabel('Pseudonym for Angel').blur();
+
+    // Decrypt: the pseudonym persisted; and the warning is gone back on Sharing.
+    await expect
+      .poll(async () => {
+        const bookId = (await listBooks(fs, key, 'owner-1'))[0]!.id;
+        const list = await getConsent(fs, key, 'owner-1', bookId);
+        return list.entries.find((e) => e.name === 'Angel')?.pseudonym;
+      })
+      .toBe('A.');
+    await w.getByRole('tab', { name: 'Sharing' }).click();
+    await expect(w.getByText(/Angel appears/)).toBeHidden();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

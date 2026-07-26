@@ -7880,6 +7880,43 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(history.versions.some((v) => v.reason === 'lineEdit')).toBe(true);
   });
 
+  it('story: the consent center lists named people + sets a pseudonym, refused without story.own (§17.5)', async () => {
+    const { bridge } = await freshOwner();
+    const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    const owner = await bridge.getActivePerson();
+    await bridge.relationshipsSave({
+      fromPersonId: owner!.id,
+      toPersonId: angel.id,
+      type: 'partner',
+    });
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'Consent Book',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const register = await bridge.storyConsent({ bookId });
+    expect(register.find((p) => p.name === 'Angel')).toMatchObject({ consent: 'unknown' });
+
+    const after = await bridge.storySetConsent({
+      bookId,
+      name: 'Angel',
+      consent: 'declined',
+      pseudonym: 'A.',
+    });
+    expect(after.find((p) => p.name === 'Angel')).toMatchObject({
+      consent: 'declined',
+      pseudonym: 'A.',
+    });
+
+    // A Guest (no story.own) gets nothing and can't set consent — the bridge is the trust boundary.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.storyConsent({ bookId })).toEqual([]);
+    expect(await bridge.storySetConsent({ bookId, name: 'Angel', consent: 'granted' })).toEqual([]);
+  });
+
   it('story: continuity + line-edit refused without story.own (§17.3)', async () => {
     const { bridge } = await freshOwner();
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });

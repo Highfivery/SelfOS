@@ -413,6 +413,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
       }),
     storyCorpusStats: () => Promise.resolve({ reflections: 0, dreams: 0, memories: 0, answers: 0 }),
     storyCastRegister: () => Promise.resolve([]),
+    storyConsent: () => Promise.resolve([]),
+    storySetConsent: () => Promise.resolve([]),
     storyCompleteness: () =>
       Promise.resolve({ stage: 'beginning' as const, ratio: 0, covered: 0, total: 12 }),
     storyInterviewCheck: () => Promise.resolve({ outcome: 'noBook' as const }),

@@ -12657,6 +12657,20 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     await w.getByRole('link', { name: 'Your Story' }).click();
     await w.getByRole('tab', { name: 'Sharing' }).click();
     await expect(w.getByText(/Read the latest/)).toBeVisible();
+
+    // Publish lifecycle (§18.2, #300): nothing edited since publishing → the diff preview is clean.
+    await expect(w.getByText(/Nothing has changed since you last shared/)).toBeVisible();
+    // Unshare behind a confirm → readers lose access; the button reverts (the manifest lost publishedAt).
+    await w.getByRole('button', { name: 'Unshare' }).click();
+    await expect(w.getByText(/Readers lose access immediately/)).toBeVisible();
+    await w.getByRole('button', { name: 'Unshare now' }).click();
+    await expect(w.getByText(/no longer have access/)).toBeVisible();
+    await expect(w.getByRole('button', { name: /Publish & choose readers/ })).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Unshare' })).toHaveCount(0);
+    // Re-share restores the published head (the same reader grant survived) → the Unshare button is back.
+    await w.getByRole('button', { name: /Publish & choose readers/ }).click();
+    await expect(w.getByText(/Shared \d+ chapter/)).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Unshare' })).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -13132,11 +13146,13 @@ test('story (64): the cast register — a recurring person appears, opt-in publi
     await expect(w.getByRole('heading', { name: 'Cast Book', level: 1 })).toBeVisible();
 
     await w.getByRole('tab', { name: 'Settings' }).click();
-    // The register knows the partner; the preview appears only once the opt-in is on.
+    // The register knows the partner; the CAST-LIST preview (a <li> "Angel — partner") appears only once the
+    // opt-in is on. (Scope to the cast preview's list item — the consent center also names Angel on this tab.)
     await expect(w.getByText(/Built from your people/)).toBeVisible();
-    await expect(w.getByText('Angel')).toBeHidden();
+    const castItem = w.getByRole('listitem').filter({ hasText: 'Angel' });
+    await expect(castItem).toHaveCount(0);
     await w.getByRole('switch', { name: 'Publish a cast list' }).click();
-    await expect(w.getByText('Angel')).toBeVisible();
+    await expect(castItem).toBeVisible();
     await w.getByRole('button', { name: 'Save front and back matter' }).click();
 
     // Decrypt: the opt-in persisted, so a publish would freeze the cast into the book.

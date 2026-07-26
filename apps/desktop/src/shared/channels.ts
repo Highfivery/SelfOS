@@ -65,6 +65,8 @@ import type {
   StoryCheckInResult,
   StoryAnsweredCheckIn,
   StoryPublishResult,
+  StoryPublishDiff,
+  StoryUnpublishResult,
   StoryOwnBookView,
   StoryReadSharedInput,
   StoryReaderGrantInput,
@@ -460,6 +462,8 @@ export const IpcChannels = {
   storyAskGap: 'story:askGap',
   storyAnsweredCheckIns: 'story:answeredCheckIns',
   storyPublish: 'story:publish',
+  storyPublishDiff: 'story:publishDiff',
+  storyUnpublish: 'story:unpublish',
   storyReaders: 'story:readers',
   storyGrantReader: 'story:grantReader',
   storyRevokeReader: 'story:revokeReader',
@@ -1403,6 +1407,12 @@ export interface SelfosBridge {
   /** Publish (or re-publish) the book (§3.5): snapshot every Reviewed chapter into the published head readers
    *  see. Refuses when nothing is Reviewed. Gated `story.own`, author-scoped. */
   storyPublish(input: { bookId: string }): Promise<StoryPublishResult>;
+  /** What a (re-)publish would change for readers vs the current head (§18.2): added/removed/updated chapters +
+   *  `willShrink`. Read-only. Gated `story.own`, author-scoped. */
+  storyPublishDiff(input: { bookId: string }): Promise<StoryPublishDiff>;
+  /** Unpublish (§18.2): readers lose access at their next read; the draft + reader grants are kept. Gated
+   *  `story.own`, author-scoped. */
+  storyUnpublish(input: { bookId: string }): Promise<StoryUnpublishResult>;
   /** The book's current readers, resolved to names. Gated `story.own`, author-scoped. */
   storyReaders(input: { bookId: string }): Promise<BookReader[]>;
   /** Grant/revoke a household reader (§3.5) — revoke ends access at the next read. Returns the updated list. */

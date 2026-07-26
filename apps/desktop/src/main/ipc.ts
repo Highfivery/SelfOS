@@ -438,6 +438,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyAskGap, bridge.storyAskGap);
   handle(IpcChannels.storyAnsweredCheckIns, bridge.storyAnsweredCheckIns);
   handle(IpcChannels.storyPublish, bridge.storyPublish);
+  handle(IpcChannels.storyPublishDiff, bridge.storyPublishDiff);
+  handle(IpcChannels.storyUnpublish, bridge.storyUnpublish);
   handle(IpcChannels.storyReaders, bridge.storyReaders);
   handle(IpcChannels.storyGrantReader, bridge.storyGrantReader);
   handle(IpcChannels.storyRevokeReader, bridge.storyRevokeReader);

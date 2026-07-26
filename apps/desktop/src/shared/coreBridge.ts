@@ -259,6 +259,8 @@ import {
   type StoryCheckInResult,
   type StoryAnsweredCheckIn,
   type StoryPublishResult,
+  type StoryPublishDiff,
+  type StoryUnpublishResult,
   type StoryReaderView,
   type StoryOwnBookView,
   type StoryRefreshViewResult,
@@ -504,8 +506,10 @@ import {
   listReaders,
   listSharedBooks,
   listStructuralProposals,
+  computePublishDiff,
   pinPassage,
   publishBook,
+  unpublishBook,
   reapReadReceiptsAbout,
   readBookBundle,
   readSharedBook,
@@ -5692,6 +5696,33 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return { ok: false, message: 'No active person.' };
       return publishBook(ctx.fs, ctx.key, personId, bookId, new Date());
+    },
+    storyPublishDiff: async (input): Promise<StoryPublishDiff> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const empty: StoryPublishDiff = {
+        everPublished: false,
+        added: [],
+        removed: [],
+        updated: [],
+        unchanged: [],
+        willShrink: false,
+        nothingToPublish: true,
+      };
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return empty;
+      const personId = await activePersonId();
+      if (!personId) return empty;
+      return computePublishDiff(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyUnpublish: async (input): Promise<StoryUnpublishResult> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
+        return { ok: false, message: 'Not permitted.' };
+      }
+      const personId = await activePersonId();
+      if (!personId) return { ok: false, message: 'No active person.' };
+      return unpublishBook(ctx.fs, ctx.key, personId, bookId, new Date());
     },
     storyReaders: async (input): Promise<BookReader[]> => {
       const { bookId } = StoryBookRefSchema.parse(input);

@@ -10,6 +10,7 @@ import type { BookChapter, BookOutline, Insight, LifeTimeline, Person } from '..
 import { generateChapter } from './storyGenerationService';
 import {
   bookMentionsReader,
+  computePublishDiff,
   grantReader,
   listReaders,
   listSharedBooks,
@@ -21,6 +22,7 @@ import {
   readSharedImage,
   reapReadReceiptsAbout,
   revokeReader,
+  unpublishBook,
   writeReadReceipt,
 } from './storyPublish';
 import { setImagePlacement } from './storyPlacementService';
@@ -270,6 +272,112 @@ describe('publishBook (64 §3.5)', () => {
     expect(
       (await readSharedBook(fs, key, 'reader', 'author', bookId))?.chapters.map((c) => c.id),
     ).toEqual(['c1']);
+  });
+});
+
+describe('publish lifecycle: diff + unpublish (64 §18.2, #300)', () => {
+  it('computePublishDiff reports what readers would gain/lose/see-updated vs the current head', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs); // c1 reviewed; c2 written but not reviewed
+
+    // Never published yet: everything reviewed is "added", nothing shrinks.
+    const before = await computePublishDiff(fs, key, 'author', bookId);
+    expect(before.everPublished).toBe(false);
+    expect(before.added.map((c) => c.id)).toEqual(['c1']);
+    expect(before.removed).toEqual([]);
+    expect(before.willShrink).toBe(false);
+    expect(before.nothingToPublish).toBe(false);
+
+    // Publish c1 → no pending changes.
+    await publishBook(fs, key, 'author', bookId, now);
+    const clean = await computePublishDiff(fs, key, 'author', bookId);
+    expect(clean.everPublished).toBe(true);
+    expect(clean.added).toEqual([]);
+    expect(clean.removed).toEqual([]);
+    expect(clean.updated).toEqual([]);
+    expect(clean.unchanged.map((c) => c.id)).toEqual(['c1']);
+    expect(clean.willShrink).toBe(false);
+
+    // Review c2 (an ADD) and edit c1's prose (an UPDATE).
+    const c1 = await getChapter(fs, key, 'author', bookId, 'c1');
+    await saveChapter(fs, key, 'author', bookId, { ...c1!, markdown: 'A different opening.' });
+    const c2 = await getChapter(fs, key, 'author', bookId, 'c2');
+    await saveChapter(fs, key, 'author', bookId, { ...c2!, status: 'reviewed' });
+    const changed = await computePublishDiff(fs, key, 'author', bookId);
+    expect(changed.added.map((c) => c.id)).toEqual(['c2']);
+    expect(changed.updated.map((c) => c.id)).toEqual(['c1']);
+    expect(changed.removed).toEqual([]);
+    expect(changed.willShrink).toBe(false);
+  });
+
+  it('a pseudonym alone never reads as an "updated" chapter (compares the next PUBLISHED form)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    const c1 = await getChapter(fs, key, 'author', bookId, 'c1');
+    await saveChapter(fs, key, 'author', bookId, {
+      ...c1!,
+      markdown: 'Angel was there.',
+      status: 'reviewed',
+    });
+    await publishBook(fs, key, 'author', bookId, now); // freezes "A." if a pseudonym existed — none yet
+    // Now assign a pseudonym AFTER publishing. The draft still says "Angel"; the published head still says
+    // "Angel" (published before the pseudonym). The diff must flag c1 as UPDATED (the reader would now see "A.").
+    await setConsentEntry(fs, key, 'author', {
+      bookId,
+      name: 'Angel',
+      consent: 'declined',
+      pseudonym: 'A.',
+      now,
+    });
+    const withPseudonym = await computePublishDiff(fs, key, 'author', bookId);
+    expect(withPseudonym.updated.map((c) => c.id)).toEqual(['c1']);
+
+    // Re-publish → the head now says "A." → the next diff is clean (no phantom "updated").
+    await publishBook(fs, key, 'author', bookId, now);
+    const clean = await computePublishDiff(fs, key, 'author', bookId);
+    expect(clean.updated).toEqual([]);
+    expect(clean.unchanged.map((c) => c.id)).toEqual(['c1']);
+  });
+
+  it('willShrink flags a re-publish that would DROP a chapter readers currently have', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    const c2 = await getChapter(fs, key, 'author', bookId, 'c2');
+    await saveChapter(fs, key, 'author', bookId, { ...c2!, status: 'reviewed' });
+    await publishBook(fs, key, 'author', bookId, now); // head = [c1, c2]
+    // Un-review c2 → a re-publish would remove it → willShrink.
+    const c2b = await getChapter(fs, key, 'author', bookId, 'c2');
+    await saveChapter(fs, key, 'author', bookId, { ...c2b!, status: 'stale' });
+    const diff = await computePublishDiff(fs, key, 'author', bookId);
+    expect(diff.removed.map((c) => c.id)).toEqual(['c2']);
+    expect(diff.willShrink).toBe(true);
+  });
+
+  it('unpublishBook denies readers immediately, keeps the draft + reader grants, and is reversible', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    await publishBook(fs, key, 'author', bookId, now);
+    await grantReader(fs, key, 'author', bookId, 'reader', now);
+    expect(await readSharedBook(fs, key, 'reader', 'author', bookId)).not.toBeNull();
+
+    // Unpublish → the re-gate denies at the next read, but the reader stays granted + the draft is intact.
+    const res = await unpublishBook(fs, key, 'author', bookId, now);
+    expect(res.ok).toBe(true);
+    expect((await getBook(fs, key, 'author', bookId))?.publishedAt).toBeUndefined();
+    expect(await readSharedBook(fs, key, 'reader', 'author', bookId)).toBeNull();
+    expect(await listSharedBooks(fs, key, 'reader')).toEqual([]);
+    // The reader grant survived — listReaders still shows them.
+    expect(await listReaders(fs, key, 'author', bookId)).toHaveLength(1);
+    // The draft chapter is untouched.
+    expect(await getChapter(fs, key, 'author', bookId, 'c1')).not.toBeNull();
+
+    // Re-publish restores the same reader's access with no re-grant.
+    await publishBook(fs, key, 'author', bookId, now);
+    expect(await readSharedBook(fs, key, 'reader', 'author', bookId)).not.toBeNull();
+
+    // Idempotent: unpublishing an already-unpublished book is a no-op ok.
+    await unpublishBook(fs, key, 'author', bookId, now);
+    expect((await unpublishBook(fs, key, 'author', bookId, now)).ok).toBe(true);
   });
 });
 

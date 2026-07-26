@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { wordDiff } from '@selfos/core/story-diff';
 import { BOOK_BOUNDARY_LINE, colophonLines, missingMatter } from '@selfos/core/story-matter';
@@ -54,6 +54,7 @@ import type {
   StoryCompletenessStage,
   StoryPartCoverage,
   StoryDraftProgress,
+  StoryPublishDiff,
   StoryReaderView,
   StoryTodoEntry,
   StructuralProposal,
@@ -2982,6 +2983,8 @@ function ShareReadersPanel({
   authorPersonId: string;
 }): JSX.Element {
   const publish = useStoryStore((s) => s.publish);
+  const publishDiff = useStoryStore((s) => s.publishDiff);
+  const unpublish = useStoryStore((s) => s.unpublish);
   const readers = useStoryStore((s) => s.readers);
   const loadReaders = useStoryStore((s) => s.loadReaders);
   const grantReader = useStoryStore((s) => s.grantReader);
@@ -2996,12 +2999,46 @@ function ShareReadersPanel({
   const [candidate, setCandidate] = useState('');
   const [featured, setFeatured] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [diff, setDiff] = useState<StoryPublishDiff | null>(null);
+  // A staged shrink awaiting confirmation: republishing would DROP chapters readers currently have (§18.2).
+  const [shrinkConfirm, setShrinkConfirm] = useState(false);
+  const [unpublishConfirm, setUnpublishConfirm] = useState(false);
+
+  const refreshDiff = useCallback(async () => {
+    setDiff(await publishDiff(bookId));
+  }, [bookId, publishDiff]);
 
   useEffect(() => {
     void loadReaders(bookId);
     void loadPeople();
     void loadConsent(bookId);
-  }, [bookId, loadReaders, loadPeople, loadConsent]);
+    void refreshDiff();
+  }, [bookId, loadReaders, loadPeople, loadConsent, refreshDiff]);
+
+  const doPublish = async (): Promise<void> => {
+    setBusy(true);
+    setNotice(null);
+    setShrinkConfirm(false);
+    const res = await publish(bookId);
+    setNotice(
+      res.ok
+        ? `Shared ${res.publishedChapters} chapter${res.publishedChapters === 1 ? '' : 's'} with your readers.`
+        : res.message,
+    );
+    await refreshDiff();
+    setBusy(false);
+  };
+
+  // Publish click: if a re-publish would remove chapters readers have, confirm first (no silent shrink, §18.2).
+  const onPublishClick = async (): Promise<void> => {
+    const current = diff ?? (await publishDiff(bookId));
+    if (current.willShrink) {
+      setDiff(current);
+      setShrinkConfirm(true);
+      return;
+    }
+    await doPublish();
+  };
 
   // Warn-not-block (§17.5): people who'd appear under their REAL name (not OK-with-it, no pseudonym).
   const unconsented = consent
@@ -3030,27 +3067,102 @@ function ShareReadersPanel({
             set a pseudonym or their consent under “People in your book” in Settings.
           </Banner>
         ) : null}
+        {/* Publish-diff preview (§18.2): what a re-publish would change for readers vs the current head. */}
+        {publishedAt && diff && diff.everPublished && !diff.nothingToPublish ? (
+          <Banner tone={diff.willShrink ? 'warning' : 'info'}>
+            <Stack gap={1}>
+              <Text size="sm">
+                {diff.added.length + diff.updated.length + diff.removed.length === 0
+                  ? 'Nothing has changed since you last shared.'
+                  : 'Sharing updates would change your readers’ book:'}
+              </Text>
+              {diff.added.length > 0 ? (
+                <Text size="sm" tone="secondary">
+                  <strong>Add {diff.added.length}</strong>:{' '}
+                  {diff.added.map((c) => c.title).join(', ')}
+                </Text>
+              ) : null}
+              {diff.updated.length > 0 ? (
+                <Text size="sm" tone="secondary">
+                  <strong>Update {diff.updated.length}</strong>:{' '}
+                  {diff.updated.map((c) => c.title).join(', ')}
+                </Text>
+              ) : null}
+              {diff.removed.length > 0 ? (
+                <Text size="sm" tone="secondary">
+                  <strong>Remove {diff.removed.length}</strong> (readers lose these):{' '}
+                  {diff.removed.map((c) => c.title).join(', ')}
+                </Text>
+              ) : null}
+            </Stack>
+          </Banner>
+        ) : null}
+        {shrinkConfirm ? (
+          <Banner tone="warning">
+            <Stack gap={1}>
+              <Text size="sm">
+                Sharing now removes{' '}
+                {diff?.removed.length === 1 ? 'a chapter' : `${diff?.removed.length} chapters`} your
+                readers currently have. This can’t be undone from their copy.
+              </Text>
+              <Inline>
+                <Button variant="danger" disabled={busy} onClick={doPublish}>
+                  {busy ? 'Sharing…' : 'Remove & share'}
+                </Button>
+                <Button variant="ghost" disabled={busy} onClick={() => setShrinkConfirm(false)}>
+                  Keep them
+                </Button>
+              </Inline>
+            </Stack>
+          </Banner>
+        ) : null}
+        {unpublishConfirm ? (
+          <Banner tone="warning">
+            <Stack gap={1}>
+              <Text size="sm">
+                Readers lose access immediately. Your draft and your reader list are untouched — you
+                can share again anytime.
+              </Text>
+              <Inline>
+                <Button
+                  variant="danger"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    setNotice(null);
+                    setUnpublishConfirm(false);
+                    const res = await unpublish(bookId);
+                    setNotice(
+                      res.ok
+                        ? 'Unshared — readers no longer have access.'
+                        : (res.message ?? 'Couldn’t unshare.'),
+                    );
+                    await refreshDiff();
+                    setBusy(false);
+                  }}
+                >
+                  {busy ? 'Unsharing…' : 'Unshare now'}
+                </Button>
+                <Button variant="ghost" disabled={busy} onClick={() => setUnpublishConfirm(false)}>
+                  Cancel
+                </Button>
+              </Inline>
+            </Stack>
+          </Banner>
+        ) : null}
         <Inline>
-          <Button
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              setNotice(null);
-              const res = await publish(bookId);
-              setNotice(
-                res.ok
-                  ? `Shared ${res.publishedChapters} chapter${res.publishedChapters === 1 ? '' : 's'} with your readers.`
-                  : res.message,
-              );
-              setBusy(false);
-            }}
-          >
+          <Button disabled={busy || shrinkConfirm} onClick={onPublishClick}>
             {busy ? 'Sharing…' : publishedAt ? 'Share updates' : 'Publish & choose readers'}
           </Button>
           {/* Export is always available (§13.6.1 — the draft head exports without publishing). */}
           <Button variant="ghost" onClick={() => setExportOpen(true)}>
             Export…
           </Button>
+          {publishedAt ? (
+            <Button variant="ghost" disabled={busy} onClick={() => setUnpublishConfirm(true)}>
+              Unshare
+            </Button>
+          ) : null}
           {publishedAt ? (
             <Text tone="secondary" size="sm">
               Last shared {new Date(publishedAt).toLocaleDateString()}

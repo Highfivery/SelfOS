@@ -2953,6 +2953,69 @@ describe('Story (64)', () => {
     expect(screen.getByText(/Hasn’t opened it yet/)).toBeInTheDocument();
   });
 
+  it('a re-publish that would shrink the reader’s book asks for confirmation first (§18.2, #300)', async () => {
+    const storyPublish = vi.fn(() => Promise.resolve({ ok: true as const, publishedChapters: 1 }));
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () =>
+        Promise.resolve({
+          ...writtenBundle('new'),
+          manifest: manifest({ status: 'ready', publishedAt: '2026-07-16T00:00:00.000Z' }),
+        }),
+      storyPublishDiff: () =>
+        Promise.resolve({
+          everPublished: true,
+          added: [],
+          updated: [],
+          removed: [{ id: 'c9', title: 'The Road' }],
+          unchanged: [{ id: 'c1', title: 'The Garage' }],
+          willShrink: true,
+          nothingToPublish: false,
+        }),
+      storyPublish,
+    });
+    renderStory();
+    await openTab('Sharing');
+    // The diff preview names the chapter readers would lose.
+    expect(await screen.findByText(/Remove 1/)).toBeInTheDocument();
+    // Clicking "Share updates" does NOT publish yet — it asks first.
+    await userEvent.click(await screen.findByRole('button', { name: 'Share updates' }));
+    expect(storyPublish).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(/removes a chapter your readers currently have/),
+    ).toBeInTheDocument();
+    // "Keep them" backs out; then "Remove & share" confirms.
+    await userEvent.click(screen.getByRole('button', { name: 'Keep them' }));
+    expect(storyPublish).not.toHaveBeenCalled();
+    await userEvent.click(await screen.findByRole('button', { name: 'Share updates' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove & share' }));
+    expect(storyPublish).toHaveBeenCalledWith({ bookId: 'b1' });
+  });
+
+  it('unshares (unpublishes) behind a confirm (§18.2, #300)', async () => {
+    const storyUnpublish = vi.fn(() => Promise.resolve({ ok: true as const }));
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () =>
+        Promise.resolve({
+          ...writtenBundle('new'),
+          manifest: manifest({ status: 'ready', publishedAt: '2026-07-16T00:00:00.000Z' }),
+        }),
+      storyUnpublish,
+    });
+    renderStory();
+    await openTab('Sharing');
+    // The Unshare button appears only for a published book.
+    await userEvent.click(await screen.findByRole('button', { name: 'Unshare' }));
+    expect(storyUnpublish).not.toHaveBeenCalled(); // confirm first
+    expect(await screen.findByText(/Readers lose access immediately/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Unshare now' }));
+    expect(storyUnpublish).toHaveBeenCalledWith({ bookId: 'b1' });
+    expect(await screen.findByText(/no longer have access/)).toBeInTheDocument();
+  });
+
   it('creates a book cover behind the shared image consent + OpenAI key (§3.8)', async () => {
     elevateToOwner(); // budgets.manage → the cost figure shows; settings.manage → the setup path is theirs
     useSettingsStore.setState((s) => ({

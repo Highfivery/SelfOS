@@ -5237,6 +5237,35 @@ export type StoryPublishResult =
   | { ok: true; publishedChapters: number }
   | { ok: false; message: string };
 
+/** One chapter named in a publish-diff (§18.2, #300). */
+export interface PublishDiffChapter {
+  id: string;
+  title: string;
+}
+
+/**
+ * What a (re-)publish would change for readers vs the CURRENTLY-published head (§18.2, #300): chapters readers
+ * would gain, lose (the silent-shrink surface), or see updated — plus whether there's a currently-published head
+ * at all and whether the next publish would REMOVE chapters a reader currently has (`willShrink`). Pure/derived.
+ */
+export interface StoryPublishDiff {
+  everPublished: boolean;
+  /** Chapters in the next publish but not in the current head. */
+  added: PublishDiffChapter[];
+  /** Chapters in the current head that the next publish would DROP — readers lose these (the shrink). */
+  removed: PublishDiffChapter[];
+  /** Chapters in both heads whose prose changed. */
+  updated: PublishDiffChapter[];
+  /** Chapters in both heads, unchanged. */
+  unchanged: PublishDiffChapter[];
+  willShrink: boolean;
+  /** No Reviewed chapters yet — a publish would refuse (mirrors `publishBook`'s review gate). */
+  nothingToPublish: boolean;
+}
+
+/** The result of `story:unpublish` — readers lose access at their next read; the draft is untouched (§18.2). */
+export type StoryUnpublishResult = { ok: boolean; message?: string };
+
 /** A book's current reader (§3.5), resolved to a name for the readers list. */
 export interface BookReader {
   personId: string;

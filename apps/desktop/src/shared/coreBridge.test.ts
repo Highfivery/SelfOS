@@ -8519,6 +8519,74 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(await bridge.storyReadShared({ authorPersonId: ownerId, bookId })).toBeNull();
   });
 
+  it('story: publish-diff + unpublish lifecycle — reader loses access, draft + grants survive (§18.2)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const reader = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: reader.id, roleId: 'member', pin: null });
+
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'The Story of Ben',
+      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    if (!gen.ok) throw new Error('foundations failed');
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.storyGenerateChapters({ bookId });
+    if (!chapters.ok) throw new Error('chapters failed');
+    const chapterId = chapters.bundle.chapters[0]!.id;
+
+    // Before any review: nothing to publish.
+    expect(await bridge.storyPublishDiff({ bookId })).toMatchObject({
+      everPublished: false,
+      nothingToPublish: true,
+      willShrink: false,
+    });
+
+    await bridge.storyReviewChapter({ bookId, chapterId });
+    // Reviewed but not published → the chapter is an "add".
+    const beforePublish = await bridge.storyPublishDiff({ bookId });
+    expect(beforePublish.added.map((c) => c.id)).toEqual([chapterId]);
+    expect(beforePublish.everPublished).toBe(false);
+
+    await bridge.storyPublish({ bookId });
+    await bridge.storyGrantReader({ bookId, readerPersonId: reader.id });
+    // Published, no pending edits → a clean diff (nothing to gain/lose).
+    const afterPublish = await bridge.storyPublishDiff({ bookId });
+    expect(afterPublish).toMatchObject({ everPublished: true, willShrink: false });
+    expect(afterPublish.added).toEqual([]);
+    expect(afterPublish.unchanged.map((c) => c.id)).toEqual([chapterId]);
+
+    // The reader can read.
+    await bridge.sessionSetActive({ personId: reader.id });
+    expect(await bridge.storyReadShared({ authorPersonId: ownerId, bookId })).not.toBeNull();
+
+    // Author unpublishes → the reader loses access immediately, but the grant + draft survive.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    expect(await bridge.storyUnpublish({ bookId })).toEqual({ ok: true });
+    expect(await bridge.storyReaders({ bookId })).toHaveLength(1); // grant kept
+    await bridge.sessionSetActive({ personId: reader.id });
+    expect(await bridge.storySharedBooks()).toEqual([]);
+    expect(await bridge.storyReadShared({ authorPersonId: ownerId, bookId })).toBeNull();
+
+    // Re-publish restores the same reader with no re-grant.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    await bridge.storyPublish({ bookId });
+    await bridge.sessionSetActive({ personId: reader.id });
+    expect(await bridge.storyReadShared({ authorPersonId: ownerId, bookId })).not.toBeNull();
+
+    // A person WITHOUT story.own can't diff or unpublish someone else's book (gated). The reader is currently
+    // active; diffing their OWN (nonexistent) book id is empty, and unpublish is refused.
+    const diffAsReader = await bridge.storyPublishDiff({ bookId });
+    expect(diffAsReader).toMatchObject({ everPublished: false, nothingToPublish: true });
+    expect((await bridge.storyUnpublish({ bookId })).ok).toBe(false);
+    // …and the author's book is STILL published (the reader's unpublish was refused) — they can still read it.
+    expect(await bridge.storyReadShared({ authorPersonId: ownerId, bookId })).not.toBeNull();
+  });
+
   it('story: exports the published book as a Markdown file outside the vault (§3.9)', async () => {
     const { bridge, host } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });

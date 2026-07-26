@@ -6,13 +6,16 @@ import { applyPseudonyms } from './storyText';
 import type {
   BookChapter,
   BookReader,
+  PublishDiffChapter,
   PublishedManifest,
   PublishedPart,
   ReaderChapter,
   SharedBookSummary,
+  StoryPublishDiff,
   StoryPublishResult,
   StoryReaderView,
   StoryReadReceipt,
+  StoryUnpublishResult,
 } from '../schemas';
 import { StoryReadReceiptSchema } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
@@ -184,6 +187,110 @@ export async function publishBook(
     updatedAt: now.toISOString(),
   });
   return { ok: true, publishedChapters: reviewed.length };
+}
+
+/**
+ * What a (re-)publish would change for readers vs the CURRENTLY-published head (§18.2, #300). Pure/derived — reads
+ * the current published head + the next-publish set (Reviewed chapters in outline order, exactly as `publishBook`
+ * computes them) and diffs by chapter id: `added` (readers gain), `removed` (readers LOSE — the silent-shrink
+ * surface), `updated` (prose/title changed), `unchanged`. Comparison is done on the NEXT published form (draft
+ * prose run through the pseudonym map) vs the CURRENT published form (already pseudonymized), so a pseudonym alone
+ * never reads as a change. `willShrink` drives the no-silent-shrink confirm.
+ */
+export async function computePublishDiff(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<StoryPublishDiff> {
+  const empty: StoryPublishDiff = {
+    everPublished: false,
+    added: [],
+    removed: [],
+    updated: [],
+    unchanged: [],
+    willShrink: false,
+    nothingToPublish: true,
+  };
+  const book = await getBook(fs, key, personId, bookId);
+  const outline = await getOutline(fs, key, personId, bookId);
+  if (!book || !outline) return empty;
+
+  const reviewed = (await listChapters(fs, key, personId, bookId)).filter(
+    (c) => c.status === 'reviewed',
+  );
+  const reviewedIds = new Set(reviewed.map((c) => c.id));
+  const byId = new Map(reviewed.map((c) => [c.id, c]));
+  // The next-publish order — the same computation `publishBook` uses.
+  const nextIds = outline.parts.flatMap((part) =>
+    part.chapters
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .filter((c) => reviewedIds.has(c.id))
+      .map((c) => c.id),
+  );
+  const nextSet = new Set(nextIds);
+
+  const published = book.publishedAt ? await getPublishedManifest(fs, key, personId, bookId) : null;
+  const everPublished = Boolean(published);
+  const currentIds = published?.chapterOrder ?? [];
+  const currentSet = new Set(currentIds);
+
+  const psMap = await pseudonymMap(fs, key, personId, bookId);
+  const added: PublishDiffChapter[] = [];
+  const updated: PublishDiffChapter[] = [];
+  const unchanged: PublishDiffChapter[] = [];
+  for (const id of nextIds) {
+    const draft = byId.get(id)!;
+    const nextTitle = applyPseudonyms(draft.title, psMap);
+    if (!currentSet.has(id)) {
+      added.push({ id, title: nextTitle });
+      continue;
+    }
+    const pub = await getPublishedChapter(fs, key, personId, bookId, id);
+    const nextMd = applyPseudonyms(draft.markdown, psMap);
+    const changed = !pub || pub.markdown !== nextMd || pub.title !== nextTitle;
+    (changed ? updated : unchanged).push({ id, title: nextTitle });
+  }
+  const removed: PublishDiffChapter[] = [];
+  for (const id of currentIds) {
+    if (nextSet.has(id)) continue;
+    const pub = await getPublishedChapter(fs, key, personId, bookId, id);
+    removed.push({ id, title: pub?.title ?? 'Untitled chapter' });
+  }
+
+  return {
+    everPublished,
+    added,
+    removed,
+    updated,
+    unchanged,
+    willShrink: removed.length > 0,
+    nothingToPublish: reviewed.length === 0,
+  };
+}
+
+/**
+ * Unpublish (§18.2, #300): readers lose access at their next read. Clears `publishedAt` so the shared-read re-gate
+ * (`!book.publishedAt` → null) denies immediately — the SAME enforcement as revoke/un-share. Keeps the frozen
+ * published head + the reader grant list intact, so a later re-publish restores exactly the same readers. The
+ * draft is untouched. Idempotent when already unpublished.
+ */
+export async function unpublishBook(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  now: Date,
+): Promise<StoryUnpublishResult> {
+  const book = await getBook(fs, key, personId, bookId);
+  if (!book) return { ok: false, message: 'That book is no longer here.' };
+  if (!book.publishedAt) return { ok: true }; // already unpublished
+  // Clear `publishedAt` (exactOptionalPropertyTypes forbids assigning it `undefined`, so drop the key).
+  const next = { ...book, updatedAt: now.toISOString() };
+  delete next.publishedAt;
+  await saveManifest(fs, key, next);
+  return { ok: true };
 }
 
 // --- Read receipts (§13.6.8) ------------------------------------------------------------------------------

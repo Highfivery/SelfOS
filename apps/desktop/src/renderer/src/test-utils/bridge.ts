@@ -423,6 +423,17 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
       Promise.resolve({ ok: false as const, reason: 'ERROR' as const, message: 'x' }),
     storyAnsweredCheckIns: () => Promise.resolve([]),
     storyPublish: () => Promise.resolve({ ok: false as const, message: 'Not available.' }),
+    storyPublishDiff: () =>
+      Promise.resolve({
+        everPublished: false,
+        added: [],
+        removed: [],
+        updated: [],
+        unchanged: [],
+        willShrink: false,
+        nothingToPublish: true,
+      }),
+    storyUnpublish: () => Promise.resolve({ ok: true as const }),
     storyReaders: () => Promise.resolve([]),
     storyGrantReader: () => Promise.resolve([]),
     storyRevokeReader: () => Promise.resolve([]),

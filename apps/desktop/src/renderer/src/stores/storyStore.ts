@@ -47,6 +47,8 @@ import type {
   StoryCheckInResult,
   StoryAnsweredCheckIn,
   StoryPublishResult,
+  StoryPublishDiff,
+  StoryUnpublishResult,
   StoryOwnBookView,
   StoryReaderView,
   StoryRefreshViewResult,
@@ -225,6 +227,10 @@ interface StoryState {
   readers: BookReader[];
   loadReaders: (bookId: string) => Promise<void>;
   publish: (bookId: string) => Promise<StoryPublishResult>;
+  /** What a (re-)publish would change for readers (§18.2). */
+  publishDiff: (bookId: string) => Promise<StoryPublishDiff>;
+  /** Unpublish — readers lose access; the draft is untouched (§18.2). */
+  unpublish: (bookId: string) => Promise<StoryUnpublishResult>;
   grantReader: (bookId: string, readerPersonId: string) => Promise<void>;
   revokeReader: (bookId: string, readerPersonId: string) => Promise<void>;
   readerFeatured: (bookId: string, readerPersonId: string) => Promise<boolean>;
@@ -753,6 +759,24 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       message: 'Not available.',
     };
     if (res.ok) await get().open(bookId); // the manifest gains publishedAt
+    return res;
+  },
+  publishDiff: async (bookId) =>
+    (await window.selfos?.storyPublishDiff({ bookId })) ?? {
+      everPublished: false,
+      added: [],
+      removed: [],
+      updated: [],
+      unchanged: [],
+      willShrink: false,
+      nothingToPublish: true,
+    },
+  unpublish: async (bookId) => {
+    const res = (await window.selfos?.storyUnpublish({ bookId })) ?? {
+      ok: false as const,
+      message: 'Not available.',
+    };
+    if (res.ok) await get().open(bookId); // the manifest loses publishedAt
     return res;
   },
   grantReader: async (bookId, readerPersonId) => {

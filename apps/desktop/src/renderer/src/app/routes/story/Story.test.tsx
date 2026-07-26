@@ -1199,24 +1199,8 @@ describe('Story (64)', () => {
     expect(screen.queryByRole('button', { name: /change.*ready/ })).not.toBeInTheDocument();
   });
 
-  it('auto-refreshes the open book on mount (the living-book cadence)', async () => {
-    const storyRefreshCheck = vi.fn(() =>
-      Promise.resolve({ staled: 0, rewritten: 0, bundle: writtenBundle('new') }),
-    );
-    installStoryBridge({
-      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
-      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
-      storyGet: () => Promise.resolve(writtenBundle('new')), // autoRefresh is on in the fixture
-      storyRefreshCheck,
-    });
-    useSessionStore.setState({ activePerson: ACTIVE_PERSON }); // the cadence is per active person
-    renderStory();
-    await screen.findByRole('heading', { name: 'The Story of Ben' });
-    // The cadence hook nudged the bridge with auto:true (the bridge owns the real daily throttle).
-    await waitFor(() =>
-      expect(storyRefreshCheck).toHaveBeenCalledWith(expect.objectContaining({ auto: true })),
-    );
-  });
+  // The auto living-book cadence (refresh + interview) is no longer driven by the /story route — it runs
+  // app-wide from AppShell (`useStoryCadences`, §18.5/#298), covered by useStoryCadences.test.tsx.
 
   it('refreshes the book from what’s new and reports what changed', async () => {
     const storyRefreshCheck = vi.fn((input: { bookId: string; auto?: boolean }) =>
@@ -2573,20 +2557,8 @@ describe('Story (64)', () => {
     expect(screen.queryByRole('button', { name: 'Ask your biographer' })).not.toBeInTheDocument();
   });
 
-  it('the interview cadence fires storyInterviewCheck({auto:true}) on mount', async () => {
-    const storyInterviewCheck = vi.fn(() => Promise.resolve({ outcome: 'throttled' as const }));
-    installStoryBridge({
-      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
-      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
-      storyGet: () => Promise.resolve(writtenBundle('new')),
-      storyInterviewCheck,
-    });
-    useSessionStore.setState({ activePerson: ACTIVE_PERSON });
-    renderStory();
-    await waitFor(() =>
-      expect(storyInterviewCheck).toHaveBeenCalledWith(expect.objectContaining({ auto: true })),
-    );
-  });
+  // The auto interview cadence now runs app-wide from AppShell (`useStoryCadences`, §18.5/#298), not on /story
+  // mount — covered by useStoryCadences.test.tsx.
 
   it('publishes the book and reports what was shared (§3.5)', async () => {
     const storyPublish = vi.fn(() => Promise.resolve({ ok: true as const, publishedChapters: 1 }));

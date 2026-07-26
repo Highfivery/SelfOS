@@ -1930,3 +1930,30 @@ stay square until regenerated (a regenerate produces the 2:3 cover).
 | B3-2 ✅ | #300  | `computePublishDiff` (added/removed/updated/willShrink; compares the next PUBLISHED form so a pseudonym isn't a phantom edit) + `unpublishBook` (clears `publishedAt`, keeps grants + draft, reversible); the `story:publishDiff`/`:unpublish` seam; the Sharing-tab diff preview + Unshare-behind-confirm + no-silent-shrink confirm.                                                                                                                      | Core: diff added/updated/removed + willShrink + pseudonym-not-a-phantom-edit; unpublish denies readers, keeps grants + draft, reversible, idempotent. Bridge: publish→diff-clean→unpublish→reader-loses-access→re-publish-restores; gated `story.own`. RTL: shrink asks first; unshare behind a confirm. E2E: diff clean → unshare → reverts → re-share.                                                                                                               |
 | B3-3 ✅ | #293  | EPUB + DOCX exports + a generic Sources appendix + PDF page numbers/trim. Sub-sliced: **B3-3a** (`ChapterSourceSummary` frozen at publish → a generic "Sources" back-matter section + a 6×9in PDF trim + footer page numbers), **B3-3b** (a dependency-free store-only ZIP writer + `bookToEpub` — valid EPUB3, images as files), **B3-3c** (`bookToDocx` — valid OOXML, DrawingML inline images sized from the PNG/JPEG header, `inlineRuns` bold/italic). | Core (valid EPUB/DOCX bytes; Sources generic, no private ids; zip round-trip + CRC vectors; DOCX escapes body + emits runs) + bridge (mimetype/`word/document.xml` signatures) + RTL (dialog EPUB/Word options) + E2E (each format written outside the vault).                                                                                                                                                                                                         |
 | B3-4 ✅ | #303  | The cover renders at the 2:3 book trim (`1024x1536`) instead of a square; illustrations stay square; the distillation composes for a vertical portrait; the CoverPanel preview shows 2:3. Exports already lay a 2:3 cover out unstretched (DOCX sizes from the header; EPUB/PDF/MD use max-width). Honest caveat: OpenAI's max 2:3 is 1024×1536, not 1800×2700.                                                                                             | Core: a cover renders at `1024x1536` + a vertical-portrait brief; an illustration stays `1024x1024`. Cover E2E green (fake image).                                                                                                                                                                                                                                                                                                                                     |
+
+## 19. Backlog batch 4 — living globally + the shelf (2026-07-26)
+
+### 19.1 Living-book cadences run app-wide + a `story-checkin` notification (#298) — BUILT (B4-1)
+
+The living-book cadences (refresh §3.4/§5.4 + interview §3.7) previously mounted only on the `/story` route, so
+a book refreshed / minted an interview check-in **only while the person was looking at it**. Now they run at the
+**AppShell** level (the spec-39/40 precedent), for every book the active person owns with `autoRefresh` on.
+
+- **`useStoryCadences()`** (AppShell): gated `story.own`; loads the person's books (`storyList`) and fires
+  `refreshBook`/`runInterviewCheck` (auto) for each `autoRefresh` book on mount, on window focus/resume, and on a
+  person switch — with the same in-memory focus throttle. The bridge still owns the real per-book gates (daily/
+  weekly/interval, crisis suppressor, ≤1-open back-off, budget) and no-ops when not warranted. Multi-book ready
+  (#299) — it loops every book, not `books[0]`. The per-route `useStoryRefresh`/`useStoryInterview` hooks are
+  deleted (AppShell covers them).
+- **`story-checkin` notification kind**: the interview "gap" prompt (a biographer check-in) now surfaces
+  globally, not only on /story. Derived for FREE from the already-loaded Inbox — `fromBiographer && answerable`
+  (the `auto-checkin-ready` precedent; the two provenances never overlap). `onIncrease` by count; links to the
+  Inbox (the card carries the "Your biographer" eyebrow). Gated `story.own`.
+- The refresh cadence's OUTPUT (stale badges / woven-in material) surfaces where it always has — the /story card
+  - the Studio "Needs you" strip; a dedicated stale-chapter bell is deliberately NOT added (it would duplicate
+    those surfaces).
+
+### 19.2 Multi-book shelf (#299) — PROPOSED
+
+The Studio + every read/export path assumes `books[0]`, though the backend is already N-book. Add a shelf /
+switcher so a person can keep multiple book projects (a biography, a couples "Our Story", a year-in-review).

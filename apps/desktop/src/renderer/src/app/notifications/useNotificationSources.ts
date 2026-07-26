@@ -63,6 +63,10 @@ export function useNotificationSources(conflicts: string[]): void {
   const [freshnessAreas, setFreshnessAreas] = useState<string[]>([]);
   // Auto check-ins (63): how many auto-generated check-ins are waiting to answer + the one-time seed marker.
   const [autoPending, setAutoPending] = useState(0);
+  // Your Story (64 §18.5): biographer interview check-ins waiting to answer — the "gap" prompt, surfaced
+  // globally now the living-book cadence runs at AppShell (not only on /story). Counted from the same inbox
+  // read as auto check-ins; the two provenances never overlap (a story check-in has no `autoCheckin`).
+  const [storyPending, setStoryPending] = useState(0);
   const [autoSeededAt, setAutoSeededAt] = useState<string | null>(null);
   // Streams others have set up targeting the active person (§3.3a) — the first-time "someone set up
   // check-ins for you" notice. Not capability-gated (a person can be targeted without holding the capability).
@@ -83,6 +87,7 @@ export function useNotificationSources(conflicts: string[]): void {
     setSynthesis(null);
     setFreshnessAreas([]);
     setAutoPending(0);
+    setStoryPending(0);
     setAutoSeededAt(null);
     setIncomingStreams([]);
     setSharedBooks([]);
@@ -129,6 +134,7 @@ export function useNotificationSources(conflicts: string[]): void {
       setChallenges(chs);
       setSynthesis(syn);
       setAutoPending(inbox.filter((i) => i.autoCheckin && i.answerable).length);
+      setStoryPending(inbox.filter((i) => i.fromBiographer && i.answerable).length);
       // The one-time seed notice only while it's still on (turning it off = they've engaged, no notice).
       setAutoSeededAt(autoConfig?.enabled ? (autoConfig.seededAt ?? null) : null);
       setIncomingStreams(incoming);
@@ -328,6 +334,22 @@ export function useNotificationSources(conflicts: string[]): void {
         action: { type: 'navigate', to: '/inbox' },
       });
     }
+    // Your biographer has an interview check-in waiting (64 §18.5) — a "gap" prompt, surfaced globally now the
+    // cadence runs app-wide. onIncrease by count; answering some never re-pops. Links to the Inbox where the
+    // biographer check-in is answered (its card carries the "Your biographer" eyebrow).
+    if (canStory && storyPending > 0) {
+      candidates.push({
+        kind: 'story-checkin',
+        coalesceKey: 'story-checkin',
+        signature: String(storyPending),
+        title:
+          storyPending === 1
+            ? 'Your biographer has a question'
+            : `Your biographer has ${storyPending} questions`,
+        body: 'A check-in is waiting to help write your story.',
+        action: { type: 'navigate', to: '/inbox' },
+      });
+    }
     if (autoSeededAt) {
       candidates.push({
         kind: 'auto-checkin-enabled',
@@ -390,6 +412,8 @@ export function useNotificationSources(conflicts: string[]): void {
     canTogether,
     togetherSessions,
     autoPending,
+    storyPending,
+    canStory,
     autoSeededAt,
     incomingStreams,
     sharedBooks,

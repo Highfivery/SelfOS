@@ -52,6 +52,7 @@ import { togetherWaitingCount, useTogetherStore } from '../stores/togetherStore'
 import { useNotificationSources } from './notifications/useNotificationSources';
 import { useUpdateChecks } from './notifications/useUpdateChecks';
 import { useMemoryReconcile } from './notifications/useMemoryReconcile';
+import { useStoryCadences } from './notifications/useStoryCadences';
 import { useCoachingSynthesis } from './notifications/useCoachingSynthesis';
 import { useAutoCheckins } from './notifications/useAutoCheckins';
 import { ToastViewport } from './notifications/ToastViewport';
@@ -139,6 +140,9 @@ export function AppShell(): JSX.Element {
   // Drive the automatic cross-feature synthesis cadence (launch + focus, gated in the bridge); 40 §3.4.
   useCoachingSynthesis();
   useAutoCheckins();
+  // Drive the living-book cadences (refresh + interview) app-wide, for every autoRefresh book the active person
+  // owns — not only while on /story (64 §18.5, #298). The bridge owns the real per-book gates.
+  useStoryCadences();
 
   // When the signed-in person changes, drop the previous account's per-person data and load this
   // person's — sessions/usage/budget are per-user, so nothing from the prior login may linger

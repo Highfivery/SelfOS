@@ -102,6 +102,10 @@ export const NOTIFICATION_KIND_DEFS: Record<NotificationKind, KindDef> = {
   // while the viewer has NEVER opened it; opening records read progress → the candidate drops (never re-pops).
   // Coalesced per book; onChange with a stable signature so a dismissal without opening stays dismissed.
   'story-shared': { icon: BookOpen, severity: 'info', resurfaces: onChange },
+  // Your biographer has an interview check-in (a "gap" prompt) waiting (64 §18.5) — the living-book cadence now
+  // runs app-wide, so this surfaces globally, not only on /story. onIncrease by count: dismissing never re-nags
+  // unless ANOTHER arrives; answering some (a lower count) never re-pops it (the auto-checkin-ready precedent).
+  'story-checkin': { icon: BookOpen, severity: 'info', resurfaces: onIncrease },
 };
 
 /** The icon for a kind (used by the bell rows + toasts). */

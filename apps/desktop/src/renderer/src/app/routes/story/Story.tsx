@@ -30,8 +30,6 @@ import { StoryMemories } from './StoryMemories';
 import { OutlineEditor } from './OutlineEditor';
 import { TimelinePanel } from './TimelinePanel';
 import { useInsightStore } from '../../../stores/insightStore';
-import { useStoryRefresh } from '../../notifications/useStoryRefresh';
-import { useStoryInterview } from '../../notifications/useStoryInterview';
 import { useSetting } from '../../../settings/useSetting';
 import { aiKeyResolved } from '../../aiAvailability';
 import { AiUnavailableNotice, aiUnavailableMessage } from '../../AiUnavailableNotice';
@@ -167,12 +165,8 @@ export function Story(): JSX.Element {
   }, [activePersonId]);
   const aiUnavailable = keyReady === false || aiEnabled === false;
 
-  // The automatic living-book refresh cadence (§3.4) — nudges the bridge (daily-throttled + capped) for the
-  // open book if its autoRefresh is on. Silent: it just re-stamps stale badges / weaves in new material.
-  useStoryRefresh(bundle?.manifest.id ?? null, bundle?.manifest.config.autoRefresh ?? false);
-  // The autonomous interview cadence (§3.7) — nudges the bridge (7-day-throttled + capped + ≤1 open) to gap-pass
-  // the book + mint a story check-in when warranted. Silent: check-ins land gently in the Inbox.
-  useStoryInterview(bundle?.manifest.id ?? null, bundle?.manifest.config.autoRefresh ?? false);
+  // The living-book cadences (refresh §3.4 + interview §3.7) now run APP-WIDE from AppShell (`useStoryCadences`,
+  // §18.5/#298) for every autoRefresh book — not only while this route is mounted — so they're not driven here.
 
   useEffect(() => {
     void load();

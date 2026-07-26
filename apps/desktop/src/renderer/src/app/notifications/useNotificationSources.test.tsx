@@ -448,6 +448,52 @@ describe('useNotificationSources — auto check-ins (63)', () => {
   });
 });
 
+describe('useNotificationSources — story-checkin (64 §18.5, #298)', () => {
+  const biographerInboxItem = {
+    assignmentId: 'sc1',
+    title: 'A question from your biographer',
+    type: 'general',
+    questionCount: 2,
+    status: 'sent' as const,
+    privacy: 'standard' as const,
+    senderName: 'Ben',
+    createdAt: 'now',
+    favorite: false,
+    answerable: true,
+    hasDraft: false,
+    fromSelf: true,
+    fromBiographer: true,
+  };
+
+  it('surfaces "your biographer has a question" for a waiting interview check-in, linking to the Inbox', async () => {
+    installMockBridge({ assignmentsInbox: () => Promise.resolve([biographerInboxItem]) });
+    asOwner();
+    await useNotificationStore.getState().load();
+    render(<Harness />);
+    await waitFor(() => {
+      const n = useNotificationStore
+        .getState()
+        .notifications.find((x) => x.coalesceKey === 'story-checkin');
+      expect(n?.title).toBe('Your biographer has a question');
+      expect(n?.action).toEqual({ type: 'navigate', to: '/inbox' });
+    });
+  });
+
+  it('does not fire when the only biographer item is already answered', async () => {
+    installMockBridge({
+      assignmentsInbox: () =>
+        Promise.resolve([{ ...biographerInboxItem, answerable: false, answeredAt: 'now' }]),
+    });
+    asOwner();
+    await useNotificationStore.getState().load();
+    render(<Harness />);
+    await waitFor(() => expect(useNotificationStore.getState().notifications).toBeDefined());
+    expect(useNotificationStore.getState().notifications.map((n) => n.coalesceKey)).not.toContain(
+      'story-checkin',
+    );
+  });
+});
+
 describe('useNotificationSources — story-shared (64 §3.6)', () => {
   const sharedBook = (over: Record<string, unknown> = {}) => ({
     authorPersonId: 'auth1',

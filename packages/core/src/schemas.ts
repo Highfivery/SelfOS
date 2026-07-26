@@ -67,6 +67,7 @@ export const NOTIFICATION_KINDS = [
   'auto-checkin-enabled', // 63-auto-checkins §5.1 — the one-time "Auto check-ins is now on" seed notice
   'auto-checkin-incoming', // 63 §3.3a — someone set up recurring check-ins for you (fires once per new sender)
   'story-shared', // 64-your-story §3.6 — someone shared their Story book with you (fires once, on first share)
+  'story-checkin', // 64-your-story §18.5 — your biographer has an interview check-in (a "gap" prompt) waiting
 ] as const;
 export const NotificationKindSchema = z.enum(NOTIFICATION_KINDS);
 export type NotificationKind = z.infer<typeof NotificationKindSchema>;

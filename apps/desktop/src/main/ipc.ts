@@ -224,7 +224,17 @@ export function registerIpcHandlers(): void {
       });
       try {
         await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-        const pdf = await win.webContents.printToPDF({ printBackground: true });
+        // A book trim (§18.3, #293): a 6×9in trade-paperback page + centered page numbers in the footer.
+        // `pageSize`/`margins` are in inches (Electron ≥21). The footer's `pageNumber` span is filled by Chromium.
+        const pdf = await win.webContents.printToPDF({
+          printBackground: true,
+          pageSize: { width: 6, height: 9 },
+          margins: { top: 0.7, bottom: 0.75, left: 0.7, right: 0.7 },
+          displayHeaderFooter: true,
+          headerTemplate: '<span></span>',
+          footerTemplate:
+            '<div style="width:100%;text-align:center;font-size:9px;color:#888;font-family:Georgia,serif;"><span class="pageNumber"></span></div>',
+        });
         return new Uint8Array(pdf);
       } catch {
         return null;

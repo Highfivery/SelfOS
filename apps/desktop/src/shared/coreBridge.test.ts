@@ -8624,6 +8624,10 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const md = new TextDecoder().decode(saved[0]!.bytes);
     expect(md).toContain('# The Story of Ben');
     expect(md).toContain('### '); // the published chapter heading
+    // A generic Sources appendix (§18.3) — per-chapter kind counts, never a source id.
+    expect(md).toContain('## Sources');
+    expect(md).toMatch(/drawn from \d+ /);
+    expect(md).not.toContain(':s0'); // the raw provenance id never crosses into an exported book
   });
 
   it('story: exports the published book as a PDF file outside the vault (§3.9)', async () => {

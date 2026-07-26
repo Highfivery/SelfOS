@@ -12600,6 +12600,10 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
     expect(exported).toContain('Ben grew up in Ohio and never left the garage.');
     expect(exported).toContain('Set in Lora, over one winter.');
     expect(exported).toContain('not a medical record');
+    // A generic Sources appendix (§18.3, #293) — per-chapter kind counts, never a raw provenance id.
+    expect(exported).toContain('## Sources');
+    expect(exported).toMatch(/drawn from \d+ /);
+    expect(exported).not.toMatch(/:s\d/); // the private source ids never leave the vault
     await w.getByRole('button', { name: 'Close' }).click();
 
     // Publish the reviewed chapter + grant the household reader.

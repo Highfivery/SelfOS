@@ -3996,6 +3996,19 @@ export const PublishedPartSchema = z.object({
 });
 export type PublishedPart = z.infer<typeof PublishedPartSchema>;
 
+/** One chapter's GENERIC source summary for the Sources appendix (§18.3, #293) — the chapter title + a per-KIND
+ *  count of the sources it drew on. Deliberately generic: NO source ids, NO content, NO dates ever cross into an
+ *  exported/shared book, so an exported book leaks nothing about the private records behind it. Frozen at publish
+ *  from the chapter provenance (which itself never crosses to a reader). */
+export const ChapterSourceSummarySchema = z.object({
+  chapterId: z.string().min(1),
+  title: z.string(),
+  counts: z
+    .array(z.object({ kind: StorySourceKindSchema, count: z.number().int().positive() }))
+    .default([]),
+});
+export type ChapterSourceSummary = z.infer<typeof ChapterSourceSummarySchema>;
+
 /** `published/manifest.enc` — the self-contained published head readers see (§3.5/§3.6). Snapshots everything the
  *  reader view needs (title, essence, matter, the auto "A Note on this book", TOC) so a draft edit after publish
  *  never leaks; the published chapters live in `published/<chapterId>.enc`. */
@@ -4011,6 +4024,9 @@ export const PublishedManifestSchema = z.object({
   cast: z.array(CastMemberSchema).optional(),
   /** The auto-generated honesty page ("Drawn from N conversations, M reflections…"), computed at publish. */
   noteOnBook: z.string().optional(),
+  /** Per-chapter GENERIC source counts for the Sources appendix (§18.3) — frozen at publish, never any ids/
+   *  content/dates. Additive-optional (pre-#293 published heads simply have none). */
+  chapterSources: z.array(ChapterSourceSummarySchema).optional(),
   parts: z.array(PublishedPartSchema).default([]),
   /** A flat, ordered list of the published chapter ids (drives read-progress + "what's new"). */
   chapterOrder: z.array(z.string()).default([]),

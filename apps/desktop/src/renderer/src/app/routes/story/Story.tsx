@@ -41,6 +41,7 @@ import { downscaleImage } from '../sessions/downscaleImage';
 import { AdminOnlyBadge } from '../../../design-system/components';
 import type {
   BookConfig,
+  BookManifest,
   ChapterMarkup,
   ChapterVersion,
   ConsentState,
@@ -249,6 +250,32 @@ export function Story(): JSX.Element {
     );
   }
 
+  // "Start another book" (§19.2) — the setup/commission flow shows even when books already exist, so it must be
+  // checked BEFORE the `if (bundle)` branch (which would otherwise return the Studio for the open book).
+  if (mode === 'setup') {
+    return (
+      <div className={styles.page}>
+        {aiUnavailable ? <AiUnavailableNotice /> : null}
+        <StorySetup
+          titleHint={personName ? `e.g. The Story of ${personName}` : 'e.g. The Story of a Life'}
+          personNameForPreview={personName}
+          aiUnavailable={aiUnavailable}
+          onCancel={() => setMode('idle')}
+          onCreate={async (title, config) => {
+            setError(null);
+            setMode('idle');
+            // Create AND draft the whole book in one flow — no outline-review gate. The draft screen shows
+            // immediately (progress is seeded), and the finished book lands ready to edit.
+            const res = await createAndDraft({ type: 'biography', title, config });
+            if (!res.ok && res.message) setError(res.message);
+          }}
+        />
+        {error ? <Banner tone="danger">{error}</Banner> : null}
+        <CrisisFooter />
+      </div>
+    );
+  }
+
   if (bundle) {
     if (bundle.outline) {
       // Editing a chapter (the markup surface) takes priority — it's reached from the reader's "Edit" or a
@@ -285,6 +312,9 @@ export function Story(): JSX.Element {
         <div className={styles.page}>
           <StudioLayout
             bundle={bundle}
+            books={books}
+            onSwitchBook={(id) => void open(id)}
+            onStartNewBook={() => setMode('setup')}
             onOpenChapter={setReading}
             onReadBook={() => navigate('/story/read')}
             aiUnavailable={aiUnavailable}
@@ -308,30 +338,6 @@ export function Story(): JSX.Element {
             if (!res.ok && res.message) setError(res.message);
           }}
         />
-        <CrisisFooter />
-      </div>
-    );
-  }
-
-  if (mode === 'setup') {
-    return (
-      <div className={styles.page}>
-        {aiUnavailable ? <AiUnavailableNotice /> : null}
-        <StorySetup
-          titleHint={personName ? `e.g. The Story of ${personName}` : 'e.g. The Story of a Life'}
-          personNameForPreview={personName}
-          aiUnavailable={aiUnavailable}
-          onCancel={() => setMode('idle')}
-          onCreate={async (title, config) => {
-            setError(null);
-            setMode('idle');
-            // Create AND draft the whole book in one flow — no outline-review gate. The draft screen shows
-            // immediately (progress is seeded), and the finished book lands ready to edit.
-            const res = await createAndDraft({ type: 'biography', title, config });
-            if (!res.ok && res.message) setError(res.message);
-          }}
-        />
-        {error ? <Banner tone="danger">{error}</Banner> : null}
         <CrisisFooter />
       </div>
     );
@@ -1432,11 +1438,18 @@ function TitleWorkshop({ bookId, onDone }: { bookId: string; onDone: () => void 
 
 function StudioLayout({
   bundle,
+  books,
+  onSwitchBook,
+  onStartNewBook,
   onOpenChapter,
   onReadBook,
   aiUnavailable = false,
 }: {
   bundle: StoryBookBundle;
+  /** Every book the active person owns (§19.2) — drives the shelf switcher in the hero. */
+  books: BookManifest[];
+  onSwitchBook: (bookId: string) => void;
+  onStartNewBook: () => void;
   onOpenChapter: (chapterId: string) => void;
   onReadBook: () => void;
   /** AI unavailable (no key / off) — drives the honest refresh copy (never "turn on AI" when it IS on). */
@@ -1598,7 +1611,15 @@ function StudioLayout({
           />
         </div>
         <div className={styles.heroBody}>
-          <span className={styles.partEyebrow}>Your story · Biography</span>
+          <div className={styles.heroEyebrowRow}>
+            <span className={styles.partEyebrow}>Your story · Biography</span>
+            <BookSwitcher
+              books={books}
+              currentId={bookId}
+              onSwitch={onSwitchBook}
+              onStartNew={onStartNewBook}
+            />
+          </div>
           {titleDraft === null ? (
             <div className={styles.heroTitleRow}>
               <Heading level={1}>{manifest.title}</Heading>
@@ -2608,6 +2629,76 @@ function TodoSheet({
           ))}
         </div>
       </aside>
+    </div>
+  );
+}
+
+/**
+ * The book shelf switcher (§19.2, #299) — a compact header control for a person who keeps more than one book.
+ * The current book's title is a menu button; the menu lists the OTHER books (switch by opening them) + "Start
+ * another book". Shown only when the person has ≥1 book (it always offers "Start another book", so a second book
+ * is reachable from a single-book Studio); with just one book it's a small "one of your books" affordance.
+ */
+function BookSwitcher({
+  books,
+  currentId,
+  onSwitch,
+  onStartNew,
+}: {
+  books: BookManifest[];
+  currentId: string;
+  onSwitch: (bookId: string) => void;
+  onStartNew: () => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const others = books.filter((b) => b.id !== currentId);
+  const label =
+    books.length > 1
+      ? `Book ${books.findIndex((b) => b.id === currentId) + 1} of ${books.length}`
+      : 'Your books';
+  return (
+    <div className={styles.kebabWrap}>
+      <button
+        type="button"
+        className={styles.switcherButton}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {label} ▾
+      </button>
+      {open ? (
+        <>
+          <div className={styles.kebabBackdrop} onClick={() => setOpen(false)} aria-hidden="true" />
+          <div className={styles.kebabMenu} role="menu">
+            {others.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                role="menuitem"
+                className={styles.kebabItem}
+                onClick={() => {
+                  setOpen(false);
+                  onSwitch(b.id);
+                }}
+              >
+                {b.title}
+              </button>
+            ))}
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.kebabItem}
+              onClick={() => {
+                setOpen(false);
+                onStartNew();
+              }}
+            >
+              + Start another book
+            </button>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

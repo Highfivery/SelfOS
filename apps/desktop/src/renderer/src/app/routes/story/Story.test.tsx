@@ -412,6 +412,43 @@ describe('Story (64)', () => {
     expect(updatedWith).toEqual({ bookId: 'b1', title: 'The Weight of Quiet' });
   });
 
+  it('shows the shelf switcher with multiple books; switching opens the other, and "Start another book" enters setup (§19.2, #299)', async () => {
+    const opened: string[] = [];
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () =>
+        Promise.resolve([
+          manifest({ id: 'b1', status: 'ready', title: 'The Story of Ben' }),
+          manifest({ id: 'b2', status: 'ready', title: 'Second Book' }),
+        ]),
+      storyGet: (input) => {
+        const id = (input as { bookId: string }).bookId;
+        opened.push(id);
+        return Promise.resolve({
+          ...writtenBundle(),
+          manifest: manifest({
+            id,
+            status: 'ready',
+            title: id === 'b2' ? 'Second Book' : 'The Story of Ben',
+          }),
+        });
+      },
+    });
+    renderStory();
+    // Lands on the first book; the switcher shows "Book 1 of 2".
+    await screen.findByRole('heading', { name: 'The Story of Ben', level: 1 });
+    await userEvent.click(await screen.findByRole('button', { name: /Book 1 of 2/ }));
+    // The menu lists the OTHER book; clicking it opens b2.
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Second Book' }));
+    await waitFor(() => expect(opened).toContain('b2'));
+    await screen.findByRole('heading', { name: 'Second Book', level: 1 });
+
+    // "Start another book" enters the setup/commission flow even though books already exist.
+    await userEvent.click(await screen.findByRole('button', { name: /Book 2 of 2/ }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: '+ Start another book' }));
+    expect(await screen.findByRole('button', { name: 'Write my book' })).toBeInTheDocument();
+  });
+
   it('renders chapters as cover-backed cards grouped by part, with number + status (§3.1 redesign)', async () => {
     installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),

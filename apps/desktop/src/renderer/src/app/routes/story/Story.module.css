@@ -788,6 +788,30 @@
 .kebabButton:hover {
   color: var(--color-accent-text);
 }
+/* The hero eyebrow row holds the "Your story · Biography" eyebrow + the shelf switcher (§19.2). */
+.heroEyebrowRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+/* The book-shelf switcher trigger (§19.2, #299) — a compact text pill, not a fixed-size icon button. */
+.switcherButton {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.switcherButton:hover {
+  color: var(--color-accent-text);
+  border-color: var(--color-border-strong);
+}
 .kebabBackdrop {
   position: fixed;
   inset: 0;

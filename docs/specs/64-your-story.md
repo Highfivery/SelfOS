@@ -1953,7 +1953,21 @@ a book refreshed / minted an interview check-in **only while the person was look
   - the Studio "Needs you" strip; a dedicated stale-chapter bell is deliberately NOT added (it would duplicate
     those surfaces).
 
-### 19.2 Multi-book shelf (#299) — PROPOSED
+### 19.2 Multi-book shelf (#299) — BUILT (B4-2)
 
-The Studio + every read/export path assumes `books[0]`, though the backend is already N-book. Add a shelf /
-switcher so a person can keep multiple book projects (a biography, a couples "Our Story", a year-in-review).
+The Studio auto-opened `books[0]` and there was no way to reach a second book, though the backend is already
+N-book. Owner decisions (asked): **build now** (even though only the `biography` type exists in v1), a **compact
+switcher in the Studio header**, and **"Start another book" reuses the Begin flow** while delete stays in the
+per-book Settings danger zone (already built).
+
+- **`BookSwitcher`** in the Studio hero: the current book shows as "Book N of M" (or "Your books" with one); its
+  menu lists the OTHER books (switch by opening them) + "Start another book". Shown whenever a book is open, so a
+  second book is always reachable from a single-book Studio.
+- Switching is just `open(bookId)` — the store's persisted `bundle` survives navigation within a session, so no
+  new selection state/seam is needed; the auto-open still lands on the first book on a fresh load. The whole
+  Studio/reader/export chain already renders from the open `bundle`, so it all works per-book unchanged.
+- "Start another book" sets `mode: 'setup'` — the commission flow, now checked BEFORE the `if (bundle)` branch so
+  it shows even with books present; `createAndDraft` opens the new book on completion. Multi-book ready
+  throughout — the app-wide cadence (§19.1) already loops every book, not `books[0]`.
+- No new book TYPES yet (biography only); the shelf holds multiple biographies today and is ready for a future
+  couples "Our Story" / year-in-review type with no further switcher work.

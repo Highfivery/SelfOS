@@ -983,8 +983,9 @@
 .coverImage {
   display: block;
   width: 100%;
-  max-width: 320px;
-  aspect-ratio: 1 / 1;
+  max-width: 240px;
+  /* The cover is generated at the 2:3 book trim (§18.4) — show it at its true aspect, uncropped. */
+  aspect-ratio: 2 / 3;
   object-fit: cover;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);

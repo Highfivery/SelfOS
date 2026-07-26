@@ -24,7 +24,11 @@ const key = generateMasterKey();
 const now = new Date('2026-07-16T00:00:00.000Z');
 const config: BookConfig = { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true };
 
-const captured: { claudeInput?: string | undefined; imagePrompt?: string | undefined } = {};
+const captured: {
+  claudeInput?: string | undefined;
+  imagePrompt?: string | undefined;
+  imageSize?: string | undefined;
+} = {};
 const ALL = { from: '2000-01-01T00:00:00.000Z', to: '2100-01-01T00:00:00.000Z' };
 
 let fs: FileSystem;
@@ -32,6 +36,7 @@ beforeEach(() => {
   fs = memFileSystem();
   captured.claudeInput = undefined;
   captured.imagePrompt = undefined;
+  captured.imageSize = undefined;
 });
 
 /** A fake Claude that records the distillation input and returns a fixed, NAME-FREE distilled prompt. */
@@ -56,6 +61,7 @@ function fakeImage(outcome?: ImageGenerateOutcome): ImageClient {
     verify: () => Promise.resolve(),
     generate: (options) => {
       captured.imagePrompt = options.prompt;
+      captured.imageSize = options.size;
       return Promise.resolve(
         outcome ?? {
           ok: true,
@@ -211,6 +217,9 @@ describe('generateStoryImage (§3.8)', () => {
     expect(res.ok).toBe(true);
     if (!res.ok) throw new Error('expected ok');
     expect(res.image.kind).toBe('cover');
+    // A cover renders at the 2:3 book trim (§18.4, #303) — a real print aspect, not a square cropped by the UI.
+    expect(captured.imageSize).toBe('1024x1536');
+    expect(captured.claudeInput).toContain('VERTICAL PORTRAIT');
 
     // The book now points at the cover; the index has the entry; the bytes decrypt back.
     const book = await getBook(fs, key, 'author', bookId);
@@ -253,6 +262,7 @@ describe('generateStoryImage (§3.8)', () => {
     if (!res.ok) throw new Error('failed');
     expect(res.image.kind).toBe('generated');
     expect(res.image.chapterId).toBe('c1');
+    expect(captured.imageSize).toBe('1024x1024'); // an inline illustration stays square, unlike the 2:3 cover
     const book = await getBook(fs, key, 'author', bookId);
     expect(book?.coverImageId).toBeUndefined(); // an illustration never sets the cover
     // The chapter seed reached Claude (defense-in-depth strips the name from the OUTPUT).

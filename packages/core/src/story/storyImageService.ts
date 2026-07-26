@@ -25,7 +25,10 @@ import {
  * decision 2026-07-16 — one switch for all AI images).
  */
 
-const IMAGE_SIZE = '1024x1024'; // a fixed square (the dream precedent); cost seeds at the 1024² estimate
+const IMAGE_SIZE = '1024x1024'; // a square, for chapter illustrations (inline figures); cost seeds at 1024²
+// A book cover is a portrait at the standard 2:3 book trim (§18.4, #303) — the largest 2:3 OpenAI offers. So the
+// cover is generated at its true print aspect (not a square the UI crops to 2:3), and exports/prints unstretched.
+const COVER_SIZE = '1024x1536';
 const ALLOWED_MIME = ['image/png', 'image/webp', 'image/jpeg'] as const;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // ~5 MB (the 08 §13.2 bound, reused)
 const DISTILL_MAX_TOKENS = 400;
@@ -70,6 +73,13 @@ export function buildStoryImagePromptInput(input: {
     `Themes to evoke:\n${input.seed.trim()}`,
     `Visual style: ${input.style}.`,
   ];
+  // A cover is a tall portrait (2:3 book trim, §18.4) — compose for a vertical frame so nothing important sits
+  // where the spine/edges would crop.
+  if (input.kind === 'cover') {
+    lines.push(
+      'Compose it as a VERTICAL PORTRAIT (2:3 book-cover proportions), balanced for a tall frame.',
+    );
+  }
   const styleNotes = input.styleNotes?.trim();
   if (styleNotes) lines.push(`Additional style direction: ${styleNotes}.`);
   lines.push(STORY_IMAGE_FRAMING);
@@ -260,7 +270,7 @@ export async function generateStoryImage(
     apiKey: openaiApiKey,
     model: imageModel,
     prompt: distilledPrompt,
-    size: IMAGE_SIZE,
+    size: target.kind === 'cover' ? COVER_SIZE : IMAGE_SIZE,
   });
   if (!outcome.ok) {
     if (outcome.reason === 'REFUSED') {

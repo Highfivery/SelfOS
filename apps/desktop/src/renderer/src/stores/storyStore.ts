@@ -12,6 +12,8 @@ import type {
   QuoteStatus,
   ContinuityFinding,
   StoryContinuityResult,
+  ConsentPerson,
+  ConsentState,
   MarkupMark,
   StoryBookBundle,
   StoryBookTypeView,
@@ -182,6 +184,14 @@ interface StoryState {
   loadCorpusStats: () => Promise<void>;
   castRegister: CastEntry[];
   loadCastRegister: (bookId: string) => Promise<void>;
+  consent: ConsentPerson[];
+  loadConsent: (bookId: string) => Promise<void>;
+  setConsent: (
+    bookId: string,
+    name: string,
+    consent: ConsentState,
+    pseudonym?: string,
+  ) => Promise<void>;
   /** How far along the book is (§3.6) — a qualitative stage + subtle ratio, from the stored coverage. */
   completeness: StoryCompleteness | null;
   loadCompleteness: (bookId: string) => Promise<void>;
@@ -308,6 +318,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   continuity: [],
   corpusStats: null,
   castRegister: [],
+  consent: [],
   completeness: null,
   readers: [],
   images: [],
@@ -660,6 +671,18 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   loadCastRegister: async (bookId) => {
     set({ castRegister: (await window.selfos?.storyCastRegister({ bookId })) ?? [] });
   },
+  loadConsent: async (bookId) => {
+    set({ consent: (await window.selfos?.storyConsent({ bookId })) ?? [] });
+  },
+  setConsent: async (bookId, name, consent, pseudonym) => {
+    const next = await window.selfos?.storySetConsent({
+      bookId,
+      name,
+      consent,
+      ...(pseudonym !== undefined ? { pseudonym } : {}),
+    });
+    if (next) set({ consent: next });
+  },
   loadCompleteness: async (bookId) => {
     const completeness = (await window.selfos?.storyCompleteness({ bookId })) ?? null;
     set({ completeness });
@@ -876,6 +899,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       continuity: [],
       corpusStats: null,
       castRegister: [],
+      consent: [],
       completeness: null,
       gaps: null,
       answeredCheckIns: [],

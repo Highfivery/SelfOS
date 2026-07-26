@@ -3790,6 +3790,50 @@ export interface CastEntry {
   sources: ('graph' | 'memory' | 'mention')[];
 }
 
+// --- People-in-your-book consent center + pseudonyms (64 §17.5, #290) -------------------------------------
+
+/** Where a named living person stands on appearing in the book — tracked manually by the author (no outbound
+ *  requests). Only ever WARNS at publish; a pseudonym is the fix, never a hard block. */
+export const ConsentStateSchema = z.enum(['unknown', 'requested', 'granted', 'declined']);
+export type ConsentState = z.infer<typeof ConsentStateSchema>;
+
+export const BookConsentEntrySchema = z.object({
+  /** The real display name as it appears in the book (the key the author is deciding about). */
+  name: z.string().min(1),
+  /** The linked household person, when this is one. */
+  personId: z.string().optional(),
+  consent: ConsentStateSchema,
+  /** A name to substitute for this person in the READ + EXPORTED book (their real name stays in the draft). */
+  pseudonym: z.string().optional(),
+  updatedAt: z.string(),
+});
+export type BookConsentEntry = z.infer<typeof BookConsentEntrySchema>;
+
+export const BookConsentListSchema = z.object({
+  schemaVersion: z.literal(1),
+  entries: z.array(BookConsentEntrySchema).default([]),
+});
+export type BookConsentList = z.infer<typeof BookConsentListSchema>;
+
+/** One person in the consent center — the cast entry joined with the author's consent decision. The Studio read. */
+export interface ConsentPerson {
+  name: string;
+  personId?: string;
+  relationship?: string;
+  mentions: number;
+  consent: ConsentState;
+  pseudonym?: string;
+}
+
+export const StorySetConsentInputSchema = z.object({
+  bookId: z.string().min(1),
+  name: z.string().min(1),
+  consent: ConsentStateSchema,
+  /** Empty string clears the pseudonym. */
+  pseudonym: z.string().optional(),
+});
+export type StorySetConsentInput = z.infer<typeof StorySetConsentInputSchema>;
+
 /** `book.enc` — the book's top-level record (64 §4). `sharedWith` = the household person ids granted read
  *  access (re-checked at every read, §3.5); `publishedAt` present once the person has published a head. */
 export const BookManifestSchema = z.object({

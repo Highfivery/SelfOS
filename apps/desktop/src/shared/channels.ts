@@ -44,6 +44,8 @@ import type {
   SharedBookSummary,
   StoryCompleteness,
   CastEntry,
+  ConsentPerson,
+  StorySetConsentInput,
   StoryCorpusStats,
   StoryOutlineEditInput,
   StoryOutlineEditResult,
@@ -450,6 +452,8 @@ export const IpcChannels = {
   storyHomeSignal: 'story:homeSignal',
   storyCorpusStats: 'story:corpusStats',
   storyCastRegister: 'story:castRegister',
+  storyConsent: 'story:consent',
+  storySetConsent: 'story:setConsent',
   storyCompleteness: 'story:completeness',
   storyInterviewCheck: 'story:interviewCheck',
   storyGaps: 'story:gaps',
@@ -1376,6 +1380,10 @@ export interface SelfosBridge {
   storyCorpusStats(): Promise<StoryCorpusStats>;
   /** The book's cast register (§17.2) — recurring people from the graph + memories + named mentions. */
   storyCastRegister(input: { bookId: string }): Promise<CastEntry[]>;
+  /** The consent center (§17.5) — everyone the book names, joined with the author's consent + pseudonym. */
+  storyConsent(input: { bookId: string }): Promise<ConsentPerson[]>;
+  /** Set a named person's consent state + pseudonym. Returns the fresh register. */
+  storySetConsent(input: StorySetConsentInput): Promise<ConsentPerson[]>;
   /** How far along the book is (§3.6) — a qualitative stage + a subtle ratio, from the stored coverage. A cheap
    *  no-AI read. Gated `story.own`, active-person-scoped. */
   storyCompleteness(input: { bookId: string }): Promise<StoryCompleteness>;

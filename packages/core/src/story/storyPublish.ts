@@ -1,6 +1,8 @@
 import type { FileSystem } from '../host';
 import { getPerson, listPeople } from '../people';
 import { castForPublication, getCastRegister } from './castRegister';
+import { pseudonymMap, pseudonymizeChapters, pseudonymizeManifest } from './storyConsent';
+import { applyPseudonyms } from './storyText';
 import type {
   BookChapter,
   BookReader,
@@ -98,8 +100,26 @@ export async function publishBook(
   }
 
   const reviewedIds = new Set(reviewed.map((c) => c.id));
+  // Freeze pseudonyms into the published head (§17.5): a shared reader can't read the author's consent register,
+  // so the substituted prose + pinned quotes are frozen here, and the DRAFT keeps the real names.
+  const psMap = await pseudonymMap(fs, key, personId, bookId);
   for (const chapter of reviewed) {
-    await savePublishedChapter(fs, key, personId, bookId, chapter);
+    // Freeze pseudonyms into EVERY name-bearing field a reader sees: the title, the prose, pinned quotes, and
+    // each image placement's caption (§17.5). A chapter title / AI caption is auto-generated — the author never
+    // got to self-substitute, so it must be covered or the real name leaks despite the pseudonym.
+    await savePublishedChapter(fs, key, personId, bookId, {
+      ...chapter,
+      title: applyPseudonyms(chapter.title, psMap),
+      markdown: applyPseudonyms(chapter.markdown, psMap),
+      imagePlacements: chapter.imagePlacements.map((pl) => ({
+        ...pl,
+        caption: applyPseudonyms(pl.caption, psMap),
+      })),
+      pinnedQuotes: chapter.pinnedQuotes.map((q) => ({
+        ...q,
+        text: applyPseudonyms(q.text, psMap),
+      })),
+    });
   }
   await prunePublishedChapters(fs, personId, bookId, reviewedIds);
 
@@ -139,19 +159,24 @@ export async function publishBook(
     ? castForPublication(await getCastRegister(fs, key, personId, bookId))
     : [];
 
-  const publishedManifest: PublishedManifest = {
-    schemaVersion: 1,
-    publishedAt: now.toISOString(),
-    title: book.title,
-    ...(book.essence ? { essence: book.essence } : {}),
-    ...(book.coverImageId ? { coverImageId: book.coverImageId } : {}),
-    ...(book.matter ? { matter: book.matter } : {}),
-    ...(cast.length > 0 ? { cast } : {}),
-    noteOnBook: noteOnBook(publishedChapters),
-    parts,
-    chapterOrder,
-    images,
-  };
+  // Build the raw manifest, then freeze pseudonyms across every name-bearing field (title / essence / matter /
+  // cast / image captions) in one pass — the shared reader can't read the consent register, so it's frozen here.
+  const publishedManifest: PublishedManifest = pseudonymizeManifest(
+    {
+      schemaVersion: 1,
+      publishedAt: now.toISOString(),
+      title: book.title,
+      ...(book.essence ? { essence: book.essence } : {}),
+      ...(book.coverImageId ? { coverImageId: book.coverImageId } : {}),
+      ...(book.matter ? { matter: book.matter } : {}),
+      ...(cast.length > 0 ? { cast } : {}),
+      noteOnBook: noteOnBook(publishedChapters),
+      parts,
+      chapterOrder,
+      images,
+    },
+    psMap,
+  );
   await savePublishedManifest(fs, key, personId, bookId, publishedManifest);
   await saveManifest(fs, key, {
     ...book,
@@ -470,14 +495,21 @@ export async function readOwnBook(
   const chapterOrder = parts.flatMap((p) => p.chapterIds);
   const orderedChapters = chapterOrder.map((id) => written.get(id)!).filter(Boolean);
 
-  const chapters: ReaderChapter[] = orderedChapters.map((c) => ({
-    id: c.id,
-    title: c.title,
-    markdown: c.markdown,
-    imagePlacements: c.imagePlacements,
-    status: c.status,
-    pinnedQuotes: c.pinnedQuotes,
-  }));
+  // The owner reads their OWN draft, so apply pseudonyms LIVE (§17.5) — they see the read/shared book as it
+  // will publish (a shared reader gets the pseudonyms frozen into the published head instead). The draft files
+  // keep the real names; substitution is a read-time projection.
+  const psMap = await pseudonymMap(fs, key, personId, bookId);
+  const chapters: ReaderChapter[] = pseudonymizeChapters(
+    orderedChapters.map((c) => ({
+      id: c.id,
+      title: c.title,
+      markdown: c.markdown,
+      imagePlacements: c.imagePlacements,
+      status: c.status,
+      pinnedQuotes: c.pinnedQuotes,
+    })),
+    psMap,
+  );
 
   const index = await getStoryImageIndex(fs, key, personId, bookId);
   // The owner reads their OWN draft, so compute the cast LIVE when opted in — they see the dramatis personae as
@@ -485,20 +517,25 @@ export async function readOwnBook(
   const draftCast = book.matter?.castPublished
     ? castForPublication(await getCastRegister(fs, key, personId, bookId))
     : [];
-  const manifest: PublishedManifest = {
-    schemaVersion: 1,
-    // Not actually published — the draft's own timestamp so the reader has a stable colophon date.
-    publishedAt: book.updatedAt,
-    title: book.title,
-    ...(book.essence ? { essence: book.essence } : {}),
-    ...(book.coverImageId ? { coverImageId: book.coverImageId } : {}),
-    ...(book.matter ? { matter: book.matter } : {}),
-    ...(draftCast.length > 0 ? { cast: draftCast } : {}),
-    noteOnBook: noteOnBook(orderedChapters),
-    parts,
-    chapterOrder,
-    images: index.images,
-  };
+  // Build the raw manifest, then apply pseudonyms LIVE across every name-bearing field — the owner previews the
+  // book exactly as it will publish (chapters are already pseudonymized above).
+  const manifest: PublishedManifest = pseudonymizeManifest(
+    {
+      schemaVersion: 1,
+      // Not actually published — the draft's own timestamp so the reader has a stable colophon date.
+      publishedAt: book.updatedAt,
+      title: book.title,
+      ...(book.essence ? { essence: book.essence } : {}),
+      ...(book.coverImageId ? { coverImageId: book.coverImageId } : {}),
+      ...(book.matter ? { matter: book.matter } : {}),
+      ...(draftCast.length > 0 ? { cast: draftCast } : {}),
+      noteOnBook: noteOnBook(orderedChapters),
+      parts,
+      chapterOrder,
+      images: index.images,
+    },
+    psMap,
+  );
 
   const person = await getPerson(fs, key, personId);
   return {

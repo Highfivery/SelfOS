@@ -178,6 +178,7 @@ import {
   StoryBookRefSchema,
   StorySetQuoteStatusInputSchema,
   StoryResolveContinuityInputSchema,
+  StorySetConsentInputSchema,
   StoryChapterRefSchema,
   StoryChapterVersionInputSchema,
   StoryMemoryRefSchema,
@@ -226,6 +227,7 @@ import {
   type ExclusionItem,
   type QuoteCandidate,
   type CastEntry,
+  type ConsentPerson,
   type ContinuityFinding,
   type StoryContinuityResult,
   type MarkupMark,
@@ -486,6 +488,8 @@ import {
   getPhotoAnswers,
   getStoryCompleteness,
   getCastRegister,
+  getConsentRegister,
+  setConsentEntry,
   checkContinuity,
   listContinuityFindings,
   resolveContinuityFinding,
@@ -5570,6 +5574,28 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return [];
       return getCastRegister(ctx.fs, ctx.key, personId, bookId);
+    },
+    storyConsent: async (input): Promise<ConsentPerson[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return getConsentRegister(ctx.fs, ctx.key, personId, bookId);
+    },
+    storySetConsent: async (input): Promise<ConsentPerson[]> => {
+      const { bookId, name, consent, pseudonym } = StorySetConsentInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return setConsentEntry(ctx.fs, ctx.key, personId, {
+        bookId,
+        name,
+        consent,
+        ...(pseudonym !== undefined ? { pseudonym } : {}),
+        now: new Date(),
+      });
     },
     storyCompleteness: async (input): Promise<StoryCompleteness> => {
       const { bookId } = StoryBookRefSchema.parse(input);

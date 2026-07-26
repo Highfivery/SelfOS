@@ -45,6 +45,7 @@ import type {
   BookConfig,
   ChapterMarkup,
   ChapterVersion,
+  ConsentState,
   StoryChapterHistoryView,
   BookMatter,
   CommentIntent,
@@ -1813,6 +1814,7 @@ function StudioLayout({
       {tab === 'settings' ? (
         <div className={styles.settingsTab}>
           <MatterEditor bookId={bookId} {...(manifest.matter ? { matter: manifest.matter } : {})} />
+          <ConsentCenter bookId={bookId} />
           <StorySettingsPanel bookId={bookId} config={manifest.config} />
           {exclusions.length > 0 ? (
             <Card>
@@ -2985,6 +2987,8 @@ function ShareReadersPanel({
   const grantReader = useStoryStore((s) => s.grantReader);
   const revokeReader = useStoryStore((s) => s.revokeReader);
   const readerFeatured = useStoryStore((s) => s.readerFeatured);
+  const consent = useStoryStore((s) => s.consent);
+  const loadConsent = useStoryStore((s) => s.loadConsent);
   const people = usePeopleStore((s) => s.people);
   const loadPeople = usePeopleStore((s) => s.load);
   const [notice, setNotice] = useState<string | null>(null);
@@ -2996,7 +3000,13 @@ function ShareReadersPanel({
   useEffect(() => {
     void loadReaders(bookId);
     void loadPeople();
-  }, [bookId, loadReaders, loadPeople]);
+    void loadConsent(bookId);
+  }, [bookId, loadReaders, loadPeople, loadConsent]);
+
+  // Warn-not-block (§17.5): people who'd appear under their REAL name (not OK-with-it, no pseudonym).
+  const unconsented = consent
+    .filter((p) => p.consent !== 'granted' && !p.pseudonym?.trim())
+    .map((p) => p.name);
 
   const readerIds = new Set(readers.map((r) => r.personId));
   const candidates = people.filter((p) => p.id !== authorPersonId && !readerIds.has(p.id));
@@ -3011,6 +3021,15 @@ function ShareReadersPanel({
           Sharing updates re-publishes those chapters.
         </Text>
         {notice ? <Banner tone="info">{notice}</Banner> : null}
+        {unconsented.length > 0 ? (
+          <Banner tone="warning">
+            {unconsented.length === 1
+              ? `${unconsented[0]} appears`
+              : `${unconsented.length} people appear`}{' '}
+            under their real name and you haven’t marked them OK with it. You can still share — or
+            set a pseudonym or their consent under “People in your book” in Settings.
+          </Banner>
+        ) : null}
         <Inline>
           <Button
             disabled={busy}
@@ -3109,6 +3128,73 @@ function ShareReadersPanel({
             ) : null}
           </Stack>
         ) : null}
+      </Stack>
+    </Card>
+  );
+}
+
+const CONSENT_OPTIONS: { value: ConsentState; label: string }[] = [
+  { value: 'unknown', label: 'Not asked' },
+  { value: 'requested', label: 'Asked them' },
+  { value: 'granted', label: 'They’re OK with it' },
+  { value: 'declined', label: 'They said no' },
+];
+
+/** The people-in-your-book consent center (§17.5) — every real person the book names, with a consent state you
+ *  track by hand and an optional pseudonym used in the read + exported book (the draft keeps their real name). */
+function ConsentCenter({ bookId }: { bookId: string }): JSX.Element | null {
+  const consent = useStoryStore((s) => s.consent);
+  const loadConsent = useStoryStore((s) => s.loadConsent);
+  const setConsent = useStoryStore((s) => s.setConsent);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  useEffect(() => {
+    void loadConsent(bookId);
+  }, [bookId, loadConsent]);
+  if (consent.length === 0) return null;
+  return (
+    <Card>
+      <Stack gap={2}>
+        <Heading level={2}>People in your book</Heading>
+        <Text tone="secondary" size="sm">
+          Real people your book names. Track whether they’re OK with appearing, and give anyone a
+          pseudonym — it replaces their name everywhere the book is read or exported, while your
+          draft keeps the real name. SelfOS never contacts anyone; this is yours to manage.
+        </Text>
+        {consent.map((p) => (
+          <div key={p.name} className={styles.consentRow}>
+            <Text size="sm" className={styles.consentName}>
+              <strong>{p.name}</strong>
+              {p.relationship ? (
+                <Text tone="tertiary" size="sm">
+                  {p.relationship}
+                </Text>
+              ) : null}
+            </Text>
+            <Select
+              aria-label={`Consent for ${p.name}`}
+              value={p.consent}
+              onChange={(e) =>
+                void setConsent(bookId, p.name, e.target.value as ConsentState, p.pseudonym)
+              }
+            >
+              {CONSENT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+            <TextInput
+              aria-label={`Pseudonym for ${p.name}`}
+              placeholder="Pseudonym (optional)"
+              value={drafts[p.name] ?? p.pseudonym ?? ''}
+              onChange={(e) => setDrafts((d) => ({ ...d, [p.name]: e.target.value }))}
+              onBlur={(e) => {
+                if ((e.target.value.trim() || '') !== (p.pseudonym ?? ''))
+                  void setConsent(bookId, p.name, p.consent, e.target.value);
+              }}
+            />
+          </div>
+        ))}
       </Stack>
     </Card>
   );

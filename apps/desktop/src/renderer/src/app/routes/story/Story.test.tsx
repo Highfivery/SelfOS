@@ -10,6 +10,7 @@ import type {
   Conversation,
   Insight,
   QuoteCandidate,
+  ConsentPerson,
   StoryBookBundle,
   StoryBookTypeView,
   StoryMarkInput,
@@ -1675,6 +1676,45 @@ describe('Story (64)', () => {
     expect(await screen.findByText("'Ana' vs 'Anna'")).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Mark fixed' }));
     await waitFor(() => expect(screen.queryByText("'Ana' vs 'Anna'")).not.toBeInTheDocument());
+  });
+
+  it('the consent center sets a pseudonym, and the publish warning names un-consented people (§17.5)', async () => {
+    let register: ConsentPerson[] = [
+      { name: 'Angel', personId: 'a', relationship: 'partner', mentions: 3, consent: 'unknown' },
+    ];
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+      storyConsent: () => Promise.resolve(register),
+      storySetConsent: (input: unknown) => {
+        const { name, consent, pseudonym } = input as {
+          name: string;
+          consent: 'unknown' | 'granted' | 'declined';
+          pseudonym?: string;
+        };
+        register = register.map((p) =>
+          p.name === name
+            ? { ...p, consent, ...(pseudonym?.trim() ? { pseudonym: pseudonym.trim() } : {}) }
+            : p,
+        );
+        return Promise.resolve(register);
+      },
+    });
+    renderStory();
+    // The Share tab warns that a named person would appear under their real name (warn, not block).
+    await userEvent.click(await screen.findByRole('tab', { name: 'Sharing' }));
+    expect(await screen.findByText(/Angel appears/)).toBeInTheDocument();
+
+    // Settings → the consent center → give them a pseudonym (commits on blur).
+    await userEvent.click(screen.getByRole('tab', { name: 'Settings' }));
+    const pseudo = await screen.findByLabelText('Pseudonym for Angel');
+    await userEvent.type(pseudo, 'A.');
+    await userEvent.tab();
+
+    // Back on Sharing, the warning is gone — they have a pseudonym now.
+    await userEvent.click(screen.getByRole('tab', { name: 'Sharing' }));
+    await waitFor(() => expect(screen.queryByText(/Angel appears/)).not.toBeInTheDocument());
   });
 
   it('publishes the cast list only when toggled on, showing the register preview (§17.2)', async () => {

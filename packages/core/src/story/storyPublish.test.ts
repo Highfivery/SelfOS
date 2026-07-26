@@ -33,6 +33,7 @@ import {
   buildPublishedMarkdown,
   exportFileStem,
 } from './storyExport';
+import { setConsentEntry } from './storyConsent';
 import type { PublishedManifest } from '../schemas';
 import {
   addUploadedPhoto,
@@ -177,6 +178,48 @@ describe('publishBook (64 §3.5)', () => {
     await publishBook(fs, key, 'author', bookId, now);
     const cast = (await getPublishedManifest(fs, key, 'author', bookId))?.cast;
     expect(cast?.find((m) => m.name === 'Angel')).toMatchObject({ relationship: 'partner' });
+  });
+
+  it('a pseudonym is frozen into the published head — a shared reader never sees the real name (§17.5)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs); // seeds author + reader; c1 reviewed
+    // A real person's name appears across EVERY reader-facing surface — prose, the chapter TITLE, and the AI
+    // essence — so the leak surfaces are real. Keep c1 reviewed.
+    const c1 = await getChapter(fs, key, 'author', bookId, 'c1');
+    await saveChapter(fs, key, 'author', bookId, {
+      ...c1!,
+      title: 'The Day Angel Stayed',
+      markdown: 'Angel steadied him through the worst of it.',
+      status: 'reviewed',
+    });
+    await updateBook(fs, key, 'author', bookId, { essence: 'A love story, all about Angel' }, now);
+    await setConsentEntry(fs, key, 'author', {
+      bookId,
+      name: 'Angel',
+      consent: 'declined',
+      pseudonym: 'A.',
+      now,
+    });
+    await publishBook(fs, key, 'author', bookId, now);
+    await grantReader(fs, key, 'author', bookId, 'reader', now);
+
+    const shared = await readSharedBook(fs, key, 'reader', 'author', bookId);
+    const prose = shared!.chapters.map((c) => c.markdown).join('\n');
+    expect(prose).not.toContain('Angel'); // the real name never reaches the shared book
+    expect(prose).toContain('A. steadied him');
+    // The chapter TITLE and the AI essence are auto-generated — they must be pseudonymized too.
+    const titles = shared!.chapters.map((c) => c.title).join('\n');
+    expect(titles).not.toContain('Angel');
+    expect(titles).toContain('The Day A. Stayed');
+    expect(shared!.manifest.essence).toBe('A love story, all about A.');
+
+    // The DRAFT keeps the real names (the substitution is a publish/read projection, not a rewrite).
+    const draftC1 = (await getChapter(fs, key, 'author', bookId, 'c1'))!;
+    expect(draftC1.markdown).toContain('Angel');
+    expect(draftC1.title).toContain('Angel');
+    expect((await getBook(fs, key, 'author', bookId))?.essence).toBe(
+      'A love story, all about Angel',
+    );
   });
 
   it('snapshots ONLY Reviewed chapters; a later draft edit does not leak into the published head', async () => {

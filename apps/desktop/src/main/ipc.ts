@@ -430,6 +430,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyHomeSignal, bridge.storyHomeSignal);
   handle(IpcChannels.storyCorpusStats, bridge.storyCorpusStats);
   handle(IpcChannels.storyCastRegister, bridge.storyCastRegister);
+  handle(IpcChannels.storyConsent, bridge.storyConsent);
+  handle(IpcChannels.storySetConsent, bridge.storySetConsent);
   handle(IpcChannels.storyCompleteness, bridge.storyCompleteness);
   handle(IpcChannels.storyInterviewCheck, bridge.storyInterviewCheck);
   handle(IpcChannels.storyGaps, bridge.storyGaps);

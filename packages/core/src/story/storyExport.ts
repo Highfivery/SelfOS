@@ -1,6 +1,6 @@
 import { colophonLines, mdSafeMatter } from './storyMatter';
 import type { FileSystem } from '../host';
-import { toBase64 } from '../encoding';
+import { fromBase64, toBase64 } from '../encoding';
 import type { PublishedManifest, ReaderChapter } from '../schemas';
 import {
   getPublishedChapter,
@@ -8,8 +8,10 @@ import {
   getPublishedManifest,
   getStoryImageBytes,
 } from './storyService';
+import { getPerson } from '../people';
 import { readOwnBook, SOURCE_KIND_NOUN } from './storyPublish';
 import { chapterParagraphs } from './storyText';
+import { makeZip, type ZipEntry } from '../zip';
 import type { ChapterSourceSummary } from '../schemas';
 
 /** A decrypted published image, base64-ready for an inline `data:` URI (self-contained export — no image folder). */
@@ -238,7 +240,14 @@ figure.placed figcaption { font-style: italic; color: #555; font-size: 10pt; mar
 `.trim();
 
 function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Escapes quotes too, so the same helper is safe in ATTRIBUTE values (e.g. `alt="…"`) — required for the
+  // strict XHTML in an EPUB (an unescaped `"` in an attribute is a hard XML parse error), harmless in text.
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 /** Escape, then apply the ONLY inline markdown the biographer emits in prose (bold/italic — no headings/lists/
  *  tables per the generation prompt). Escaping FIRST makes this safe by construction: any `<`/`>` in the prose
@@ -356,4 +365,283 @@ export function exportFileStem(title: string): string {
     .trim()
     .replace(/\s+/g, '-');
   return stem.length > 0 ? stem : 'your-story';
+}
+
+// --- EPUB (§18.3, #293) --------------------------------------------------------------------------------------
+// A minimal, valid EPUB3: a store-only ZIP of an OCF container (mimetype first + uncompressed), an OPF package,
+// an EPUB nav, per-chapter XHTML, and image files. Reuses the safe text helpers (escape-first, bold/italic only)
+// and stores images as files (never data URIs — the EPUB-correct way). Pure.
+
+const utf8 = (s: string): Uint8Array => new TextEncoder().encode(s);
+
+const EPUB_CSS = `
+body { font-family: Georgia, 'Times New Roman', serif; line-height: 1.55; margin: 1em; color: #1a1a1a; }
+h1 { font-size: 1.7em; margin: 0 0 0.6em; } h2 { font-size: 1.35em; } h3 { font-size: 1.15em; }
+p { margin: 0 0 0.8em; text-align: justify; }
+.dedication { text-align: center; font-style: italic; margin: 1.5em 0; }
+.epigraph { font-style: italic; border-left: 3px solid #ccc; padding-left: 1em; color: #555; }
+.note { color: #555; font-size: 0.9em; } .cover { text-align: center; }
+.cover img, figure img { max-width: 100%; } figure { margin: 1.5em 0; text-align: center; }
+figcaption { font-style: italic; color: #555; font-size: 0.9em; }
+`.trim();
+
+/** File extension for an image mime (defaults to `.img` for an unknown type — the OPF still declares the mime). */
+function imageExt(mime: string): string {
+  if (mime === 'image/png') return 'png';
+  if (mime === 'image/jpeg') return 'jpg';
+  if (mime === 'image/webp') return 'webp';
+  if (mime === 'image/gif') return 'gif';
+  return 'img';
+}
+
+/** Wrap body markup as a well-formed XHTML document (EPUB requires valid XML, not loose HTML). */
+function xhtmlDoc(title: string, bodyInner: string): string {
+  return (
+    `<?xml version="1.0" encoding="utf-8"?>\n` +
+    `<!DOCTYPE html>\n` +
+    `<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="en">` +
+    `<head><meta charset="utf-8"/><title>${escapeHtml(title)}</title>` +
+    `<link rel="stylesheet" type="text/css" href="style.css"/></head>` +
+    `<body>${bodyInner}</body></html>`
+  );
+}
+
+/** A chapter's XHTML body — prose + placed images resolved to FILE paths (`images/<id>.<ext>`), not data URIs. */
+function chapterXhtmlBody(
+  chapter: ReaderChapter,
+  imageFile: (id: string) => string | undefined,
+): string {
+  const paras = chapterParagraphs(chapter.markdown);
+  const out: string[] = [`<h1>${escapeHtml(chapter.title)}</h1>`];
+  paras.forEach((para, i) => {
+    out.push(`<p>${inlineHtml(para.replace(/\n/g, ' '))}</p>`);
+    for (const pl of chapter.imagePlacements.filter((p) => p.afterAnchor === `p${i}`)) {
+      const src = imageFile(pl.imageId);
+      if (!src) continue;
+      out.push(
+        `<figure><img src="${src}" alt="${escapeHtml(pl.caption || 'Image')}"/>` +
+          (pl.caption ? `<figcaption>${escapeHtml(pl.caption)}</figcaption>` : '') +
+          '</figure>',
+      );
+    }
+  });
+  return out.join('\n');
+}
+
+/**
+ * Build a valid EPUB3 for a published/reader head (§18.3). `authorName` → dc:creator; `uid` → a stable
+ * dc:identifier; `modified` (a UTC ISO instant, from the manifest's publishedAt) → the required dcterms:modified.
+ * Images are stored as files; every page reuses the escape-first (bold/italic-only) text helpers.
+ */
+export function bookToEpub(
+  manifest: PublishedManifest,
+  chapters: ReaderChapter[],
+  images: ExportImages,
+  opts: { authorName: string; uid: string; modified: string },
+): Uint8Array {
+  const byId = new Map(chapters.map((c) => [c.id, c]));
+
+  // Referenced images → file entries. `imageFile(id)` gives the OPF-relative path, or undefined if absent.
+  const imageEntries: { id: string; path: string; mime: string; bytes: Uint8Array }[] = [];
+  for (const meta of manifest.images) {
+    const img = images[meta.id];
+    if (!img) continue;
+    const path = `images/${meta.id}.${imageExt(meta.mime)}`;
+    imageEntries.push({ id: meta.id, path, mime: meta.mime, bytes: fromBase64(img.base64) });
+  }
+  const imageFile = (id: string): string | undefined => imageEntries.find((e) => e.id === id)?.path;
+  const coverEntry = manifest.coverImageId ? imageFile(manifest.coverImageId) : undefined;
+
+  // --- Pages (spine order) ---
+  type Page = { id: string; file: string; navTitle: string; xhtml: string };
+  const pages: Page[] = [];
+
+  // Title page: cover + title + dedication + epigraph.
+  const titleBody: string[] = ['<section class="cover">'];
+  if (coverEntry) titleBody.push(`<img src="${coverEntry}" alt="Cover"/>`);
+  titleBody.push(`<h1>${escapeHtml(manifest.title)}</h1>`);
+  if (opts.authorName) titleBody.push(`<p class="note">${escapeHtml(opts.authorName)}</p>`);
+  titleBody.push('</section>');
+  if (manifest.matter?.dedication)
+    titleBody.push(`<p class="dedication">${escapeHtml(manifest.matter.dedication)}</p>`);
+  if (manifest.matter?.epigraph)
+    titleBody.push(
+      `<blockquote class="epigraph">${escapeHtml(manifest.matter.epigraph)}</blockquote>`,
+    );
+  pages.push({
+    id: 'titlepage',
+    file: 'titlepage.xhtml',
+    navTitle: manifest.title,
+    xhtml: xhtmlDoc(manifest.title, titleBody.join('\n')),
+  });
+
+  // Optional dramatis personae page (§17.2).
+  if (manifest.cast && manifest.cast.length > 0) {
+    const rows = manifest.cast
+      .map((m) =>
+        m.relationship
+          ? `<li><strong>${escapeHtml(m.name)}</strong> — ${escapeHtml(m.relationship)}</li>`
+          : `<li><strong>${escapeHtml(m.name)}</strong></li>`,
+      )
+      .join('');
+    pages.push({
+      id: 'cast',
+      file: 'cast.xhtml',
+      navTitle: 'The people in this book',
+      xhtml: xhtmlDoc(
+        'The people in this book',
+        `<h1>The people in this book</h1><ul>${rows}</ul>`,
+      ),
+    });
+  }
+
+  // One page per chapter, in part/order; the first chapter of a part carries the part title.
+  let chapterIndex = 0;
+  for (const part of manifest.parts) {
+    let first = true;
+    for (const id of part.chapterIds) {
+      const chapter = byId.get(id);
+      if (!chapter) continue;
+      chapterIndex += 1;
+      const partHeader = first ? `<h2>${escapeHtml(part.title)}</h2>` : '';
+      pages.push({
+        id: `chap${chapterIndex}`,
+        file: `chap${chapterIndex}.xhtml`,
+        navTitle: chapter.title,
+        xhtml: xhtmlDoc(chapter.title, partHeader + chapterXhtmlBody(chapter, imageFile)),
+      });
+      first = false;
+    }
+  }
+
+  // Back matter: acknowledgments, about the author, Sources, note, colophon (the boundary always renders).
+  const back: string[] = [];
+  if (manifest.matter?.acknowledgments)
+    back.push(`<h2>Acknowledgments</h2>${matterHtml(manifest.matter.acknowledgments)}`);
+  if (manifest.matter?.aboutAuthor)
+    back.push(`<h2>About the author</h2>${matterHtml(manifest.matter.aboutAuthor)}`);
+  if (manifest.chapterSources && manifest.chapterSources.length > 0) {
+    const rows = manifest.chapterSources
+      .map((cs) => {
+        const line = sourceLine(cs.counts);
+        return line
+          ? `<li><strong>${escapeHtml(cs.title)}</strong> — drawn from ${escapeHtml(line)}</li>`
+          : '';
+      })
+      .join('');
+    if (rows) back.push(`<h2>Sources</h2><ul>${rows}</ul>`);
+  }
+  if (manifest.noteOnBook)
+    back.push(`<p class="note"><em>${escapeHtml(manifest.noteOnBook)}</em></p>`);
+  back.push(
+    `<p class="note">${colophonLines(manifest.matter)
+      .map((line) => `<em>${escapeHtml(line)}</em>`)
+      .join('<br/>')}</p>`,
+  );
+  pages.push({
+    id: 'backmatter',
+    file: 'backmatter.xhtml',
+    navTitle: 'Colophon',
+    xhtml: xhtmlDoc('Colophon', back.join('\n')),
+  });
+
+  // --- Nav ---
+  const navList = pages
+    .map((p) => `<li><a href="${p.file}">${escapeHtml(p.navTitle)}</a></li>`)
+    .join('');
+  const navXhtml = xhtmlDoc(
+    'Contents',
+    `<nav epub:type="toc" id="toc"><h1>Contents</h1><ol>${navList}</ol></nav>`,
+  );
+
+  // --- OPF ---
+  const manifestItems = [
+    `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
+    `<item id="css" href="style.css" media-type="text/css"/>`,
+    ...pages.map((p) => `<item id="${p.id}" href="${p.file}" media-type="application/xhtml+xml"/>`),
+    ...imageEntries.map((e) => {
+      const isCover = e.id === manifest.coverImageId;
+      return `<item id="img-${e.id}" href="${e.path}" media-type="${e.mime}"${
+        isCover ? ' properties="cover-image"' : ''
+      }/>`;
+    }),
+  ].join('');
+  const spine = pages.map((p) => `<itemref idref="${p.id}"/>`).join('');
+  const opf =
+    `<?xml version="1.0" encoding="utf-8"?>\n` +
+    `<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">` +
+    `<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">` +
+    `<dc:identifier id="bookid">${escapeHtml(opts.uid)}</dc:identifier>` +
+    `<dc:title>${escapeHtml(manifest.title)}</dc:title>` +
+    `<dc:language>en</dc:language>` +
+    (opts.authorName ? `<dc:creator>${escapeHtml(opts.authorName)}</dc:creator>` : '') +
+    `<meta property="dcterms:modified">${escapeHtml(opts.modified)}</meta>` +
+    `</metadata>` +
+    `<manifest>${manifestItems}</manifest>` +
+    `<spine>${spine}</spine>` +
+    `</package>`;
+
+  const container =
+    `<?xml version="1.0" encoding="utf-8"?>\n` +
+    `<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">` +
+    `<rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>` +
+    `</container>`;
+
+  // --- Assemble the ZIP (mimetype FIRST + stored) ---
+  const entries: ZipEntry[] = [
+    { name: 'mimetype', data: utf8('application/epub+zip') },
+    { name: 'META-INF/container.xml', data: utf8(container) },
+    { name: 'OEBPS/content.opf', data: utf8(opf) },
+    { name: 'OEBPS/nav.xhtml', data: utf8(navXhtml) },
+    { name: 'OEBPS/style.css', data: utf8(EPUB_CSS) },
+    ...pages.map((p) => ({ name: `OEBPS/${p.file}`, data: utf8(p.xhtml) })),
+    ...imageEntries.map((e) => ({ name: `OEBPS/${e.path}`, data: e.bytes })),
+  ];
+  return makeZip(entries);
+}
+
+/** A UTC `dcterms:modified` instant (seconds precision) from an ISO timestamp, defaulting deterministically. */
+function epubModified(iso: string): string {
+  const m = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/.exec(iso);
+  return `${m ? m[1] : '1970-01-01T00:00:00'}Z`;
+}
+
+/** Build the PUBLISHED head as an EPUB — null if the book has never been published. */
+export async function buildPublishedEpub(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<{ title: string; bytes: Uint8Array } | null> {
+  const head = await readPublishedHead(fs, key, personId, bookId);
+  if (!head) return null;
+  const author = await getPerson(fs, key, personId);
+  return {
+    title: head.manifest.title,
+    bytes: bookToEpub(head.manifest, head.chapters, head.images, {
+      authorName: author?.displayName ?? '',
+      uid: `urn:selfos:${bookId}`,
+      modified: epubModified(head.manifest.publishedAt),
+    }),
+  };
+}
+
+/** Build the DRAFT head as an EPUB (§13.6.1) — null before the book has an outline. */
+export async function buildDraftEpub(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<{ title: string; bytes: Uint8Array } | null> {
+  const head = await readDraftHead(fs, key, personId, bookId);
+  if (!head) return null;
+  const author = await getPerson(fs, key, personId);
+  return {
+    title: head.manifest.title,
+    bytes: bookToEpub(head.manifest, head.chapters, head.images, {
+      authorName: author?.displayName ?? '',
+      uid: `urn:selfos:${bookId}`,
+      modified: epubModified(head.manifest.publishedAt),
+    }),
+  };
 }

@@ -2926,6 +2926,25 @@ describe('Story (64)', () => {
     ).toBeInTheDocument();
   });
 
+  it('the export dialog exports the DRAFT head as EPUB (§18.3)', async () => {
+    const storyExportEpub = vi.fn(() => Promise.resolve('/exports/The-Story-of-Ben.epub'));
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('new')), // never published
+      storyExportEpub,
+    });
+    renderStory();
+    await openTab('Sharing');
+    await userEvent.click(await screen.findByRole('button', { name: 'Export…' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'EPUB' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Export' }));
+    expect(storyExportEpub).toHaveBeenCalledWith({ bookId: 'b1', head: 'draft' });
+    expect(
+      await screen.findByText(/Saved to .* — this file leaves your encrypted vault/),
+    ).toBeInTheDocument();
+  });
+
   it('the Sharing tab shows each reader’s read state, joined from their receipt (§13.6.8)', async () => {
     installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),

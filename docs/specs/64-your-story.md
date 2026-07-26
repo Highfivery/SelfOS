@@ -1884,6 +1884,18 @@ numbers + trim size. Sub-sliced: **B3-3a** (Sources appendix + PDF page numbers/
   a centered footer page number (`displayHeaderFooter` + `footerTemplate`); the core `PRINT_CSS` drops its
   `@page` margin (the host owns page geometry) and keeps typography only.
 
+**B3-3b — EPUB export (BUILT):**
+
+- A dependency-free store-only **ZIP writer** (`packages/core/src/zip.ts` — `makeZip` + `crc32`; store-only so the
+  EPUB `mimetype` is the first entry, uncompressed, as the spec requires). Reused by DOCX next.
+- **`bookToEpub`** builds a valid EPUB3: an OCF container + OPF package (dc:title/language/identifier/creator +
+  the required `dcterms:modified`, from the manifest's `publishedAt`) + an EPUB nav + per-chapter XHTML +
+  **images as files** (never data URIs — the EPUB-correct way). Reuses the escape-first (bold/italic-only) text
+  helpers, the pseudonymized manifest, and renders the same front/back matter + Sources appendix. Titles + prose
+  are already pseudonymized by the manifest/chapters.
+- Seam: `story:exportEpub` (draft or published head), gated `story.own`, author-scoped; the ExportDialog gains an
+  **EPUB** format option.
+
 ### 18.4 Print cover pipeline (#303)
 
 Regenerate the cover at print aspect (1800×2700, 2:3, with bleed) for export — one more image generation, best

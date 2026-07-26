@@ -472,8 +472,10 @@ import {
   mintTodoCheckIn,
   resolveSentQuestionTodos,
   bookMentionsReader,
+  buildDraftEpub,
   buildDraftHtml,
   buildDraftMarkdown,
+  buildPublishedEpub,
   buildPublishedHtml,
   buildPublishedMarkdown,
   addPhotoAnswer,
@@ -5877,6 +5879,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const pdf = await host.printToPdf(built.html);
       if (!pdf) return null; // a host that can't render PDF (web/iOS), or a render failure
       return host.saveImageFile(`${exportFileStem(built.title)}.pdf`, pdf, 'application/pdf');
+    },
+    storyExportEpub: async (input): Promise<string | null> => {
+      const { bookId, head } = StoryExportInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const built =
+        head === 'draft'
+          ? await buildDraftEpub(ctx.fs, ctx.key, personId, bookId)
+          : await buildPublishedEpub(ctx.fs, ctx.key, personId, bookId);
+      if (!built) return null; // nothing to export (draft: no outline; published: not published)
+      return host.saveImageFile(
+        `${exportFileStem(built.title)}.epub`,
+        built.bytes,
+        'application/epub+zip',
+      );
     },
     // --- Images (§3.8, Phase H) — shares the ONE image consent + OpenAI key with dreams ---------------
     storyImages: async (input): Promise<StoryImageEntry[]> => {

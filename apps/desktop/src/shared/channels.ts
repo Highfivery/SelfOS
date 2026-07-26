@@ -476,6 +476,7 @@ export const IpcChannels = {
   storyReadSharedImage: 'story:readSharedImage',
   storyExportMarkdown: 'story:exportMarkdown',
   storyExportPdf: 'story:exportPdf',
+  storyExportEpub: 'story:exportEpub',
   storyImages: 'story:images',
   storyGenerateImage: 'story:generateImage',
   storyGetImage: 'story:getImage',
@@ -1449,6 +1450,9 @@ export interface SelfosBridge {
    *  `printToPDF`. Returns the saved path, or null (nothing to export, dialog cancelled, or a host that can't
    *  render PDF). Gated `story.own`, author-scoped. */
   storyExportPdf(input: { bookId: string; head?: 'draft' | 'published' }): Promise<string | null>;
+  /** Export the book's DRAFT or PUBLISHED head as an EPUB OUTSIDE the vault (§18.3/§13.6.1). Returns the saved
+   *  path, or null (nothing to export, or dialog cancelled). Gated `story.own`, author-scoped. */
+  storyExportEpub(input: { bookId: string; head?: 'draft' | 'published' }): Promise<string | null>;
   /** The book's image index (cover + illustrations + uploads), metadata only. Gated `story.own`. */
   storyImages(input: { bookId: string }): Promise<StoryImageEntry[]>;
   /** Generate (or regenerate) a cover or chapter illustration via the spec-13 distill→render flow (§3.8).

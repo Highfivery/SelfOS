@@ -32,10 +32,12 @@ import {
   bookToMarkdown,
   buildDraftHtml,
   buildDraftMarkdown,
+  buildPublishedEpub,
   buildPublishedHtml,
   buildPublishedMarkdown,
   exportFileStem,
 } from './storyExport';
+import { readStoreZip } from '../zip.test';
 import { setConsentEntry } from './storyConsent';
 import type { PublishedManifest } from '../schemas';
 import {
@@ -780,6 +782,34 @@ describe('export (64 §3.9)', () => {
     const built = await buildPublishedMarkdown(fs, key, 'author', bookId);
     expect(built?.title).toBe('The Story of Ben');
     expect(built?.markdown).toContain('### The Garage'); // the one Reviewed chapter
+  });
+
+  it('builds a valid EPUB — OCF container, per-chapter XHTML, images as files, Sources appendix (§18.3)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    expect(await buildPublishedEpub(fs, key, 'author', bookId)).toBeNull(); // not published yet
+    await publishBook(fs, key, 'author', bookId, now);
+    const built = await buildPublishedEpub(fs, key, 'author', bookId);
+    expect(built?.title).toBe('The Story of Ben');
+    const files = readStoreZip(built!.bytes);
+    // The OCF: mimetype FIRST + verbatim, the container, the OPF, the nav.
+    expect(Object.keys(files)[0]).toBe('mimetype');
+    expect(new TextDecoder().decode(files['mimetype']!)).toBe('application/epub+zip');
+    expect(files['META-INF/container.xml']).toBeDefined();
+    const opf = new TextDecoder().decode(files['OEBPS/content.opf']!);
+    expect(opf).toContain('<dc:title>The Story of Ben</dc:title>');
+    expect(opf).toContain('<dc:creator>Ben</dc:creator>'); // the author name
+    expect(opf).toContain('dcterms:modified'); // EPUB3 requires it
+    expect(files['OEBPS/nav.xhtml']).toBeDefined();
+    // A chapter page is well-formed XHTML naming the chapter, and the Sources appendix is in the back matter.
+    const chap1 = new TextDecoder().decode(files['OEBPS/chap1.xhtml']!);
+    expect(chap1).toContain('<?xml version="1.0"');
+    expect(chap1).toContain('xmlns="http://www.w3.org/1999/xhtml"');
+    expect(chap1).toContain('The Garage');
+    const back = new TextDecoder().decode(files['OEBPS/backmatter.xhtml']!);
+    expect(back).toContain('Sources');
+    expect(back).toContain('drawn from');
+    expect(back).toContain(BOOK_BOUNDARY_LINE); // the §8.2 boundary always closes the book
   });
 
   it('draft export works WITHOUT publishing and includes every written chapter (§13.6.1)', async () => {

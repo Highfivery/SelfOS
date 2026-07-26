@@ -237,6 +237,7 @@ interface StoryState {
   /** Export the draft or published head as a file outside the vault (§3.9/§13.6.1). Returns the saved path, or null. */
   exportMarkdown: (bookId: string, head: 'draft' | 'published') => Promise<string | null>;
   exportPdf: (bookId: string, head: 'draft' | 'published') => Promise<string | null>;
+  exportEpub: (bookId: string, head: 'draft' | 'published') => Promise<string | null>;
   /** Images (§3.8) — cover + chapter illustrations. `imageUrls` caches decrypted data URLs by image id. */
   images: StoryImageEntry[];
   imageUrls: Record<string, string>;
@@ -793,6 +794,8 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     (await window.selfos?.storyExportMarkdown({ bookId, head })) ?? null,
   exportPdf: async (bookId, head) =>
     (await window.selfos?.storyExportPdf({ bookId, head })) ?? null,
+  exportEpub: async (bookId, head) =>
+    (await window.selfos?.storyExportEpub({ bookId, head })) ?? null,
   loadImages: async (bookId) => {
     const images = (await window.selfos?.storyImages({ bookId })) ?? [];
     set({ images });

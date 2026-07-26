@@ -2876,7 +2876,8 @@ function ExportDialog({
 }): JSX.Element {
   const exportMarkdown = useStoryStore((s) => s.exportMarkdown);
   const exportPdf = useStoryStore((s) => s.exportPdf);
-  const [format, setFormat] = useState<'markdown' | 'pdf'>('markdown');
+  const exportEpub = useStoryStore((s) => s.exportEpub);
+  const [format, setFormat] = useState<'markdown' | 'pdf' | 'epub'>('markdown');
   const [head, setHead] = useState<'draft' | 'published'>(published ? 'published' : 'draft');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -2893,7 +2894,11 @@ function ExportDialog({
     setBusy(true);
     setResult(null);
     const path =
-      format === 'markdown' ? await exportMarkdown(bookId, head) : await exportPdf(bookId, head);
+      format === 'markdown'
+        ? await exportMarkdown(bookId, head)
+        : format === 'epub'
+          ? await exportEpub(bookId, head)
+          : await exportPdf(bookId, head);
     setBusy(false);
     if (path) setResult(`Saved to ${path} — this file leaves your encrypted vault.`);
     else setResult('Nothing to export yet, or the save was cancelled.');
@@ -2925,6 +2930,7 @@ function ExportDialog({
               aria-label="Export format"
               options={[
                 { value: 'markdown', label: 'Markdown' },
+                { value: 'epub', label: 'EPUB' },
                 { value: 'pdf', label: 'PDF' },
               ]}
             />

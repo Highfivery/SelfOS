@@ -450,6 +450,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     storyExportMarkdown: () => Promise.resolve(null),
     storyExportPdf: () => Promise.resolve(null),
     storyExportEpub: () => Promise.resolve(null),
+    storyExportDocx: () => Promise.resolve(null),
     storyImages: () => Promise.resolve([]),
     storyGenerateImage: () => Promise.resolve({ ok: false, reason: 'NO_CONSENT', message: 'off' }),
     storyGetImage: () => Promise.resolve(null),

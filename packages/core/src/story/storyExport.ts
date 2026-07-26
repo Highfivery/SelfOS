@@ -645,3 +645,299 @@ export async function buildDraftEpub(
     }),
   };
 }
+
+// --- DOCX (§18.3, #293) --------------------------------------------------------------------------------------
+// A minimal, valid Office Open XML (.docx) — a ZIP of the OOXML parts (Content_Types, package rels, the
+// WordprocessingML `document.xml`, `styles.xml`, image parts + their relationships). An editable manuscript that
+// mirrors the reader's matter + the generic Sources appendix. Pure; reuses the ZIP writer + escape-first helpers.
+
+const EMU_PER_PX = 9525; // 96 dpi
+const MAX_IMG_WIDTH_EMU = 5029200; // 5.5in — fits a book page with margins
+
+/** Image pixel dimensions from the file header (PNG IHDR / JPEG SOF); a safe fallback otherwise. */
+function imageDimensions(bytes: Uint8Array, mime: string): { w: number; h: number } {
+  if (mime === 'image/png' && bytes.length >= 24) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    return { w: dv.getUint32(16), h: dv.getUint32(20) };
+  }
+  if (mime === 'image/jpeg') {
+    let i = 2;
+    while (i + 9 < bytes.length) {
+      if (bytes[i] !== 0xff) {
+        i += 1;
+        continue;
+      }
+      const marker = bytes[i + 1]!;
+      // SOF0..SOF15 carry the frame size, except the non-SOF markers C4 (DHT), C8 (JPG), CC (DAC).
+      if (
+        marker >= 0xc0 &&
+        marker <= 0xcf &&
+        marker !== 0xc4 &&
+        marker !== 0xc8 &&
+        marker !== 0xcc
+      ) {
+        return {
+          h: (bytes[i + 5]! << 8) | bytes[i + 6]!,
+          w: (bytes[i + 7]! << 8) | bytes[i + 8]!,
+        };
+      }
+      i += 2 + ((bytes[i + 2]! << 8) | bytes[i + 3]!);
+    }
+  }
+  return { w: 800, h: 600 };
+}
+
+/** Display EMU for an image, scaled to fit `MAX_IMG_WIDTH_EMU` while preserving aspect. */
+function displayEmu(bytes: Uint8Array, mime: string): { cx: number; cy: number } {
+  const { w, h } = imageDimensions(bytes, mime);
+  let cx = Math.max(1, w) * EMU_PER_PX;
+  let cy = Math.max(1, h) * EMU_PER_PX;
+  if (cx > MAX_IMG_WIDTH_EMU) {
+    cy = Math.round((cy * MAX_IMG_WIDTH_EMU) / cx);
+    cx = MAX_IMG_WIDTH_EMU;
+  }
+  return { cx, cy };
+}
+
+/** Inline runs from prose: `**bold**` / `*italic*` (the only inline markup the biographer emits). Escape-safe. */
+function inlineRuns(text: string): string {
+  // Tokenize on ** and * (bold wins). Emits `<w:r>` runs with the right `<w:rPr>`.
+  const runs: string[] = [];
+  const re = /\*\*([^*]+)\*\*|\*([^*]+)\*/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  const push = (s: string, bold: boolean, italic: boolean): void => {
+    if (!s) return;
+    const rpr =
+      bold || italic ? `<w:rPr>${bold ? '<w:b/>' : ''}${italic ? '<w:i/>' : ''}</w:rPr>` : '';
+    runs.push(`<w:r>${rpr}<w:t xml:space="preserve">${escapeHtml(s)}</w:t></w:r>`);
+  };
+  while ((m = re.exec(text)) !== null) {
+    push(text.slice(last, m.index), false, false);
+    if (m[1] !== undefined) push(m[1], true, false);
+    else push(m[2]!, false, true);
+    last = m.index + m[0].length;
+  }
+  push(text.slice(last), false, false);
+  return runs.join('');
+}
+
+/** A WordprocessingML paragraph with an optional named style + inline runs. */
+function docxPara(text: string, style?: string): string {
+  const ppr = style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : '';
+  return `<w:p>${ppr}${inlineRuns(text)}</w:p>`;
+}
+
+const DOCX_STYLES =
+  `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+  `<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+  `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/>` +
+  `<w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="22"/></w:rPr></w:style>` +
+  `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:pPr><w:jc w:val="center"/><w:spacing w:before="240" w:after="240"/></w:pPr>` +
+  `<w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="56"/></w:rPr></w:style>` +
+  `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:spacing w:before="360" w:after="120"/></w:pPr>` +
+  `<w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:b/><w:sz w:val="36"/></w:rPr></w:style>` +
+  `<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:pPr><w:spacing w:before="240" w:after="120"/></w:pPr>` +
+  `<w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:b/><w:sz w:val="28"/></w:rPr></w:style>` +
+  `</w:styles>`;
+
+/**
+ * Build a valid .docx for a published/reader head (§18.3) — an editable manuscript mirroring the reader's matter
+ * + the generic Sources appendix. Images are embedded as parts with DrawingML inline references; text reuses the
+ * escape-first (bold/italic-only) helpers over the pseudonymized manifest/chapters.
+ */
+export function bookToDocx(
+  manifest: PublishedManifest,
+  chapters: ReaderChapter[],
+  images: ExportImages,
+  opts: { authorName: string },
+): Uint8Array {
+  const byId = new Map(chapters.map((c) => [c.id, c]));
+
+  // Referenced images → parts + relationship ids. `imgXml(id)` yields the inline-drawing paragraph, or ''.
+  type Img = {
+    id: string;
+    rid: string;
+    path: string;
+    mime: string;
+    bytes: Uint8Array;
+    cx: number;
+    cy: number;
+  };
+  const imgs: Img[] = [];
+  let ridN = 1;
+  let docPrN = 1;
+  for (const meta of manifest.images) {
+    const img = images[meta.id];
+    if (!img) continue;
+    const bytes = fromBase64(img.base64);
+    const { cx, cy } = displayEmu(bytes, meta.mime);
+    imgs.push({
+      id: meta.id,
+      rid: `rId${100 + ridN++}`,
+      path: `media/${meta.id}.${imageExt(meta.mime)}`,
+      mime: meta.mime,
+      bytes,
+      cx,
+      cy,
+    });
+  }
+  const imgXml = (id: string): string => {
+    const img = imgs.find((e) => e.id === id);
+    if (!img) return '';
+    const n = docPrN++;
+    return (
+      `<w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">` +
+      `<wp:extent cx="${img.cx}" cy="${img.cy}"/><wp:docPr id="${n}" name="Image ${n}"/>` +
+      `<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">` +
+      `<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+      `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">` +
+      `<pic:nvPicPr><pic:cNvPr id="${n}" name="Image ${n}"/><pic:cNvPicPr/></pic:nvPicPr>` +
+      `<pic:blipFill><a:blip r:embed="${img.rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+      `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${img.cx}" cy="${img.cy}"/></a:xfrm>` +
+      `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
+      `</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+    );
+  };
+
+  const body: string[] = [docxPara(manifest.title, 'Title')];
+  if (manifest.coverImageId) body.push(imgXml(manifest.coverImageId));
+  if (opts.authorName) body.push(docxPara(opts.authorName));
+  if (manifest.matter?.dedication) body.push(docxPara(`*${manifest.matter.dedication}*`));
+  if (manifest.matter?.epigraph) body.push(docxPara(`*${manifest.matter.epigraph}*`));
+  if (manifest.cast && manifest.cast.length > 0) {
+    body.push(docxPara('The people in this book', 'Heading1'));
+    for (const m of manifest.cast)
+      body.push(docxPara(m.relationship ? `**${m.name}** — ${m.relationship}` : `**${m.name}**`));
+  }
+  for (const part of manifest.parts) {
+    let first = true;
+    for (const id of part.chapterIds) {
+      const chapter = byId.get(id);
+      if (!chapter) continue;
+      if (first) body.push(docxPara(part.title, 'Heading1'));
+      first = false;
+      body.push(docxPara(chapter.title, 'Heading2'));
+      const paras = chapterParagraphs(chapter.markdown);
+      paras.forEach((para, i) => {
+        body.push(docxPara(para.replace(/\n/g, ' ')));
+        for (const pl of chapter.imagePlacements.filter((p) => p.afterAnchor === `p${i}`)) {
+          const x = imgXml(pl.imageId);
+          if (x) body.push(x);
+          if (pl.caption) body.push(docxPara(`*${pl.caption}*`));
+        }
+      });
+    }
+  }
+  if (manifest.matter?.acknowledgments) {
+    body.push(docxPara('Acknowledgments', 'Heading1'));
+    for (const p of manifest.matter.acknowledgments.split(/\n{2,}/))
+      if (p.trim()) body.push(docxPara(p.trim()));
+  }
+  if (manifest.matter?.aboutAuthor) {
+    body.push(docxPara('About the author', 'Heading1'));
+    for (const p of manifest.matter.aboutAuthor.split(/\n{2,}/))
+      if (p.trim()) body.push(docxPara(p.trim()));
+  }
+  if (manifest.chapterSources && manifest.chapterSources.length > 0) {
+    body.push(docxPara('Sources', 'Heading1'));
+    for (const cs of manifest.chapterSources) {
+      const line = sourceLine(cs.counts);
+      if (line) body.push(docxPara(`**${cs.title}** — drawn from ${line}`));
+    }
+  }
+  if (manifest.noteOnBook) body.push(docxPara(`*${manifest.noteOnBook}*`));
+  for (const line of colophonLines(manifest.matter)) body.push(docxPara(`*${line}*`));
+
+  const documentXml =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ` +
+    `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ` +
+    `xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">` +
+    `<w:body>${body.join('')}<w:sectPr><w:pgSz w:w="8640" w:h="12960"/>` +
+    `<w:pgMar w:top="1008" w:right="1008" w:bottom="1080" w:left="1008"/></w:sectPr></w:body></w:document>`;
+
+  // Content types: default extensions (rels/xml + each image ext) + the document + styles overrides.
+  const imgExts = [...new Set(imgs.map((i) => imageExt(i.mime)))];
+  const imgMime = (ext: string): string =>
+    ext === 'jpg'
+      ? 'image/jpeg'
+      : ext === 'png'
+        ? 'image/png'
+        : ext === 'webp'
+          ? 'image/webp'
+          : 'image/gif';
+  const contentTypes =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+    `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+    `<Default Extension="xml" ContentType="application/xml"/>` +
+    imgExts.map((e) => `<Default Extension="${e}" ContentType="${imgMime(e)}"/>`).join('') +
+    `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>` +
+    `<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>` +
+    `</Types>`;
+
+  const packageRels =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+    `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>` +
+    `</Relationships>`;
+
+  const documentRels =
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+    `<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+    imgs
+      .map(
+        (i) =>
+          `<Relationship Id="${i.rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${i.path}"/>`,
+      )
+      .join('') +
+    `</Relationships>`;
+
+  const entries: ZipEntry[] = [
+    { name: '[Content_Types].xml', data: utf8(contentTypes) },
+    { name: '_rels/.rels', data: utf8(packageRels) },
+    { name: 'word/document.xml', data: utf8(documentXml) },
+    { name: 'word/styles.xml', data: utf8(DOCX_STYLES) },
+    { name: 'word/_rels/document.xml.rels', data: utf8(documentRels) },
+    ...imgs.map((i) => ({ name: `word/${i.path}`, data: i.bytes })),
+  ];
+  return makeZip(entries);
+}
+
+/** Build the PUBLISHED head as a .docx — null if the book has never been published. */
+export async function buildPublishedDocx(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<{ title: string; bytes: Uint8Array } | null> {
+  const head = await readPublishedHead(fs, key, personId, bookId);
+  if (!head) return null;
+  const author = await getPerson(fs, key, personId);
+  return {
+    title: head.manifest.title,
+    bytes: bookToDocx(head.manifest, head.chapters, head.images, {
+      authorName: author?.displayName ?? '',
+    }),
+  };
+}
+
+/** Build the DRAFT head as a .docx (§13.6.1) — null before the book has an outline. */
+export async function buildDraftDocx(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<{ title: string; bytes: Uint8Array } | null> {
+  const head = await readDraftHead(fs, key, personId, bookId);
+  if (!head) return null;
+  const author = await getPerson(fs, key, personId);
+  return {
+    title: head.manifest.title,
+    bytes: bookToDocx(head.manifest, head.chapters, head.images, {
+      authorName: author?.displayName ?? '',
+    }),
+  };
+}

@@ -473,6 +473,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyExportMarkdown, bridge.storyExportMarkdown);
   handle(IpcChannels.storyExportPdf, bridge.storyExportPdf);
   handle(IpcChannels.storyExportEpub, bridge.storyExportEpub);
+  handle(IpcChannels.storyExportDocx, bridge.storyExportDocx);
   handle(IpcChannels.storyImages, bridge.storyImages);
   // storyGenerateImage streams compose→render phase progress via emitImageProgress → IPC event, so the
   // cover / illustration surface shows realtime status. Bound for the whole generation, reset when it resolves.

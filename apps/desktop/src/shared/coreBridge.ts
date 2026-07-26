@@ -472,9 +472,11 @@ import {
   mintTodoCheckIn,
   resolveSentQuestionTodos,
   bookMentionsReader,
+  buildDraftDocx,
   buildDraftEpub,
   buildDraftHtml,
   buildDraftMarkdown,
+  buildPublishedDocx,
   buildPublishedEpub,
   buildPublishedHtml,
   buildPublishedMarkdown,
@@ -5895,6 +5897,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         `${exportFileStem(built.title)}.epub`,
         built.bytes,
         'application/epub+zip',
+      );
+    },
+    storyExportDocx: async (input): Promise<string | null> => {
+      const { bookId, head } = StoryExportInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      const built =
+        head === 'draft'
+          ? await buildDraftDocx(ctx.fs, ctx.key, personId, bookId)
+          : await buildPublishedDocx(ctx.fs, ctx.key, personId, bookId);
+      if (!built) return null;
+      return host.saveImageFile(
+        `${exportFileStem(built.title)}.docx`,
+        built.bytes,
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       );
     },
     // --- Images (§3.8, Phase H) — shares the ONE image consent + OpenAI key with dreams ---------------

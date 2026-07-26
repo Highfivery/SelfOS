@@ -1867,7 +1867,22 @@ an unpublish action, and a confirm against a silent shrink.
 
 EPUB + DOCX exports matching the reader's typography + matter; a **generic** Sources appendix (describes
 provenance without naming the specific private content — a shared/exported book leaks nothing); PDF page
-numbers + trim size.
+numbers + trim size. Sub-sliced: **B3-3a** (Sources appendix + PDF page numbers/trim) BUILT; EPUB + DOCX follow.
+
+**B3-3a — generic Sources appendix + PDF trim/page numbers (BUILT):**
+
+- **The leak-safe design:** exports are ALWAYS the owner exporting their OWN book (`story.own`, author-scoped),
+  and the published `ReaderChapter` deliberately carries NO provenance (stripped in the cross-person
+  projection). So a generic per-chapter source summary (`ChapterSourceSummary` — chapter title + per-KIND
+  counts, NEVER an id/content/date) is computed at publish (`chapterSourceSummary`, from the full
+  `BookChapter.provenance`) and frozen into `PublishedManifest.chapterSources` (additive-optional). `readOwnBook`
+  computes it LIVE from the draft chapters. The provenance objects themselves never cross to a reader — only the
+  counts. Titles are pseudonymized (they land in a reader-facing book).
+- Rendered as a "Sources" back-matter section in both Markdown + HTML (so it flows into PDF, and EPUB/DOCX next):
+  "**Chapter** — drawn from 3 coaching insights, 2 memories you shared". A book with no provenance shows none.
+- **PDF trim + page numbers:** the host's `printToPDF` gets a 6×9in trade-paperback `pageSize` + margins +
+  a centered footer page number (`displayHeaderFooter` + `footerTemplate`); the core `PRINT_CSS` drops its
+  `@page` margin (the host owns page geometry) and keeps typography only.
 
 ### 18.4 Print cover pipeline (#303)
 

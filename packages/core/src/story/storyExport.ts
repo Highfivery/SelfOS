@@ -8,8 +8,9 @@ import {
   getPublishedManifest,
   getStoryImageBytes,
 } from './storyService';
-import { readOwnBook } from './storyPublish';
+import { readOwnBook, SOURCE_KIND_NOUN } from './storyPublish';
 import { chapterParagraphs } from './storyText';
+import type { ChapterSourceSummary } from '../schemas';
 
 /** A decrypted published image, base64-ready for an inline `data:` URI (self-contained export — no image folder). */
 export type ExportImage = { mime: string; base64: string };
@@ -17,6 +18,11 @@ export type ExportImages = Record<string, ExportImage>;
 
 function dataUri(img: ExportImage): string {
   return `data:${img.mime};base64,${img.base64}`;
+}
+
+/** One chapter's generic source line, e.g. "3 coaching insights, 2 memories you shared". Never any id/content. */
+function sourceLine(counts: ChapterSourceSummary['counts']): string {
+  return counts.map(({ kind, count }) => `${count} ${SOURCE_KIND_NOUN[kind] ?? kind}`).join(', ');
 }
 
 /**
@@ -73,6 +79,16 @@ export function bookToMarkdown(
   }
   if (manifest.matter?.aboutAuthor) {
     lines.push('## About the author', '', mdSafeMatter(manifest.matter.aboutAuthor.trim()), '');
+  }
+  // Sources appendix (§18.3) — a GENERIC per-chapter breakdown of what the book drew on (kind counts only, no
+  // ids/content/dates), so an exported copy leaks nothing about the private records behind it.
+  if (manifest.chapterSources && manifest.chapterSources.length > 0) {
+    lines.push('## Sources', '');
+    for (const cs of manifest.chapterSources) {
+      const line = sourceLine(cs.counts);
+      if (line) lines.push(`- **${mdSafeMatter(cs.title)}** — drawn from ${line}`);
+    }
+    lines.push('');
   }
   if (manifest.noteOnBook) lines.push('---', '', `*${manifest.noteOnBook}*`, '');
   // The colophon closes the book — the person's own line (if any) plus the standing boundary, which is
@@ -203,9 +219,10 @@ export async function buildDraftHtml(
 }
 
 const PRINT_CSS = `
-@page { margin: 1in; }
-body { font-family: Georgia, 'Times New Roman', serif; font-size: 12pt; line-height: 1.6; color: #1a1a1a; }
-.cover { text-align: center; margin: 2.5in 0; page-break-after: always; }
+/* Page geometry (trim size + margins + footer page numbers) is set by the host's printToPDF options (§18.3),
+   so the CSS owns only typography — no @page margin here, or it would double the printed margins. */
+body { font-family: Georgia, 'Times New Roman', serif; font-size: 11pt; line-height: 1.55; color: #1a1a1a; }
+.cover { text-align: center; margin: 2in 0; page-break-after: always; }
 .cover h1 { font-size: 30pt; margin: 0; }
 h2 { page-break-before: always; font-size: 20pt; }
 h3 { font-size: 15pt; margin-top: 1.5em; }
@@ -305,6 +322,18 @@ export function bookToHtml(
   }
   if (manifest.matter?.aboutAuthor) {
     body.push(`<h2>About the author</h2>${matterHtml(manifest.matter.aboutAuthor)}`);
+  }
+  // Sources appendix (§18.3) — generic per-chapter kind counts only (no ids/content), safe in an exported book.
+  if (manifest.chapterSources && manifest.chapterSources.length > 0) {
+    const rows = manifest.chapterSources
+      .map((cs) => {
+        const line = sourceLine(cs.counts);
+        return line
+          ? `<li><strong>${escapeHtml(cs.title)}</strong> — drawn from ${escapeHtml(line)}</li>`
+          : '';
+      })
+      .join('');
+    if (rows) body.push(`<section class="sources"><h2>Sources</h2><ul>${rows}</ul></section>`);
   }
   if (manifest.noteOnBook) {
     body.push(`<hr/><p class="note"><em>${escapeHtml(manifest.noteOnBook)}</em></p>`);

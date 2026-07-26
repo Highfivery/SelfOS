@@ -10,6 +10,7 @@ import type { BookChapter, BookOutline, Insight, LifeTimeline, Person } from '..
 import { generateChapter } from './storyGenerationService';
 import {
   bookMentionsReader,
+  chapterSourceSummary,
   computePublishDiff,
   grantReader,
   listReaders,
@@ -675,6 +676,86 @@ describe('export (64 §3.9)', () => {
     expect(bookToMarkdown({ ...manifest, cast: undefined }, chapters)).not.toContain(
       'The people in this book',
     );
+  });
+
+  it('renders a GENERIC Sources appendix (per-chapter kind counts, never ids/content) in both exports (§18.3)', () => {
+    const manifest: PublishedManifest = {
+      schemaVersion: 1,
+      publishedAt: 'now',
+      title: 'The Story of Ben',
+      chapterSources: [
+        {
+          chapterId: 'c1',
+          title: 'The Garage',
+          counts: [
+            { kind: 'insight', count: 3 },
+            { kind: 'memory', count: 2 },
+          ],
+        },
+      ],
+      parts: [{ id: 'p1', title: 'Roots', chapterIds: ['c1'] }],
+      chapterOrder: ['c1'],
+      images: [],
+    };
+    const chapters = [{ id: 'c1', title: 'The Garage', markdown: 'Prose.', imagePlacements: [] }];
+    const md = bookToMarkdown(manifest, chapters);
+    expect(md).toContain('## Sources');
+    expect(md).toContain('**The Garage** — drawn from 3 coaching insights, 2 memories you shared');
+    // Generic only — no source ids ever appear.
+    expect(md).not.toMatch(/insight-|mem-|:i1|:f1/);
+    const html = bookToHtml(manifest, chapters);
+    expect(html).toContain('<h2>Sources</h2>');
+    expect(html).toContain('drawn from 3 coaching insights, 2 memories you shared');
+    // A book with NO chapterSources renders no Sources section.
+    expect(bookToMarkdown({ ...manifest, chapterSources: undefined }, chapters)).not.toContain(
+      '## Sources',
+    );
+  });
+
+  it('chapterSourceSummary emits generic dedup-by-id counts, pseudonymizes titles, omits provenance-less chapters', () => {
+    const chapter = (
+      id: string,
+      title: string,
+      refs: { kind: string; id: string }[],
+    ): BookChapter => ({
+      id,
+      schemaVersion: 1,
+      partId: 'p1',
+      order: 0,
+      title,
+      markdown: 'x',
+      revision: 0,
+      status: 'reviewed',
+      sourceSignature: '',
+      provenance:
+        refs.length > 0
+          ? [{ anchor: 'p0', refs: refs.map((r) => ({ kind: r.kind as 'insight', id: r.id })) }]
+          : [],
+      protectedBlocks: [],
+      pinnedQuotes: [],
+      imagePlacements: [],
+    });
+    const summary = chapterSourceSummary(
+      [
+        // c1: the SAME insight id cited twice → counts once; two distinct memories → 2.
+        chapter('c1', 'A Day with Angel', [
+          { kind: 'insight', id: 'i1' },
+          { kind: 'insight', id: 'i1' },
+          { kind: 'memory', id: 'm1' },
+          { kind: 'memory', id: 'm2' },
+        ]),
+        // c2: no provenance → omitted entirely.
+        chapter('c2', 'Empty', []),
+      ],
+      { Angel: 'A.' },
+    );
+    expect(summary).toHaveLength(1);
+    expect(summary[0]!.chapterId).toBe('c1');
+    expect(summary[0]!.title).toBe('A Day with A.'); // pseudonymized
+    expect(summary[0]!.counts).toEqual([
+      { kind: 'insight', count: 1 },
+      { kind: 'memory', count: 2 },
+    ]);
   });
 
   it('a book with NO colophon still closes with the boundary line (§8.2)', () => {

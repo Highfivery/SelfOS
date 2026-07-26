@@ -6,11 +6,13 @@ import { applyPseudonyms } from './storyText';
 import type {
   BookChapter,
   BookReader,
+  ChapterSourceSummary,
   PublishDiffChapter,
   PublishedManifest,
   PublishedPart,
   ReaderChapter,
   SharedBookSummary,
+  StorySourceRef,
   StoryPublishDiff,
   StoryPublishResult,
   StoryReaderView,
@@ -43,7 +45,7 @@ import {
  * every read (revoke or un-publish takes effect immediately — the dream-image-sharing model). No AI here.
  */
 
-const SOURCE_KIND_NOUN: Record<string, string> = {
+export const SOURCE_KIND_NOUN: Record<string, string> = {
   insight: 'coaching insights',
   intakeAnswer: 'onboarding answers',
   response: 'check-in answers',
@@ -57,6 +59,36 @@ const SOURCE_KIND_NOUN: Record<string, string> = {
   memory: 'memories you shared',
   quote: 'lines you said',
 };
+
+/**
+ * The GENERIC per-chapter source summary for the Sources appendix (§18.3, #293). Reads each chapter's paragraph
+ * provenance and emits ONLY per-KIND counts (never a source id, its content, or a date) — so an exported/shared
+ * book describes what it drew on without leaking anything about the private records behind it. Titles are run
+ * through the pseudonym map (they land in a reader-facing book). A chapter with no provenance is omitted.
+ */
+export function chapterSourceSummary(
+  chapters: BookChapter[],
+  map: Record<string, string> = {},
+): ChapterSourceSummary[] {
+  const out: ChapterSourceSummary[] = [];
+  for (const chapter of chapters) {
+    const byKind = new Map<string, Set<string>>();
+    for (const entry of chapter.provenance) {
+      for (const ref of entry.refs) {
+        const ids = byKind.get(ref.kind) ?? new Set<string>();
+        ids.add(ref.id);
+        byKind.set(ref.kind, ids);
+      }
+    }
+    const counts = [...byKind.entries()]
+      .filter(([, ids]) => ids.size > 0)
+      .map(([kind, ids]) => ({ kind: kind as StorySourceRef['kind'], count: ids.size }));
+    if (counts.length > 0) {
+      out.push({ chapterId: chapter.id, title: applyPseudonyms(chapter.title, map), counts });
+    }
+  }
+  return out;
+}
 
 /** The auto "A Note on this book" honesty page (§3.6) — built from what the published chapters ACTUALLY drew on
  *  (their provenance), so it never overstates. Names no numbers it can't back up. */
@@ -174,6 +206,9 @@ export async function publishBook(
       ...(book.matter ? { matter: book.matter } : {}),
       ...(cast.length > 0 ? { cast } : {}),
       noteOnBook: noteOnBook(publishedChapters),
+      // Generic per-chapter source counts for the Sources appendix (§18.3) — titles pseudonymized here since
+      // they land in a reader-facing book; provenance itself never crosses (only the counts).
+      chapterSources: chapterSourceSummary(publishedChapters, psMap),
       parts,
       chapterOrder,
       images,
@@ -637,6 +672,9 @@ export async function readOwnBook(
       ...(book.matter ? { matter: book.matter } : {}),
       ...(draftCast.length > 0 ? { cast: draftCast } : {}),
       noteOnBook: noteOnBook(orderedChapters),
+      // Generic per-chapter source counts (§18.3) computed LIVE from the draft chapters' provenance — the
+      // provenance itself is never projected onto the ReaderChapters, only these counts.
+      chapterSources: chapterSourceSummary(orderedChapters, psMap),
       parts,
       chapterOrder,
       images: index.images,

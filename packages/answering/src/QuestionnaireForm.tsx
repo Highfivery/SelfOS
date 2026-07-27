@@ -201,6 +201,14 @@ function SliderControl({
   // With descriptive labels at start/middle/end (18 §14.5), anchor all three under the track and drop the
   // raw number; otherwise keep the numeric min/value/max readout.
   const triLabelled = scale.midLabel !== undefined;
+  // The middle label must sit under the thumb's NEUTRAL resting position, not the track's geometric centre.
+  // The neutral value is the integer `middle` = round((min+max)/2); for an odd-span scale (e.g. 1–10 → 6)
+  // that value renders at ~55.6% of the track, not 50%, so a fixed-centre label drifts left of the dot.
+  // A native range thumb of width THUMB_PX at value fraction f has its centre at `f*(100% − THUMB_PX) +
+  // THUMB_PX/2`, so we position the label there. min/max stay pinned to the track ends.
+  const span = scale.max - scale.min;
+  const midFraction = span > 0 ? (middle - scale.min) / span : 0.5;
+  const midLeft = `calc(${midFraction.toFixed(4)} * (100% - 20px) + 10px)`;
   return (
     <div className={styles.sliderWrap}>
       <input
@@ -216,8 +224,10 @@ function SliderControl({
       {triLabelled ? (
         <div className={styles.sliderTriLabels} aria-hidden="true">
           <span>{scale.minLabel}</span>
-          <span>{scale.midLabel}</span>
           <span>{scale.maxLabel}</span>
+          <span className={styles.sliderTriMid} style={{ left: midLeft }}>
+            {scale.midLabel}
+          </span>
         </div>
       ) : (
         <div className={styles.sliderScale}>

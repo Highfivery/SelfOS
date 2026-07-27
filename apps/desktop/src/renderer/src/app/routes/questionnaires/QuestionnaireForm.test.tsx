@@ -257,6 +257,43 @@ describe('QuestionnaireForm', () => {
     expect(onChange).toHaveBeenCalledWith('a', 7);
   });
 
+  it('positions the middle slider label under the neutral thumb, not a fixed 50% (#1)', () => {
+    // A 1–10 scale has no integer centre: the neutral thumb rests at value 6 (~55.6% of the track), so the
+    // middle label must be positioned there — NOT at the geometric 50% that drifted left of the resting dot.
+    const { rerender } = render(
+      <Harness
+        questions={[
+          q({
+            id: 'a',
+            type: 'slider',
+            prompt: 'Rate',
+            scale: { min: 1, max: 10, minLabel: 'Low', midLabel: 'Medium', maxLabel: 'High' },
+          }),
+        ]}
+      />,
+    );
+    expect((screen.getByText('Medium') as HTMLElement).style.left).toBe(
+      'calc(10px + 0.5556 * (100% - 20px))',
+    );
+
+    // An even-centred scale (1–5, middle = 3) lands the label at exactly 50%.
+    rerender(
+      <Harness
+        questions={[
+          q({
+            id: 'a',
+            type: 'slider',
+            prompt: 'Rate',
+            scale: { min: 1, max: 5, minLabel: 'Low', midLabel: 'Medium', maxLabel: 'High' },
+          }),
+        ]}
+      />,
+    );
+    expect((screen.getByText('Medium') as HTMLElement).style.left).toBe(
+      'calc(10px + 0.5 * (100% - 20px))',
+    );
+  });
+
   it('renders an attached image (decrypted via loadImage) with its alt text', async () => {
     const questions = [
       q({

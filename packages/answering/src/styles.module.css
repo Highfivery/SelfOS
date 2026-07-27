@@ -479,25 +479,24 @@
   color: var(--color-text-primary);
 }
 
-/* Three example anchors (start / middle / end) under a labelled slider (18 §14.5). */
+/* Three example anchors (start / middle / end) under a labelled slider (18 §14.5). The start/end sit at the
+ * track ends (flow, so they set the row height); the middle is absolutely overlaid at the thumb's neutral
+ * position so it lines up with the resting dot on any scale span (see SliderControl `midLeft`). */
 .sliderTriLabels {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  position: relative;
+  display: flex;
+  justify-content: space-between;
   gap: var(--space-2);
   font-size: var(--text-xs);
   color: var(--color-text-secondary);
 }
 
-.sliderTriLabels > :nth-child(1) {
-  text-align: left;
-}
-
-.sliderTriLabels > :nth-child(2) {
+.sliderTriMid {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
   text-align: center;
-}
-
-.sliderTriLabels > :nth-child(3) {
-  text-align: right;
 }
 
 /* Ranking list. */

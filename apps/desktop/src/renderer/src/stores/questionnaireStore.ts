@@ -12,6 +12,9 @@ type GenerateInput = Parameters<SelfosBridge['questionnairesGenerate']>[0];
 type GenerateResult = Awaited<ReturnType<SelfosBridge['questionnairesGenerate']>>;
 type ImproveInput = Parameters<SelfosBridge['questionnairesImproveQuestion']>[0];
 type ImproveResult = Awaited<ReturnType<SelfosBridge['questionnairesImproveQuestion']>>;
+type SharpenInput = Parameters<SelfosBridge['questionnairesSharpenQuestion']>[0];
+type MarkCoveredInput = Parameters<SelfosBridge['questionnairesMarkCovered']>[0];
+type MarkCoveredResult = Awaited<ReturnType<SelfosBridge['questionnairesMarkCovered']>>;
 type SuggestInput = Parameters<SelfosBridge['gapfinderSuggest']>[0];
 type SuggestResult = Awaited<ReturnType<SelfosBridge['gapfinderSuggest']>>;
 type AnalyzeResult = Awaited<ReturnType<SelfosBridge['insightsAnalyze']>>;
@@ -48,6 +51,10 @@ interface QuestionnaireState {
   /** AI authoring (budget-gated + metered in main). */
   generate: (input: GenerateInput) => Promise<GenerateResult>;
   improveQuestion: (input: ImproveInput) => Promise<ImproveResult>;
+  /** "Too vague → sharpen" (08 §28.2): rewrite a question to be concrete + probing. */
+  sharpenQuestion: (input: SharpenInput) => Promise<ImproveResult>;
+  /** "Already answered → replace" (08 §28.3): record a topic covered for a recipient (future gens avoid it). */
+  markCovered: (input: MarkCoveredInput) => Promise<MarkCoveredResult>;
   suggest: (input: SuggestInput) => Promise<SuggestResult>;
   /** Recipient-first saved suggestions (08 §18): read (no spend), generate (accumulate), delete. */
   listSavedSuggestions: (recipientPersonId: string) => Promise<SavedSuggestionList>;
@@ -104,6 +111,10 @@ export const useQuestionnaireStore = create<QuestionnaireState>((set, get) => ({
   generate: async (input) => (await window.selfos?.questionnairesGenerate(input)) ?? AI_UNAVAILABLE,
   improveQuestion: async (input) =>
     (await window.selfos?.questionnairesImproveQuestion(input)) ?? AI_UNAVAILABLE,
+  sharpenQuestion: async (input) =>
+    (await window.selfos?.questionnairesSharpenQuestion(input)) ?? AI_UNAVAILABLE,
+  markCovered: async (input) =>
+    (await window.selfos?.questionnairesMarkCovered(input)) ?? { ok: false },
   suggest: async (input) => (await window.selfos?.gapfinderSuggest(input)) ?? AI_UNAVAILABLE,
   listSavedSuggestions: async (recipientPersonId) =>
     (await window.selfos?.questionnaireSuggestionsList({ recipientPersonId })) ?? [],

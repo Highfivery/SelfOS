@@ -18,7 +18,12 @@ import {
 import { extractJsonArray } from '../ai/jsonSalvage';
 import { SUGGESTABLE_ANSWER_TYPES } from '../schemas';
 import { GAP_FINDER_SYSTEM } from './aiPrompts';
-import { generateQuestions, improveQuestion, type AiDeps } from './generationService';
+import {
+  generateQuestions,
+  improveQuestion,
+  sharpenQuestion,
+  type AiDeps,
+} from './generationService';
 import { suggestQuestionnaires } from './gapFinderService';
 
 const key = generateMasterKey();
@@ -853,6 +858,77 @@ describe('improveQuestion + gap-finder', () => {
       },
     );
     expect(result).toMatchObject({ ok: true, prompt: 'How are we really doing?' });
+  });
+
+  it('sharpenQuestion rewrites the same question with the sharpen instruction (§28.2)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    let seenUser = '';
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        seenUser = options.messages
+          .map((m) => (typeof m.content === 'string' ? m.content : ''))
+          .join('\n');
+        const text = 'What specifically about money keeps you up at night?';
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await sharpenQuestion(deps(fs, capturing, author), {
+      prompt: 'What matters to you?',
+      type: 'shortText',
+    });
+    expect(result).toMatchObject({ ok: true });
+    // The server-side sharpen wording reached the model (the renderer just asked to "sharpen").
+    expect(seenUser.toLowerCase()).toContain('specific and probing');
+  });
+
+  it('surfaces dedupDegraded when the semantic pass falls back to keep-all (§28.4)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    const gen = JSON.stringify({
+      title: 'T',
+      questions: [
+        { type: 'shortText', prompt: 'One?' },
+        { type: 'shortText', prompt: 'Two?' },
+      ],
+    });
+    // The dedup call + its one retry both come back non-array → the pass degrades (keep-all) and flags it.
+    const responses = [gen, 'not an array', 'still not an array'];
+    let calls = 0;
+    const seq: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (_o, onDelta) => {
+        const text = responses[Math.min(calls, responses.length - 1)] ?? '';
+        calls += 1;
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await generateQuestions(deps(fs, seq, author), {
+      type: 'general',
+      sensitivity: 'standard',
+      count: 2,
+      context: {
+        authorPersonId: author,
+        includeAuthor: true,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+      recipientHistory: 'Themes they have already explored:\n- Work.',
+    });
+    expect(result.ok).toBe(true);
+    expect(result.dedupDegraded).toBe(true);
+    // Keep-all fallback: both questions survive (nothing was actually filtered).
+    expect(result.questions?.map((q) => q.prompt)).toEqual(['One?', 'Two?']);
   });
 
   it('suggests questionnaires from structured context', async () => {

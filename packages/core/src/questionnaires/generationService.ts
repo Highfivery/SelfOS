@@ -26,6 +26,7 @@ import {
   IMPROVE_SYSTEM,
   INTIMACY_TYPE,
   SCENARIO_TYPE,
+  SHARPEN_INSTRUCTION,
   VARIANT_SYSTEM,
   type IntimacyGenerateMode,
 } from './aiPrompts';
@@ -247,16 +248,26 @@ export async function generateQuestions(
   // FAIL-SAFE — on AI-off / over-budget / a parse miss it keeps every question. Then TRIM to the requested
   // count (we over-asked to absorb the drops). Fewer than requested is acceptable (all we had were new).
   let finalQuestions = questions;
+  let dedupDegraded = false;
   if (willSemanticDedup && questions.length > 1) {
     const sem = await semanticDedupFilter(deps, questions, dedupReference);
     finalQuestions = sem.kept;
+    // Surface the §26 flag (08 §28.4): the pass fell back to keep-all with no real filter signal (AI-off /
+    // over-budget / unparseable / empty). A caller finally reads it so a silent no-op is observable.
+    dedupDegraded = sem.degraded === true;
   }
   finalQuestions = finalQuestions.slice(0, requestedCount);
 
   const title = set.title?.trim();
   // We return the generation call's usage for the renderer's optimistic budget refresh; the semantic pass's
   // `questionnaire.dedup` usage is billed separately (recorded inside `runClaude`) — the ring reloads to reflect it.
-  return { ok: true, questions: finalQuestions, ...(title ? { title } : {}), usage: call.usage };
+  return {
+    ok: true,
+    questions: finalQuestions,
+    ...(title ? { title } : {}),
+    usage: call.usage,
+    ...(dedupDegraded ? { dedupDegraded: true } : {}),
+  };
 }
 
 /**
@@ -330,6 +341,18 @@ export async function generateVariant(
     };
   });
   return { ok: true, questions, usage: call.usage };
+}
+
+/**
+ * Sharpen a single "too vague" question (08-questionnaires §28.2) — same topic, made concrete and probing so
+ * it draws out a considered answer instead of a shrug. A thin wrapper over `improveQuestion` so the prompt
+ * wording (`SHARPEN_INSTRUCTION`) stays server-side; the renderer just asks to "sharpen".
+ */
+export async function sharpenQuestion(
+  deps: AiDeps,
+  input: { prompt: string; type: string },
+): Promise<ImproveResult> {
+  return improveQuestion(deps, { ...input, instruction: SHARPEN_INSTRUCTION });
 }
 
 /** Reword a single question per an instruction ("warmer", "tighter", …). */

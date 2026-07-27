@@ -356,6 +356,19 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // Single-question reword / sharpen (08 §16 / §28.2): "Rewrite this questionnaire question." → return
+      // ONLY the rewritten text. Distinguish a "sharpen" (too vague) by its instruction so an E2E can tell the
+      // two apart and assert the swap.
+      if (userText.includes('Rewrite this questionnaire question')) {
+        const sharpen = userText.includes('specific and probing');
+        return Promise.resolve({
+          text: sharpen
+            ? 'What, specifically this week, made you feel closest to me?'
+            : 'How are we really doing lately?',
+          usage: { inputTokens: 40, outputTokens: 12, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
       // The semantic de-dup pass (08 §23.5) — the ONE layer that catches a re-ask of known info in different
       // words. A no-op fake here (keep-all) hides whether the live pass works at all — the reported "AI re-asks
       // things it already knows" bug, and the 37 §10 "fakes must not be no-ops" rule. So actually DROP a

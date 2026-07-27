@@ -2089,6 +2089,66 @@ describe('createCoreBridge', () => {
     expect(JSON.stringify(result)).not.toContain('secret codeword');
   });
 
+  it('records an author-marked covered topic (§28.3) that reaches generation as an ALREADY COVERED avoid, gated to the author', async () => {
+    const { host, bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+
+    const marked = await bridge.questionnairesMarkCovered({
+      recipientPersonId: mara.id,
+      note: 'Their childhood memories',
+      sourcePrompt: 'Tell me about your childhood.',
+    });
+    expect(marked.ok).toBe(true);
+
+    // Capture every user message that reaches the model (generation + the semantic de-dup pass).
+    const sent: string[] = [];
+    const gen = JSON.stringify({
+      title: 'X',
+      questions: [
+        { type: 'shortText', prompt: 'What is a small joy lately?' },
+        { type: 'shortText', prompt: 'What is weighing on you?' },
+      ],
+    });
+    const replies = [gen, '[1,2]'];
+    let calls = 0;
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        sent.push(options.messages.map((m) => m.content).join('\n'));
+        const text = replies[Math.min(calls, replies.length - 1)] ?? '';
+        calls += 1;
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    const result = await bridge.questionnairesGenerate({
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      existingPrompts: [],
+      recipientPersonId: mara.id,
+    });
+    expect(result.ok).toBe(true);
+    // The author's marked topic reached the de-dup pass as an explicit "already covered" avoid.
+    const all = sent.join('\n');
+    expect(all).toContain('ALREADY COVERED');
+    expect(all).toContain('Their childhood memories');
+
+    // Gate: a Guest (no questionnaires.create) cannot mark a topic covered.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(
+      await bridge.questionnairesMarkCovered({ recipientPersonId: mara.id, note: 'x' }),
+    ).toMatchObject({
+      ok: false,
+    });
+  });
+
   it('passes the chosen count to the model and hard-drops a re-ask of a prior question (§23.4/§23.5)', async () => {
     const { host, bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

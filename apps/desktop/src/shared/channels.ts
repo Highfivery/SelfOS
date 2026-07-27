@@ -359,6 +359,8 @@ export const IpcChannels = {
   questionnairesDeleteImage: 'questionnaires:deleteImage',
   questionnairesGenerate: 'questionnaires:generate',
   questionnairesImproveQuestion: 'questionnaires:improveQuestion',
+  questionnairesSharpenQuestion: 'questionnaires:sharpenQuestion',
+  questionnairesMarkCovered: 'questionnaires:markCovered',
   gapfinderSuggest: 'gapfinder:suggest',
   questionnaireSuggestionsList: 'questionnaires:suggestionsList',
   questionnaireSuggestionsGenerate: 'questionnaires:suggestionsGenerate',
@@ -1073,6 +1075,19 @@ export interface SelfosBridge {
     type: AnswerType;
     instruction: string;
   }): Promise<QuestionnaireImproveResult>;
+  /** "Too vague → sharpen" (08 §28.2): rewrite the same question to be concrete + probing. Budget-gated. */
+  questionnairesSharpenQuestion(input: {
+    prompt: string;
+    type: AnswerType;
+  }): Promise<QuestionnaireImproveResult>;
+  /** "Already answered → replace" (08 §28.3): record a topic as covered for this recipient so future
+   * generation avoids it. Author-scoped, gated `questionnaires.create`. The replacement is generated
+   * separately via `questionnairesGenerate`. */
+  questionnairesMarkCovered(input: {
+    recipientPersonId: string;
+    note: string;
+    sourcePrompt?: string;
+  }): Promise<{ ok: boolean }>;
   /** Gap-finder: propose the next questionnaires from structured context. Budget-gated + metered. */
   gapfinderSuggest(input: { targetPersonId?: string }): Promise<QuestionnaireSuggestResult>;
   /** Recipient-first saved suggestions (08 §18). Read the author's saved set for one household recipient — no

@@ -35,6 +35,7 @@ import {
   getAssignmentSnapshot,
   getResponse,
   listAssignments,
+  listCoveredTopics,
   listQuestionnaires,
   listSavedSuggestions,
   readCustomIntimacyTopics,
@@ -5986,6 +5987,64 @@ test('authoring (§16.4): AI draft fills the empty title; Save→Send is a two-s
     await expect(w.getByRole('heading', { name: 'Edit questionnaire' })).toBeVisible();
     await expect(w.getByText(/Saved\. You can send it now/i)).toBeVisible();
     await expect(w.getByRole('button', { name: 'Send' })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('mark repetitive/vague (§28.2/§28.3): "Too vague" sharpens in place; "Already answered" records the topic + swaps in a fresh question', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('expected a master key');
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // A household recipient to bind + key the covered-topic note to.
+    await w.getByRole('link', { name: 'People' }).click();
+    await w.getByRole('button', { name: 'Add person' }).click();
+    await w.getByLabel('Name').fill('Robin');
+    await w.getByRole('button', { name: 'Create' }).click();
+    await expect(w.getByText('Robin')).toBeVisible();
+
+    // New → bind to Robin → author one vague question.
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: 'New' }).click();
+    await w.getByLabel('Who is this for?').selectOption({ label: 'Robin' });
+    await w.getByRole('button', { name: 'Continue' }).click();
+    await w.getByLabel('Question 1', { exact: true }).fill('What matters to you?');
+
+    // "Too vague → sharpen": the same question is rewritten to be specific + probing, in place.
+    await w.getByRole('button', { name: /Too vague/ }).click();
+    await expect(w.getByLabel('Question 1', { exact: true })).toHaveValue(
+      /made you feel closest to me/,
+    );
+
+    // A second question to mark "already answered".
+    await w.getByRole('button', { name: 'Add question' }).click();
+    await w.getByLabel('Question 2', { exact: true }).fill('Do you have a favorite hobby?');
+
+    // "Already answered → replace": records the topic as covered for Robin AND swaps in a fresh question.
+    await w
+      .getByRole('button', { name: /Already answered/ })
+      .last()
+      .click();
+    await expect(w.getByLabel('Question 2', { exact: true })).toHaveValue(
+      'What felt hardest this week?',
+    );
+
+    // The covered topic persisted under the AUTHOR, keyed to Robin — so ALL future generation avoids it.
+    const robin = (await listPeople(fs, key)).find((p) => p.displayName === 'Robin');
+    const author = (await listPeople(fs, key)).find((p) => p.displayName === 'Tester');
+    await expect
+      .poll(async () =>
+        (await listCoveredTopics(fs, key, author!.id, robin!.id)).map((t) => t.note),
+      )
+      .toContain('Do you have a favorite hobby?');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

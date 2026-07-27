@@ -421,6 +421,8 @@ import {
   updateState as updateTogetherState,
 } from '@selfos/core/together';
 import { sniffImageMime } from '@selfos/core/media';
+import { readImagePrefs, readFeatureImagePrefs, setFeatureImagePrefs } from '@selfos/core/images';
+import type { FeatureImagePrefs } from '@selfos/core/schemas';
 import {
   backfillPartnerSharing,
   deleteInsight,
@@ -1084,12 +1086,21 @@ const MarkCoveredSchema = z.object({
   note: z.string().min(1),
   sourcePrompt: z.string().optional(),
 });
-// A recipient flagging a wrong fact in a question they're answering (spec 08 wrong-fact amendment).
+// A recipient flagging a wrong fact in a question they're answering (spec 08 §29 wrong-fact amendment).
 const CorrectFactSchema = z.object({
   assignmentId: z.string().min(1),
   questionId: z.string().min(1),
   questionPrompt: z.string().min(1),
   correction: z.string().min(1).max(1000),
+});
+// Per-person image prefs patch (image-settings amendment): one feature, a partial of style/notes/toggle.
+const ImagePrefsSetSchema = z.object({
+  feature: z.enum(['dreams', 'story']),
+  patch: z.object({
+    enabled: z.boolean().optional(),
+    style: z.string().min(1).optional(),
+    styleNotes: z.string().max(300).optional(),
+  }),
 });
 const SuggestSchema = z.object({ targetPersonId: z.string().min(1).optional() });
 // Recipient-first saved suggestions (08 §18.5) — a household recipient, validated in the bridge.
@@ -6112,23 +6123,17 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) {
         return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
       }
-      // Consent + image model + default style are the SAME vault settings as dream images (one switch,
-      // owner decision 2026-07-16). Both API keys are read host-side and never cross to the renderer.
+      // Your Story image settings are now split from Dreams + made per-person (image-settings amendment):
+      // consent + style + direction come from THIS person's story prefs (a per-book override still wins,
+      // resolved inside generateStoryImage); the story image MODEL is its own owner-managed vault setting.
       const settings = await readVaultSettingsValues(ctx.fs);
       const imageModel =
-        typeof settings['dreams.imageModel'] === 'string'
-          ? settings['dreams.imageModel']
+        typeof settings['story.imageModel'] === 'string'
+          ? settings['story.imageModel']
           : 'gpt-image-2';
-      // The single global image style (§3.8) — every AI image across SelfOS uses it, so they share one look.
-      const style =
-        typeof settings['dreams.imageStyle'] === 'string'
-          ? settings['dreams.imageStyle']
-          : 'oil painting';
-      // The global style DIRECTION note (Settings → Images) refines every image — dream + story alike.
-      const styleNotes =
-        typeof settings['dreams.imageStyleNotes'] === 'string'
-          ? settings['dreams.imageStyleNotes'].trim()
-          : '';
+      const prefs = await readFeatureImagePrefs(ctx.fs, ctx.key, personId, 'story');
+      const style = prefs.style;
+      const styleNotes = prefs.styleNotes.trim();
       // Route realtime phase events to the surface that started this generation (§ image progress).
       const progressId =
         target.kind === 'cover'
@@ -6141,7 +6146,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         image: host.image,
         anthropicApiKey: (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
         openaiApiKey: (await resolveOpenAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
-        consent: settings['dreams.imageGenerationEnabled'] === true,
+        consent: prefs.enabled,
         claudeModel: await host.activeModel(),
         imageModel,
         style,
@@ -8059,6 +8064,28 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         now: new Date(),
       });
     },
+    // Per-person image preferences (image-settings amendment) — style, direction + the on/off toggle, split
+    // per use-type (dreams / story). Scoped to the ACTIVE person: each member edits only their own, so one
+    // choice never overwrites another's (the reported bug). No admin gate — it's a personal preference.
+    imagesGetPrefs: async () => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId) return null;
+      return readImagePrefs(ctx.fs, ctx.key, personId);
+    },
+    imagesSetPrefs: async (input) => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId) return null;
+      const p = ImagePrefsSetSchema.parse(input);
+      // Build the patch with only DEFINED keys (exactOptionalPropertyTypes: no `undefined` values).
+      const patch: Partial<FeatureImagePrefs> = {
+        ...(p.patch.enabled !== undefined ? { enabled: p.patch.enabled } : {}),
+        ...(p.patch.style !== undefined ? { style: p.patch.style } : {}),
+        ...(p.patch.styleNotes !== undefined ? { styleNotes: p.patch.styleNotes } : {}),
+      };
+      return setFeatureImagePrefs(ctx.fs, ctx.key, personId, p.feature, patch);
+    },
     dreamGenerateImage: async (input): Promise<DreamImageResult> => {
       const { dreamId } = DreamGenerateImageSchema.parse(input);
       const ctx = await host.vaultAndKey();
@@ -8066,23 +8093,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'dreams.generateImage'))) {
         return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
       }
-      // Consent + image model + default style are vault settings; both API keys are read host-side and
-      // never cross to the renderer (the `anthropic.apiKey` rule, applied to the second provider).
+      // Consent + style + direction are now PER-PERSON (image-settings amendment) so one member's choice
+      // never overwrites another's; the image MODEL stays an owner-managed vault setting and both API keys
+      // are read host-side and never cross to the renderer.
       const settings = await readVaultSettingsValues(ctx.fs);
       const imageModel =
         typeof settings['dreams.imageModel'] === 'string'
           ? settings['dreams.imageModel']
           : 'gpt-image-2';
-      // The single global image style (§3.8) — every AI image across SelfOS uses it, so they share one look.
-      const style =
-        typeof settings['dreams.imageStyle'] === 'string'
-          ? settings['dreams.imageStyle']
-          : 'dreamlike';
-      // Settings-only free-text style direction (§15.2); blank ⇒ omitted so the prompt is unchanged.
-      const styleNotes =
-        typeof settings['dreams.imageStyleNotes'] === 'string'
-          ? settings['dreams.imageStyleNotes'].trim()
-          : '';
+      const prefs = await readFeatureImagePrefs(ctx.fs, ctx.key, personId, 'dreams');
+      const styleNotes = prefs.styleNotes.trim();
       const progressId = `dream:${dreamId}`;
       const result = await generateDreamImage({
         fs: ctx.fs,
@@ -8091,10 +8111,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         image: host.image,
         anthropicApiKey: (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
         openaiApiKey: (await resolveOpenAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
-        consent: settings['dreams.imageGenerationEnabled'] === true,
+        consent: prefs.enabled,
         claudeModel: await host.activeModel(),
         imageModel,
-        style,
+        style: prefs.style,
         ...(styleNotes ? { styleNotes } : {}),
         personId,
         dreamId,

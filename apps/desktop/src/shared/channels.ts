@@ -142,6 +142,8 @@ import type {
   FactCorrectionOutcome,
   GuidanceState,
   GuidedSuggestResult,
+  ImageFeature,
+  ImagePrefs,
   InAppSendResult,
   InboxAssignmentDetail,
   InboxItem,
@@ -599,6 +601,8 @@ export const IpcChannels = {
   dreamShareTargets: 'dreams:shareTargets',
   dreamGetInsight: 'dreams:getInsight',
   dreamSetFactShare: 'dreams:setFactShare',
+  imagesGetPrefs: 'images:getPrefs',
+  imagesSetPrefs: 'images:setPrefs',
   dreamGenerateImage: 'dreams:generateImage',
   dreamGetImage: 'dreams:getImage',
   dreamDeleteImage: 'dreams:deleteImage',
@@ -1951,6 +1955,14 @@ export interface SelfosBridge {
     withPersonId: string;
     share: boolean;
   }): Promise<DreamShareResult>;
+  /** Read the active person's per-feature image preferences (style / direction / on-off), or null when not
+   * signed in (image-settings amendment). Per-person — never another member's. */
+  imagesGetPrefs(): Promise<ImagePrefs | null>;
+  /** Patch one feature's image prefs for the active person; returns the updated prefs (per-person). */
+  imagesSetPrefs(input: {
+    feature: ImageFeature;
+    patch: { enabled?: boolean; style?: string; styleNotes?: string };
+  }): Promise<ImagePrefs | null>;
   /**
    * Generate (or regenerate) an AI image of one of the active dreamer's dreams (13-dream-images §6).
    * Distills a name-free prompt via Claude, renders it via OpenAI, and stores the encrypted bytes; the
@@ -2166,6 +2178,8 @@ export type {
   FactCorrectionOutcome,
   GuidanceState,
   GuidedSuggestResult,
+  ImageFeature,
+  ImagePrefs,
   InAppSendResult,
   InboxAssignmentDetail,
   InboxItem,

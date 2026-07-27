@@ -18,6 +18,7 @@
     "./crypto": "./src/crypto/index.ts",
     "./host": "./src/host/index.ts",
     "./media": "./src/media/index.ts",
+    "./images": "./src/images/index.ts",
     "./vault": "./src/vault/index.ts",
     "./people": "./src/people/index.ts",
     "./usage": "./src/usage/index.ts",

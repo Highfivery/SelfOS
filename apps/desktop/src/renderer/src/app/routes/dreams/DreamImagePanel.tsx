@@ -5,6 +5,7 @@ import type { Dream, DreamShareTarget } from '@shared/channels';
 import { aiKeyResolved } from '../../aiAvailability';
 import { useDreamStore } from '../../../stores/dreamStore';
 import { useSessionStore } from '../../../stores/sessionStore';
+import { useImagePrefsStore } from '../../../stores/imagePrefsStore';
 import { useSetting } from '../../../settings/useSetting';
 import { ImageProgress } from '../story/ImageProgress';
 import {
@@ -43,7 +44,15 @@ export function DreamImagePanel({ dream, hero = false }: DreamImagePanelProps): 
   // Dream-image setup (consent, the OpenAI key, AI on) lives in the owner-only Dreams settings; a member
   // can't reach it, so the "Open Settings" path is theirs alone — a member is pointed at the owner (41 §3.3).
   const canManageAi = useSessionStore((s) => s.can('settings.manage'));
-  const [consent] = useSetting('dreams.imageGenerationEnabled');
+  // Image-generation consent is now PER-PERSON (image-settings amendment): this dreamer's own dream-image
+  // toggle, set in Settings → Dreams. Load it if needed.
+  const imagePrefs = useImagePrefsStore((s) => s.prefs);
+  const imagePrefsLoaded = useImagePrefsStore((s) => s.loaded);
+  const loadImagePrefs = useImagePrefsStore((s) => s.load);
+  useEffect(() => {
+    if (!imagePrefsLoaded) void loadImagePrefs();
+  }, [imagePrefsLoaded, loadImagePrefs]);
+  const consent = imagePrefs?.dreams.enabled ?? false;
   const [aiEnabled] = useSetting('ai.enabled');
   const navigate = useNavigate();
   // Generating/deleting an image changes `Dream.image`, which now drives the dashboard grid thumbnail AND
@@ -196,9 +205,22 @@ export function DreamImagePanel({ dream, hero = false }: DreamImagePanelProps): 
   );
 
   // Calm states (no dead controls), resolved in priority order (§3.4).
+  // Consent is PER-PERSON (image-settings amendment) — Settings → Dreams is member-visible, so EVERYONE
+  // (not just an admin) can turn on their own dream images; always offer the Settings affordance here.
   if (!consent) {
-    return settingsNote(
-      'Turn on dream-image generation in Settings to visualize a dream. Generating sends the dream’s description to OpenAI (a third party).',
+    return (
+      <div className={styles.imagePanel}>
+        {heading}
+        <Text size="sm" tone="secondary">
+          Turn on dream images in Settings → Dreams to visualize a dream — it’s your own setting.
+          Generating sends the dream’s description to OpenAI (a third party).
+        </Text>
+        <Inline>
+          <Button variant="secondary" onClick={() => navigate('/settings')}>
+            Open Settings
+          </Button>
+        </Inline>
+      </div>
     );
   }
   if (!aiEnabled) {

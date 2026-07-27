@@ -31,6 +31,7 @@ import { OutlineEditor } from './OutlineEditor';
 import { TimelinePanel } from './TimelinePanel';
 import { useInsightStore } from '../../../stores/insightStore';
 import { useSetting } from '../../../settings/useSetting';
+import { useImageConsent, useImagePrefsStore } from '../../../stores/imagePrefsStore';
 import { aiKeyResolved } from '../../aiAvailability';
 import { AiUnavailableNotice, aiUnavailableMessage } from '../../AiUnavailableNotice';
 import { CrisisFooter } from '../sessions/CrisisFooter';
@@ -807,7 +808,8 @@ function CoverPanel({
 }): JSX.Element {
   const isAdmin = useSessionStore((s) => s.can('budgets.manage'));
   const canManageAi = useSessionStore((s) => s.can('settings.manage'));
-  const [consent] = useSetting('dreams.imageGenerationEnabled');
+  // Story image-generation consent is now per-person (image-settings amendment) — this author's own toggle.
+  const consent = useImageConsent('story');
   const [aiEnabled] = useSetting('ai.enabled');
   const generateImage = useStoryStore((s) => s.generateImage);
   const getImageUrl = useStoryStore((s) => s.getImageUrl);
@@ -1141,7 +1143,14 @@ function StorySettingsPanel({
   config: BookConfig;
 }): JSX.Element {
   const update = useStoryStore((s) => s.update);
-  const [globalStyle] = useSetting('dreams.imageStyle');
+  // The fallback when this book hasn't set its own style is the author's per-person STORY style
+  // (image-settings amendment) — no longer a single global value.
+  const storyPrefsStyle = useImagePrefsStore((s) => s.prefs?.story.style);
+  const imagePrefsLoaded = useImagePrefsStore((s) => s.loaded);
+  const loadImagePrefs = useImagePrefsStore((s) => s.load);
+  useEffect(() => {
+    if (!imagePrefsLoaded) void loadImagePrefs();
+  }, [imagePrefsLoaded, loadImagePrefs]);
   const [draft, setDraft] = useState<BookConfig>(config);
   useEffect(() => setDraft(config), [config]);
   const [notes, setNotes] = useState(config.imageStyleNotes ?? '');
@@ -1160,8 +1169,8 @@ function StorySettingsPanel({
   };
 
   const styleHint = STYLE_CHOICES.find((s) => s.value === draft.style)?.hint ?? '';
-  // Show what images will actually use: this book's own style, or the global fallback until one is chosen.
-  const effectiveImageStyle = draft.imageStyle ?? globalStyle ?? '';
+  // Show what images will actually use: this book's own style, or your per-person story style until one is chosen.
+  const effectiveImageStyle = draft.imageStyle ?? storyPrefsStyle ?? '';
 
   return (
     <>
@@ -4217,7 +4226,7 @@ function ChapterReader({
   // Image-generation setup (§3.8) — the SAME gate as the cover panel, so the "Illustrate this chapter" button
   // is never a dead control. Errors surface IN the Images card (below), not at the top of the reader.
   const canManageAi = useSessionStore((s) => s.can('settings.manage'));
-  const [imageConsent] = useSetting('dreams.imageGenerationEnabled');
+  const imageConsent = useImageConsent('story');
   const [aiEnabled] = useSetting('ai.enabled');
   const [hasImageKey, setHasImageKey] = useState(false);
   // Gate the "turn on image generation" setup note on the ASYNC key check having resolved, so it never

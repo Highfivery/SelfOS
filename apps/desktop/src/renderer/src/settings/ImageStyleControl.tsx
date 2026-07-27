@@ -1,6 +1,15 @@
-import { useState } from 'react';
-import { Field, Select, Stack, Text, TextInput } from '../design-system/components';
-import { useSetting } from './useSetting';
+import { useEffect, useState } from 'react';
+import type { ImageFeature } from '@shared/channels';
+import {
+  Field,
+  Select,
+  Stack,
+  Switch,
+  Text,
+  Textarea,
+  TextInput,
+} from '../design-system/components';
+import { useImagePrefsStore } from '../stores/imagePrefsStore';
 import {
   DEFAULT_IMAGE_STYLE,
   IMAGE_STYLE_PRESETS,
@@ -80,18 +89,90 @@ export function ImageStylePicker({
 }
 
 /**
- * The global dream-image style control (`dreams.imageStyle`) — used by every dream image. (Your story uses
- * its OWN image style, set in the Story settings section, §3.8.)
+ * The PER-PERSON image preferences control for one use-type (Dreams or Your Story) — the on/off toggle,
+ * the style, and the free-text style direction (image-settings amendment). Backed by
+ * `people/<personId>/imagePrefs.enc` (via the store), so each household member's choice is their own and one
+ * person changing it never overwrites another's (the reported bug). The image MODEL + the OpenAI key stay
+ * owner-managed settings alongside this control. `defaultStyle` seeds the picker when unset.
  */
-export function ImageStyleControl(): JSX.Element {
-  const [stored, setStyle] = useSetting('dreams.imageStyle');
+export function ImagePrefsControl({
+  feature,
+  defaultStyle,
+  copy,
+}: {
+  feature: ImageFeature;
+  defaultStyle: string;
+  copy: string;
+}): JSX.Element {
+  const prefs = useImagePrefsStore((s) => s.prefs);
+  const loaded = useImagePrefsStore((s) => s.loaded);
+  const load = useImagePrefsStore((s) => s.load);
+  const setFeature = useImagePrefsStore((s) => s.setFeature);
+  useEffect(() => {
+    if (!loaded) void load();
+  }, [loaded, load]);
+
+  const fp = prefs?.[feature];
+  const enabled = fp?.enabled ?? false;
+
   return (
-    <Stack gap={2}>
-      <ImageStylePicker value={stored ?? DEFAULT_IMAGE_STYLE} onChange={setStyle} />
-      <Text size="sm" tone="secondary">
-        Used for your dream images. Your story has its own image style in Your Story → Story
-        settings.
-      </Text>
+    <Stack gap={3}>
+      <Stack gap={1}>
+        <Switch
+          checked={enabled}
+          onChange={(v) => void setFeature(feature, { enabled: v })}
+          aria-label="AI image generation"
+        />
+        <Text size="sm" tone="secondary">
+          {copy}
+        </Text>
+      </Stack>
+      {enabled ? (
+        <Stack gap={3}>
+          <Field label="Image style">
+            {() => (
+              <ImageStylePicker
+                value={fp?.style || defaultStyle}
+                onChange={(v) => void setFeature(feature, { style: v })}
+              />
+            )}
+          </Field>
+          <Field label="Style direction (optional)">
+            {(props) => (
+              <Textarea
+                {...props}
+                rows={3}
+                maxLength={300}
+                value={fp?.styleNotes ?? ''}
+                placeholder="muted earth tones, soft focus, golden-hour light…"
+                onChange={(e) => void setFeature(feature, { styleNotes: e.target.value })}
+              />
+            )}
+          </Field>
+        </Stack>
+      ) : null}
     </Stack>
+  );
+}
+
+/** Per-person DREAM image preferences (image-settings amendment). */
+export function DreamImagePrefsControl(): JSX.Element {
+  return (
+    <ImagePrefsControl
+      feature="dreams"
+      defaultStyle="dreamlike"
+      copy="When on, SelfOS can create AI images for your dreams. Generating sends a description (never anyone’s name or private notes) to OpenAI to draw the picture. This is your own setting — it doesn’t change anyone else’s."
+    />
+  );
+}
+
+/** Per-person YOUR STORY image preferences (image-settings amendment). */
+export function StoryImagePrefsControl(): JSX.Element {
+  return (
+    <ImagePrefsControl
+      feature="story"
+      defaultStyle="oil painting"
+      copy="When on, SelfOS can create your story’s cover and illustrations. Generating sends a description (never anyone’s name or private notes) to OpenAI. This is your own setting; a specific book can still override the style on its own page."
+    />
   );
 }

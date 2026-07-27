@@ -613,6 +613,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.dreamShareTargets, bridge.dreamShareTargets);
   handle(IpcChannels.dreamGetInsight, bridge.dreamGetInsight);
   handle(IpcChannels.dreamSetFactShare, bridge.dreamSetFactShare);
+  handle(IpcChannels.imagesGetPrefs, bridge.imagesGetPrefs);
+  handle(IpcChannels.imagesSetPrefs, bridge.imagesSetPrefs);
   // dreamGenerateImage streams compose→render phase progress via emitImageProgress (like story images).
   ipcMain.handle(IpcChannels.dreamGenerateImage, async (event, raw: unknown) => {
     imageSender = event.sender;

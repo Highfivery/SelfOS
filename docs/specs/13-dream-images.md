@@ -1054,3 +1054,53 @@ _Original (historical):_ The `DreamImagePanel` per-image **style picker** used t
 
 _All resolved (2026-06-12) — see §15.5. **Approved 2026-06-14** (package F of the app refresh); built on
 `feat/dream-image-style`._
+
+---
+
+## 16. 2026-07-26 amendment — image settings split PER USE-TYPE + made PER-PERSON
+
+> **Status: BUILT** (`feat/image-settings-per-person`). Owner-approved 2026-07-26 (AskUserQuestion). Fixes a
+> reported bug — image style was a single household vault value, so one member changing it overwrote another's
+> — and splits the settings by use-type. Amends §15 (dream image style) + [`64 §13.5`](64-your-story.md)
+> (story image style).
+
+### 16.1 The problem
+
+`dreams.imageStyle` / `imageStyleNotes` / `imageGenerationEnabled` were `scope: 'vault'` — a **single
+household-wide value** shared by every member, used for BOTH dream images and (as the fallback) story images.
+So a second member editing the style overwrote the first member's, and the "Images" settings section
+conflated the two use-types.
+
+### 16.2 The decisions (owner)
+
+1. **Split per use-type.** Dream image settings live in **Settings → Dreams**; story image settings get a new
+   **Settings → Your Story** section.
+2. **Style, style direction, and the on/off toggle are PER PERSON** for each use-type — each member sets their
+   own; changing yours never affects anyone else.
+3. **The image MODEL is an owner-set household default per use-type** (`dreams.imageModel`, `story.imageModel`)
+   — cost stays centrally controlled. The **OpenAI API key** stays owner/device-managed (one key powers both).
+
+### 16.3 The model
+
+- Per-person prefs at `people/<personId>/imagePrefs.enc` (`ImagePrefs = { dreams, story }`, each
+  `{ enabled, style, styleNotes }`), the per-person `guidance/prefs.enc` precedent. Read/written via
+  `images:getPrefs` / `images:setPrefs`, scoped to the ACTIVE person (a member edits only their own). No
+  migration: unset → sensible per-feature defaults (generation off).
+- `dreamGenerateImage` resolves consent/style/direction from the active person's `imagePrefs.dreams` +
+  `dreams.imageModel`; `storyGenerateImage` from `imagePrefs.story` + `story.imageModel` (a per-**book**
+  `BookConfig.imageStyle` override still wins, resolved in `generateStoryImage`).
+- Settings: the **Dreams** + **Your Story** sections are **member-visible** (each holds a per-person custom
+  control); the household bits inside (dream memory, the image models, the OpenAI key + test) are individually
+  `adminOnly`, so a non-admin sees only their own image controls. The old "Images" section is removed.
+
+### 16.4 Testing
+
+- **Core** — `imagePrefsService`: defaults, per-feature patch isolation, strict per-person isolation (one
+  person's change never touches another's), blank-style/long-notes handling.
+- **coreBridge** — a two-persona round-trip: the owner + a member each set a different style; each reads their
+  own, unaffected by the other.
+- **Renderer** — the per-person control (toggle → style picker + notes reveal, persists via `images:setPrefs`);
+  the Dreams/Your Story sections are member-visible while the model/key stay admin-only; the DreamImagePanel /
+  Story consent reads use the per-person prefs (a member can turn on their OWN dream images).
+- **E2E** — Settings → Dreams + Your Story: toggle on, pick a style + direction, decrypt each person's
+  `imagePrefs.enc`; the "Images" section is gone; 390px no-overflow.

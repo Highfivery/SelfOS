@@ -49,6 +49,7 @@ import { useAutoCheckinStore } from '../stores/autoCheckinStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { useDiscoveryStore } from '../stores/discoveryStore';
 import { togetherWaitingCount, useTogetherStore } from '../stores/togetherStore';
+import { useImagePrefsStore } from '../stores/imagePrefsStore';
 import { useNotificationSources } from './notifications/useNotificationSources';
 import { useUpdateChecks } from './notifications/useUpdateChecks';
 import { useMemoryReconcile } from './notifications/useMemoryReconcile';
@@ -168,6 +169,7 @@ export function AppShell(): JSX.Element {
     useNotificationStore.getState().reset(); // notifications are per-person, device-local (35 §4)
     useDiscoveryStore.getState().reset(); // orientation/tip dismissals are per-person, device-local (41 §4)
     useTogetherStore.getState().reset(); // Together sessions are per-person (58 §5.3)
+    useImagePrefsStore.getState().reset(); // image style/direction/toggle are per-person (image-settings amendment)
     useStoryStore.getState().reset(); // Your Story books are per-person (64 §5.7)
     useStoryMemoryStore.getState().reset(); // "Share a memory" chats are per-person (64 §14)
     void useNotificationStore.getState().load();

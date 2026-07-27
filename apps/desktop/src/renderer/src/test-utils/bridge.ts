@@ -813,6 +813,18 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     dreamShareTargets: () => Promise.resolve([]),
     dreamGetInsight: () => Promise.resolve(null),
     dreamSetFactShare: () => Promise.resolve({ ok: true }),
+    imagesGetPrefs: () =>
+      Promise.resolve({
+        schemaVersion: 1,
+        dreams: { enabled: false, style: 'dreamlike', styleNotes: '' },
+        story: { enabled: false, style: 'oil painting', styleNotes: '' },
+      }),
+    imagesSetPrefs: () =>
+      Promise.resolve({
+        schemaVersion: 1,
+        dreams: { enabled: false, style: 'dreamlike', styleNotes: '' },
+        story: { enabled: false, style: 'oil painting', styleNotes: '' },
+      }),
     dreamGenerateImage: () => Promise.resolve({ ok: true, mime: 'image/png' }),
     dreamGetImage: () => Promise.resolve(null),
     dreamDeleteImage: () => Promise.resolve(),

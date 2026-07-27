@@ -382,6 +382,39 @@ describe('QuestionnaireResults', () => {
     expect(insightsAnalyze).toHaveBeenCalledWith({ assignmentId: 'a1' });
   });
 
+  it('while one response is analyzing, the other Analyze buttons are disabled + read "unavailable" (§3.1)', async () => {
+    enableAi();
+    // A deferred analysis stays pending so the in-flight state is observable across cards.
+    let resolveAnalyze!: (v: { ok: true }) => void;
+    const insightsAnalyze = vi.fn(
+      () =>
+        new Promise<{ ok: true }>((res) => {
+          resolveAnalyze = res;
+        }),
+    );
+    installMockBridge({
+      ...aiReadyBridge,
+      assignmentsResults: () =>
+        Promise.resolve([
+          send({ assignmentId: 'a1', recipientName: 'Angel', privacy: 'private' }),
+          send({ assignmentId: 'a2', recipientName: 'Mara', privacy: 'private' }),
+        ]),
+      insightsAnalyze,
+    });
+    renderResults();
+    await expandRows();
+    const draw = await screen.findAllByRole('button', { name: /^Draw an insight/i });
+    expect(draw).toHaveLength(2);
+
+    // Start one — its promise never resolves. The active card shows "Drawing…"; the OTHER is disabled and
+    // reads "Analysis unavailable" (only one analysis runs at a time).
+    await userEvent.click(draw[0]!);
+    expect(screen.getByRole('button', { name: 'Drawing…' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Analysis unavailable' })).toBeDisabled();
+
+    resolveAnalyze({ ok: true });
+  });
+
   it('draws an insight from a private response, then links to Memory (§21.5)', async () => {
     enableAi();
     let analyzed = false;

@@ -462,6 +462,7 @@ export function Questionnaires(): JSX.Element {
                                   isDraft={e.isDraft}
                                   confirmingDelete={confirmDeleteId === q.id}
                                   analyzing={analyzingId === q.id}
+                                  analyzingOther={analyzingId !== null && analyzingId !== q.id}
                                   onOpen={() => setSelection({ mode: 'edit', id: q.id })}
                                   onToggleFavorite={() => void setFavorite(q.id, !q.favorite)}
                                   {...(e.sendState && !e.sendState.answered

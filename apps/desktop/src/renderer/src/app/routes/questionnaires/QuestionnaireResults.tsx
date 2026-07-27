@@ -167,6 +167,9 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
   const aiReady = aiEnabled === true && hasAiKey;
 
   const [analyzing, setAnalyzing] = useState<Record<string, boolean>>({});
+  // Only one analysis runs at a time (08 §3.1): while any response is analyzing, the other Analyze buttons
+  // are disabled and read "Analysis unavailable" so it's clear why they don't respond.
+  const anyAnalyzing = Object.values(analyzing).some(Boolean);
   const [messages, setMessages] = useState<
     Record<string, { tone: 'info' | 'warning'; text: string }>
   >({});
@@ -290,6 +293,7 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
                 aiReady={aiReady}
                 senderName={senderName}
                 analyzing={analyzing[send.assignmentId] === true}
+                busyElsewhere={anyAnalyzing && analyzing[send.assignmentId] !== true}
                 message={messages[send.assignmentId]}
                 onAnalyze={() => void runAnalyze(send.assignmentId)}
                 onDelete={() => void runDelete(send.assignmentId)}
@@ -336,6 +340,7 @@ function SendCard({
   aiReady,
   senderName,
   analyzing,
+  busyElsewhere,
   message,
   onAnalyze,
   onDelete,
@@ -345,11 +350,18 @@ function SendCard({
   aiReady: boolean;
   senderName: string;
   analyzing: boolean;
+  /** Another response on this Results page is being analyzed — only one runs at a time. */
+  busyElsewhere: boolean;
   message: { tone: 'info' | 'warning'; text: string } | undefined;
   onAnalyze: () => void;
   onDelete: () => void;
   onRevoke: () => void;
 }): JSX.Element {
+  // Analyze is disabled while THIS card is analyzing OR another card is; a busy-elsewhere button reads
+  // "Analysis unavailable" so it's clear it's paused rather than broken (08 §3.1).
+  const analyzeDisabled = analyzing || busyElsewhere;
+  const analyzeLabel = (idle: string, active: string): string =>
+    analyzing ? active : busyElsewhere ? 'Analysis unavailable' : idle;
   const navigate = useNavigate();
   const isSubmitted = send.status === 'submitted';
   const isOpen = OPEN_STATUSES.includes(send.status);
@@ -487,9 +499,13 @@ function SendCard({
                       <Text>Answers updated since your last insight — draw a fresh one.</Text>
                       {aiReady ? (
                         <div>
-                          <Button variant="secondary" onClick={onAnalyze} disabled={analyzing}>
+                          <Button
+                            variant="secondary"
+                            onClick={onAnalyze}
+                            disabled={analyzeDisabled}
+                          >
                             <Sparkles size={16} aria-hidden="true" />
-                            {analyzing ? 'Drawing…' : 'Draw a fresh insight'}
+                            {analyzeLabel('Draw a fresh insight', 'Drawing…')}
                           </Button>
                         </div>
                       ) : null}
@@ -512,9 +528,9 @@ function SendCard({
                   </div>
                 ) : aiReady ? (
                   <div>
-                    <Button variant="primary" onClick={onAnalyze} disabled={analyzing}>
+                    <Button variant="primary" onClick={onAnalyze} disabled={analyzeDisabled}>
                       <Sparkles size={16} aria-hidden="true" />
-                      {analyzing ? 'Drawing…' : 'Draw an insight'}
+                      {analyzeLabel('Draw an insight', 'Drawing…')}
                     </Button>
                   </div>
                 ) : null}
@@ -535,9 +551,9 @@ function SendCard({
                   </Text>
                   {aiReady ? (
                     <div>
-                      <Button variant="secondary" onClick={onAnalyze} disabled={analyzing}>
+                      <Button variant="secondary" onClick={onAnalyze} disabled={analyzeDisabled}>
                         <Sparkles size={16} aria-hidden="true" />
-                        {analyzing ? 'Analyzing…' : 'Re-analyze'}
+                        {analyzeLabel('Re-analyze', 'Analyzing…')}
                       </Button>
                     </div>
                   ) : null}
@@ -565,9 +581,9 @@ function SendCard({
             {/* STANDARD un-analyzed send: a secondary Analyze (its answers already show above). */}
             {isSubmitted && send.privacy === 'standard' && !send.analyzed && aiReady ? (
               <div>
-                <Button variant="secondary" onClick={onAnalyze} disabled={analyzing}>
+                <Button variant="secondary" onClick={onAnalyze} disabled={analyzeDisabled}>
                   <Sparkles size={16} aria-hidden="true" />
-                  {analyzing ? 'Analyzing…' : 'Analyze'}
+                  {analyzeLabel('Analyze', 'Analyzing…')}
                 </Button>
               </div>
             ) : null}

@@ -1602,6 +1602,69 @@ describe('Questionnaires', () => {
     expect(await screen.findByText(/Couldn’t analyze/)).toBeInTheDocument();
   });
 
+  it('while one questionnaire is analyzing, other Analyze buttons are disabled + read "unavailable" (§3.1)', async () => {
+    // A deferred analysis stays pending so we can observe the in-flight state across cards.
+    let resolveAnalyze!: (v: { ok: false; reason: 'NO_RESPONSE' }) => void;
+    const insightsAnalyze = vi.fn(
+      () =>
+        new Promise<{ ok: false; reason: 'NO_RESPONSE' }>((res) => {
+          resolveAnalyze = res;
+        }),
+    );
+    installMockBridge({
+      questionnairesList: () =>
+        Promise.resolve([sentDef('q1', 'Money talk'), sentDef('q2', 'Love languages')]),
+      questionnairesSendStates: () =>
+        Promise.resolve({
+          q1: { lastSentAt: '2026-06-10T00:00:00.000Z', total: 1 },
+          q2: { lastSentAt: '2026-06-09T00:00:00.000Z', total: 1 },
+        }),
+      questionnairesSentOverview: () =>
+        Promise.resolve({
+          q1: {
+            questionnaireId: 'q1',
+            lastSentAt: '2026-06-10T00:00:00.000Z',
+            recipients: [{ name: 'Angel', status: 'submitted', answered: true }],
+            answeredCount: 1,
+            newResponses: 1,
+            analyzed: false,
+            answeredAt: '2026-06-11T09:00:00.000Z',
+            analyzableAssignmentId: 'a1',
+          },
+          q2: {
+            questionnaireId: 'q2',
+            lastSentAt: '2026-06-09T00:00:00.000Z',
+            recipients: [{ name: 'Angel', status: 'submitted', answered: true }],
+            answeredCount: 1,
+            newResponses: 1,
+            analyzed: false,
+            answeredAt: '2026-06-10T09:00:00.000Z',
+            analyzableAssignmentId: 'a2',
+          },
+        }),
+      insightsAnalyze,
+    });
+    renderApp();
+
+    // Both cards start with a live Analyze affordance.
+    const analyzeButtons = await screen.findAllByRole('button', {
+      name: /Analyze to see the insight/,
+    });
+    expect(analyzeButtons).toHaveLength(2);
+
+    // Start analyzing one (its promise never resolves) — the active card shows "Analyzing…", the OTHER
+    // card's button is disabled and explains it's unavailable while one is running.
+    await userEvent.click(analyzeButtons[0]!);
+    expect(screen.getByRole('button', { name: 'Analyzing…' })).toBeInTheDocument();
+    const other = screen.getByRole('button', {
+      name: /Analysis unavailable — one is already running/,
+    });
+    expect(other).toBeDisabled();
+
+    // Clean up the pending promise so the store settles.
+    resolveAnalyze({ ok: false, reason: 'NO_RESPONSE' });
+  });
+
   it('the Insight excerpt renders rich text and "View in Memory" deep-links to the exact insight (§3.1)', async () => {
     installMockBridge({
       questionnairesList: () => Promise.resolve([sentDef('q2', 'Love languages')]),

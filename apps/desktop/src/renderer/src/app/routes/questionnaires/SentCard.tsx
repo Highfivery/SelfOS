@@ -63,6 +63,7 @@ export function SentCard({
   isDraft,
   confirmingDelete,
   analyzing,
+  analyzingOther,
   onOpen,
   onToggleFavorite,
   onShare,
@@ -78,6 +79,9 @@ export function SentCard({
   isDraft: boolean;
   confirmingDelete: boolean;
   analyzing?: boolean;
+  /** Another questionnaire on this page is currently being analyzed — only one runs at a time, so this
+   * card's Analyze action is unavailable until it finishes (08 §3.1). */
+  analyzingOther?: boolean;
   onOpen: () => void;
   onToggleFavorite: () => void;
   onShare?: () => void;
@@ -206,11 +210,20 @@ export function SentCard({
           <button
             type="button"
             className={styles.analyzeGo}
-            disabled={analyzing ?? false}
+            disabled={(analyzing ?? false) || (analyzingOther ?? false)}
+            title={
+              analyzingOther && !analyzing
+                ? 'Another questionnaire is being analyzed — wait for it to finish.'
+                : undefined
+            }
             onClick={() => onAnalyze(analyzable)}
           >
             <Sparkles size={13} aria-hidden="true" />
-            {analyzing ? 'Analyzing…' : 'Analyze to see the insight →'}
+            {analyzing
+              ? 'Analyzing…'
+              : analyzingOther
+                ? 'Analysis unavailable — one is already running'
+                : 'Analyze to see the insight →'}
           </button>
         </div>
       ) : null}

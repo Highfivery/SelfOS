@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.44.0](https://github.com/Highfivery/SelfOS/compare/v0.43.4...v0.44.0) (2026-07-27)
+
+
+### Features
+
+* **story:** a cast register — the book knows its people ([#328](https://github.com/Highfivery/SelfOS/issues/328)) ([3bd3a7b](https://github.com/Highfivery/SelfOS/commit/3bd3a7bf230c872a0610e05101c162adffd475ae))
+* **story:** a generic Sources appendix + PDF trim size & page numbers ([#293](https://github.com/Highfivery/SelfOS/issues/293)) ([#332](https://github.com/Highfivery/SelfOS/issues/332)) ([0d6b3e2](https://github.com/Highfivery/SelfOS/commit/0d6b3e20b5e653bac5f2fd39e1c8340f177cd46c))
+* **story:** a multi-book shelf switcher in the Studio header ([#299](https://github.com/Highfivery/SelfOS/issues/299)) ([#337](https://github.com/Highfivery/SelfOS/issues/337)) ([edb8119](https://github.com/Highfivery/SelfOS/commit/edb81197072f27ccd7eb6517376855d14359c465))
+* **story:** a people-in-your-book consent center + pseudonyms ([#290](https://github.com/Highfivery/SelfOS/issues/290)) ([#330](https://github.com/Highfivery/SelfOS/issues/330)) ([a46bd69](https://github.com/Highfivery/SelfOS/commit/a46bd69ad08024d663c56d9e05ae28029a34516d))
+* **story:** a title workshop — alternatives + a fresh essence without a rewrite ([#324](https://github.com/Highfivery/SelfOS/issues/324)) ([0dd01d0](https://github.com/Highfivery/SelfOS/commit/0dd01d0c8f0b3e51e941cd0e387e53cd404fa8b0))
+* **story:** corpus budgeting + per-chapter relevance slicing for generation ([#326](https://github.com/Highfivery/SelfOS/issues/326)) ([b5bb9d3](https://github.com/Highfivery/SelfOS/commit/b5bb9d3bb414d3d48c1d4ab4ed4c31fe2346d35f))
+* **story:** cross-chapter continuity checks + an opt-in line-edit ([#329](https://github.com/Highfivery/SelfOS/issues/329)) ([0241837](https://github.com/Highfivery/SelfOS/commit/024183707b9f12c1cbc2bea98a3b99369165276a))
+* **story:** export books to EPUB via a dependency-free ZIP writer ([#293](https://github.com/Highfivery/SelfOS/issues/293)) ([#333](https://github.com/Highfivery/SelfOS/issues/333)) ([91a7c85](https://github.com/Highfivery/SelfOS/commit/91a7c85776253a574ac6d87760c5e731d0ebd908))
+* **story:** export books to Word (.docx) via the shared ZIP writer ([#293](https://github.com/Highfivery/SelfOS/issues/293)) ([#334](https://github.com/Highfivery/SelfOS/issues/334)) ([f7a28d8](https://github.com/Highfivery/SelfOS/commit/f7a28d89cb5fd0e994c5678669b7843955fe592d))
+* **story:** manuscript metrics — how long the book is, and whether it's balanced ([#325](https://github.com/Highfivery/SelfOS/issues/325)) ([e909682](https://github.com/Highfivery/SelfOS/commit/e909682281467ba58fae89ea0ffc9985dbc8ae40))
+* **story:** publish lifecycle — publish-diff preview, unpublish + no silent shrink ([#300](https://github.com/Highfivery/SelfOS/issues/300)) ([#331](https://github.com/Highfivery/SelfOS/issues/331)) ([b03be5c](https://github.com/Highfivery/SelfOS/commit/b03be5c63673dbd2e746d8df5510dc9a7ebfe0b0))
+* **story:** quote mining — your own words, in your own book ([#327](https://github.com/Highfivery/SelfOS/issues/327)) ([06969f6](https://github.com/Highfivery/SelfOS/commit/06969f6976c767d6372ac88ce96b29115b712d30))
+* **story:** render the book cover at the 2:3 book trim, not a square ([#303](https://github.com/Highfivery/SelfOS/issues/303)) ([#335](https://github.com/Highfivery/SelfOS/issues/335)) ([1ef7eed](https://github.com/Highfivery/SelfOS/commit/1ef7eed05d61cc751e260b0faab1274d3c709c64))
+* **story:** run the living-book cadences app-wide + a biographer-checkin notification ([#298](https://github.com/Highfivery/SelfOS/issues/298)) ([#336](https://github.com/Highfivery/SelfOS/issues/336)) ([caf7130](https://github.com/Highfivery/SelfOS/commit/caf713071662216779d9aa17d702830b3c6bf094))
+* **story:** structured front & back matter — with an unremovable wellness line ([#323](https://github.com/Highfivery/SelfOS/issues/323)) ([26746e3](https://github.com/Highfivery/SelfOS/commit/26746e345682ab70998c654510e9a29cb690347d))
+* **story:** the author edits their own outline — no AI in the loop ([#321](https://github.com/Highfivery/SelfOS/issues/321)) ([27a373e](https://github.com/Highfivery/SelfOS/commit/27a373e360cbbcc3166bfbadae93c9c300d113f1))
+* **story:** the timeline stops being dead data — and what you fix stays fixed ([#322](https://github.com/Highfivery/SelfOS/issues/322)) ([cce2414](https://github.com/Highfivery/SelfOS/commit/cce24141c1c0052ee3462f5d312ed59028b203ba))
+
+
+### Bug Fixes
+
+* **story:** a memory outlives its book — book-independent /story/memories route ([#317](https://github.com/Highfivery/SelfOS/issues/317)) ([fbdef61](https://github.com/Highfivery/SelfOS/commit/fbdef61971ec4130b003ace004e826406f1a9088))
+* **story:** count only what feeds the book, and cite answers per questionnaire ([#319](https://github.com/Highfivery/SelfOS/issues/319)) ([836ca26](https://github.com/Highfivery/SelfOS/commit/836ca262d7705efeb089771f87ab75c92888c1e5))
+
 ## [0.43.4](https://github.com/Highfivery/SelfOS/compare/v0.43.3...v0.43.4) (2026-07-22)
 
 

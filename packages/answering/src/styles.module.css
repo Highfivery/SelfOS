@@ -1114,6 +1114,12 @@
   padding-top: var(--space-3);
   border-top: 1px dashed var(--color-border);
 }
+/* The secondary actions under a wizard question (Skip + "That's not right about me") stack quietly. */
+.wizardSecondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+}
 .skipBtn {
   border: none;
   background: none;

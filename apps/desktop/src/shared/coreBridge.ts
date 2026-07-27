@@ -115,6 +115,7 @@ import {
   type QuestionnaireAnalyzeResult,
   type QuestionnaireGenerateResult,
   type QuestionnaireImproveResult,
+  type FactCorrectionOutcome,
   type QuestionnaireSuggestResult,
   type SavedSuggestion,
   type SavedSuggestionsResult,
@@ -338,6 +339,7 @@ import {
   upsertPerson,
   upsertRelationship,
   verifyAccountPin,
+  ageFromBirthday,
 } from '@selfos/core/people';
 import {
   checkBudget,
@@ -652,6 +654,8 @@ import {
   getResponse,
   improveQuestion,
   sharpenQuestion,
+  resolveFactCorrection,
+  type KnownFact,
   isAllowedImageMime,
   isAnswerable,
   listAssignments,
@@ -1079,6 +1083,13 @@ const MarkCoveredSchema = z.object({
   recipientPersonId: z.string().min(1),
   note: z.string().min(1),
   sourcePrompt: z.string().optional(),
+});
+// A recipient flagging a wrong fact in a question they're answering (spec 08 wrong-fact amendment).
+const CorrectFactSchema = z.object({
+  assignmentId: z.string().min(1),
+  questionId: z.string().min(1),
+  questionPrompt: z.string().min(1),
+  correction: z.string().min(1).max(1000),
 });
 const SuggestSchema = z.object({ targetPersonId: z.string().min(1).optional() });
 // Recipient-first saved suggestions (08 §18.5) — a household recipient, validated in the bridge.
@@ -3999,6 +4010,102 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         new Date(),
       );
       return { ok: true };
+    },
+    // A recipient flags a wrong fact in a question they're answering (spec 08 wrong-fact amendment). Trace it
+    // to the recipient's OWN on-record facts (profile / onboarding / insight), auto-flag a wrong INSIGHT so it
+    // stops feeding future questions, and reword THIS question so they can answer the corrected version. The
+    // recipient is the subject (their own data), so all reads/writes are their own — recipient-scoped.
+    assignmentsCorrectFact: async (input): Promise<FactCorrectionOutcome> => {
+      const p = CorrectFactSchema.parse(input);
+      const scoped = await recipientAssignment(p.assignmentId);
+      if (!scoped) return { ok: false, reason: 'NO_PERMISSION', message: 'Not permitted.' };
+      const deps = await aiDeps('questionnaires.answer');
+      if (!deps) return { ok: false, reason: 'DENIED', message: 'AI is unavailable.' };
+      const { fs, key } = scoped;
+      const personId = deps.personId;
+      const now = new Date();
+
+      // The recipient's own on-record facts, numbered for the model to match the correction against.
+      const known: KnownFact[] = [];
+      const person = await getPerson(fs, key, personId);
+      if (person) {
+        if (person.birthday) {
+          const age = ageFromBirthday(person.birthday, now);
+          known.push({
+            source: 'profile',
+            label: 'your birthday',
+            text: age != null ? `age: ${age} (born ${person.birthday})` : `born ${person.birthday}`,
+          });
+        }
+        for (const [label, value] of [
+          ['occupation', person.occupation],
+          ['relationship status', person.relationshipStatus],
+          ['parental status', person.parentalStatus],
+          ['location', person.location],
+        ] as const) {
+          if (value)
+            known.push({ source: 'profile', label: `your ${label}`, text: `${label}: ${value}` });
+        }
+      }
+      // Only NON-flagged insight facts (a fact already flagged inaccurate no longer feeds generation).
+      const insights = await listInsightsForPerson(fs, key, personId);
+      for (const ins of insights) {
+        for (const f of ins.facts) {
+          if (f.flaggedInaccurate) continue;
+          known.push({
+            source: 'insight',
+            label: 'your Memory',
+            text: f.text,
+            insightId: ins.id,
+            factId: f.id,
+          });
+        }
+      }
+      // Onboarding is a single generic entry (the granular answers aren't listed here) — enough for the model
+      // to route "this came from my onboarding", which the renderer turns into a deep-link to fix it.
+      const session = await getIntakeSession(fs, key, personId);
+      if (session) {
+        known.push({
+          source: 'onboarding',
+          label: 'your onboarding answers',
+          text: 'something you told SelfOS during onboarding',
+        });
+      }
+
+      const res = await resolveFactCorrection(deps, {
+        questionPrompt: p.questionPrompt,
+        correction: p.correction,
+        knownFacts: known,
+      });
+      if (!res.ok || !res.rewrittenPrompt) {
+        return {
+          ok: false,
+          ...(res.reason ? { reason: res.reason } : {}),
+          ...(res.message ? { message: res.message } : {}),
+        };
+      }
+      // Auto-fix at source for an insight (safe + non-destructive); profile/onboarding are routed to the
+      // recipient to correct themselves (auto-editing structured data from free text is unreliable).
+      let insightFlagged = false;
+      if (res.matched?.source === 'insight' && res.matched.insightId && res.matched.factId) {
+        await flagInsightFact(
+          fs,
+          key,
+          personId,
+          res.matched.insightId,
+          res.matched.factId,
+          true,
+          now,
+        );
+        insightFlagged = true;
+      }
+      return {
+        ok: true,
+        rewrittenPrompt: res.rewrittenPrompt,
+        source: res.matched?.source ?? 'unknown',
+        ...(res.matched?.label ? { sourceLabel: res.matched.label } : {}),
+        insightFlagged,
+      };
     },
     gapfinderSuggest: async (input): Promise<QuestionnaireSuggestResult> => {
       const deps = await aiDeps();

@@ -574,6 +574,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.assignmentsReopen, bridge.assignmentsReopen);
   handle(IpcChannels.assignmentsSubmit, bridge.assignmentsSubmit);
   handle(IpcChannels.assignmentsDecline, bridge.assignmentsDecline);
+  handle(IpcChannels.assignmentsCorrectFact, bridge.assignmentsCorrectFact);
   handle(IpcChannels.assignmentsResults, bridge.assignmentsResults);
   handle(IpcChannels.assignmentsTrends, bridge.assignmentsTrends);
   handle(IpcChannels.assignmentsAggregate, bridge.assignmentsAggregate);

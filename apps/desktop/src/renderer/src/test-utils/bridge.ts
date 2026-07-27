@@ -574,6 +574,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     assignmentsReopen: () => Promise.resolve(),
     assignmentsSubmit: () => Promise.resolve(),
     assignmentsDecline: () => Promise.resolve(),
+    assignmentsCorrectFact: () =>
+      Promise.resolve({ ok: true, rewrittenPrompt: 'Corrected question?', source: 'unknown' }),
     assignmentsResults: () => Promise.resolve([]),
     assignmentsTrends: () => Promise.resolve([]),
     assignmentsAggregate: () => Promise.resolve({ questions: [] }),

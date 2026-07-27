@@ -4884,6 +4884,82 @@ test('answer review/edit (56): recipient reviews + edits + resends → Results g
   }
 });
 
+test('inbox: “That’s not right about me” flags the wrong insight + rewords the question in place (wrong-fact amendment)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('wrong-fact e2e: master key missing');
+
+  // An insight carrying the wrong fact about the owner (the recipient).
+  await saveInsight(fs, key, {
+    id: 'i-age',
+    schemaVersion: 1,
+    source: 'session',
+    subjectPersonId: 'owner-1',
+    summary: 'about them',
+    facts: [{ id: 'f-age', text: 'They turned 39 last May', shareable: false }],
+    confidence: 'medium',
+    categories: [],
+    approved: true,
+    provenance: { at: new Date().toISOString() },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  // A self-send whose question states the wrong fact.
+  const q = await saveQuestionnaire(
+    fs,
+    key,
+    {
+      title: 'Birthday check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: 'owner-1' },
+      questions: [
+        { id: 'qq1', type: 'shortText', prompt: 'How did turning 39 feel?', required: false },
+      ],
+    },
+    'owner-1',
+  );
+  await createAssignment(fs, key, {
+    questionnaireId: q.id,
+    senderPersonId: 'owner-1',
+    recipient: { kind: 'person', personId: 'owner-1' },
+    channel: 'inApp',
+    privacy: 'standard',
+    senderVisibleToRecipient: true,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    await w.getByRole('button', { name: /Birthday check-in/ }).click();
+    await expect(w.getByText('How did turning 39 feel?')).toBeVisible();
+
+    // Flag the wrong fact → describe it → Fix it.
+    await w.getByRole('button', { name: /That’s not right about me/ }).click();
+    await w.getByLabel(/what’s wrong about this question/i).fill('I turned 41 last May, not 39.');
+    await w.getByRole('button', { name: 'Fix it' }).click();
+
+    // The question is reworded in place, and the outcome confirms the wrong insight was flagged.
+    await expect(w.getByText('How did turning 41 feel?')).toBeVisible();
+    await expect(w.getByText(/flagged that in your Memory/i)).toBeVisible();
+
+    // Decrypt: the wrong insight fact is now flagged inaccurate → it stops feeding future questions/context.
+    await expect
+      .poll(async () => {
+        const insights = await listInsightsForPerson(fs, key, 'owner-1');
+        return insights[0]?.facts[0]?.flaggedInaccurate;
+      })
+      .toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('questionnaires: a questionnaire sent TO you is in your Inbox, NOT your edit list (author-scoped)', async () => {
   const { userData, vault } = await seedReadyVault();
   const fs = createNodeFileSystem(vault);

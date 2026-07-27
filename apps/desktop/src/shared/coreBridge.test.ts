@@ -2038,6 +2038,83 @@ describe('createCoreBridge', () => {
     expect(await bridge.gapfinderSuggest({})).toMatchObject({ ok: false, reason: 'DENIED' });
   });
 
+  it('corrects a wrong fact (wrong-fact amendment): flags the matched INSIGHT + rewords the question; recipient-scoped', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const ctx = (await host.host.vaultAndKey())!;
+    // The recipient's own insight carrying the wrong fact.
+    await saveInsight(ctx.fs, ctx.key, {
+      id: 'i1',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: ownerId,
+      summary: 'about them',
+      facts: [{ id: 'f1', text: 'They turned 39 last May', shareable: false }],
+      confidence: 'medium',
+      categories: [],
+      approved: true,
+      provenance: { at: new Date().toISOString() },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    // A self-send so the active person (owner) is the recipient.
+    const q = await bridge.questionnairesSave({
+      title: 'Check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: ownerId },
+      questions: [
+        { id: 'q1', type: 'shortText', prompt: 'How did turning 39 feel?', required: false },
+      ],
+    });
+    const { assignment } = await bridge.assignmentsCreate({ questionnaireId: q.id });
+
+    // The model matches the insight (the only fact on record for a bare owner → index 1) + rewords.
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (_o, onDelta) => {
+        const text = JSON.stringify({
+          matchedIndex: 1,
+          rewrittenPrompt: 'How did turning 41 feel?',
+        });
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    const res = await bridge.assignmentsCorrectFact({
+      assignmentId: assignment.id,
+      questionId: 'q1',
+      questionPrompt: 'How did turning 39 feel?',
+      correction: 'I turned 41, not 39.',
+    });
+    expect(res).toMatchObject({
+      ok: true,
+      rewrittenPrompt: 'How did turning 41 feel?',
+      source: 'insight',
+      insightFlagged: true,
+    });
+    // The wrong insight fact is now flagged inaccurate → it stops feeding future questions/context.
+    const insights = await listInsightsForPerson(ctx.fs, ctx.key, ownerId);
+    expect(insights[0]?.facts[0]?.flaggedInaccurate).toBe(true);
+
+    // Recipient-scoped: a different active person (not the recipient) can't correct this assignment.
+    const other = await bridge.peopleSave({ displayName: 'Sam', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: other.id, roleId: 'member', pin: null });
+    await bridge.sessionSetActive({ personId: other.id });
+    expect(
+      await bridge.assignmentsCorrectFact({
+        assignmentId: assignment.id,
+        questionId: 'q1',
+        questionPrompt: 'How did turning 39 feel?',
+        correction: 'nope',
+      }),
+    ).toMatchObject({ ok: false, reason: 'NO_PERMISSION' });
+  });
+
   it('feeds the bound recipient’s history into generation but never returns it to the renderer (§17.4)', async () => {
     const { host, bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

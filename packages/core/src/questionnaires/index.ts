@@ -16,6 +16,7 @@ export * from './imageGc';
 export * from './contextProviders';
 export * from './recipientHistory';
 export * from './generationService';
+export * from './factCorrectionService';
 export * from './selfContained';
 export * from './gapFinderService';
 export * from './suggestionStore';

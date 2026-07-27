@@ -3903,3 +3903,58 @@ visible, never mistaken for "nothing was duplicated."
 - **Renderer** — the two per-question actions call the right store methods; the degraded note renders.
 - **E2E** — mark a generated question "already answered" → it's replaced AND a decrypt asserts the covered
   topic persisted; the too-vague action sharpens in place.
+
+---
+
+## 29. 2026-07-26 amendment — "That's not right about me": correct a wrong fact in a question
+
+> **Status: BUILT** (`feat/questionnaire-wrong-fact-correction`). Owner-approved 2026-07-26 (AskUserQuestion:
+> "fix the source + reword this question for me" + "best-effort AI tracing with a safe fallback"). Sits beside
+> the per-question skip (§25.5) — a distinct affordance for "the premise is wrong, fix it so I can answer",
+> not "I won't answer". Amends §3.3 (answering). Inbox (household recipient) only.
+
+### 29.1 The problem
+
+A generated question sometimes states a wrong fact about the recipient — e.g. "you turned 39 last May" when
+they're 41. The recipient could only skip it; there was no way to correct the wrong fact so it stops recurring.
+
+### 29.2 The flow
+
+On each wizard question (Inbox only — the external relay page has no access to the household's data, so it
+never shows this), a **"That's not right about me"** affordance opens a panel: the recipient says what's wrong
+in their own words. On submit, the app:
+
+1. **Traces the wrong fact to its source** — a best-effort AI classification (`resolveFactCorrection`) against
+   the recipient's OWN on-record facts (profile fields incl. birthday→age, insight facts, an onboarding
+   marker). Returns the matched record + a reworded question.
+2. **Fixes it at the source, safely by kind:**
+   - a wrong **insight** fact → **auto-flagged inaccurate** (`flagInsightFact`) — non-destructive, and it
+     stops feeding future questions/context immediately.
+   - a **profile** / **onboarding** fact → **routed** to the recipient to update it themselves (a deep-link to
+     People / Onboarding). Auto-editing structured data (a birthday) from free text is unreliable, so it's a
+     guided fix, never a silent edit.
+   - **unknown** (the classifier didn't confidently match) → the recipient picks where to fix it
+     (Profile / Onboarding / Memory) — the safe fallback.
+3. **Rewords THIS question** — the reworded prompt is applied to the recipient's LOCAL view so they can answer
+   the corrected version. The sender's stored question is unchanged (no integrity issue); only the recipient's
+   answer (against the original question id) is stored.
+
+### 29.3 Scope, safety & honesty
+
+- Recipient-scoped: the recipient IS the subject, so every read/write (insight flag, profile, onboarding) is
+  their OWN data. The bridge re-checks the active person is the assignment's recipient (`recipientAssignment`).
+- The AI source-classification is **best-effort** and can't be quality-verified offline (per the "never ship an
+  unverified model fix" rule); the offline fake exercises the wiring, and the `unknown` fallback means a wrong
+  or low-confidence classification never mis-edits data — it just asks the recipient where to fix it. Live
+  tuning of `CORRECTION_SYSTEM` is a noted follow-up.
+
+### 29.4 Testing
+
+- **Core** `resolveFactCorrection` — rewrites + maps the matched index to its source record; index 0 → no match
+  (fallback); an unparseable reply → honest failure.
+- **coreBridge** — an insight-sourced correction flags the fact + rewords; recipient-scoped (a non-recipient →
+  `NO_PERMISSION`).
+- **Renderer** — the affordance opens the panel; "Fix it" rewords the question in place + shows the outcome
+  (insight flagged / route to source).
+- **E2E** — a household recipient flags a wrong fact → the question is reworded in place → a decrypt asserts the
+  wrong insight fact is flagged inaccurate.

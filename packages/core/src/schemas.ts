@@ -2259,6 +2259,29 @@ export const DreamImageDescriptorSchema = z.object({
 });
 export type DreamImageDescriptor = z.infer<typeof DreamImageDescriptorSchema>;
 
+/**
+ * Per-person, per-feature image preferences (13 §16 / spec 08 image-settings amendment). Style, direction,
+ * and the on/off toggle are PER PERSON so one household member's choice never overwrites another's (the
+ * reported bug). The image MODEL + the OpenAI key stay household/device (owner-managed) and live in the
+ * settings registry, not here. Stored at `people/<personId>/imagePrefs.enc`.
+ */
+export const FeatureImagePrefsSchema = z.object({
+  enabled: z.boolean(),
+  style: z.string().min(1),
+  styleNotes: z.string().max(300),
+});
+export type FeatureImagePrefs = z.infer<typeof FeatureImagePrefsSchema>;
+
+export const ImagePrefsSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  dreams: FeatureImagePrefsSchema,
+  story: FeatureImagePrefsSchema,
+});
+export type ImagePrefs = z.infer<typeof ImagePrefsSchema>;
+
+/** The two use-types image settings split by (spec 08 image-settings amendment). */
+export type ImageFeature = 'dreams' | 'story';
+
 export const DreamSchema = z.object({
   id: z.string().min(1),
   schemaVersion: z.number().int().positive(),

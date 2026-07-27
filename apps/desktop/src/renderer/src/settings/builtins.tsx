@@ -13,7 +13,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { registerSection, registerSettings } from './registry';
-import { ImageStyleControl } from './ImageStyleControl';
+import { DreamImagePrefsControl, StoryImagePrefsControl } from './ImageStyleControl';
 import { DevicesControl } from './DevicesControl';
 import { defineSetting } from './types';
 import {
@@ -39,7 +39,6 @@ import {
   RelayMessagesSchema,
   type RelayMessages,
 } from '../app/routes/questionnaires/relayMessages';
-import { DEFAULT_IMAGE_STYLE } from '../app/routes/dreams/imageStyles';
 
 declare module './types' {
   interface SettingsTypeMap {
@@ -59,10 +58,12 @@ declare module './types' {
     'questionnaires.defaultMessages': RelayMessages;
     'questionnaires.intimacyTopics': null;
     'dreams.memoryEnabled': boolean;
-    'dreams.imageGenerationEnabled': boolean;
+    // Per-person image style/direction/toggle live in `people/<id>/imagePrefs.enc` (a custom control owns
+    // its state via IPC), split per use-type; only the MODEL stays an owner-managed vault setting.
+    'dreams.imagePrefs': null;
     'dreams.imageModel': 'gpt-image-2' | 'gpt-image-1';
-    'dreams.imageStyle': string; // a free string — an IMAGE_STYLE_PRESETS value, growable without migration
-    'dreams.imageStyleNotes': string;
+    'story.imagePrefs': null;
+    'story.imageModel': 'gpt-image-2' | 'gpt-image-1';
     'updates.autoCheck': boolean;
     // The immersive Your Story reader's text-size scale (§13.5) — a reader-local control (the aA button),
     // persisted device-locally. Hidden from the Settings screen (it lives in the reader, not Settings).
@@ -72,10 +73,6 @@ declare module './types' {
 
 const aiEnabled = (values: Readonly<Record<string, unknown>>): boolean =>
   values['ai.enabled'] === true;
-
-/** Dream-image config (model / style / OpenAI key) only appears once the consent toggle is on. */
-const dreamImagesEnabled = (values: Readonly<Record<string, unknown>>): boolean =>
-  values['dreams.imageGenerationEnabled'] === true;
 
 let registered = false;
 
@@ -132,23 +129,24 @@ export function registerBuiltinSettings(): void {
     order: 4,
     adminOnly: true,
   });
+  // Not adminOnly: it holds each person's OWN dream-image preferences (style/direction/toggle), which any
+  // member sets for themselves. The household settings inside it (dream memory, image model, OpenAI key) are
+  // individually adminOnly, so a non-admin sees only their personal controls.
   registerSection({
     id: 'dreams',
     title: 'Dreams',
-    description: 'Your dream journal and how it informs your coaching.',
+    description: 'Your dream journal, how it informs your coaching, and your dream-image style.',
     icon: Moon,
     order: 5,
-    adminOnly: true,
   });
-  // Images is the single home for AI image generation — one consent switch, one key, and ONE style used by
-  // every image on every page (dream images + your story's cover and illustrations), so they all match.
+  // Your Story image settings (image-settings amendment): split out from Dreams, per use-type. Not adminOnly
+  // — the style/direction/toggle are each person's own; only the story image MODEL is adminOnly.
   registerSection({
-    id: 'images',
-    title: 'Images',
-    description: 'AI image generation and the single style used for every image across SelfOS.',
+    id: 'story',
+    title: 'Your Story',
+    description: 'How your story’s cover and illustrations are generated.',
     icon: Image,
     order: 5.5,
-    adminOnly: true,
   });
   registerSection({
     id: 'relay',
@@ -428,26 +426,28 @@ export function registerBuiltinSettings(): void {
       schema: z.boolean(),
       default: true,
       control: { type: 'switch' },
+      // A household vault setting — kept admin-only now that the Dreams section is member-visible (so a
+      // member sees only their own per-person image controls, not this household toggle).
       scope: 'vault',
+      adminOnly: true,
       order: 1,
     }),
+    // Per-person dream-image preferences (image-settings amendment) — the toggle + style + direction, YOUR
+    // own (a custom control backed by imagePrefs, not a household setting). Non-admin: every member sets it.
     defineSetting({
-      key: 'dreams.imageGenerationEnabled',
-      section: 'images',
-      label: 'AI image generation',
-      description:
-        'When on, SelfOS can create AI images — dream images and your story’s cover and illustrations. Generating sends a description (never anyone’s name or private notes) to OpenAI, a third party, to draw the picture. Off by default.',
-      schema: z.boolean(),
-      default: false,
-      control: { type: 'switch' },
-      scope: 'vault',
-      order: 1,
+      key: 'dreams.imagePrefs',
+      section: 'dreams',
+      label: 'Dream images',
+      schema: z.null(),
+      default: null,
+      control: { type: 'custom', render: DreamImagePrefsControl },
+      order: 2,
     }),
     defineSetting({
       key: 'dreams.imageModel',
-      section: 'images',
+      section: 'dreams',
       label: 'Image model',
-      description: 'Which OpenAI model draws the image.',
+      description: 'Which OpenAI model draws dream images (a household setting).',
       schema: z.enum(['gpt-image-2', 'gpt-image-1']),
       default: 'gpt-image-2',
       control: {
@@ -459,63 +459,61 @@ export function registerBuiltinSettings(): void {
       },
       scope: 'vault',
       adminOnly: true,
-      order: 4,
-      visibleWhen: dreamImagesEnabled,
-    }),
-    defineSetting({
-      key: 'dreams.imageStyle',
-      section: 'images',
-      label: 'Image style',
-      description:
-        'Pick a preset or choose Custom to enter your own. Used for every AI image across SelfOS.',
-      schema: z.string().min(1),
-      default: DEFAULT_IMAGE_STYLE,
-      control: { type: 'custom', render: ImageStyleControl },
-      scope: 'vault',
-      order: 2,
-      visibleWhen: dreamImagesEnabled,
-    }),
-    defineSetting({
-      key: 'dreams.imageStyleNotes',
-      section: 'images',
-      label: 'Style direction (optional)',
-      description:
-        'Refine the look in your own words — e.g. “muted earth tones, soft focus, golden-hour light.” Applied to every AI image on top of the style above. It never adds anyone’s name or private details.',
-      schema: z.string().max(300),
-      default: '',
-      control: {
-        type: 'textarea',
-        rows: 3,
-        maxLength: 300,
-        placeholder: 'muted earth tones, soft focus, golden-hour light…',
-      },
-      scope: 'vault',
       order: 3,
-      visibleWhen: dreamImagesEnabled,
     }),
     defineSetting({
       key: 'dreams.imageApiKey',
-      section: 'images',
+      section: 'dreams',
       label: 'OpenAI API key',
+      description: 'One key powers image generation for dreams and your story.',
       schema: z.null(),
       default: null,
       control: { type: 'custom', render: OpenAiKeyControl },
       adminOnly: true,
       // Device-local secret (00 §6.2) — never synced, like the Claude key above.
       scope: 'device',
-      order: 5,
-      visibleWhen: dreamImagesEnabled,
+      order: 4,
     }),
     defineSetting({
       key: 'dreams.imageTest',
-      section: 'images',
+      section: 'dreams',
       label: 'OpenAI connection',
       schema: z.null(),
       default: null,
       control: { type: 'custom', render: OpenAiTestConnectionControl },
+      adminOnly: true,
       scope: 'device',
-      order: 6,
-      visibleWhen: dreamImagesEnabled,
+      order: 5,
+    }),
+    // Your Story image settings (image-settings amendment) — a separate section. Per-person style/direction/
+    // toggle (custom control) + an owner-managed story image model. The OpenAI key is shared (set in Dreams).
+    defineSetting({
+      key: 'story.imagePrefs',
+      section: 'story',
+      label: 'Story images',
+      schema: z.null(),
+      default: null,
+      control: { type: 'custom', render: StoryImagePrefsControl },
+      order: 1,
+    }),
+    defineSetting({
+      key: 'story.imageModel',
+      section: 'story',
+      label: 'Image model',
+      description:
+        'Which OpenAI model draws your story’s cover + illustrations (a household setting).',
+      schema: z.enum(['gpt-image-2', 'gpt-image-1']),
+      default: 'gpt-image-2',
+      control: {
+        type: 'select',
+        options: [
+          { value: 'gpt-image-2', label: 'GPT Image 2 — newest' },
+          { value: 'gpt-image-1', label: 'GPT Image 1' },
+        ],
+      },
+      scope: 'vault',
+      adminOnly: true,
+      order: 2,
     }),
     defineSetting({
       key: 'relay.connection',

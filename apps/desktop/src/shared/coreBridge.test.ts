@@ -5230,6 +5230,32 @@ describe('createCoreBridge', () => {
     expect((await bridge.dreamGetAnalysis(dream.id))?.insightId).toBeUndefined();
   });
 
+  it('image prefs are PER PERSON — a member editing theirs never overwrites the owner (image-settings amendment)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    // The owner sets their own dream image style.
+    await bridge.imagesSetPrefs({ feature: 'dreams', patch: { enabled: true, style: 'ukiyo-e' } });
+
+    // A member sets a DIFFERENT style for themselves.
+    const member = await bridge.peopleSave({ displayName: 'Sam', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    await bridge.sessionSetActive({ personId: member.id });
+    await bridge.imagesSetPrefs({
+      feature: 'dreams',
+      patch: { enabled: false, style: 'watercolor' },
+    });
+    expect((await bridge.imagesGetPrefs())?.dreams).toMatchObject({
+      enabled: false,
+      style: 'watercolor',
+    });
+
+    // Back to the owner (returning to the owner needs their PIN) — their choice is intact.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    expect((await bridge.imagesGetPrefs())?.dreams).toMatchObject({
+      enabled: true,
+      style: 'ukiyo-e',
+    });
+  });
+
   it('generates → reads → deletes a dream image, gated by consent + key + dreams.generateImage', async () => {
     const { bridge } = await freshOwner();
     const dream = await bridge.dreamSave({
@@ -5246,7 +5272,7 @@ describe('createCoreBridge', () => {
       ok: false,
       reason: 'NO_CONSENT',
     });
-    await bridge.setSetting({ key: 'dreams.imageGenerationEnabled', value: true, scope: 'vault' });
+    await bridge.imagesSetPrefs({ feature: 'dreams', patch: { enabled: true } });
 
     // Consent on but no OpenAI key → refused.
     expect(await bridge.dreamGenerateImage({ dreamId: dream.id })).toMatchObject({
@@ -5274,7 +5300,7 @@ describe('createCoreBridge', () => {
 
   it('keeps a generated image (and its sharing) when the dream is edited', async () => {
     const { bridge, ownerId } = await freshOwner();
-    await bridge.setSetting({ key: 'dreams.imageGenerationEnabled', value: true, scope: 'vault' });
+    await bridge.imagesSetPrefs({ feature: 'dreams', patch: { enabled: true } });
     await bridge.secretSet({ id: OPENAI_API_KEY_ID, value: 'sk-openai' });
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-ant' });
 
@@ -5325,7 +5351,7 @@ describe('createCoreBridge', () => {
 
   it('exports an image, shares it with a related person, and the recipient reads it in "Shared with you"', async () => {
     const { bridge, ownerId } = await freshOwner();
-    await bridge.setSetting({ key: 'dreams.imageGenerationEnabled', value: true, scope: 'vault' });
+    await bridge.imagesSetPrefs({ feature: 'dreams', patch: { enabled: true } });
     await bridge.secretSet({ id: OPENAI_API_KEY_ID, value: 'sk-openai' });
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-ant' });
 
@@ -8888,8 +8914,8 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(off.ok === false && off.reason).toBe('NO_CONSENT');
     expect(await bridge.storyImages({ bookId })).toEqual([]);
 
-    // Turn on the ONE shared image consent + the OpenAI key → a cover generates + is indexed + served.
-    await bridge.setSetting({ key: 'dreams.imageGenerationEnabled', value: true, scope: 'vault' });
+    // Turn on this person's Story image consent + the OpenAI key → a cover generates + is indexed + served.
+    await bridge.imagesSetPrefs({ feature: 'story', patch: { enabled: true } });
     await bridge.secretSet({ id: OPENAI_API_KEY_ID, value: 'sk-openai' });
     host.imageProgress.length = 0; // ignore the consent-off call's terminal event
     const made = await bridge.storyGenerateImage({ bookId, target: { kind: 'cover' } });
@@ -9043,7 +9069,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.secretSet({ id: OPENAI_API_KEY_ID, value: 'sk-openai' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    await bridge.setSetting({ key: 'dreams.imageGenerationEnabled', value: true, scope: 'vault' });
+    await bridge.imagesSetPrefs({ feature: 'story', patch: { enabled: true } });
     const saved: { name: string; bytes: Uint8Array }[] = [];
     host.host.saveImageFile = (name, bytes) => {
       saved.push({ name, bytes });

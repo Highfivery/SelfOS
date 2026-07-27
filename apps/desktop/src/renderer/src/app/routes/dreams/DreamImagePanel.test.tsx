@@ -7,7 +7,20 @@ import { DEFAULT_ROLES } from '@shared/capabilities';
 import { DreamImagePanel } from './DreamImagePanel';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
+import { useImagePrefsStore } from '../../../stores/imagePrefsStore';
 import { clearMockBridge, elevateToOwner, installMockBridge } from '../../../test-utils/bridge';
+
+/** Seed the active person's per-feature image consent (image-settings amendment). */
+function setImageConsent(dreams: boolean): void {
+  useImagePrefsStore.setState({
+    prefs: {
+      schemaVersion: 1,
+      dreams: { enabled: dreams, style: 'dreamlike', styleNotes: '' },
+      story: { enabled: false, style: 'oil painting', styleNotes: '' },
+    },
+    loaded: true,
+  });
+}
 
 const dream: Dream = {
   id: 'd1',
@@ -28,22 +41,15 @@ const dream: Dream = {
 afterEach(() => {
   clearMockBridge();
   useSessionStore.setState({ activePerson: null, access: null });
-  useSettingsStore.setState((s) => ({
-    values: {
-      ...s.values,
-      'ai.enabled': false,
-      'dreams.imageGenerationEnabled': false,
-      'dreams.imageStyle': 'dreamlike',
-    },
-  }));
+  useSettingsStore.setState((s) => ({ values: { ...s.values, 'ai.enabled': false } }));
+  useImagePrefsStore.setState({ prefs: null, loaded: false });
 });
 
 /** The Owner has every capability (dreams.generateImage + budgets.manage); set the gate settings. */
 function enable({ consent = true, ai = true }: { consent?: boolean; ai?: boolean } = {}): void {
   elevateToOwner();
-  useSettingsStore.setState((s) => ({
-    values: { ...s.values, 'ai.enabled': ai, 'dreams.imageGenerationEnabled': consent },
-  }));
+  useSettingsStore.setState((s) => ({ values: { ...s.values, 'ai.enabled': ai } }));
+  setImageConsent(consent);
 }
 
 function renderPanel(d: Dream = dream): void {
@@ -88,9 +94,7 @@ describe('DreamImagePanel', () => {
         }),
     });
     renderPanel();
-    expect(
-      await screen.findByText(/turn on dream-image generation in settings/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/turn on dream images in settings/i)).toBeInTheDocument();
   });
 
   it('shows a calm AI-off state when AI is disabled', async () => {
@@ -116,8 +120,7 @@ describe('DreamImagePanel', () => {
     expect(await screen.findByText(/add your openai key in settings/i)).toBeInTheDocument();
   });
 
-  it('tells a member to ask the owner when dream images are not set up (no Settings path)', async () => {
-    // A member can own/generate dream images but cannot reach the owner-only Dreams settings.
+  function asMember(): void {
     useSessionStore.setState({
       activePerson: {
         id: 'm1',
@@ -133,16 +136,30 @@ describe('DreamImagePanel', () => {
         accounts: [{ personId: 'm1', roleId: 'member', hasPin: false }],
       },
     });
-    // Consent off — the member can't turn it on, so they're pointed at the owner.
-    useSettingsStore.setState((s) => ({
-      values: { ...s.values, 'ai.enabled': true, 'dreams.imageGenerationEnabled': false },
-    }));
-    installMockBridge({ secretHas: () => Promise.resolve(true) });
+  }
+
+  it('tells a member to ask the owner when the OpenAI KEY is missing (the key is owner-managed)', async () => {
+    // A member can own/generate dream images + turn on their own consent, but the OpenAI key is
+    // owner-managed — so a missing key still points them at the owner (no dead Settings button).
+    asMember();
+    useSettingsStore.setState((s) => ({ values: { ...s.values, 'ai.enabled': true } }));
+    setImageConsent(true); // their per-person consent is ON; only the key is missing
+    installMockBridge({ secretHas: () => Promise.resolve(false) });
     renderPanel();
     expect(
       await screen.findByText(/ask the person who set up this household/i),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /open settings/i })).not.toBeInTheDocument();
+  });
+
+  it('lets a MEMBER open Settings to turn on their own per-person dream images (image-settings amendment)', async () => {
+    asMember();
+    useSettingsStore.setState((s) => ({ values: { ...s.values, 'ai.enabled': true } }));
+    setImageConsent(false); // consent off → the member CAN enable it themselves (per-person)
+    installMockBridge({ secretHas: () => Promise.resolve(true) });
+    renderPanel();
+    expect(await screen.findByText(/turn on dream images in settings/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /open settings/i })).toBeInTheDocument();
   });
 
   it('shows a calm "no image yet" entry state, distinct from an error', async () => {

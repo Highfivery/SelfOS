@@ -27,6 +27,7 @@ import { useSessionStore } from '../../../stores/sessionStore';
 import { useInsightStore } from '../../../stores/insightStore';
 import { clearMockBridge, elevateToOwner, installMockBridge } from '../../../test-utils/bridge';
 import { useSettingsStore } from '../../../settings/settingsStore';
+import { useImagePrefsStore } from '../../../stores/imagePrefsStore';
 
 const ACTIVE_PERSON = {
   id: 'me',
@@ -230,15 +231,21 @@ afterEach(() => {
   useStoryMemoryStore.getState().reset(); // "Share a memory" (§14) — per-person chat + collection state
   useInsightStore.getState().reset(); // the Studio's crisis-quiet read loads it (§13.4)
   useSessionStore.setState({ activePerson: null, access: null });
-  useSettingsStore.setState((s) => ({
-    values: {
-      ...s.values,
-      'ai.enabled': false,
-      'dreams.imageGenerationEnabled': false,
-      'dreams.imageStyle': 'oil painting',
-    },
-  }));
+  useSettingsStore.setState((s) => ({ values: { ...s.values, 'ai.enabled': false } }));
+  useImagePrefsStore.setState({ prefs: null, loaded: false });
 });
+
+/** Seed the active person's per-person Story image consent (image-settings amendment). */
+function setStoryImageConsent(enabled: boolean): void {
+  useImagePrefsStore.setState({
+    prefs: {
+      schemaVersion: 1,
+      dreams: { enabled: false, style: 'dreamlike', styleNotes: '' },
+      story: { enabled, style: 'oil painting', styleNotes: '' },
+    },
+    loaded: true,
+  });
+}
 
 describe('Story (64)', () => {
   it('shows the invitation empty state with a Begin your book action', async () => {
@@ -3065,9 +3072,8 @@ describe('Story (64)', () => {
 
   it('creates a book cover behind the shared image consent + OpenAI key (§3.8)', async () => {
     elevateToOwner(); // budgets.manage → the cost figure shows; settings.manage → the setup path is theirs
-    useSettingsStore.setState((s) => ({
-      values: { ...s.values, 'ai.enabled': true, 'dreams.imageGenerationEnabled': true },
-    }));
+    useSettingsStore.setState((s) => ({ values: { ...s.values, 'ai.enabled': true } }));
+    setStoryImageConsent(true); // this author's per-person Story image consent is on
     const storyGenerateImage = vi.fn(() =>
       Promise.resolve({
         ok: true as const,

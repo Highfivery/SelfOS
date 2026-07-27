@@ -65,14 +65,18 @@ describe('SettingsScreen', () => {
   it('hides the owner-only sections from non-admins and shows them to admins', async () => {
     installMockBridge();
     const { rerender } = render(<SettingsScreen />);
-    // Non-admin: the household-wide sections are absent entirely; only Appearance/Vault/About show.
-    for (const name of ['AI', 'Sessions', 'Questionnaires', 'Dreams', 'Relay', 'Devices']) {
+    // Non-admin: the household-wide sections are absent entirely.
+    for (const name of ['AI', 'Sessions', 'Questionnaires', 'Relay', 'Devices']) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
     }
     expect(screen.getByRole('button', { name: 'Appearance' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Vault' })).toBeInTheDocument();
+    // Dreams + Your Story ARE member-visible now (each person's own per-person image style/toggle lives
+    // there; the household bits inside are individually admin-only) — image-settings amendment.
+    expect(screen.getByRole('button', { name: 'Dreams' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Your Story' })).toBeInTheDocument();
 
-    // Admin: the sections appear; Relay carries the "Admin only" marker on its Cloudflare control.
+    // Admin: the household sections appear; Relay carries the "Admin only" marker on its Cloudflare control.
     asAdmin();
     rerender(<SettingsScreen />);
     for (const name of ['AI', 'Sessions', 'Questionnaires', 'Dreams', 'Relay', 'Devices']) {

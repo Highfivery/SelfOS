@@ -51,6 +51,11 @@ import {
 } from '@selfos/core/insights';
 import { listDreams, saveAnalysis, saveDream } from '@selfos/core/dreams';
 import {
+  readFeatureImagePrefs,
+  setFeatureImagePrefs,
+  type ImageFeature,
+} from '@selfos/core/images';
+import {
   conversationAttachmentsDir,
   getConversationAttachment,
   listConversations,
@@ -112,6 +117,22 @@ async function seedHousehold(
   });
   await setAccount(fs, key, { personId: ownerId, roleId: 'owner' });
   return ownerId;
+}
+
+/**
+ * Seed the owner's per-person image preferences (image-settings amendment) — the toggle/style/direction that
+ * used to be global vault settings. Written before launch so a generation test boots ready.
+ */
+async function seedOwnerImagePrefs(
+  userData: string,
+  vault: string,
+  feature: ImageFeature,
+  patch: { enabled?: boolean; style?: string; styleNotes?: string },
+): Promise<void> {
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('seedOwnerImagePrefs: master key missing');
+  await setFeatureImagePrefs(fs, key, 'owner-1', feature, patch);
 }
 
 /**
@@ -6376,12 +6397,9 @@ test('dreams: dashboard chrome — insight strip, quick filters, time grouping, 
 });
 
 test('dreams: visualize a dream — sensitive warning, generate, encrypted round-trip, regenerate, delete', async () => {
-  const { userData, vault } = await seedReadyVault({
-    'ai.enabled': true,
-    'dreams.imageGenerationEnabled': true,
-    // The SINGLE global image style (§3.8) — no per-image picker; every image uses this.
-    'dreams.imageStyle': 'watercolor',
-  });
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  // Per-person dream-image consent + style (image-settings amendment) — no longer global vault settings.
+  await seedOwnerImagePrefs(userData, vault, 'dreams', { enabled: true, style: 'watercolor' });
   const secrets = createNodeSecretStore(userData, passthrough);
   await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
   await secrets.set('openai.apiKey', 'sk-openai-e2e');
@@ -6396,7 +6414,7 @@ test('dreams: visualize a dream — sensitive warning, generate, encrypted round
     await w.getByRole('button', { name: 'Just save' }).click();
 
     // Reopen the saved dream → the image panel sits on the read-first detail (12 §15.3). There is no
-    // per-image style picker — the single global style (Settings → Images) applies to every image (§3.8).
+    // per-image style picker — this dreamer's per-person style (Settings → Dreams) applies to every dream image.
     await w.getByRole('button', { name: /Visualize me/ }).click();
 
     // A non-standard tier warns before sending to OpenAI; Continue proceeds.
@@ -6431,7 +6449,7 @@ test('dreams: visualize a dream — sensitive warning, generate, encrypted round
     await gridCard.click();
     await expect(w.getByRole('img')).toBeVisible();
 
-    // The GLOBAL style (Settings → Images) is stamped onto the dream's image descriptor on disk.
+    // The dreamer's per-person style is stamped onto the dream's image descriptor on disk.
     const key = await loadMasterKey(secrets);
     if (!key) throw new Error('master key missing');
     const fs = createNodeFileSystem(vault);
@@ -6481,10 +6499,8 @@ test('dreams: visualize a dream — sensitive warning, generate, encrypted round
 });
 
 test('dreams: export an image to a file + share it; the recipient sees it in "Shared with you"', async () => {
-  const { userData, vault } = await seedReadyVault({
-    'ai.enabled': true,
-    'dreams.imageGenerationEnabled': true,
-  });
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await seedOwnerImagePrefs(userData, vault, 'dreams', { enabled: true });
   const secrets = createNodeSecretStore(userData, passthrough);
   await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
   await secrets.set('openai.apiKey', 'sk-openai-e2e');
@@ -7160,47 +7176,49 @@ test('AI: enabling reveals key + model, saving a key and testing connects', asyn
   }
 });
 
-test('images: enabling image generation reveals the model, single global style, and admin-only OpenAI key', async () => {
-  const { userData, vault } = await seedReadyVault({ 'dreams.imageGenerationEnabled': true });
+test('image settings (amendment): PER-PERSON style/direction/toggle split into Dreams + Your Story; model + key stay admin-only; no "Images" section', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('image settings e2e: master key missing');
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Settings' }).click();
-    // The single home for AI image generation — one consent switch, one key, one global style (§3.8).
-    await w.getByRole('button', { name: 'Images', exact: true }).click();
+    // The old single "Images" section is gone — the settings are split per use-type.
+    await expect(w.getByRole('button', { name: 'Images', exact: true })).toHaveCount(0);
 
-    // Consent on → the model, the single global style, style direction, and OpenAI key controls appear.
+    // Settings → Dreams: turn ON this person's own dream images, then style + direction appear.
+    await w.getByRole('button', { name: 'Dreams' }).click();
+    await w.getByRole('switch', { name: 'AI image generation' }).click();
+    await w.getByRole('combobox', { name: 'Image style' }).selectOption({ label: 'Gouache' });
+    await w.getByLabel('Style direction (optional)').fill('muted earth tones, golden-hour light');
+    // The image model + OpenAI key are admin-only (household), marked so.
     await expect(w.getByLabel('Image model')).toBeVisible();
-    await expect(w.getByRole('combobox', { name: 'Image style' })).toBeVisible();
-    await expect(w.getByLabel('Style direction (optional)')).toBeVisible();
     await expect(w.getByLabel('OpenAI API key')).toBeVisible();
-
-    // The image model + key are admin-only — marked so admins know normal users don't see them.
     await expect(w.getByText('Admin only').first()).toBeVisible();
 
-    // The expanded, family-grouped presets are available (an option beyond the original four).
-    await w.getByRole('combobox', { name: 'Image style' }).selectOption({ label: 'Gouache' });
-    // The free-text style direction (§15.2) persists through the textarea control.
-    await w.getByLabel('Style direction (optional)').fill('muted earth tones, golden-hour light');
-
-    const settingsFile = join(vault, 'config', 'settings.json');
+    // It persisted to THIS person's encrypted per-person image prefs (not a shared vault setting).
     await expect
       .poll(async () => {
-        const parsed = JSON.parse(await readFile(settingsFile, 'utf8')) as {
-          values: Record<string, unknown>;
-        };
-        return [parsed.values['dreams.imageStyle'], parsed.values['dreams.imageStyleNotes']];
+        const p = await readFeatureImagePrefs(fs, key, 'owner-1', 'dreams');
+        return [p.enabled, p.style, p.styleNotes];
       })
-      .toEqual(['gouache', 'muted earth tones, golden-hour light']);
+      .toEqual([true, 'gouache', 'muted earth tones, golden-hour light']);
 
-    // The OpenAI key is write-only — saving it reports configured (the value never returns to the renderer).
-    await w.getByLabel('OpenAI API key').fill('sk-openai-e2e');
-    await w.getByRole('button', { name: /save key/i }).click();
-    await expect(w.getByText(/key is configured/i)).toBeVisible();
+    // Settings → Your Story: a SEPARATE per-person style (its own toggle + model).
+    await w.getByRole('button', { name: 'Your Story' }).click();
+    await w.getByRole('switch', { name: 'AI image generation' }).click();
+    await w.getByRole('combobox', { name: 'Image style' }).selectOption({ label: 'Ukiyo-e' });
+    await expect
+      .poll(async () => {
+        const p = await readFeatureImagePrefs(fs, key, 'owner-1', 'story');
+        return [p.enabled, p.style];
+      })
+      .toEqual([true, 'ukiyo-e']);
 
-    // At phone width the expanded select + the multiline notes textarea fit — the content area and the
-    // document don't overflow horizontally. (The Settings section nav is an intentional horizontal pill
-    // scroller, so this mirrors the section-sweep guard rather than flagging that by-design scroller.)
+    // At phone width the expanded controls fit — no horizontal overflow (the intentional section-nav pill
+    // scroller aside).
     await w.setViewportSize({ width: 390, height: 780 });
     await w.waitForTimeout(50);
     const overflow = await w.evaluate(() => {
@@ -12635,10 +12653,8 @@ test('story (64): a memory outlives its book — the insight deep-link still ope
 
 test('story (64): a cover, publish to a household reader who reads the shared book, and export leaves the vault', async () => {
   test.setTimeout(90_000);
-  const { userData, vault } = await seedReadyVault({
-    'ai.enabled': true,
-    'dreams.imageGenerationEnabled': true,
-  });
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await seedOwnerImagePrefs(userData, vault, 'story', { enabled: true });
   const secrets = createNodeSecretStore(userData, passthrough);
   await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
   await secrets.set('openai.apiKey', 'sk-openai-e2e');
@@ -12847,10 +12863,8 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
 test('story (64): a photo answer feeds the biographer’s corpus — it reaches a captured generation prompt (§13.6.2)', async () => {
   test.setTimeout(60_000);
   const promptDir = await mkdtemp(join(tmpdir(), 'selfos-e2e-prompt-'));
-  const { userData, vault } = await seedReadyVault({
-    'ai.enabled': true,
-    'dreams.imageGenerationEnabled': true,
-  });
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await seedOwnerImagePrefs(userData, vault, 'story', { enabled: true });
   const secrets = createNodeSecretStore(userData, passthrough);
   await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
   await secrets.set('openai.apiKey', 'sk-openai-e2e');

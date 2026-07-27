@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.45.0](https://github.com/Highfivery/SelfOS/compare/v0.44.0...v0.45.0) (2026-07-27)
+
+
+### Features
+
+* **images:** split image settings per use-type + make style/direction/toggle per-person ([#342](https://github.com/Highfivery/SelfOS/issues/342)) ([d68d941](https://github.com/Highfivery/SelfOS/commit/d68d941c2a0fe8b851d054b680f50d037ebb4969))
+* **questionnaires:** "That's not right about me" — correct a wrong fact in a question ([#343](https://github.com/Highfivery/SelfOS/issues/343)) ([cc3c848](https://github.com/Highfivery/SelfOS/commit/cc3c848c0370284fbe8278cc009a7b745051f88d))
+* **questionnaires:** author-marked "already answered"/"too vague" + de-dup observability ([#341](https://github.com/Highfivery/SelfOS/issues/341)) ([2ae8177](https://github.com/Highfivery/SelfOS/commit/2ae81773c49265180f3974b3cd854f5e091a3e38))
+* **questionnaires:** gate Analyze so only one runs at a time ([#339](https://github.com/Highfivery/SelfOS/issues/339)) ([27cde70](https://github.com/Highfivery/SelfOS/commit/27cde708f76de5c9d77419004eace10594f975af))
+
+
+### Bug Fixes
+
+* **questionnaires:** align a slider's middle label with the neutral thumb ([#338](https://github.com/Highfivery/SelfOS/issues/338)) ([e8a4288](https://github.com/Highfivery/SelfOS/commit/e8a4288f5d8d39d5d6a4ce0d0be3c206cc06fb43))
+* **questionnaires:** harden analysis + self-diagnose "unexpected shape" ([#340](https://github.com/Highfivery/SelfOS/issues/340)) ([7c9f55b](https://github.com/Highfivery/SelfOS/commit/7c9f55b106dd0843c1cf922f4c7fcd77580c654e))
+
 ## [0.44.0](https://github.com/Highfivery/SelfOS/compare/v0.43.4...v0.44.0) (2026-07-27)
 
 

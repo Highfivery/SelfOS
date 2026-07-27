@@ -139,6 +139,7 @@ import type {
   DreamShareResult,
   DreamShareTarget,
   DreamSynthesisResult,
+  FactCorrectionOutcome,
   GuidanceState,
   GuidedSuggestResult,
   InAppSendResult,
@@ -551,6 +552,7 @@ export const IpcChannels = {
   assignmentsReopen: 'assignments:reopen',
   assignmentsSubmit: 'assignments:submit',
   assignmentsDecline: 'assignments:decline',
+  assignmentsCorrectFact: 'assignments:correctFact',
   assignmentsResults: 'assignments:results',
   assignmentsTrends: 'assignments:trends',
   assignmentsAggregate: 'assignments:aggregate',
@@ -1756,6 +1758,17 @@ export interface SelfosBridge {
   /** Decline an assignment, silently or with a short note. Recipient-only; requires `questionnaires.answer`. */
   assignmentsDecline(input: { assignmentId: string; note?: string }): Promise<void>;
   /**
+   * Correct a WRONG fact in a question the recipient is answering (spec 08 wrong-fact amendment): trace it to
+   * the recipient's own profile / onboarding / insight, auto-flag a wrong insight, and reword the question.
+   * Recipient-only; the returned reworded prompt is applied to the recipient's local view.
+   */
+  assignmentsCorrectFact(input: {
+    assignmentId: string;
+    questionId: string;
+    questionPrompt: string;
+    correction: string;
+  }): Promise<FactCorrectionOutcome>;
+  /**
    * The active person's sends of one questionnaire, newest first — the sender's Results view. Raw answers
    * are included only for **Standard, submitted** sends (a Private send carries none). Requires
    * `questionnaires.viewResults`.
@@ -2150,6 +2163,7 @@ export type {
   DreamShareResult,
   DreamShareTarget,
   DreamSynthesisResult,
+  FactCorrectionOutcome,
   GuidanceState,
   GuidedSuggestResult,
   InAppSendResult,

@@ -140,6 +140,67 @@ describe('Inbox', () => {
     });
   });
 
+  it('“That’s not right about me” fixes the source + rewords the question in place (wrong-fact amendment)', async () => {
+    const correctFact = vi.fn(() =>
+      Promise.resolve({
+        ok: true as const,
+        rewrittenPrompt: 'How did turning 41 feel?',
+        source: 'insight' as const,
+        insightFlagged: true,
+      }),
+    );
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([item()]),
+      assignmentsGet: () =>
+        Promise.resolve(
+          detail({
+            questionnaire: {
+              id: 'q1',
+              schemaVersion: 1,
+              version: 1,
+              title: 'Weekly check-in',
+              type: 'role-feedback',
+              sensitivity: 'standard',
+              questions: [
+                {
+                  id: 'qq1',
+                  type: 'shortText',
+                  prompt: 'How did turning 39 feel?',
+                  required: false,
+                },
+              ],
+              createdAt: 'now',
+              updatedAt: 'now',
+            },
+          }),
+        ),
+      assignmentsCorrectFact: correctFact,
+    });
+    renderInbox();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    expect(await screen.findByText('How did turning 39 feel?')).toBeInTheDocument();
+
+    // Flag the wrong fact → describe it → Fix it.
+    await userEvent.click(screen.getByRole('button', { name: /That’s not right about me/ }));
+    await userEvent.type(
+      screen.getByLabelText(/what’s wrong about this question/i),
+      'I turned 41, not 39.',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Fix it' }));
+
+    expect(correctFact).toHaveBeenCalledWith({
+      assignmentId: 'a1',
+      questionId: 'qq1',
+      questionPrompt: 'How did turning 39 feel?',
+      correction: 'I turned 41, not 39.',
+    });
+    // The question is reworded in place, and the outcome says the wrong insight was flagged.
+    expect(await screen.findByText('How did turning 41 feel?')).toBeInTheDocument();
+    expect(screen.getByText(/flagged that in your Memory/i)).toBeInTheDocument();
+    expect(screen.queryByText('How did turning 39 feel?')).not.toBeInTheDocument();
+  });
+
   it('required = answer or skip: Send is disabled on review until a required question is answered (§25.3)', async () => {
     const submit = vi.fn(() => Promise.resolve());
     installMockBridge({

@@ -332,6 +332,19 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // Wrong-fact correction (spec 08 wrong-fact amendment): the system says a detail is wrong; return a
+      // match + a reworded prompt. Deterministic — match the FIRST fact on record + reword to age 41.
+      if (
+        (options.system ?? '').includes(
+          'flagged that a detail this question states ABOUT THEM is wrong',
+        )
+      ) {
+        return Promise.resolve({
+          text: JSON.stringify({ matchedIndex: 1, rewrittenPrompt: 'How did turning 41 feel?' }),
+          usage: { inputTokens: 40, outputTokens: 20, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+
       // Question generation (08 §3.1/§16.4) asks for a {title, questions} JSON object. Return a small,
       // valid set deterministically. Must come BEFORE the generic "JSON object" branch below.
       if (userText.includes('the JSON object with a short')) {

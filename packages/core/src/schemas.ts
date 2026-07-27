@@ -1818,6 +1818,22 @@ export interface QuestionnaireImproveResult {
   reason?: AiFailureReason;
   message?: string;
 }
+/**
+ * Result of a recipient correcting a WRONG fact in a question (spec 08 wrong-fact amendment): the reworded
+ * question (applied to their local view), where the wrong fact came from, and whether an insight was flagged.
+ * `unknown` source → the renderer falls back to letting the recipient pick where to fix it.
+ */
+export interface FactCorrectionOutcome {
+  ok: boolean;
+  rewrittenPrompt?: string;
+  source?: 'profile' | 'onboarding' | 'insight' | 'unknown';
+  /** A short human label of where the fact lives, when matched (e.g. "your Memory", "your birthday"). */
+  sourceLabel?: string;
+  /** True when a wrong AI insight fact was auto-flagged inaccurate (so it won't feed future questions). */
+  insightFlagged?: boolean;
+  reason?: AiFailureReason | 'NO_PERMISSION';
+  message?: string;
+}
 export interface QuestionnaireSuggestResult {
   ok: boolean;
   suggestions?: QuestionnaireSuggestion[];

@@ -113,7 +113,7 @@ const ANSWER_TYPE_GUIDE = `Each question is an object with:
 Do NOT use matrix or allocation. No prose, no markdown fences.
 MATCH the answer type to what the question is trying to learn: a story/feeling/nuance → shortText or longText; "how much" or something to track over time → rating or slider; a quick, playful, or rapport-building choice → thisOrThat or singleChoice/yesNo; ranking priorities → ranking. Vary DELIBERATELY — never stack many rating scales in a row; pick the type that earns the best answer for each question.`;
 
-const SAFETY = `You draft questions for SelfOS, a wellness / self-help tool — NOT medical, NOT diagnosis, NOT treatment. Write ORIGINAL, evidence-informed questions in a supportive voice. Never reproduce or imitate copyrighted or clinical/diagnostic instruments, never score diagnostically, never ask for medical/clinical self-assessment. Stay strictly within Anthropic's usage policy. If a request would require unsafe or out-of-policy content, return an empty questions array.`;
+export const SAFETY = `You draft questions for SelfOS, a wellness / self-help tool — NOT medical, NOT diagnosis, NOT treatment. Write ORIGINAL, evidence-informed questions in a supportive voice. Never reproduce or imitate copyrighted or clinical/diagnostic instruments, never score diagnostically, never ask for medical/clinical self-assessment. Stay strictly within Anthropic's usage policy. If a request would require unsafe or out-of-policy content, return an empty questions array.`;
 
 // Generation returns an OBJECT so it can also propose a short title (08 §16.4). The title is advisory —
 // the builder applies it only when the author hasn't typed one.

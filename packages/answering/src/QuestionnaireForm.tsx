@@ -95,6 +95,13 @@ interface QuestionnaireFormProps {
    * a Review step. When set, the form renders it instead of the all-at-once form. See {@link WizardActions}.
    */
   wizard?: WizardActions;
+  /**
+   * "That's not right about me" (spec 08 wrong-fact amendment): when provided, each wizard question shows an
+   * affordance to flag a wrong fact in it. The host (the in-app Inbox) owns the correction flow — it traces
+   * the fact to source, fixes it, and rewrites the question. Omitted (e.g. the external relay page, which
+   * has no access to the recipient's household data) ⇒ no such affordance. Wizard mode only.
+   */
+  onReportWrongFact?: (question: Question) => void;
 }
 
 const range = (min: number, max: number): number[] => {
@@ -888,6 +895,7 @@ function WizardForm({
   loadImage,
   footer,
   actions,
+  onReportWrongFact,
 }: {
   visible: Question[];
   answers: AnswerMap;
@@ -895,6 +903,7 @@ function WizardForm({
   loadImage?: LoadImage;
   footer?: ReactNode;
   actions: WizardActions;
+  onReportWrongFact?: (question: Question) => void;
 }): JSX.Element {
   const total = visible.length;
   const [step, setStep] = useState(0);
@@ -1228,9 +1237,22 @@ function WizardForm({
                         </div>
                       </div>
                     ) : (
-                      <button type="button" className={styles.skipBtn} onClick={openSkip}>
-                        Skip this — I can’t or don’t want to answer
-                      </button>
+                      <div className={styles.wizardSecondary}>
+                        <button type="button" className={styles.skipBtn} onClick={openSkip}>
+                          Skip this — I can’t or don’t want to answer
+                        </button>
+                        {/* Wrong-fact correction (spec 08 wrong-fact amendment) — Inbox only (the host wires
+                            the callback; the relay page doesn't, so it never shows there). */}
+                        {onReportWrongFact && question ? (
+                          <button
+                            type="button"
+                            className={styles.skipBtn}
+                            onClick={() => onReportWrongFact(question)}
+                          >
+                            That’s not right about me
+                          </button>
+                        ) : null}
+                      </div>
                     )}
                   </div>
                 </>
@@ -1315,6 +1337,7 @@ export function QuestionnaireForm({
   progress,
   disabled,
   wizard,
+  onReportWrongFact,
 }: QuestionnaireFormProps): JSX.Element {
   const visible = visibleQuestions(questions, answers);
 
@@ -1329,6 +1352,7 @@ export function QuestionnaireForm({
         onChange={onChange}
         {...(loadImage ? { loadImage } : {})}
         {...(footer !== undefined ? { footer } : {})}
+        {...(onReportWrongFact ? { onReportWrongFact } : {})}
         actions={wizard}
       />
     );

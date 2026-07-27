@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   classifyParseOutcome,
   extractJsonObject,
+  isEmptyStructuredResult,
   salvageJsonObjectField,
   tolerantArray,
 } from '../ai/jsonSalvage';
@@ -14,7 +15,7 @@ import {
 } from '../insights';
 import { isDeclined, visibleQuestions, type AnswerMap, type AnswerValue } from './answering';
 import type { Insight, QuestionnaireAnalyzeResult, ResponseSet } from '../schemas';
-import { ANALYSIS_SYSTEM, buildAnalysisUserMessage } from './aiPrompts';
+import { buildAnalysisSystem, buildAnalysisUserMessage } from './aiPrompts';
 import { aboutFromRecipient } from './aboutResolver';
 import { getAssignment, getAssignmentSnapshot } from './assignmentService';
 import { runClaude, type AiDeps } from './generationService';
@@ -38,7 +39,9 @@ export { extractJsonObject } from '../ai/jsonSalvage';
 // `crisisFlag` is preserved (.catch(undefined), never coerced — §8) so a per-fact salvage can't drop it.
 const FACT_SENTINEL = { text: '', shareable: false };
 const AnalysisSchema = z.object({
-  summary: z.string().min(1),
+  // A whitespace-only summary is as empty as ""; require real content so it routes to the honest EMPTY branch
+  // (via `isEmptyStructuredResult`) rather than saving a near-blank Insight (37 §3.1 / 08 §22.7).
+  summary: z.string().refine((s) => s.trim().length > 0),
   facts: tolerantArray(
     z.object({ text: z.string().min(1), shareable: z.boolean() }),
     FACT_SENTINEL,
@@ -146,9 +149,13 @@ export async function analyzeAssignment(
     };
   }
 
+  // Register-aware system prompt (08 §22.7): an intimacy/scenario questionnaire at an explicit tier gets the
+  // explicit analysis framing so the model synthesizes frank sexual answers into an insight instead of
+  // returning valid-but-EMPTY JSON (the "unexpected shape" bug the #340 hardening couldn't fix — the answers
+  // were substantive, the empty came from the missing register); standard questionnaires are unchanged.
   const call = await runClaude(
     deps,
-    ANALYSIS_SYSTEM,
+    buildAnalysisSystem(snapshot.type, snapshot.sensitivity),
     buildAnalysisUserMessage({ title: snapshot.title, qa }),
     'questionnaire.analyze',
     // A summary + up to 6 facts + the JSON scaffolding can exceed a tight ceiling; give it real headroom so
@@ -160,12 +167,25 @@ export async function analyzeAssignment(
 
   // Tolerant parse; on a truncated object, salvage at least the leading `summary` so a partial result still
   // produces an Insight (37 "show any partial"). Only a genuinely-empty/no-JSON reply is classified.
-  let data = AnalysisSchema.safeParse(extractJsonObject(call.text)).data;
+  const raw = extractJsonObject(call.text);
+  let data = AnalysisSchema.safeParse(raw).data;
   if (!data) {
     const summary = salvageJsonObjectField(call.text, 'summary');
     if (summary?.trim()) data = { summary, facts: [] };
   }
   if (!data) {
+    // A genuinely EMPTY-but-valid reply (well-formed JSON with an empty summary AND no facts — the model had
+    // nothing to say) is honest, not a "shape" problem, and retrying won't change it. This is the empty-MODEL-
+    // OUTPUT case (distinct from the empty-Q&A guard above): substantive answers in, an empty result out —
+    // the missing explicit register is what the §22.7 fix above closes. Surface a distinct honest message.
+    if (isEmptyStructuredResult(raw)) {
+      return {
+        ok: false,
+        reason: 'EMPTY',
+        usage: call.usage,
+        message: 'There wasn’t enough in these answers to draw an insight yet.',
+      };
+    }
     // A reply that STILL hit max_tokens after the bounded continuations is honestly "cut off", not a shape
     // problem — report TRUNCATED even if it happens to end brace-balanced (don't rely on the endsUnclosed
     // guess). Attach a content-free fingerprint so a recurring failure is diagnosable without leaking answers.

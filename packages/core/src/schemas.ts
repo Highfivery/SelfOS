@@ -1845,8 +1845,11 @@ export interface QuestionnaireAnalyzeResult {
   ok: boolean;
   insight?: Insight;
   usage?: UsageEvent;
-  /** `EMPTY` = the response was submitted but every answer is blank/skipped, so there is nothing to
-   * analyze (caught BEFORE any model spend, 08 §3.7). */
+  // `NO_RESPONSE` = nothing submitted to analyze. `EMPTY` covers two honest "nothing to analyze" cases, both
+  // distinct from a MALFORMED/truncated reply so the UI shows a calm message and doesn't invite a pointless
+  // retry: (a) the submitted answers are all blank/skipped, caught BEFORE any model spend (08 §3.7); and
+  // (b) the model returned a valid but empty analysis for substantive answers — the missing-explicit-register
+  // case (08 §22.7).
   reason?: AiFailureReason | 'NO_RESPONSE' | 'EMPTY';
   message?: string;
   /** A content-free failure fingerprint (parse reason · reply length · complete/truncated · the model's
@@ -3074,7 +3077,8 @@ export type AlignmentResult =
   | { ok: true; report: AlignmentReport; usage: UsageEvent }
   | {
       ok: false;
-      // TRUNCATED/MALFORMED join the honest parse-failure reasons (37 §3.2).
+      // TRUNCATED/MALFORMED join the honest parse-failure reasons (37 §3.2); EMPTY = a valid but empty report
+      // (nothing to compare), distinct from a malformed shape (08 §22.7).
       reason:
         | 'NO_KEY'
         | 'DENIED'
@@ -3082,6 +3086,7 @@ export type AlignmentResult =
         | 'REFUSED'
         | 'TRUNCATED'
         | 'MALFORMED'
+        | 'EMPTY'
         | 'ERROR'
         | 'NOT_READY';
       message: string;
@@ -3097,7 +3102,8 @@ export type ContextOnlyResult =
   | { ok: true; updated: number; usage: UsageEvent[] }
   | {
       ok: false;
-      // TRUNCATED/MALFORMED join the honest parse-failure reasons (37 §3.2).
+      // TRUNCATED/MALFORMED join the honest parse-failure reasons (37 §3.2); EMPTY = a valid but empty distill
+      // (nothing to synthesize), distinct from a malformed shape (08 §22.7).
       reason:
         | 'NO_KEY'
         | 'DENIED'
@@ -3105,6 +3111,7 @@ export type ContextOnlyResult =
         | 'REFUSED'
         | 'TRUNCATED'
         | 'MALFORMED'
+        | 'EMPTY'
         | 'ERROR'
         | 'NOT_READY';
       message: string;

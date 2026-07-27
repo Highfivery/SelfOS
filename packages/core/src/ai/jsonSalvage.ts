@@ -228,6 +228,23 @@ export function classifyParseFailure(text: string): AiParseFailureReason {
   return 'MALFORMED';
 }
 
+/**
+ * True when a parsed reply is a well-formed result object that is genuinely EMPTY — an empty/whitespace
+ * `summary` AND no usable `facts` (08 §22.7). That's the model saying "nothing to synthesize" (e.g. it
+ * declined to interpret explicit content), NOT a malformed shape — so callers give it an honest `EMPTY`
+ * outcome instead of "unexpected shape" (which would wrongly invite a retry). A reply with real facts but no
+ * summary is left to the normal classifier (a genuine shape problem, not "empty"). Shared by questionnaire
+ * analysis, the context-only distill, and the compatibility report — every read-side path with a summary+facts
+ * result shape.
+ */
+export function isEmptyStructuredResult(raw: unknown): boolean {
+  if (!raw || typeof raw !== 'object') return false;
+  const o = raw as { summary?: unknown; facts?: unknown };
+  const summaryEmpty = typeof o.summary === 'string' && o.summary.trim() === '';
+  const factsEmpty = !Array.isArray(o.facts) || o.facts.length === 0;
+  return summaryEmpty && factsEmpty;
+}
+
 /** The honest, distinct user-facing message for a parse-failure reason (37 §3.2; wording approved §11). */
 export function aiFailureMessage(reason: AiParseFailureReason, noun: string): string {
   switch (reason) {

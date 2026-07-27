@@ -3115,6 +3115,52 @@ adjusts caps only if the diagnosis shows truncation.
 - No loosening of Anthropic usage policy; explicit output is generated **within** policy, refusing only when
   genuinely out of policy.
 
+### 22.7 2026-07-27 follow-up — the explicit register on ANALYSIS (member-reported empty insight) — BUILT
+
+> **Status: BUILT** (`fix/questionnaire-analysis-empty-insight`; live-diagnosed + verified against the real
+> model per §6, not assumed). A member clicked "Analyze to see the insight" on an intimacy auto check-in and hit
+> **"The analysis came back in an unexpected shape."** on the first analysis of that questionnaire.
+
+**Diagnosed against the LIVE model (§6), not assumed.** The billed analysis call **succeeded** and returned
+**valid, well-formed JSON** — but with an **empty summary and zero facts**
+(`{"summary":"","facts":[],"confidence":"low","categories":["Other"],"crisisFlag":false}`) for substantive,
+explicit answers. So it was neither a truncation, nor a matched refusal, nor thin input. The §22 explicit
+register had only ever been applied to **generation** — `analyzeAssignment` used the generic
+_"coaching Insight … supporting them"_ register plus the question-drafting `SAFETY` prefix (whose "return an
+empty questions array" primes emptiness), so the model had no license to synthesize frank sexual content into an
+insight and returned valid-but-empty JSON. Our parser then rejected the empty `summary` and fell through to the
+catch-all `MALFORMED` → the misleading "unexpected shape" (retrying couldn't help).
+
+**Two fixes (both built), applied to EVERY read-side path (no half-application):**
+
+1. **The explicit register now applies to interpretation, not just generation** — a shared
+   `withIntimacyRegister(base, type, tier)` appends `INTIMACY_ANALYSIS_FRAMING` for an intimacy/scenario
+   questionnaire at the `explicit`/`unfiltered` tiers (the read-side counterpart of generation's
+   `explicitFraming`): it establishes the legitimate consensual-adult context, **directs a substantive frank
+   synthesis** (name desires/preferences/fantasies/boundaries plainly; do NOT return an empty summary merely
+   because the content is explicit), and restates the **same** consensual-adult boundary. `intimacyGeneral` gets a
+   lighter non-graphic note; **standard is byte-unchanged**; 18+/consent gates + Anthropic policy are unchanged.
+   It is wired into **all three** paths that turn intimacy answers into insight — `buildAnalysisSystem` for
+   `analyzeAssignment` (one-person) **and** `distillContextOnly` (compatibility, each participant's own coach),
+   and `buildAlignmentSystem` for `generateAlignment` (the compatibility report) — so a compatibility intimacy
+   send can't hit the same dead-end. **Verified live** on the one-person analysis path (the reported case now
+   returns a full ~1.9k-char analysis — summary + 5 facts, categories `["Intimacy","Relationships"]`); the
+   distill path is identical (same `buildAnalysisSystem` framing), and the alignment path applies the same
+   framing to the report prompt — its live behaviour on an explicit **compatibility** send is verified by analogy
+   and is an on-device DoD item (like §22.3), since it needs a two-person compat intimacy send to exercise.
+2. **Honest EMPTY handling** — a genuinely empty-but-valid result (empty/whitespace summary AND no facts) now
+   returns a distinct `EMPTY` reason across all three (`QuestionnaireAnalyzeResult` / `ContextOnlyResult` /
+   `AlignmentResult` `reason += 'EMPTY'`) → _"There wasn't enough … yet."_ instead of the misleading "unexpected
+   shape, try again". The shared `isEmptyStructuredResult` helper backs it, and `AnalysisSchema.summary` was
+   tightened to reject a **whitespace-only** summary (so `"   "` routes to EMPTY rather than saving a near-blank
+   Insight).
+
+**Lesson:** the explicit register was only half-applied — generation got it, the read side (analysis, distill,
+**and** the compatibility report) didn't — so a questionnaire that generated fine produced an **empty** insight
+on analysis; when adding an explicit register, apply it to **every** AI path that touches the content, and prove
+it (assert the register reaches the prompt on each path). And a valid-JSON-but-empty model reply is an EMPTY
+outcome, not a MALFORMED shape — classify it honestly so the UI doesn't invite a pointless retry.
+
 ## 23. 2026-07-13 amendment — Draft-with-AI quality overhaul (brief-as-focus · question count · real de-dup · declutter) — BUILT
 
 > **Status: BUILT** (`feat/questionnaire-ai-audit`; decisions locked + approved with the user 2026-07-13; the

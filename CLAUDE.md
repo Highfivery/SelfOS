@@ -430,6 +430,52 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-27 — **Fix (Questionnaires "Analyze to see the insight" → "The analysis came back in an unexpected
+  shape" on an intimacy auto check-in; member-reported; SPEC 08 §22.7; on `fix/questionnaire-analysis-empty-insight`).**
+  **Diagnosed against the LIVE model, not assumed (§6).** Since the raw reply is host-side + the vault is encrypted
+  on-device, I couldn't reproduce it here — so I added a temporary, main-process `console.error` dump of the raw
+  analysis reply + `stop_reason`, had the user re-click Analyze, and read the ACTUAL output. It was **not** a
+  refusal, truncation, or thin input: the billed call SUCCEEDED and returned **valid, well-formed JSON with an
+  empty summary + zero facts** (`{"summary":"","facts":[],"confidence":"low","categories":["Other"],"crisisFlag":false}`)
+  for two fully-substantive explicit answers. **Root cause:** the §22 explicit register had only ever been wired
+  into **generation** — `analyzeAssignment` used the generic _"coaching Insight … supporting them"_ register + the
+  question-drafting `SAFETY` prefix (whose "return an empty questions array" primes emptiness), so the model had no
+  license to synthesize frank sexual content into an insight and returned valid-but-empty JSON; our parser then
+  rejected the empty `summary` (`z.string().min(1)`) and fell through to the catch-all `MALFORMED` → the misleading
+  "unexpected shape" (retrying couldn't help). **Owner-approved (asked first, both forks):** add the intimacy
+  register to analysis + handle empty honestly. **Fixed across EVERY read-side path (no half-application — the
+  code-reviewer independently flagged the sibling gap, matching my own trace):** (1) a shared
+  `withIntimacyRegister(base, type, tier)` appends `INTIMACY_ANALYSIS_FRAMING` for intimacy/scenario at
+  `explicit`/`unfiltered` (the read-side counterpart of generation's `explicitFraming`) — establishes the
+  consensual-adult context, DIRECTS a substantive frank synthesis ("do NOT return an empty summary merely because
+  the content is explicit"), restates the SAME boundary; `intimacyGeneral` gets a lighter non-graphic note;
+  **standard byte-unchanged**; 18+/consent gates + Anthropic policy unchanged. Wired into **all three** paths:
+  `buildAnalysisSystem` for `analyzeAssignment` (one-person) AND `distillContextOnly` (compatibility own-context),
+  and `buildAlignmentSystem` for `generateAlignment` (the compat report) — so a compatibility intimacy send can't
+  hit the same dead-end. (2) A genuinely empty-but-valid result now returns a distinct honest `EMPTY` across all
+  three (`QuestionnaireAnalyzeResult` / `ContextOnlyResult` / `AlignmentResult` `reason += 'EMPTY'`) → "There
+  wasn't enough … yet." instead of "unexpected shape", backed by a shared `isEmptyStructuredResult`; also tightened
+  `AnalysisSchema.summary` to reject a WHITESPACE-only summary (reviewer nit — `"   "` routed to EMPTY, not a
+  near-blank Insight). **Verified LIVE** on the one-person analysis path (the reported case now returns a full
+  ~1.9k-char analysis — summary + 5 facts, categories `["Intimacy","Relationships"]`); the distill path is
+  identical framing, and the alignment path applies the same framing to the report prompt — its live behaviour on
+  an explicit **compatibility** send is verified by analogy + is an on-device DoD item (needs a two-person compat
+  intimacy send). Temp diagnostic removed. code-reviewer **fix-first** (the one should-fix — the sibling distill/
+  alignment gap — applied; nits: whitespace-summary tightening applied, the facts-but-no-summary sub-case
+  acknowledged as acceptable). Gate green: typecheck (core + desktop node/web), lint, format, **1758 core** unit
+  (+`buildAnalysisSystem`/`buildAlignmentSystem` register matrix [explicit/scenario/standard/intimacyGeneral],
+  +the register REACHES the prompt for an intimacy questionnaire [asserting the PROMPT, not just the count — the
+  neutered-fix trap], +standard-doesn't-get-it, +valid-but-empty → EMPTY-not-MALFORMED still metered, +whitespace
+  → EMPTY). **Lessons: (1) the explicit register was only HALF-applied — generation had it, the READ side
+  (analysis, distill, AND the compat report) didn't — so a questionnaire that generated fine produced an EMPTY
+  insight on analysis; when you add an explicit register, apply it to EVERY AI path that touches the content
+  (generate AND analyze AND distill AND align), and assert the register reaches the prompt on each. (2) A
+  valid-JSON-but-empty model reply is an EMPTY outcome, not a MALFORMED shape — classify it honestly so the UI
+  doesn't invite a pointless retry. (3) When the failing call is host-side + encrypted, a temporary unconditional
+  main-process log of the raw reply + stop_reason, read from the user's own running app, IS the §6 live diagnosis —
+  no key-sharing, no reconstruction; the empty-but-valid JSON it revealed is exactly what the offline fake could
+  never surface.**
+
 - 2026-07-26 — **Build (questionnaires: "That's not right about me" — correct a wrong fact in a question;
   SPEC 08 §28 BUILT; PR [#343]; on `feat/questionnaire-wrong-fact-correction`, a worktree off `main`).** The 6th
   and final of the 6 reported questionnaire issues (#2). A generated question sometimes states a wrong fact about
@@ -459,7 +505,6 @@ A running log of durable decisions and feedback captured into the project config
   fact rather than silently editing free text; let the person pick on an unknown match), and reword only the
   recipient's LOCAL view so the sender's stored question keeps its integrity. Numbering: this §28 collides with
   the concurrent dedup branch's §28 — whichever merges second renumbers to §29.**
-
 - 2026-07-22 — **Fix (auto check-ins were repetitive on intimacy + fired "just because the toggle was on";
   member-reported [#314]; SPEC 08 §27 + 63 §13 written, approved, BUILT; on `fix/intimacy-topic-coverage`).**
   The reporter: _"I don't know how many more ways it wants me to describe Ben giving me oral or my thoughts on

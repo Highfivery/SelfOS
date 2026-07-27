@@ -12,7 +12,8 @@ import {
   isAnalysisStale,
   responseRevision,
 } from './analysisService';
-import type { Insight, ResponseSet } from '../schemas';
+import { buildAlignmentSystem, buildAnalysisSystem } from './aiPrompts';
+import type { Insight, ResponseSet, SensitivityTier } from '../schemas';
 import type { AiDeps } from './generationService';
 
 const key = generateMasterKey();
@@ -45,6 +46,34 @@ const ANALYSIS = JSON.stringify({
   crisisFlag: false,
 });
 
+/** Seed a submitted intimacy questionnaire at a given tier (for the explicit-register + empty-insight tests). */
+async function seedIntimacy(fs: FileSystem, tier: SensitivityTier): Promise<string> {
+  const q = await saveQuestionnaire(fs, key, {
+    title: 'Desire, Depth & Us',
+    type: 'intimacy',
+    sensitivity: tier,
+    questions: [{ id: 'q1', type: 'shortText', prompt: 'What do you crave most?', required: true }],
+  });
+  const a = await createAssignment(fs, key, {
+    questionnaireId: q.id,
+    senderPersonId: 'p1',
+    recipient: { kind: 'person', personId: 'p2' },
+    channel: 'inApp',
+    privacy: 'private',
+    senderVisibleToRecipient: true,
+  });
+  await saveResponse(fs, key, {
+    id: 'r1',
+    schemaVersion: 1,
+    assignmentId: a.id,
+    answers: [
+      { questionId: 'q1', value: 'Slow and deliberate — drawing it out until I’m desperate.' },
+    ],
+    submittedAt: now.toISOString(),
+  });
+  return a.id;
+}
+
 async function seedAnswered(fs: FileSystem): Promise<string> {
   const q = await saveQuestionnaire(fs, key, {
     title: 'Weekly check-in',
@@ -74,6 +103,45 @@ describe('extractJsonObject', () => {
   it('pulls a JSON object out of fenced / prose-wrapped text', () => {
     expect(extractJsonObject('Here:\n```json\n{"a":1}\n```')).toEqual({ a: 1 });
     expect(extractJsonObject('no object')).toBeNull();
+  });
+});
+
+describe('buildAnalysisSystem — register-aware (08 §22.2)', () => {
+  it('appends the EXPLICIT intimacy framing for intimacy/scenario at explicit + unfiltered tiers', () => {
+    for (const type of ['intimacy', 'scenario']) {
+      for (const tier of ['explicit', 'unfiltered'] as const) {
+        const sys = buildAnalysisSystem(type, tier);
+        expect(sys).toContain('DO produce a real, substantive result');
+        expect(sys).toContain('do NOT return an empty summary');
+        expect(sys).toContain('consensual adults only');
+      }
+    }
+  });
+
+  it('leaves a STANDARD questionnaire unchanged (no explicit framing)', () => {
+    const sys = buildAnalysisSystem('role-feedback', 'standard');
+    expect(sys).not.toContain('DO produce a real, substantive result');
+    expect(sys).not.toContain('sexually explicit');
+  });
+
+  it('uses the lighter, non-graphic note for the intimacyGeneral tier', () => {
+    const sys = buildAnalysisSystem('intimacy', 'intimacyGeneral');
+    expect(sys).toContain('respectful and non-graphic');
+    expect(sys).not.toContain('sexually explicit'); // not the explicit register
+  });
+
+  it('applies the SAME register to the compatibility report (buildAlignmentSystem) — no half-application', () => {
+    // The 08 §22.7 lesson: apply the register to EVERY read-side path that interprets intimacy content.
+    const report = buildAlignmentSystem('intimacy', 'unfiltered');
+    expect(report).toContain('DO produce a real, substantive result');
+    expect(report).toContain('do NOT return an empty summary');
+    expect(report).toContain('consensual adults only');
+    // …but it's still the ALIGNMENT prompt (compatibility report), not the analysis one.
+    expect(report).toContain('compatibility report');
+    // Standard compatibility report is unchanged.
+    expect(buildAlignmentSystem('role-feedback', 'standard')).not.toContain(
+      'DO produce a real, substantive result',
+    );
   });
 });
 
@@ -364,6 +432,83 @@ describe('analyzeAssignment', () => {
     expect(
       await analyzeAssignment(deps(fs, fakeClient('just some prose, no json')), { assignmentId }),
     ).toMatchObject({ ok: false, reason: 'MALFORMED' });
+  });
+
+  it('sends the EXPLICIT analysis register to the model for an intimacy questionnaire (the empty-insight fix, 08 §22.2)', async () => {
+    const fs = memFileSystem();
+    const assignmentId = await seedIntimacy(fs, 'unfiltered');
+    let sentSystem = '';
+    const client: ClaudeClient = {
+      send: () => Promise.resolve(ANALYSIS),
+      stream: (options, onDelta) => {
+        sentSystem = options.system ?? '';
+        onDelta(ANALYSIS);
+        return Promise.resolve({
+          text: ANALYSIS,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    await analyzeAssignment(deps(fs, client), { assignmentId });
+    // The system prompt the model actually receives carries the frank register + the "don't return empty"
+    // direction + the consensual-adult boundary — this is what fixes the valid-but-empty analysis.
+    expect(sentSystem).toContain('DO produce a real, substantive result');
+    expect(sentSystem).toContain('do NOT return an empty summary');
+    expect(sentSystem).toContain('consensual adults only');
+  });
+
+  it('does NOT send the explicit register for a STANDARD questionnaire (register scoped to intimacy)', async () => {
+    const fs = memFileSystem();
+    const assignmentId = await seedAnswered(fs); // role-feedback / standard
+    let sentSystem = '';
+    const client: ClaudeClient = {
+      send: () => Promise.resolve(ANALYSIS),
+      stream: (options, onDelta) => {
+        sentSystem = options.system ?? '';
+        onDelta(ANALYSIS);
+        return Promise.resolve({
+          text: ANALYSIS,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    await analyzeAssignment(deps(fs, client), { assignmentId });
+    expect(sentSystem).not.toContain('DO produce a real, substantive result');
+    expect(sentSystem).not.toContain('sexually explicit');
+  });
+
+  it('returns an honest EMPTY (not MALFORMED) when the model returns a valid but empty analysis', async () => {
+    const fs = memFileSystem();
+    const assignmentId = await seedIntimacy(fs, 'unfiltered');
+    // The exact shape the live model returned for the reported case: well-formed JSON, empty summary + facts.
+    const empty = JSON.stringify({
+      summary: '',
+      facts: [],
+      confidence: 'low',
+      categories: ['Other'],
+      crisisFlag: false,
+    });
+    const result = await analyzeAssignment(deps(fs, fakeClient(empty)), { assignmentId });
+    // Before the fix this fell through to MALFORMED ("unexpected shape, try again") — now it's an honest EMPTY.
+    expect(result).toMatchObject({ ok: false, reason: 'EMPTY' });
+    expect(result.message).toContain('draw an insight');
+    // A billed call is still metered even on an empty result.
+    expect(result.usage?.type).toBe('questionnaire.analyze');
+  });
+
+  it('treats a WHITESPACE-only summary as EMPTY too (not a near-blank Insight)', async () => {
+    const fs = memFileSystem();
+    const assignmentId = await seedIntimacy(fs, 'unfiltered');
+    // `"   "` used to pass `z.string().min(1)` and save a near-blank Insight; now it routes to EMPTY.
+    const blank = JSON.stringify({
+      summary: '   ',
+      facts: [],
+      confidence: 'low',
+      crisisFlag: false,
+    });
+    const result = await analyzeAssignment(deps(fs, fakeClient(blank)), { assignmentId });
+    expect(result).toMatchObject({ ok: false, reason: 'EMPTY' });
+    expect(result.insight).toBeUndefined();
   });
 
   it('salvages the good facts, dropping a malformed one (per-element, 37 §3.1)', async () => {

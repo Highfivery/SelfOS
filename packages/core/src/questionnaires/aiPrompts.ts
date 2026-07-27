@@ -520,6 +520,59 @@ export function buildAnalysisUserMessage(input: {
 }
 
 /**
+ * The explicit register for INTERPRETING intimacy answers — questionnaire analysis (`analyzeAssignment` /
+ * `distillContextOnly`) AND the compatibility report (`generateAlignment`) — for an intimacy/scenario
+ * questionnaire at the `explicit`/`unfiltered` tiers (08-questionnaires §22.7 — the read-side counterpart of
+ * generation's `explicitFraming`). Without it, the generic "coaching Insight … supporting them" register + the
+ * question-drafting `SAFETY` prefix (whose "return an empty questions array" primes emptiness) makes the model
+ * return a structurally-valid but EMPTY result for frank sexual answers — it has no license to synthesize
+ * explicit content, so it says nothing. This establishes the legitimate consensual-adult context, positively
+ * DIRECTS a substantive frank synthesis, and restates the SAME boundary as generation. Applied only for
+ * intimacy/scenario at the explicit tiers; standard analysis/reports are unchanged.
+ */
+const INTIMACY_ANALYSIS_FRAMING = [
+  `CONTEXT: This questionnaire is a private, 18+ intimacy check-in inside a personal wellness app. The answers are a consenting adult's candid reflections on their own sex life — desires, preferences, fantasies, turn-ons, dynamics, and boundaries. Interpreting them for the coaching that supports their intimate life is appropriate, expected, and IN POLICY — a normal use of this app, NOT a request to decline.`,
+  `So DO produce a real, substantive result. Name the desires, preferences, turn-ons, fantasies, dynamics, and boundaries in the answers plainly and frankly in the summary and the facts — do not sanitize them into vague euphemism, and do NOT return an empty summary or empty facts merely because the content is sexually explicit. Synthesize (never quote the raw answers back verbatim). If the answers are genuinely sparse, still summarize what little is there rather than returning nothing.`,
+  `Boundary: consensual adults only; taboo content only as fantasy/roleplay; never minors, real non-consent, or illegal acts. Within those limits this content IS in policy — interpret it normally. Only decline for genuinely prohibited content, never because the topic is sexually explicit.`,
+].join('\n');
+
+/** A light note for a NON-explicit intimacy check-in (`intimacyGeneral`): permit warm reflection on intimate
+ *  and relational content without graphic language, and never return empty just because it's intimate. */
+const INTIMACY_GENERAL_ANALYSIS_NOTE = `CONTEXT: This is a private intimacy check-in for a consenting adult reflecting on connection and desire with a partner. Reflecting on intimate, relational content is appropriate and expected here — keep it respectful and non-graphic, and do not return an empty result merely because the topic is intimate.`;
+
+/** Whether a questionnaire's type + tier carries the EXPLICIT intimacy register (08 §15.2/§22.2). */
+export function isExplicitIntimacyTier(type: string, tier: SensitivityTier): boolean {
+  return (
+    (type === INTIMACY_TYPE || type === SCENARIO_TYPE) &&
+    (tier === 'explicit' || tier === 'unfiltered')
+  );
+}
+
+/**
+ * Append the explicit intimacy register (or the lighter `intimacyGeneral` note) to a base analysis/report
+ * system prompt for an intimacy/scenario questionnaire at the matching tier; any other questionnaire keeps the
+ * base prompt unchanged. Shared by `buildAnalysisSystem` + `buildAlignmentSystem` so every read-side path that
+ * interprets intimacy content gets the register (08 §22.7 — never half-apply it).
+ */
+function withIntimacyRegister(base: string, type: string, tier: SensitivityTier): string {
+  if (isExplicitIntimacyTier(type, tier)) return `${base}\n\n${INTIMACY_ANALYSIS_FRAMING}`;
+  if ((type === INTIMACY_TYPE || type === SCENARIO_TYPE) && tier === 'intimacyGeneral') {
+    return `${base}\n\n${INTIMACY_GENERAL_ANALYSIS_NOTE}`;
+  }
+  return base;
+}
+
+/**
+ * The analysis system prompt for a questionnaire, register-aware (08 §22.7). An intimacy/scenario questionnaire
+ * at an explicit tier gets the explicit framing appended so the model actually synthesizes frank sexual content
+ * into an insight (instead of returning valid-but-empty JSON); `intimacyGeneral` gets the lighter note; every
+ * other questionnaire keeps the base `ANALYSIS_SYSTEM` unchanged.
+ */
+export function buildAnalysisSystem(type: string, tier: SensitivityTier): string {
+  return withIntimacyRegister(ANALYSIS_SYSTEM, type, tier);
+}
+
+/**
  * Compatibility variant personalization (08-questionnaires §3.6). The author writes the canonical
  * questions once; this rewrites each prompt warmly for one specific answerer, keeping the SAME meaning and
  * the SAME answer type so the two variants stay aligned by `canonicalId`. The model returns only the
@@ -606,6 +659,15 @@ Two people answered personalized variants of the same questionnaire. Compare the
 {"summary": string (2-4 sentences on where they align and where they differ, supportive not judgemental), "items": [{"canonicalId": string, "agreement": "aligned" | "mixed" | "divergent", "note": string (one sentence on how the two answers relate)}], "crisisFlag": boolean (true ONLY if an answer discloses risk of self-harm, abuse, or acute crisis), "facts": [{"text": string, "shareable": boolean}] (3-6 concise coaching facts for the sender; "shareable" = safe to share with the other person)}.
 Use each item's canonicalId exactly as given. Never diagnose. Synthesize — do not quote raw answers verbatim.
 The "summary" and each item "note" may use light Markdown (paragraphs, **bold**, *italic*, "-" lists); the "facts" stay PLAIN text. No tables, images, raw HTML, or code fences.`;
+
+/**
+ * The compatibility-report system prompt, register-aware (08 §22.7): an intimacy/scenario compatibility
+ * questionnaire at an explicit tier gets the explicit register so the report isn't empty for frank answers —
+ * the same gap `buildAnalysisSystem` closes for one-person analysis. Standard reports are unchanged.
+ */
+export function buildAlignmentSystem(type: string, tier: SensitivityTier): string {
+  return withIntimacyRegister(ALIGNMENT_SYSTEM, type, tier);
+}
 
 export function buildAlignmentUserMessage(input: {
   title: string;

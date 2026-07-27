@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { classifyParseOutcome, salvageJsonObjectField, tolerantArray } from '../ai/jsonSalvage';
+import {
+  classifyParseOutcome,
+  isEmptyStructuredResult,
+  salvageJsonObjectField,
+  tolerantArray,
+} from '../ai/jsonSalvage';
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
 import { listInsightsForPerson, producedFactShare, saveInsight } from '../insights';
@@ -18,9 +23,9 @@ import {
 } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import {
-  ALIGNMENT_SYSTEM,
-  ANALYSIS_SYSTEM,
+  buildAlignmentSystem,
   buildAlignmentUserMessage,
+  buildAnalysisSystem,
   buildAnalysisUserMessage,
 } from './aiPrompts';
 import { aboutFromRecipient, type InsightAbout } from './aboutResolver';
@@ -162,9 +167,12 @@ export async function generateAlignment(
     };
   }
 
+  // Register-aware system prompt (08 §22.7): an intimacy/scenario compatibility questionnaire at an explicit
+  // tier gets the explicit register so the report isn't valid-but-EMPTY for frank answers (the same gap the
+  // one-person analysis fix closes); standard reports are unchanged.
   const call = await runClaude(
     deps,
-    ALIGNMENT_SYSTEM,
+    buildAlignmentSystem(aSnap.type, aSnap.sensitivity),
     buildAlignmentUserMessage({ title: aSnap.title, personAName, personBName, items: aligned }),
     'questionnaire.analyze',
     1200,
@@ -173,12 +181,22 @@ export async function generateAlignment(
 
   // Tolerant parse; on a truncated object salvage the leading `summary` (the report is still useful — every
   // aligned prompt defaults to `mixed`). Only a genuinely-empty/no-JSON reply is classified honestly.
-  let aiData = AlignmentAiSchema.safeParse(extractJsonObject(call.text)).data;
+  const rawReport = extractJsonObject(call.text);
+  let aiData = AlignmentAiSchema.safeParse(rawReport).data;
   if (!aiData) {
     const summary = salvageJsonObjectField(call.text, 'summary');
     if (summary?.trim()) aiData = { summary, items: [], facts: [] };
   }
   if (!aiData) {
+    // A valid-but-EMPTY report (no summary, no facts — nothing to compare) is honest, not "unexpected shape".
+    if (isEmptyStructuredResult(rawReport)) {
+      return {
+        ok: false,
+        reason: 'EMPTY',
+        usage: call.usage,
+        message: 'There wasn’t enough in these answers to compare yet.',
+      };
+    }
     const { reason, message } = classifyParseOutcome(call.text, 'comparison');
     return { ok: false, reason, usage: call.usage, message };
   }
@@ -308,21 +326,32 @@ export async function distillContextOnly(
         return q ? [{ prompt: q.prompt, answer: formatAnswerForDisplay(q, a.value) }] : [];
       });
 
+    // Register-aware system prompt (08 §22.7): mirrors `analyzeAssignment` — an intimacy/scenario questionnaire
+    // at an explicit tier gets the explicit register so the distill isn't valid-but-EMPTY for frank answers.
     const call = await runClaude(
       deps,
-      ANALYSIS_SYSTEM,
+      buildAnalysisSystem(snapshot.type, snapshot.sensitivity),
       buildAnalysisUserMessage({ title: snapshot.title, qa }),
       'questionnaire.analyze',
       800,
     );
     if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
 
-    let distill = ContextOnlyDistillSchema.safeParse(extractJsonObject(call.text)).data;
+    const rawDistill = extractJsonObject(call.text);
+    let distill = ContextOnlyDistillSchema.safeParse(rawDistill).data;
     if (!distill) {
       const summary = salvageJsonObjectField(call.text, 'summary');
       if (summary?.trim()) distill = { summary, facts: [] };
     }
     if (!distill) {
+      // A valid-but-EMPTY distill (nothing to synthesize) is honest, not "unexpected shape".
+      if (isEmptyStructuredResult(rawDistill)) {
+        return {
+          ok: false,
+          reason: 'EMPTY',
+          message: 'There wasn’t enough in these answers to update their coaches yet.',
+        };
+      }
       const { reason, message } = classifyParseOutcome(call.text, 'summary');
       return { ok: false, reason, message };
     }

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.45.1](https://github.com/Highfivery/SelfOS/compare/v0.45.0...v0.45.1) (2026-07-27)
+
+
+### Bug Fixes
+
+* **questionnaires:** explicit register on intimacy analysis + honest empty results ([#345](https://github.com/Highfivery/SelfOS/issues/345)) ([326365a](https://github.com/Highfivery/SelfOS/commit/326365adbe30a7df5fd38aaec02918daff7e1bd9))
+
 ## [0.45.0](https://github.com/Highfivery/SelfOS/compare/v0.44.0...v0.45.0) (2026-07-27)
 
 

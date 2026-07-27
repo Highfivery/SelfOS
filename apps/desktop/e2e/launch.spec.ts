@@ -13035,6 +13035,49 @@ test('story (64): the Studio tabs deep-link, and the Danger zone deletes only af
   }
 });
 
+test('story (64): the shelf switcher keeps two books and switches between them (§19.2, #299)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+
+    // Book 1.
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('First Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'First Book', level: 1 })).toBeVisible();
+
+    // Start a SECOND book from the shelf switcher (reuses the Begin flow, §19.2).
+    await w.getByRole('button', { name: 'Your books ▾' }).click();
+    await w.getByRole('menuitem', { name: '+ Start another book' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Second Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'Second Book', level: 1 })).toBeVisible();
+    // Decrypt-level: the owner now has two books.
+    await expect.poll(async () => (await listBooks(fs, key, 'owner-1')).length).toBe(2);
+
+    // The switcher now shows "Book N of 2"; switching lands on the other book's Studio.
+    await w.getByRole('button', { name: /Book \d of 2/ }).click();
+    await w.getByRole('menuitem', { name: 'First Book' }).click();
+    await expect(w.getByRole('heading', { name: 'First Book', level: 1 })).toBeVisible();
+    await w.getByRole('button', { name: /Book \d of 2/ }).click();
+    await w.getByRole('menuitem', { name: 'Second Book' }).click();
+    await expect(w.getByRole('heading', { name: 'Second Book', level: 1 })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('story (64): the title workshop offers alternative titles + a fresh essence without a rewrite (§16.4)', async () => {
   test.setTimeout(60_000);
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });

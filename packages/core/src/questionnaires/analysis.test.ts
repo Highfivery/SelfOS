@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient, FileSystem } from '../host';
@@ -387,6 +387,58 @@ describe('analyzeAssignment', () => {
     expect(result.ok).toBe(true);
     expect(result.insight?.summary).toBe('They want more connection.');
     expect(result.insight?.facts).toEqual([]); // the cut-off fact is dropped
+  });
+
+  it('fails with EMPTY and spends NOTHING when every answer is blank/skipped (08 §3.7)', async () => {
+    const fs = memFileSystem();
+    const assignmentId = await seedAnswered(fs);
+    // Overwrite the response so the only answer is a per-question decline (skipped) → no live Q&A. Feeding the
+    // model an empty questionnaire is what reliably produced the scary "unexpected shape" MALFORMED error.
+    const r = await getResponse(fs, key, assignmentId);
+    await saveResponse(fs, key, {
+      ...r!,
+      answers: [{ questionId: 'q1', value: { declined: true, reason: 'Prefer not to say' } }],
+    });
+    const stream = vi.fn();
+    const client: ClaudeClient = { send: () => Promise.resolve(''), stream };
+    const result = await analyzeAssignment(deps(fs, client), { assignmentId });
+    expect(result).toMatchObject({ ok: false, reason: 'EMPTY' });
+    // Caught BEFORE any model call — no spend, no usage event.
+    expect(stream).not.toHaveBeenCalled();
+    expect(result.usage).toBeUndefined();
+  });
+
+  it('gives the analysis real token headroom, not a tight ceiling (08 §3.7)', async () => {
+    const fs = memFileSystem();
+    const assignmentId = await seedAnswered(fs);
+    let captured = 0;
+    const client: ClaudeClient = {
+      send: () => Promise.resolve(ANALYSIS),
+      stream: (options, onDelta) => {
+        captured = options.maxTokens;
+        onDelta(ANALYSIS);
+        return Promise.resolve({
+          text: ANALYSIS,
+          usage: { inputTokens: 10, outputTokens: 20, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    await analyzeAssignment(deps(fs, client), { assignmentId });
+    expect(captured).toBeGreaterThanOrEqual(2000);
+  });
+
+  it('a MALFORMED failure carries a CONTENT-FREE diagnostic (keys, length) for self-diagnosis (08 §3.7)', async () => {
+    const fs = memFileSystem();
+    const assignmentId = await seedAnswered(fs);
+    // A complete, closed object — but the model used the WRONG keys (no "summary"), so it can't parse.
+    const text = JSON.stringify({ overview: 'A summary in the wrong key.', points: ['a', 'b'] });
+    const result = await analyzeAssignment(deps(fs, fakeClient(text)), { assignmentId });
+    expect(result).toMatchObject({ ok: false, reason: 'MALFORMED' });
+    // The diagnostic reveals the actual shape (the model's top-level KEYS) so a recurring failure is
+    // diagnosable — but never the field VALUES (no answer content leaks).
+    expect(result.diagnostic).toContain('MALFORMED');
+    expect(result.diagnostic).toContain('keys: overview, points');
+    expect(result.diagnostic).not.toContain('wrong key');
   });
 });
 

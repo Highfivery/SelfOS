@@ -1665,6 +1665,44 @@ describe('Questionnaires', () => {
     resolveAnalyze({ ok: false, reason: 'NO_RESPONSE' });
   });
 
+  it('surfaces the content-free failure diagnostic under an analysis error (§3.7)', async () => {
+    const insightsAnalyze = vi.fn(() =>
+      Promise.resolve({
+        ok: false as const,
+        reason: 'MALFORMED' as const,
+        message: 'The analysis came back in an unexpected shape. Please try again.',
+        diagnostic: 'MALFORMED · 842 chars · complete · keys: overview, points',
+      }),
+    );
+    installMockBridge({
+      questionnairesList: () => Promise.resolve([sentDef('q1', 'Money talk')]),
+      questionnairesSendStates: () =>
+        Promise.resolve({ q1: { lastSentAt: '2026-06-10T00:00:00.000Z', total: 1 } }),
+      questionnairesSentOverview: () =>
+        Promise.resolve({
+          q1: {
+            questionnaireId: 'q1',
+            lastSentAt: '2026-06-10T00:00:00.000Z',
+            recipients: [{ name: 'Angel', status: 'submitted', answered: true }],
+            answeredCount: 1,
+            newResponses: 1,
+            analyzed: false,
+            answeredAt: '2026-06-11T09:00:00.000Z',
+            analyzableAssignmentId: 'a1',
+          },
+        }),
+      insightsAnalyze,
+    });
+    renderApp();
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Analyze to see the insight/ }),
+    );
+    // The calm user message AND the technical fingerprint (keys/length) so a recurring failure is diagnosable.
+    expect(await screen.findByText(/came back in an unexpected shape/)).toBeInTheDocument();
+    expect(screen.getByText(/keys: overview, points/)).toBeInTheDocument();
+  });
+
   it('the Insight excerpt renders rich text and "View in Memory" deep-links to the exact insight (§3.1)', async () => {
     installMockBridge({
       questionnairesList: () => Promise.resolve([sentDef('q2', 'Love languages')]),

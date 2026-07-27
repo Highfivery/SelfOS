@@ -687,6 +687,16 @@
   padding: var(--space-2) var(--space-3);
 }
 
+/* Content-free failure fingerprint under an analysis error (08 §3.7) — a small, muted, monospace detail
+   for diagnosing a recurring "unexpected shape"; never carries answer content. */
+.analyzeDetail {
+  margin-top: var(--space-1);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--text-xs);
+  opacity: 0.75;
+  word-break: break-word;
+}
+
 .analyzeGo,
 .refreshGo {
   border: none;

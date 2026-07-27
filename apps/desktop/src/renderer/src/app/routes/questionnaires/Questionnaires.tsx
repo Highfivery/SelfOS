@@ -119,6 +119,9 @@ export function Questionnaires(): JSX.Element {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  // A content-free failure fingerprint (08 §3.7) shown under the error so a recurring "unexpected shape" is
+  // diagnosable — never any answer content.
+  const [analyzeDetail, setAnalyzeDetail] = useState<string | null>(null);
 
   // Which top-level tab is showing (§3.1 redesign): your Sent library, questionnaires Received by you, or
   // the Auto check-ins config. Session state — defaults to Sent.
@@ -169,6 +172,7 @@ export function Questionnaires(): JSX.Element {
   const handleAnalyze = async (questionnaireId: string, assignmentId: string): Promise<void> => {
     setAnalyzingId(questionnaireId);
     setAnalyzeError(null);
+    setAnalyzeDetail(null);
     try {
       const result = await analyze(assignmentId);
       // Surface a calm message on failure (AI off / over budget / denied) — never fail silently.
@@ -176,6 +180,7 @@ export function Questionnaires(): JSX.Element {
         setAnalyzeError(
           ('message' in result && result.message) || 'Couldn’t analyze those responses right now.',
         );
+        setAnalyzeDetail(('diagnostic' in result && result.diagnostic) || null);
       }
     } finally {
       setAnalyzingId(null);
@@ -310,7 +315,12 @@ export function Questionnaires(): JSX.Element {
           </div>
 
           {deleteError ? <Banner tone="warning">{deleteError}</Banner> : null}
-          {analyzeError ? <Banner tone="warning">{analyzeError}</Banner> : null}
+          {analyzeError ? (
+            <Banner tone="warning">
+              {analyzeError}
+              {analyzeDetail ? <div className={styles.analyzeDetail}>{analyzeDetail}</div> : null}
+            </Banner>
+          ) : null}
 
           <div className={styles.tabs} role="tablist" aria-label="Questionnaires">
             <button

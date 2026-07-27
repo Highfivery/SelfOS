@@ -19,6 +19,7 @@ export * from './generationService';
 export * from './selfContained';
 export * from './gapFinderService';
 export * from './suggestionStore';
+export * from './coveredTopicsStore';
 export * from './analysisService';
 export * from './aboutResolver';
 export * from './questionnaireTopic';

@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Copy, ImagePlus, Link2, Plus, Send, Sparkles, Trash2 } from 'lucide-react';
+import {
+  Copy,
+  ImagePlus,
+  Link2,
+  Plus,
+  RotateCcw,
+  Send,
+  Sparkles,
+  Target,
+  Trash2,
+} from 'lucide-react';
 import {
   ALLOWED_IMAGE_MIME,
   hasDanglingReference,
@@ -351,6 +361,9 @@ export function QuestionnaireBuilder({
   const storeImage = useQuestionnaireStore((s) => s.storeImage);
   const getImage = useQuestionnaireStore((s) => s.getImage);
   const improve = useQuestionnaireStore((s) => s.improveQuestion);
+  const sharpen = useQuestionnaireStore((s) => s.sharpenQuestion);
+  const markCovered = useQuestionnaireStore((s) => s.markCovered);
+  const generate = useQuestionnaireStore((s) => s.generate);
   const [imageErrors, setImageErrors] = useState<Record<string, string>>({});
   const [aiErrors, setAiErrors] = useState<Record<string, string>>({});
   const [improving, setImproving] = useState<Record<string, boolean>>({});
@@ -616,6 +629,61 @@ export function QuestionnaireBuilder({
       const result = await improve({ prompt: d.prompt.trim(), type: d.type, instruction });
       if (result.ok && result.prompt) patch(d.id, { prompt: result.prompt });
       else setAiErrors((e) => ({ ...e, [d.id]: result.message ?? 'Couldn’t reword that one.' }));
+    } finally {
+      setImproving((m) => ({ ...m, [d.id]: false }));
+    }
+  };
+
+  // "Too vague → sharpen" (08 §28.2): rewrite the same question to be concrete + probing.
+  const onSharpen = async (d: QDraft): Promise<void> => {
+    if (improving[d.id]) return;
+    setAiErrors((e) => ({ ...e, [d.id]: '' }));
+    setImproving((m) => ({ ...m, [d.id]: true }));
+    try {
+      const result = await sharpen({ prompt: d.prompt.trim(), type: d.type });
+      if (result.ok && result.prompt) patch(d.id, { prompt: result.prompt });
+      else setAiErrors((e) => ({ ...e, [d.id]: result.message ?? 'Couldn’t sharpen that one.' }));
+    } finally {
+      setImproving((m) => ({ ...m, [d.id]: false }));
+    }
+  };
+
+  // "Already answered → replace" (08 §28.3): record the topic as covered for this recipient (so ALL future
+  // generation avoids it), then regenerate ONE genuinely-new question in its place. The marked prompt is still
+  // in the draft set when we generate, so the new one is de-duped against it deterministically.
+  const onReplaceRepetitive = async (d: QDraft): Promise<void> => {
+    if (improving[d.id]) return;
+    setAiErrors((e) => ({ ...e, [d.id]: '' }));
+    setImproving((m) => ({ ...m, [d.id]: true }));
+    try {
+      const marked = d.prompt.trim();
+      // Persist the covered topic (household recipient only — a covered note is keyed to a person).
+      if (recipient?.kind === 'person') {
+        await markCovered({
+          recipientPersonId: recipient.personId,
+          note: marked,
+          sourcePrompt: marked,
+        });
+      }
+      const existingPrompts = drafts.map((x) => x.prompt.trim()).filter(Boolean);
+      const result = await generate({
+        type,
+        sensitivity: effectiveSensitivity,
+        existingPrompts,
+        ...(recipient?.kind === 'person' ? { recipientPersonId: recipient.personId } : {}),
+        count: 1,
+      });
+      const fresh = result.ok ? result.questions?.[0] : undefined;
+      if (fresh) {
+        // Swap the question IN PLACE (keep the draft id so its position + React key are stable).
+        const nd = fromGenerated(fresh);
+        setDrafts((ds) => ds.map((x) => (x.id === d.id ? { ...nd, id: d.id } : x)));
+      } else {
+        setAiErrors((e) => ({
+          ...e,
+          [d.id]: (!result.ok && result.message) || 'Couldn’t find a fresh question — try again.',
+        }));
+      }
     } finally {
       setImproving((m) => ({ ...m, [d.id]: false }));
     }
@@ -1235,6 +1303,33 @@ export function QuestionnaireBuilder({
                           {instruction === 'warmer' ? 'Warmer' : 'Tighter'}
                         </button>
                       ))}
+                      {/* Fix a repeated / vague AI question (08 §28.2): sharpen the same topic, or mark it
+                          already-answered and swap in a genuinely new one (which future gens then avoid). */}
+                      <button
+                        type="button"
+                        className={styles.aiAssistButton}
+                        disabled={improving[d.id]}
+                        onClick={() => void onSharpen(d)}
+                        title="This is too vague — ask it more specifically"
+                      >
+                        <Target size={12} aria-hidden="true" />
+                        Too vague
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.aiAssistButton}
+                        disabled={improving[d.id]}
+                        onClick={() => void onReplaceRepetitive(d)}
+                        title="They've already answered this — replace it and don't ask it again"
+                      >
+                        <RotateCcw size={12} aria-hidden="true" />
+                        Already answered
+                      </button>
+                      {improving[d.id] ? (
+                        <Text size="xs" tone="tertiary">
+                          Working…
+                        </Text>
+                      ) : null}
                       {aiErrors[d.id] ? (
                         <Text size="xs" tone="secondary">
                           {aiErrors[d.id]}

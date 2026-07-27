@@ -140,6 +140,14 @@ ${ANSWER_TYPE_GUIDE}`;
 // object/questions generation contract.
 export const IMPROVE_SYSTEM = `${SAFETY}\n\nYou rewrite a single questionnaire question's prompt on request. Return ONLY the rewritten question text — no quotes, no prose, no options, no JSON.`;
 
+/**
+ * The "Too vague → sharpen" instruction (08 §28.2) reused through `improveQuestion`. Turns a broad, generic
+ * question into a concrete, probing one — same topic, but specific enough to draw out a real, considered
+ * answer instead of a shrug.
+ */
+export const SHARPEN_INSTRUCTION =
+  'This question is too vague and invites a generic answer. Rewrite it to be specific and probing — name concrete situations, choices, or details, and gently push them to really think and give a considered, honest answer. Keep the same underlying topic; do not make it a different question.';
+
 const SENSITIVITY_NOTE: Record<SensitivityTier, string> = {
   standard: '',
   // Intimacy/scenario at `intimacyGeneral` route through `sensitiveGeneralFraming` (08 §22.2); this key is

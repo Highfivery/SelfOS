@@ -1748,6 +1748,31 @@ export type QuestionnaireSuggestionsDoc = z.infer<typeof QuestionnaireSuggestion
 /** The accumulate cap per recipient (08-questionnaires §18.3) — newest kept when a new batch overflows. */
 export const SUGGESTION_CAP = 9;
 
+/**
+ * An author-marked "already answered / covered" topic for one recipient (08-questionnaires §28.3). The
+ * author's own durable note that a topic is done for this person, so ALL future generation avoids it — fed
+ * into `buildDedupReference` + the gap-finder's `avoidSuggestions`. Stored per author, keyed by recipient.
+ */
+export const CoveredTopicSchema = z.object({
+  id: z.string().min(1),
+  recipientPersonId: z.string().min(1),
+  /** A short human note of what's covered — the topic, or the marked question's gist. */
+  note: z.string().min(1),
+  /** The prompt of the question that was marked repetitive, when it came from one (for the fuzzy filter). */
+  sourcePrompt: z.string().optional(),
+  createdAt: z.string(),
+});
+export type CoveredTopic = z.infer<typeof CoveredTopicSchema>;
+
+export const CoveredTopicsDocSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  topics: z.array(CoveredTopicSchema),
+});
+export type CoveredTopicsDoc = z.infer<typeof CoveredTopicsDocSchema>;
+
+/** Per-recipient cap on covered-topic notes fed into a de-dup reference (08 §28.3) — newest kept. */
+export const COVERED_TOPICS_CAP = 40;
+
 /** Result of a persisted gap-finder generate (08-questionnaires §18.5): the updated saved set + honest
  * outcome. On failure the prior saved set is preserved (the caller returns it unchanged). */
 export interface SavedSuggestionsResult {
@@ -1781,6 +1806,10 @@ export interface QuestionnaireGenerateResult {
   usage?: UsageEvent;
   reason?: AiFailureReason;
   message?: string;
+  // True when the semantic de-dup pass fell back to keep-all with no real filter signal (08 §28.4 — the §26
+  // `degraded` flag, finally surfaced). The Draft-with-AI panel shows a calm "couldn't fully check for
+  // repeats" note so a silent no-op is visible, never mistaken for "nothing was duplicated".
+  dedupDegraded?: boolean;
 }
 export interface QuestionnaireImproveResult {
   ok: boolean;

@@ -3839,3 +3839,67 @@ _"no new ground to cover right now"_ note so a quiet run reads as deliberate, no
 - **Engine unit** — a topical slot with no suggestion is skipped, not filled; the run result records it.
 - **E2E** — an auto run for a recipient with heavily-asked intimacy ground produces an intimacy check-in on
   an **uncovered** category (decrypt-asserted), and a run with no new topic sends nothing.
+
+---
+
+## 28. 2026-07-26 amendment — author-marked "already answered" / "too vague" + de-dup observability
+
+> **Status: BUILT** (`feat/questionnaire-dedup-mark-covered`). Owner-approved 2026-07-26 (AskUserQuestion: "two
+> actions + remember covered topics per recipient"). After §17/§23/§24/§26/§27, AI questionnaires still
+> re-asked known things and rarely broke new ground. Those amendments improved the DATA and the auto engine;
+> this one gives the **author** a direct lever and makes the one meaning-level de-dup pass **observable**.
+> Amends §13.3 (generation) + §23.5 (de-dup). Privacy boundary (§8.4/§17.4) UNCHANGED — the covered-topics
+> list is the author's own note about a recipient, assembled host-side; only generated questions / keep-drop
+> indices ever come back.
+
+### 28.1 Why the prior fixes weren't enough
+
+The audit found three residual gaps: (1) the semantic de-dup pass is the ONLY meaning-level defense and it
+**fails open silently** — on AI-off / over-budget / any parse hiccup it returns keep-all with a `degraded`
+flag that **no caller reads**, so under a shared daily budget it can quietly do nothing. (2) There is **no
+author-authored signal** — the app can only INFER "already answered" from stored artifacts; the author can't
+say "this is covered, stop asking it." (3) A generated question that's technically new but **too vague**
+("What matters to you?") had no one-tap way to sharpen it into something specific.
+
+### 28.2 The author lever — a per-question "This is repetitive / too vague" control
+
+On the builder's per-question AI strip (beside Reword's Warmer/Tighter), an AI-ready question gains two
+actions:
+
+- **"Already answered → replace"** — records the question's topic as **covered for this recipient** (a
+  durable note, §28.3) AND regenerates ONE genuinely-different question that avoids the marked topic + the
+  recipient's known ground. The draft question is swapped in place.
+- **"Too vague → sharpen"** — regenerates the SAME question to be concrete and probing (name specifics, ask
+  the person to really think), reusing the single-question `improveQuestion` path with a `sharpen` preset.
+  Records nothing (the topic is still wanted, just asked better).
+
+### 28.3 Persistence — per-recipient covered topics
+
+A new per-author, per-recipient store `people/<authorId>/questionnaires/coveredTopics.enc`
+(`CoveredTopic[]` — `{ id, recipientPersonId, note, sourcePrompt?, createdAt }`), following the
+`suggestions.enc` / `autoCheckins.enc` precedent. It feeds two places, so a marked topic is avoided by ALL
+future generation for that recipient, not just the current draft:
+
+- **`buildDedupReference`** gains an "ALREADY COVERED (the author marked these done for this person) — do NOT
+  ask about them" section (capped), so both the hard fuzzy filter's reference and the semantic pass see it.
+- **The gap-finder's `avoidSuggestions`** gains the covered topic notes, so the topic SELECTOR won't re-pick
+  a covered area under a new title.
+
+### 28.4 Observability — surface `degraded`
+
+`generateQuestions` now returns `dedupDegraded: true` when the semantic pass fell back to keep-all with no
+real filter signal (the §26 flag, finally read by a caller). The Draft-with-AI panel shows a calm note
+("couldn't fully check against what they've already shared — review for repeats") so a silent no-op is
+visible, never mistaken for "nothing was duplicated."
+
+### 28.5 Testing
+
+- **Core** — a covered topic is recorded + gathered into `buildDedupReference` (a new section) and the
+  gap-finder `avoidSuggestions`; `replaceQuestion` returns a question distinct from the marked one;
+  `sharpenQuestion`/`improveQuestion` sharpen preset; `generateQuestions` surfaces `dedupDegraded` when the
+  pass degrades.
+- **coreBridge** — `markCovered` persists under the author scoped to the recipient; a non-author can't read
+  another's covered topics.
+- **Renderer** — the two per-question actions call the right store methods; the degraded note renders.
+- **E2E** — mark a generated question "already answered" → it's replaced AND a decrypt asserts the covered
+  topic persisted; the too-vague action sharpens in place.

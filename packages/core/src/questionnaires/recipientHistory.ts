@@ -123,12 +123,20 @@ export function buildDedupReference(inputs: {
   insightFacts: string;
   /** `gatherRecipientAskedPrompts` — the exact prompts already asked. */
   priorPrompts: readonly string[];
+  /** Author-marked "already answered / covered" topic notes for this recipient (08 §28.3). */
+  coveredTopics?: readonly string[];
 }): string {
   const cap = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n)}\n…` : s);
   const intake = inputs.intakeText.trim();
   const priorAnswers = inputs.priorAnswers.trim();
   const insightFacts = inputs.insightFacts.trim();
+  const covered = (inputs.coveredTopics ?? []).map((t) => t.trim()).filter(Boolean);
   return [
+    // The author's OWN explicit "this is done" signal leads — it's the strongest, most deliberate de-dup
+    // instruction there is (§28.3), so it should never be crowded out by a heavy onboarding.
+    covered.length
+      ? `ALREADY COVERED — the author has explicitly marked these topics as done for this person; do NOT ask about them or anything close to them:\n${cap(covered.map((t) => `- ${t}`).join('\n'), 2000)}`
+      : '',
     intake
       ? `ALREADY ANSWERED in their onboarding — do NOT re-ask ANY of this, including specific sub-preferences, acts, positions, kinks, and options they selected (e.g. MMF/FFM, particular porn genres, yes/no on an act):\n${cap(intake, 14000)}`
       : '',

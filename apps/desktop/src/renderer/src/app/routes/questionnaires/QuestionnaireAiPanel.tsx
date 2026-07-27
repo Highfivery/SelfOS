@@ -94,12 +94,19 @@ export function QuestionnaireAiPanel({
       if (result.ok && result.questions && result.questions.length > 0) {
         onGenerated(result.questions);
         if (result.title) onTitle?.(result.title);
-        setNotice({
-          tone: 'info',
-          text: `Added ${result.questions.length} draft question${
-            result.questions.length === 1 ? '' : 's'
-          } below — review and edit them.`,
-        });
+        const added = `Added ${result.questions.length} draft question${
+          result.questions.length === 1 ? '' : 's'
+        } below — review and edit them.`;
+        // Observability (08 §28.4): the semantic de-dup pass fell back to keep-all with no real signal, so
+        // a repeat of something they've already shared could have slipped through — say so, don't hide it.
+        setNotice(
+          result.dedupDegraded
+            ? {
+                tone: 'warning',
+                text: `${added} (Couldn’t fully check these against what they’ve already shared — skim for anything they’ve answered before.)`,
+              }
+            : { tone: 'info', text: added },
+        );
       } else {
         setNotice({ tone: 'warning', text: result.message ?? 'No questions came back.' });
       }

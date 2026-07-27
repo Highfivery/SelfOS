@@ -355,4 +355,21 @@ describe('buildDedupReference (08 §23.5b — the shared budgeting rule)', () =>
     expect(ref).toContain(`${'a'.repeat(4000)}\n…`);
     expect(ref).toContain(`${'f'.repeat(3000)}\n…`);
   });
+
+  it('leads with the author-marked "ALREADY COVERED" topics when present (08 §28.3)', () => {
+    const ref = buildDedupReference({
+      intakeText: 'They love hiking.',
+      priorAnswers: '',
+      insightFacts: '',
+      priorPrompts: [],
+      coveredTopics: ['Their childhood', 'Their career goals'],
+    });
+    const covered = ref.indexOf('ALREADY COVERED');
+    const onboarding = ref.indexOf('ALREADY ANSWERED in their onboarding');
+    expect(covered).toBeGreaterThanOrEqual(0);
+    // The author's explicit "this is done" signal leads — before even the onboarding block.
+    expect(covered).toBeLessThan(onboarding);
+    expect(ref).toContain('Their childhood');
+    expect(ref).toContain('Their career goals');
+  });
 });

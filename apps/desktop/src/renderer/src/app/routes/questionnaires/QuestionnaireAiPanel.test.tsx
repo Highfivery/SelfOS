@@ -43,6 +43,35 @@ describe('QuestionnaireAiPanel — initialBrief (59 §3.5)', () => {
   });
 });
 
+describe('QuestionnaireAiPanel — de-dup observability (08 §28.4)', () => {
+  it('shows a calm "couldn’t fully check for repeats" note when the de-dup pass degraded', async () => {
+    const generate = vi.fn(() =>
+      Promise.resolve({
+        ok: true as const,
+        questions: [
+          { id: 'q', type: 'shortText' as const, prompt: 'A fresh one?', required: false },
+        ],
+        dedupDegraded: true,
+      }),
+    );
+    installMockBridge({ questionnairesGenerate: generate });
+    render(
+      <QuestionnaireAiPanel
+        aiReady
+        type="general"
+        sensitivity="standard"
+        existingPrompts={[]}
+        onGenerated={() => {}}
+        initialBrief="x" // opens expanded
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /generate questions/i }));
+    expect(
+      await screen.findByText(/couldn’t fully check these against what they’ve already shared/i),
+    ).toBeInTheDocument();
+  });
+});
+
 describe('QuestionnaireAiPanel — question count (08 §23.4)', () => {
   it('defaults to 5 and passes the chosen count to generate', async () => {
     const generate = vi.fn(() => Promise.resolve({ ok: true as const, questions: [] }));

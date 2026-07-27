@@ -651,9 +651,12 @@ import {
   getQuestionnaireImage,
   getResponse,
   improveQuestion,
+  sharpenQuestion,
   isAllowedImageMime,
   isAnswerable,
   listAssignments,
+  listCoveredTopics,
+  markCoveredTopic,
   listCustomTypes,
   isAnalysisStale,
   listQuestionnaires,
@@ -1065,6 +1068,17 @@ const ImproveSchema = z.object({
   prompt: z.string().min(1),
   type: AnswerTypeSchema,
   instruction: z.string().min(1),
+});
+// "Too vague → sharpen" (08 §28.2) — no free instruction; the wording lives in core.
+const SharpenSchema = z.object({
+  prompt: z.string().min(1),
+  type: AnswerTypeSchema,
+});
+// "Already answered → replace" — record a covered topic for a recipient (08 §28.3).
+const MarkCoveredSchema = z.object({
+  recipientPersonId: z.string().min(1),
+  note: z.string().min(1),
+  sourcePrompt: z.string().optional(),
 });
 const SuggestSchema = z.object({ targetPersonId: z.string().min(1).optional() });
 // Recipient-first saved suggestions (08 §18.5) — a household recipient, validated in the bridge.
@@ -1517,6 +1531,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     fs: FileSystem,
     key: Uint8Array,
     recipientPersonId: string,
+    /** The active person (author) — reads their per-recipient covered-topic notes (08 §28.3). */
+    authorId: string,
     /** The author's brief, when there is one — the §27.4 explicit-request signal (see below). */
     brief?: string,
   ): Promise<{
@@ -1524,6 +1540,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     coveredActs: CoveredAct[];
     askedPrompts: string[];
     dedupReference: string;
+    /** The author's "already covered" topic notes for this recipient (08 §28.3) — fed to the gap-finder's
+     *  avoid-list by the caller, so the TOPIC selector won't re-pick a marked-done area under a new title. */
+    coveredNotes: string[];
     /** Which intimacy ground has already been worked (08 §27.2) — bounds the "go deeper" framing so a manual
      *  intimacy draft can't re-mine the same rated acts either (#314). */
     intimacyCoverage: IntimacyCoverage;
@@ -1543,10 +1562,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           coveredActs: [] as CoveredAct[],
           prompts: [] as string[],
         };
-    const [intimacyAsks, signals] = await Promise.all([
+    const [intimacyAsks, signals, coveredTopics] = await Promise.all([
       gatherRecipientIntimacyAsks(fs, key, recipientPersonId),
       gatherRecipientMaterialSignals(fs, key, recipientPersonId),
+      // The author's explicit "already covered" notes for this recipient (08 §28.3) — the strongest de-dup
+      // signal there is; fed into the reference below + returned for the gap-finder's avoid-list.
+      listCoveredTopics(fs, key, authorId, recipientPersonId),
     ]);
+    const coveredNotes = coveredTopics.map((t) => t.note);
     // The generation SOFT grounding (the whole blob) — onboarding appended, as before.
     const combined = [
       history,
@@ -1563,10 +1586,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       priorAnswers,
       insightFacts,
       priorPrompts,
+      // §28.3 — the author's marked-done topics lead the reference (strongest, most deliberate signal).
+      ...(coveredNotes.length ? { coveredTopics: coveredNotes } : {}),
     });
-    // The hard near-dup FILTER list: prior questionnaire prompts AND the answered onboarding question prompts,
-    // so a generated question that verbatim re-asks an onboarding question is dropped deterministically too.
-    const askedPrompts = [...priorPrompts, ...intake.prompts];
+    // The hard near-dup FILTER list: prior questionnaire prompts, the answered onboarding question prompts, AND
+    // the prompts of questions the author marked "already answered" (§28.3) — so a re-ask of any is dropped
+    // deterministically too.
+    const coveredPrompts = coveredTopics
+      .map((t) => t.sourcePrompt)
+      .filter((p): p is string => Boolean(p));
+    const askedPrompts = [...priorPrompts, ...intake.prompts, ...coveredPrompts];
     // §27.2 — the intimacy coverage map, in lockstep with the auto engine's `buildDedupBundle`. The author's
     // BRIEF is the `explicitFocus` (§27.4): an author who explicitly asks for ground must be able to get it
     // even when that ground is otherwise worked through — otherwise this fix would silently refuse a direct
@@ -1584,6 +1613,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       coveredActs: intake.coveredActs,
       askedPrompts,
       dedupReference,
+      coveredNotes,
       intimacyCoverage,
     };
   };
@@ -3859,12 +3889,19 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Knowledge-aware de-dup (08 §19): the recipient's history + RAW onboarding answers, and the intimacy
       // acts already rated — so generation goes deeper instead of repeating what's known. Author-blind.
       const known = recipientIsHousehold
-        ? await recipientKnownData(deps.fs, deps.key, p.recipientPersonId as string, p.brief)
+        ? await recipientKnownData(
+            deps.fs,
+            deps.key,
+            p.recipientPersonId as string,
+            deps.personId,
+            p.brief,
+          )
         : {
             history: '',
             coveredActs: [],
             askedPrompts: [],
             dedupReference: '',
+            coveredNotes: [] as string[],
             intimacyCoverage: undefined,
           };
       // Who it's FOR (08 §24.4): the recipient's name/pronouns + the author↔recipient relationship (type +
@@ -3932,6 +3969,37 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
       return improveQuestion(deps, ImproveSchema.parse(input));
     },
+    // "Too vague → sharpen" (08 §28.2): rewrite the same question to be concrete + probing. The prompt wording
+    // lives in core (`SHARPEN_INSTRUCTION`); the renderer just asks to sharpen.
+    questionnairesSharpenQuestion: async (input): Promise<QuestionnaireImproveResult> => {
+      const deps = await aiDeps();
+      if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
+      return sharpenQuestion(deps, SharpenSchema.parse(input));
+    },
+    // "Already answered → replace" (08 §28.3): record the topic as covered for this recipient so ALL future
+    // generation avoids it. Author-scoped (the note lives under the active person, keyed by recipient); gated
+    // `questionnaires.create`. The replacement question itself is generated via the existing generate path.
+    questionnairesMarkCovered: async (input): Promise<{ ok: boolean }> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.create'))) {
+        return { ok: false };
+      }
+      const authorId = await activePersonId();
+      if (!authorId) return { ok: false };
+      const p = MarkCoveredSchema.parse(input);
+      await markCoveredTopic(
+        ctx.fs,
+        ctx.key,
+        authorId,
+        {
+          recipientPersonId: p.recipientPersonId,
+          note: p.note,
+          ...(p.sourcePrompt !== undefined ? { sourcePrompt: p.sourcePrompt } : {}),
+        },
+        new Date(),
+      );
+      return { ok: true };
+    },
     gapfinderSuggest: async (input): Promise<QuestionnaireSuggestResult> => {
       const deps = await aiDeps();
       if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
@@ -3962,22 +4030,27 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       // Their full answered content as avoid-only grounding (§17.4 / §18.2 / §19.1: now incl. raw onboarding
       // answers) + the ideas already saved, so a "Suggest more" returns genuinely new ones. Author-blind.
-      const recipientHistory = (await recipientKnownData(deps.fs, deps.key, recipientPersonId))
-        .history;
+      const known = await recipientKnownData(deps.fs, deps.key, recipientPersonId, deps.personId);
+      const recipientHistory = known.history;
       const existing = await listSavedSuggestions(
         deps.fs,
         deps.key,
         deps.personId,
         recipientPersonId,
       );
-      // Topic-level de-dup (§23.5): avoid re-proposing an idea already SAVED here AND a questionnaire already
-      // SENT to this recipient — so "Suggest more" opens new ground instead of circling covered topics.
+      // Topic-level de-dup (§23.5/§28.3): avoid re-proposing an idea already SAVED here, a questionnaire
+      // already SENT to this recipient, OR a topic the author explicitly marked "already answered" — so
+      // "Suggest more" opens new ground instead of circling covered topics.
       const priorTitles = await gatherRecipientQuestionnaireTitles(
         deps.fs,
         deps.key,
         recipientPersonId,
       );
-      const avoidSuggestions = [...existing.map((s) => s.title), ...priorTitles];
+      const avoidSuggestions = [
+        ...existing.map((s) => s.title),
+        ...priorTitles,
+        ...known.coveredNotes,
+      ];
       const result = await suggestQuestionnaires(deps, {
         targetPersonId: recipientPersonId,
         recipientName: recipient.displayName,
@@ -4045,7 +4118,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           message: 'That suggestion is no longer available.',
         };
       }
-      const known = await recipientKnownData(deps.fs, deps.key, recipientPersonId);
+      const known = await recipientKnownData(deps.fs, deps.key, recipientPersonId, deps.personId);
       const brief = [
         `Build a full, specific questionnaire from this idea: "${suggestion.title}".`,
         suggestion.rationale ? `Why now: ${suggestion.rationale}.` : '',

@@ -171,7 +171,7 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
   // are disabled and read "Analysis unavailable" so it's clear why they don't respond.
   const anyAnalyzing = Object.values(analyzing).some(Boolean);
   const [messages, setMessages] = useState<
-    Record<string, { tone: 'info' | 'warning'; text: string }>
+    Record<string, { tone: 'info' | 'warning'; text: string; detail?: string }>
   >({});
 
   useEffect(() => {
@@ -189,7 +189,12 @@ function StandardResults({ questionnaireId }: { questionnaireId: string }): JSX.
         ...m,
         [assignmentId]: result.ok
           ? { tone: 'info', text: 'Insight drafted — review it in Memory.' }
-          : { tone: 'warning', text: result.message ?? 'Couldn’t analyze this response.' },
+          : {
+              tone: 'warning',
+              text: result.message ?? 'Couldn’t analyze this response.',
+              // Content-free failure fingerprint (08 §3.7) — never answer content.
+              ...('diagnostic' in result && result.diagnostic ? { detail: result.diagnostic } : {}),
+            },
       }));
     } finally {
       setAnalyzing((m) => ({ ...m, [assignmentId]: false }));
@@ -352,7 +357,7 @@ function SendCard({
   analyzing: boolean;
   /** Another response on this Results page is being analyzed — only one runs at a time. */
   busyElsewhere: boolean;
-  message: { tone: 'info' | 'warning'; text: string } | undefined;
+  message: { tone: 'info' | 'warning'; text: string; detail?: string } | undefined;
   onAnalyze: () => void;
   onDelete: () => void;
   onRevoke: () => void;
@@ -621,7 +626,12 @@ function SendCard({
 
         {reshareMsg ? <Banner tone="warning">{reshareMsg}</Banner> : null}
 
-        {message ? <Banner tone={message.tone}>{message.text}</Banner> : null}
+        {message ? (
+          <Banner tone={message.tone}>
+            {message.text}
+            {message.detail ? <div className={styles.analyzeDetail}>{message.detail}</div> : null}
+          </Banner>
+        ) : null}
 
         {confirmingDelete ? (
           <Banner tone="warning">

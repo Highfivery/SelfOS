@@ -1845,8 +1845,14 @@ export interface QuestionnaireAnalyzeResult {
   ok: boolean;
   insight?: Insight;
   usage?: UsageEvent;
-  reason?: AiFailureReason | 'NO_RESPONSE';
+  /** `EMPTY` = the response was submitted but every answer is blank/skipped, so there is nothing to
+   * analyze (caught BEFORE any model spend, 08 §3.7). */
+  reason?: AiFailureReason | 'NO_RESPONSE' | 'EMPTY';
   message?: string;
+  /** A content-free failure fingerprint (parse reason · reply length · complete/truncated · the model's
+   * top-level JSON keys) surfaced on the error so a recurring "unexpected shape" is self-diagnosing without
+   * ever exposing the recipient's answers (08 §3.7). Never carries answer content. */
+  diagnostic?: string;
 }
 
 /**

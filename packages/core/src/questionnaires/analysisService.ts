@@ -80,6 +80,25 @@ function formatAnswer(value: AnswerValue): string {
   return String(value);
 }
 
+/**
+ * A CONTENT-FREE fingerprint of a failed analysis reply (08 §3.7) — the parse reason, how long the reply
+ * was, whether it was cut off, and the model's TOP-LEVEL JSON keys (field NAMES only — never values, so no
+ * answer content leaks). Surfaced on the error so a recurring "unexpected shape" tells us the actual shape
+ * (e.g. the model returned `overview`/`points` instead of `summary`/`facts`) rather than staying a black box.
+ */
+export function analysisFailureDiagnostic(
+  text: string,
+  reason: string,
+  truncated: boolean,
+): string {
+  const parsed = extractJsonObject(text);
+  const shape =
+    parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? `keys: ${Object.keys(parsed as Record<string, unknown>).join(', ') || '(none)'}`
+      : 'no JSON object';
+  return `${reason} · ${text.length} chars · ${truncated ? 'cut off' : 'complete'} · ${shape}`;
+}
+
 /** Analyze the submitted answers for one assignment → a saved (unapproved) Insight. */
 export async function analyzeAssignment(
   deps: AiDeps,
@@ -115,12 +134,27 @@ export async function analyzeAssignment(
     return q ? [{ prompt: q.prompt, answer: formatAnswer(a.value) }] : [];
   });
 
+  // Nothing to analyze: the response was submitted but every answer is blank/skipped/declined (or only for
+  // now-hidden branches). Fail honestly BEFORE spending — feeding the model an empty Q&A reliably produces a
+  // conversational, non-JSON reply that then reads as the scary "unexpected shape" MALFORMED error (08 §3.7).
+  if (qa.length === 0) {
+    return {
+      ok: false,
+      reason: 'EMPTY',
+      message:
+        'These answers are all blank or skipped — there’s nothing to analyze into an insight yet.',
+    };
+  }
+
   const call = await runClaude(
     deps,
     ANALYSIS_SYSTEM,
     buildAnalysisUserMessage({ title: snapshot.title, qa }),
     'questionnaire.analyze',
-    800,
+    // A summary + up to 6 facts + the JSON scaffolding can exceed a tight ceiling; give it real headroom so
+    // the model isn't forced to cut the object short (you only pay for tokens generated). §17.9 keeps adaptive
+    // thinking off so the whole budget goes to the output.
+    2000,
   );
   if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
 
@@ -132,8 +166,18 @@ export async function analyzeAssignment(
     if (summary?.trim()) data = { summary, facts: [] };
   }
   if (!data) {
-    const { reason, message } = classifyParseOutcome(call.text, 'analysis');
-    return { ok: false, reason, usage: call.usage, message };
+    // A reply that STILL hit max_tokens after the bounded continuations is honestly "cut off", not a shape
+    // problem — report TRUNCATED even if it happens to end brace-balanced (don't rely on the endsUnclosed
+    // guess). Attach a content-free fingerprint so a recurring failure is diagnosable without leaking answers.
+    const { reason: classified, message } = classifyParseOutcome(call.text, 'analysis');
+    const reason = call.truncated ? ('TRUNCATED' as const) : classified;
+    return {
+      ok: false,
+      reason,
+      usage: call.usage,
+      message,
+      diagnostic: analysisFailureDiagnostic(call.text, reason, call.truncated ?? false),
+    };
   }
   const validated = { data } as const;
 

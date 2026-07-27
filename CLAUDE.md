@@ -430,6 +430,36 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-07-26 — **Build (questionnaires: "That's not right about me" — correct a wrong fact in a question;
+  SPEC 08 §28 BUILT; PR [#343]; on `feat/questionnaire-wrong-fact-correction`, a worktree off `main`).** The 6th
+  and final of the 6 reported questionnaire issues (#2). A generated question sometimes states a wrong fact about
+  the recipient ("How did turning 39 feel?" when they're 41) and the only recourse was to skip it. **Decisions
+  asked first (AskUserQuestion):** a **distinct "That's not right about me" affordance** beside the §25.5 skip
+  (not a repurposed skip); **"fix the source + reword this question for me"**; **best-effort AI tracing with a
+  safe fallback**. Built: a per-question panel (Inbox only — the external relay page has no household data) →
+  on Fix it, core **`resolveFactCorrection`** (one bounded AI call, tolerant parse) traces the wrong fact to the
+  recipient's OWN on-record source (profile incl. birthday→age, insight facts, an onboarding marker) and returns
+  a reworded prompt + the matched record. **Fix by kind:** a wrong **insight** fact → auto-`flagInsightFact`
+  (non-destructive; stops feeding future questions/context immediately); a **profile/onboarding** fact →
+  **routed** to the recipient to update (auto-editing structured data from free text is unreliable — guided, never
+  silent); **unknown** → the recipient picks where to fix it (safe fallback). The reworded prompt applies to the
+  recipient's LOCAL view (a `promptOverrides` map); the sender's stored question is unchanged (no integrity issue),
+  only the answer against the original question id is stored. New IPC **`assignments:correctFact`** (recipient-
+  scoped in the bridge via `recipientAssignment`; a non-recipient → `NO_PERMISSION`) + a `KnownFact`-based core
+  service + a shared-`@selfos/answering` `onReportWrongFact` prop (present only when the host passes it → Inbox
+  only, never relay). The AI classification is best-effort (unverifiable offline; the offline fake exercises the
+  wiring, the `unknown` fallback prevents a low-confidence mis-edit; live `CORRECTION_SYSTEM` tuning is a noted
+  follow-up). Gate green: typecheck (4 packages), lint, format, **1753 core + 12 relay + 1469 desktop** unit
+  (core rewrite/match/no-match/honest-failure; coreBridge insight-flag round-trip + recipient-scoping; InboxAnswer
+  RTL panel→Fix-it→reworded+outcome), + an E2E (flag a wrong fact → reworded question in place → decrypt asserts
+  the insight fact is `flaggedInaccurate`) + the existing answering E2E still green (the shared WizardForm gained
+  the optional prop). Visual QA at desktop (the accent correction panel + the success outcome banner + the
+  reworded question). **Lesson: a "the premise is wrong" correction is distinct from a skip — trace to the
+  recipient's OWN source and fix it by KIND (auto-flag a soft insight fact; route a structured profile/onboarding
+  fact rather than silently editing free text; let the person pick on an unknown match), and reword only the
+  recipient's LOCAL view so the sender's stored question keeps its integrity. Numbering: this §28 collides with
+  the concurrent dedup branch's §28 — whichever merges second renumbers to §29.**
+
 - 2026-07-22 — **Fix (auto check-ins were repetitive on intimacy + fired "just because the toggle was on";
   member-reported [#314]; SPEC 08 §27 + 63 §13 written, approved, BUILT; on `fix/intimacy-topic-coverage`).**
   The reporter: _"I don't know how many more ways it wants me to describe Ben giving me oral or my thoughts on

@@ -473,7 +473,18 @@
   color: var(--color-text-secondary);
 }
 
+/* The live value bubble rides above the track, absolutely positioned over the thumb (see SliderControl
+ * `leftFor(current)`) so the number always sits over the dot — never pinned to the geometric centre. */
+.sliderValueRow {
+  position: relative;
+  height: var(--text-base);
+}
+
 .sliderValue {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--color-text-primary);

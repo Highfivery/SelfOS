@@ -294,6 +294,23 @@ describe('QuestionnaireForm', () => {
     );
   });
 
+  it('positions the live value readout OVER the thumb, not the geometric centre (1–10 slider)', () => {
+    render(
+      <Harness
+        questions={[q({ id: 'a', type: 'slider', prompt: 'Rate', scale: { min: 1, max: 10 } })]}
+      />,
+    );
+    // Untouched → neutral value 6 at ~55.6% of the track (the number rides above the thumb).
+    expect((screen.getByText('6') as HTMLElement).style.left).toBe(
+      'calc(10px + 0.5556 * (100% - 20px))',
+    );
+    // Move it to 5 → the "5" readout sits over the thumb at ~44.4% — NOT centred at 50% (the reported bug).
+    fireEvent.change(screen.getByRole('slider', { name: 'Rate' }), { target: { value: '5' } });
+    expect((screen.getByText('5') as HTMLElement).style.left).toBe(
+      'calc(10px + 0.4444 * (100% - 20px))',
+    );
+  });
+
   it('renders an attached image (decrypted via loadImage) with its alt text', async () => {
     const questions = [
       q({

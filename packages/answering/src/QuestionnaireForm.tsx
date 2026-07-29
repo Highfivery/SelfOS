@@ -222,16 +222,27 @@ function SliderControl({
   // With descriptive labels at start/middle/end (18 §14.5), anchor all three under the track and drop the
   // raw number; otherwise keep the numeric min/value/max readout.
   const triLabelled = scale.midLabel !== undefined;
-  // The middle label must sit under the thumb's NEUTRAL resting position, not the track's geometric centre.
-  // The neutral value is the integer `middle` = round((min+max)/2); for an odd-span scale (e.g. 1–10 → 6)
-  // that value renders at ~55.6% of the track, not 50%, so a fixed-centre label drifts left of the dot.
-  // A native range thumb of width THUMB_PX at value fraction f has its centre at `f*(100% − THUMB_PX) +
-  // THUMB_PX/2`, so we position the label there. min/max stay pinned to the track ends.
+  // A label that must line up with the thumb (the tri-label middle example, or the live value readout) can't
+  // sit at the track's geometric centre — the thumb for a value at fraction f is NOT at 50% unless f is 0.5
+  // (e.g. value 5 on a 1–10 scale is at ~44%, so a centred "5" drifts right of the dot — the reported bug). A
+  // native range thumb of width THUMB_PX at fraction f has its centre at `f*(100% − THUMB_PX) + THUMB_PX/2`, so
+  // we position such a label there. min/max stay pinned to the track ends.
   const span = scale.max - scale.min;
-  const midFraction = span > 0 ? (middle - scale.min) / span : 0.5;
-  const midLeft = `calc(${midFraction.toFixed(4)} * (100% - 20px) + 10px)`;
+  const leftFor = (v: number): string => {
+    const f = span > 0 ? Math.min(1, Math.max(0, (v - scale.min) / span)) : 0.5;
+    return `calc(${f.toFixed(4)} * (100% - 20px) + 10px)`;
+  };
   return (
     <div className={styles.sliderWrap}>
+      {/* The live value rides ABOVE the thumb (tracking it), so the number always sits over the dot on any
+          scale — not pinned to the geometric centre. min/max stay at the ends below. */}
+      {triLabelled ? null : (
+        <div className={styles.sliderValueRow} aria-hidden="true">
+          <span className={styles.sliderValue} style={{ left: leftFor(current) }}>
+            {current}
+          </span>
+        </div>
+      )}
       <input
         type="range"
         className={styles.slider}
@@ -246,14 +257,13 @@ function SliderControl({
         <div className={styles.sliderTriLabels} aria-hidden="true">
           <span>{scale.minLabel}</span>
           <span>{scale.maxLabel}</span>
-          <span className={styles.sliderTriMid} style={{ left: midLeft }}>
+          <span className={styles.sliderTriMid} style={{ left: leftFor(middle) }}>
             {scale.midLabel}
           </span>
         </div>
       ) : (
         <div className={styles.sliderScale}>
           <span className={styles.sliderEnd}>{scale.minLabel ?? scale.min}</span>
-          <span className={styles.sliderValue}>{current}</span>
           <span className={styles.sliderEnd}>{scale.maxLabel ?? scale.max}</span>
         </div>
       )}

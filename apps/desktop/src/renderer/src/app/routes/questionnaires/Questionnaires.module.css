@@ -719,6 +719,18 @@
   text-decoration: underline;
 }
 
+/* One analysis runs at a time — a calm, muted "queued" status (never a scary "unavailable" button). */
+.analyzeWaiting {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-text-tertiary);
+  font-weight: 600;
+}
+.analyzeWaiting svg {
+  flex: none;
+}
+
 /* Stale answers → a calm, clear "ask again" prompt (keeps the age visible; not an alert). */
 .refreshPrompt {
   display: flex;

@@ -362,11 +362,11 @@ function SendCard({
   onDelete: () => void;
   onRevoke: () => void;
 }): JSX.Element {
-  // Analyze is disabled while THIS card is analyzing OR another card is; a busy-elsewhere button reads
-  // "Analysis unavailable" so it's clear it's paused rather than broken (08 §3.1).
+  // Analyze is disabled while THIS card is analyzing OR another card is; a busy-elsewhere button reads a calm
+  // "Waiting…" so it's clear it's momentarily queued (one runs at a time), not broken (08 §3.1).
   const analyzeDisabled = analyzing || busyElsewhere;
   const analyzeLabel = (idle: string, active: string): string =>
-    analyzing ? active : busyElsewhere ? 'Analysis unavailable' : idle;
+    analyzing ? active : busyElsewhere ? 'Waiting…' : idle;
   const navigate = useNavigate();
   const isSubmitted = send.status === 'submitted';
   const isOpen = OPEN_STATUSES.includes(send.status);

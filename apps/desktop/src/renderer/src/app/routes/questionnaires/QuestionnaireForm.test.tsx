@@ -294,6 +294,23 @@ describe('QuestionnaireForm', () => {
     );
   });
 
+  it('positions the live value readout OVER the thumb, not the geometric centre (1–10 slider)', () => {
+    render(
+      <Harness
+        questions={[q({ id: 'a', type: 'slider', prompt: 'Rate', scale: { min: 1, max: 10 } })]}
+      />,
+    );
+    // Untouched → neutral value 6 at ~55.6% of the track (the number rides above the thumb).
+    expect((screen.getByText('6') as HTMLElement).style.left).toBe(
+      'calc(10px + 0.5556 * (100% - 20px))',
+    );
+    // Move it to 5 → the "5" readout sits over the thumb at ~44.4% — NOT centred at 50% (the reported bug).
+    fireEvent.change(screen.getByRole('slider', { name: 'Rate' }), { target: { value: '5' } });
+    expect((screen.getByText('5') as HTMLElement).style.left).toBe(
+      'calc(10px + 0.4444 * (100% - 20px))',
+    );
+  });
+
   it('renders an attached image (decrypted via loadImage) with its alt text', async () => {
     const questions = [
       q({
@@ -451,6 +468,7 @@ function WizardHarness({
   onDecline,
   submitLabel,
   declineLabel,
+  withWrongFact,
 }: {
   questions: Question[];
   onSubmit: () => void;
@@ -458,6 +476,8 @@ function WizardHarness({
   onDecline?: () => void;
   submitLabel?: string;
   declineLabel?: string;
+  /** Wire the inline wrong-fact affordance (as the Inbox host does) — a marker panel to assert placement. */
+  withWrongFact?: boolean;
 }): JSX.Element {
   const [answers, setAnswers] = useState<AnswerMap>({});
   return (
@@ -467,6 +487,21 @@ function WizardHarness({
       onChange={(id: string, value: AnswerValue) =>
         setAnswers((prev) => ({ ...prev, [id]: value }))
       }
+      {...(withWrongFact
+        ? {
+            wrongFact: {
+              onOpen: vi.fn(),
+              renderPanel: (close: () => void) => (
+                <div>
+                  <p>Correction panel body</p>
+                  <button type="button" onClick={close}>
+                    Close correction
+                  </button>
+                </div>
+              ),
+            },
+          }
+        : {})}
       wizard={{
         onSubmit,
         ...(onSaveForLater ? { onSaveForLater } : {}),
@@ -535,6 +570,74 @@ describe('QuestionnaireForm — wizard mode, unlocked (08 §25)', () => {
     // "Answer it instead" brings the control back so they can still answer.
     await userEvent.click(screen.getByRole('button', { name: 'Answer it instead' }));
     expect(screen.getByLabelText('Deep one?')).toBeInTheDocument();
+  });
+
+  it('opening the skip reason greys out the question control (consistent with wrong-fact)', async () => {
+    render(
+      <WizardHarness
+        questions={[q({ id: 'a', type: 'shortText', prompt: 'Deep one?' })]}
+        onSubmit={vi.fn()}
+      />,
+    );
+    // Interactive before opening any panel.
+    expect(screen.getByLabelText('Deep one?')).toBeEnabled();
+    await userEvent.click(screen.getByRole('button', { name: /Skip this/i }));
+    // While the reason box is open, the question control above is disabled (greyed).
+    expect(screen.getByLabelText('Deep one?')).toBeDisabled();
+    // Cancel → the control is interactive again.
+    await userEvent.click(screen.getByRole('button', { name: 'Never mind' }));
+    expect(screen.getByLabelText('Deep one?')).toBeEnabled();
+  });
+
+  it('Skip and "That\'s not right about me" are two DISTINCT buttons (wrong-fact wired)', async () => {
+    render(
+      <WizardHarness
+        questions={[q({ id: 'a', type: 'shortText', prompt: 'Deep one?' })]}
+        onSubmit={vi.fn()}
+        withWrongFact
+      />,
+    );
+    const skip = screen.getByRole('button', { name: /Skip this one/ });
+    const wrong = screen.getByRole('button', { name: /That’s not right about me/ });
+    expect(skip).toBeInTheDocument();
+    expect(wrong).toBeInTheDocument();
+    expect(skip).not.toBe(wrong);
+  });
+
+  it('wrong-fact panel renders INLINE below the greyed question; closing un-greys it', async () => {
+    render(
+      <WizardHarness
+        questions={[q({ id: 'a', type: 'shortText', prompt: 'Deep one?' })]}
+        onSubmit={vi.fn()}
+        withWrongFact
+      />,
+    );
+    // Opening it greys the question control AND renders the host panel in place (not above the questions).
+    await userEvent.click(screen.getByRole('button', { name: /That’s not right about me/ }));
+    expect(screen.getByText('Correction panel body')).toBeInTheDocument();
+    expect(screen.getByLabelText('Deep one?')).toBeDisabled();
+    // The panel sits AFTER the question control in the DOM (inline below, not popped above).
+    const control = screen.getByLabelText('Deep one?');
+    const panel = screen.getByText('Correction panel body');
+    expect(control.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // `close` dismisses the panel and re-enables the question.
+    await userEvent.click(screen.getByRole('button', { name: 'Close correction' }));
+    expect(screen.queryByText('Correction panel body')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Deep one?')).toBeEnabled();
+  });
+
+  it('the wrong-fact affordance is absent when the host does not wire it (e.g. the relay page)', () => {
+    render(
+      <WizardHarness
+        questions={[q({ id: 'a', type: 'shortText', prompt: 'Deep one?' })]}
+        onSubmit={vi.fn()}
+      />,
+    );
+    expect(
+      screen.queryByRole('button', { name: /That’s not right about me/ }),
+    ).not.toBeInTheDocument();
+    // Skip is always available.
+    expect(screen.getByRole('button', { name: /Skip this/i })).toBeInTheDocument();
   });
 
   it('required = answer OR skip: Send is blocked until a required question is answered or skipped (§25.3)', async () => {

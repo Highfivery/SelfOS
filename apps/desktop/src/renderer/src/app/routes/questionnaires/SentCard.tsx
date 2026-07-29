@@ -207,24 +207,24 @@ export function SentCard({
       ) : analyzable ? (
         <div className={styles.analyzePrompt} aria-busy={analyzing ?? false}>
           <span>Responses are in.</span>
-          <button
-            type="button"
-            className={styles.analyzeGo}
-            disabled={(analyzing ?? false) || (analyzingOther ?? false)}
-            title={
-              analyzingOther && !analyzing
-                ? 'Another questionnaire is being analyzed — wait for it to finish.'
-                : undefined
-            }
-            onClick={() => onAnalyze(analyzable)}
-          >
-            <Sparkles size={13} aria-hidden="true" />
-            {analyzing
-              ? 'Analyzing…'
-              : analyzingOther
-                ? 'Analysis unavailable — one is already running'
-                : 'Analyze to see the insight →'}
-          </button>
+          {analyzingOther && !analyzing ? (
+            // Only one analysis runs at a time — a calm "queued" status, not a disabled button labelled with a
+            // scary "unavailable" sentence (which reads as broken rather than momentarily busy, 08 §3.1).
+            <span className={styles.analyzeWaiting} role="status">
+              <Clock size={13} aria-hidden="true" />
+              Waiting for another analysis to finish…
+            </span>
+          ) : (
+            <button
+              type="button"
+              className={styles.analyzeGo}
+              disabled={analyzing ?? false}
+              onClick={() => onAnalyze(analyzable)}
+            >
+              <Sparkles size={13} aria-hidden="true" />
+              {analyzing ? 'Analyzing…' : 'Analyze to see the insight →'}
+            </button>
+          )}
         </div>
       ) : null}
 

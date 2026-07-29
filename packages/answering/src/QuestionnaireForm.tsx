@@ -66,6 +66,21 @@ export interface WizardActions {
   busy?: boolean;
 }
 
+/**
+ * The "That's not right about me" wrong-fact correction (spec 08 wrong-fact amendment). Supplied ONLY by the
+ * in-app Inbox host (the relay page has no access to the recipient's household data, so it omits this). The
+ * host owns the correction flow (tracing the fact to source, fixing it, rewording the question) — but the
+ * wizard owns WHERE it renders: opening it greys the question and shows the host's `renderPanel` INLINE,
+ * directly below the question (never a banner that pops above the questions and scrolls the page).
+ */
+export interface WizardWrongFact {
+  /** Fired when the recipient opens the inline panel for `question` — the host resets its input + outcome. */
+  onOpen: (question: Question) => void;
+  /** Render the host's correction panel body (input + Fix it + outcome) shown inline below the greyed
+   *  question; `close` dismisses the panel and un-greys the question. */
+  renderPanel: (close: () => void) => ReactNode;
+}
+
 interface QuestionnaireFormProps {
   questions: Question[];
   answers: AnswerMap;
@@ -97,11 +112,10 @@ interface QuestionnaireFormProps {
   wizard?: WizardActions;
   /**
    * "That's not right about me" (spec 08 wrong-fact amendment): when provided, each wizard question shows an
-   * affordance to flag a wrong fact in it. The host (the in-app Inbox) owns the correction flow — it traces
-   * the fact to source, fixes it, and rewrites the question. Omitted (e.g. the external relay page, which
-   * has no access to the recipient's household data) ⇒ no such affordance. Wizard mode only.
+   * inline affordance to flag a wrong fact in it — see {@link WizardWrongFact}. Omitted (e.g. the external
+   * relay page, which has no access to the recipient's household data) ⇒ no such affordance. Wizard mode only.
    */
-  onReportWrongFact?: (question: Question) => void;
+  wrongFact?: WizardWrongFact;
 }
 
 const range = (min: number, max: number): number[] => {
@@ -208,16 +222,27 @@ function SliderControl({
   // With descriptive labels at start/middle/end (18 §14.5), anchor all three under the track and drop the
   // raw number; otherwise keep the numeric min/value/max readout.
   const triLabelled = scale.midLabel !== undefined;
-  // The middle label must sit under the thumb's NEUTRAL resting position, not the track's geometric centre.
-  // The neutral value is the integer `middle` = round((min+max)/2); for an odd-span scale (e.g. 1–10 → 6)
-  // that value renders at ~55.6% of the track, not 50%, so a fixed-centre label drifts left of the dot.
-  // A native range thumb of width THUMB_PX at value fraction f has its centre at `f*(100% − THUMB_PX) +
-  // THUMB_PX/2`, so we position the label there. min/max stay pinned to the track ends.
+  // A label that must line up with the thumb (the tri-label middle example, or the live value readout) can't
+  // sit at the track's geometric centre — the thumb for a value at fraction f is NOT at 50% unless f is 0.5
+  // (e.g. value 5 on a 1–10 scale is at ~44%, so a centred "5" drifts right of the dot — the reported bug). A
+  // native range thumb of width THUMB_PX at fraction f has its centre at `f*(100% − THUMB_PX) + THUMB_PX/2`, so
+  // we position such a label there. min/max stay pinned to the track ends.
   const span = scale.max - scale.min;
-  const midFraction = span > 0 ? (middle - scale.min) / span : 0.5;
-  const midLeft = `calc(${midFraction.toFixed(4)} * (100% - 20px) + 10px)`;
+  const leftFor = (v: number): string => {
+    const f = span > 0 ? Math.min(1, Math.max(0, (v - scale.min) / span)) : 0.5;
+    return `calc(${f.toFixed(4)} * (100% - 20px) + 10px)`;
+  };
   return (
     <div className={styles.sliderWrap}>
+      {/* The live value rides ABOVE the thumb (tracking it), so the number always sits over the dot on any
+          scale — not pinned to the geometric centre. min/max stay at the ends below. */}
+      {triLabelled ? null : (
+        <div className={styles.sliderValueRow} aria-hidden="true">
+          <span className={styles.sliderValue} style={{ left: leftFor(current) }}>
+            {current}
+          </span>
+        </div>
+      )}
       <input
         type="range"
         className={styles.slider}
@@ -232,14 +257,13 @@ function SliderControl({
         <div className={styles.sliderTriLabels} aria-hidden="true">
           <span>{scale.minLabel}</span>
           <span>{scale.maxLabel}</span>
-          <span className={styles.sliderTriMid} style={{ left: midLeft }}>
+          <span className={styles.sliderTriMid} style={{ left: leftFor(middle) }}>
             {scale.midLabel}
           </span>
         </div>
       ) : (
         <div className={styles.sliderScale}>
           <span className={styles.sliderEnd}>{scale.minLabel ?? scale.min}</span>
-          <span className={styles.sliderValue}>{current}</span>
           <span className={styles.sliderEnd}>{scale.maxLabel ?? scale.max}</span>
         </div>
       )}
@@ -873,6 +897,36 @@ function QuestionField({
  *  "unclear" count can't drift. "Not clear — needs more context" (the first) is the unclear flag. */
 const SKIP_REASONS = SKIP_REASON_PRESETS;
 
+/** A "skip forward" (»») glyph leading the Skip chip. */
+function SkipIcon(): JSX.Element {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M6 6l6 6-6 6M13 6l6 6-6 6"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** A flag glyph leading the "That's not right about me" chip. */
+function FlagIcon(): JSX.Element {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M5 21V4m0 0h11l-1.6 3.5L16 11H5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 /** One question's state in the wizard navigator (a chip / list-item). */
 type QState = 'answered' | 'skipped' | 'current' | 'open';
 
@@ -895,7 +949,7 @@ function WizardForm({
   loadImage,
   footer,
   actions,
-  onReportWrongFact,
+  wrongFact,
 }: {
   visible: Question[];
   answers: AnswerMap;
@@ -903,13 +957,16 @@ function WizardForm({
   loadImage?: LoadImage;
   footer?: ReactNode;
   actions: WizardActions;
-  onReportWrongFact?: (question: Question) => void;
+  wrongFact?: WizardWrongFact;
 }): JSX.Element {
   const total = visible.length;
   const [step, setStep] = useState(0);
   const [reviewing, setReviewing] = useState(false);
   const [allOpen, setAllOpen] = useState(false);
   const [skipOpen, setSkipOpen] = useState(false);
+  // The inline "That's not right about me" panel is open for the current question — greys the question above
+  // and renders the host's correction panel in place (never a banner that pops above + scrolls the page).
+  const [wrongFactOpen, setWrongFactOpen] = useState(false);
   const [reasonSel, setReasonSel] = useState<string | null>(null);
   const [reasonText, setReasonText] = useState('');
   // A declined question the recipient chose to answer instead — show a fresh control (the stored decline
@@ -940,6 +997,7 @@ function WizardForm({
 
   const leave = (): void => {
     setSkipOpen(false);
+    setWrongFactOpen(false);
     setAnswerInstead(null);
   };
   const jumpTo = (i: number): void => {
@@ -957,9 +1015,16 @@ function WizardForm({
     setStep(Math.max(0, current - 1));
   };
   const openSkip = (): void => {
+    setWrongFactOpen(false);
     setSkipOpen(true);
     setReasonSel(null);
     setReasonText('');
+  };
+  const openWrongFact = (): void => {
+    if (!question || !wrongFact) return;
+    setSkipOpen(false);
+    wrongFact.onOpen(question);
+    setWrongFactOpen(true);
   };
   const confirmSkip = (): void => {
     if (!question) return;
@@ -1181,15 +1246,20 @@ function WizardForm({
                 </div>
               ) : (
                 <>
-                  {question.help ? <p className={styles.help}>{question.help}</p> : null}
-                  {question.media && loadImage ? (
-                    <QuestionImage media={question.media} loadImage={loadImage} />
-                  ) : null}
-                  <Control
-                    question={question}
-                    value={answerInstead === question.id ? undefined : answers[question.id]}
-                    set={(v) => onChange(question.id, v)}
-                  />
+                  {/* The question body greys out (native `disabled` fieldset) while an inline panel — skip
+                      reason OR wrong-fact — is open, so both affordances behave the SAME: the question steps
+                      back and the panel takes over in place, directly below. */}
+                  <fieldset className={styles.qBody} disabled={skipOpen || wrongFactOpen}>
+                    {question.help ? <p className={styles.help}>{question.help}</p> : null}
+                    {question.media && loadImage ? (
+                      <QuestionImage media={question.media} loadImage={loadImage} />
+                    ) : null}
+                    <Control
+                      question={question}
+                      value={answerInstead === question.id ? undefined : answers[question.id]}
+                      set={(v) => onChange(question.id, v)}
+                    />
+                  </fieldset>
                   <div className={styles.skipRow}>
                     {skipOpen ? (
                       <div className={styles.reason}>
@@ -1236,19 +1306,30 @@ function WizardForm({
                           </button>
                         </div>
                       </div>
+                    ) : wrongFactOpen && wrongFact ? (
+                      // The host renders its correction panel (input + Fix it + outcome) INLINE here, below the
+                      // greyed question — never a banner above the questions that scrolls the page. `close`
+                      // dismisses it + un-greys the question.
+                      <div className={styles.correctionPanel}>
+                        {wrongFact.renderPanel(() => setWrongFactOpen(false))}
+                      </div>
                     ) : (
-                      <div className={styles.wizardSecondary}>
-                        <button type="button" className={styles.skipBtn} onClick={openSkip}>
-                          Skip this — I can’t or don’t want to answer
+                      // Two DISTINCT secondary escape hatches — bordered chips with a leading icon, so they
+                      // read as two separate controls, not one run of muted text.
+                      <div className={styles.secondaryActions}>
+                        <button type="button" className={styles.secondaryAction} onClick={openSkip}>
+                          <SkipIcon />
+                          Skip this one
                         </button>
-                        {/* Wrong-fact correction (spec 08 wrong-fact amendment) — Inbox only (the host wires
-                            the callback; the relay page doesn't, so it never shows there). */}
-                        {onReportWrongFact && question ? (
+                        {/* Wrong-fact correction (spec 08 wrong-fact amendment) — Inbox only (the relay page
+                            doesn't pass `wrongFact`, so it never shows there). */}
+                        {wrongFact ? (
                           <button
                             type="button"
-                            className={styles.skipBtn}
-                            onClick={() => onReportWrongFact(question)}
+                            className={styles.secondaryAction}
+                            onClick={openWrongFact}
                           >
+                            <FlagIcon />
                             That’s not right about me
                           </button>
                         ) : null}
@@ -1337,7 +1418,7 @@ export function QuestionnaireForm({
   progress,
   disabled,
   wizard,
-  onReportWrongFact,
+  wrongFact,
 }: QuestionnaireFormProps): JSX.Element {
   const visible = visibleQuestions(questions, answers);
 
@@ -1352,7 +1433,7 @@ export function QuestionnaireForm({
         onChange={onChange}
         {...(loadImage ? { loadImage } : {})}
         {...(footer !== undefined ? { footer } : {})}
-        {...(onReportWrongFact ? { onReportWrongFact } : {})}
+        {...(wrongFact ? { wrongFact } : {})}
         actions={wizard}
       />
     );

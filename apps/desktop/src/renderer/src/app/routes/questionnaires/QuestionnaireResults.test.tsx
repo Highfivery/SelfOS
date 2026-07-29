@@ -407,10 +407,10 @@ describe('QuestionnaireResults', () => {
     expect(draw).toHaveLength(2);
 
     // Start one — its promise never resolves. The active card shows "Drawing…"; the OTHER is disabled and
-    // reads "Analysis unavailable" (only one analysis runs at a time).
+    // reads a calm "Waiting…" (only one analysis runs at a time).
     await userEvent.click(draw[0]!);
     expect(screen.getByRole('button', { name: 'Drawing…' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Analysis unavailable' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Waiting…' })).toBeDisabled();
 
     resolveAnalyze({ ok: true });
   });

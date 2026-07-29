@@ -1653,13 +1653,12 @@ describe('Questionnaires', () => {
     expect(analyzeButtons).toHaveLength(2);
 
     // Start analyzing one (its promise never resolves) — the active card shows "Analyzing…", the OTHER
-    // card's button is disabled and explains it's unavailable while one is running.
+    // card shows a calm "waiting" status (no Analyze button) while one is running.
     await userEvent.click(analyzeButtons[0]!);
     expect(screen.getByRole('button', { name: 'Analyzing…' })).toBeInTheDocument();
-    const other = screen.getByRole('button', {
-      name: /Analysis unavailable — one is already running/,
-    });
-    expect(other).toBeDisabled();
+    expect(screen.getByText(/Waiting for another analysis to finish/)).toBeInTheDocument();
+    // The other card no longer offers a live Analyze button while it's queued.
+    expect(screen.queryByRole('button', { name: /Analyze to see the insight/ })).toBeNull();
 
     // Clean up the pending promise so the store settles.
     resolveAnalyze({ ok: false, reason: 'NO_RESPONSE' });

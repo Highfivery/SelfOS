@@ -2,7 +2,12 @@
 // implementation of the answer-type controls + branching/required gating + crisis footer, imported by
 // both the Electron renderer and the apps/relay zero-knowledge answering page.
 export { QuestionnaireForm } from './QuestionnaireForm';
-export type { LoadImage, QuestionSharing, WizardActions } from './QuestionnaireForm';
+export type {
+  LoadImage,
+  QuestionSharing,
+  WizardActions,
+  WizardWrongFact,
+} from './QuestionnaireForm';
 export { QuestionImage } from './QuestionImage';
 export { CrisisFooter } from './CrisisFooter';
 export { Markdown } from './Markdown';

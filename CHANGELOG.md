@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.45.2](https://github.com/Highfivery/SelfOS/compare/v0.45.1...v0.45.2) (2026-07-29)
+
+
+### Bug Fixes
+
+* **questionnaires:** answering & results UX — distinct skip/wrong-fact buttons, inline correction, slider centering, calm analyze status ([#348](https://github.com/Highfivery/SelfOS/issues/348)) ([fbf8d39](https://github.com/Highfivery/SelfOS/commit/fbf8d39c70066faf1b204294fdfe9ea9cf993ae4))
+
 ## [0.45.1](https://github.com/Highfivery/SelfOS/compare/v0.45.0...v0.45.1) (2026-07-27)
 
 

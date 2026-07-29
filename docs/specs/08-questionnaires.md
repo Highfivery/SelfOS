@@ -4034,3 +4034,19 @@ local-only). The relay page omits `wrongFact`, so it still never shows the affor
 wrong-fact panel renders inline (DOM-after the control) + closing un-greys it; the affordance is absent when the
 host doesn't wire it. E2E: flagging a wrong fact disables the question inline (not a banner above), then rewords in
 place. The existing skip + wrong-fact flows (unit + E2E) stay green.
+
+## 31. 2026-07-29 amendment — slider readout tracks the thumb + a calm "queued" analyze status
+
+> **Status: BUILT** (`fix/questionnaire-skip-wrongfact-inline`). Two more member-reported answering/results
+> UI/UX papercuts, alongside §30.
+
+- **Slider value readout tracks the thumb.** A slider value is at fraction `(v−min)/(max−min)` of the track,
+  but the numeric readout was pinned to the geometric centre (50%), so e.g. **5 on a 1–10 scale** (~44%) showed
+  the "5" drifting right of the dot and a fresh slider looked mis-centred. The live value now rides directly
+  **above the thumb** via the same thumb-aware `left` calc already used for the tri-label middle anchor; min/max
+  stay pinned at the ends below. RTL asserts the readout sits over the thumb at value 6 (~55.6%) and 5 (~44.4%).
+- **Calm "queued" analyze status.** Only one analysis runs at a time; while another is running, a Sent card's
+  Analyze affordance used to become a **disabled button labelled "Analysis unavailable — one is already
+  running"** — which reads as broken, not busy. It's now a muted **"Waiting for another analysis to finish…"**
+  status (with a clock glyph), and the Results view's per-response Analyze buttons read a short **"Waiting…"**
+  instead of "Analysis unavailable". Purely presentational — the one-at-a-time gating is unchanged.

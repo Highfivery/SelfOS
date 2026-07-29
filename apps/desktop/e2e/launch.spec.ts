@@ -4958,8 +4958,10 @@ test('inbox: “That’s not right about me” flags the wrong insight + rewords
     await w.getByRole('button', { name: /Birthday check-in/ }).click();
     await expect(w.getByText('How did turning 39 feel?')).toBeVisible();
 
-    // Flag the wrong fact → describe it → Fix it.
+    // Flag the wrong fact → the correction shows INLINE (below), greying/disabling the question — not a
+    // banner that pops above the questions and scrolls the page (spec 08 wrong-fact UX fix).
     await w.getByRole('button', { name: /That’s not right about me/ }).click();
+    await expect(w.getByLabel('How did turning 39 feel?')).toBeDisabled();
     await w.getByLabel(/what’s wrong about this question/i).fill('I turned 41 last May, not 39.');
     await w.getByRole('button', { name: 'Fix it' }).click();
 

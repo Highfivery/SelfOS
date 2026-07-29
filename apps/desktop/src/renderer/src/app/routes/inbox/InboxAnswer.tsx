@@ -89,27 +89,29 @@ export function InboxAnswer({
   const navigate = useNavigate();
   // Wrong-fact correction (spec 08 wrong-fact amendment): the question the recipient is flagging + its
   // reworded prompts (applied to their LOCAL view) + the resolved outcome. Reworded prompts never change the
-  // sender's stored question — the recipient just answers the corrected version.
-  const [correcting, setCorrecting] = useState<Question | null>(null);
+  // sender's stored question — the recipient just answers the corrected version. The panel renders INLINE
+  // (below the greyed question) via the wizard's `wrongFact.renderPanel` — never a banner above the questions.
+  const [wrongFactQ, setWrongFactQ] = useState<Question | null>(null);
   const [correctionText, setCorrectionText] = useState('');
   const [correctionBusy, setCorrectionBusy] = useState(false);
   const [correctionOutcome, setCorrectionOutcome] = useState<FactCorrectionOutcome | null>(null);
   const [promptOverrides, setPromptOverrides] = useState<Record<string, string>>({});
 
   const runCorrection = async (): Promise<void> => {
-    if (!correcting || !correctionText.trim()) return;
+    if (!wrongFactQ || !correctionText.trim()) return;
     setCorrectionBusy(true);
     try {
       const result = await window.selfos?.assignmentsCorrectFact({
         assignmentId,
-        questionId: correcting.id,
-        questionPrompt: promptOverrides[correcting.id] ?? correcting.prompt,
+        questionId: wrongFactQ.id,
+        questionPrompt: promptOverrides[wrongFactQ.id] ?? wrongFactQ.prompt,
         correction: correctionText.trim(),
       });
       if (result?.ok && result.rewrittenPrompt) {
-        setPromptOverrides((m) => ({ ...m, [correcting.id]: result.rewrittenPrompt! }));
+        // Apply the reworded prompt to the recipient's LOCAL view + show the success outcome in place (the
+        // question stays greyed until they close the panel). The sender's stored question is unchanged.
+        setPromptOverrides((m) => ({ ...m, [wrongFactQ.id]: result.rewrittenPrompt! }));
         setCorrectionOutcome(result);
-        setCorrecting(null);
         setCorrectionText('');
       } else {
         setCorrectionOutcome(
@@ -119,6 +121,95 @@ export function InboxAnswer({
     } finally {
       setCorrectionBusy(false);
     }
+  };
+
+  // The inline wrong-fact panel body the wizard renders below the greyed question — the input (with an
+  // optional error), OR the resolved success outcome. `close` dismisses the panel + un-greys the question.
+  const renderWrongFactPanel = (close: () => void): JSX.Element => {
+    const dismiss = (): void => {
+      setCorrectionOutcome(null);
+      close();
+    };
+    if (correctionOutcome?.ok) {
+      return (
+        <Banner tone="info">
+          <Stack gap={2}>
+            <Text size="sm">
+              {correctionOutcome.insightFlagged
+                ? 'Fixed — I flagged that in your Memory so it won’t come back, and reworded this question.'
+                : 'Reworded this question so you can answer it.'}
+            </Text>
+            {correctionOutcome.source === 'profile' ? (
+              <Button variant="secondary" onClick={() => navigate('/people')}>
+                Update it in your profile
+              </Button>
+            ) : correctionOutcome.source === 'onboarding' ? (
+              <Button variant="secondary" onClick={() => navigate('/onboarding')}>
+                Update it in your onboarding
+              </Button>
+            ) : correctionOutcome.source === 'unknown' ? (
+              <div className={styles.correctionActions}>
+                <Text size="sm" tone="secondary">
+                  Where does this come from?
+                </Text>
+                <Button variant="secondary" onClick={() => navigate('/people')}>
+                  Profile
+                </Button>
+                <Button variant="secondary" onClick={() => navigate('/onboarding')}>
+                  Onboarding
+                </Button>
+                <Button variant="secondary" onClick={() => navigate('/memory')}>
+                  Memory
+                </Button>
+              </div>
+            ) : null}
+            <div>
+              <Button variant="primary" onClick={dismiss}>
+                Answer the reworded question
+              </Button>
+            </div>
+          </Stack>
+        </Banner>
+      );
+    }
+    return (
+      <Banner tone={correctionOutcome ? 'warning' : 'info'}>
+        <Stack gap={2}>
+          <Text weight={600}>What’s not right about this question?</Text>
+          <Text size="sm" tone="secondary">
+            e.g. “I turned 41 last May, not 39.” I’ll correct where this came from and reword the
+            question so you can answer it.
+          </Text>
+          {/* Focus moves into the panel on open (the panel subtree mounts when the wizard opens it), so a
+              keyboard/SR user lands on the correction input rather than back at the top of the page. */}
+          <Textarea
+            autoFocus
+            rows={2}
+            value={correctionText}
+            placeholder="Say what’s wrong…"
+            onChange={(e) => setCorrectionText(e.target.value)}
+            aria-label="What’s wrong about this question"
+          />
+          {correctionOutcome && !correctionOutcome.ok ? (
+            <Text size="sm">
+              {correctionOutcome.message ?? 'Couldn’t process that correction — please try again.'}
+            </Text>
+          ) : null}
+          <div className={styles.correctionActions}>
+            <Button
+              variant="primary"
+              onClick={() => void runCorrection()}
+              disabled={correctionBusy || correctionText.trim() === ''}
+            >
+              {correctionBusy ? 'Fixing…' : 'Fix it'}
+            </Button>
+            <Button variant="secondary" onClick={dismiss} disabled={correctionBusy}>
+              Never mind
+            </Button>
+          </div>
+        </Stack>
+      </Banner>
+    );
   };
 
   useEffect(() => {
@@ -340,96 +431,12 @@ export function InboxAnswer({
           {saved ? <Banner tone="info">Saved — you can come back and finish later.</Banner> : null}
           {error ? <Banner tone="warning">{error}</Banner> : null}
 
-          {/* Wrong-fact correction panel (spec 08 wrong-fact amendment) — opened from the question's "That's
-              not right about me" affordance. Fixes the source + rewords this question. */}
-          {correcting ? (
-            <Banner tone="info">
-              <Stack gap={2}>
-                <Text weight={600}>What’s not right about this question?</Text>
-                <Text size="sm" tone="secondary">
-                  e.g. “I turned 41 last May, not 39.” I’ll correct where this came from and reword
-                  the question so you can answer it.
-                </Text>
-                <Textarea
-                  rows={2}
-                  value={correctionText}
-                  placeholder="Say what’s wrong…"
-                  onChange={(e) => setCorrectionText(e.target.value)}
-                  aria-label="What’s wrong about this question"
-                />
-                <div className={styles.correctionActions}>
-                  <Button
-                    variant="primary"
-                    onClick={() => void runCorrection()}
-                    disabled={correctionBusy || correctionText.trim() === ''}
-                  >
-                    {correctionBusy ? 'Fixing…' : 'Fix it'}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setCorrecting(null)}
-                    disabled={correctionBusy}
-                  >
-                    Never mind
-                  </Button>
-                </div>
-              </Stack>
-            </Banner>
-          ) : null}
-
-          {/* The outcome once a correction resolves: what was fixed + where to fix the source it came from. */}
-          {correctionOutcome ? (
-            <Banner tone={correctionOutcome.ok ? 'info' : 'warning'}>
-              <Stack gap={2}>
-                {correctionOutcome.ok ? (
-                  <>
-                    <Text size="sm">
-                      {correctionOutcome.insightFlagged
-                        ? 'Fixed — I flagged that in your Memory so it won’t come back, and reworded this question.'
-                        : 'Reworded this question so you can answer it.'}
-                    </Text>
-                    {correctionOutcome.source === 'profile' ? (
-                      <Button variant="secondary" onClick={() => navigate('/people')}>
-                        Update it in your profile
-                      </Button>
-                    ) : correctionOutcome.source === 'onboarding' ? (
-                      <Button variant="secondary" onClick={() => navigate('/onboarding')}>
-                        Update it in your onboarding
-                      </Button>
-                    ) : correctionOutcome.source === 'unknown' ? (
-                      <div className={styles.correctionActions}>
-                        <Text size="sm" tone="secondary">
-                          Where does this come from?
-                        </Text>
-                        <Button variant="secondary" onClick={() => navigate('/people')}>
-                          Profile
-                        </Button>
-                        <Button variant="secondary" onClick={() => navigate('/onboarding')}>
-                          Onboarding
-                        </Button>
-                        <Button variant="secondary" onClick={() => navigate('/memory')}>
-                          Memory
-                        </Button>
-                      </div>
-                    ) : null}
-                    <Button variant="ghost" onClick={() => setCorrectionOutcome(null)}>
-                      Dismiss
-                    </Button>
-                  </>
-                ) : (
-                  <Text size="sm">
-                    {correctionOutcome.message ??
-                      'Couldn’t process that correction — please try again.'}
-                  </Text>
-                )}
-              </Stack>
-            </Banner>
-          ) : null}
-
           {/* One question at a time (08 §21.3): the shared wizard owns Back/Next + the action bar; the
               host supplies the terminal callbacks. Editing → Update answers + Cancel (no Save for later);
               a fresh answer → Submit + Save for later + Decline. Prompt overrides apply the reworded text
-              from a wrong-fact correction to the recipient's local view (the sender's question is unchanged). */}
+              from a wrong-fact correction to the recipient's local view (the sender's question is unchanged).
+              The "That's not right about me" correction panel renders INLINE below the greyed question (the
+              wizard owns placement; `onOpen` resets our input/outcome, `renderPanel` supplies the body). */}
           <QuestionnaireForm
             questions={detail.questionnaire.questions.map((q) =>
               promptOverrides[q.id] ? { ...q, prompt: promptOverrides[q.id]! } : q,
@@ -438,10 +445,13 @@ export function InboxAnswer({
             loadImage={loadImage}
             onChange={onChange}
             footer={<CrisisFooter />}
-            onReportWrongFact={(q) => {
-              setCorrecting(q);
-              setCorrectionText('');
-              setCorrectionOutcome(null);
+            wrongFact={{
+              onOpen: (q) => {
+                setWrongFactQ(q);
+                setCorrectionText('');
+                setCorrectionOutcome(null);
+              },
+              renderPanel: renderWrongFactPanel,
             }}
             wizard={
               editing

@@ -4004,3 +4004,33 @@ in their own words. On submit, the app:
   (insight flagged / route to source).
 - **E2E** — a household recipient flags a wrong fact → the question is reworded in place → a decrypt asserts the
   wrong insight fact is flagged inaccurate.
+
+## 30. 2026-07-29 amendment — skip & wrong-fact affordances: two distinct buttons + inline, question-greying panels
+
+> **Status: BUILT** (`fix/questionnaire-skip-wrongfact-inline`). Member-reported UI/UX: the per-question _"Skip"_ and
+> _"That's not right about me"_ affordances "appear as a single button which is confusing", and flagging a wrong
+> fact "pops up above the questions and scrolls up which is a little discombobulating."
+
+Two connected refinements to the wizard's per-question secondary actions (§25/§29), no behavioural or data change:
+
+1. **Two DISTINCT buttons.** The skip + wrong-fact affordances were two identical borderless muted text-links in
+   one flex row, so they read as a single control. They are now **bordered chip buttons with a leading icon** —
+   **"Skip this one"** (a »» skip glyph) and **"That's not right about me"** (a flag glyph) — clearly two separate
+   controls. (The skip-reason box's confirm button stays **"Skip this question"**, distinct from the entry chip.)
+2. **Both panels render INLINE, below the greyed question.** The skip-reason box already rendered in place; the
+   **wrong-fact correction panel** used to be a host `<Banner>` rendered ABOVE the whole `QuestionnaireForm`, which
+   popped above the questions and scrolled the page. It now renders in the **same in-place slot** as the skip box,
+   directly below the question — and opening EITHER panel **greys out + disables the question above** (a native
+   `<fieldset disabled>` + reduced opacity), so both affordances feel identical: the question steps back and the
+   panel takes over in place. Closing (Never mind / "Answer the reworded question") un-greys it.
+
+**API.** `@selfos/answering`'s `QuestionnaireForm` replaces the `onReportWrongFact?: (question) => void` prop with a
+`wrongFact?: WizardWrongFact` object — `{ onOpen(question), renderPanel(close) }`. The wizard owns the inline
+open/close state + the greying + placement; the host (`InboxAnswer`) supplies the panel body (input → Fix it →
+outcome) via `renderPanel`, and the sender's stored question is still never mutated (prompt overrides stay
+local-only). The relay page omits `wrongFact`, so it still never shows the affordance.
+
+**Testing.** RTL: the two are distinct buttons; opening skip OR wrong-fact disables the question control; the
+wrong-fact panel renders inline (DOM-after the control) + closing un-greys it; the affordance is absent when the
+host doesn't wire it. E2E: flagging a wrong fact disables the question inline (not a banner above), then rewords in
+place. The existing skip + wrong-fact flows (unit + E2E) stay green.

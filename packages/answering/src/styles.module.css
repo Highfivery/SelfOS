@@ -1114,29 +1114,69 @@
   padding-top: var(--space-3);
   border-top: 1px dashed var(--color-border);
 }
-/* The secondary actions under a wizard question (Skip + "That's not right about me") stack quietly. */
-.wizardSecondary {
+/* The question body (help + control) greys out while an inline panel (skip reason / wrong-fact) is open, so
+   BOTH escape hatches behave the same: the question steps back and the panel takes over in place. A native
+   `disabled` <fieldset> makes the controls inert; the opacity is the visual cue. `min-width: 0` avoids the
+   disabled-fieldset min-content overflow footgun (§12). */
+.qBody {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  transition: opacity var(--motion-fast) var(--ease-standard);
+}
+.qBody:disabled {
+  opacity: 0.45;
+}
+
+/* Two DISTINCT secondary escape hatches under a wizard question — "Skip this one" + "That's not right about
+   me" — as bordered chip buttons with a leading icon, so they clearly read as two separate controls (not one
+   run of muted text that looks like a single button). */
+.secondaryActions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1) var(--space-4);
+  gap: var(--space-2);
 }
-.skipBtn {
-  border: none;
-  background: none;
+.secondaryAction {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
   color: var(--color-text-secondary);
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   font-weight: 600;
   cursor: pointer;
-  padding: 2px 0;
+  transition:
+    color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard);
 }
-.skipBtn:hover {
+.secondaryAction:hover {
   color: var(--color-warning);
+  border-color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-surface));
 }
-.skipBtn:focus-visible {
+.secondaryAction:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
-  border-radius: var(--radius-sm);
+}
+.secondaryAction svg {
+  flex: none;
+}
+
+/* The host-supplied wrong-fact correction panel renders in this slot (with its own card chrome), in the same
+   spot the skip-reason box uses — inline, below the greyed question. */
+.correctionPanel {
+  display: flex;
+  flex-direction: column;
 }
 
 .reason {

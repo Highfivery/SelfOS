@@ -996,6 +996,13 @@ function WizardForm({
   const isLast = current >= total - 1;
 
   const leave = (): void => {
+    // Commit a pending skip before navigating away. The reason lives in local state until `confirmSkip`
+    // writes the decline into the answer map, and every nav path (Next/Back/jump) routes through here — so
+    // without this, opening the skip panel, typing a reason, then clicking the big "Review & send" / "Next"
+    // / "Back" button silently DROPS the decline and the (often last, required) question stays `open`,
+    // blocking Send (#347). Only "Never mind" (which sets `setSkipOpen(false)` directly, not via `leave`)
+    // discards, preserving the explicit-cancel intent.
+    if (skipOpen) confirmSkip();
     setSkipOpen(false);
     setWrongFactOpen(false);
     setAnswerInstead(null);

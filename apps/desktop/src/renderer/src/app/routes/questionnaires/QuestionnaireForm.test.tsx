@@ -661,6 +661,45 @@ describe('QuestionnaireForm — wizard mode, unlocked (08 §25)', () => {
     expect(screen.getByRole('button', { name: 'Send answers' })).toBeEnabled();
   });
 
+  it('committing a pending skip on the LAST required question via "Review & send" satisfies the gate (#347)', async () => {
+    // Repro: open the skip panel on the last (required) question, type a reason, then click the big
+    // "Review & send" button instead of the small "Skip this question" panel button. The decline must be
+    // committed (not discarded), so Send is enabled and the review shows the skipped state.
+    const onSubmit = vi.fn();
+    render(
+      <WizardHarness
+        questions={[q({ id: 'a', type: 'shortText', prompt: 'Only one?', required: true })]}
+        onSubmit={onSubmit}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: /Skip this/i }));
+    await userEvent.type(screen.getByLabelText(/Reason for skipping/i), 'this one keeps repeating');
+    // Navigate away WITHOUT clicking the panel's "Skip this question" — the reported failure path.
+    await userEvent.click(screen.getByRole('button', { name: 'Review & send' }));
+    // The decline was committed: the required gate is satisfied and Send fires.
+    expect(screen.queryByText(/still needs an answer or a reason/i)).not.toBeInTheDocument();
+    const send = screen.getByRole('button', { name: 'Send answers' });
+    expect(send).toBeEnabled();
+    await userEvent.click(send);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it('"Never mind" still discards a pending skip (explicit cancel is not a commit)', async () => {
+    render(
+      <WizardHarness
+        questions={[q({ id: 'a', type: 'shortText', prompt: 'Only one?', required: true })]}
+        onSubmit={vi.fn()}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: /Skip this/i }));
+    await userEvent.type(screen.getByLabelText(/Reason for skipping/i), 'typed then cancelled');
+    await userEvent.click(screen.getByRole('button', { name: 'Never mind' }));
+    // Not committed: going to review still shows the required question as unsatisfied.
+    await userEvent.click(screen.getByRole('button', { name: 'Review & send' }));
+    expect(screen.getByText(/still needs an answer or a reason/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send answers' })).toBeDisabled();
+  });
+
   it('the navigator jumps to any question (see all → click) without answering the previous (§25.1)', async () => {
     const three = [
       q({ id: 'a', type: 'shortText', prompt: 'First?' }),

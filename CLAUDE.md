@@ -430,6 +430,25 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-04 — **Fix (Questionnaires: a declined/skipped LAST question still blocked Send; member-reported
+  [#347]; SPEC 08 §25; on `fix/questionnaire-skip-last-question`).** The skip-with-reason panel kept the reason
+  in local state; only the in-panel "Skip this question" button committed the decline into the answer map, and
+  every navigation path (`leave()` → Next/Back/jump) discarded it. On the LAST question the primary button reads
+  **"Review & send"**, so a user who opened the skip panel + typed a reason clicked that instead of the small
+  panel button → the decline was dropped → the (often required) question stayed `open` → the review gate blocked
+  Send ("still needs an answer or a reason"). On earlier questions the button reads "Next", so users clicked the
+  panel button, which committed — hence "skipping an earlier question worked fine." **Fix:** `leave()` now
+  commits a pending skip before navigating (covering the reported case AND the sibling data-loss on Back/jump);
+  only "Never mind" (which closes the panel directly, not via `leave()`) still discards. Renderer-only in the
+  shared `@selfos/answering` `QuestionnaireForm`, so the relay page gets it too. Gate green: typecheck, lint,
+  format, desktop unit (+a repro test that FAILS without the fix — commit-on-"Review & send" for the last
+  required question — + a "Never mind" still-discards guard); the inbox answer/skip E2E re-pointed to drive the
+  reported path (skip the last required question via "Review & send" directly) and still decrypt the vault to
+  assert the decline persisted with its reason. **Lesson: a per-question control whose value lives in local
+  state until an explicit in-panel confirm is a data-loss trap when a DIFFERENT prominent button (Review & send)
+  also navigates — commit pending local state on every navigation path (a shared `leave()`), reserving discard
+  for the explicit cancel.**
+
 - 2026-07-27 — **Fix (Questionnaires "Analyze to see the insight" → "The analysis came back in an unexpected
   shape" on an intimacy auto check-in; member-reported; SPEC 08 §22.7; on `fix/questionnaire-analysis-empty-insight`).**
   **Diagnosed against the LIVE model, not assumed (§6).** Since the raw reply is host-side + the vault is encrypted

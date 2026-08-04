@@ -430,6 +430,23 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-04 — **Follow-up to #350 (Sent-tab delete for a self check-in; SPEC 08 §3.9; on
+  `fix/sent-tab-delete-self-checkin`).** After the Inbox delete shipped, the owner asked to make a self / auto
+  check-in deletable from the Questionnaires **Sent** tab too (it appears there as an authored questionnaire,
+  but the kebab Delete threw for a non-owner because the send exists). **Owner decision (asked — the fork
+  changes a data-safety rule): self-targeted only.** `questionnairesDelete` now lets a non-owner creator delete
+  their own questionnaire while unsent **OR when every send is self-targeted** (recipient == the creator);
+  a send to **anyone else** stays Owner-deletable-only once sent (§3.9 still protects others' answered
+  responses + derived insights). The check reads the actual assignments (`listAssignments` → all recipients ==
+  personId), not `hasSends`, so it's the sends — not a def flag — that decide. Renderer unchanged (the SentCard
+  kebab Delete already existed; it now succeeds instead of erroring for a self check-in). Gate green: typecheck,
+  lint, format, **1487 desktop** unit (the deletion coreBridge test extended: a member deletes their own SENT
+  self-targeted questionnaire; a send-to-owner stays blocked; owner purges any) + an E2E driving the Sent-tab
+  kebab Delete as a **member** and decrypting the vault to prove the def + self-send are purged. **Lesson: "let
+  me delete it from here too" for a self check-in is safe as a narrow self-targeted exception — key the relaxation
+  on "every recipient is the creator" (read the assignments), never a blanket creator-can-delete-sent, which
+  would let a member nuke a questionnaire others answered.**
+
 - 2026-08-04 — **Fix (Auto check-ins: "turned them off but still getting them" + "can't delete a received
   check-in"; member-reported [#350]; SPEC 08 §3.3 + 63 §5.1; on `fix/inbox-delete-received-checkin`).** Two
   bugs. **Bug A (opt-out) — diagnosed against the real code, NOT assumed (§6): there is NO generation bug.** The

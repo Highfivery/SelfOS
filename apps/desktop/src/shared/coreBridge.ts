@@ -634,7 +634,6 @@ import {
   generateVariant,
   getAlignmentReport,
   getCompatibilityGroup,
-  hasSends,
   createRelaySend,
   drainRelaySend,
   buildDedupReference,
@@ -3759,13 +3758,19 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const questionnaire = await getQuestionnaire(ctx.fs, ctx.key, questionnaireId);
       if (!questionnaire) return;
       const personId = await activePersonId();
-      if (
-        questionnaire.creatorPersonId !== personId ||
-        (await hasSends(ctx.fs, ctx.key, questionnaireId))
-      ) {
-        throw new Error('Not permitted');
-      }
-      // A creator-only delete is unsent (no sends), but revoke any preview relay link to be safe.
+      if (questionnaire.creatorPersonId !== personId) throw new Error('Not permitted');
+      // A non-owner creator may delete their OWN questionnaire while it is still unsent, OR when every send is
+      // SELF-TARGETED (the recipient is the creator themselves — a self / auto check-in, #350). Sends to
+      // OTHERS stay protected (§3.9): a non-owner can't purge a questionnaire whose recipients may have
+      // answered, since that would destroy their responses + the insights drawn from them.
+      const sends = (await listAssignments(ctx.fs, ctx.key)).filter(
+        (a) => a.questionnaireId === questionnaireId,
+      );
+      const allSelfTargeted = sends.every(
+        (a) => a.recipient.kind === 'person' && a.recipient.personId === personId,
+      );
+      if (!allSelfTargeted) throw new Error('Not permitted');
+      // Unsent or self-only — safe to purge; revoke any preview/self relay link first.
       await revokeRelayLinks(ctx.fs, ctx.key, (a) => a.questionnaireId === questionnaireId);
       await purgeQuestionnaire(ctx.fs, ctx.key, questionnaireId);
     },

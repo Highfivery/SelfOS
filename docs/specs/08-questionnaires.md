@@ -393,7 +393,9 @@ Per-household **bring-your-own Cloudflare**, provisioned + deployed from the app
 report.enc` + the group's derived Insight, §13.5d) + `deleteSend` + `hasSends`; `Questionnaire.creatorPersonId` is main-stamped
 > on create (preserved on edit, never back-filled onto a legacy def). `questionnaires:delete` is role-aware
 > — the Owner (`people.manage`) purges at any stage; a non-owner **creator** deletes their own
-> **only while unsent**. Per-send delete is `assignments:delete` (sender/admin-only). Inline "Are you sure?"
+> **while unsent OR when every send is self-targeted** (recipient == the creator — a self / auto check-in,
+> #350), since that destroys only their own data; a send to **anyone else** stays protected. Per-send delete
+> is `assignments:delete` (sender/admin-only). Inline "Are you sure?"
 > confirms in the builder + each Results send card. **Built §13.6:** the relay-link **revoke** before an
 > external send's teardown, and **question-image garbage collection** — `purgeQuestionnaire`/`deleteSend`
 > (and an image-dropping save) run `imageGc.garbageCollectImages`, which deletes media referenced by no
@@ -402,8 +404,10 @@ report.enc` + the group's derived Insight, §13.5d) + `deleteSend` + `hasSends`;
 
 - **Owner** deletes **any** questionnaire at any stage → **purge everything** (questionnaire +
   relay link + raw responses + Insights) after a clear confirmation; the relay link is revoked.
-- **Creator** (incl. a Member) deletes **their own** questionnaire **only while unsent**, which also revokes
-  any preview relay link.
+- **Creator** (incl. a Member) deletes **their own** questionnaire **while unsent, or once sent when every
+  recipient is themselves** (a self / auto check-in — no one else's answers are involved, #350), which also
+  revokes any preview/self relay link. A questionnaire sent to **someone else** stays Owner-deletable-only
+  once sent (their responses + derived insights are protected).
 
 ## 4. Data model
 

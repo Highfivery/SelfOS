@@ -5052,6 +5052,78 @@ test('questionnaires: a questionnaire sent TO you is in your Inbox, NOT your edi
   }
 });
 
+test('questionnaires: a member deletes their own SENT self check-in from the Sent tab (#350)', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('sent-delete e2e: master key missing');
+  // A member (with a completed onboarding so the hard gate releases) who authored a SELF-targeted check-in
+  // that has already been SENT to themselves.
+  const now = new Date().toISOString();
+  await savePerson(fs, key, {
+    id: 'mara-1',
+    schemaVersion: 1,
+    displayName: 'Mara',
+    isSubject: true,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  });
+  await setAccount(fs, key, { personId: 'mara-1', roleId: 'member' });
+  await seedCompletedIntake(fs, key, 'mara-1');
+  const q = await saveQuestionnaire(
+    fs,
+    key,
+    {
+      title: 'My self check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How am I?', required: true }],
+    },
+    'mara-1',
+  );
+  await createAssignment(fs, key, {
+    questionnaireId: q.id,
+    senderPersonId: 'mara-1',
+    recipient: { kind: 'person', personId: 'mara-1' },
+    channel: 'inApp',
+    privacy: 'private',
+    senderVisibleToRecipient: true,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Switch owner → Mara (PIN-free), then open her authored questionnaires.
+    await switchTogetherPerson(w, 'Mara');
+    await w.getByRole('link', { name: /Questionnaires/ }).click();
+    const sent = w.getByRole('tabpanel', { name: 'Sent questionnaires' });
+    await expect(sent.getByRole('button', { name: 'My self check-in', exact: true })).toBeVisible();
+
+    // Delete it from the Sent tab kebab → confirm. Even though it's been sent, every recipient is Mara
+    // herself, so §3.9's protection doesn't apply and the delete succeeds (no "not permitted" error).
+    await sent.getByRole('button', { name: 'Options for My self check-in' }).click();
+    await w.getByRole('menuitem', { name: 'Delete' }).click();
+    await w.getByRole('button', { name: 'Delete', exact: true }).click();
+
+    await expect(sent.getByRole('button', { name: 'My self check-in', exact: true })).toHaveCount(
+      0,
+    );
+    await expect(w.getByText(/don.t have permission/i)).toHaveCount(0);
+    // Purged from the vault: the def and its self-send are gone.
+    await expect
+      .poll(async () => (await listQuestionnaires(fs, key)).some((d) => d.id === q.id))
+      .toBe(false);
+    expect((await listAssignments(fs, key)).filter((a) => a.questionnaireId === q.id)).toHaveLength(
+      0,
+    );
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('results: re-asks chart a trend, a send deletes, and the questionnaire purges', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);

@@ -3880,7 +3880,7 @@ describe('createCoreBridge', () => {
     expect((await bridge.questionnairesList()).map((q) => q.id)).not.toContain(legacy.id);
   });
 
-  it('deletion: owner purges any stage; a member-creator only deletes their own while unsent', async () => {
+  it('deletion: owner purges any stage; a member-creator deletes their own while unsent OR self-targeted', async () => {
     const { bridge, ownerId } = await freshOwner();
     const member = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
@@ -3927,6 +3927,20 @@ describe('createCoreBridge', () => {
     });
     await bridge.questionnairesDelete(draft.id);
     expect(await bridge.questionnairesGet(draft.id)).toBeNull();
+
+    // …and a SELF-targeted send: a member CAN delete their own self / auto check-in even once sent (#350) —
+    // no one else's answers are involved, so §3.9's protection doesn't apply. (Contrast the send to the owner
+    // above, which stays blocked.)
+    const selfQ = await bridge.questionnairesSave({
+      title: 'My self check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: member.id },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How am I?', required: true }],
+    });
+    await bridge.assignmentsCreate({ questionnaireId: selfQ.id, privacy: 'private' });
+    await bridge.questionnairesDelete(selfQ.id);
+    expect(await bridge.questionnairesGet(selfQ.id)).toBeNull();
     void assignment;
   });
 

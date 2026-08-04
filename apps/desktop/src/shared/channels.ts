@@ -554,6 +554,7 @@ export const IpcChannels = {
   assignmentsReopen: 'assignments:reopen',
   assignmentsSubmit: 'assignments:submit',
   assignmentsDecline: 'assignments:decline',
+  assignmentsDismiss: 'assignments:dismiss',
   assignmentsCorrectFact: 'assignments:correctFact',
   assignmentsResults: 'assignments:results',
   assignmentsTrends: 'assignments:trends',
@@ -1761,6 +1762,12 @@ export interface SelfosBridge {
   assignmentsSubmit(input: { assignmentId: string; answers: Answer[] }): Promise<void>;
   /** Decline an assignment, silently or with a short note. Recipient-only; requires `questionnaires.answer`. */
   assignmentsDecline(input: { assignmentId: string; note?: string }): Promise<void>;
+  /**
+   * Remove a received questionnaire from the recipient's Inbox (issue #350). Recipient-only (requires
+   * `questionnaires.answer`): a self check-in is DELETED outright; a send from someone else is DISMISSED
+   * (hidden from the recipient's Inbox, the sender's copy/results untouched).
+   */
+  assignmentsDismiss(assignmentId: string): Promise<void>;
   /**
    * Correct a WRONG fact in a question the recipient is answering (spec 08 wrong-fact amendment): trace it to
    * the recipient's own profile / onboarding / insight, auto-flag a wrong insight, and reword the question.

@@ -286,6 +286,15 @@ note), then submit. **Amended by [`56-answer-review-edit-reanalyze`](56-answer-r
 and Edit + resend** (a resubmit bumps `ResponseSet.revision`), which flags the sender's analysis stale
 (the `answers-updated` nudge → Re-analyze). Household/Inbox only; compatibility + relay stay single-submission.
 
+**Remove from Inbox (2026-08-04, issue #350).** A received questionnaire is no longer un-removable: the
+answering pane offers a two-step **"Delete this check-in" / "Remove from my Inbox"** action (recipient-scoped
+`assignments:dismiss`). A **self check-in** (you are both sender and recipient) is **deleted outright**
+(`deleteSend`); a send **from someone else** is **dismissed** — an additive-optional `Assignment.recipientDismissedAt`
+hides it from the recipient's Inbox reads WITHOUT touching the sender's copy or its Results (no `schemaVersion`
+bump). This is also how a person clears the residual queue of a self auto check-in stream they've turned off
+(63 §5.1): turning a stream off stops future generation but leaves already-sent, unanswered check-ins until
+they expire (~14d) or are removed here.
+
 **Mirrored on the Questionnaires landing (2026-07-08).** The recipient's Inbox items also surface as a
 **"Received"** card section on the Questionnaires page (sender avatar, status pill, a state-matched CTA —
 Answer / Continue / View), so everything questionnaire-related has one home. The standalone **`/inbox`** nav
@@ -741,9 +750,10 @@ renderer):
   `senderSeesAll` sender holding `questionnaires.readRaw` — reveals raw answers; **no audit entry is
   written**) — _all sender-scoped/gated, built §13.5d_; `:list` / `:createRelayLink` /
   `:drain` / `:revoke` land with the relay slice.
-- **Answer** — `assignments:saveProgress` / `:submit` / `:decline({ note? })` _(in-app — wired; gated by
-  `questionnaires.answer`, recipient-scoped in the bridge)_; the relay page talks to the **Worker** directly
-  (submit / decline / withdraw).
+- **Answer** — `assignments:saveProgress` / `:submit` / `:decline({ note? })` / `:dismiss(assignmentId)`
+  _(in-app — wired; gated by `questionnaires.answer`, recipient-scoped in the bridge)_; the relay page talks to
+  the **Worker** directly (submit / decline / withdraw). `:dismiss` removes a received questionnaire from the
+  recipient's Inbox — a self check-in is deleted outright, a send from someone else is dismissed (#350).
 - **Analysis/insights** — `insights:analyze({assignmentId})` / `insights:list` / `:approve` / `:update` /
   `:delete`; `gapfinder:suggest`. _(All wired, gated by `questionnaires.viewResults`; analyze is
   budget-gated + metered as `questionnaire.analyze`. The live `Analyze` action runs from the Results view;

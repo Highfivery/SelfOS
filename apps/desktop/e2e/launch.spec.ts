@@ -11762,6 +11762,30 @@ test('auto check-ins (63): a completed onboarding seeds an on self stream that g
     // The recipient's Inbox marks it as auto-generated (never covert, §8.3).
     await w.getByRole('link', { name: /Inbox/ }).click();
     await expect(w.getByText(/Auto check-in/).first()).toBeVisible();
+
+    // Delete it straight from the Inbox (#350): the reported case — a self auto check-in the recipient no
+    // longer wants. A self check-in offers outright "Delete this check-in"; confirm removes it from the
+    // Inbox AND the encrypted vault (a delete, not a lingering "declined" row).
+    const before = await listAssignments(fs, key, { recipientPersonId: 'owner-1' });
+    const target = before[0]; // newest-first order matches the Inbox row order (both from listAssignments)
+    if (!target) throw new Error('expected a self auto check-in to delete');
+    await w
+      .locator('button')
+      .filter({ hasText: /Auto check-in/ })
+      .first()
+      .click();
+    await w.getByRole('button', { name: 'Delete this check-in' }).click();
+    await expect(w.getByText(/removes it for good/i)).toBeVisible();
+    await w.getByRole('button', { name: 'Delete' }).click();
+    // Gone from the vault: `deleteSend` removed the whole send folder (a delete, not a lingering row).
+    await expect
+      .poll(async () =>
+        (await listAssignments(fs, key, { recipientPersonId: 'owner-1' })).map((a) => a.id),
+      )
+      .not.toContain(target.id);
+    expect((await listAssignments(fs, key, { recipientPersonId: 'owner-1' })).length).toBe(
+      before.length - 1,
+    );
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

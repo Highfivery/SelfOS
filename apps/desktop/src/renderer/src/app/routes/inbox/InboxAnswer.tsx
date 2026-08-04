@@ -73,6 +73,7 @@ export function InboxAnswer({
   const reopen = useInboxStore((s) => s.reopen);
   const submit = useInboxStore((s) => s.submit);
   const decline = useInboxStore((s) => s.decline);
+  const dismiss = useInboxStore((s) => s.dismiss);
 
   const [detail, setDetail] = useState<InboxAssignmentDetail | null>(null);
   const [missing, setMissing] = useState(false);
@@ -82,6 +83,9 @@ export function InboxAnswer({
   const [saved, setSaved] = useState(false);
   const [declining, setDeclining] = useState(false);
   const [declineNote, setDeclineNote] = useState('');
+  // Remove-from-Inbox (#350): a self check-in is deleted outright, a send from someone else is dismissed
+  // (their copy stays). Two-step inline confirm so a tap can't lose it by accident.
+  const [removing, setRemoving] = useState(false);
   // 56 §3.1 — editing a previously-submitted send: the review is shown until the recipient taps "Edit answers",
   // which flips this on and renders the (pre-filled) form. Reopening the assignment is deferred to the update
   // submit, so Cancel is a true no-op (the send stays submitted).
@@ -261,6 +265,46 @@ export function InboxAnswer({
     return externalSendDisclosure(asker, detail.privacy);
   })();
 
+  const onRemove = async (): Promise<void> => {
+    setBusy(true);
+    setError(null);
+    try {
+      await dismiss(assignmentId);
+      onDone();
+    } catch {
+      setError('Could not remove this from your Inbox. Please try again.');
+      setBusy(false);
+    }
+  };
+
+  // The remove/delete affordance (#350) — reachable in both the answering view and the locked review. A
+  // self check-in is deleted for good; a send from someone else is removed from this Inbox only.
+  const removeBlock = removing ? (
+    <Banner tone="warning">
+      <Stack gap={2}>
+        <Text size="sm">
+          {detail.fromSelf
+            ? 'Delete this check-in? This removes it for good.'
+            : `Remove this from your Inbox? ${asker} keeps their copy.`}
+        </Text>
+        <div className={styles.footer}>
+          <Button variant="danger" onClick={() => void onRemove()} disabled={busy}>
+            {detail.fromSelf ? 'Delete' : 'Remove'}
+          </Button>
+          <Button variant="secondary" onClick={() => setRemoving(false)} disabled={busy}>
+            Keep it
+          </Button>
+        </div>
+      </Stack>
+    </Banner>
+  ) : (
+    <div>
+      <Button variant="ghost" size="sm" onClick={() => setRemoving(true)}>
+        {detail.fromSelf ? 'Delete this check-in' : 'Remove from my Inbox'}
+      </Button>
+    </div>
+  );
+
   const onChange = (id: string, value: AnswerValue): void => {
     setSaved(false);
     setError(null);
@@ -376,6 +420,7 @@ export function InboxAnswer({
           </Card>
         ) : null}
         {error ? <Banner tone="warning">{error}</Banner> : null}
+        {removeBlock}
         <div className={styles.footer}>
           <Button variant="secondary" onClick={onDone}>
             Back to Inbox
@@ -428,6 +473,7 @@ export function InboxAnswer({
         </div>
       ) : (
         <>
+          {removeBlock}
           {saved ? <Banner tone="info">Saved — you can come back and finish later.</Banner> : null}
           {error ? <Banner tone="warning">{error}</Banner> : null}
 

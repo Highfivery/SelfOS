@@ -1915,6 +1915,11 @@ export const AssignmentSchema = z.object({
   status: AssignmentStatusSchema,
   expiresAt: z.string().optional(), // omitted = indefinite
   declineNote: z.string().optional(),
+  // When the RECIPIENT dismissed this from their Inbox (08-questionnaires §3.3 / issue #350). Recipient-only
+  // and status-preserving — it hides the send from the recipient's Inbox reads WITHOUT deleting the sender's
+  // copy or its results. (A self-send the recipient no longer wants is deleted outright instead, so this is
+  // only ever set on a send FROM someone else.) Additive-optional: existing sends omit it, no migration.
+  recipientDismissedAt: z.string().optional(),
   relay: z
     .object({
       token: z.string().min(1),
@@ -2810,6 +2815,9 @@ export interface InboxAssignmentDetail {
   senderName: string | null;
   answers: Answer[]; // saved draft answers; empty until the recipient saves progress
   answerable: boolean;
+  // True when the recipient IS the sender (a self check-in) — the Inbox offers "Delete" (removes it outright)
+  // rather than "Remove from my Inbox" (dismiss, which leaves another sender's copy intact). Issue #350.
+  fromSelf: boolean;
   // Present only for a compatibility send — drives the answerer's joint-report view once they've answered.
   compatibility?: InboxCompatibilityView;
 }

@@ -19,6 +19,8 @@ interface InboxState {
   reopen: (assignmentId: string) => Promise<void>;
   submit: (assignmentId: string, answers: Answer[]) => Promise<void>;
   decline: (assignmentId: string, note?: string) => Promise<void>;
+  /** Remove a received questionnaire from the Inbox (#350): a self check-in is deleted, else dismissed. */
+  dismiss: (assignmentId: string) => Promise<void>;
 }
 
 export const useInboxStore = create<InboxState>((set, get) => ({
@@ -58,6 +60,10 @@ export const useInboxStore = create<InboxState>((set, get) => ({
       assignmentId,
       ...(note !== undefined && note.trim() !== '' ? { note: note.trim() } : {}),
     });
+    await get().load();
+  },
+  dismiss: async (assignmentId) => {
+    await window.selfos?.assignmentsDismiss(assignmentId);
     await get().load();
   },
 }));

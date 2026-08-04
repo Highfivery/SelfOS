@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.45.4](https://github.com/Highfivery/SelfOS/compare/v0.45.3...v0.45.4) (2026-08-04)
+
+
+### Bug Fixes
+
+* **questionnaires:** let a creator delete a SENT self check-in from the Sent tab ([#350](https://github.com/Highfivery/SelfOS/issues/350)) ([#354](https://github.com/Highfivery/SelfOS/issues/354)) ([cd5e79e](https://github.com/Highfivery/SelfOS/commit/cd5e79e77912d2a2f4bb6af0cc9c8ccb670e8e7a))
+
 ## [0.45.3](https://github.com/Highfivery/SelfOS/compare/v0.45.2...v0.45.3) (2026-08-04)
 
 

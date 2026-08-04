@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.45.3](https://github.com/Highfivery/SelfOS/compare/v0.45.2...v0.45.3) (2026-08-04)
+
+
+### Bug Fixes
+
+* **questionnaires:** commit a pending skip on navigate so a declined question satisfies Send ([#347](https://github.com/Highfivery/SelfOS/issues/347)) ([#351](https://github.com/Highfivery/SelfOS/issues/351)) ([cf8e3a4](https://github.com/Highfivery/SelfOS/commit/cf8e3a4e2fe494a491e6f8806bc1efb55b2aaae8))
+* **questionnaires:** let a recipient remove a received check-in from the Inbox ([#350](https://github.com/Highfivery/SelfOS/issues/350)) ([#352](https://github.com/Highfivery/SelfOS/issues/352)) ([3b1d5ff](https://github.com/Highfivery/SelfOS/commit/3b1d5ffe85310176f11dfd54c835456477019396))
+
 ## [0.45.2](https://github.com/Highfivery/SelfOS/compare/v0.45.1...v0.45.2) (2026-07-29)
 
 

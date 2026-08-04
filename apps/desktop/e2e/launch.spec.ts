@@ -4557,15 +4557,13 @@ test('inbox: send a questionnaire, answer it, submit, and round-trip through the
     expect(wizardOverflow.inner).toBe(0);
     await w.setViewportSize({ width: 1000, height: 800 });
 
-    // SKIP the (required) second question with a reason (§25.2): "Skip this" → pick "Not clear" → confirm.
-    // A required question satisfied by a skip-with-reason is exactly the §25.3 gate.
+    // SKIP the (required) LAST question with a reason (§25.2): "Skip this" → pick "Not clear" → then click
+    // the big "Review & send" button DIRECTLY, without the in-panel "Skip this question" button (#347). The
+    // pending decline must be committed on navigation, not discarded — a required question satisfied by a
+    // skip-with-reason is exactly the §25.3 gate.
     await w.getByRole('button', { name: /Skip this/ }).click();
     await w.getByRole('button', { name: 'Not clear — needs more context' }).click();
-    await w.getByRole('button', { name: 'Skip this question' }).click();
-    await expect(w.getByText(/Skipped\./)).toBeVisible();
-    await expect(w.getByText('1 skipped')).toBeVisible();
-
-    // Review & send → the review lists both, and Send is enabled (nothing required is outstanding).
+    // Review & send commits the pending skip → the review lists both, and Send is enabled.
     await w.getByRole('button', { name: 'Review & send' }).click();
     await expect(w.getByText(/almost done/i)).toBeVisible();
     const send = w.getByRole('button', { name: 'Send answers' });

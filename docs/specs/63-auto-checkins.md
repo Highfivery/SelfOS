@@ -113,6 +113,11 @@ A new collapsible **Auto check-ins** section on `/questionnaires` (below the Sen
   person completes onboarding** (seeded, §5.1 — with a one-time "Auto check-ins is now on" notice so it's
   never a surprise); a person can turn it off anytime. Off → the whole engine is inert for this author; the
   target list is disabled with an explainer.
+  - **Turning a stream off stops FUTURE generation; it does not retroactively clear already-sent check-ins**
+    (issue #350, 2026-08-04, owner-confirmed). An explicit off persists (`enabled:false` round-trips — the
+    schema `.default(true)` only fills `undefined`, and the seed is write-once, so it never re-enables), so no
+    new check-ins are generated. Ones already in the recipient's Inbox linger until they expire (~14d) or the
+    recipient removes them via the Inbox **Remove / Delete** action (08 §3.3 `assignments:dismiss`).
 - **A short honest explainer** under the toggle: what it does, that it uses the author's AI allowance, that
   it never re-asks what the app knows, and (when the app is closed) that it runs once per day the app is
   open. Not-medical / wellness framing consistent with [`05 §7`](05-conversations.md).

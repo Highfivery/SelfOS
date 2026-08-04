@@ -3,7 +3,12 @@ import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import type { FileSystem } from '../host';
 import type { Recipient } from '../schemas';
-import { createAssignment, getAssignment, listAssignments } from './assignmentService';
+import {
+  createAssignment,
+  dismissAssignmentForRecipient,
+  getAssignment,
+  listAssignments,
+} from './assignmentService';
 import { saveQuestionnaire } from './questionnaireService';
 import { getResponse } from './responseService';
 import {
@@ -51,6 +56,26 @@ describe('listAssignments — recipientPersonId filter (the Inbox side)', () => 
 
     const inbox = await listAssignments(fs, key, { recipientPersonId: 'p2' });
     expect(inbox.map((a) => a.id)).toEqual([forP2]);
+  });
+});
+
+describe('dismissAssignmentForRecipient (#350)', () => {
+  it('stamps recipientDismissedAt without deleting the send or changing its status', async () => {
+    const fs = memFileSystem();
+    const id = await seedSentAssignment(fs);
+    const before = await getAssignment(fs, key, id);
+    expect(before?.recipientDismissedAt).toBeUndefined();
+
+    const dismissed = await dismissAssignmentForRecipient(fs, key, id);
+    expect(dismissed.recipientDismissedAt).toBeTruthy();
+    expect(dismissed.status).toBe(before?.status); // status-preserving — the sender's copy is intact
+    // Still on disk (dismiss ≠ delete) — the sender's Results/list still see it; the Inbox filters it.
+    expect(await getAssignment(fs, key, id)).not.toBeNull();
+  });
+
+  it('throws for an unknown assignment', async () => {
+    const fs = memFileSystem();
+    await expect(dismissAssignmentForRecipient(fs, key, 'nope')).rejects.toThrow(/not found/i);
   });
 });
 

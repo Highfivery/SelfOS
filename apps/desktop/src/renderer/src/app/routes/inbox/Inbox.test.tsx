@@ -75,6 +75,7 @@ const detail = (over: Partial<InboxAssignmentDetail> = {}): InboxAssignmentDetai
   senderName: 'Ben',
   answers: [],
   answerable: true,
+  fromSelf: false,
   ...over,
 });
 
@@ -138,6 +139,45 @@ describe('Inbox', () => {
       assignmentId: 'a1',
       answers: [{ questionId: 'qq1', value: 'Pretty well' }],
     });
+  });
+
+  it('removes a self check-in from the Inbox with a confirm — "Delete" (#350)', async () => {
+    const dismiss = vi.fn(() => Promise.resolve());
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([item()]),
+      assignmentsGet: () => Promise.resolve(detail({ fromSelf: true })),
+      assignmentsDismiss: dismiss,
+    });
+    renderInbox();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    // A self check-in offers outright deletion (not "Remove from my Inbox").
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete this check-in' }));
+    expect(screen.getByText(/removes it for good/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(dismiss).toHaveBeenCalledWith('a1');
+  });
+
+  it('removes a send from someone else with a confirm — "Remove from my Inbox" (#350)', async () => {
+    const dismiss = vi.fn(() => Promise.resolve());
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([item()]),
+      assignmentsGet: () => Promise.resolve(detail({ fromSelf: false })),
+      assignmentsDismiss: dismiss,
+    });
+    renderInbox();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove from my Inbox' }));
+    // The confirm makes clear the sender keeps their copy — a dismiss, not a delete.
+    expect(screen.getByText(/Ben keeps their copy/i)).toBeInTheDocument();
+    // "Keep it" backs out without calling the IPC.
+    await userEvent.click(screen.getByRole('button', { name: 'Keep it' }));
+    expect(dismiss).not.toHaveBeenCalled();
+    // Re-open the confirm and go through with it.
+    await userEvent.click(screen.getByRole('button', { name: 'Remove from my Inbox' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    expect(dismiss).toHaveBeenCalledWith('a1');
   });
 
   it('“That’s not right about me” fixes the source + rewords the question in place (wrong-fact amendment)', async () => {

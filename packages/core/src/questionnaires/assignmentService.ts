@@ -147,3 +147,24 @@ export async function updateAssignmentStatus(
 export async function deleteAssignment(fs: FileSystem, id: string): Promise<void> {
   await fs.remove(sendDir(id));
 }
+
+/**
+ * Mark an assignment as dismissed by its recipient (issue #350) — status-preserving, so the sender's
+ * copy/results are untouched; the Inbox read filters dismissed sends out. Idempotent (a second dismiss just
+ * refreshes the timestamp). Use for a send FROM someone else; a self-send is deleted outright instead.
+ */
+export async function dismissAssignmentForRecipient(
+  fs: FileSystem,
+  key: Uint8Array,
+  id: string,
+): Promise<Assignment> {
+  const existing = await getAssignment(fs, key, id);
+  if (!existing) throw new Error(`Assignment not found: ${id}`);
+  const updated: Assignment = {
+    ...existing,
+    recipientDismissedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  await writeEncryptedJson(fs, assignmentPath(id), updated, key);
+  return updated;
+}

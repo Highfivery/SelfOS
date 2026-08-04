@@ -626,6 +626,7 @@ import {
   declineAssignment,
   deleteQuestionnaireImage,
   deleteSend,
+  dismissAssignmentForRecipient,
   distillContextOnly,
   formatAnswerForDisplay,
   formatResponseAnswers,
@@ -6574,6 +6575,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const favorites = new Set(device.inboxFavorites?.[personId] ?? []);
       const items: InboxItem[] = [];
       for (const a of assignments) {
+        if (a.recipientDismissedAt) continue; // recipient removed it from their Inbox (#350)
         const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, a.id);
         if (!snapshot) continue; // a half-written send with no snapshot is unanswerable — skip it
         const response = await getResponse(ctx.fs, ctx.key, a.id);
@@ -6672,6 +6674,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         senderName: await senderNameFor(fs, key, assignment),
         answers: draft?.answers ?? [],
         answerable: isAnswerable(assignment.status),
+        // A self check-in (recipient IS the sender) → the Inbox offers outright "Delete"; else "Remove"
+        // (dismiss, sender's copy untouched). recipient.personId is the active person (recipientAssignment).
+        fromSelf:
+          assignment.recipient.kind === 'person' &&
+          assignment.recipient.personId === assignment.senderPersonId,
         ...(compatibility ? { compatibility } : {}),
       };
     },
@@ -6740,6 +6747,25 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           );
           await revokeRelayForDeletion(resolved.fs, resolved.key, client, assignmentId);
         }
+      }
+    },
+    assignmentsDismiss: async (assignmentId): Promise<void> => {
+      // Remove a received questionnaire from the recipient's Inbox (#350). Recipient-scoped via
+      // `recipientAssignment` (gated `questionnaires.answer` + recipient == active person), so a caller can
+      // only ever act on a send made to THEM.
+      const resolved = await recipientAssignment(AssignmentIdSchema.parse(assignmentId));
+      if (!resolved) throw new Error('Not permitted');
+      const { fs, key, assignment } = resolved;
+      const isSelf =
+        assignment.recipient.kind === 'person' &&
+        assignment.recipient.personId === assignment.senderPersonId;
+      if (isSelf) {
+        // The recipient IS the sender (a self check-in): delete it outright — nobody else has a copy.
+        if (assignment.relay) await revokeRelayLinks(fs, key, (a) => a.id === assignment.id);
+        await deleteSend(fs, key, assignment.id);
+      } else {
+        // A send from someone else: dismiss it (hide from this Inbox) WITHOUT touching the sender's copy.
+        await dismissAssignmentForRecipient(fs, key, assignment.id);
       }
     },
     assignmentsResults: async (questionnaireId): Promise<SendResult[]> => {

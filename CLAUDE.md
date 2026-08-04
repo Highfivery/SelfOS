@@ -430,6 +430,39 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-04 — **Fix (Auto check-ins: "turned them off but still getting them" + "can't delete a received
+  check-in"; member-reported [#350]; SPEC 08 §3.3 + 63 §5.1; on `fix/inbox-delete-received-checkin`).** Two
+  bugs. **Bug A (opt-out) — diagnosed against the real code, NOT assumed (§6): there is NO generation bug.** The
+  engine gate is correct (`!config.enabled || no enabled targets → SKIPPED`; only enabled targets are planned),
+  the opt-out genuinely persists (`enabled:false` round-trips — the schema `.default(true)` only fills
+  `undefined`), and the onboarding seed is write-once (an existing config, incl. an explicit off, is never
+  overwritten — no re-enable path). The reported symptom is the **residual queue**: turning a stream off stops
+  FUTURE generation but leaves already-sent, unanswered check-ins in the Inbox for up to ~14d (expiry), still
+  driving the badge/notification/Home card — so it READS as "still getting them." **Owner decision (asked):
+  leave existing ones, just stop new — no retroactive withdraw**; the residual queue is cleared via Bug B. So
+  Bug A is a **no-code-change** (verified; already covered by `service.test`/`planner.test`/`prefsService.test`).
+  **Bug B (can't delete) — the real gap:** there was NO recipient-side delete anywhere the recipient looks; the
+  only delete (`assignments:delete`) is sender/Owner-scoped + wired solely into the sender-side card, and a self
+  check-in is `fromSelf` (filtered out of the "Received" tab), so it was unreachable. **Owner decision (asked):
+  delete your own self check-ins outright; dismiss ones others sent you (their copy untouched).** Built one
+  recipient-scoped **`assignments:dismiss`** (gated `questionnaires.answer`, resolved via `recipientAssignment`
+  so a caller can only act on a send made to THEM): a **self-send → `deleteSend`** (deleted for good); a **send
+  from someone else → additive-optional `Assignment.recipientDismissedAt`** (hides it from the recipient's Inbox
+  reads only — the sender's copy/Results are untouched; no `schemaVersion` bump). Added `fromSelf` to
+  `InboxAssignmentDetail` so the Inbox answering pane shows the right copy (**"Delete this check-in"** vs
+  **"Remove from my Inbox"** + a two-step inline confirm, reachable in both the answering + locked-review views).
+  Gate green: typecheck (4 pkgs), lint, format, **1777 core + 1487 desktop** unit (+`dismissAssignmentForRecipient`
+  core [stamps + status-preserving + not-found]; +a two-persona coreBridge test [owner deletes own self-send →
+  gone from vault; Mara dismisses a from-owner send → gone from HER Inbox but the sender's Results copy survives;
+  a non-recipient dismiss → "Not permitted"; `fromSelf` true/false]; +2 Inbox RTL [Delete vs Remove labels,
+  confirm, "Keep it" no-ops]), + the auto check-in E2E extended to **delete a self auto check-in through the
+  real UI** and **decrypt the vault** to prove the send folder is gone (the reported flow). **Lessons: (1) a
+  "still getting them after I turned it off" report is often the residual QUEUE, not a generation bug — verify
+  the gate persists + the seed is write-once before touching the engine; the fix is a way to CLEAR the queue.
+  (2) A recipient-side remove must be its own recipient-scoped op — the author-scoped `assignments:delete`
+  can't be widened; model "dismiss others'" as an additive `recipientDismissedAt` filtered on the Inbox read
+  (sender's copy intact), and "delete own" as a real `deleteSend`.**
+
 - 2026-08-04 — **Fix (Questionnaires: a declined/skipped LAST question still blocked Send; member-reported
   [#347]; SPEC 08 §25; on `fix/questionnaire-skip-last-question`).** The skip-with-reason panel kept the reason
   in local state; only the in-panel "Skip this question" button committed the decline into the answer map, and

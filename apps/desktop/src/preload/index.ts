@@ -388,6 +388,8 @@ const bridge: SelfosBridge = {
     ipcRenderer.invoke(IpcChannels.assignmentsReopen, assignmentId),
   assignmentsSubmit: (input) => ipcRenderer.invoke(IpcChannels.assignmentsSubmit, input),
   assignmentsDecline: (input) => ipcRenderer.invoke(IpcChannels.assignmentsDecline, input),
+  assignmentsDismiss: (assignmentId) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsDismiss, assignmentId),
   assignmentsCorrectFact: (input) => ipcRenderer.invoke(IpcChannels.assignmentsCorrectFact, input),
   assignmentsResults: (questionnaireId) =>
     ipcRenderer.invoke(IpcChannels.assignmentsResults, questionnaireId),

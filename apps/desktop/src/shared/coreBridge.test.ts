@@ -3583,6 +3583,57 @@ describe('createCoreBridge', () => {
     });
   });
 
+  it('recipient can DELETE a self check-in and DISMISS a send from someone else; non-recipients are gated (#350)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: mara.id, roleId: 'member', pin: null });
+
+    // Owner → Mara (a send from someone else, from Mara's view) and Owner → Owner (a self check-in).
+    const toMaraDef = await bridge.questionnairesSave({
+      title: 'Weekly check-in',
+      type: 'role-feedback',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: mara.id },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are we doing?', required: true }],
+    });
+    const { assignment: toMara } = await bridge.assignmentsCreate({
+      questionnaireId: toMaraDef.id,
+      privacy: 'private',
+    });
+    const selfDef = await bridge.questionnairesSave({
+      title: 'Self check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: ownerId },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How am I?', required: true }],
+    });
+    const { assignment: selfSend } = await bridge.assignmentsCreate({
+      questionnaireId: selfDef.id,
+      privacy: 'private',
+    });
+
+    // As the OWNER: the self check-in is fromSelf; the owner cannot dismiss the send addressed to Mara
+    // (they're the sender, not the recipient) — the recipient gate lives in the bridge.
+    expect((await bridge.assignmentsGet(selfSend.id))?.fromSelf).toBe(true);
+    await expect(bridge.assignmentsDismiss(toMara.id)).rejects.toThrow(/permitted/);
+
+    // The owner deletes their own self check-in outright → gone from their Inbox AND from their sent copy.
+    await bridge.assignmentsDismiss(selfSend.id);
+    expect((await bridge.assignmentsInbox()).map((i) => i.assignmentId)).not.toContain(selfSend.id);
+    expect(await bridge.assignmentsResults(selfDef.id)).toEqual([]);
+
+    // As MARA: the send is fromSelf:false; dismissing it removes it from HER Inbox only (a dismiss, not a
+    // delete) — the sender's copy/results survive.
+    await bridge.sessionSetActive({ personId: mara.id });
+    expect((await bridge.assignmentsGet(toMara.id))?.fromSelf).toBe(false);
+    await bridge.assignmentsDismiss(toMara.id);
+    expect(await bridge.assignmentsInbox()).toEqual([]);
+
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    const results = await bridge.assignmentsResults(toMaraDef.id);
+    expect(results.map((r) => r.assignmentId)).toContain(toMara.id); // sender's copy untouched
+  });
+
   it('Results expose Standard answers but never Private ones; Analyze flips the analyzed flag', async () => {
     const { host, bridge, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

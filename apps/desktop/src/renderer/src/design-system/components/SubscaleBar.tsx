@@ -18,7 +18,7 @@ function clamp01(n: number): number {
  * 50-self-assessments §3.3 — one subscale of a self-assessment result, as a labelled bar. The value is
  * rendered as **text** (a percent for a unit subscale, a signed number for a bipolar one) AND a bar, and the
  * descriptor band is text — never colour alone (01 §9). A signed subscale fills from the centre toward the
- * leaning side. A design-system primitive (in `/gallery`).
+ * leaning side. A design-system primitive.
  */
 export function SubscaleBar({
   label,

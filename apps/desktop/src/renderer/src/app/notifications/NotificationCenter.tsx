@@ -17,7 +17,7 @@ interface NotificationCenterProps {
  * The notification center dropdown list (35-notification-system §3.1). Presentational — the bell wires the
  * store + open state; this just renders. Newest first; unread rows carry a non-color-only dot; each row has
  * its kind icon, title, one-line body, relative time, an optional action, and a per-row dismiss. Vertical
- * scroll only (CLAUDE.md §12). Showcased in /gallery with sample data.
+ * scroll only (CLAUDE.md §12).
  */
 export function NotificationCenter({
   notifications,

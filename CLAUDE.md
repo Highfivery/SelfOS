@@ -231,7 +231,6 @@ A slice is **not** done until **all** of these pass:
       the user relies on: after an action (send), the entity's state must be **visibly reflected** where they
       look next — a "Sent · <date>" badge in the list + builder, not a form that looks untouched. Bridge tests
       complement UI walks; they do not replace them.)
-- [ ] **`/gallery` updated** when a design-system primitive is added or changed (it must showcase all of them)
 - [ ] **Admin-only UI is marked** — any control/section visible only to an Owner / super-admin carries a
       consistent "admin only" indicator (see §12)
 - [ ] **The Questionnaires E2E matrix is extended** — any **new questionnaire option** (answer type,
@@ -359,15 +358,13 @@ placing anything. Specifically:
   A chat/message **bubble** may use a **percentage** (~80%) for readability — never a fixed `px` cap.
   When you build OR review ANY screen, confirm the top-level content container has **no `max-width`**;
   when in doubt, fill. (2026-07-11: removed content caps on Together/Settings/Home/Questionnaires/You/
-  Onboarding/Gallery after the user flagged it yet again.)
+  Onboarding after the user flagged it yet again.)
 - **Admin-only visibility marker.** Anything visible **only** to an Owner / super-admin (cost, budgets,
   the Everyone scope + person picker + by-person breakdown, the Roles screen, etc.) carries a clear,
   consistent indicator (e.g. a small "Admin only" / lock badge) so admins know normal users don't see
   it. Apply to **all** current and future admin-gated UI.
 - **Global controls live in the `TopBar`** (a slot-based header): the usage ring, the appearance
   (light/dark) toggle, logout, and future global items — integrated seamlessly, not as separate add-ons.
-- **`/gallery` is the living component catalog** — update it whenever a design-system primitive is
-  added or changed (DoD item).
 - **No scaffolding for unbuilt features.** Don't pre-create capabilities/schemas/settings/routes for
   features that aren't specced and built (see the "never assume" rule in §6).
 - **Visual QA is part of testing.** When testing a change, scrutinize the rendered UI for alignment,

@@ -266,3 +266,7 @@ _No open questions remain. New questions that arise during implementation are ap
 - 2026-06-09 — created (draft). Direction confirmed: warm neutrals, dusty-blue accent, Mulish + Lora.
 - 2026-06-09 — resolved open questions (lucide-react icons, build the dev gallery, Comfortable density
   default) after review; marked Approved.
+- 2026-08-06 — **the dev-only `/gallery` design-system showcase route was REMOVED** (owner request). The
+  route, nav entry, and the "keep `/gallery` current" Definition-of-Done rule (CLAUDE.md §7 + §12) are gone.
+  Primitives are still reviewed via each feature's own screens + Playwright visual QA; there is no longer a
+  standalone catalog route. (§10 "Visual review" and §11.2 "Dev gallery" above are historical.)

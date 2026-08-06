@@ -12,7 +12,7 @@ const LABEL: Record<ChallengeStatusValue, string> = {
 /**
  * A compact, labelled challenge-status indicator (52-challenge-sessions §3.3 / §9). The status is conveyed as
  * **text** (never colour alone — accessibility §9); a subtle tone via `data-status` only reinforces it.
- * Mirrors `GoalStatusChip`. Showcased in `/gallery`.
+ * Mirrors `GoalStatusChip`.
  */
 export function ChallengeStatusChip({ status }: { status: ChallengeStatusValue }): JSX.Element {
   return (

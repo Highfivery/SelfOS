@@ -13,7 +13,7 @@ const LABEL: Record<GoalStatusValue, string> = {
 /**
  * A compact, labelled goal-status indicator (39-living-memory §3.1 / §9). The status is conveyed as **text**
  * (never colour alone — accessibility §9); a subtle tone via `data-status` only reinforces it. Used in the
- * Memory Goals section; showcased in `/gallery`.
+ * Memory Goals section.
  */
 export function GoalStatusChip({ status }: { status: GoalStatusValue }): JSX.Element {
   return (

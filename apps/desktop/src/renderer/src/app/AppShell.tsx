@@ -16,7 +16,6 @@ import {
   PanelLeftOpen,
   Heart,
   Settings,
-  Shapes,
   Share2,
   ShieldCheck,
   Sparkles,
@@ -521,18 +520,6 @@ export function AppShell(): JSX.Element {
               >
                 <BarChart3 size={18} aria-hidden="true" />
                 <span className={styles.label}>Usage</span>
-              </NavLink>
-            ) : null}
-            {import.meta.env.DEV && isOwner ? (
-              <NavLink
-                to="/gallery"
-                className={navClass}
-                aria-label="Gallery"
-                title={tip('Gallery')}
-                onClick={closeDrawer}
-              >
-                <Shapes size={18} aria-hidden="true" />
-                <span className={styles.label}>Gallery</span>
               </NavLink>
             ) : null}
           </nav>

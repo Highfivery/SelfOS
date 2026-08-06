@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './AppShell';
 import { Home } from './routes/home/Home';
-import { Gallery } from './routes/Gallery';
 import { Sessions } from './routes/sessions/Sessions';
 import { Questionnaires } from './routes/questionnaires/Questionnaires';
 import { Inbox } from './routes/inbox/Inbox';
@@ -26,15 +25,13 @@ import { SettingsScreen } from '../settings/SettingsScreen';
 import { RequireCapability } from './RequireCapability';
 import { useSettingsStore } from '../settings/settingsStore';
 import { useNavStore } from '../stores/navStore';
-import { useSessionStore } from '../stores/sessionStore';
 import type { CapabilityKey } from '@shared/capabilities';
 
 /**
  * Capability-gated routes: each is guarded by the SAME capability as its sidebar nav link
  * (AppShell.tsx), so a person who lacks it can never reach the screen — whether by switching the active
  * person while sitting on it or by typing a `#/…` hash. `/` (Home) and `/settings` are intentionally
- * absent (always reachable; Settings filters its own admin-only sections). `/gallery` is guarded
- * separately below (dev + Owner — the route is omitted entirely otherwise). The map is verified against
+ * absent (always reachable; Settings filters its own admin-only sections). The map is verified against
  * the nav gating in AppShell.tsx.
  */
 const GUARDED_ROUTES: { path: string; capability: CapabilityKey; element: JSX.Element }[] = [
@@ -69,9 +66,6 @@ const GUARDED_ROUTES: { path: string; capability: CapabilityKey; element: JSX.El
 
 /** The main app (rendered once the vault is ready): router + sidebar layout. */
 export function Shell(): JSX.Element {
-  // The dev-only design gallery is owner-only (the route is omitted entirely otherwise, so even a typed
-  // URL can't reach it).
-  const isOwner = useSessionStore((s) => s.isOwner());
   useEffect(() => {
     void useSettingsStore.getState().load();
     void useNavStore.getState().load();
@@ -93,9 +87,8 @@ export function Shell(): JSX.Element {
               in-Memory path working for any lingering link. */}
           <Route path="memory/sharing" element={<Navigate to="/sharing" replace />} />
           <Route path="settings" element={<SettingsScreen />} />
-          {import.meta.env.DEV && isOwner ? <Route path="gallery" element={<Gallery />} /> : null}
-          {/* Any unknown hash (a typo, or a route the user can't reach — e.g. a non-owner typing
-              #/gallery) lands on Home rather than a blank content area. */}
+          {/* Any unknown hash (a typo, or a route the user can't reach) lands on Home rather than a
+              blank content area. */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

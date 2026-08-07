@@ -385,6 +385,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.emailResponses, bridge.emailResponses);
   handle(IpcChannels.emailEditResponse, bridge.emailEditResponse);
   handle(IpcChannels.emailAllActivity, bridge.emailAllActivity);
+  handle(IpcChannels.emailContent, bridge.emailContent);
   handle(IpcChannels.emailMutualGreenLights, bridge.emailMutualGreenLights);
   handle(IpcChannels.emailIntimacyOffers, bridge.emailIntimacyOffers);
   handle(IpcChannels.emailApplyIntimacyOffer, bridge.emailApplyIntimacyOffer);

@@ -108,6 +108,7 @@ import {
   type EmailVerifyResult,
   type IntimacyInventoryOffer,
   type MutualGreenLight,
+  type EmailContentSnapshot,
   type OwnerEmailActivityEntry,
   RelationshipTypeSchema,
   type RelationshipType,
@@ -470,6 +471,7 @@ import {
   emailStatusOf,
   applyIntimacyInventoryOffer,
   listAllEmailActivity,
+  getEmailContent,
   listEmailActivity,
   listEmailResponses,
   listIntimacyInventoryOffers,
@@ -1320,6 +1322,7 @@ const EmailSendTransactionalSchema = z.object({
 const EmailReconcileSchema = z.object({ auto: z.boolean().optional() });
 const EmailEditResponseSchema = z.object({ id: z.string().min(1), answer: z.string() });
 const EmailIntimacyOfferSchema = z.object({ actKey: z.string().min(1) });
+const EmailContentInputSchema = z.object({ personId: z.string().min(1), id: z.string().min(1) });
 const ProfileSuggestionIdSchema = z.string().min(1);
 const AssignmentIdSchema = z.string().min(1);
 const QuestionnaireIdSchema = z.string().min(1);
@@ -4816,6 +4819,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Owner-only (67 §3.7) — the full-visibility Email-activity view across every member.
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'people.manage'))) return [];
       return listAllEmailActivity(ctx.fs, ctx.key);
+    },
+    emailContent: async (input): Promise<EmailContentSnapshot | null> => {
+      const ctx = await host.vaultAndKey();
+      // Owner-only (67 §3.7) — read the stored rendered content of a member's sent email ("see what was sent").
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'people.manage'))) return null;
+      const { personId, id } = EmailContentInputSchema.parse(input);
+      return getEmailContent(ctx.fs, ctx.key, personId, id);
     },
     emailMutualGreenLights: async (): Promise<MutualGreenLight[]> => {
       const ctx = await host.vaultAndKey();

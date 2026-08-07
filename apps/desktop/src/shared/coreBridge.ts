@@ -696,6 +696,7 @@ import {
   gatherRecipientMaterialSignals,
   gatherRecipientQuestionnaireTitles,
   gatherRecipientFeedbackGuidance,
+  gatherRecipientPartnerContext,
   generateQuestions,
   refreshCoverage,
   resolveInsightAbout,
@@ -1679,11 +1680,22 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     /** Differentiated avoid/boundary/reword steering from the recipient's Personalization Profile — how the
      *  app learns from their prior skips/declines (spec 69 §5.9). */
     feedbackGuidance: string;
+    /** Partner-shared context — ONLY for a self-send (author == recipient): the facts people close to them
+     *  shared TO them, so a self check-in can personalize + reciprocate (spec 69 §5.4). Restricted never
+     *  crosses (the `scopeGrants` gate). Empty for an other-person send. */
+    partnerContext: string;
   }> => {
     const history = await gatherRecipientHistory(fs, key, recipientPersonId);
     // The recipient's skip/decline steering (spec 69) — read host-side, fed to the model to avoid what they
     // said doesn't apply / would rather not, and to reword what landed unclear.
     const feedbackGuidance = await gatherRecipientFeedbackGuidance(fs, key, recipientPersonId);
+    // Partner-shared context (spec 69 §5.4) — ONLY when the author is generating for THEMSELVES (a self check-in),
+    // so a partner's shared desire can be reflected back. Never for an other-person send (that'd surface a third
+    // party's context to the author). Restricted facts are excluded by the gate regardless.
+    const partnerContext =
+      recipientPersonId === authorId
+        ? (await gatherRecipientPartnerContext(fs, key, recipientPersonId)).contextBlock
+        : '';
     // The structured already-asked prompts (08 §23.5) drive the deterministic hard near-dup filter in core.
     const priorPrompts = await gatherRecipientAskedPrompts(fs, key, recipientPersonId);
     // §24.3-A1/A2: the recipient's RAW prior-questionnaire answers + all distilled insight facts (sessions,
@@ -1752,6 +1764,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       coveredNotes,
       intimacyCoverage,
       feedbackGuidance,
+      partnerContext,
     };
   };
 
@@ -4047,6 +4060,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             coveredNotes: [] as string[],
             intimacyCoverage: undefined,
             feedbackGuidance: '',
+            partnerContext: '',
           };
       // Who it's FOR (08 §24.4): the recipient's name/pronouns + the author↔recipient relationship (type +
       // closeness), so generation adopts the right register (partner vs coworker vs child) and personalizes.
@@ -4105,6 +4119,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(known.intimacyCoverage ? { intimacyCoverage: known.intimacyCoverage } : {}),
         // spec 69 §5.9 — learn from their prior skips/declines (avoid / boundary / reword).
         ...(known.feedbackGuidance ? { feedbackGuidance: known.feedbackGuidance } : {}),
+        // spec 69 §5.4 — a self check-in can reflect a partner's shared desire (restricted never crosses).
+        ...(known.partnerContext ? { partnerContext: known.partnerContext } : {}),
         ...(p.intimacyMode !== undefined ? { intimacyMode: p.intimacyMode } : {}),
         ...(p.count !== undefined ? { count: p.count } : {}),
         ...(recipientFraming ? { recipient: recipientFraming } : {}),
@@ -4413,6 +4429,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(known.intimacyCoverage ? { intimacyCoverage: known.intimacyCoverage } : {}),
         // spec 69 §5.9 — learn from their prior skips/declines (avoid / boundary / reword).
         ...(known.feedbackGuidance ? { feedbackGuidance: known.feedbackGuidance } : {}),
+        // spec 69 §5.4 — a self check-in can reflect a partner's shared desire (restricted never crosses).
+        ...(known.partnerContext ? { partnerContext: known.partnerContext } : {}),
       });
     },
 

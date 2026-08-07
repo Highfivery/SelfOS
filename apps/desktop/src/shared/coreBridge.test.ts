@@ -42,7 +42,7 @@ import { getTest } from '@selfos/core/tests';
 import { matrixRowKey } from '@selfos/core/schemas';
 import { saveGoal } from '@selfos/core/goals';
 import { listChallenges, recordCheckIn } from '@selfos/core/challenges';
-import { buildContext, getPerson } from '@selfos/core/people';
+import { buildContext, getPerson, upsertRelationship } from '@selfos/core/people';
 import { buildStoryCorpus, corpusText, saveProposals } from '@selfos/core/story';
 import {
   captureJointChallengeFromMarker,
@@ -2961,6 +2961,80 @@ describe('createCoreBridge', () => {
     expect(result.ok).toBe(true);
     expect(sentUserText).toContain('NEW / UNEXPLORED GROUND');
     expect(sentUserText).toContain('- Money');
+  });
+
+  it("a self check-in reflects a partner's SHARED desire, never a restricted fact (spec 69 §5.4)", async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const ctx = (await host.host.vaultAndKey())!;
+    const ben = await bridge.peopleSave({ displayName: 'Ben', isSubject: true, tags: [] });
+    // Ben is the owner's partner.
+    await upsertRelationship(ctx.fs, ctx.key, {
+      fromPersonId: ownerId,
+      toPersonId: ben.id,
+      type: 'partner',
+    });
+    // Ben has one partner-shared intimacy desire and one RESTRICTED intimacy fact.
+    await saveInsight(ctx.fs, ctx.key, {
+      schemaVersion: 1,
+      id: 'ins-ben',
+      source: 'test',
+      subjectPersonId: ben.id,
+      summary: 'About Ben',
+      facts: [
+        {
+          id: 'f1',
+          text: 'Ben would love to try rope play',
+          shareable: false,
+          shareableTypes: ['partner'],
+          lifeArea: 'Intimacy',
+        },
+        {
+          id: 'f2',
+          text: 'Bens deeply private trauma',
+          shareable: false,
+          restricted: true,
+          lifeArea: 'Intimacy',
+        },
+      ],
+      confidence: 'medium',
+      categories: [],
+      approved: true,
+      provenance: { at: '2026-08-01T00:00:00.000Z' },
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    });
+
+    let sentUserText = '';
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        sentUserText = options.messages.map((m) => m.content).join('\n');
+        const json = JSON.stringify({
+          title: 'X',
+          questions: [{ type: 'shortText', prompt: 'Somewhere new?', required: true }],
+        });
+        onDelta(json);
+        return Promise.resolve({
+          text: json,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    // The owner generates a SELF check-in → the partner's shared desire reaches the prompt for reciprocity…
+    const result = await bridge.questionnairesGenerate({
+      type: 'intimacy',
+      sensitivity: 'explicit',
+      existingPrompts: [],
+      recipientPersonId: ownerId,
+    });
+    expect(result.ok).toBe(true);
+    expect(sentUserText).toContain('rope play');
+    expect(sentUserText).toMatch(/how THIS person feels/i);
+    // …but Ben's RESTRICTED fact NEVER crosses, and it's not returned to the author either.
+    expect(sentUserText).not.toContain('trauma');
+    expect(JSON.stringify(result)).not.toContain('trauma');
   });
 
   it('the SEMANTIC de-dup pass receives the recipient’s onboarding answers, led + untruncated (§23.5b)', async () => {

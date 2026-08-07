@@ -1,6 +1,6 @@
 # 68 — Sharing redesign: a unified "what reaches anyone" transparency dashboard
 
-> **Status:** **Approved** · _last updated 2026-08-06_
+> **Status:** **Built** · _last updated 2026-08-07_
 >
 > The `/sharing` ("Sharing & relationships") page today is, by its own admission, _"a relocation, not a
 > redesign"_ ([`57`](57-memory-overview-redesign.md) §5.3): a flat, unbounded scroll of one card per shared
@@ -655,6 +655,27 @@ Per the DoD (CLAUDE.md §7). Decrypt the vault to assert data; run `pnpm typeche
 
 ## 12. Changelog
 
+- 2026-08-07 — **Slice 1b BUILT — spec 68 is now FULLY BUILT.** `/sharing` rebuilt into the unified
+  transparency dashboard: a stats header (things-you-share by type · people-reached · kept-private), four tabs
+  (**By person** / **By category** / **Everything** / **Reflections**) on a `sharing/*` splat (deep-linkable +
+  reload-surviving, mirrored to `useState` for RTL), and a full-width filter/sort/search bar. Folds in the two
+  omitted surfaces — **profile-field sharing** (a `ShareToggle` → `memory:setProfileFieldShared`) and
+  **dream-image sharing** (per-recipient unshare → `dreams:setImageShare` + a "Manage in Dreams" link). Per-category
+  **bulk actions** ("Make private" / "Share with partner" → `memory:setScopeBatch`, an inline confirm; facts +
+  answers only, profile/dream untouched; hidden when there's no applicable target for the caller's role).
+  Reflections moved to its own tab. The three warts fixed: a per-person dream share reads **"Shared with <name>"**
+  (never "Private · reaching X"); the inert intake-fact twin is gone (the 1a read skips `source:'intake'` facts);
+  Home's "Manage" + the nav go to `/sharing` (nav aria-label "Sharing & relationships" → "Sharing"). New
+  route-local components (`SharingStatsHeader`/`SharingFilterBar`/`SharingByPerson`/`SharingByCategory`/
+  `SharingItemRow`) + pure helpers (`summarizeSharingStats`/`describeSharingScope`/`groupByPerson`/
+  `groupByCategory`/`filterAndSortItems`/`resolveSharingTab`); the old `SharingSection` deleted.
+  `sharingItemCategory` relocated from the crypto-heavy `people/outboundSharing.ts` to the crypto-free
+  `@selfos/core/sharing` (re-exported for 1a) so the renderer can import it. No new design-system primitive.
+  Gate green: typecheck/lint/format, 1785 core + 1501 desktop unit (+sharingDashboard pure helpers +8 dashboard
+  RTL), a decrypt-level Playwright E2E (stats + tabs + folded-in surfaces + bulk-replace/lock/unshare all
+  decrypt-asserted + restricted-absent + 360px overflow guard on every tab + Home Manage → /sharing) + the 3
+  updated existing sharing E2E; visual QA at desktop + 360px matching the approved mockup. Code-reviewer **ship**
+  (dead `isCloseFamily` removed; the privacy/honesty core verified airtight).
 - 2026-08-07 — **Slice 1a BUILT** (core + bridge; the additive, no-migration extension — no renderer UI yet).
   `OutboundSharingItem` gains `'profileField' | 'dreamImage'` kinds + optional `lifeArea`/`category`;
   `OutboundSharing` gains `keptPrivateCount`. `listOutboundSharing` now skips `source: 'intake'` facts (the

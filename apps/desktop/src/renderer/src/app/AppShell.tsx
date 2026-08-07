@@ -478,8 +478,8 @@ export function AppShell(): JSX.Element {
               <NavLink
                 to="/sharing"
                 className={navClass}
-                aria-label="Sharing & relationships"
-                title={tip('Sharing & relationships')}
+                aria-label="Sharing"
+                title={tip('Sharing')}
                 onClick={closeDrawer}
               >
                 <Share2 size={18} aria-hidden="true" />

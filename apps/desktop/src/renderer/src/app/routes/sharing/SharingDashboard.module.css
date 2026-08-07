@@ -1,0 +1,334 @@
+/* The unified Sharing dashboard (68 §3). Content FILLS the width — no max-width page cap (§12). */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 100%;
+}
+
+/* ── Stats header (§3.1) ── */
+.statStrip {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: var(--space-4);
+}
+@media (max-width: 640px) {
+  .statStrip {
+    grid-template-columns: 1fr;
+  }
+}
+.statTile {
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  min-width: 0;
+}
+.statBig {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-text-heading);
+  font-variant-numeric: tabular-nums;
+}
+.statLabel {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--color-text-tertiary);
+  margin-top: var(--space-2);
+}
+.statChips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+}
+.statChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+}
+.statChipCount {
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.statChipLock {
+  background: var(--color-surface-alt);
+  border-color: var(--color-border);
+}
+.statNote {
+  display: block;
+  margin-top: var(--space-3);
+}
+.avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.62rem;
+  flex: none;
+}
+
+/* ── Tab strip (§3.2 — the Together/Questionnaires pattern; 4 fixed tabs fit at 360px) ── */
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px var(--space-4) 12px;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab:hover {
+  color: var(--color-text-primary);
+}
+.tab:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -2px;
+}
+.tabActive {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  border-bottom-color: var(--color-accent-solid);
+}
+.tabCount {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+/* At phone width the 4 longer labels (By category / Reflections) can't fit WITH icons + counts, so drop the
+   decorative icon + the count badge and tighten — the strip then fits at 360px with NO horizontal scroll (§12). */
+@media (max-width: 480px) {
+  .tab {
+    padding: 9px 6px 11px;
+    gap: 0;
+    font-size: 0.72rem;
+  }
+  .tab svg {
+    display: none;
+  }
+  .tabCount {
+    display: none;
+  }
+}
+
+/* ── Filter / sort / search bar (§3.3) — full-width space-filling controls, never a wrapping chip row ── */
+.toolbar {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.toolbar > * {
+  min-width: 0;
+}
+.search {
+  flex: 1 1 180px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  color: var(--color-text-tertiary);
+}
+.search input {
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--color-text-primary);
+  width: 100%;
+  min-width: 0;
+  outline: none;
+}
+
+/* ── Grouped views (By person / By category, §3.4/§3.5) ── */
+.groupList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  width: 100%;
+}
+.groupName {
+  font-weight: 600;
+  color: var(--color-text-heading);
+  white-space: nowrap;
+}
+.groupCount {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--color-text-tertiary);
+  text-align: right;
+  min-width: 0;
+}
+.categoryIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+/* ── Item rows (§3.4) ── */
+.rows {
+  display: flex;
+  flex-direction: column;
+}
+.itemRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+  min-width: 0;
+}
+.rows > .itemRow:first-child {
+  border-top: none;
+}
+.itemMain {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.itemKind {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+.itemControl {
+  flex: none;
+  margin-left: auto;
+}
+
+/* ── Per-category bulk actions (§3.5) ── */
+.bulkRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding-bottom: var(--space-3);
+}
+.bulkNote {
+  font-size: 0.74rem;
+  color: var(--color-text-tertiary);
+  margin-right: auto;
+}
+.bulkBtn,
+.bulkConfirm,
+.bulkCancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-pill);
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+.bulkBtn:hover,
+.bulkCancel:hover {
+  color: var(--color-text-primary);
+}
+.bulkConfirm {
+  background: var(--color-accent-solid);
+  color: var(--color-accent-solid-text);
+  border-color: transparent;
+  margin-left: auto;
+}
+.bulkBtn:focus-visible,
+.bulkConfirm:focus-visible,
+.bulkCancel:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 1px;
+}
+
+/* ── Dream-image per-recipient control (§3.8) ── */
+.dreamControl {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.unshareChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+.unshareChip:hover {
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}
+.manageLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--color-accent-text);
+  cursor: pointer;
+  padding: 0;
+}
+.manageLink:hover {
+  text-decoration: underline;
+}

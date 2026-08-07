@@ -427,6 +427,42 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-07 — **Build (Sharing redesign slice 1b — the transparency dashboard UI; SPEC 68 §3 → FULLY BUILT;
+  on `feat/sharing-redesign-dashboard`).** Rebuilt `/sharing` from a flat unbounded scroll into the unified
+  "what reaches anyone" dashboard: a **stats header** (things-you-share split by relationship type · people
+  reached · **kept-private** reassurance count) + **four tabs** (By person / By category / Everything /
+  Reflections) on a `sharing/*` **splat** (deep-linkable + reload-surviving, mirrored to `useState` for RTL, the
+  Together/Story pattern) + a full-width **filter/sort/search** bar. **Folds in the two omitted surfaces** so it's
+  complete: **profile fields** (a `ShareToggle` → the 1a own-scoped `memory:setProfileFieldShared`) + **dream
+  images** (per-recipient unshare → `dreams:setImageShare` + a "Manage in Dreams" link-out). **Per-category bulk
+  actions** ("Make private" / "Share with partner" → `memory:setScopeBatch` with an inline confirm; facts +
+  answers only, profile/dream untouched; the bulk row is **hidden when the caller has no applicable target** —
+  no silent no-op for a `memory.own`-without-`intake.own` role). Reflections moved to its own tab. **The three
+  warts fixed:** a per-person dream/fact share reads **"Shared with <name>"** (never the old "Private · reaching
+  X" lie — a pure `describeSharingScope`); the inert intake-fact twin is gone (the slice-1a read already skips
+  `source:'intake'` facts); Home's "Manage" + the sidebar nav go to **`/sharing`** (nav aria-label "Sharing &
+  relationships" → "Sharing"). New route-local components + pure helpers (`summarizeSharingStats`/
+  `describeSharingScope`/`groupByPerson`/`groupByCategory`/`filterAndSortItems`/`resolveSharingTab`); the old
+  `SharingSection` deleted; **no new design-system primitive** (reuses `Collapsible`/`ShareToggle`/
+  `RelationshipScopePicker`/`Select`/`FactSharingControl`). **`sharingItemCategory` relocated** from the
+  crypto-heavy `people/outboundSharing.ts` to the **crypto-free `@selfos/core/sharing`** (re-exported for the 1a
+  callers) so the renderer can import it without dragging crypto under the DOM lib. code-reviewer **ship** (dead
+  `isCloseFamily` removed; privacy/honesty core verified airtight — the page renders only the active person's own
+  items, restricted facts never appear as items [only the count], no owner-access framing). Gate green:
+  typecheck (4 pkgs), lint, format, **1785 core + 1501 desktop** unit (+`sharingDashboard` pure-helper units;
+  +8 dashboard RTL: stats/tabs/By-person/By-category-bulk/profile-lock/dream-unshare/Reflections/read-only-role/
+  empty-state), a **decrypt-level E2E** (stats + tabs + folded-in surfaces + bulk-replace/profile-lock/dream-unshare
+  all decrypt-asserted + restricted-absent + a 360px inner-scroller overflow guard on every tab + Home Manage →
+  /sharing) + the 3 updated existing sharing E2E. Visual QA at desktop + 360px (real-Electron screenshots — matches
+  the approved mockup: stats tiles, four-tab strip, filter bar, per-person/per-category groups, the "Shared with"
+  chip). **Lessons: (1) a pure display helper (`sharingItemCategory`) that the RENDERER needs must live in a
+  crypto-free module (`@selfos/core/sharing`), not the crypto-heavy `people` barrel — importing the latter drags
+  crypto under the renderer's DOM lib and trips the TS5.7 `BufferSource` error; relocate + re-export. (2) A tab
+  strip with 4 LONGER labels (By category / Reflections) overflows 360px by ~120px even with the standard tighten —
+  drop the decorative icon + count badge at ≤480px so the labels alone fit (the §12 overflow guard, measured, is
+  what caught it). (3) A per-category bulk that silently drops answer targets for a role lacking `intake.own` reads
+  as a no-op — gate the bulk row on there being an applicable target, don't render a button whose only outcome is
+  `updated:0`.**
 - 2026-08-07 — **Build (Sharing redesign slice 1a — the additive core + bridge extension; SPEC 68 §4/§5.2/§6;
   on `feat/sharing-redesign-core`).** First slice of the `/sharing` transparency-dashboard rebuild — CORE + BRIDGE
   only, no renderer UI (that's 1b). Extended the crypto-free view type `OutboundSharingItem` with

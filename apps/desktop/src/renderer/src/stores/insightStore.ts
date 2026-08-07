@@ -5,6 +5,7 @@ import type {
   MergeProposal,
   MemoryReconcileResult,
   OutboundSharing,
+  PersonFieldKey,
   RelationshipType,
 } from '@shared/schemas';
 
@@ -45,6 +46,23 @@ interface InsightState {
     sectionId: string;
     questionId: string;
     types: RelationshipType[];
+  }) => Promise<void>;
+  /**
+   * Per-category BULK scope change (68 §3.5) — REPLACE the scope of a set of facts + answers in one call
+   * (empty `types` ⇒ Private). Reloads memory + outbound so every tab + the stats update at once.
+   */
+  setScopeBatch: (input: {
+    types: RelationshipType[];
+    factTargets: { insightId: string; factId: string }[];
+    answerTargets: { sectionId: string; questionId: string }[];
+  }) => Promise<void>;
+  /** Flip a profile field in/out of the active person's own `privateFields` (68 §3.8), then refresh. */
+  setProfileFieldShared: (input: { field: PersonFieldKey; shared: boolean }) => Promise<void>;
+  /** Per-person unshare of a dream image (68 §3.8 / 13 §3.6), then refresh the outbound view. */
+  setDreamImageShare: (input: {
+    dreamId: string;
+    targetPersonId: string;
+    shared: boolean;
   }) => Promise<void>;
   /** Flag/clear a fact (or whole insight) as inaccurate — drops it from the coach at once (§3.6). */
   flag: (input: FlagInput) => Promise<Insight | null>;
@@ -109,6 +127,18 @@ export const useInsightStore = create<InsightState>((set, get) => ({
   },
   setAnswerScope: async (input) => {
     await window.selfos?.intakeSetAnswerSharing(input);
+    await get().load();
+  },
+  setScopeBatch: async (input) => {
+    await window.selfos?.memorySetScopeBatch(input);
+    await get().load();
+  },
+  setProfileFieldShared: async (input) => {
+    await window.selfos?.memorySetProfileFieldShared(input);
+    await get().load();
+  },
+  setDreamImageShare: async (input) => {
+    await window.selfos?.dreamSetImageShare(input);
     await get().load();
   },
   remove: async (input) => {

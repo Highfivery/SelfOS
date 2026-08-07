@@ -106,18 +106,45 @@ async function workersDevSubdomain(
   return result.subdomain;
 }
 
+/** Find the relay KV namespace by its title, if it already exists (for idempotent re-provisioning). */
+async function findKvNamespace(
+  fetchImpl: FetchLike,
+  token: string,
+  accountId: string,
+): Promise<string | null> {
+  const list = (await cfJson(
+    fetchImpl,
+    token,
+    `/accounts/${accountId}/storage/kv/namespaces?per_page=100`,
+  )) as { id?: string; title?: string }[] | null;
+  const match = Array.isArray(list) ? list.find((n) => n.title === KV_TITLE) : null;
+  return match?.id ?? null;
+}
+
 async function createKvNamespace(
   fetchImpl: FetchLike,
   token: string,
   accountId: string,
 ): Promise<string> {
-  const result = (await cfJson(fetchImpl, token, `/accounts/${accountId}/storage/kv/namespaces`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ title: KV_TITLE }),
-  })) as { id?: string };
-  if (!result?.id) throw new CloudflareDeployError('Could not create the relay storage namespace.');
-  return result.id;
+  try {
+    const result = (await cfJson(fetchImpl, token, `/accounts/${accountId}/storage/kv/namespaces`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: KV_TITLE }),
+    })) as { id?: string };
+    if (!result?.id)
+      throw new CloudflareDeployError('Could not create the relay storage namespace.');
+    return result.id;
+  } catch (err) {
+    // Idempotent re-provision: Cloudflare rejects a duplicate namespace title, so a re-connect after a
+    // prior (or partial) provision fails with "a namespace with this account ID and title already exists".
+    // In that case reuse the existing namespace (same title) instead of erroring out.
+    if (err instanceof CloudflareDeployError && /already exists/i.test(err.message)) {
+      const existing = await findKvNamespace(fetchImpl, token, accountId);
+      if (existing) return existing;
+    }
+    throw err;
+  }
 }
 
 async function uploadWorker(
@@ -169,8 +196,9 @@ async function enableWorkersDevRoute(
 /**
  * Connect + deploy: verify the token, provision KV, upload the Worker (bound to KV + a fresh drain
  * secret), and enable the workers.dev route. Returns the config bits the caller encrypts into the vault.
- * Idempotent enough to retry — re-running creates a new KV namespace + re-uploads (partial provisioning
- * never claims success because each step throws on failure).
+ * Idempotent — re-running REUSES the existing KV namespace (Cloudflare rejects a duplicate title, so a
+ * re-connect after a prior/partial provision finds + reuses it) and re-uploads the Worker (partial
+ * provisioning never claims success because each step throws on failure).
  */
 export async function deployRelay(
   fetchImpl: FetchLike,

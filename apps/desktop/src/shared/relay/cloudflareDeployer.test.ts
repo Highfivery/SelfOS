@@ -45,6 +45,38 @@ describe('cloudflareDeployer', () => {
     ).toBe(true);
   });
 
+  it('reuses an existing KV namespace when one with the title already exists (idempotent re-connect)', async () => {
+    const base = 'https://api.cloudflare.com/client/v4/accounts/acct/storage/kv/namespaces';
+    const { fetch, calls } = cfFetch({
+      // Creating a namespace with the same title fails (a prior/partial provision left it behind)…
+      [base]: new Response(
+        JSON.stringify({
+          success: false,
+          errors: [{ message: 'a namespace with this account ID and title already exists' }],
+        }),
+        { status: 400 },
+      ),
+      // …so the deployer lists namespaces + reuses the matching one.
+      [`${base}?per_page=100`]: new Response(
+        JSON.stringify({
+          success: true,
+          result: [
+            { id: 'other', title: 'unrelated' },
+            { id: 'kv-existing', title: 'selfos-relay-mailbox' },
+          ],
+        }),
+        { status: 200 },
+      ),
+    });
+    const result = await deployRelay(fetch, bundle, { apiToken: 'tok', accountId: 'acct' });
+    expect(result.kvNamespaceId).toBe('kv-existing');
+    expect(calls.some((c) => c.url.endsWith('?per_page=100'))).toBe(true);
+    // Still uploaded the Worker (bound to the reused namespace).
+    expect(
+      calls.some((c) => c.method === 'PUT' && c.url.includes('/workers/scripts/selfos-relay')),
+    ).toBe(true);
+  });
+
   it('refuses to deploy when the token is invalid', async () => {
     const { fetch } = cfFetch({
       'https://api.cloudflare.com/client/v4/user/tokens/verify': new Response(

@@ -697,6 +697,7 @@ import {
   gatherRecipientQuestionnaireTitles,
   gatherRecipientFeedbackGuidance,
   generateQuestions,
+  refreshCoverage,
   resolveInsightAbout,
   resolveInsightSource,
   getAssignment,
@@ -4981,6 +4982,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // life-area so it topic-narrows in context like a fresh one. Idempotent; never bumps updatedAt.
       await retroTagLegacyPortraits(deps.fs, deps.key, deps.personId);
       const result = await reconcileInsights(deps);
+      // spec 69 §5.6 — ride the SAME reconcile cadence (launch/focus, 24h throttle, ≥N-new-signals gate) to
+      // refresh the active person's coverage map, so generation steers to genuinely new ground. Metered
+      // `questionnaire.profile`, budget-gated + fail-safe inside `refreshCoverage`. Best-effort: a coverage
+      // failure never fails the memory refresh.
+      try {
+        await refreshCoverage(deps, deps.personId);
+      } catch {
+        // coverage refresh is a side-benefit of this cadence, not part of the memory-refresh contract
+      }
       // Consume the 24h throttle window only when the pass DIDN'T fail for a no-spend transient reason
       // (AI off / over budget / a stream ERROR — all bail before metering). Those should retry on the next
       // launch, not be suppressed for 24h (the §3.3 "falls back to manual" intent). A pass that DID spend —

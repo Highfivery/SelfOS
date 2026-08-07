@@ -48,6 +48,7 @@ const CoverageTopicSchema = z.object({
   lastAskedAt: z.string().optional(),
   reopenedBy: ReopenSignalSchema.optional(),
 });
+export type CoverageTopic = z.infer<typeof CoverageTopicSchema>;
 
 /**
  * How a piece of answer feedback steers future generation:

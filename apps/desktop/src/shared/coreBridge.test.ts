@@ -35,6 +35,7 @@ import {
   applyDecline,
   emptyProfile,
   NOT_APPLICABLE_SKIP_REASON,
+  readProfile,
   writeProfile,
 } from '@selfos/core/questionnaires';
 import { getTest } from '@selfos/core/tests';
@@ -2906,6 +2907,60 @@ describe('createCoreBridge', () => {
     expect(sentUserText).toContain('How is your commute?');
     // …but it stays author-blind — the raw declined content is never returned to the author.
     expect(JSON.stringify(result)).not.toContain('How is your commute?');
+  });
+
+  it('the reconcile cadence refreshes the coverage map, steering generation to new ground (spec 69 §5.6)', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+
+    // One fake routes both calls: the coverage-placement pass (its prompt lists the life areas) returns depth
+    // assessments; every other call returns a single question. Capture the last generation prompt.
+    let sentUserText = '';
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        const user = options.messages.map((m) => m.content).join('\n');
+        let text: string;
+        if (user.includes('Life areas to score')) {
+          text = JSON.stringify([
+            { lifeArea: 'Work & purpose', depth: 0.9 },
+            { lifeArea: 'Money', depth: 0 },
+            { lifeArea: 'Health & body', depth: 0 },
+          ]);
+        } else {
+          sentUserText = user;
+          text = JSON.stringify({
+            title: 'X',
+            questions: [{ type: 'shortText', prompt: 'Somewhere new?', required: true }],
+          });
+        }
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    // A memory refresh rides the coverage refresh (spec 69 §5.6) → the owner's coverage map populates.
+    await bridge.memoryRefresh({ auto: false });
+    const ctx = (await host.host.vaultAndKey())!;
+    const profile = await readProfile(ctx.fs, ctx.key, ownerId);
+    expect(profile.coverage.lastPlacementAt).toBeTruthy();
+    expect(profile.coverage.topics.find((t) => t.topicId === 'Work & purpose')).toMatchObject({
+      explored: true,
+    });
+
+    // …so a self-send now leads generation with the UNEXPLORED ground (Money / Health), not worked Work.
+    const result = await bridge.questionnairesGenerate({
+      type: 'general',
+      sensitivity: 'standard',
+      existingPrompts: [],
+      recipientPersonId: ownerId,
+    });
+    expect(result.ok).toBe(true);
+    expect(sentUserText).toContain('NEW / UNEXPLORED GROUND');
+    expect(sentUserText).toContain('- Money');
   });
 
   it('the SEMANTIC de-dup pass receives the recipient’s onboarding answers, led + untruncated (§23.5b)', async () => {

@@ -24,12 +24,14 @@ const notConnected: EmailStatus = {
   hasDeviceOverride: false,
   resolvedReady: false,
   source: 'none',
+  intimacyEligible: false,
 };
 const connected: EmailStatus = {
   ...notConnected,
   configured: true,
   resolvedReady: true,
   source: 'device',
+  intimacyEligible: false,
 };
 
 function asRole(roleId: 'owner' | 'member'): void {
@@ -213,7 +215,8 @@ describe('EmailSettingsPanel (67 §3.1)', () => {
       }),
     );
     installMockBridge({
-      emailStatus: () => Promise.resolve(connected),
+      // 18+-acknowledged → the intimacy toggle renders (not the ack affordance).
+      emailStatus: () => Promise.resolve({ ...connected, intimacyEligible: true }),
       emailGetPrefs: () =>
         Promise.resolve({
           schemaVersion: 1,
@@ -233,6 +236,51 @@ describe('EmailSettingsPanel (67 §3.1)', () => {
     expect(setPrefs).toHaveBeenCalledWith({ families: { 'ai-suggestion': false } });
     // The intimacy toggle flips BOTH the family AND the distinct intimacy-email opt-in (67 §8.2).
     await userEvent.click(screen.getByRole('switch', { name: /Intimacy suggestions by email/ }));
+    expect(setPrefs).toHaveBeenCalledWith({
+      families: { 'ai-suggestion-intimacy': true },
+      intimacyEmailOptIn: true,
+    });
+  });
+
+  it('offers the 18+ acknowledgement when not yet eligible, then enables intimacy email (67 §8.2)', async () => {
+    asRole('member');
+    const ack = vi.fn(() =>
+      Promise.resolve({
+        configured: true,
+        domainVerified: false,
+        hasSharedKey: false,
+        hasDeviceOverride: true,
+        resolvedReady: true,
+        source: 'device' as const,
+        intimacyEligible: true,
+      }),
+    );
+    const setPrefs = vi.fn(() =>
+      Promise.resolve({
+        schemaVersion: 1 as const,
+        address: 'me@inbox.example',
+        families: {},
+        richness: 'brief' as const,
+        intimacyEmailOptIn: true,
+        paused: false,
+        digestDay: 0,
+        digestTime: 'evening' as const,
+        unsubscribeToken: 't',
+      }),
+    );
+    installMockBridge({
+      emailStatus: () => Promise.resolve({ ...connected, intimacyEligible: false }),
+      emailGetPrefs: () => Promise.resolve(null),
+      emailAcknowledgeAdult: ack,
+      emailSetPrefs: setPrefs,
+    });
+    render(<EmailSettingsPanel />);
+    // Not eligible → no toggle, an 18+ affordance instead.
+    expect(
+      screen.queryByRole('switch', { name: /Intimacy suggestions by email/ }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: /I’m 18\+/ }));
+    expect(ack).toHaveBeenCalled();
     expect(setPrefs).toHaveBeenCalledWith({
       families: { 'ai-suggestion-intimacy': true },
       intimacyEmailOptIn: true,

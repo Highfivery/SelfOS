@@ -30,6 +30,7 @@ const READY_STATUS: EmailStatus = {
   hasDeviceOverride: false,
   resolvedReady: true,
   source: 'shared',
+  intimacyEligible: false,
 };
 
 describe('RelayLinkDelivery email/phone validation (38 §3.9)', () => {

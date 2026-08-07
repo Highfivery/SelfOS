@@ -111,6 +111,7 @@ export async function emailStatusOf(
   secrets: SecretStore,
   fs: FileSystem,
   key: Uint8Array,
+  opts?: { intimacyEligible?: boolean },
 ): Promise<EmailStatus> {
   const config = await readEmailConfig(fs, key);
   const hasDeviceOverride = await secrets.has(RESEND_API_KEY_ID);
@@ -128,6 +129,7 @@ export async function emailStatusOf(
     // would fail NOT_CONFIGURED), so don't overstate readiness (it would enable the toggles + retry-loop).
     resolvedReady: source !== 'none' && Boolean(config?.fromAddress),
     source,
+    intimacyEligible: opts?.intimacyEligible ?? false,
   };
 }
 

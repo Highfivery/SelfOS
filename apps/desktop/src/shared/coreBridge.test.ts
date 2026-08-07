@@ -951,6 +951,30 @@ describe('createCoreBridge', () => {
     expect(await bridge.emailAllActivity()).toHaveLength(0);
   });
 
+  it('email (67 §8.2): intimacy-email opt-in is coerced OFF until the 18+ ack, then persists', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.emailSetConfig({ fromAddress: 'hi@fam.example', fromName: 'SelfOS' });
+    await bridge.secretSet({ id: RESEND_API_KEY_ID, value: 're-key' });
+    await bridge.emailSetPrefs({ address: 'owner@inbox.example' });
+
+    // Not yet 18+-acked → status says ineligible + turning the opt-in on is coerced back OFF (the bug fix).
+    expect((await bridge.emailStatus()).intimacyEligible).toBe(false);
+    const coerced = await bridge.emailSetPrefs({
+      families: { 'ai-suggestion-intimacy': true },
+      intimacyEmailOptIn: true,
+    });
+    expect(coerced.intimacyEmailOptIn).toBe(false);
+
+    // Acknowledge 18+ → eligible → the opt-in now sticks.
+    expect((await bridge.emailAcknowledgeAdult()).intimacyEligible).toBe(true);
+    const kept = await bridge.emailSetPrefs({
+      families: { 'ai-suggestion-intimacy': true },
+      intimacyEmailOptIn: true,
+    });
+    expect(kept.intimacyEmailOptIn).toBe(true);
+    expect(kept.families?.['ai-suggestion-intimacy']).toBe(true);
+  });
+
   it('email (67 P6 / milestones): reaching a goal schedules a milestone email, sent once', async () => {
     const { bridge, host, ownerId } = await freshOwner();
     await bridge.emailSetConfig({ fromAddress: 'hi@fam.example', fromName: 'SelfOS' });

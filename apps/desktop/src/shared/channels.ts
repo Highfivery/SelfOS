@@ -392,6 +392,7 @@ export const IpcChannels = {
   emailClearSharedKey: 'email:clearSharedKey',
   emailGetPrefs: 'email:getPrefs',
   emailSetPrefs: 'email:setPrefs',
+  emailAcknowledgeAdult: 'email:acknowledgeAdult',
   emailSend: 'email:send',
   emailSendQuestionnaireDelivery: 'email:sendQuestionnaireDelivery',
   emailSendTransactional: 'email:sendTransactional',
@@ -1208,6 +1209,8 @@ export interface SelfosBridge {
     digestDay?: number;
     digestTime?: 'morning' | 'afternoon' | 'evening';
   }): Promise<EmailPrefs>;
+  /** Record the active person's shared 18+ acknowledgement, unlocking the intimacy-email opt-in (67 §8.2). */
+  emailAcknowledgeAdult(): Promise<EmailStatus>;
   /** Compose + send one family email for the active person, gated + logged (67 §6). Phase 0: `welcome`. */
   emailSend(input: EmailSendInput): Promise<EmailSendResult>;
   /**

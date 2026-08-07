@@ -35,6 +35,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         hasDeviceOverride: false,
         resolvedReady: false,
         source: 'none' as const,
+        intimacyEligible: false,
       }),
     aiSetSharedKey: () => Promise.resolve(),
     aiShareDeviceKey: () => Promise.resolve(),
@@ -293,6 +294,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         hasDeviceOverride: false,
         resolvedReady: false,
         source: 'none' as const,
+        intimacyEligible: false,
       }),
     emailVerify: () => Promise.resolve({ ok: true as const, domains: [] }),
     emailSetConfig: () =>
@@ -303,6 +305,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         hasDeviceOverride: false,
         resolvedReady: false,
         source: 'none' as const,
+        intimacyEligible: false,
       }),
     emailSetSharedKey: () =>
       Promise.resolve({
@@ -312,6 +315,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         hasDeviceOverride: false,
         resolvedReady: true,
         source: 'shared' as const,
+        intimacyEligible: false,
       }),
     emailClearSharedKey: () =>
       Promise.resolve({
@@ -321,6 +325,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         hasDeviceOverride: false,
         resolvedReady: false,
         source: 'none' as const,
+        intimacyEligible: false,
       }),
     emailGetPrefs: () => Promise.resolve(null),
     emailSetPrefs: () =>
@@ -333,6 +338,16 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         digestDay: 0,
         digestTime: 'evening' as const,
         unsubscribeToken: 'mock-token',
+      }),
+    emailAcknowledgeAdult: () =>
+      Promise.resolve({
+        configured: true,
+        domainVerified: false,
+        hasSharedKey: false,
+        hasDeviceOverride: false,
+        resolvedReady: true,
+        source: 'device' as const,
+        intimacyEligible: true,
       }),
     emailSend: () => Promise.resolve({ ok: false as const, reason: 'NOT_CONFIGURED' as const }),
     emailSendQuestionnaireDelivery: () =>

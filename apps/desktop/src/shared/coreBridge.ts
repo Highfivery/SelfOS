@@ -4501,9 +4501,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         hasDeviceOverride: false,
         resolvedReady: false,
         source: 'none',
+        intimacyEligible: false,
       };
-      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'email.own'))) return noneStatus;
-      return emailStatusOf(host.secrets, ctx.fs, ctx.key);
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'email.own')))
+        return noneStatus;
+      // Intimacy-email eligibility = the person's own shared 18+ acknowledgement (67 §8.2).
+      const intimacyEligible =
+        (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
+      return emailStatusOf(host.secrets, ctx.fs, ctx.key, { intimacyEligible });
     },
     emailVerify: async (): Promise<EmailVerifyResult> => {
       const ctx = await host.vaultAndKey();
@@ -4580,16 +4586,36 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           unsubscribeToken: 'unavailable',
         };
       }
-      // Intimacy-email eligibility is Phase 5 (the 18+ ack + adult + live partner + shared data); in Phase 0
-      // no intimacy family exists, so eligibility is false — the coercion keeps a stray opt-in OFF (§8.2).
+      // Intimacy-email opt-in requires the person's own shared 18+ acknowledgement (67 §8.2); `setEmailPrefs`
+      // coerces the opt-in OFF when ineligible. (The mutual/partner gates apply later, at SEND time.)
+      const eligible =
+        (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
       return setEmailPrefs(
         ctx.fs,
         ctx.key,
         personId,
         EmailSetPrefsSchema.parse(input),
-        false,
+        eligible,
         new Date(),
       );
+    },
+    emailAcknowledgeAdult: async (): Promise<EmailStatus> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      const noneStatus: EmailStatus = {
+        configured: false,
+        domainVerified: false,
+        hasSharedKey: false,
+        hasDeviceOverride: false,
+        resolvedReady: false,
+        source: 'none',
+        intimacyEligible: false,
+      };
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'email.own')))
+        return noneStatus;
+      // The person confirms they're 18+ (the shared app-wide ack, 67 §8.2) — then intimacy email is opt-in-able.
+      await acknowledgeAdult(ctx.fs, ctx.key, personId);
+      return emailStatusOf(host.secrets, ctx.fs, ctx.key, { intimacyEligible: true });
     },
     emailSend: async (input): Promise<EmailSendResult> => {
       const ctx = await host.vaultAndKey();

@@ -62,7 +62,13 @@ export function EmailSettingsPanel(): JSX.Element {
   return (
     <Stack gap={4}>
       {canManage ? <ConnectSection status={status} onChanged={() => void refresh()} /> : null}
-      <PrefsSection connected={connected} prefs={prefs} onSaved={(next) => setPrefs(next)} />
+      <PrefsSection
+        connected={connected}
+        prefs={prefs}
+        intimacyEligible={status?.intimacyEligible ?? false}
+        onSaved={(next) => setPrefs(next)}
+        onRefreshStatus={() => void refresh()}
+      />
       <GreenLightsSection />
       <IntimacyOffersSection />
       <ResponsesSection />
@@ -506,11 +512,15 @@ function ConnectSection({
 function PrefsSection({
   connected,
   prefs,
+  intimacyEligible,
   onSaved,
+  onRefreshStatus,
 }: {
   connected: boolean;
   prefs: EmailPrefs | null;
+  intimacyEligible: boolean;
   onSaved: (next: EmailPrefs) => void;
+  onRefreshStatus: () => void;
 }): JSX.Element {
   const [address, setAddress] = useState('');
   const [busy, setBusy] = useState(false);
@@ -657,18 +667,50 @@ function PrefsSection({
         disabled={busy || !connected}
         onChange={(checked) => void patch({ families: { 'ai-suggestion': checked } })}
       />
-      <ToggleRow
-        label="Intimacy suggestions by email"
-        help="Explicit, act-specific suggestions built only from what you and a partner have BOTH said you’re into. Wanting explicit content in the app is separate from wanting it in your inbox — this is off unless you turn it on, and needs both partners’ 18+ and shared-inventory consent."
-        checked={intimacyOn && intimacyEmailOptIn}
-        disabled={busy || !connected}
-        onChange={(checked) =>
-          void patch({
-            families: { 'ai-suggestion-intimacy': checked },
-            intimacyEmailOptIn: checked,
-          })
-        }
-      />
+      {intimacyEligible ? (
+        <ToggleRow
+          label="Intimacy suggestions by email"
+          help="Explicit, act-specific suggestions built only from what you and a partner have BOTH said you’re into. Wanting explicit content in the app is separate from wanting it in your inbox — this is off unless you turn it on, and needs both partners’ 18+ and shared-inventory consent."
+          checked={intimacyOn && intimacyEmailOptIn}
+          disabled={busy || !connected}
+          onChange={(checked) =>
+            void patch({
+              families: { 'ai-suggestion-intimacy': checked },
+              intimacyEmailOptIn: checked,
+            })
+          }
+        />
+      ) : (
+        <Stack gap={1}>
+          <Text weight={600}>Intimacy suggestions by email</Text>
+          <Text size="sm" tone="secondary">
+            Explicit, act-specific suggestions built only from what you and a partner have BOTH said
+            you’re into. To turn these on, confirm you’re 18+ (a one-time, app-wide
+            acknowledgement).
+          </Text>
+          <Inline gap={2}>
+            <Button
+              variant="secondary"
+              disabled={busy || !connected}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await window.selfos?.emailAcknowledgeAdult();
+                  onRefreshStatus();
+                  await patch({
+                    families: { 'ai-suggestion-intimacy': true },
+                    intimacyEmailOptIn: true,
+                  });
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              I’m 18+ — turn these on
+            </Button>
+          </Inline>
+        </Stack>
+      )}
       <ToggleRow
         label="Milestones & celebrations"
         help="A short well-done when you reach a goal, cross a streak, or your Story book is ready to read."

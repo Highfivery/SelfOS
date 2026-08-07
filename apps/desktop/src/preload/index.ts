@@ -193,6 +193,7 @@ const bridge: SelfosBridge = {
   emailClearSharedKey: () => ipcRenderer.invoke(IpcChannels.emailClearSharedKey),
   emailGetPrefs: () => ipcRenderer.invoke(IpcChannels.emailGetPrefs),
   emailSetPrefs: (input) => ipcRenderer.invoke(IpcChannels.emailSetPrefs, input),
+  emailAcknowledgeAdult: () => ipcRenderer.invoke(IpcChannels.emailAcknowledgeAdult),
   emailSend: (input) => ipcRenderer.invoke(IpcChannels.emailSend, input),
   emailSendQuestionnaireDelivery: (input) =>
     ipcRenderer.invoke(IpcChannels.emailSendQuestionnaireDelivery, input),

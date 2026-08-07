@@ -28,6 +28,7 @@ const SCHEMA_VERSION = 1;
 /** Rolling caps so the doc stays economical (oldest dropped past the cap). */
 export const FEEDBACK_CAP = 300;
 export const CHANGE_CAP = 100;
+export const RECIPROCITY_CAP = 100;
 
 /**
  * "Prefer not to say" backs off long-term; a gentle re-approach is allowed only after this window, and only
@@ -100,6 +101,7 @@ const ReciprocityCandidateSchema = z.object({
   at: z.string(),
   explored: z.boolean(),
 });
+export type ReciprocityCandidate = z.infer<typeof ReciprocityCandidateSchema>;
 
 export const PersonalizationProfileSchema = z.object({
   schemaVersion: z.number().default(SCHEMA_VERSION),
@@ -316,6 +318,41 @@ export function markChangesExplored(
   });
   if (!changed) return profile;
   return { ...profile, changes, updatedAt: now.toISOString() };
+}
+
+/**
+ * Persist reciprocity candidates (spec 69 §5.4 follow-on) — a partner's shared desire/need to reflect back.
+ * Upserts by (partner, note): a candidate already recorded is kept as-is (its original `at` ages out of the
+ * fresh window so a stable desire stops being re-nudged); a genuinely NEW one is added unexplored. Pure.
+ */
+export function applyReciprocity(
+  profile: PersonalizationProfile,
+  candidates: readonly { fromPartnerId: string; note: string; topicId?: string }[],
+  now: Date,
+): PersonalizationProfile {
+  const existing = profile.relational?.reciprocity ?? [];
+  const seen = new Set(existing.map((r) => `${r.fromPartnerId}|${norm(r.note)}`));
+  const added: ReciprocityCandidate[] = [];
+  for (const c of candidates) {
+    const note = c.note.trim();
+    if (!note) continue;
+    const k = `${c.fromPartnerId}|${norm(note)}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    added.push({
+      fromPartnerId: c.fromPartnerId,
+      ...(c.topicId ? { topicId: c.topicId } : {}),
+      note,
+      at: now.toISOString(),
+      explored: false,
+    });
+  }
+  if (added.length === 0) return profile;
+  return {
+    ...profile,
+    relational: { reciprocity: [...added, ...existing].slice(0, RECIPROCITY_CAP) },
+    updatedAt: now.toISOString(),
+  };
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;

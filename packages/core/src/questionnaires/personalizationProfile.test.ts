@@ -11,6 +11,7 @@ import {
   applyChange,
   applyDecline,
   applyEngagement,
+  applyReciprocity,
   buildFeedbackGuidance,
   CHANGE_CAP,
   classifyDeclineReason,
@@ -250,5 +251,31 @@ describe('buildFeedbackGuidance', () => {
     );
     p = applyEngagement(p, { topicId: 'x', engagement: 'rich' }, at(2));
     expect(buildFeedbackGuidance(p, at(3))).toBe('');
+  });
+});
+
+describe('applyReciprocity', () => {
+  it('adds new candidates and dedupes by (partner, note), keeping the original timestamp', () => {
+    let p = applyReciprocity(
+      emptyProfile('p1'),
+      [{ fromPartnerId: 'b', note: 'wants rope play' }],
+      at(1),
+    );
+    expect(p.relational?.reciprocity).toHaveLength(1);
+    expect(p.relational?.reciprocity[0]).toMatchObject({
+      fromPartnerId: 'b',
+      note: 'wants rope play',
+      explored: false,
+    });
+    // Re-detecting the same desire is a no-op — the original `at` is kept so it ages out of the fresh window.
+    const same = applyReciprocity(p, [{ fromPartnerId: 'b', note: 'wants rope play' }], at(9));
+    expect(same.relational?.reciprocity).toHaveLength(1);
+    expect(same.relational?.reciprocity[0]?.at).toBe(at(1).toISOString());
+    // A genuinely new desire is added, newest first.
+    p = applyReciprocity(p, [{ fromPartnerId: 'b', note: 'wants a weekend away' }], at(2));
+    expect(p.relational?.reciprocity.map((r) => r.note)).toEqual([
+      'wants a weekend away',
+      'wants rope play',
+    ]);
   });
 });

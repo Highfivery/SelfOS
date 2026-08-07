@@ -11,7 +11,8 @@ import {
   GENERAL_LIFE_AREAS,
   type CoverageAssessment,
 } from './coverageModel';
-import { readProfile, writeProfile } from './personalizationProfile';
+import { gatherRecipientPartnerContext } from './partnerContext';
+import { applyReciprocity, readProfile, writeProfile } from './personalizationProfile';
 import {
   gatherRecipientInsightFacts,
   gatherRecipientIntimacyAsks,
@@ -141,11 +142,19 @@ export async function refreshCoverage(
 
   const skeleton = deriveCoverageSkeleton(intimacyCoverage);
   const topics = applyCoverageAssessments(skeleton, assessments);
+  // Persist the reciprocity ledger (spec 69 §5.4 follow-on) on the same cadence: a partner's shared desire →
+  // a candidate to reflect back (bounded by the fresh window so a stable desire stops being re-nudged).
+  const partner = await gatherRecipientPartnerContext(deps.fs, deps.key, recipientPersonId);
   const profile = await readProfile(deps.fs, deps.key, recipientPersonId);
-  await writeProfile(deps.fs, deps.key, {
+  const withCoverage = {
     ...profile,
     coverage: { topics, lastPlacementAt: deps.now.toISOString() },
     updatedAt: deps.now.toISOString(),
-  });
+  };
+  await writeProfile(
+    deps.fs,
+    deps.key,
+    applyReciprocity(withCoverage, partner.reciprocity, deps.now),
+  );
   return { ok: true };
 }

@@ -608,8 +608,11 @@ _These finer points were resolved with the owner (2026-08-07); the defaults belo
   recipient) so an other-person send never surfaces a third party's context to the author. Proven: a core
   gate test (shared crosses; restricted/private/wrong-type never do) + a two-persona bridge test (a partner's
   shared desire reaches the self-send prompt with the reciprocity framing; a restricted fact never does).
-  **Phase-3 follow-ons** (minor): feed the recipient's own test subscale NUMBERS, and a persistent
-  reciprocity-candidate ledger (the profile field exists; the live block already delivers the behaviour).
+  **Phase-3 follow-ons — BUILT:** the recipient's own test subscale NUMBERS (`gatherRecipientTestMetrics` — the
+  `metrics` on their `source:'test'` insights, folded into `gatherRecipientHistory` so generation tailors to
+  their measured profile), and the persistent reciprocity ledger (`applyReciprocity` — populated on the coverage
+  refresh cadence, deduped by (partner, note), bounded by a fresh window; the profile field the Phase-5
+  transparency surface reads).
 - 2026-08-07 — **Phase 2 BUILT** (coverage / novelty engine). The per-person coverage map
   (`coverageModel.ts`: one coarse topic per general `LIFE_AREA` + the Intimacy categories folded in from the
   existing `intimacy/coverage` engine; `buildCoverageGuidance` leads with unexplored/low-depth ground and marks

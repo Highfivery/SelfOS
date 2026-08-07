@@ -45,6 +45,11 @@ export async function gatherRecipientHistory(
   const facts = await gatherRecipientInsightFacts(fs, key, recipientPersonId);
   if (facts.trim()) parts.push(facts);
 
+  // Their measured self-assessment profile (spec 69 §5.4 follow-on): the NUMBERS behind the band facts — e.g.
+  // attachment anxiety 0.72, openness 0.85 — so questions can match their measured profile, not just re-state it.
+  const metrics = await gatherRecipientTestMetrics(fs, key, recipientPersonId);
+  if (metrics.trim()) parts.push(metrics);
+
   // The exact questions they've ALREADY been asked (so we never repeat a prompt across questionnaires).
   const prompts = await gatherRecipientAskedPrompts(fs, key, recipientPersonId);
   if (prompts.length) {
@@ -53,6 +58,32 @@ export async function gatherRecipientHistory(
   }
 
   return parts.join('\n');
+}
+
+/**
+ * The recipient's self-assessment subscale NUMBERS (spec 69 §5.4 follow-on) — the `metrics` on their own
+ * `source:'test'` insights (Big Five, attachment, kink interest, wellbeing bands, …), formatted so generation
+ * can tailor tone + depth to their measured profile instead of re-asking what a score already tells us.
+ * The recipient's OWN data, author-blind (fed only to the model). Household recipients only.
+ */
+export async function gatherRecipientTestMetrics(
+  fs: FileSystem,
+  key: Uint8Array,
+  recipientPersonId: string,
+): Promise<string> {
+  const insights = await listInsightsForPerson(fs, key, recipientPersonId);
+  const lines: string[] = [];
+  for (const insight of insights) {
+    if (insight.source !== 'test' || !insight.approved || !insight.metrics) continue;
+    const pairs = Object.entries(insight.metrics)
+      .filter(([, v]) => Number.isFinite(v))
+      .map(([k, v]) => `${k} ${v.toFixed(2)}`);
+    if (pairs.length) lines.push(`- ${insight.summary}: ${pairs.join(', ')}`);
+  }
+  if (lines.length === 0) return '';
+  return `Their measured profile from self-assessments (tailor tone + depth to this; do NOT re-ask what a score already tells you):\n${lines.join(
+    '\n',
+  )}`;
 }
 
 /**

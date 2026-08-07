@@ -1,4 +1,5 @@
-import type { RelationshipType } from './schemas';
+import type { LifeArea, OutboundSharingItem, RelationshipType } from './schemas';
+import type { SharingCategory } from './people/sharingPresets';
 
 /**
  * Shared relationship-sharing copy + helpers (42-relationship-scoped-sharing §3.2/§3.4). Crypto-free and
@@ -154,3 +155,37 @@ export function confidentialityPreamble(viewerName: string): string {
 
 /** Re-export the close-family relationship set so the Memory share-preset chip (65 §3.4) reuses ONE source. */
 export { CLOSE_FAMILY } from './people/sharingPresets';
+
+/** The By-category display bucket "Dreams" for dream-image items (68 §3.5). */
+const DREAMS_BUCKET = 'Dreams';
+
+/**
+ * A `SharingCategory` (a shared intake answer's bucket) → a display life-area, so a shared answer groups next
+ * to insight facts + profile fields in the Sharing dashboard's By-category tab (68 §3.5). A display bucket,
+ * not the sharing MECHANIC. Crypto-free (here in the shared sharing copy module) so the renderer may use it.
+ */
+const SHARING_CATEGORY_LIFE_AREA: Record<SharingCategory, LifeArea> = {
+  basics: 'Other',
+  values: 'Values & beliefs',
+  goals: 'Goals & growth',
+  work: 'Work & purpose',
+  joy: 'Emotions & patterns',
+  health: 'Health & body',
+  relationships: 'Relationships',
+  family: 'Family',
+  story: 'Other',
+  intimacy: 'Intimacy',
+  trauma: 'Emotions & patterns',
+};
+
+/**
+ * Resolve a single display bucket for an outbound item's By-category grouping (68 §3.5): a dream image →
+ * "Dreams"; else its own `lifeArea` (facts + profile fields); else its `category` mapped to a life-area
+ * (intake answers); else "Other". Pure + total; used by the read (`listOutboundSharing`) + the renderer.
+ */
+export function sharingItemCategory(item: OutboundSharingItem): string {
+  if (item.kind === 'dreamImage') return DREAMS_BUCKET;
+  if (item.lifeArea) return item.lifeArea;
+  if (item.category) return SHARING_CATEGORY_LIFE_AREA[item.category] ?? 'Other';
+  return 'Other';
+}

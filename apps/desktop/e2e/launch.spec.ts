@@ -3706,9 +3706,10 @@ test('memory redesign (54/57): a partner’s shared facts never show raw; the Sh
     await expect(w.getByText('PARTNER-PRIVATE-FACT')).toHaveCount(0);
     await expect(w.getByText('About people you relate to')).toHaveCount(0);
 
-    // The relationship reflections moved to the "Sharing & relationships" page (57 §3.8): a
+    // The relationship reflections live on the Sharing dashboard's Reflections tab now (68 §3.7): a
     // relationship-insights card. Generate → AI observations (a synthesis, never raw).
-    await w.getByRole('link', { name: 'Sharing & relationships' }).click();
+    await w.getByRole('link', { name: 'Sharing', exact: true }).click();
+    await w.getByRole('tab', { name: /Reflections/ }).click();
     await expect(w.getByText(/You & Pat/)).toBeVisible();
     await w.getByRole('button', { name: /Reflect on us/ }).click();
     await expect(w.getByText(/both lean on security/)).toBeVisible();
@@ -4018,11 +4019,12 @@ test('memory overview: portrait hero, drill in to type-scope a fact to partner (
     expect(await overflowAt()).toBeLessThanOrEqual(1);
     await w.setViewportSize({ width: 1024, height: 800 });
 
-    // Sharing lives on its own "Sharing & relationships" page now (57 §3.8): it lists the now-shared fact.
-    await w.getByRole('link', { name: 'Sharing & relationships' }).click();
-    await expect(w.getByRole('heading', { name: /What you share/ })).toBeVisible();
+    // Sharing lives on its own dashboard now (68 §3): the Everything tab lists the now-shared fact.
+    await w.getByRole('link', { name: 'Sharing', exact: true }).click();
+    await expect(w.getByRole('heading', { name: 'Sharing', level: 2 })).toBeVisible();
+    await w.getByRole('tab', { name: /Everything/ }).click();
     await expect(w.getByText('Enjoys rock climbing')).toBeVisible();
-    await expect(w.getByText(/Shared with Partner · reaching Pat/)).toBeVisible();
+    await expect(w.getByText(/Partner · reaching Pat/)).toBeVisible();
     await w.setViewportSize({ width: 360, height: 800 });
     expect(await overflowAt()).toBeLessThanOrEqual(1);
     await w.setViewportSize({ width: 1024, height: 800 });
@@ -4031,6 +4033,188 @@ test('memory overview: portrait hero, drill in to type-scope a fact to partner (
     await w.getByRole('link', { name: 'Memory' }).click();
     await w.getByRole('button', { name: /Edit your answers/ }).click();
     await expect.poll(() => w.url()).toContain('onboarding');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('sharing dashboard (68): stats + tabs + folded-in profile/dream surfaces + bulk/lock/unshare (decrypt) + 360px; Home Manage → /sharing', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('sharing-dashboard e2e: master key missing');
+  const at = '2026-08-07T10:00:00.000Z';
+
+  // owner-1 is Pat's PARTNER and Sam's SIBLING.
+  await savePerson(fs, key, {
+    id: 'pat-1',
+    schemaVersion: 1,
+    displayName: 'Pat',
+    isSubject: true,
+    tags: [],
+    createdAt: at,
+    updatedAt: at,
+  });
+  await savePerson(fs, key, {
+    id: 'sam-1',
+    schemaVersion: 1,
+    displayName: 'Sam',
+    isSubject: true,
+    tags: [],
+    createdAt: at,
+    updatedAt: at,
+  });
+  await saveRelationship(fs, key, {
+    id: 'rp',
+    schemaVersion: 1,
+    fromPersonId: 'owner-1',
+    toPersonId: 'pat-1',
+    type: 'partner',
+    createdAt: at,
+    updatedAt: at,
+  });
+  await saveRelationship(fs, key, {
+    id: 'rs',
+    schemaVersion: 1,
+    fromPersonId: 'owner-1',
+    toPersonId: 'sam-1',
+    type: 'sibling',
+    createdAt: at,
+    updatedAt: at,
+  });
+
+  // A SIBLING-scoped fact (so a later "Share with partner" bulk visibly REPLACES the scope) + a RESTRICTED
+  // fact (never outbound — only the "kept private" count).
+  await saveInsight(fs, key, {
+    id: 'ins-share',
+    schemaVersion: 1,
+    source: 'session',
+    subjectPersonId: 'owner-1',
+    summary: 'A theme',
+    facts: [
+      {
+        id: 'fp',
+        text: 'Values honesty above comfort',
+        shareable: false,
+        shareableTypes: ['sibling'],
+        lifeArea: 'Values & beliefs',
+      },
+      { id: 'fr', text: 'RESTRICTED-SECRET-XYZ', shareable: false, restricted: true },
+    ],
+    confidence: 'medium',
+    categories: ['Values & beliefs'],
+    approved: true,
+    provenance: { at },
+    createdAt: at,
+    updatedAt: at,
+  });
+
+  // A profile field (folded in, reaches ALL related) — add occupation to the owner's own Person.
+  const owner = await getPerson(fs, key, 'owner-1');
+  if (!owner) throw new Error('sharing-dashboard e2e: owner missing');
+  await savePerson(fs, key, { ...owner, occupation: 'Nurse', updatedAt: at });
+
+  // A dream image shared with Pat only (folded in).
+  await saveDream(fs, key, {
+    id: 'd1',
+    schemaVersion: 1,
+    personId: 'owner-1',
+    title: 'Flying over the city',
+    narrative: 'a dream',
+    lucid: false,
+    nightmare: false,
+    tags: [],
+    people: [],
+    sensitivity: 'standard',
+    status: 'captured',
+    image: { style: 's', mime: 'image/png', generatedAt: at, model: 'm', shareableWith: ['pat-1'] },
+    createdAt: at,
+    updatedAt: at,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    const overflowAt = async (): Promise<number> =>
+      w.evaluate(() => {
+        let max = 0;
+        for (const el of Array.from(document.querySelectorAll('*'))) {
+          const style = getComputedStyle(el);
+          if (
+            (style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+            el.scrollWidth - el.clientWidth > max
+          ) {
+            max = el.scrollWidth - el.clientWidth;
+          }
+        }
+        const main = document.querySelector('main');
+        return Math.max(max, main ? main.scrollWidth - main.clientWidth : 0);
+      });
+
+    await w.getByRole('link', { name: 'Sharing', exact: true }).click();
+    await expect(w.getByRole('heading', { name: 'Sharing', level: 2 })).toBeVisible();
+
+    // Stats header: things-you-share + the kept-private reassurance (1 restricted fact, never listed).
+    await expect(w.getByText('Things you share')).toBeVisible();
+    await expect(w.getByText('Kept private')).toBeVisible();
+    // The restricted fact is NEVER an item on ANY tab (only in the count).
+    await expect(w.getByText('RESTRICTED-SECRET-XYZ')).toHaveCount(0);
+
+    // By person (default): a Pat group + a Sam group; the dream image reads "Shared with Pat" (the §3.9 fix).
+    await expect(w.getByRole('button', { name: /Pat/ }).first()).toBeVisible();
+    await expect(w.getByRole('button', { name: /Sam/ }).first()).toBeVisible();
+    await expect(w.getByText(/Shared with Pat/).first()).toBeVisible();
+    await expect(w.getByText(/Private · reaching/)).toHaveCount(0); // the wart is gone
+
+    // Everything tab: the folded-in profile field renders with a share/lock toggle.
+    await w.getByRole('tab', { name: /Everything/ }).click();
+    await expect(w.getByText('Occupation: Nurse')).toBeVisible();
+    await expect(w.getByText('RESTRICTED-SECRET-XYZ')).toHaveCount(0);
+
+    // By category: "Share with partner" on Values REPLACES the sibling-scoped fact's scope (decrypt).
+    await w.getByRole('tab', { name: /By category/ }).click();
+    await w
+      .getByRole('button', { name: /Share with partner/ })
+      .first()
+      .click();
+    await w.getByRole('button', { name: /Yes, apply/ }).click();
+    await expect
+      .poll(async () => {
+        const facts = (await listInsightsForPerson(fs, key, 'owner-1')).flatMap((i) => i.facts);
+        return facts.find((f) => f.id === 'fp')?.shareableTypes ?? [];
+      })
+      .toEqual(['partner']);
+
+    // Profile-field lock (own-scoped): toggling Occupation locks it — decrypt privateFields.
+    await w.getByRole('tab', { name: /Everything/ }).click();
+    await w.getByRole('button', { name: /Occupation: shared/i }).click();
+    await expect
+      .poll(async () => (await getPerson(fs, key, 'owner-1'))?.privateFields ?? [])
+      .toContain('occupation');
+
+    // Dream-image inline unshare — decrypt shareableWith is now empty.
+    await w.getByRole('button', { name: /Stop sharing this dream image with Pat/ }).click();
+    await expect
+      .poll(async () => {
+        const dreams = await listDreams(fs, key, 'owner-1');
+        return dreams.find((d) => d.id === 'd1')?.image?.shareableWith ?? [];
+      })
+      .toEqual([]);
+
+    // No horizontal overflow (page or inner controls) at 360px on each tab.
+    await w.setViewportSize({ width: 360, height: 800 });
+    for (const tabName of [/By person/, /By category/, /Everything/, /Reflections/]) {
+      await w.getByRole('tab', { name: tabName }).click();
+      expect(await overflowAt()).toBeLessThanOrEqual(1);
+    }
+    await w.setViewportSize({ width: 1024, height: 800 });
+
+    // Home's "Manage" navigates to /sharing (the wart fix), not /memory.
+    await w.getByRole('link', { name: 'Home' }).click();
+    await w.getByRole('button', { name: 'Manage' }).click();
+    await expect.poll(() => w.url()).toContain('/sharing');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -8877,8 +9061,9 @@ test('memory: an existing (pre-spec) portrait shares by default — Sharing refl
     expect(await w.getByText('Private', { exact: true }).count()).toBe(0);
     // The Sharing surface (its own page now, 57 §3.8) reflects the backfilled share — the shared onboarding
     // answer is listed, NOT the empty "not sharing anything yet".
-    await w.getByRole('link', { name: 'Sharing & relationships' }).click();
-    await expect(w.getByRole('heading', { name: /What you share/ })).toBeVisible();
+    await w.getByRole('link', { name: 'Sharing', exact: true }).click();
+    await expect(w.getByRole('heading', { name: 'Sharing', level: 2 })).toBeVisible();
+    await w.getByRole('tab', { name: /Everything/ }).click();
     await expect(w.getByText(/not sharing anything yet/i)).toHaveCount(0);
     await expect(w.getByText(/Early to bed, early to rise/)).toBeVisible();
   } finally {

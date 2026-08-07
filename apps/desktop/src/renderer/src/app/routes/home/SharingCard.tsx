@@ -29,7 +29,7 @@ export function SharingCard({ outbound }: { outbound: OutboundSharing }): JSX.El
           <Heading level={2} className={styles.sectionTitle}>
             <Share2 size={16} aria-hidden="true" /> Sharing
           </Heading>
-          <button type="button" className={styles.cardLink} onClick={() => navigate('/memory')}>
+          <button type="button" className={styles.cardLink} onClick={() => navigate('/sharing')}>
             Manage
           </button>
         </div>

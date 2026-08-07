@@ -43,7 +43,8 @@ const GUARDED_ROUTES: { path: string; capability: CapabilityKey; element: JSX.El
   // The dedicated one-at-a-time review screen (65 §3.3) — its own focused route, not inline on Memory.
   { path: 'memory/review', capability: 'memory.own', element: <MemoryReview /> },
   { path: 'goals', capability: 'memory.own', element: <Goals /> },
-  { path: 'sharing', capability: 'memory.own', element: <SharingAndRelationships /> },
+  // A splat so the dashboard's tabs deep-link (`/sharing/by-category`, …) + survive reload (68 §3.2).
+  { path: 'sharing/*', capability: 'memory.own', element: <SharingAndRelationships /> },
   { path: 'dreams', capability: 'dreams.own', element: <Dreams /> },
   { path: 'dreams/patterns', capability: 'dreams.own', element: <DreamPatterns /> },
   { path: 'you', capability: 'tests.own', element: <You /> },

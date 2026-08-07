@@ -13,7 +13,9 @@ import {
   type Relationship,
   type RelationshipType,
 } from '../schemas';
-import type { SharingCategory } from './sharingPresets';
+// `sharingItemCategory` lives in the crypto-free `../sharing` so the renderer can import it without pulling
+// this host-only (crypto-heavy) module; re-exported here for the read + the 1a callers/tests.
+import { sharingItemCategory } from '../sharing';
 import { readEncryptedJson } from '../vault';
 import { getPerson } from './peopleService';
 import { listRelatedPeople } from './buildContext';
@@ -21,39 +23,7 @@ import { profileSharingItems } from './profileFieldSharing';
 import { relationshipTypesFromSubjectToViewer } from './relationshipScope';
 import { formatSharedAnswer, getIntakeQuestion } from './sharedIntakeAnswers';
 
-/** The By-category display bucket "Dreams" for dream-image items (68 §3.5). */
-const DREAMS_BUCKET = 'Dreams';
-
-/**
- * A `SharingCategory` (a shared intake answer's bucket) → a display life-area, so a shared answer groups next
- * to insight facts + profile fields in the By-category tab (68 §3.5). A display bucket, not the sharing
- * MECHANIC.
- */
-const SHARING_CATEGORY_LIFE_AREA: Record<SharingCategory, LifeArea> = {
-  basics: 'Other',
-  values: 'Values & beliefs',
-  goals: 'Goals & growth',
-  work: 'Work & purpose',
-  joy: 'Emotions & patterns',
-  health: 'Health & body',
-  relationships: 'Relationships',
-  family: 'Family',
-  story: 'Other',
-  intimacy: 'Intimacy',
-  trauma: 'Emotions & patterns',
-};
-
-/**
- * Resolve a single display bucket for an outbound item's By-category grouping (68 §3.5): a dream image →
- * "Dreams"; else its own `lifeArea` (facts + profile fields); else its `category` mapped to a life-area
- * (intake answers); else "Other". Pure + total; exported for the renderer + tests.
- */
-export function sharingItemCategory(item: OutboundSharingItem): string {
-  if (item.kind === 'dreamImage') return DREAMS_BUCKET;
-  if (item.lifeArea) return item.lifeArea;
-  if (item.category) return SHARING_CATEGORY_LIFE_AREA[item.category] ?? 'Other';
-  return 'Other';
-}
+export { sharingItemCategory };
 
 /** Normalize an `InsightFact.lifeArea` (a free string) against the fixed taxonomy; undefined if not a member. */
 function normalizeLifeArea(value: string | undefined): LifeArea | undefined {

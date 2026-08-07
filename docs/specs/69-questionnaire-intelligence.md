@@ -599,6 +599,16 @@ _These finer points were resolved with the owner (2026-08-07); the defaults belo
 
 ## 15. Changelog
 
+- 2026-08-07 — **Phase 2 BUILT** (coverage / novelty engine). The per-person coverage map
+  (`coverageModel.ts`: one coarse topic per general `LIFE_AREA` + the Intimacy categories folded in from the
+  existing `intimacy/coverage` engine; `buildCoverageGuidance` leads with unexplored/low-depth ground and marks
+  explored areas deepen-only) + the metered `questionnaire.profile` AI placement pass (`coverageService.ts`
+  `refreshCoverage` — bounded digest → per-area depth 0..1 + optional emergent sub-topics; budget-gated;
+  fail-safe, never wipes the last-good map). The coverage guidance is combined with the skip/decline feedback in
+  `gatherRecipientFeedbackGuidance`, so all four generation paths get the strong-new bias through the existing
+  thread. The refresh **rides the living-memory reconcile cadence** (`memoryRefresh` — launch/focus, 24h
+  throttle, ≥N-new-signals gate; §5.6). Verified end-to-end at the bridge (reconcile → coverage populated →
+  generation leads with the unexplored ground). Slices 2a–2d. No new user surface (§12).
 - 2026-08-07 — **Phase 1 BUILT** (feedback loop + concrete fixes). The Personalization Profile store
   (`personalizationProfile.ts`: feedback ledger + change log, module-local schema, tolerant/bounded); capture of
   per-question declines at every submit channel (`captureResponseFeedback` in `submitResponse` + `drainRelaySend`,

@@ -931,6 +931,52 @@ describe('improveQuestion + gap-finder', () => {
     expect(result.questions?.map((q) => q.prompt)).toEqual(['One?', 'Two?']);
   });
 
+  it('tightens the deterministic filter when the semantic pass degrades (spec 69 §5.5)', async () => {
+    const fs = memFileSystem();
+    const { author } = await seedHousehold(fs);
+    // Q1 near-duplicates an already-asked prompt at Jaccard 0.5 — BELOW the standard 0.6 hard filter (so it
+    // survives the first pass) but AT/ABOVE the stricter 0.45 fallback. Q2 is unrelated.
+    const gen = JSON.stringify({
+      title: 'T',
+      questions: [
+        { type: 'shortText', prompt: 'Quiet solo reading, hiking, painting?' },
+        { type: 'shortText', prompt: 'Childhood summers by the ocean?' },
+      ],
+    });
+    const responses = [gen, 'not an array', 'still not an array']; // degrade the semantic pass
+    let calls = 0;
+    const seq: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (_o, onDelta) => {
+        const text = responses[Math.min(calls, responses.length - 1)] ?? '';
+        calls += 1;
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const result = await generateQuestions(deps(fs, seq, author), {
+      type: 'general',
+      sensitivity: 'standard',
+      count: 2,
+      context: {
+        authorPersonId: author,
+        includeAuthor: true,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+      recipientHistory: 'Themes they have already explored:\n- Hobbies.',
+      recipientAskedPrompts: ['Quiet solo reading, gaming?'],
+    });
+    expect(result.ok).toBe(true);
+    expect(result.dedupDegraded).toBe(true);
+    // The stricter fallback dropped the near-dup Q1; only the genuinely-new Q2 survives.
+    expect(result.questions?.map((q) => q.prompt)).toEqual(['Childhood summers by the ocean?']);
+  });
+
   it('suggests questionnaires from structured context', async () => {
     const fs = memFileSystem();
     const { author } = await seedHousehold(fs);

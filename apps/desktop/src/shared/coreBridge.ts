@@ -4245,7 +4245,26 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const deps = await aiDeps();
       if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
       const { targetPersonId } = SuggestSchema.parse(input);
-      return suggestQuestionnaires(deps, targetPersonId !== undefined ? { targetPersonId } : {});
+      // spec 69 §5.2 — the Home gap-finder now gets the SAME avoid-list as the auto/saved paths (it used to
+      // pass nothing, so it could re-propose already-covered topics forever). Household targets only: the
+      // target's history as avoid-only grounding + the topics already sent (titles) + the author's marked-done
+      // notes (§28.3) as the deterministic `avoidSuggestions`.
+      let recipientHistory = '';
+      let avoidSuggestions: string[] = [];
+      if (targetPersonId !== undefined && (await getPerson(deps.fs, deps.key, targetPersonId))) {
+        const [history, priorTitles, covered] = await Promise.all([
+          gatherRecipientHistory(deps.fs, deps.key, targetPersonId),
+          gatherRecipientQuestionnaireTitles(deps.fs, deps.key, targetPersonId),
+          listCoveredTopics(deps.fs, deps.key, deps.personId, targetPersonId),
+        ]);
+        recipientHistory = history;
+        avoidSuggestions = [...priorTitles, ...covered.map((t) => t.note)];
+      }
+      return suggestQuestionnaires(deps, {
+        ...(targetPersonId !== undefined ? { targetPersonId } : {}),
+        ...(recipientHistory.trim() ? { recipientHistory } : {}),
+        ...(avoidSuggestions.length ? { avoidSuggestions } : {}),
+      });
     },
 
     // --- Recipient-first saved suggestions (08 §18) — author = the active person, gated `questionnaires.create`.

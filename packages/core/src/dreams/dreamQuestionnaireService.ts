@@ -19,6 +19,7 @@ import {
   gatherRecipientInsightFacts,
   gatherRecipientPriorAnswers,
   generateQuestions,
+  listCoveredTopics,
   saveQuestionnaire,
   validateQuestionnaire,
   type AiDeps,
@@ -128,23 +129,32 @@ export async function mintDreamQuestionnaires(
     // what they've already answered in onboarding / prior questionnaires / reflected on (08 §23.5). This
     // path previously passed NO de-dup inputs — a real hole, since it can reach another member with full
     // history. Mirrors the auto-checkin/bridge assembly (intake fetched here, the pure reference shared).
-    const [dHistory, dPrompts, dAnswers, dFacts, dSession, dFeedback] = await Promise.all([
-      gatherRecipientHistory(fs, key, recipient.personId),
-      gatherRecipientAskedPrompts(fs, key, recipient.personId),
-      gatherRecipientPriorAnswers(fs, key, recipient.personId),
-      gatherRecipientInsightFacts(fs, key, recipient.personId),
-      getIntakeSession(fs, key, recipient.personId),
-      // spec 69 §5.9 — the recipient's prior skips/declines steer the dream-prompted questionnaire too.
-      gatherRecipientFeedbackGuidance(fs, key, recipient.personId),
-    ]);
+    const [dHistory, dPrompts, dAnswers, dFacts, dSession, dFeedback, dCovered] = await Promise.all(
+      [
+        gatherRecipientHistory(fs, key, recipient.personId),
+        gatherRecipientAskedPrompts(fs, key, recipient.personId),
+        gatherRecipientPriorAnswers(fs, key, recipient.personId),
+        gatherRecipientInsightFacts(fs, key, recipient.personId),
+        getIntakeSession(fs, key, recipient.personId),
+        // spec 69 §5.9 — the recipient's prior skips/declines steer the dream-prompted questionnaire too.
+        gatherRecipientFeedbackGuidance(fs, key, recipient.personId),
+        // §28.3 covered-topics parity (spec 69 §5.2): the dreamer (personId) is the author for this recipient.
+        listCoveredTopics(fs, key, personId, recipient.personId),
+      ],
+    );
     const dIntake = dSession
       ? formatIntakeForGeneration(dSession)
       : { text: '', prompts: [] as string[] };
+    const dCoveredNotes = dCovered.map((t) => t.note);
+    const dCoveredPrompts = dCovered
+      .map((t) => t.sourcePrompt)
+      .filter((p): p is string => Boolean(p));
     const dedupReference = buildDedupReference({
       intakeText: dIntake.text,
       priorAnswers: dAnswers,
       insightFacts: dFacts,
       priorPrompts: dPrompts,
+      ...(dCoveredNotes.length ? { coveredTopics: dCoveredNotes } : {}),
     });
     const recipientHistory = [
       dHistory,
@@ -152,7 +162,7 @@ export async function mintDreamQuestionnaires(
     ]
       .filter((s) => s.trim() !== '')
       .join('\n\n');
-    const recipientAskedPrompts = [...dPrompts, ...dIntake.prompts];
+    const recipientAskedPrompts = [...dPrompts, ...dIntake.prompts, ...dCoveredPrompts];
 
     const generated = await generateQuestions(deps, {
       type: 'general',

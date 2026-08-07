@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { EmailPrefs, EmailStatus, EmailVerifyResult } from '@selfos/core/schemas';
+import type {
+  EmailPrefs,
+  EmailResponse,
+  EmailStatus,
+  EmailVerifyResult,
+} from '@selfos/core/schemas';
 import { RESEND_API_KEY_ID } from '@shared/channels';
 import {
   AdminOnlyBadge,
@@ -55,6 +60,89 @@ export function EmailSettingsPanel(): JSX.Element {
     <Stack gap={4}>
       {canManage ? <ConnectSection status={status} onChanged={() => void refresh()} /> : null}
       <PrefsSection connected={connected} prefs={prefs} onSaved={(next) => setPrefs(next)} />
+      <ResponsesSection />
+    </Stack>
+  );
+}
+
+/** Family label for the response history (matches the family toggles above). */
+const FAMILY_LABEL: Record<string, string> = {
+  're-engagement': 'Re-engagement',
+  'ai-suggestion': 'Suggestion',
+  'ai-suggestion-intimacy': 'Intimacy',
+  digest: 'Digest',
+  milestone: 'Milestone',
+};
+
+/**
+ * Your email responses (67 §3.6 / Phase 4) — the own-only, editable history of what you tapped in an email
+ * (drained back from the relay). Self-hides when there are none.
+ */
+function ResponsesSection(): JSX.Element | null {
+  const [responses, setResponses] = useState<EmailResponse[]>([]);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+
+  const load = async (): Promise<void> => {
+    setResponses((await window.selfos?.emailResponses()) ?? []);
+  };
+  useEffect(() => {
+    void load();
+  }, []);
+
+  if (responses.length === 0) return null;
+
+  const save = async (id: string): Promise<void> => {
+    await window.selfos?.emailEditResponse({ id, answer: draft.trim() });
+    setEditing(null);
+    await load();
+  };
+
+  return (
+    <Stack gap={2}>
+      <Text weight={600}>Your email responses</Text>
+      <Text size="sm" tone="secondary">
+        What you’ve tapped in a SelfOS email. Only you can see these.
+      </Text>
+      {responses.map((r) => (
+        <div key={r.id}>
+          {editing === r.id ? (
+            <Inline gap={2} align="end">
+              <TextInput
+                aria-label="Edit response"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+              />
+              <Button
+                variant="secondary"
+                aria-label="Save response"
+                onClick={() => void save(r.id)}
+              >
+                Save
+              </Button>
+              <Button variant="secondary" onClick={() => setEditing(null)}>
+                Cancel
+              </Button>
+            </Inline>
+          ) : (
+            <Inline gap={2} align="center">
+              <Text size="sm">
+                <strong>{FAMILY_LABEL[r.family] ?? r.family}</strong> — {r.answer}
+                {r.edited ? ' (edited)' : ''}
+              </Text>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setEditing(r.id);
+                  setDraft(r.answer);
+                }}
+              >
+                Edit
+              </Button>
+            </Inline>
+          )}
+        </div>
+      ))}
     </Stack>
   );
 }

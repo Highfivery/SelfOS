@@ -14,11 +14,13 @@ import { flattenContent } from '@selfos/core/host';
 import {
   contentKeyFromFragment,
   drain as kvDrain,
+  drainTaps as kvDrainTaps,
   openContent,
   openResult,
   purge as kvPurge,
   putMailbox as kvPut,
   putResult as kvPutResult,
+  recordTap as kvRecordTap,
   respond as kvRespond,
   revoke as kvRevoke,
   sealResponse,
@@ -87,10 +89,15 @@ function makeRelayFetch(): typeof fetch {
       return json({ success: true, result: {} });
     }
     const path = new URL(url).pathname;
+    if (path.startsWith('/t/')) {
+      await kvRecordTap(env, decodeURIComponent(path.slice('/t/'.length)));
+      return new Response('ok', { status: 200 });
+    }
     const ops: Record<string, () => Promise<{ status: number; json: unknown }>> = {
       '/api/admin/mailbox': () => kvPut(env, body),
       '/api/admin/result': () => kvPutResult(env, body),
       '/api/admin/drain': () => kvDrain(env, body),
+      '/api/admin/drainTaps': () => kvDrainTaps(env, body),
       '/api/admin/purge': () => kvPurge(env, body),
       '/api/admin/revoke': () => kvRevoke(env, body),
       '/api/unlock': () => kvUnlock(env, body),
@@ -772,6 +779,74 @@ describe('createCoreBridge', () => {
     const throttled = await bridge.emailScheduleReconcile({ auto: true });
     expect(throttled).toMatchObject({ ok: false, reason: 'SKIPPED' });
     expect(await bridge.emailActivity({ family: 'digest' })).toHaveLength(1);
+  });
+
+  it('email (67 P4 / interactive): a relay-provisioned re-engagement mints tap tokens; a tap drains → an EmailResponse + turns the family off', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.emailSetConfig({ fromAddress: 'hi@fam.example', fromName: 'SelfOS' });
+    await bridge.secretSet({ id: RESEND_API_KEY_ID, value: 're-key' });
+    await bridge.emailSetPrefs({ address: 'owner@inbox.example' });
+    await bridge.relayConnect({ apiToken: 'cf', accountId: 'acct' });
+    const ctx = (await host.host.vaultAndKey())!;
+    // A waiting check-in so the re-engagement nudge has content.
+    await writeEncryptedJson(
+      ctx.fs,
+      'questionnaires/sends/a1/assignment.enc',
+      {
+        id: 'a1',
+        schemaVersion: 1,
+        questionnaireId: 'q1',
+        senderPersonId: 'someone',
+        recipient: { kind: 'person', personId: ownerId },
+        channel: 'inApp',
+        privacy: 'standard',
+        senderVisibleToRecipient: true,
+        status: 'sent',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        updatedAt: '2026-08-01T00:00:00.000Z',
+      },
+      ctx.key,
+    );
+
+    // Reconcile → schedules the interactive re-engagement + mints the one-click tokens.
+    expect((await bridge.emailScheduleReconcile({ auto: false })).ok).toBe(true);
+    const tokenNames = await ctx.fs.list(`people/${ownerId}/email/tokens`);
+    expect(tokenNames.length).toBeGreaterThanOrEqual(2);
+    // Find the `pause` token + simulate a one-click tap on it (via the shared fake relay).
+    let pauseToken = '';
+    for (const name of tokenNames) {
+      const raw = await readEncryptedJson(
+        ctx.fs,
+        `people/${ownerId}/email/tokens/${name}`,
+        ctx.key,
+      );
+      const token = raw as { token: string; answer: string };
+      if (token.answer === 'pause') pauseToken = token.token;
+    }
+    expect(pauseToken).not.toBe('');
+    await host.host.relay.fetch(`https://relay.example/t/${pauseToken}`);
+
+    // Next reconcile drains the tap → an EmailResponse, and the `pause` reaction turns re-engagement OFF.
+    expect((await bridge.emailScheduleReconcile({ auto: false })).ok).toBe(true);
+    const responses = await bridge.emailResponses();
+    expect(responses).toHaveLength(1);
+    expect(responses[0]).toMatchObject({
+      family: 're-engagement',
+      answer: 'pause',
+      source: 'relay-tap',
+    });
+    expect((await bridge.emailGetPrefs())?.families?.['re-engagement']).toBe(false);
+    // The response is editable (own-only).
+    const edited = await bridge.emailEditResponse({ id: responses[0]!.id, answer: 'changed' });
+    expect(edited).toMatchObject({ answer: 'changed', edited: true });
+
+    // Own-scoping: another person can neither see nor edit the owner's response (path is under the caller's
+    // own subtree — a foreign id misses → null; the history read returns only the active person's own).
+    const other = await bridge.peopleSave({ displayName: 'Nan', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: other.id, roleId: 'member', pin: null });
+    expect((await bridge.sessionSetActive({ personId: other.id })).ok).toBe(true);
+    expect(await bridge.emailResponses()).toHaveLength(0);
+    expect(await bridge.emailEditResponse({ id: responses[0]!.id, answer: 'hijack' })).toBeNull();
   });
 
   it('email (67 §6): a non-owner cannot connect; the owner reads a member’s activity, a member cannot', async () => {

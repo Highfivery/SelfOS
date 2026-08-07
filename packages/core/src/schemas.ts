@@ -2314,6 +2314,56 @@ export const EmailActivityEntrySchema = z.object({
 });
 export type EmailActivityEntry = z.infer<typeof EmailActivityEntrySchema>;
 
+/** The kind of a one-click email interaction (67 §4.5 / Phase 4). */
+export const EmailTokenKindSchema = z.enum([
+  'reaction',
+  'intimacy-reaction',
+  'checkin-answer',
+  'tuning',
+]);
+export type EmailTokenKind = z.infer<typeof EmailTokenKindSchema>;
+
+/**
+ * The local meaning of an opaque one-click email token (67 §4.5), at `people/<id>/email/tokens/<token>.enc`.
+ * The relay only ever sees the token + a tap timestamp; THIS map — what the tap means — lives only in the
+ * encrypted vault. Drained + deleted once mapped to an `EmailResponse`.
+ */
+export const EmailTokenSchema = z.object({
+  token: z.string().min(1),
+  schemaVersion: z.literal(1),
+  /** Groups the option-set tokens minted for ONE email (a tap on one spends its siblings). */
+  interactionId: z.string().min(1),
+  family: EmailFamilySchema,
+  suggestionId: z.string().optional(),
+  questionId: z.string().optional(),
+  kind: EmailTokenKindSchema,
+  /** 'im-here'|'pause'|'im-game'|'maybe-later'|'not-for-me'|'more'|'less'|<answer value>. */
+  answer: z.string(),
+  sharedSuggestionKey: z.string().optional(),
+  mintedAt: z.string().datetime(),
+});
+export type EmailToken = z.infer<typeof EmailTokenSchema>;
+
+/**
+ * A drained email tap → a local response (67 §4.5), at `people/<id>/email/responses/<id>.enc`. Feeds
+ * coaching context + the in-app response history; sensitive (intimacy) responses are stored at the
+ * `restricted`/`intimacy` tier (§8.2).
+ */
+export const EmailResponseSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.literal(1),
+  family: EmailFamilySchema,
+  suggestionId: z.string().optional(),
+  questionId: z.string().optional(),
+  kind: EmailTokenKindSchema,
+  answer: z.string(),
+  sensitivity: z.enum(['standard', 'restricted', 'intimacy']).default('standard'),
+  respondedAt: z.string().datetime(),
+  source: z.enum(['relay-tap', 'deep-link']),
+  edited: z.boolean().default(false),
+});
+export type EmailResponse = z.infer<typeof EmailResponseSchema>;
+
 /** The renderer-facing trigger for a send (67 §6) — Phase 0 covers the `welcome` family. */
 export const EmailSendInputSchema = z.object({
   family: EmailFamilySchema,

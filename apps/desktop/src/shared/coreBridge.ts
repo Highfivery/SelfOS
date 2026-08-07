@@ -102,6 +102,7 @@ import {
   type EmailActivityEntry,
   type EmailPrefs,
   type EmailReconcileResult,
+  type EmailResponse,
   type EmailSendResult,
   type EmailStatus,
   type EmailVerifyResult,
@@ -461,8 +462,10 @@ import {
   buildTransactionalEmail,
   buildWelcomeEmail,
   clearSharedResendKey,
+  editEmailResponse,
   emailStatusOf,
   listEmailActivity,
+  listEmailResponses,
   readEmailPrefs,
   reconcileEmailSchedule,
   resolveResendKey,
@@ -1308,6 +1311,7 @@ const EmailSendTransactionalSchema = z.object({
   body: z.string().max(400).optional(),
 });
 const EmailReconcileSchema = z.object({ auto: z.boolean().optional() });
+const EmailEditResponseSchema = z.object({ id: z.string().min(1), answer: z.string() });
 const ProfileSuggestionIdSchema = z.string().min(1);
 const AssignmentIdSchema = z.string().min(1);
 const QuestionnaireIdSchema = z.string().min(1);
@@ -4718,6 +4722,19 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         nightmareNudge: false,
       }).recurring;
       const person = await getPerson(ctx.fs, ctx.key, personId);
+      // A provisioned relay enables the one-click interactive re-engagement email + draining its taps
+      // (67 §3.5 / Phase 4). The Cloudflare token + drain secret stay host-side, never crossing IPC.
+      const relayConfig = await readRelayConfig(ctx.fs, ctx.key);
+      const relayParts = relayConfig
+        ? {
+            relay: createRelayHttpClient(
+              relayConfig.endpointUrl,
+              relayConfig.drainSecret,
+              host.relay.fetch,
+            ),
+            relayEndpoint: relayConfig.endpointUrl,
+          }
+        : {};
       const result = await reconcileEmailSchedule({
         fs: ctx.fs,
         key: ctx.key,
@@ -4728,6 +4745,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         crisisSuppressed,
         now,
         ...(person?.displayName ? { recipientName: person.displayName } : {}),
+        ...relayParts,
       });
       // Stamp the throttle only on a real run (not a NOT_CONFIGURED short-circuit) — the memoryRefresh pattern.
       if (result.ok) {
@@ -4740,6 +4758,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         });
       }
       return result;
+    },
+    emailResponses: async (): Promise<EmailResponse[]> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'email.own'))) return [];
+      return listEmailResponses(ctx.fs, ctx.key, personId);
+    },
+    emailEditResponse: async (input): Promise<EmailResponse | null> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'email.own'))) return null;
+      const { id, answer } = EmailEditResponseSchema.parse(input);
+      // Own-scoped — the active person edits only their OWN responses (the path is under their vault).
+      return editEmailResponse(ctx.fs, ctx.key, personId, id, answer);
     },
     emailActivity: async (input): Promise<EmailActivityEntry[]> => {
       const ctx = await host.vaultAndKey();

@@ -10,7 +10,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // Bump whenever the Worker's code changes so the app's "Update relay" prompt fires for already-deployed
 // relays (08 §17.14c). v1→v2: 2026-06-17 — earlier "v1" deploys could predate routes (e.g. /api/admin/
 // mailbox), so a stale Worker 404s on send; bumping lets the user push the current bundle in one click.
-const RELAY_VERSION = '2';
+const RELAY_VERSION = '3';
 
 /** Pass 1: bundle the answering page to in-memory JS + CSS. */
 async function buildPage() {

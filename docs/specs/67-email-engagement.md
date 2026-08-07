@@ -1,6 +1,6 @@
 # 67 — Email engagement & re-engagement (Resend)
 
-> **Status:** **Phases 0–3 Built** (of 7 phases) · _last updated 2026-08-07_
+> **Status:** **Phases 0–4 Built** (of 7 phases) · _last updated 2026-08-07_
 >
 > SelfOS's first real outbound email. Today the only "email" is a `mailto:` hand-off for questionnaire
 > links — SelfOS has **never actually sent a message**. This spec adds a household-provisioned
@@ -250,6 +250,11 @@ opaque one-click token URL** pointing at the zero-knowledge relay: `<relay>/t/<t
   responses) and maps each **locally** (§4.5) back to a `(suggestion, answer, timestamp)` in the
   encrypted vault.
 
+A tap is a `GET` (a bare link the email client follows), so it's **no-PIN / one-click** and recording it
+is a state change. **Accepted risk:** a mail-client link prefetch (Gmail proxy, Outlook SafeLinks) could
+record a tap with no user intent — the spec deliberately chose one-click for these low-stakes signals;
+recording is idempotent (first-tap-wins), and a mistaken response is editable in the in-app history.
+
 Because it rides the relay, **interactive emails REQUIRE the relay provisioned** — exactly like external
 questionnaire delivery (family A). A plain email (a digest with only a "open SelfOS" link) does not.
 There is also a **same-Mac fast path**: a `selfos://` deep-link button; when clicked on the machine
@@ -469,6 +474,7 @@ export type SentSuggestion = z.infer<typeof SentSuggestionSchema>;
   export const EmailTokenSchema = z.object({
     token: z.string().min(1),
     schemaVersion: z.literal(1),
+    interactionId: z.string().min(1), // groups the option-set tokens minted for ONE email (a tap spends its siblings)
     family: EmailFamilySchema,
     suggestionId: z.string().optional(),
     questionId: z.string().optional(), // for an embedded check-in
@@ -628,9 +634,17 @@ valuable.
   `useEmailScheduler` (reconcile via `scheduledAt`/cancel; poll delivery status); the deterministic
   digest builder; the re-engagement nudges; the family-A recipient reminder deferred from Phase 1 (§3.2)
   is now built.
-- **Phase 4 — Interactive layer.** The relay Worker `/t/<token>` tap extension (+ `RELAY_VERSION` bump);
-  token mint/drain/map; the `EmailResponse` store; the embedded one-question check-in (can deliver an
-  auto check-in); the `selfos://` deep-link path; the in-app response history (own-only, editable).
+- **Phase 4 — Interactive layer. BUILT.** The relay Worker `/t/<token>` tap extension (idempotent
+  first-tap-wins, no PIN) + drain-secret-authed `POST /api/admin/drainTaps` (**`RELAY_VERSION` bumped 2→3**
+  — an existing deploy must be re-deployed); token mint/drain/map (`emailResponse.ts` —
+  `mintEmailToken`/`drainEmailTaps` map a tap → an `EmailResponse` in the vault, consume every sibling token
+  sharing an `interactionId`, and TTL-prune stale tokens); the reconcile drains taps at step 0; a `pause`
+  reaction one-click-unsubscribes the re-engagement family; the in-app response history (own-only, editable,
+  in Settings → Email). **Deferred to Phase 5:** the embedded one-question check-in / auto-checkin delivery,
+  the `EmailResponse` → `buildContext` coaching wiring, and the richer tap effects (resurface, de-dup
+  avoid-set, more/less tuning) beyond the built `pause`. Accepted risk (§3.5): `GET /t/` is a destructive
+  side effect a mail-client link prefetch could trigger — the spec chose one-click/no-PIN for low-stakes
+  signals.
 - **Phase 5 — Family E (AI Coach Suggestions) + E-int (intimacy).** `emailSuggestionService` (new-data
   gate, de-dup, one metered call, shared-data-only couples, both-partners' copies); mutual green light;
   the intimacy family (all gates + the inventory-update offer); more/less tuning.
@@ -847,6 +861,29 @@ No open questions remain.
 
 ## 12. Changelog
 
+- 2026-08-07 — **Phase 4 BUILT** (interactive tap layer — one-click email responses via the zero-knowledge
+  relay). Relay Worker gained `GET /t/<token>` (records a tap — `tapKey` / `TAP_TTL_SECONDS`=30d, idempotent
+  first-tap-wins, no PIN, strict-CSP page) + drain-secret-authed `POST /api/admin/drainTaps`; **`RELAY_VERSION`
+  bumped 2→3** (`build.mjs` + `relayBundle.ts`) so an existing deploy shows "Update relay" — re-deploy required.
+  Core `relayMailbox.ts` gained `recordTap`/`drainTaps` (revoke deletes the tapKey); `RelayClient` /
+  `relayHttpClient` / `fakeRelay` gained `drainTaps`. New `@selfos/core/email/emailResponse.ts`:
+  `mintEmailToken` (opaque token → `people/<id>/email/tokens/<token>.enc`), `listEmailResponses` /
+  `editEmailResponse` (own-only history, stamps `edited`), `drainEmailTaps` (list tokens → `relay.drainTaps` →
+  map each tap → an `EmailResponse` in the vault → `applyResponseEffect` → delete every sibling token sharing
+  `interactionId`; **prunes tokens older than the 30d TTL** so the local store + drain payload stay bounded),
+  `TapDrainer` interface. `applyResponseEffect`: a `pause` reaction on `re-engagement` turns that family off,
+  reading current prefs + passing `intimacyEmailOptIn` as eligibility so it **does not strip a legitimately-true
+  intimacy opt-in** (the Phase-5 landmine caught in review). Additive schema `EmailToken` (+`interactionId`,
+  `mintedAt`) / `EmailResponse` / `EmailTokenKind` — no `schemaVersion` bump. `reconcileEmailSchedule` threads
+  `relay?: TapDrainer` + drains taps at reconcile step 0 (the bridge resolves the relay config host-side — the
+  Cloudflare token + drain secret never cross IPC). New IPC `email:responses` / `email:editResponse`
+  (`email.own`-gated, own-scoped — a foreign id path-misses → null). Renderer `ResponsesSection` in
+  `EmailSettingsPanel` ("Your email responses", self-hides when empty, inline edit). code-reviewer **ship after
+  two should-fixes** — both applied (the intimacy-opt-in preservation + the token TTL prune) with tests; the
+  `GET /t/` prefetch is a conscious accepted risk (§3.5). Gate green: typecheck (4 pkgs), lint, format, core
+  (`emailResponse` 7) + relay-worker (tap/drainTaps) + desktop (coreBridge two-persona interactive round-trip +
+  own-scoping denial; `EmailSettingsPanel` history+edit RTL) unit + a decrypt-level P4 E2E (response history
+  renders → edit round-trips to the vault). **Phases 5–6 remain.**
 - 2026-08-07 — **Phase 3 BUILT** (scheduling substrate + families C [weekly digest] + D [re-engagement] +
   the deferred family-A recipient reminder). New core `emailSchedule.ts`: `reconcileEmailSchedule` (poll
   Resend status via `mapResendStatus`; schedule/cancel the digest + re-engagement via `scheduledAt`/cancel;

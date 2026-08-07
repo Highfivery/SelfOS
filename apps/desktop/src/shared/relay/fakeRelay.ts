@@ -1,8 +1,10 @@
 import {
   drain,
+  drainTaps,
   purge,
   putMailbox,
   putResult,
+  recordTap,
   respond,
   revoke,
   unlock,
@@ -47,12 +49,18 @@ export function fakeRelayFetch(): typeof fetch {
       return json({ success: true, result: {} });
     }
     const path = new URL(url).pathname;
+    // A one-click email tap (67 §3.5) is a GET /t/<token> — record it, return a friendly 200.
+    if (path.startsWith('/t/')) {
+      await recordTap(env, decodeURIComponent(path.slice('/t/'.length)));
+      return new Response('Got it — open SelfOS.', { status: 200 });
+    }
     const ops: Record<string, () => Promise<{ status: number; json: unknown }>> = {
       '/api/admin/mailbox': () => putMailbox(env, body),
       '/api/admin/result': () => putResult(env, body),
       '/api/admin/drain': () => drain(env, body),
       '/api/admin/purge': () => purge(env, body),
       '/api/admin/revoke': () => revoke(env, body),
+      '/api/admin/drainTaps': () => drainTaps(env, body),
       '/api/unlock': () => unlock(env, body),
       '/api/respond': () => respond(env, body),
     };

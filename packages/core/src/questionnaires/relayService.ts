@@ -49,6 +49,8 @@ export interface RelayClient {
   drain(token: string): Promise<RelayStoredResponse[]>;
   purge(token: string): Promise<void>;
   revoke(token: string): Promise<void>;
+  /** Drain one-click email tap markers (67 §4.7 / Phase 4) for a set of tokens; purged on the relay. */
+  drainTaps(tokens: string[]): Promise<{ token: string; at: string }[]>;
 }
 
 export interface CreateRelaySendInput {

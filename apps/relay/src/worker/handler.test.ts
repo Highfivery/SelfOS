@@ -166,4 +166,33 @@ describe('relay worker handler', () => {
       (await handleRelayRequest(new Request('https://relay.example.dev/nope'), env, PAGE)).status,
     ).toBe(404);
   });
+
+  it('records a one-click email tap (GET /t/<token>) and drains it (drain-secret authed)', async () => {
+    const env = memEnv();
+    // A public GET tap records the token + returns a friendly confirmation page (CSP-locked).
+    const tap = await handleRelayRequest(
+      new Request('https://relay.example.dev/t/T-abc'),
+      env,
+      PAGE,
+    );
+    expect(tap.status).toBe(200);
+    expect(tap.headers.get('content-type')).toContain('text/html');
+    expect(await tap.text()).toContain('Got it');
+    expect(env.store.has('tapped:T-abc')).toBe(true);
+
+    // drainTaps needs the drain secret.
+    expect(
+      (await handleRelayRequest(post('/api/admin/drainTaps', { tokens: ['T-abc'] }), env, PAGE))
+        .status,
+    ).toBe(401);
+    const drained = await handleRelayRequest(
+      post('/api/admin/drainTaps', { tokens: ['T-abc', 'T-none'] }, auth),
+      env,
+      PAGE,
+    );
+    expect(((await drained.json()) as { taps: { token: string }[] }).taps).toEqual([
+      { token: 'T-abc', at: expect.any(String) },
+    ]);
+    expect(env.store.has('tapped:T-abc')).toBe(false); // purged on drain
+  });
 });

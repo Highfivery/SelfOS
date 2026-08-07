@@ -45,5 +45,11 @@ export function createRelayHttpClient(
     revoke: async (token: string) => {
       await post('/api/admin/revoke', { token });
     },
+    drainTaps: async (tokens: string[]) => {
+      const json = (await post('/api/admin/drainTaps', { tokens })) as {
+        taps?: { token: string; at: string }[];
+      };
+      return json.taps ?? [];
+    },
   };
 }

@@ -3,6 +3,7 @@ import { getPerson } from '../people/peopleService';
 import { listInsightsForPerson } from '../insights';
 import { formatAnswerForDisplay, isDeclined, type AnswerValue } from './answering';
 import { getAssignmentSnapshot, listAssignments } from './assignmentService';
+import { buildCoverageGuidance } from './coverageModel';
 import { buildFeedbackGuidance, readProfile } from './personalizationProfile';
 import { getResponse } from './responseService';
 
@@ -324,7 +325,13 @@ export async function gatherRecipientFeedbackGuidance(
   recipientPersonId: string,
   now: Date = new Date(),
 ): Promise<string> {
-  return buildFeedbackGuidance(await readProfile(fs, key, recipientPersonId), now);
+  // Profile-derived generation steering (spec 69): the coverage map (§5.2 — lead with new ground) LEADS, then
+  // the differentiated skip/decline feedback (§5.9). Read once, combined into one block. Both are `''` until
+  // there's something to say (an empty/pre-placement profile yields nothing).
+  const profile = await readProfile(fs, key, recipientPersonId);
+  return [buildCoverageGuidance(profile), buildFeedbackGuidance(profile, now)]
+    .filter((s) => s.trim() !== '')
+    .join('\n\n');
 }
 
 /** The whole answer history as ONE string (the de-dup reference). Byte-identical to the pre-§15.2 output. */

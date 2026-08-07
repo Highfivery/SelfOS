@@ -41,10 +41,12 @@ export type AnswerMap = Record<string, AnswerValue>;
  * aggregate's `unclear` count reference the same canonical strings and can't drift.
  */
 export const UNCLEAR_SKIP_REASON = 'Not clear — needs more context';
+export const PREFER_NOT_TO_SAY_SKIP_REASON = 'Prefer not to say';
+export const NOT_APPLICABLE_SKIP_REASON = 'Doesn’t apply to me';
 export const SKIP_REASON_PRESETS = [
   UNCLEAR_SKIP_REASON,
-  'Prefer not to say',
-  'Doesn’t apply to me',
+  PREFER_NOT_TO_SAY_SKIP_REASON,
+  NOT_APPLICABLE_SKIP_REASON,
 ] as const;
 
 /**

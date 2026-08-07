@@ -335,6 +335,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     emailSend: () => Promise.resolve({ ok: false as const, reason: 'NOT_CONFIGURED' as const }),
     emailSendQuestionnaireDelivery: () =>
       Promise.resolve({ ok: false as const, reason: 'NOT_CONFIGURED' as const }),
+    emailSendTransactional: () =>
+      Promise.resolve({ ok: false as const, reason: 'NOT_CONFIGURED' as const }),
     emailActivity: () => Promise.resolve([]),
     insightsAnalyze: () => Promise.resolve({ ok: false, reason: 'NO_RESPONSE' }),
     insightsApprove: () => Promise.resolve(null),

@@ -692,6 +692,46 @@ describe('createCoreBridge', () => {
     });
   });
 
+  it('email (67 P2 / family B): a transactional alert is sent to the engagement address, idempotent on sourceKey; a non-emailable kind is rejected', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.emailSetConfig({ fromAddress: 'hi@fam.example', fromName: 'SelfOS' });
+    await bridge.secretSet({ id: RESEND_API_KEY_ID, value: 're-key' });
+    await bridge.emailSetPrefs({ address: 'owner@inbox.example' });
+
+    // A non-emailable kind is rejected (no scaffolding; can't email arbitrary-kind content to yourself).
+    expect(
+      await bridge.emailSendTransactional({
+        kind: 'sync-conflict',
+        sourceKey: 'sync-conflict#1',
+        title: 'Sync conflicts found',
+      }),
+    ).toMatchObject({ reason: 'FAMILY_OFF' });
+
+    // An emailable kind sends to the person's OWN engagement address + logs a transactional entry.
+    const sent = await bridge.emailSendTransactional({
+      kind: 'responses-arrived',
+      sourceKey: 'responses-arrived:q1#1',
+      title: 'Alex answered “Q1”',
+      body: '1 response is ready to review.',
+    });
+    expect(sent.ok).toBe(true);
+
+    // Idempotent: the same sourceKey no-ops (still one entry).
+    await bridge.emailSendTransactional({
+      kind: 'responses-arrived',
+      sourceKey: 'responses-arrived:q1#1',
+      title: 'Alex answered “Q1”',
+    });
+    const activity = await bridge.emailActivity({ family: 'transactional' });
+    expect(activity).toHaveLength(1);
+    expect(activity[0]).toMatchObject({
+      family: 'transactional',
+      status: 'sent',
+      toAddress: 'owner@inbox.example',
+      sourceKey: 'responses-arrived:q1#1',
+    });
+  });
+
   it('email (67 §6): a non-owner cannot connect; the owner reads a member’s activity, a member cannot', async () => {
     const { bridge, host, ownerId } = await freshOwner();
     const ctx = (await host.host.vaultAndKey())!;

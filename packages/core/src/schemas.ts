@@ -2213,6 +2213,26 @@ export const EmailStatusSchema = z.object({
 });
 export type EmailStatus = z.infer<typeof EmailStatusSchema>;
 
+/**
+ * The notification kinds (35) that also email as a transactional alert (family B, 67 §3.2 / Phase 2) — the
+ * genuinely time-sensitive or reaches-another-person kinds. Purely-local/housekeeping kinds (sync-conflict,
+ * update-available) and the wellbeing nudges stay in-app. `new-insight-ready` (§3.2) is deferred until such
+ * a notification kind exists. The bridge rejects any kind outside this set (no scaffolding, §12).
+ */
+export const EMAILABLE_TRANSACTIONAL_KINDS = [
+  'responses-arrived',
+  'answers-updated',
+  'together-invite',
+  'together-turn', // a teaser only — the notification carries no message content (58 §3.11)
+  'story-shared',
+  'auto-checkin-incoming',
+] as const satisfies readonly NotificationKind[];
+
+/** Whether a notification kind emails as a transactional alert (family B). */
+export function isEmailableTransactionalKind(kind: string): kind is NotificationKind {
+  return (EMAILABLE_TRANSACTIONAL_KINDS as readonly string[]).includes(kind);
+}
+
 /** The eight email families (67 §3.2) — drives per-family opt-in, the activity log, and scheduling. */
 export const EmailFamilySchema = z.enum([
   'questionnaire-delivery',
@@ -2276,6 +2296,12 @@ export const EmailActivityEntrySchema = z.object({
   clicks: z.array(z.object({ token: z.string(), at: z.string().datetime() })).default([]),
   tokens: z.array(z.string()).default([]),
   contentSnapshotPath: z.string().optional(),
+  /**
+   * De-dup key for a triggered send (67 §3.4 / Phase 2). For a transactional email it is the source
+   * notification's `coalesceKey#signature`, so the same alert isn't re-sent on a re-open (only a changed
+   * signature — a genuinely new event — sends again). Absent for families with no such trigger.
+   */
+  sourceKey: z.string().optional(),
 });
 export type EmailActivityEntry = z.infer<typeof EmailActivityEntrySchema>;
 

@@ -379,6 +379,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.emailSetPrefs, bridge.emailSetPrefs);
   handle(IpcChannels.emailSend, bridge.emailSend);
   handle(IpcChannels.emailSendQuestionnaireDelivery, bridge.emailSendQuestionnaireDelivery);
+  handle(IpcChannels.emailSendTransactional, bridge.emailSendTransactional);
   handle(IpcChannels.emailActivity, bridge.emailActivity);
   handle(IpcChannels.insightsAnalyze, bridge.insightsAnalyze);
   handle(IpcChannels.insightsApprove, bridge.insightsApprove);

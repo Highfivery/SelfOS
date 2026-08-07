@@ -53,6 +53,7 @@ async function performSend(deps: {
   composed: ComposedEmail;
   scheduledAt?: string;
   tokens?: string[];
+  sourceKey?: string;
   now: Date;
 }): Promise<EmailSendResult> {
   const outcome = await deps.email.send({
@@ -78,6 +79,7 @@ async function performSend(deps: {
     tokens: deps.tokens ?? [],
     ...(outcome.ok ? { resendMessageId: outcome.id } : {}),
     ...(deps.scheduledAt ? { scheduledAt: deps.scheduledAt } : {}),
+    ...(deps.sourceKey ? { sourceKey: deps.sourceKey } : {}),
   };
   await appendActivity(deps.fs, deps.key, entry);
 
@@ -112,6 +114,7 @@ export async function sendFamilyEmail(deps: {
   crisisSuppressed: boolean;
   scheduledAt?: string;
   tokens?: string[];
+  sourceKey?: string;
   now: Date;
 }): Promise<EmailSendResult> {
   const { fs, key, email, resendKey, personId, family, composed, now } = deps;
@@ -140,6 +143,45 @@ export async function sendFamilyEmail(deps: {
     now,
     ...(deps.scheduledAt ? { scheduledAt: deps.scheduledAt } : {}),
     ...(deps.tokens ? { tokens: deps.tokens } : {}),
+    ...(deps.sourceKey ? { sourceKey: deps.sourceKey } : {}),
+  });
+}
+
+/**
+ * Family B — a transactional alert (67 §3.2 / Phase 2). An engagement family, so — unlike family A — it
+ * routes through `sendFamilyEmail` (the person's own engagement address + the `transactional` opt-in +
+ * pause). Per §7 it is NOT crisis-suppressed (crisis suppresses only C/D/E/F). It is **idempotent on
+ * `sourceKey`** (the source notification's `coalesceKey#signature`): if a non-failed transactional entry
+ * with this key is already logged, it no-ops — so a re-open never re-sends the same alert, while a changed
+ * signature (a genuinely new event) is a new key and sends again. A prior FAILED send is retryable.
+ */
+export async function sendTransactionalEmail(deps: {
+  fs: FileSystem;
+  key: Uint8Array;
+  email: EmailClient;
+  resendKey: string | undefined;
+  personId: string;
+  sourceKey: string;
+  composed: ComposedEmail;
+  now: Date;
+}): Promise<EmailSendResult> {
+  const prior = await listEmailActivity(deps.fs, deps.key, deps.personId, {
+    family: 'transactional',
+  });
+  const already = prior.find((e) => e.sourceKey === deps.sourceKey && e.status !== 'failed');
+  if (already) return { ok: true, entryId: already.id };
+
+  return sendFamilyEmail({
+    fs: deps.fs,
+    key: deps.key,
+    email: deps.email,
+    resendKey: deps.resendKey,
+    personId: deps.personId,
+    family: 'transactional',
+    composed: deps.composed,
+    crisisSuppressed: false, // §7 — transactional is not one of the crisis-suppressed families (C/D/E/F)
+    sourceKey: deps.sourceKey,
+    now: deps.now,
   });
 }
 

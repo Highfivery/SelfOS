@@ -53,6 +53,7 @@ import { useNotificationSources } from './notifications/useNotificationSources';
 import { useUpdateChecks } from './notifications/useUpdateChecks';
 import { useMemoryReconcile } from './notifications/useMemoryReconcile';
 import { useEmailWelcome } from './email/useEmailWelcome';
+import { useEmailTransactional } from './email/useEmailTransactional';
 import { useStoryCadences } from './notifications/useStoryCadences';
 import { useCoachingSynthesis } from './notifications/useCoachingSynthesis';
 import { useAutoCheckins } from './notifications/useAutoCheckins';
@@ -146,6 +147,7 @@ export function AppShell(): JSX.Element {
   useStoryCadences();
   // Drive the welcome-email cadence (once per person on open, gated + idempotent in the bridge); 67 §3.2.
   useEmailWelcome();
+  useEmailTransactional();
 
   // When the signed-in person changes, drop the previous account's per-person data and load this
   // person's — sessions/usage/budget are per-user, so nothing from the prior login may linger

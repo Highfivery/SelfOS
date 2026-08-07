@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import type { EmailClient } from '../host';
-import { buildQuestionnaireDeliveryEmail, buildWelcomeEmail } from './emailComposer';
+import {
+  buildQuestionnaireDeliveryEmail,
+  buildTransactionalEmail,
+  buildWelcomeEmail,
+} from './emailComposer';
 import {
   emailStatusOf,
   readEmailConfig,
@@ -11,8 +15,17 @@ import {
   writeSharedResendKey,
 } from './emailConfig';
 import { effectiveFamilyEnabled, ensureEmailPrefs, setEmailPrefs } from './emailPrefs';
-import { listEmailActivity, sendFamilyEmail, sendQuestionnaireDeliveryEmail } from './emailSend';
-import { RESEND_API_KEY_ID } from '../schemas';
+import {
+  listEmailActivity,
+  sendFamilyEmail,
+  sendQuestionnaireDeliveryEmail,
+  sendTransactionalEmail,
+} from './emailSend';
+import {
+  EMAILABLE_TRANSACTIONAL_KINDS,
+  isEmailableTransactionalKind,
+  RESEND_API_KEY_ID,
+} from '../schemas';
 
 const key = generateMasterKey();
 const now = new Date('2026-08-07T12:00:00.000Z');
@@ -322,5 +335,124 @@ describe('sendQuestionnaireDeliveryEmail — family A (67 §3.2/§7)', () => {
     const res = await sendQuestionnaireDeliveryEmail(deliveryBase(fs, { email }));
     expect(res).toEqual({ ok: false, reason: 'SEND_ERROR', message: 'bounced' });
     expect((await listEmailActivity(fs, key, 'sender'))[0]?.status).toBe('failed');
+  });
+});
+
+describe('buildTransactionalEmail (67 §3.2 / Phase 2 / family B)', () => {
+  it('renders a teaser (title + body) with an Open-SelfOS prompt; escapes; no CTA link, no SVG', () => {
+    const email = buildTransactionalEmail({
+      title: 'Alex answered “Outside view”',
+      body: '<b>1</b> response is ready to review.',
+    });
+    expect(email.subject).toBe('Alex answered “Outside view”');
+    expect(email.html).toContain('Alex answered');
+    expect(email.html).toContain('&lt;b&gt;1&lt;/b&gt; response is ready'); // escaped teaser
+    expect(email.html).toContain('Open SelfOS to see it.');
+    expect(email.html).not.toContain('<svg');
+    expect(email.html).not.toContain('href='); // no CTA link (the selfos:// deep link is Phase 4)
+    expect(email.text).toContain('Alex answered');
+    expect(email.text).toContain('Open SelfOS to see it.');
+  });
+
+  it('omits the body line when none is given', () => {
+    const email = buildTransactionalEmail({ title: 'Your turn with Sam' });
+    expect(email.html).toContain('Your turn with Sam');
+    expect(email.html).toContain('Open SelfOS to see it.');
+  });
+});
+
+describe('EMAILABLE_TRANSACTIONAL_KINDS (67 §3.2)', () => {
+  it('covers exactly the six emailable kinds; housekeeping/nudge kinds are not emailable', () => {
+    expect([...EMAILABLE_TRANSACTIONAL_KINDS]).toEqual([
+      'responses-arrived',
+      'answers-updated',
+      'together-invite',
+      'together-turn',
+      'story-shared',
+      'auto-checkin-incoming',
+    ]);
+    expect(isEmailableTransactionalKind('responses-arrived')).toBe(true);
+    expect(isEmailableTransactionalKind('sync-conflict')).toBe(false);
+    expect(isEmailableTransactionalKind('update-available')).toBe(false);
+    expect(isEmailableTransactionalKind('together-private')).toBe(false); // private note stays in-app
+    expect(isEmailableTransactionalKind('not-a-kind')).toBe(false);
+  });
+});
+
+describe('sendTransactionalEmail — family B (67 §3.2/§7)', () => {
+  async function ready(fs = memFileSystem()) {
+    await updateEmailConfig(fs, key, { fromAddress: 'hi@fam.example', fromName: 'SelfOS' }, now);
+    await setEmailPrefs(fs, key, 'me', { address: 'me@inbox.example' }, false, now);
+    return fs;
+  }
+  const deps = (fs: ReturnType<typeof memFileSystem>, over = {}) => ({
+    fs,
+    key,
+    email: fakeEmail(),
+    resendKey: 're-key' as string | undefined,
+    personId: 'me',
+    sourceKey: 'responses-arrived:q1#1',
+    composed: buildTransactionalEmail({ title: 'Alex answered “Q1”' }),
+    now,
+    ...over,
+  });
+
+  it('sends to the engagement address, logs a transactional entry with the sourceKey', async () => {
+    const fs = await ready();
+    const res = await sendTransactionalEmail(deps(fs));
+    expect(res.ok).toBe(true);
+    const log = await listEmailActivity(fs, key, 'me');
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatchObject({
+      family: 'transactional',
+      status: 'sent',
+      toAddress: 'me@inbox.example',
+      sourceKey: 'responses-arrived:q1#1',
+    });
+  });
+
+  it('is idempotent on sourceKey — a re-send no-ops (one log entry), a new sourceKey sends again', async () => {
+    const fs = await ready();
+    const email = fakeEmail();
+    const first = await sendTransactionalEmail(deps(fs, { email }));
+    const second = await sendTransactionalEmail(deps(fs, { email })); // same sourceKey
+    expect(second).toEqual({ ok: true, entryId: (first as { entryId: string }).entryId });
+    expect(email.send).toHaveBeenCalledTimes(1); // the second didn't send
+    expect(await listEmailActivity(fs, key, 'me')).toHaveLength(1);
+    // A new event (changed signature → new sourceKey) sends again.
+    await sendTransactionalEmail(deps(fs, { email, sourceKey: 'responses-arrived:q1#2' }));
+    expect(email.send).toHaveBeenCalledTimes(2);
+    expect(await listEmailActivity(fs, key, 'me')).toHaveLength(2);
+  });
+
+  it('respects the transactional opt-in (FAMILY_OFF) and pause via sendFamilyEmail; never crisis-gated', async () => {
+    const fs = await ready();
+    await setEmailPrefs(fs, key, 'me', { families: { transactional: false } }, false, now);
+    expect(((await sendTransactionalEmail(deps(fs))) as { reason: string }).reason).toBe(
+      'FAMILY_OFF',
+    );
+    await setEmailPrefs(
+      fs,
+      key,
+      'me',
+      { families: { transactional: true }, paused: true },
+      false,
+      now,
+    );
+    expect(((await sendTransactionalEmail(deps(fs))) as { reason: string }).reason).toBe('PAUSED');
+  });
+
+  it('a prior FAILED send is retryable (not treated as already-sent)', async () => {
+    const fs = await ready();
+    const failing = fakeEmail({
+      send: vi.fn(() => Promise.resolve({ ok: false as const, reason: 'API_ERROR' as const })),
+    });
+    await sendTransactionalEmail(deps(fs, { email: failing }));
+    expect((await listEmailActivity(fs, key, 'me'))[0]?.status).toBe('failed');
+    // Same sourceKey, now the client works → it sends (the failed entry doesn't block).
+    const ok = fakeEmail();
+    const res = await sendTransactionalEmail(deps(fs, { email: ok }));
+    expect(res.ok).toBe(true);
+    expect(ok.send).toHaveBeenCalledTimes(1);
   });
 });

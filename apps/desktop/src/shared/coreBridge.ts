@@ -98,6 +98,7 @@ import {
   PersonFieldKeySchema,
   EmailFamilySchema,
   EmailSendInputSchema,
+  isEmailableTransactionalKind,
   type EmailActivityEntry,
   type EmailPrefs,
   type EmailSendResult,
@@ -456,6 +457,7 @@ import {
 } from '@selfos/core/insights';
 import {
   buildQuestionnaireDeliveryEmail,
+  buildTransactionalEmail,
   buildWelcomeEmail,
   clearSharedResendKey,
   emailStatusOf,
@@ -464,6 +466,7 @@ import {
   resolveResendKey,
   sendFamilyEmail,
   sendQuestionnaireDeliveryEmail,
+  sendTransactionalEmail,
   setEmailPrefs,
   updateEmailConfig,
   writeSharedResendKey,
@@ -1290,6 +1293,12 @@ const EmailSendQuestionnaireDeliverySchema = z.object({
   subject: z.string(),
   message: z.string(),
   link: z.string(),
+});
+const EmailSendTransactionalSchema = z.object({
+  kind: z.string(),
+  sourceKey: z.string().min(1),
+  title: z.string().min(1).max(200),
+  body: z.string().max(400).optional(),
 });
 const ProfileSuggestionIdSchema = z.string().min(1);
 const AssignmentIdSchema = z.string().min(1);
@@ -4624,6 +4633,33 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         resendKey: resolved.key,
         senderPersonId: personId,
         toAddress: parsed.toAddress,
+        composed,
+        now: new Date(),
+      });
+    },
+    emailSendTransactional: async (input): Promise<EmailSendResult> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'email.own')))
+        return { ok: false, reason: 'NOT_CONFIGURED' };
+      const parsed = EmailSendTransactionalSchema.parse(input);
+      // Only the emailable notification kinds (67 §3.2) — reject anything else (no scaffolding; and a
+      // caller can't email arbitrary-kind content to their own inbox outside the allowlist).
+      if (!isEmailableTransactionalKind(parsed.kind)) return { ok: false, reason: 'FAMILY_OFF' };
+      const resolved = await resolveResendKey(host.secrets, ctx.fs, ctx.key);
+      const composed = buildTransactionalEmail({
+        title: parsed.title,
+        ...(parsed.body ? { body: parsed.body } : {}),
+      });
+      // Idempotent on the source key; routes through sendFamilyEmail (engagement address + transactional
+      // opt-in + pause). Not crisis-suppressed (§7 — transactional is not a C/D/E/F family).
+      return sendTransactionalEmail({
+        fs: ctx.fs,
+        key: ctx.key,
+        email: host.email,
+        resendKey: resolved.key,
+        personId,
+        sourceKey: parsed.sourceKey,
         composed,
         now: new Date(),
       });

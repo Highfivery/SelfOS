@@ -699,6 +699,9 @@ active-person-scoped in the bridge. **No channel ever returns the Resend key.**
   editable).
 - **`email:allActivity` → `OwnerEmailActivityEntry[]`** (Phase 6) — EVERY member's email activity, name-tagged,
   newest-first, for the owner Email-activity view. **`people.manage`-gated (owner-only)** — a member gets `[]`.
+- **`email:content({ personId, id }) → EmailContentSnapshot | null`** (Phase 6) — the stored rendered content
+  of one sent email (subject + html + text) for the click-to-view detail. **`people.manage`-gated (owner-only)**,
+  path-guarded; null when no snapshot exists.
 - **`email:mutualGreenLights` → `MutualGreenLight[]`** (Phase 5) — the active person's couple suggestions
   both partners tapped `im-game` on; own-scoped, read host-side with the master key.
 - **`email:intimacyOffers` → `IntimacyInventoryOffer[]`** / **`email:applyIntimacyOffer({ actKey })` →
@@ -894,6 +897,23 @@ No open questions remain.
 
 ## 12. Changelog
 
+- 2026-08-07 — **Fix + redesign (post-Phase-6): the intimacy-email toggle, and a greatly-improved owner
+  activity view.** (1) **Toggle fix** — the "Intimacy suggestions by email" toggle never enabled because the
+  `emailSetPrefs` bridge handler passed `eligibleForIntimacy: false` (hardcoded — a stale Phase-0 leftover),
+  so `setEmailPrefs` always coerced `intimacyEmailOptIn` back off. Now it computes real eligibility from the
+  person's shared 18+ ack; `EmailStatus` gains `intimacyEligible`; a new `email:acknowledgeAdult` IPC records
+  the ack; the renderer offers an "I'm 18+" affordance when not yet eligible (never a dead toggle). (2)
+  **Activity-view redesign** (mockup-approved) — the owner Email-activity view is rebuilt from a bare list into
+  a proper surface: summary stat cards (sent / delivered / opened / bounced), a search + member/family/status
+  toolbar, a **sortable + paginated** table with avatars and status pills, delivery health, CSV export, and a
+  **click-to-view detail** that renders the exact email that was sent in a **sandboxed `srcdoc` iframe**. This
+  required storing the rendered email: `performSend` now writes an encrypted `EmailContentSnapshot`
+  (`people/<id>/email/content/<entryId>.enc`, additive, best-effort) + sets `EmailActivityEntry.contentSnapshotPath`;
+  new core `getEmailContent` (path-guarded) + `email:content` IPC (**`people.manage`-gated, owner-only**).
+  Gate green: typecheck (4 pkgs), lint, format, core (email 21) + desktop (coreBridge: intimacy opt-in
+  coerced-then-acked, content store→owner-reads→member-null; EmailSettingsPanel RTL: toggle/ack-affordance +
+  the redesigned view) unit + a decrypt-level E2E (the redesigned view + click-to-view opens the email in the
+  sandboxed iframe + Back).
 - 2026-08-07 — **Phase 6 BUILT — spec 67 is COMPLETE (all 7 phases).** Owner Email-activity view + delivery
   health + family F milestones. New `emailMilestones.ts`: `detectMilestones` (deterministic, no AI — a reached
   [done] goal via `effectiveGoalStatus`; the HIGHEST `STREAK_MILESTONES` [7/30/100/365] threshold crossed via

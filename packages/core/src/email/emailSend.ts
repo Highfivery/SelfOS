@@ -3,7 +3,9 @@ import type { EmailClient, FileSystem } from '../host';
 import { uuid } from '../id';
 import {
   EmailActivityEntrySchema,
+  EmailContentSnapshotSchema,
   type EmailActivityEntry,
+  type EmailContentSnapshot,
   type EmailFamily,
   type EmailSendResult,
 } from '../schemas';
@@ -16,6 +18,34 @@ const activityDir = (personId: string): string => `people/${personId}/email/acti
 const shardPath = (personId: string, month: string): string =>
   `${activityDir(personId)}/${month}.enc`;
 const monthOf = (iso: string): string => iso.slice(0, 7); // YYYY-MM
+
+const emailContentPath = (personId: string, entryId: string): string =>
+  `people/${personId}/email/content/${entryId}.enc`;
+
+/** A safe path segment (no traversal / separators) — guards the content read against a crafted id. */
+const isSafeSegment = (v: string): boolean => /^[A-Za-z0-9_-]+$/.test(v);
+
+/**
+ * Read the stored rendered content of one sent email (67 §3.7 — the owner view's "see what was sent"). Null
+ * when there's no snapshot (a pre-Phase-6.1 send, a snapshot-write failure) or a corrupt/absent file. The
+ * caller (the bridge) gates on `people.manage`; the id/person segments are path-guarded here too.
+ */
+export async function getEmailContent(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  entryId: string,
+): Promise<EmailContentSnapshot | null> {
+  if (!isSafeSegment(personId) || !isSafeSegment(entryId)) return null;
+  try {
+    const raw = await readEncryptedJson(fs, emailContentPath(personId, entryId), key);
+    if (!raw) return null;
+    const parsed = EmailContentSnapshotSchema.safeParse(raw);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
 
 const ActivityShardSchema = z.object({
   schemaVersion: z.literal(1),
@@ -104,8 +134,30 @@ async function performSend(deps: {
     ...(deps.scheduledAt ? { scheduledAt: deps.scheduledAt } : {}),
   });
 
+  const entryId = uuid();
+  // Snapshot the rendered email (67 §3.7 / owner view "see what was sent") so the owner can view the exact
+  // content later. Encrypted, per-person; best-effort — a snapshot write failure never fails the send.
+  let contentSnapshotPath: string | undefined;
+  try {
+    const path = emailContentPath(deps.personId, entryId);
+    await writeEncryptedJson(
+      deps.fs,
+      path,
+      {
+        schemaVersion: 1,
+        subject: deps.composed.subject,
+        html: deps.composed.html,
+        text: deps.composed.text,
+      } satisfies EmailContentSnapshot,
+      deps.key,
+    );
+    contentSnapshotPath = path;
+  } catch {
+    contentSnapshotPath = undefined;
+  }
+
   const entry: EmailActivityEntry = {
-    id: uuid(),
+    id: entryId,
     schemaVersion: 1,
     personId: deps.personId,
     family: deps.family,
@@ -118,6 +170,7 @@ async function performSend(deps: {
     ...(outcome.ok ? { resendMessageId: outcome.id } : {}),
     ...(deps.scheduledAt ? { scheduledAt: deps.scheduledAt } : {}),
     ...(deps.sourceKey ? { sourceKey: deps.sourceKey } : {}),
+    ...(contentSnapshotPath ? { contentSnapshotPath } : {}),
   };
   await appendActivity(deps.fs, deps.key, entry);
 

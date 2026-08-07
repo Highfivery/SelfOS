@@ -917,6 +917,28 @@ describe('createCoreBridge', () => {
     expect(mine.some((a) => a.status === 'submitted' || a.status === 'analyzed')).toBe(true);
   });
 
+  it('email (67 §3.7 / Phase 6): a sent email stores its content; the owner reads it, a member cannot', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    await bridge.emailSetConfig({ fromAddress: 'hi@fam.example', fromName: 'SelfOS' });
+    await bridge.secretSet({ id: RESEND_API_KEY_ID, value: 're-key' });
+    await bridge.emailSetPrefs({ address: 'owner@inbox.example' });
+    await bridge.emailSend({ family: 'welcome' });
+
+    const all = await bridge.emailAllActivity();
+    const entry = all.find((r) => r.family === 'welcome');
+    expect(entry?.contentSnapshotPath).toBeDefined();
+    // The owner reads the stored rendered email.
+    const content = await bridge.emailContent({ personId: ownerId, id: entry!.id });
+    expect(content?.subject).toContain('Welcome');
+    expect(content?.html.length ?? 0).toBeGreaterThan(0);
+
+    // A member cannot read it (people.manage-gated) nor list the household activity.
+    const member = await bridge.peopleSave({ displayName: 'Mo', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    expect((await bridge.sessionSetActive({ personId: member.id })).ok).toBe(true);
+    expect(await bridge.emailContent({ personId: ownerId, id: entry!.id })).toBeNull();
+  });
+
   it('email (67 §6): a non-owner cannot connect; the owner reads a member’s activity, a member cannot', async () => {
     const { bridge, host, ownerId } = await freshOwner();
     const ctx = (await host.host.vaultAndKey())!;

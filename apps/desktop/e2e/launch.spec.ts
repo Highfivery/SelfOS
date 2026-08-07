@@ -2071,8 +2071,6 @@ test('sessions (66 §3.1): a cut-off reply auto-continues into one seamless mess
     // Auto-continue is invisible: it is NOT surfaced as a failure the person has to recover from.
     await expect(w.getByRole('button', { name: 'Try again' })).toHaveCount(0);
     await expect(w.getByText(/came back empty/i)).toHaveCount(0);
-
-    await w.screenshot({ path: 'e2e-artifacts/66-auto-continue.png' });
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -5465,6 +5463,18 @@ test('email (67 P6 / owner view): the owner Email-activity view shows every memb
       },
       key,
     );
+    // A stored content snapshot for the welcome email, so click-to-view can show the actual email.
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/email/content/e1.enc',
+      {
+        schemaVersion: 1,
+        subject: 'Welcome to SelfOS',
+        html: '<p>Welcome aboard, this is the sent email body.</p>',
+        text: 'Welcome aboard, this is the sent email body.',
+      },
+      key,
+    );
   }
 
   const app = await launch(userData);
@@ -5477,6 +5487,13 @@ test('email (67 P6 / owner view): the owner Email-activity view shows every memb
     await expect(w.getByText('Your week on SelfOS')).toBeVisible();
     await expect(w.getByText(/Delivery health: 1 bounced/)).toBeVisible();
     await expect(w.getByRole('button', { name: 'Export CSV' })).toBeVisible();
+
+    // Click-to-view: open the welcome email's detail → a Back affordance + the email in a sandboxed iframe.
+    await w.getByRole('button', { name: /Welcome to SelfOS/ }).click();
+    await expect(w.getByRole('button', { name: /Back/ })).toBeVisible();
+    await expect(w.locator('iframe[title="Email: Welcome to SelfOS"]')).toBeVisible();
+    await w.getByRole('button', { name: /Back/ }).click();
+    await expect(w.getByText('Email activity')).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

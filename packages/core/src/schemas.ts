@@ -2421,6 +2421,15 @@ export interface IntimacyInventoryOffer {
 /** One row of the owner Email-activity view (67 §3.7 / Phase 6) — an activity entry + the member's name. */
 export type OwnerEmailActivityEntry = EmailActivityEntry & { personName: string };
 
+/** The stored rendered content of one sent email (67 §3.7) — so the owner view can show what was sent. */
+export const EmailContentSnapshotSchema = z.object({
+  schemaVersion: z.literal(1),
+  subject: z.string(),
+  html: z.string(),
+  text: z.string(),
+});
+export type EmailContentSnapshot = z.infer<typeof EmailContentSnapshotSchema>;
+
 /** The renderer-facing trigger for a send (67 §6) — Phase 0 covers the `welcome` family. */
 export const EmailSendInputSchema = z.object({
   family: EmailFamilySchema,

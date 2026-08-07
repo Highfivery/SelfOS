@@ -315,6 +315,36 @@ export function buildReEngagementEmail(content: ReEngagementContent): ComposedEm
   return { subject, html, text };
 }
 
+/**
+ * Family F — a milestone / celebration email (67 §3.2 / Phase 6). A short, warm "well done" + a jump-back-in
+ * CTA. Deterministic (no AI); the headline/detail come from `detectMilestones`. No inline SVG (§9).
+ */
+export function buildMilestoneEmail(input: {
+  recipientName?: string;
+  headline: string;
+  detail: string;
+}): ComposedEmail {
+  const name = input.recipientName?.trim();
+  const subject = input.headline;
+  const html = shell(
+    [
+      `<h1 style="font-size:20px;margin:0 0 12px;color:#241f1a;">${esc(input.headline)}</h1>`,
+      `<p style="margin:0 0 14px;">${esc(name ? `Nice work, ${name}. ${input.detail}` : input.detail)}</p>`,
+      '<p style="margin:0;color:#6e665c;">Open SelfOS to keep the momentum going.</p>',
+    ].join(''),
+  );
+  const text = [
+    input.headline,
+    '',
+    name ? `Nice work, ${name}. ${input.detail}` : input.detail,
+    '',
+    'Open SelfOS to keep the momentum going.',
+    '',
+    NOT_MEDICAL,
+  ].join('\n');
+  return { subject, html, text };
+}
+
 /** Content for an AI Coach Suggestion email (67 §3.3 family E / Phase 5). */
 export interface SuggestionContent {
   recipientName?: string;

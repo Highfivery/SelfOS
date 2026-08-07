@@ -12,6 +12,7 @@ import type {
   EmailStatus,
   EmailVerifyResult,
   IntimacyInventoryOffer,
+  OwnerEmailActivityEntry,
   MutualGreenLight,
   BookManifest,
   ChapterMarkup,
@@ -397,6 +398,7 @@ export const IpcChannels = {
   emailScheduleReconcile: 'email:scheduleReconcile',
   emailResponses: 'email:responses',
   emailEditResponse: 'email:editResponse',
+  emailAllActivity: 'email:allActivity',
   emailMutualGreenLights: 'email:mutualGreenLights',
   emailIntimacyOffers: 'email:intimacyOffers',
   emailApplyIntimacyOffer: 'email:applyIntimacyOffer',
@@ -1246,6 +1248,8 @@ export interface SelfosBridge {
   emailResponses(): Promise<EmailResponse[]>;
   /** Edit one of the active person's own email responses in place (own-only, editable). Gated `email.own`. */
   emailEditResponse(input: { id: string; answer: string }): Promise<EmailResponse | null>;
+  /** EVERY member's email activity (owner-only, 67 §3.7) — the full-visibility Email-activity view. */
+  emailAllActivity(): Promise<OwnerEmailActivityEntry[]>;
   /** The active person's mutual green lights — a couple suggestion both partners tapped "I'm game" on (67 §3.6). */
   emailMutualGreenLights(): Promise<MutualGreenLight[]>;
   /** Pending offers to update the intimacy inventory from an emailed "I'm game" tap (67 §3.6). Gated `email.own`. */

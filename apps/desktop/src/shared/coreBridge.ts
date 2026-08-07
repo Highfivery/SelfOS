@@ -108,6 +108,7 @@ import {
   type EmailVerifyResult,
   type IntimacyInventoryOffer,
   type MutualGreenLight,
+  type OwnerEmailActivityEntry,
   RelationshipTypeSchema,
   type RelationshipType,
   type IntakeState,
@@ -468,6 +469,7 @@ import {
   editEmailResponse,
   emailStatusOf,
   applyIntimacyInventoryOffer,
+  listAllEmailActivity,
   listEmailActivity,
   listEmailResponses,
   listIntimacyInventoryOffers,
@@ -4782,6 +4784,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const { id, answer } = EmailEditResponseSchema.parse(input);
       // Own-scoped — the active person edits only their OWN responses (the path is under their vault).
       return editEmailResponse(ctx.fs, ctx.key, personId, id, answer);
+    },
+    emailAllActivity: async (): Promise<OwnerEmailActivityEntry[]> => {
+      const ctx = await host.vaultAndKey();
+      // Owner-only (67 §3.7) — the full-visibility Email-activity view across every member.
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'people.manage'))) return [];
+      return listAllEmailActivity(ctx.fs, ctx.key);
     },
     emailMutualGreenLights: async (): Promise<MutualGreenLight[]> => {
       const ctx = await host.vaultAndKey();

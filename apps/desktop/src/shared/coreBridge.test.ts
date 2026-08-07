@@ -942,6 +942,43 @@ describe('createCoreBridge', () => {
     expect((await bridge.sessionSetActive({ personId: ownerId, pin: '1234' })).ok).toBe(true);
     expect(await bridge.emailActivity({ personId: member.id })).toHaveLength(0);
     expect(await bridge.emailActivity({ personId: ownerId })).toHaveLength(1);
+
+    // The owner Email-activity view (67 §3.7 / Phase 6) — full visibility across members, name-tagged.
+    const all = await bridge.emailAllActivity();
+    expect(all.some((r) => r.personName === 'Ben' && r.family === 'welcome')).toBe(true);
+    // A member cannot read the household-wide view (people.manage-gated).
+    expect((await bridge.sessionSetActive({ personId: member.id })).ok).toBe(true);
+    expect(await bridge.emailAllActivity()).toHaveLength(0);
+  });
+
+  it('email (67 P6 / milestones): reaching a goal schedules a milestone email, sent once', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.emailSetConfig({ fromAddress: 'hi@fam.example', fromName: 'SelfOS' });
+    await bridge.secretSet({ id: RESEND_API_KEY_ID, value: 're-key' });
+    await bridge.emailSetPrefs({ address: 'owner@inbox.example' });
+    const ctx = (await host.host.vaultAndKey())!;
+    // A reached (done) goal for the owner → a family-F milestone.
+    await saveGoal(ctx.fs, ctx.key, {
+      id: 'goal-done',
+      schemaVersion: 1,
+      subjectPersonId: ownerId,
+      text: 'Finish the marathon',
+      status: 'done',
+      provenance: { at: '2026-09-01T00:00:00.000Z' },
+      createdAt: '2026-09-01T00:00:00.000Z',
+      updatedAt: '2026-09-10T00:00:00.000Z',
+    });
+
+    expect((await bridge.emailScheduleReconcile({ auto: false })).ok).toBe(true);
+    const milestones = await bridge.emailActivity({ family: 'milestone' });
+    expect(milestones).toHaveLength(1);
+    expect(milestones[0]).toMatchObject({
+      family: 'milestone',
+      sourceKey: 'milestone:goal:goal-done',
+    });
+    // De-dup: a second reconcile does NOT re-send the same milestone.
+    expect((await bridge.emailScheduleReconcile({ auto: false })).ok).toBe(true);
+    expect(await bridge.emailActivity({ family: 'milestone' })).toHaveLength(1);
   });
 
   it('household AI key: owner shares → member inherits; member cannot write the shared key (25)', async () => {

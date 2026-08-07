@@ -2415,6 +2415,9 @@ export interface IntimacyInventoryOffer {
   currentRating: number;
 }
 
+/** One row of the owner Email-activity view (67 §3.7 / Phase 6) — an activity entry + the member's name. */
+export type OwnerEmailActivityEntry = EmailActivityEntry & { personName: string };
+
 /** The renderer-facing trigger for a send (67 §6) — Phase 0 covers the `welcome` family. */
 export const EmailSendInputSchema = z.object({
   family: EmailFamilySchema,

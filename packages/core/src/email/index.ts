@@ -9,3 +9,5 @@ export * from './emailResponse';
 export * from './emailResponseEffects';
 export * from './emailSuggestionService';
 export * from './emailIntimacy';
+export * from './emailMilestones';
+export * from './emailActivityView';

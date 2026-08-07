@@ -29,6 +29,7 @@ import { fromLineOf, readEmailConfig } from './emailConfig';
 import { drainEmailTaps, mintEmailToken, type TapDrainer } from './emailResponse';
 import { applyEmailCheckinAnswers } from './emailResponseEffects';
 import { resolveIntimacyEmailTarget } from './emailIntimacy';
+import { detectMilestones } from './emailMilestones';
 import {
   buildAvoidSet,
   gatherSuggestionSignals,
@@ -42,6 +43,7 @@ import {
 } from './emailSuggestionService';
 import {
   buildDigestEmail,
+  buildMilestoneEmail,
   buildQuestionnaireReminderEmail,
   buildReEngagementEmail,
   buildSuggestionEmail,
@@ -796,6 +798,47 @@ export async function reconcileEmailSchedule(deps: {
         now,
       }));
     scheduled += sent;
+  }
+
+  // 6) Milestones (F) — a deterministic celebration when a goal is reached / a streak crossed / a Story book
+  // published. Sent immediately (the app is open), de-dup'd by sourceKey. Capped at ONE per run for restraint
+  // (the rest trickle out over later runs), so a person who reached several at once isn't flooded.
+  if (engagementReady && prefs && effectiveFamilyEnabled(prefs, 'milestone')) {
+    const milestones = await detectMilestones(fs, key, personId, now);
+    // "Sent exactly once" means once SUCCESSFULLY — a `failed` (or canceled) prior attempt is retryable, so a
+    // transient Resend error never permanently swallows the celebration (the transactional-path rule).
+    const alreadySent = new Set(
+      activity
+        .filter(
+          (e): e is typeof e & { sourceKey: string } =>
+            e.family === 'milestone' &&
+            e.status !== 'canceled' &&
+            e.status !== 'failed' &&
+            e.sourceKey !== undefined,
+        )
+        .map((e) => e.sourceKey),
+    );
+    const next = milestones.find((m) => !alreadySent.has(m.sourceKey));
+    if (next) {
+      const composed = buildMilestoneEmail({
+        ...(deps.recipientName ? { recipientName: deps.recipientName } : {}),
+        headline: next.headline,
+        detail: next.detail,
+      });
+      const res = await sendFamilyEmail({
+        fs,
+        key,
+        email,
+        resendKey,
+        personId,
+        family: 'milestone',
+        composed,
+        crisisSuppressed: false, // gated by engagementReady (crisis already excluded)
+        sourceKey: next.sourceKey,
+        now,
+      });
+      if (res.ok) scheduled += 1;
+    }
   }
 
   return { ok: true, polled, scheduled, canceled };

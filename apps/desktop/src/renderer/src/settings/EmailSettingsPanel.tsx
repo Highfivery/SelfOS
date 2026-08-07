@@ -4,6 +4,7 @@ import type {
   EmailResponse,
   EmailStatus,
   EmailVerifyResult,
+  OwnerEmailActivityEntry,
 } from '@selfos/core/schemas';
 import { RESEND_API_KEY_ID } from '@shared/channels';
 import {
@@ -44,6 +45,7 @@ const DAY_LABELS = [
  */
 export function EmailSettingsPanel(): JSX.Element {
   const canManage = useSessionStore((state) => state.can('settings.manage'));
+  const canViewActivity = useSessionStore((state) => state.can('people.manage'));
   const [status, setStatus] = useState<EmailStatus | null>(null);
   const [prefs, setPrefs] = useState<EmailPrefs | null>(null);
 
@@ -64,9 +66,166 @@ export function EmailSettingsPanel(): JSX.Element {
       <GreenLightsSection />
       <IntimacyOffersSection />
       <ResponsesSection />
+      {canViewActivity ? <EmailActivityView /> : null}
     </Stack>
   );
 }
+
+/**
+ * The owner Email-activity view (67 §3.7 / Phase 6) — an admin-only subsection showing EVERY member's sent
+ * email (full visibility, the Owner full-access model), filterable by member + family, with delivery-health
+ * counts and a CSV export. Never member-facing; the read is `people.manage`-gated in the bridge.
+ */
+function EmailActivityView(): JSX.Element {
+  const [rows, setRows] = useState<OwnerEmailActivityEntry[]>([]);
+  const [member, setMember] = useState('all');
+  const [family, setFamily] = useState('all');
+
+  useEffect(() => {
+    void (async () => setRows((await window.selfos?.emailAllActivity()) ?? []))();
+  }, []);
+
+  const members = Array.from(new Set(rows.map((r) => r.personName))).sort();
+  const families = Array.from(new Set(rows.map((r) => r.family))).sort();
+  const filtered = rows.filter(
+    (r) =>
+      (member === 'all' || r.personName === member) && (family === 'all' || r.family === family),
+  );
+  const bounced = rows.filter((r) => r.status === 'bounced').length;
+  const complained = rows.filter((r) => r.status === 'complained').length;
+  const when = (iso?: string): string => (iso ? new Date(iso).toLocaleString() : '—');
+
+  const exportCsv = (): void => {
+    const esc = (v: string): string => `"${v.replace(/"/g, '""')}"`;
+    const header = [
+      'Member',
+      'Family',
+      'Subject',
+      'To',
+      'Status',
+      'Sent',
+      'Delivered',
+      'Opened',
+      'Clicked',
+    ];
+    const lines = filtered.map((r) =>
+      [
+        r.personName,
+        r.family,
+        r.subject,
+        r.toAddress,
+        r.status,
+        when(r.sentAt),
+        when(r.deliveredAt),
+        when(r.openedAt),
+        when(r.clickedAt),
+      ]
+        .map((v) => esc(String(v)))
+        .join(','),
+    );
+    const blob = new Blob([[header.join(','), ...lines].join('\n')], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'selfos-email-activity.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <Stack gap={3}>
+      <Inline gap={2} align="center">
+        <Text weight={600}>Email activity</Text>
+        <AdminOnlyBadge />
+      </Inline>
+      <Text size="sm" tone="secondary">
+        Every email SelfOS has sent for your household — delivery, opens, and clicks.
+      </Text>
+      {rows.length === 0 ? (
+        <Text size="sm" tone="secondary">
+          No email has been sent yet.
+        </Text>
+      ) : (
+        <>
+          <Inline gap={3} align="end">
+            <Field label="Member">
+              {(f) => (
+                <Select {...f} value={member} onChange={(e) => setMember(e.target.value)}>
+                  <option value="all">All members</option>
+                  {members.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Field label="Family">
+              {(f) => (
+                <Select {...f} value={family} onChange={(e) => setFamily(e.target.value)}>
+                  <option value="all">All families</option>
+                  {families.map((fam) => (
+                    <option key={fam} value={fam}>
+                      {fam}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+            <Button variant="secondary" onClick={exportCsv}>
+              Export CSV
+            </Button>
+          </Inline>
+          {bounced + complained > 0 ? (
+            <Text size="sm" tone="secondary">
+              Delivery health: {bounced} bounced · {complained} complaint
+              {complained === 1 ? '' : 's'}.
+            </Text>
+          ) : null}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '14px' }}>
+              <thead>
+                <tr>
+                  {['Member', 'Family', 'Subject', 'To', 'Status', 'Sent'].map((h) => (
+                    <th
+                      key={h}
+                      style={{
+                        textAlign: 'left',
+                        padding: '6px 10px',
+                        borderBottom: '1px solid var(--color-border)',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((r) => (
+                  <tr key={r.id}>
+                    <td style={cellStyle}>{r.personName}</td>
+                    <td style={cellStyle}>{FAMILY_LABEL[r.family] ?? r.family}</td>
+                    <td style={cellStyle}>{r.subject}</td>
+                    <td style={cellStyle}>{r.toAddress}</td>
+                    <td style={cellStyle}>{r.status}</td>
+                    <td style={{ ...cellStyle, whiteSpace: 'nowrap' }}>{when(r.sentAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Stack>
+  );
+}
+
+const cellStyle = {
+  padding: '6px 10px',
+  borderBottom: '1px solid var(--color-border-subtle)',
+  verticalAlign: 'top',
+} as const;
 
 /**
  * "You're both up for this" (67 §3.6) — a couple suggestion both partners tapped "I'm game" on (via email).
@@ -130,10 +289,13 @@ function IntimacyOffersSection(): JSX.Element | null {
 
 /** Family label for the response history (matches the family toggles above). */
 const FAMILY_LABEL: Record<string, string> = {
+  welcome: 'Welcome',
+  'questionnaire-delivery': 'Questionnaire',
+  transactional: 'Transactional',
+  digest: 'Digest',
   're-engagement': 'Re-engagement',
   'ai-suggestion': 'Suggestion',
   'ai-suggestion-intimacy': 'Intimacy',
-  digest: 'Digest',
   milestone: 'Milestone',
 };
 
@@ -367,6 +529,7 @@ function PrefsSection({
   const suggestionsOn = prefs?.families?.['ai-suggestion'] ?? true;
   const intimacyOn = prefs?.families?.['ai-suggestion-intimacy'] ?? false;
   const intimacyEmailOptIn = prefs?.intimacyEmailOptIn ?? false;
+  const milestoneOn = prefs?.families?.milestone ?? true;
   const paused = prefs?.paused ?? false;
 
   const patch = async (
@@ -505,6 +668,13 @@ function PrefsSection({
             intimacyEmailOptIn: checked,
           })
         }
+      />
+      <ToggleRow
+        label="Milestones & celebrations"
+        help="A short well-done when you reach a goal, cross a streak, or your Story book is ready to read."
+        checked={milestoneOn}
+        disabled={busy || !connected}
+        onChange={(checked) => void patch({ families: { milestone: checked } })}
       />
       <ToggleRow
         label="Pause all email"

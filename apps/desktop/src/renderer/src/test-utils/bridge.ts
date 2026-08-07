@@ -343,6 +343,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
       Promise.resolve({ ok: false as const, reason: 'NOT_CONFIGURED' as const }),
     emailResponses: () => Promise.resolve([]),
     emailEditResponse: () => Promise.resolve(null),
+    emailAllActivity: () => Promise.resolve([]),
     emailMutualGreenLights: () => Promise.resolve([]),
     emailIntimacyOffers: () => Promise.resolve([]),
     emailApplyIntimacyOffer: () => Promise.resolve(true),

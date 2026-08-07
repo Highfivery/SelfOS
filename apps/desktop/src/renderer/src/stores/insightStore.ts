@@ -62,14 +62,15 @@ interface InsightState {
 
 export const useInsightStore = create<InsightState>((set, get) => ({
   insights: [],
-  outbound: { items: [] },
+  outbound: { items: [], keptPrivateCount: 0 },
   loaded: false,
   lastReconciledAt: undefined,
   proposals: [],
   load: async () => {
     const [insights, outbound] = await Promise.all([
       window.selfos?.insightsList() ?? Promise.resolve([] as Insight[]),
-      window.selfos?.memoryOutboundSharing() ?? Promise.resolve({ items: [] } as OutboundSharing),
+      window.selfos?.memoryOutboundSharing() ??
+        Promise.resolve({ items: [], keptPrivateCount: 0 } as OutboundSharing),
     ]);
     set({ insights, outbound, loaded: true });
   },
@@ -80,7 +81,7 @@ export const useInsightStore = create<InsightState>((set, get) => ({
   reset: () =>
     set({
       insights: [],
-      outbound: { items: [] },
+      outbound: { items: [], keptPrivateCount: 0 },
       loaded: false,
       lastReconciledAt: undefined,
       proposals: [],

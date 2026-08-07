@@ -173,6 +173,7 @@ import type {
   SendResult,
   MemoryReconcileResult,
   OutboundSharing,
+  PersonFieldKey,
   PersonInput,
   PrivacyMode,
   Questionnaire,
@@ -371,6 +372,8 @@ export const IpcChannels = {
   questionnaireSuggestionMaterialize: 'questionnaires:suggestionMaterialize',
   insightsList: 'insights:list',
   memoryOutboundSharing: 'memory:outboundSharing',
+  memorySetScopeBatch: 'memory:setScopeBatch',
+  memorySetProfileFieldShared: 'memory:setProfileFieldShared',
   insightsAnalyze: 'insights:analyze',
   insightsApprove: 'insights:approve',
   insightsUpdate: 'insights:update',
@@ -1128,6 +1131,25 @@ export interface SelfosBridge {
    * they own + the concrete related people currently receiving it. Own-scoped + gated on `memory.own`.
    */
   memoryOutboundSharing(): Promise<OutboundSharing>;
+  /**
+   * The per-category bulk scope change (68-sharing-redesign §3.5/§6): REPLACE the relationship-type scope of
+   * a set of the active person's OWN Insight facts + intake answers in one call (empty `types` ⇒ Private).
+   * Touches only facts + answers — never profile fields or dream images. Gated `memory.own` (+ `intake.own`
+   * for the answer writes; a caller lacking it has its `answerTargets` skipped, never errored),
+   * active-person-scoped. Returns the number of targets actually updated.
+   */
+  memorySetScopeBatch(input: {
+    types: RelationshipType[];
+    factTargets: { insightId: string; factId: string }[];
+    answerTargets: { sectionId: string; questionId: string }[];
+  }): Promise<{ updated: number }>;
+  /**
+   * The profile-field lock toggle (68-sharing-redesign §3.8/§6): flip one controllable field in/out of the
+   * ACTIVE person's own `Person.privateFields` (15-shareability). Own-scoped + gated `memory.own` —
+   * deliberately NOT `people.manage`, so a member can share/lock their OWN profile field here. Returns `true`
+   * when applied.
+   */
+  memorySetProfileFieldShared(input: { field: PersonFieldKey; shared: boolean }): Promise<boolean>;
   /** Analyze a submitted assignment's answers into an UNapproved Insight. Budget-gated + metered. */
   insightsAnalyze(input: { assignmentId: string }): Promise<QuestionnaireAnalyzeResult>;
   /** Approve an Insight (apply edits + chosen shareable facts) so it enters the coach's context. */

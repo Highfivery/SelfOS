@@ -54,6 +54,7 @@ const outbound: OutboundSharing = {
       recipients: [],
     },
   ],
+  keptPrivateCount: 0,
 };
 
 const rel = (over: Partial<Relationship> & { id: string }): Relationship => ({
@@ -81,7 +82,11 @@ function renderPanel(): void {
 
 afterEach(() => {
   clearMockBridge();
-  useInsightStore.setState({ insights: [], outbound: { items: [] }, loaded: false });
+  useInsightStore.setState({
+    insights: [],
+    outbound: { items: [], keptPrivateCount: 0 },
+    loaded: false,
+  });
   useSessionStore.setState({ activePerson: null });
 });
 
@@ -140,7 +145,7 @@ describe('SharingSection (transparency surface)', () => {
     useSessionStore.setState({ activePerson: activeP1 });
     installMockBridge({
       insightsList: () => Promise.resolve([]),
-      memoryOutboundSharing: () => Promise.resolve({ items: [] }),
+      memoryOutboundSharing: () => Promise.resolve({ items: [], keptPrivateCount: 0 }),
     });
     renderPanel();
     expect(await screen.findByText(/not sharing anything yet/)).toBeInTheDocument();

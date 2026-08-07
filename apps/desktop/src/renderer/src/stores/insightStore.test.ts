@@ -23,7 +23,11 @@ const insight: Insight = {
 
 afterEach(() => {
   clearMockBridge();
-  useInsightStore.setState({ insights: [], outbound: { items: [] }, loaded: false });
+  useInsightStore.setState({
+    insights: [],
+    outbound: { items: [], keptPrivateCount: 0 },
+    loaded: false,
+  });
 });
 
 describe('insightStore.setFactScope', () => {

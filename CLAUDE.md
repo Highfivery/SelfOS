@@ -427,6 +427,36 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-07 — **Build (Sharing redesign slice 1a — the additive core + bridge extension; SPEC 68 §4/§5.2/§6;
+  on `feat/sharing-redesign-core`).** First slice of the `/sharing` transparency-dashboard rebuild — CORE + BRIDGE
+  only, no renderer UI (that's 1b). Extended the crypto-free view type `OutboundSharingItem` with
+  `'profileField' | 'dreamImage'` kinds + optional `lifeArea`/`category`, and `OutboundSharing` with a required
+  `keptPrivateCount` — **additive, no `schemaVersion` bump, no context-feed change**. `listOutboundSharing` now
+  (a) **skips `source: 'intake'` insight facts** from the item list (the twin fix — an intake fact's scope is
+  answer-owned, the `intakeAnswer` row is the control), (b) fills `lifeArea` (facts) / `category` (answers),
+  (c) emits a **`profileField`** item for each populated, non-locked controllable field (reaching ALL related
+  people, 15-shareability's broadcast-to-related), (d) emits a **`dreamImage`** item for each standard-tier dream
+  with a non-empty `image.shareableWith`, and (e) returns **`keptPrivateCount`** — the count of the person's
+  `restricted` facts across EVERY insight **including intake-sourced ones** (onboarding trauma/intimacy is exactly
+  where restricted facts originate; the code-reviewer caught that an earlier `source==='intake'` skip-before-count
+  undercounted them). New pure `sharingItemCategory` (single By-category display bucket from `lifeArea`|`category`|
+  `kind`) + `profileFieldSharing.ts` (labels + field→life-area map + `profileSharingItems`). New core
+  **`applyScopeBatch`** (bounded per-category bulk: REPLACE `shareableTypes` on facts [preserving siblings +
+  server-owned `restricted`/`shareableWith`] + `answerSharing` on answers; empty ⇒ Private; answers skipped when
+  the caller lacks `intake.own`, never errored). Two new **own-scoped** bridge handlers:
+  **`memory:setScopeBatch`** (gated `memory.own`; `intake.own` gates only the answer writes; active-person-scoped,
+  `MAX_SCOPE_BATCH_TARGETS` cap) + **`memory:setProfileFieldShared`** (flip a field in/out of the ACTIVE person's
+  own `Person.privateFields`; gated `memory.own`, deliberately **NOT** `people.manage`, so a member controls their
+  own field). Wired channels/preload/ipc/test-utils. Reuses `memory:outboundSharing` (its result shape is the only
+  change). Code-reviewer **ship-after-one-should-fix** (the intake keptPrivateCount undercount — fixed + pinned by
+  a test; privacy/own-scoping boundaries verified airtight — the read only ever emits the active person's own
+  items, both writes can't touch another's data). Gate green: typecheck (4 pkgs), lint, format, **1785 core + 1492
+  desktop** unit (+outboundSharing extension/applyScopeBatch/sharingItemCategory core; +3 coreBridge two-persona
+  [setScopeBatch decrypt + own-scoping + Guest denial + `memory.own`-without-`intake.own` answer-skip;
+  setProfileFieldShared own-scoped, another's record untouched]). No E2E (no new user-facing surface). **Lesson: a
+  "count of restricted facts never shared" reassurance stat must span ALL insights including the intake portrait —
+  putting the `source==='intake'` display-skip BEFORE the restricted count silently undercounts the most sensitive
+  content, which is exactly what the stat exists to reassure about.**
 - 2026-08-04 — **Follow-up to #350 (Sent-tab delete for a self check-in; SPEC 08 §3.9; on
   `fix/sent-tab-delete-self-checkin`).** After the Inbox delete shipped, the owner asked to make a self / auto
   check-in deletable from the Questionnaires **Sent** tab too (it appears there as an authored questionnaire,

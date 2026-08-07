@@ -26,6 +26,7 @@ describe('SharingCard', () => {
   it('summarizes what you share and tallies recipients', () => {
     renderCard({
       items: [item('a', ['Angel', 'Mom']), item('b', ['Angel']), item('c', ['Angel'])],
+      keptPrivateCount: 0,
     });
     expect(screen.getByText(/3 things/i)).toBeInTheDocument();
     // Angel receives 3 items, Mom 1.
@@ -37,7 +38,7 @@ describe('SharingCard', () => {
   it('self-hides when nothing is shared', () => {
     const { container } = render(
       <MemoryRouter>
-        <SharingCard outbound={{ items: [] }} />
+        <SharingCard outbound={{ items: [], keptPrivateCount: 0 }} />
       </MemoryRouter>,
     );
     expect(container).toBeEmptyDOMElement();

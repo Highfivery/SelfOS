@@ -95,6 +95,7 @@ import {
   type MemoryReconcileState,
   type OutboundSharing,
   IntakeAnswerValueSchema,
+  PersonFieldKeySchema,
   RelationshipTypeSchema,
   type RelationshipType,
   type IntakeState,
@@ -319,10 +320,12 @@ import {
   deletePerson,
   deleteRelationship,
   ensureMemberAccounts,
+  applyScopeBatch,
   getAccessConfig,
   getAccessView,
   getPerson,
   listDevices,
+  MAX_SCOPE_BATCH_TARGETS,
   listInvitesForPerson,
   listOutboundSharing,
   listPeople,
@@ -1216,6 +1219,22 @@ const IntakeSetAnswerSharingSchema = z.object({
   sectionId: z.string().min(1),
   questionId: z.string().min(1),
   types: z.array(RelationshipTypeSchema),
+});
+// 68-sharing-redesign §6 — the per-category bulk scope change. Bounded (`MAX_SCOPE_BATCH_TARGETS`) so a
+// caller can't rescope thousands at once.
+const SetScopeBatchSchema = z.object({
+  types: z.array(RelationshipTypeSchema),
+  factTargets: z
+    .array(z.object({ insightId: z.string().min(1), factId: z.string().min(1) }))
+    .max(MAX_SCOPE_BATCH_TARGETS),
+  answerTargets: z
+    .array(z.object({ sectionId: z.string().min(1), questionId: z.string().min(1) }))
+    .max(MAX_SCOPE_BATCH_TARGETS),
+});
+// 68-sharing-redesign §6 — the own-scoped profile-field lock toggle.
+const SetProfileFieldSharedSchema = z.object({
+  field: PersonFieldKeySchema,
+  shared: z.boolean(),
 });
 const ProfileSuggestionIdSchema = z.string().min(1);
 const AssignmentIdSchema = z.string().min(1);
@@ -4337,11 +4356,56 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // The transparency read (42 §5.3): the active person's OWN outbound sharing only. Gated on `memory.own`
       // + scoped to the active person — a person never sees another's sharing.
       const ctx = await host.vaultAndKey();
-      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return { items: [] };
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own')))
+        return { items: [], keptPrivateCount: 0 };
       const personId = await activePersonId();
-      if (!personId) return { items: [] };
+      if (!personId) return { items: [], keptPrivateCount: 0 };
       const relationships = await listRelationships(ctx.fs, ctx.key);
       return listOutboundSharing(ctx.fs, ctx.key, personId, relationships);
+    },
+    memorySetScopeBatch: async (input): Promise<{ updated: number }> => {
+      // The per-category bulk scope change (68 §6). Gated `memory.own` for the fact writes; the answer writes
+      // additionally require `intake.own` (a `memory.own`-only caller has its answerTargets skipped, never
+      // errored — §7). Active-person-scoped: a person can only ever rescope THEIR OWN items (the boundary).
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return { updated: 0 };
+      const personId = await activePersonId();
+      if (!personId) return { updated: 0 };
+      const { types, factTargets, answerTargets } = SetScopeBatchSchema.parse(input);
+      const includeAnswers = await activePersonCan(ctx.fs, ctx.key, 'intake.own');
+      return applyScopeBatch({
+        fs: ctx.fs,
+        key: ctx.key,
+        personId,
+        types,
+        factTargets,
+        answerTargets,
+        includeAnswers,
+        now: new Date(),
+      });
+    },
+    memorySetProfileFieldShared: async (input): Promise<boolean> => {
+      // The profile-field lock toggle (68 §3.8/§6). Own-scoped + gated `memory.own` — deliberately NOT
+      // `people.manage`, so a member can share/lock THEIR OWN field. Flips the field in/out of the active
+      // person's own `Person.privateFields` (never another person's record — the trust boundary).
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'memory.own'))) return false;
+      const personId = await activePersonId();
+      if (!personId) return false;
+      const { field, shared } = SetProfileFieldSharedSchema.parse(input);
+      const person = await getPerson(ctx.fs, ctx.key, personId);
+      if (!person) return false;
+      const locked = new Set(person.privateFields ?? []);
+      const wasLocked = locked.has(field);
+      if (shared) locked.delete(field);
+      else locked.add(field);
+      // No-op toggle (already in the requested state) → skip the write to avoid spurious sync churn.
+      if (wasLocked === !shared) return true;
+      const next: Person = { ...person, updatedAt: new Date().toISOString() };
+      if (locked.size > 0) next.privateFields = [...locked];
+      else delete next.privateFields;
+      await savePerson(ctx.fs, ctx.key, next);
+      return true;
     },
     insightsAnalyze: async (input): Promise<QuestionnaireAnalyzeResult> => {
       const deps = await aiDeps('questionnaires.viewResults');

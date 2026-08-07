@@ -9,4 +9,5 @@ export * from './deviceRegistry';
 export * from './relationshipScope';
 export * from './sharingPresets';
 export * from './sharedIntakeAnswers';
+export * from './profileFieldSharing';
 export * from './outboundSharing';

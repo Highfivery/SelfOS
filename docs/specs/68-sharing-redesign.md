@@ -655,6 +655,16 @@ Per the DoD (CLAUDE.md §7). Decrypt the vault to assert data; run `pnpm typeche
 
 ## 12. Changelog
 
+- 2026-08-07 — **Slice 1a BUILT** (core + bridge; the additive, no-migration extension — no renderer UI yet).
+  `OutboundSharingItem` gains `'profileField' | 'dreamImage'` kinds + optional `lifeArea`/`category`;
+  `OutboundSharing` gains `keptPrivateCount`. `listOutboundSharing` now skips `source: 'intake'` facts (the
+  twin fix), fills `lifeArea`/`category`, emits profile-field items (each populated non-locked controllable
+  field, reaching all related people) + dream-image items (standard-tier, `image.shareableWith` non-empty),
+  and returns `keptPrivateCount` (all `restricted` facts across every insight, intake included). New pure
+  `sharingItemCategory` + `profileFieldSharing.ts` helpers; new core `applyScopeBatch`; new bounded
+  own-scoped bridge handlers `memory:setScopeBatch` (gated `memory.own`, `intake.own` for answers) +
+  `memory:setProfileFieldShared` (gated `memory.own`, NOT `people.manage`). Reuses `memory:outboundSharing`.
+  Slice 1b (the dashboard UI) follows.
 - 2026-08-06 — reviewed with the owner; per-category bulk actions included in v1, remaining open questions
   resolved; Approved.
 - 2026-08-06 — created (Draft). A **complete redesign** of `/sharing` into a unified transparency dashboard —

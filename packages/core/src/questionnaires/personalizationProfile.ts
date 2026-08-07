@@ -82,6 +82,8 @@ export type FeedbackEntry = z.infer<typeof FeedbackEntrySchema>;
 const ChangeEntrySchema = z.object({
   topicId: z.string().optional(),
   metricKey: z.string().optional(),
+  /** A human-readable label for the changed thing (e.g. the question prompt) — used in the "what changed?" hint. */
+  label: z.string().optional(),
   kind: z.enum(['numeric-shift', 'contradiction']),
   from: z.string(),
   to: z.string(),
@@ -257,6 +259,7 @@ export function applyChange(
   input: {
     topicId?: string;
     metricKey?: string;
+    label?: string;
     kind: 'numeric-shift' | 'contradiction';
     from: string;
     to: string;
@@ -274,6 +277,7 @@ export function applyChange(
   const entry: ChangeEntry = {
     ...(input.topicId ? { topicId: input.topicId } : {}),
     ...(input.metricKey ? { metricKey: input.metricKey } : {}),
+    ...(input.label?.trim() ? { label: input.label.trim() } : {}),
     kind: input.kind,
     from: input.from,
     to: input.to,
@@ -316,6 +320,12 @@ export function markChangesExplored(
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /** Cap each guidance list so the prompt block stays bounded. */
 const GUIDANCE_LIST_CAP = 30;
+/**
+ * How long a detected-but-unexplored change stays in the "what changed?" hint (spec 69 §5.8). A fresh window
+ * bounds the nudge without needing to confirm the model actually asked — a genuinely new shift (different
+ * value) resets `detectedAt`, so it re-surfaces.
+ */
+const CHANGE_FRESH_DAYS = 45;
 
 function uniqLabels(labels: readonly string[]): string[] {
   const seen = new Set<string>();
@@ -372,6 +382,17 @@ export function buildFeedbackGuidance(profile: PersonalizationProfile, now: Date
     sections.push(
       `These questions landed as UNCLEAR to them — if you cover this ground at all, ask it a DIFFERENT, more` +
         ` concrete and specific way (never the same wording):\n${r.map((l) => `- ${l}`).join('\n')}`,
+    );
+  // Recent, unexplored changes (spec 69 §5.8): "used to say X, now Y" → invite exploration of the shift.
+  const changeCutoff = new Date(now.getTime() - CHANGE_FRESH_DAYS * MS_PER_DAY).toISOString();
+  const changes = profile.changes
+    .filter((c) => !c.explored && c.detectedAt >= changeCutoff)
+    .slice(0, GUIDANCE_LIST_CAP)
+    .map((c) => `- "${c.label ?? c.topicId ?? c.metricKey ?? 'something'}": ${c.from} → ${c.to}`);
+  if (changes.length)
+    sections.push(
+      `They have RECENTLY CHANGED their answer on these — gently and tactfully explore what shifted and WHY` +
+        ` (this is high-value new ground, not a re-ask):\n${changes.join('\n')}`,
     );
   if (sections.length === 0) return '';
   return `WHAT THEY'VE TOLD YOU ABOUT PRIOR QUESTIONS (learn from this — it is how you get smarter over time):\n${sections.join(

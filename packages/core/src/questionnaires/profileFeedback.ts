@@ -3,7 +3,8 @@ import { getPerson } from '../people/peopleService';
 
 import { isDeclined, type AnswerValue } from './answering';
 import { getAssignment, getAssignmentSnapshot } from './assignmentService';
-import { applyDecline, readProfile, writeProfile } from './personalizationProfile';
+import { detectRecipientNumericShifts } from './changeDetection';
+import { applyChange, applyDecline, readProfile, writeProfile } from './personalizationProfile';
 import { getResponse } from './responseService';
 
 /**
@@ -51,5 +52,26 @@ export async function captureResponseFeedback(
     );
     changed = true;
   }
+
+  // spec 69 §5.8 — also detect any numeric re-ask shift ("used to say X, now Y") and log it as an unexplored
+  // change, so generation can invite them to explore what changed.
+  for (const shift of await detectRecipientNumericShifts(fs, key, recipientId)) {
+    const next = applyChange(
+      profile,
+      {
+        metricKey: shift.questionId,
+        label: shift.prompt,
+        kind: 'numeric-shift',
+        from: shift.from,
+        to: shift.to,
+      },
+      now,
+    );
+    if (next !== profile) {
+      profile = next;
+      changed = true;
+    }
+  }
+
   if (changed) await writeProfile(fs, key, profile);
 }

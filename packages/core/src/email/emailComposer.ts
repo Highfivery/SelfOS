@@ -97,3 +97,38 @@ export function buildWelcomeEmail(input: {
 
   return { subject, html, text };
 }
+
+/** A bulletproof, inline-styled button-link (email clients ignore `<button>` + external CSS). */
+function ctaButton(href: string, label: string): string {
+  return [
+    `<a href="${esc(href)}" style="display:inline-block;background:#3f6d63;color:#ffffff;`,
+    'text-decoration:none;font-weight:600;font-size:16px;padding:12px 22px;border-radius:8px;',
+    `margin:4px 0 8px;">${esc(label)}</a>`,
+  ].join('');
+}
+
+/**
+ * Family A — the questionnaire-delivery email (67 §3.2 / Phase 1). SelfOS's first real send to a
+ * RECIPIENT (rather than the app's own user): a branded wrapper around the sender's friendly note (the
+ * editable message from `RelayLinkDelivery`, which already carries the secure relay link + PIN inline),
+ * plus a prominent one-click CTA button to the link. The `message` is treated as plain text — escaped and
+ * split into paragraphs — so what the sender sees in the compose field is exactly what's sent, just
+ * branded. The plaintext alternative is the message verbatim (link + PIN included), so non-HTML clients
+ * still work. No inline SVG (§9).
+ */
+export function buildQuestionnaireDeliveryEmail(input: {
+  subject: string;
+  message: string;
+  link: string;
+}): ComposedEmail {
+  const paragraphs = input.message
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter((block) => block.length > 0)
+    .map((block) => `<p style="margin:0 0 14px;">${esc(block).replace(/\n/g, '<br>')}</p>`)
+    .join('');
+
+  const html = shell([ctaButton(input.link, 'Open your questionnaire'), paragraphs].join(''));
+
+  return { subject: input.subject, html, text: input.message };
+}

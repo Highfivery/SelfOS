@@ -656,6 +656,42 @@ describe('createCoreBridge', () => {
     expect(rawFile).not.toContain('re-shared-key');
   });
 
+  it('email (67 P1 / family A): a real questionnaire-delivery send logs under the SENDER with the recipient address', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    // NOT_CONFIGURED before the household connects → the renderer falls back to mailto (67 §7).
+    expect(
+      await bridge.emailSendQuestionnaireDelivery({
+        toAddress: 'alex@example.com',
+        subject: 'A questionnaire for you',
+        message: 'Open the secure link: https://relay.example/q/abc',
+        link: 'https://relay.example/q/abc#k=xyz',
+      }),
+    ).toMatchObject({ reason: 'NOT_CONFIGURED' });
+
+    // Connect the household email (from-address + a device key). No recipient EmailPrefs needed — family A
+    // goes to the CONTACT address, not an engagement address.
+    await bridge.emailSetConfig({ fromAddress: 'hi@fam.example', fromName: 'SelfOS' });
+    await bridge.secretSet({ id: RESEND_API_KEY_ID, value: 're-key' });
+
+    const sent = await bridge.emailSendQuestionnaireDelivery({
+      toAddress: 'alex@example.com',
+      subject: 'A questionnaire for you',
+      message: 'Open the secure link: https://relay.example/q/abc',
+      link: 'https://relay.example/q/abc#k=xyz',
+    });
+    expect(sent.ok).toBe(true);
+
+    // Logged under the SENDER (the active owner), with the recipient's address + the questionnaire family.
+    const activity = await bridge.emailActivity();
+    expect(activity).toHaveLength(1);
+    expect(activity[0]).toMatchObject({
+      family: 'questionnaire-delivery',
+      status: 'sent',
+      toAddress: 'alex@example.com',
+      personId: ownerId,
+    });
+  });
+
   it('email (67 §6): a non-owner cannot connect; the owner reads a member’s activity, a member cannot', async () => {
     const { bridge, host, ownerId } = await freshOwner();
     const ctx = (await host.host.vaultAndKey())!;

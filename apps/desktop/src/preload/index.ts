@@ -194,6 +194,8 @@ const bridge: SelfosBridge = {
   emailGetPrefs: () => ipcRenderer.invoke(IpcChannels.emailGetPrefs),
   emailSetPrefs: (input) => ipcRenderer.invoke(IpcChannels.emailSetPrefs, input),
   emailSend: (input) => ipcRenderer.invoke(IpcChannels.emailSend, input),
+  emailSendQuestionnaireDelivery: (input) =>
+    ipcRenderer.invoke(IpcChannels.emailSendQuestionnaireDelivery, input),
   emailActivity: (input) => ipcRenderer.invoke(IpcChannels.emailActivity, input),
   insightsAnalyze: (input) => ipcRenderer.invoke(IpcChannels.insightsAnalyze, input),
   insightsApprove: (input) => ipcRenderer.invoke(IpcChannels.insightsApprove, input),

@@ -455,6 +455,7 @@ import {
   updateInsight,
 } from '@selfos/core/insights';
 import {
+  buildQuestionnaireDeliveryEmail,
   buildWelcomeEmail,
   clearSharedResendKey,
   emailStatusOf,
@@ -462,6 +463,7 @@ import {
   readEmailPrefs,
   resolveResendKey,
   sendFamilyEmail,
+  sendQuestionnaireDeliveryEmail,
   setEmailPrefs,
   updateEmailConfig,
   writeSharedResendKey,
@@ -1282,6 +1284,12 @@ const EmailActivitySchema = z.object({
   family: z.string().optional(),
   from: z.string().optional(),
   to: z.string().optional(),
+});
+const EmailSendQuestionnaireDeliverySchema = z.object({
+  toAddress: z.string(),
+  subject: z.string(),
+  message: z.string(),
+  link: z.string(),
 });
 const ProfileSuggestionIdSchema = z.string().min(1);
 const AssignmentIdSchema = z.string().min(1);
@@ -4590,6 +4598,34 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         composed,
         crisisSuppressed,
         now,
+      });
+    },
+    emailSendQuestionnaireDelivery: async (input): Promise<EmailSendResult> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      // The SENDER (active person) triggers the delivery; gate on their own email capability. NOT_CONFIGURED
+      // when unavailable so the renderer falls back cleanly to the `mailto:` hand-off (67 §7).
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'email.own')))
+        return { ok: false, reason: 'NOT_CONFIGURED' };
+      const parsed = EmailSendQuestionnaireDeliverySchema.parse(input);
+      const resolved = await resolveResendKey(host.secrets, ctx.fs, ctx.key);
+      const composed = buildQuestionnaireDeliveryEmail({
+        subject: parsed.subject,
+        message: parsed.message,
+        link: parsed.link,
+      });
+      // Family A goes to the RECIPIENT's contact address, not the sender's engagement address; it is not
+      // crisis-suppressed and not gated on the recipient's opt-in (67 §3.2/§7). The one gate the core applies
+      // is that the household is configured + a recipient address is present.
+      return sendQuestionnaireDeliveryEmail({
+        fs: ctx.fs,
+        key: ctx.key,
+        email: host.email,
+        resendKey: resolved.key,
+        senderPersonId: personId,
+        toAddress: parsed.toAddress,
+        composed,
+        now: new Date(),
       });
     },
     emailActivity: async (input): Promise<EmailActivityEntry[]> => {

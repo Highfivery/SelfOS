@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Copy, Mail, MessageSquare, RefreshCw, Share2 } from 'lucide-react';
 import {
   Banner,
@@ -106,11 +106,66 @@ export function RelayLinkDelivery({
     emailBodyFrom(messages, { sender: senderName, link, pin, includePin: !sensitive }),
   );
   const [copied, setCopied] = useState<string | null>(null);
+  // Family A (67 §3.2): when the household's Resend email is connected + ready, the Email button sends a real
+  // branded email straight from their address; otherwise it stays the `mailto:` hand-off (the spec fallback).
+  const [emailReady, setEmailReady] = useState<boolean | null>(null);
+  const [sending, setSending] = useState(false);
+  const [sendBanner, setSendBanner] = useState<{ tone: 'info' | 'warning'; text: string } | null>(
+    null,
+  );
+  const resendMode = emailReady === true;
+
+  useEffect(() => {
+    let live = true;
+    void window.selfos?.emailStatus().then((s) => {
+      if (live) setEmailReady(s.resolvedReady);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const copy = async (label: string, value: string): Promise<void> => {
     await navigator.clipboard?.writeText(value);
     setCopied(label);
     window.setTimeout(() => setCopied(null), 1500);
+  };
+
+  // A real Resend send (family A) — the branded message goes to the recipient's address; on any failure the
+  // sender can fall back to Copy / Text (delivery is never a dead end, 67 §7).
+  const sendViaResend = async (): Promise<void> => {
+    setSending(true);
+    setSendBanner(null);
+    try {
+      const result = await window.selfos?.emailSendQuestionnaireDelivery({
+        toAddress: email.trim(),
+        subject: emailSubjectFrom(messages, senderName),
+        message,
+        link,
+      });
+      if (result?.ok) {
+        setSendBanner({ tone: 'info', text: `Sent to ${email.trim()}.` });
+      } else {
+        const reason = result?.reason;
+        const detail = result && !result.ok && result.message ? ` (${result.message})` : '';
+        setSendBanner({
+          tone: 'warning',
+          text:
+            reason === 'NO_ADDRESS'
+              ? 'Add the recipient’s email above, then try again.'
+              : reason === 'NOT_CONFIGURED'
+                ? 'Email isn’t set up yet — use Copy or Text instead, or connect it in Settings → Email.'
+                : `We couldn’t send that email${detail}. Use Copy or Text instead.`,
+        });
+      }
+    } catch {
+      setSendBanner({
+        tone: 'warning',
+        text: 'We couldn’t send that email. Use Copy or Text instead.',
+      });
+    } finally {
+      setSending(false);
+    }
   };
   const canShare = useMemo(() => typeof navigator !== 'undefined' && 'share' in navigator, []);
   // Only a NON-EMPTY malformed value is an error — empty is fine (the sender addresses it in their client).
@@ -215,17 +270,23 @@ export function RelayLinkDelivery({
         )}
       </Field>
 
+      {sendBanner ? <Banner tone={sendBanner.tone}>{sendBanner.text}</Banner> : null}
+
       <div className={styles.deliveryRow}>
         <Button
           variant="primary"
-          disabled={emailError !== undefined}
+          disabled={emailError !== undefined || (resendMode && (email.trim() === '' || sending))}
           onClick={() => {
+            if (resendMode) {
+              void sendViaResend();
+              return;
+            }
             const subject = emailSubjectFrom(messages, senderName);
             window.location.href = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
           }}
         >
           <Mail size={15} aria-hidden="true" />
-          Email
+          {resendMode ? (sending ? 'Sending…' : 'Send email') : 'Email'}
         </Button>
         <Button
           variant="secondary"
@@ -256,6 +317,13 @@ export function RelayLinkDelivery({
           {copied === 'message' ? 'Copied' : 'Copy message'}
         </Button>
       </div>
+
+      {resendMode ? (
+        <Text size="sm" tone="secondary">
+          Email sends straight from your household’s address. Text, Share and Copy still hand the
+          link to your own apps.
+        </Text>
+      ) : null}
 
       {onDone ? (
         <div className={styles.footer}>

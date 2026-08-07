@@ -4970,6 +4970,83 @@ test('relay: connect a household relay, then mint an external link + PIN, no ove
   }
 });
 
+test('email (67 P1 / family A): a minted relay link is delivered by a REAL Resend send → decrypt a questionnaire-delivery activity entry', async () => {
+  const { userData, vault } = await seedReadyVault();
+  // Connect the household email (a from-address + a device Resend key) so the delivery UI's Email button
+  // becomes a real "Send email" (SELFOS_FAKE_RESEND is on globally — no real account/network, 67 §10).
+  await createNodeSecretStore(userData, passthrough).set('resend.apiKey', 're-e2e-p1');
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('email P1 e2e: master key missing');
+    await writeEncryptedJson(
+      fs,
+      'config/email.enc',
+      {
+        schemaVersion: 1,
+        fromAddress: 'hi@fam.example',
+        fromName: 'SelfOS',
+        domainVerified: true,
+        updatedAt: '2026-08-07T00:00:00.000Z',
+      },
+      key,
+    );
+  }
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // Connect the relay (fake Cloudflare) so a link can be minted.
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Relay' }).click();
+    await w.getByLabel(/cloudflare account id/i).fill('acct-123');
+    await w.getByLabel(/cloudflare api token/i).fill('cf-token');
+    await w.getByRole('button', { name: /connect & deploy/i }).click();
+    await expect(w.getByText(/relay connected at/i)).toBeVisible();
+
+    // Author + send an external questionnaire → the delivery UI (link + PIN).
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('button', { name: 'New' }).click();
+    await w.getByLabel('Recipient').selectOption('external');
+    await w.getByLabel('Their name').fill('Alex');
+    await w.getByRole('button', { name: 'Continue' }).click();
+    await w.getByLabel('Title').fill('Outside view');
+    await w.getByLabel('Question 1', { exact: true }).fill('How do I come across?');
+    await w.getByRole('button', { name: 'Create draft' }).click();
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: /create link/i }).click();
+    await expect(w.getByText(/share this link/i)).toBeVisible();
+
+    // With email connected, the delivery Email action is a real Resend "Send email" (not a mailto hand-off).
+    await w.getByLabel('Email (optional)', { exact: true }).fill('alex@example.com');
+    const sendBtn = w.getByRole('button', { name: 'Send email' });
+    await expect(sendBtn).toBeEnabled();
+    await sendBtn.click();
+    await expect(w.getByText(/sent to alex@example\.com/i)).toBeVisible();
+
+    // Decrypt the vault: a questionnaire-delivery activity entry, logged under the SENDER (owner-1), to the
+    // recipient's contact address.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('email P1 e2e: master key missing (2)');
+    const activity = await listEmailActivity(fs, key, 'owner-1', {
+      family: 'questionnaire-delivery',
+    });
+    expect(activity).toHaveLength(1);
+    expect(activity[0]).toMatchObject({
+      family: 'questionnaire-delivery',
+      status: 'sent',
+      toAddress: 'alex@example.com',
+      personId: 'owner-1',
+    });
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('unified delivery (§17.13): a household send also mints a link the recipient can answer anywhere', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);

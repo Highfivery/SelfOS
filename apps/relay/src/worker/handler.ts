@@ -1,8 +1,10 @@
 import {
   drain,
+  drainTaps,
   purge,
   putMailbox,
   putResult,
+  recordTap,
   respond,
   revoke,
   unlock,
@@ -18,9 +20,24 @@ import {
  * The Worker holds no key that can read questions or responses — it is a ciphertext mailbox.
  *
  *  Recipient (public, PIN-gated, rate-limited):  POST /api/unlock | /api/respond | /api/withdraw
- *  App (drain-secret authenticated):             POST /api/admin/mailbox | /result | /drain | /purge | /revoke
+ *  Recipient (public, one-click email tap):      GET  /t/<token>
+ *  App (drain-secret authenticated):             POST /api/admin/mailbox | /result | /drain | /purge | /revoke | /drainTaps
  *  Answering page (static):                       GET  /q/<token>
  */
+
+/** A tiny self-contained confirmation page for a one-click email tap (67 §3.5) — inline style only (CSP). */
+const TAP_PAGE = [
+  '<!doctype html><html><head><meta charset="utf-8">',
+  '<meta name="viewport" content="width=device-width, initial-scale=1"><title>SelfOS</title></head>',
+  '<body style="margin:0;background:#f6f1ea;color:#2e2a25;',
+  "font-family:system-ui,-apple-system,'Segoe UI',sans-serif;\">",
+  '<div style="max-width:440px;margin:15vh auto;padding:0 24px;text-align:center;">',
+  '<div style="font-weight:700;font-size:20px;color:#241f1a;margin-bottom:16px;">SelfOS</div>',
+  '<div style="background:#fff;border:1px solid #e7ddd0;border-radius:12px;padding:28px 24px;">',
+  '<p style="font-size:18px;margin:0 0 8px;">Got it — thanks!</p>',
+  '<p style="color:#6e665c;margin:0;">Open SelfOS to see it. You can close this tab.</p>',
+  '</div></div></body></html>',
+].join('');
 
 export interface WorkerEnv {
   RELAY_KV: RelayKv;
@@ -93,6 +110,12 @@ export async function handleRelayRequest(
     if (url.pathname.startsWith('/q/')) {
       return new Response(page, { status: 200, headers: PAGE_HEADERS });
     }
+    if (url.pathname.startsWith('/t/')) {
+      // A one-click email tap (67 §3.5): record it, show a friendly confirmation. Public + no PIN — the
+      // opaque token is the capability and the relay learns only that it was tapped, and when.
+      await recordTap(relayEnv, decodeURIComponent(url.pathname.slice('/t/'.length)));
+      return new Response(TAP_PAGE, { status: 200, headers: PAGE_HEADERS });
+    }
     if (url.pathname === '/' || url.pathname === '/health') {
       return new Response('SelfOS relay', { status: 200, headers: CORS });
     }
@@ -125,6 +148,8 @@ export async function handleRelayRequest(
         return jsonResponse(await purge(relayEnv, body));
       case '/api/admin/revoke':
         return jsonResponse(await revoke(relayEnv, body));
+      case '/api/admin/drainTaps':
+        return jsonResponse(await drainTaps(relayEnv, body));
     }
   }
 

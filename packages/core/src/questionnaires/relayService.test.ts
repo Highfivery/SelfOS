@@ -74,6 +74,7 @@ function fakeRelay(): { client: RelayClient; env: RelayEnv } {
     revoke: async (token) => {
       await kvRevoke(env, { token });
     },
+    drainTaps: async () => [],
   };
   return { client, env };
 }

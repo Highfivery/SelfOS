@@ -7,9 +7,11 @@ import {
   type RelayEnv,
   type RelayKv,
   drain,
+  drainTaps,
   purge,
   putMailbox,
   putResult,
+  recordTap,
   respond,
   revoke,
   unlock,
@@ -187,5 +189,30 @@ describe('relay mailbox', { timeout: 20_000 }, () => {
     const mailbox = { ...(await makeMailbox('123456')), expiresAt: '2026-06-10T00:00:00.000Z' };
     await putMailbox(env, mailbox);
     expect((await unlock(env, { token: 'tok', pin: '123456' })).status).toBe(404);
+  });
+
+  describe('one-click email taps (67 §3.5 / Phase 4)', () => {
+    it('records a tap idempotently (first tap wins) and drains + purges it', async () => {
+      const first = await recordTap(env, 'T-abc');
+      // A re-tap keeps the original timestamp (idempotent).
+      env.nowIso = () => '2099-01-01T00:00:00.000Z';
+      const second = await recordTap(env, 'T-abc');
+      expect(second).toBe(first);
+
+      // Drain returns the tapped token + timestamp for the requested set (untapped tokens are absent).
+      const res = await drainTaps(env, { tokens: ['T-abc', 'T-untapped'] });
+      expect(res.status).toBe(200);
+      expect((res.json as { taps: { token: string; at: string }[] }).taps).toEqual([
+        { token: 'T-abc', at: first },
+      ]);
+      // Purge-on-drain: a second drain returns nothing.
+      const again = await drainTaps(env, { tokens: ['T-abc'] });
+      expect((again.json as { taps: unknown[] }).taps).toEqual([]);
+    });
+
+    it('drainTaps rejects a malformed body', async () => {
+      expect((await drainTaps(env, { tokens: 'nope' })).status).toBe(400);
+      expect((await drainTaps(env, {})).status).toBe(400);
+    });
   });
 });

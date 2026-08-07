@@ -45,6 +45,9 @@ export interface RelayOpResult {
 const mailboxKey = (token: string): string => `mailbox:${token}`;
 const responseKey = (token: string): string => `response:${token}`;
 const attemptsKey = (token: string): string => `attempts:${token}`;
+const tapKey = (token: string): string => `tapped:${token}`;
+/** Taps expire after ~30 days if never drained (a bounded, self-cleaning KV footprint). */
+const TAP_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 interface Attempts {
   count: number;
@@ -259,5 +262,41 @@ export async function revoke(env: RelayEnv, body: unknown): Promise<RelayOpResul
   await env.kv.delete(mailboxKey(token));
   await env.kv.delete(responseKey(token));
   await env.kv.delete(attemptsKey(token));
+  await env.kv.delete(tapKey(token));
   return { status: 200, json: { ok: true } };
+}
+
+/**
+ * Recipient → relay: a ONE-CLICK email tap (67 §3.5). A `GET /t/<token>` records only that this opaque
+ * token was tapped, and when — the relay never learns the token's meaning, the answer, or the person (the
+ * §8.6 zero-knowledge posture). No PIN: a tap is a single low-stakes signal and the token itself is the
+ * capability. First tap wins (idempotent — a re-tap keeps the original timestamp). Returns the first-tap ISO.
+ */
+export async function recordTap(env: RelayEnv, token: string): Promise<string> {
+  if (!token) return env.nowIso();
+  const existing = await env.kv.get(tapKey(token));
+  if (existing) return existing;
+  const at = env.nowIso();
+  await env.kv.put(tapKey(token), at, { expirationTtl: TAP_TTL_SECONDS });
+  return at;
+}
+
+/**
+ * App → relay: drain the tap markers for a set of tokens (drain-secret authenticated by the Worker, 67
+ * §4.7). Returns the tapped tokens + timestamps and DELETES them (purge-on-drain), so the same tap is
+ * never mapped twice. Untapped tokens are simply absent from the result.
+ */
+export async function drainTaps(env: RelayEnv, body: unknown): Promise<RelayOpResult> {
+  const tokens = (body as { tokens?: unknown })?.tokens;
+  if (!Array.isArray(tokens) || tokens.some((t) => typeof t !== 'string'))
+    return { status: 400, json: { error: 'tokens required' } };
+  const taps: { token: string; at: string }[] = [];
+  for (const token of tokens as string[]) {
+    const at = await env.kv.get(tapKey(token));
+    if (at) {
+      taps.push({ token, at });
+      await env.kv.delete(tapKey(token));
+    }
+  }
+  return { status: 200, json: { taps } };
 }

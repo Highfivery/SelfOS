@@ -150,4 +150,49 @@ describe('EmailSettingsPanel (67 §3.1)', () => {
     await userEvent.selectOptions(screen.getByLabelText('Time of day'), 'morning');
     expect(setPrefs).toHaveBeenCalledWith({ digestTime: 'morning' });
   });
+
+  it('shows the email response history and edits a response (67 §3.6 / Phase 4)', async () => {
+    asRole('member');
+    const editResponse = vi.fn(() =>
+      Promise.resolve({
+        id: 'r1',
+        schemaVersion: 1 as const,
+        family: 're-engagement' as const,
+        kind: 'reaction' as const,
+        answer: 'Come back soon',
+        sensitivity: 'standard' as const,
+        respondedAt: '2026-08-21T09:00:00.000Z',
+        source: 'relay-tap' as const,
+        edited: true,
+      }),
+    );
+    installMockBridge({
+      emailStatus: () => Promise.resolve(connected),
+      emailGetPrefs: () => Promise.resolve(null),
+      emailResponses: () =>
+        Promise.resolve([
+          {
+            id: 'r1',
+            schemaVersion: 1,
+            family: 're-engagement',
+            kind: 'reaction',
+            answer: 'im-here',
+            sensitivity: 'standard',
+            respondedAt: '2026-08-21T09:00:00.000Z',
+            source: 'relay-tap',
+            edited: false,
+          },
+        ]),
+      emailEditResponse: editResponse,
+    });
+    render(<EmailSettingsPanel />);
+    expect(await screen.findByText('Your email responses')).toBeInTheDocument();
+    expect(screen.getByText(/im-here/)).toBeInTheDocument(); // the drained response's answer
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const field = screen.getByLabelText('Edit response');
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Come back soon');
+    await userEvent.click(screen.getByRole('button', { name: 'Save response' }));
+    expect(editResponse).toHaveBeenCalledWith({ id: 'r1', answer: 'Come back soon' });
+  });
 });

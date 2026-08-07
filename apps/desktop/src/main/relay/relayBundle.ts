@@ -11,7 +11,7 @@ import type { RelayBundle } from '../../shared/relay/cloudflareDeployer';
  */
 // Must match apps/relay/scripts/build.mjs. Bumping it makes the Relay panel's "Update relay" prompt fire
 // for an already-deployed older relay so the user can push the current Worker (08 §17.14c).
-export const RELAY_VERSION = '2';
+export const RELAY_VERSION = '3';
 
 const requireFromHere = createRequire(import.meta.url);
 

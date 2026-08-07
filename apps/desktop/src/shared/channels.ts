@@ -6,6 +6,7 @@ import type {
   EmailActivityEntry,
   EmailPrefs,
   EmailReconcileResult,
+  EmailResponse,
   EmailSendInput,
   EmailSendResult,
   EmailStatus,
@@ -392,6 +393,8 @@ export const IpcChannels = {
   emailSendQuestionnaireDelivery: 'email:sendQuestionnaireDelivery',
   emailSendTransactional: 'email:sendTransactional',
   emailScheduleReconcile: 'email:scheduleReconcile',
+  emailResponses: 'email:responses',
+  emailEditResponse: 'email:editResponse',
   emailActivity: 'email:activity',
   insightsAnalyze: 'insights:analyze',
   insightsApprove: 'insights:approve',
@@ -1234,6 +1237,10 @@ export interface SelfosBridge {
    * (a manual run) forces. Gated `email.own`; the Resend key never crosses the seam.
    */
   emailScheduleReconcile(input?: { auto?: boolean }): Promise<EmailReconcileResult>;
+  /** The ACTIVE person's own drained email responses (67 §3.6 / Phase 4), newest first. Gated `email.own`. */
+  emailResponses(): Promise<EmailResponse[]>;
+  /** Edit one of the active person's own email responses in place (own-only, editable). Gated `email.own`. */
+  emailEditResponse(input: { id: string; answer: string }): Promise<EmailResponse | null>;
   /** Read logged email activity (own; another person's is `people.manage`-gated in the bridge). */
   emailActivity(input?: {
     personId?: string;

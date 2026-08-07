@@ -279,21 +279,27 @@ export interface ReEngagementContent {
   recipientName?: string;
   headline: string;
   detail?: string;
+  /** One-click tap links (67 §3.5 / Phase 4) — rendered as buttons when the relay is provisioned. */
+  taps?: { label: string; url: string }[];
 }
 
 /**
  * Family D — a re-engagement nudge (67 §3.2 / Phase 3). One focused "something waiting" (a check-in, a
- * stale goal, a biographer question, a due pulse) + a jump-back-in CTA. Deterministic; no inline SVG (§9).
+ * stale goal, a biographer question, a due pulse) + a jump-back-in CTA. When `taps` are supplied (the relay
+ * is provisioned, Phase 4) they render as one-click buttons — e.g. "Come back" / "Pause these". Deterministic;
+ * no inline SVG (§9).
  */
 export function buildReEngagementEmail(content: ReEngagementContent): ComposedEmail {
   const name = content.recipientName?.trim();
   const subject = content.headline;
+  const taps = content.taps ?? [];
   const html = shell(
     [
       `<h1 style="font-size:20px;margin:0 0 12px;color:#241f1a;">${esc(name ? `Hi ${name}` : content.headline)}</h1>`,
       name ? `<p style="margin:0 0 12px;">${esc(content.headline)}</p>` : '',
       content.detail ? `<p style="margin:0 0 14px;color:#6e665c;">${esc(content.detail)}</p>` : '',
-      '<p style="margin:0;">Whenever you’re ready, SelfOS is here.</p>',
+      '<p style="margin:0 0 12px;">Whenever you’re ready, SelfOS is here.</p>',
+      ...taps.map((t) => ctaButton(t.url, t.label) + ' '),
     ].join(''),
   );
   const text = [
@@ -302,6 +308,7 @@ export function buildReEngagementEmail(content: ReEngagementContent): ComposedEm
     ...(name ? [content.headline, ''] : []),
     ...(content.detail ? [content.detail, ''] : []),
     'Whenever you’re ready, SelfOS is here.',
+    ...(taps.length > 0 ? ['', ...taps.map((t) => `${t.label}: ${t.url}`)] : []),
     '',
     NOT_MEDICAL,
   ].join('\n');

@@ -5,3 +5,4 @@ export * from './emailPrefs';
 export * from './emailComposer';
 export * from './emailSend';
 export * from './emailSchedule';
+export * from './emailResponse';

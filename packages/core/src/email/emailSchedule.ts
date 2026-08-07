@@ -17,8 +17,11 @@ import { stalestOpenGoal } from '../recommendations/providers';
 import { buildActivityFeed } from '../home/feed';
 import { computeStreak } from '../home/streak';
 import { computeLifeRings } from '../home/rings';
-import { effectiveFamilyEnabled } from './emailPrefs';
+import { generateRelayToken } from '../relay';
+import { uuid } from '../id';
+import { effectiveFamilyEnabled, readEmailPrefs } from './emailPrefs';
 import { fromLineOf, readEmailConfig } from './emailConfig';
+import { drainEmailTaps, mintEmailToken, type TapDrainer } from './emailResponse';
 import {
   buildDigestEmail,
   buildQuestionnaireReminderEmail,
@@ -331,14 +334,27 @@ export async function reconcileEmailSchedule(deps: {
   prefs: EmailPrefs | null;
   recipientName?: string;
   crisisSuppressed: boolean;
+  /** The relay tap-drain transport (Phase 4) — present only when a relay is provisioned. Enables the
+   *  one-click interactive re-engagement email + draining its taps back into responses. */
+  relay?: TapDrainer;
+  /** The relay endpoint base (Phase 4) — for building `<endpoint>/t/<token>` one-click links. */
+  relayEndpoint?: string;
   now: Date;
 }): Promise<EmailReconcileResult> {
-  const { fs, key, email, resendKey, personId, prefs, now } = deps;
+  const { fs, key, email, resendKey, personId, now } = deps;
   const nowMs = now.getTime();
 
   const config = await readEmailConfig(fs, key);
   const from = fromLineOf(config);
   if (!resendKey || !from) return { ok: false, reason: 'NOT_CONFIGURED' };
+
+  // 0) Drain any one-click email taps back into responses (Phase 4) BEFORE gating — a `pause` tap that
+  // turned off the re-engagement family must be reflected this same run, so re-read prefs after a drain.
+  let prefs = deps.prefs;
+  if (deps.relay) {
+    const drained = await drainEmailTaps(fs, key, personId, deps.relay, now);
+    if (drained.length > 0) prefs = await readEmailPrefs(fs, key, personId);
+  }
 
   const scoped = { fs, key, email, resendKey, personId };
   let polled = 0;
@@ -458,9 +474,37 @@ export async function reconcileEmailSchedule(deps: {
       : null;
   if (existingReeng) canceled += await cancelScheduled(scoped, existingReeng); // reschedule the pending one fresh
   if (reengContent) {
+    // When a relay is provisioned, the nudge is tap-to-respond (Phase 4): mint one-click tokens for
+    // "Come back" + "Pause these" and render them as buttons; a tap drains back on the next reconcile.
+    let taps: { label: string; url: string }[] | undefined;
+    if (deps.relay && deps.relayEndpoint) {
+      const interactionId = uuid();
+      const endpoint = deps.relayEndpoint.replace(/\/+$/, '');
+      const mint = async (
+        answer: string,
+        label: string,
+      ): Promise<{ label: string; url: string }> => {
+        const token = generateRelayToken();
+        await mintEmailToken(fs, key, personId, {
+          token,
+          schemaVersion: 1,
+          interactionId,
+          family: 're-engagement',
+          kind: 'reaction',
+          answer,
+          mintedAt: now.toISOString(),
+        });
+        return { label, url: `${endpoint}/t/${token}` };
+      };
+      taps = [
+        await mint('im-here', 'Come back to SelfOS'),
+        await mint('pause', 'Pause these nudges'),
+      ];
+    }
     const composed = buildReEngagementEmail({
       ...reengContent,
       ...(deps.recipientName ? { recipientName: deps.recipientName } : {}),
+      ...(taps ? { taps } : {}),
     });
     const res = await sendFamilyEmail({
       fs,

@@ -43,7 +43,7 @@ import {
   submitResponse,
 } from '@selfos/core/questionnaires';
 import { getIntakeSession, intakeCatalogSnapshot } from '@selfos/core/intake';
-import { listEmailActivity } from '@selfos/core/email';
+import { listEmailActivity, listEmailResponses } from '@selfos/core/email';
 import {
   getInsight,
   listInsightsForPerson,
@@ -1605,7 +1605,7 @@ test('people: the merged Notes field persists with a share lock (15 §4.3)', asy
     await w.getByLabel('Notes', { exact: true }).fill('enjoys cycling');
     // Lock the notes to this person only via the per-field ShareToggle.
     await w.getByRole('button', { name: /Notes: shared/i }).click();
-    await w.getByRole('button', { name: 'Save' }).click();
+    await w.getByRole('button', { name: 'Save response' }).click();
 
     // Reopen and confirm the merged field + the lock round-tripped through encryption.
     await w.getByRole('button', { name: 'Tester Subject' }).click();
@@ -1671,7 +1671,7 @@ test('shareability: a locked field never reaches a related person’s assembled 
     await w.getByLabel('Ethnicity', { exact: true }).fill('SHARED-KOREAN');
     await w.getByLabel('Appearance', { exact: true }).fill('LOCKED-FEATURE');
     await w.getByRole('button', { name: /Appearance: shared/i }).click(); // lock it
-    await w.getByRole('button', { name: 'Save' }).click();
+    await w.getByRole('button', { name: 'Save response' }).click();
 
     // Relate Robin to the subject so Robin's SHARED data flows into the subject's context.
     await w.getByText('Robin').click();
@@ -5229,6 +5229,74 @@ test('email (67 P3 / scheduling): the cadence schedules a weekly digest on launc
   }
 });
 
+test('email (67 P4 / interactive): the response history renders in Settings → Email and an edit round-trips to the vault', async () => {
+  const { userData, vault } = await seedReadyVault();
+  // Connect email + seed a drained EmailResponse (as if a one-click email tap had been drained back).
+  await createNodeSecretStore(userData, passthrough).set('resend.apiKey', 're-e2e-p4');
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('email P4 e2e: master key missing');
+    await writeEncryptedJson(
+      fs,
+      'config/email.enc',
+      {
+        schemaVersion: 1,
+        fromAddress: 'hi@fam.example',
+        fromName: 'SelfOS',
+        domainVerified: true,
+        updatedAt: '2026-08-07T00:00:00.000Z',
+      },
+      key,
+    );
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/email/responses/r1.enc',
+      {
+        id: 'r1',
+        schemaVersion: 1,
+        family: 're-engagement',
+        kind: 'reaction',
+        answer: 'im-here',
+        sensitivity: 'standard',
+        respondedAt: '2026-08-21T09:00:00.000Z',
+        source: 'relay-tap',
+        edited: false,
+      },
+      key,
+    );
+  }
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Email' }).click();
+    await expect(w.getByText('Your email responses')).toBeVisible();
+    await expect(w.getByText(/im-here/)).toBeVisible(); // the drained response's answer
+
+    // Edit the response inline; it round-trips to the encrypted vault.
+    await w.getByRole('button', { name: 'Edit' }).click();
+    const field = w.getByLabel('Edit response');
+    await field.fill('changed my mind');
+    await w.getByRole('button', { name: 'Save response' }).click();
+
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('email P4 e2e: master key missing (2)');
+    await expect
+      .poll(async () => (await listEmailResponses(fs, key, 'owner-1'))[0]?.answer, {
+        timeout: 5000,
+      })
+      .toBe('changed my mind');
+    expect((await listEmailResponses(fs, key, 'owner-1'))[0]?.edited).toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('unified delivery (§17.13): a household send also mints a link the recipient can answer anywhere', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
@@ -7091,7 +7159,7 @@ test('dreams: visualize a dream — sensitive warning, generate, encrypted round
     // forward, or Save silently orphans the encrypted bytes and the image vanishes from the UI.
     await w.getByRole('button', { name: 'Edit dream' }).click();
     await w.getByLabel('What happened?').fill('A brighter surreal place of open doors.');
-    await w.getByRole('button', { name: 'Save' }).click();
+    await w.getByRole('button', { name: 'Save response' }).click();
     // Saving an edit returns to the read-first detail — the image must still be rendered there.
     await expect(w.getByText('A brighter surreal place of open doors.')).toBeVisible();
     await expect(w.getByRole('img')).toBeVisible();
@@ -12272,7 +12340,7 @@ test('memory redesign (62): sections collapsed (sensitive too), edit a fact inli
     await w.getByRole('button', { name: 'Edit this insight' }).click();
     const field = w.getByRole('textbox', { name: 'Edit fact: Likes early starts' });
     await field.fill('Likes slow mornings');
-    await w.getByRole('button', { name: 'Save' }).click();
+    await w.getByRole('button', { name: 'Save response' }).click();
 
     // Decrypt-level proof: the inline edit persisted to the vault (trim tolerates a `fill` whitespace quirk).
     await expect

@@ -9,6 +9,8 @@ export interface EmailPrefsPatch {
   richness?: 'brief' | 'full' | undefined;
   intimacyEmailOptIn?: boolean | undefined;
   paused?: boolean | undefined;
+  digestDay?: number | undefined;
+  digestTime?: 'morning' | 'afternoon' | 'evening' | undefined;
 }
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 
@@ -61,6 +63,8 @@ export async function ensureEmailPrefs(
     richness: 'brief',
     intimacyEmailOptIn: false,
     paused: false,
+    digestDay: 0,
+    digestTime: 'evening',
     unsubscribeToken: uuid(),
     updatedAt: now.toISOString(),
   };

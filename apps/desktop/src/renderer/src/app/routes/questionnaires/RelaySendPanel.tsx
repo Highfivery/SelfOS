@@ -24,6 +24,7 @@ const PRIVACY_COPY: Record<PrivacyMode, string> = {
 interface Minted {
   link: string;
   pin: string;
+  assignmentId: string;
 }
 
 /**
@@ -77,7 +78,7 @@ export function RelaySendPanel({
           : { privacy: 'private' as const }),
       });
       if (!result) throw new Error('No relay');
-      setMinted({ link: result.link, pin: result.pin });
+      setMinted({ link: result.link, pin: result.pin, assignmentId: result.assignmentId });
     } catch (e) {
       setError(
         e instanceof Error && e.message.includes('relay')
@@ -117,6 +118,7 @@ export function RelaySendPanel({
           pin={minted.pin}
           senderName={who}
           sensitive={sensitive}
+          assignmentId={minted.assignmentId}
           {...(recipientEmail ? { recipientEmail } : {})}
           {...(recipientPhone ? { recipientPhone } : {})}
           note="The link is ready to share. You can find it again any time from the questionnaire’s “Share a link”."

@@ -73,6 +73,8 @@ describe('EmailSettingsPanel (67 §3.1)', () => {
           richness: 'brief',
           intimacyEmailOptIn: false,
           paused: false,
+          digestDay: 0,
+          digestTime: 'evening' as const,
           unsubscribeToken: 't',
         }),
     });
@@ -94,6 +96,8 @@ describe('EmailSettingsPanel (67 §3.1)', () => {
         richness: 'brief' as const,
         intimacyEmailOptIn: false,
         paused: false,
+        digestDay: 0,
+        digestTime: 'evening' as const,
         unsubscribeToken: 't',
       }),
     );
@@ -106,5 +110,44 @@ describe('EmailSettingsPanel (67 §3.1)', () => {
     await userEvent.type(await screen.findByLabelText('Email me at'), 'new@inbox.example');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(setPrefs).toHaveBeenCalledWith({ address: 'new@inbox.example' });
+  });
+
+  it('the digest day/time controls persist via emailSetPrefs (67 §3.2a / Phase 3)', async () => {
+    asRole('member');
+    const setPrefs = vi.fn((input) =>
+      Promise.resolve({
+        schemaVersion: 1 as const,
+        address: 'me@inbox.example',
+        families: {},
+        richness: 'brief' as const,
+        intimacyEmailOptIn: false,
+        paused: false,
+        digestDay: input.digestDay ?? 0,
+        digestTime: input.digestTime ?? ('evening' as const),
+        unsubscribeToken: 't',
+      }),
+    );
+    installMockBridge({
+      emailStatus: () => Promise.resolve(connected),
+      emailGetPrefs: () =>
+        Promise.resolve({
+          schemaVersion: 1,
+          address: 'me@inbox.example',
+          families: {},
+          richness: 'brief',
+          intimacyEmailOptIn: false,
+          paused: false,
+          digestDay: 0,
+          digestTime: 'evening',
+          unsubscribeToken: 't',
+        }),
+      emailSetPrefs: setPrefs,
+    });
+    render(<EmailSettingsPanel />);
+    // The weekly-digest toggle is on → the day/time controls render.
+    await userEvent.selectOptions(await screen.findByLabelText('Digest day'), '2'); // Tuesday
+    expect(setPrefs).toHaveBeenCalledWith({ digestDay: 2 });
+    await userEvent.selectOptions(screen.getByLabelText('Time of day'), 'morning');
+    expect(setPrefs).toHaveBeenCalledWith({ digestTime: 'morning' });
   });
 });

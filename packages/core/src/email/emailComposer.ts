@@ -134,6 +134,34 @@ export function buildQuestionnaireDeliveryEmail(input: {
 }
 
 /**
+ * Family A — a delivery reminder (67 §3.2 / Phase 3), scheduled at send time for a few days out and
+ * canceled once the recipient answers. It carries NO new link (the secure link lives in the original
+ * email; storing it again would duplicate the decryption key) — a gentle nudge back to that message.
+ */
+export function buildQuestionnaireReminderEmail(input: { originalSubject: string }): ComposedEmail {
+  const subject = `Reminder — ${input.originalSubject}`;
+  const line =
+    'Just a gentle reminder that a questionnaire is waiting for you. The secure link is in the earlier email from SelfOS.';
+  const html = shell(
+    [
+      `<h1 style="font-size:20px;margin:0 0 12px;color:#241f1a;">${esc(subject)}</h1>`,
+      `<p style="margin:0 0 12px;">${esc(line)}</p>`,
+      '<p style="margin:0;color:#6e665c;">No rush — whenever it’s a good time.</p>',
+    ].join(''),
+  );
+  const text = [
+    subject,
+    '',
+    line,
+    '',
+    'No rush — whenever it’s a good time.',
+    '',
+    NOT_MEDICAL,
+  ].join('\n');
+  return { subject, html, text };
+}
+
+/**
  * Family B — a transactional alert (67 §3.2 / Phase 2). A branded teaser mirroring an in-app notification
  * (35): the notification's title as the heading, its optional body as a line, and an "Open SelfOS" prompt.
  * Deliberately content-light — a `together-turn` alert never carries the message, only that it's your turn
@@ -162,4 +190,120 @@ export function buildTransactionalEmail(input: { title: string; body?: string })
   ].join('\n');
 
   return { subject: title, html, text };
+}
+
+/** Structured, deterministic content for the weekly digest (67 §3.2 family C / Phase 3). All optional — the
+ *  digest renders whatever's present and is only sent when there's at least something to say. */
+export interface DigestContent {
+  recipientName?: string;
+  /** The coaching insight-of-the-week (40 synthesis observation), if any. */
+  insightOfWeek?: string;
+  /** The warm momentum line (53), if any. */
+  momentumLine?: string;
+  /** A gentle current streak in days (>0 to show). */
+  streakDays?: number;
+  /** A whole-life glance (60 rings) — label + level word + %. */
+  rings?: { label: string; levelLabel: string; pct: number }[];
+  /** The recent cross-feature activity (14-day feed), already capped + newest-first. */
+  activity?: { title: string; detail?: string }[];
+}
+
+/**
+ * Family C — the weekly digest (67 §3.2 / Phase 3). A deterministic (no-AI) look-back: the coaching
+ * insight-of-the-week, a momentum line, a life-rings glance, the recent activity, and a jump-back-in CTA.
+ * Rendered from structured content gathered host-side; no inline SVG (§9).
+ */
+export function buildDigestEmail(content: DigestContent): ComposedEmail {
+  const name = content.recipientName?.trim();
+  const subject = name ? `Your week on SelfOS, ${name}` : 'Your week on SelfOS';
+
+  const htmlParts: string[] = [
+    `<h1 style="font-size:22px;margin:0 0 14px;color:#241f1a;">${esc(name ? `Hi ${name}` : 'Your week on SelfOS')}</h1>`,
+  ];
+  const textParts: string[] = [
+    name ? `Hi ${name} — your week on SelfOS` : 'Your week on SelfOS',
+    '',
+  ];
+
+  if (content.insightOfWeek) {
+    htmlParts.push(
+      '<p style="margin:0 0 6px;font-weight:600;color:#3f6d63;">This week’s reflection</p>',
+      `<p style="margin:0 0 16px;">${esc(content.insightOfWeek)}</p>`,
+    );
+    textParts.push('This week’s reflection', content.insightOfWeek, '');
+  }
+  if (content.momentumLine) {
+    htmlParts.push(`<p style="margin:0 0 12px;">${esc(content.momentumLine)}</p>`);
+    textParts.push(content.momentumLine, '');
+  }
+  if (content.streakDays && content.streakDays > 0) {
+    const line = `You’ve shown up ${content.streakDays} day${content.streakDays === 1 ? '' : 's'} in a row.`;
+    htmlParts.push(`<p style="margin:0 0 12px;color:#6e665c;">${esc(line)}</p>`);
+    textParts.push(line, '');
+  }
+  if (content.rings && content.rings.length > 0) {
+    htmlParts.push('<p style="margin:0 0 6px;font-weight:600;">A glance across your life</p>');
+    htmlParts.push('<ul style="margin:0 0 16px;padding-left:20px;">');
+    textParts.push('A glance across your life');
+    for (const ring of content.rings) {
+      const line = `${ring.label}: ${ring.levelLabel} (${ring.pct}%)`;
+      htmlParts.push(`<li style="margin:4px 0;">${esc(line)}</li>`);
+      textParts.push(`- ${line}`);
+    }
+    htmlParts.push('</ul>');
+    textParts.push('');
+  }
+  if (content.activity && content.activity.length > 0) {
+    htmlParts.push('<p style="margin:0 0 6px;font-weight:600;">Recently</p>');
+    htmlParts.push('<ul style="margin:0 0 16px;padding-left:20px;">');
+    textParts.push('Recently');
+    for (const event of content.activity) {
+      const line = event.detail ? `${event.title} — ${event.detail}` : event.title;
+      htmlParts.push(`<li style="margin:4px 0;">${esc(line)}</li>`);
+      textParts.push(`- ${line}`);
+    }
+    htmlParts.push('</ul>');
+    textParts.push('');
+  }
+
+  htmlParts.push(
+    '<p style="margin:0;color:#6e665c;">Open SelfOS to pick up where you left off.</p>',
+  );
+  textParts.push('Open SelfOS to pick up where you left off.', '', NOT_MEDICAL);
+
+  return { subject, html: shell(htmlParts.join('')), text: textParts.join('\n') };
+}
+
+/** The single focused "something waiting" for a re-engagement nudge (67 §3.2 family D / Phase 3). */
+export interface ReEngagementContent {
+  recipientName?: string;
+  headline: string;
+  detail?: string;
+}
+
+/**
+ * Family D — a re-engagement nudge (67 §3.2 / Phase 3). One focused "something waiting" (a check-in, a
+ * stale goal, a biographer question, a due pulse) + a jump-back-in CTA. Deterministic; no inline SVG (§9).
+ */
+export function buildReEngagementEmail(content: ReEngagementContent): ComposedEmail {
+  const name = content.recipientName?.trim();
+  const subject = content.headline;
+  const html = shell(
+    [
+      `<h1 style="font-size:20px;margin:0 0 12px;color:#241f1a;">${esc(name ? `Hi ${name}` : content.headline)}</h1>`,
+      name ? `<p style="margin:0 0 12px;">${esc(content.headline)}</p>` : '',
+      content.detail ? `<p style="margin:0 0 14px;color:#6e665c;">${esc(content.detail)}</p>` : '',
+      '<p style="margin:0;">Whenever you’re ready, SelfOS is here.</p>',
+    ].join(''),
+  );
+  const text = [
+    name ? `Hi ${name}` : content.headline,
+    '',
+    ...(name ? [content.headline, ''] : []),
+    ...(content.detail ? [content.detail, ''] : []),
+    'Whenever you’re ready, SelfOS is here.',
+    '',
+    NOT_MEDICAL,
+  ].join('\n');
+  return { subject, html, text };
 }

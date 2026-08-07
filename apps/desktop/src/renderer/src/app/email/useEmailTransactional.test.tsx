@@ -34,6 +34,8 @@ const PREFS = {
   richness: 'brief' as const,
   intimacyEmailOptIn: false,
   paused: false,
+  digestDay: 0,
+  digestTime: 'evening' as const,
   unsubscribeToken: 't',
 };
 

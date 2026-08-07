@@ -732,6 +732,48 @@ describe('createCoreBridge', () => {
     });
   });
 
+  it('email (67 P3 / scheduling): reconcile schedules the weekly digest + is 24h-throttled on the auto cadence', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.emailSetConfig({ fromAddress: 'hi@fam.example', fromName: 'SelfOS' });
+    await bridge.secretSet({ id: RESEND_API_KEY_ID, value: 're-key' });
+    await bridge.emailSetPrefs({
+      address: 'owner@inbox.example',
+      digestDay: 0,
+      digestTime: 'evening',
+    });
+    // Seed a coaching synthesis (for the ACTIVE owner) so the digest has content to send.
+    const ctx = (await host.host.vaultAndKey())!;
+    await writeEncryptedJson(
+      ctx.fs,
+      `people/${ownerId}/coaching/synthesis.enc`,
+      {
+        schemaVersion: 1,
+        observation: 'A steady week of showing up.',
+        subjectPersonId: ownerId,
+        sources: [],
+        computedAt: '2026-08-04T00:00:00.000Z',
+      },
+      ctx.key,
+    );
+
+    // A manual run schedules the digest.
+    const first = await bridge.emailScheduleReconcile({ auto: false });
+    expect(first.ok).toBe(true);
+    const activity = await bridge.emailActivity({ family: 'digest' });
+    expect(activity).toHaveLength(1);
+    expect(activity[0]).toMatchObject({
+      family: 'digest',
+      status: 'scheduled',
+      toAddress: 'owner@inbox.example',
+    });
+    expect(activity[0]?.scheduledAt).toBeDefined();
+
+    // A stamped auto run within 24h is SKIPPED (the throttle) — no second digest scheduled.
+    const throttled = await bridge.emailScheduleReconcile({ auto: true });
+    expect(throttled).toMatchObject({ ok: false, reason: 'SKIPPED' });
+    expect(await bridge.emailActivity({ family: 'digest' })).toHaveLength(1);
+  });
+
   it('email (67 §6): a non-owner cannot connect; the owner reads a member’s activity, a member cannot', async () => {
     const { bridge, host, ownerId } = await freshOwner();
     const ctx = (await host.host.vaultAndKey())!;

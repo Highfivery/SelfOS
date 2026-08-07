@@ -52,6 +52,7 @@ export function QuestionnaireSendPanel({
   // When a relay is connected, the in-app send ALSO mints a link the recipient can answer anywhere (§17.13).
   const [link, setLink] = useState<string | null>(null);
   const [pin, setPin] = useState<string | null>(null);
+  const [assignmentId, setAssignmentId] = useState<string | null>(null);
   // Set when a relay IS connected but the link mint failed — shown instead of the no-relay hint (§17.14a).
   const [linkError, setLinkError] = useState<string | null>(null);
   const senderName = useSessionStore((s) => s.activePerson?.displayName ?? 'Someone');
@@ -105,6 +106,7 @@ export function QuestionnaireSendPanel({
     setError(null);
     try {
       const result = await window.selfos?.assignmentsCreate({ questionnaireId, privacy });
+      if (result?.assignment?.id) setAssignmentId(result.assignment.id);
       if (result?.link && result.pin) {
         setLink(result.link);
         setPin(result.pin);
@@ -132,6 +134,7 @@ export function QuestionnaireSendPanel({
               pin={pin}
               senderName={senderName}
               sensitive={sensitivity !== 'standard'}
+              {...(assignmentId ? { assignmentId } : {})}
               note={`${sentTo} can also answer anywhere with this link — whichever they reach first counts. You can find this link again any time from the questionnaire’s “Share a link”.`}
               onDone={() => onSent(sentTo)}
             />

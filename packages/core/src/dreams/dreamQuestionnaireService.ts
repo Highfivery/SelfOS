@@ -14,6 +14,7 @@ import {
   createAssignment,
   deleteQuestionnaire,
   gatherRecipientAskedPrompts,
+  gatherRecipientFeedbackGuidance,
   gatherRecipientHistory,
   gatherRecipientInsightFacts,
   gatherRecipientPriorAnswers,
@@ -127,12 +128,14 @@ export async function mintDreamQuestionnaires(
     // what they've already answered in onboarding / prior questionnaires / reflected on (08 §23.5). This
     // path previously passed NO de-dup inputs — a real hole, since it can reach another member with full
     // history. Mirrors the auto-checkin/bridge assembly (intake fetched here, the pure reference shared).
-    const [dHistory, dPrompts, dAnswers, dFacts, dSession] = await Promise.all([
+    const [dHistory, dPrompts, dAnswers, dFacts, dSession, dFeedback] = await Promise.all([
       gatherRecipientHistory(fs, key, recipient.personId),
       gatherRecipientAskedPrompts(fs, key, recipient.personId),
       gatherRecipientPriorAnswers(fs, key, recipient.personId),
       gatherRecipientInsightFacts(fs, key, recipient.personId),
       getIntakeSession(fs, key, recipient.personId),
+      // spec 69 §5.9 — the recipient's prior skips/declines steer the dream-prompted questionnaire too.
+      gatherRecipientFeedbackGuidance(fs, key, recipient.personId),
     ]);
     const dIntake = dSession
       ? formatIntakeForGeneration(dSession)
@@ -168,6 +171,7 @@ export async function mintDreamQuestionnaires(
       ...(recipientHistory ? { recipientHistory } : {}),
       ...(dedupReference ? { dedupReference } : {}),
       ...(recipientAskedPrompts.length ? { recipientAskedPrompts } : {}),
+      ...(dFeedback ? { feedbackGuidance: dFeedback } : {}),
     });
     const questions = generated.ok ? (generated.questions ?? []) : [];
     if (questions.length === 0) continue;

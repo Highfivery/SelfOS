@@ -24,6 +24,7 @@ import { saveQuestionnaire, validateQuestionnaire } from '../questionnaires/ques
 import {
   buildDedupReference,
   gatherRecipientAskedPrompts,
+  gatherRecipientFeedbackGuidance,
   gatherRecipientHistory,
   gatherRecipientInsightFacts,
   gatherRecipientIntimacyAsks,
@@ -239,6 +240,8 @@ export async function runAutoCheckins(input: RunAutoCheckinsInput): Promise<Auto
           : {}),
         // §27.3 — steer this set to intimacy ground not yet worked, and put worked-through ground off-limits.
         ...(intent === 'intimacy' ? { intimacyCoverage: bundle.intimacyCoverage } : {}),
+        // spec 69 §5.9 — learn from the recipient's prior skips/declines (avoid / boundary / reword).
+        ...(bundle.feedbackGuidance ? { feedbackGuidance: bundle.feedbackGuidance } : {}),
         recipient: elig.recipient,
       });
 
@@ -556,6 +559,8 @@ async function buildDedupBundle(
   priorTitles: string[];
   /** Which intimacy ground has already been worked (08 §27.2) — steers the intimacy slot to new ground. */
   intimacyCoverage: IntimacyCoverage;
+  /** Differentiated avoid/boundary/reword steering from the recipient's Personalization Profile (spec 69 §5.9). */
+  feedbackGuidance: string;
 }> {
   const [
     history,
@@ -566,6 +571,7 @@ async function buildDedupBundle(
     session,
     intimacyAsks,
     signals,
+    feedbackGuidance,
   ] = await Promise.all([
     gatherRecipientHistory(fs, key, recipientId),
     gatherRecipientAskedPrompts(fs, key, recipientId),
@@ -575,6 +581,7 @@ async function buildDedupBundle(
     getIntakeSession(fs, key, recipientId),
     gatherRecipientIntimacyAsks(fs, key, recipientId),
     gatherRecipientMaterialSignals(fs, key, recipientId),
+    gatherRecipientFeedbackGuidance(fs, key, recipientId, now),
   ]);
   const intake = session
     ? formatIntakeForGeneration(session)
@@ -615,5 +622,6 @@ async function buildDedupBundle(
     coveredActs: intake.coveredActs,
     priorTitles,
     intimacyCoverage,
+    feedbackGuidance,
   };
 }

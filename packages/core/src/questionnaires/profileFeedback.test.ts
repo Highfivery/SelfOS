@@ -1,0 +1,134 @@
+import { describe, expect, it } from 'vitest';
+
+import { generateMasterKey } from '../crypto';
+import type { FileSystem } from '../host';
+import { memFileSystem } from '../host/memFileSystem';
+import { upsertPerson } from '../people/peopleService';
+
+import { buildGenerationUserMessage } from './aiPrompts';
+import {
+  NOT_APPLICABLE_SKIP_REASON,
+  PREFER_NOT_TO_SAY_SKIP_REASON,
+  UNCLEAR_SKIP_REASON,
+} from './answering';
+import { submitResponse } from './answerService';
+import { createAssignment } from './assignmentService';
+import { readProfile } from './personalizationProfile';
+import { saveQuestionnaire } from './questionnaireService';
+import { gatherRecipientFeedbackGuidance } from './recipientHistory';
+
+const key = generateMasterKey();
+
+async function seed(fs: FileSystem, recipientId?: string): Promise<string> {
+  const q = await saveQuestionnaire(fs, key, {
+    title: 'Check-in',
+    type: 'general',
+    sensitivity: 'standard',
+    questions: [
+      { id: 'q1', type: 'shortText', prompt: 'How is work going?', required: false },
+      { id: 'q2', type: 'yesNo', prompt: 'Feeling good lately?', required: false },
+    ],
+  });
+  const a = await createAssignment(fs, key, {
+    questionnaireId: q.id,
+    senderPersonId: 'author',
+    recipient: recipientId
+      ? { kind: 'person', personId: recipientId }
+      : { kind: 'external', displayName: 'A friend' },
+    channel: 'inApp',
+    privacy: 'private',
+    senderVisibleToRecipient: true,
+  });
+  return a.id;
+}
+
+describe('captureResponseFeedback (via submitResponse) → the Personalization Profile', () => {
+  it('records a household recipient’s "doesn’t apply" decline and it steers future generation', async () => {
+    const fs = memFileSystem();
+    await upsertPerson(fs, key, { id: 'p2', displayName: 'Pat', isSubject: true, tags: [] });
+    const id = await seed(fs, 'p2');
+
+    await submitResponse(fs, key, {
+      assignmentId: id,
+      answers: [
+        { questionId: 'q1', value: { declined: true, reason: NOT_APPLICABLE_SKIP_REASON } },
+        { questionId: 'q2', value: true },
+      ],
+    });
+
+    const profile = await readProfile(fs, key, 'p2');
+    expect(profile.feedback).toHaveLength(1);
+    expect(profile.feedback[0]).toMatchObject({
+      kind: 'not-applicable',
+      questionPrompt: 'How is work going?',
+    });
+
+    const guidance = await gatherRecipientFeedbackGuidance(fs, key, 'p2');
+    expect(guidance).toContain("DON'T APPLY");
+    expect(guidance).toContain('How is work going?');
+    // And that guidance reaches the generation prompt (spec 69 §5.9 — assert the PROMPT, not just the count).
+    const prompt = buildGenerationUserMessage({
+      type: 'general',
+      sensitivity: 'standard',
+      existingPrompts: [],
+      count: 4,
+      feedbackGuidance: guidance,
+    });
+    expect(prompt).toContain("DON'T APPLY");
+    expect(prompt).toContain('How is work going?');
+  });
+
+  it('captures an "unclear" skip as reword guidance', async () => {
+    const fs = memFileSystem();
+    await upsertPerson(fs, key, { id: 'p3', displayName: 'Sam', isSubject: true, tags: [] });
+    const id = await seed(fs, 'p3');
+    await submitResponse(fs, key, {
+      assignmentId: id,
+      answers: [{ questionId: 'q1', value: { declined: true, reason: UNCLEAR_SKIP_REASON } }],
+    });
+    const guidance = await gatherRecipientFeedbackGuidance(fs, key, 'p3');
+    expect(guidance).toContain('UNCLEAR');
+    expect(guidance).toContain('How is work going?');
+  });
+
+  it('captures a "prefer not to say" as a boundary', async () => {
+    const fs = memFileSystem();
+    await upsertPerson(fs, key, { id: 'p5', displayName: 'Ari', isSubject: true, tags: [] });
+    const id = await seed(fs, 'p5');
+    await submitResponse(fs, key, {
+      assignmentId: id,
+      answers: [
+        { questionId: 'q1', value: { declined: true, reason: PREFER_NOT_TO_SAY_SKIP_REASON } },
+      ],
+    });
+    expect((await readProfile(fs, key, 'p5')).feedback[0]?.kind).toBe('prefer-not-to-say');
+  });
+
+  it('skips capture for a non-household recipient (no Person record → no profile)', async () => {
+    const fs = memFileSystem();
+    // 'p9' is used as a recipient id but no Person exists for it → the household gate skips capture.
+    const id = await seed(fs, 'p9');
+    await submitResponse(fs, key, {
+      assignmentId: id,
+      answers: [
+        { questionId: 'q1', value: { declined: true, reason: NOT_APPLICABLE_SKIP_REASON } },
+      ],
+    });
+    expect((await readProfile(fs, key, 'p9')).feedback).toEqual([]);
+  });
+
+  it('records nothing (and yields no guidance) when there are no declines', async () => {
+    const fs = memFileSystem();
+    await upsertPerson(fs, key, { id: 'p4', displayName: 'Lee', isSubject: true, tags: [] });
+    const id = await seed(fs, 'p4');
+    await submitResponse(fs, key, {
+      assignmentId: id,
+      answers: [
+        { questionId: 'q1', value: 'going well' },
+        { questionId: 'q2', value: true },
+      ],
+    });
+    expect((await readProfile(fs, key, 'p4')).feedback).toEqual([]);
+    expect(await gatherRecipientFeedbackGuidance(fs, key, 'p4')).toBe('');
+  });
+});

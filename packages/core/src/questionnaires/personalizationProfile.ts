@@ -312,3 +312,69 @@ export function markChangesExplored(
   if (!changed) return profile;
   return { ...profile, changes, updatedAt: now.toISOString() };
 }
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+/** Cap each guidance list so the prompt block stays bounded. */
+const GUIDANCE_LIST_CAP = 30;
+
+function uniqLabels(labels: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const l of labels) {
+    const t = l.trim();
+    if (!t) continue;
+    const k = t.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+  }
+  return out.slice(0, GUIDANCE_LIST_CAP);
+}
+
+/**
+ * Turn the feedback ledger into a prompt block that steers generation (spec 69 §5.9), differentiated by reason:
+ * - `not-applicable`    → a hard avoid list (don't ask this or closely related things).
+ * - `prefer-not-to-say` → a boundary; avoided only while within `PREFER_NOT_COOLDOWN_DAYS` (after that a fresh
+ *                         re-approach is allowed, so it drops off the avoid list).
+ * - `unclear`           → a reword list (if you cover this ground, ask it a different, more concrete way).
+ * `skipped` / engagement kinds are not steered here (a weak signal). Pure; `''` when there is nothing to say.
+ */
+export function buildFeedbackGuidance(profile: PersonalizationProfile, now: Date): string {
+  const cutoff = new Date(now.getTime() - PREFER_NOT_COOLDOWN_DAYS * MS_PER_DAY).toISOString();
+  const avoid: string[] = [];
+  const boundary: string[] = [];
+  const reword: string[] = [];
+  for (const f of profile.feedback) {
+    const label = f.questionPrompt ?? f.topicId;
+    if (!label) continue;
+    if (f.kind === 'not-applicable') avoid.push(label);
+    else if (f.kind === 'prefer-not-to-say') {
+      if (f.at >= cutoff) boundary.push(label);
+    } else if (f.kind === 'unclear') reword.push(label);
+  }
+  const sections: string[] = [];
+  const a = uniqLabels(avoid);
+  const b = uniqLabels(boundary);
+  const r = uniqLabels(reword);
+  if (a.length)
+    sections.push(
+      `They have indicated these DON'T APPLY to them — do NOT ask about these or closely related things:\n${a
+        .map((l) => `- ${l}`)
+        .join('\n')}`,
+    );
+  if (b.length)
+    sections.push(
+      `These touch a boundary they'd rather not discuss right now — leave them alone:\n${b
+        .map((l) => `- ${l}`)
+        .join('\n')}`,
+    );
+  if (r.length)
+    sections.push(
+      `These questions landed as UNCLEAR to them — if you cover this ground at all, ask it a DIFFERENT, more` +
+        ` concrete and specific way (never the same wording):\n${r.map((l) => `- ${l}`).join('\n')}`,
+    );
+  if (sections.length === 0) return '';
+  return `WHAT THEY'VE TOLD YOU ABOUT PRIOR QUESTIONS (learn from this — it is how you get smarter over time):\n${sections.join(
+    '\n\n',
+  )}`;
+}

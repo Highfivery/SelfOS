@@ -136,6 +136,10 @@ export interface GenerateRequest {
     pronouns?: string;
     relationship?: { type: RelationshipType; closeness?: number };
   };
+  // Differentiated steering from the recipient's Personalization Profile (spec 69 §5.9): what they've said
+  // doesn't apply (avoid), touched a boundary (leave alone), or landed unclear (reword). Assembled host-side by
+  // `gatherRecipientFeedbackGuidance`; how the app learns from skips/declines over time.
+  feedbackGuidance?: string;
 }
 
 /** Generate questions from a brief and/or the configured structured context. */
@@ -182,6 +186,9 @@ export async function generateQuestions(
       ? { intimacyCoverage: request.intimacyCoverage }
       : {}),
     ...(request.recipient !== undefined ? { recipient: request.recipient } : {}),
+    ...(request.feedbackGuidance !== undefined
+      ? { feedbackGuidance: request.feedbackGuidance }
+      : {}),
   });
 
   // A generous output budget (thinking is off) that SCALES with the (over-asked) count (08 §23.4) — a 20-question

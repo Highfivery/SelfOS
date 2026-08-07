@@ -11,6 +11,7 @@ import {
   applyChange,
   applyDecline,
   applyEngagement,
+  buildFeedbackGuidance,
   CHANGE_CAP,
   classifyDeclineReason,
   emptyProfile,
@@ -195,5 +196,59 @@ describe('applyChange / markChangesExplored', () => {
       at(1),
     );
     expect(markChangesExplored(p, { topicId: 'nope' }, at(2))).toBe(p);
+  });
+});
+
+describe('buildFeedbackGuidance', () => {
+  it('renders avoid / boundary / reword sections differentiated by reason', () => {
+    let p = emptyProfile('p1');
+    p = applyDecline(
+      p,
+      { questionPrompt: 'How is work?', reason: NOT_APPLICABLE_SKIP_REASON },
+      at(1),
+    );
+    p = applyDecline(
+      p,
+      { questionPrompt: 'Your sex life?', reason: PREFER_NOT_TO_SAY_SKIP_REASON },
+      at(2),
+    );
+    p = applyDecline(
+      p,
+      { questionPrompt: 'Describe your vibe', reason: UNCLEAR_SKIP_REASON },
+      at(3),
+    );
+    const g = buildFeedbackGuidance(p, at(4));
+    expect(g).toContain("DON'T APPLY");
+    expect(g).toContain('How is work?');
+    expect(g).toContain('boundary');
+    expect(g).toContain('Your sex life?');
+    expect(g).toContain('UNCLEAR');
+    expect(g).toContain('Describe your vibe');
+  });
+
+  it('drops a prefer-not-to-say boundary after the cooldown window', () => {
+    const p = applyDecline(
+      emptyProfile('p1'),
+      { questionPrompt: 'A boundary topic', reason: PREFER_NOT_TO_SAY_SKIP_REASON },
+      new Date('2026-01-01T00:00:00.000Z'),
+    );
+    // 30 days later → within the 180-day cooldown → still avoided.
+    expect(buildFeedbackGuidance(p, new Date('2026-01-31T00:00:00.000Z'))).toContain(
+      'A boundary topic',
+    );
+    // 200 days later → past the cooldown → a fresh re-approach is allowed, so it drops off.
+    expect(buildFeedbackGuidance(p, new Date('2026-07-20T00:00:00.000Z'))).not.toContain(
+      'A boundary topic',
+    );
+  });
+
+  it('is empty when there is no steering signal (a plain skip / engagement only)', () => {
+    let p = applyDecline(
+      emptyProfile('p1'),
+      { questionPrompt: 'Q', reason: 'later please' },
+      at(1),
+    );
+    p = applyEngagement(p, { topicId: 'x', engagement: 'rich' }, at(2));
+    expect(buildFeedbackGuidance(p, at(3))).toBe('');
   });
 });

@@ -15,6 +15,8 @@ export * from './imageService';
 export * from './imageGc';
 export * from './contextProviders';
 export * from './recipientHistory';
+export * from './personalizationProfile';
+export * from './profileFeedback';
 export * from './generationService';
 export * from './factCorrectionService';
 export * from './selfContained';

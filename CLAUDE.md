@@ -427,6 +427,42 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-07 — **Build (Email engagement — Phase 0: Resend infra + connect + the welcome send; SPEC 67 §5.6
+  Phase 0; on `feat/email-phase-0`).** SelfOS's first real outbound email — the foundation for the 7-phase
+  email feature. New **`EmailClient` `BridgeHost` part** (send/cancel/status/verify) wired to `fetch` as
+  `resendClient()` (blind-written like the relay/OpenAI clients — verified on-device) with a
+  **`SELFOS_FAKE_RESEND`** offline fake + a `webFakeEmailClient` web/iOS stub; a device-local
+  `RESEND_API_KEY_ID` secret. New **`@selfos/core/email`**: `emailConfig` (`config/email.enc` +
+  **`resolveResendKey`** [device → shared → none, the spec-25 `resolveAiKey` sibling] + `emailStatusOf` —
+  **booleans-only, never a key value**; readiness requires a key AND a from-address), `emailPrefs` (per-person
+  `people/<id>/email/prefs.enc`, **fail-closed** — no `address` ⇒ no send; unsubscribe token minted once;
+  intimacy opt-in coerced off when ineligible), `emailComposer` (pure welcome HTML+text, HTML-escaped, no
+  inline SVG per §9), and **`emailSend`** — the ONE gated send-and-log orchestrator every family routes
+  through (crisis → configured → address → per-family opt-in → pause; monthly activity shards). New additive
+  schemas (no `schemaVersion` bump on existing files); new **`email.own`** capability (Member default on);
+  the household connect + owner-activity read are **`settings.manage`/`people.manage`-gated IN THE BRIDGE**.
+  Full IPC seam (`email:status`/`verify`/`setConfig`/`setSharedKey`/`clearSharedKey`/`getPrefs`/`setPrefs`/
+  `send`/`activity`) — **the Resend key never crosses it** (resolved host-side, returned never). Settings →
+  Email panel (admin `SecretKeyControl` + Test connection + sending domain/from-address; per-person engagement
+  address + welcome toggle + pause; the "Connect Resend to turn this on" empty state) + a `useEmailWelcome`
+  cadence hook (welcome **sent once** per person, idempotent via a bridge "sent once" guard). Family G
+  (welcome) is the pipeline proof; `emailSend` **rejects every other (unbuilt) family** (no scaffolding, §12).
+  code-reviewer **ship** (the security envelope verified airtight — key never leaves main, gating in the
+  bridge, fail-closed, crisis-first; applied the should-fix restricting `emailSend` to the one built family +
+  the readiness/`domainVerified`/shard-path nits). Gate green: typecheck (4 pkgs), lint, format, **1795 core +
+  1506 desktop** unit (+email core [10], +2 coreBridge two-persona [connect→prefs→welcome→decrypt an activity
+  entry, key never returned + ciphertext on disk; non-owner can't connect / read another's activity], +3
+  EmailSettingsPanel RTL) + a decrypt-level E2E (connect → welcome auto-sends on launch → decrypt an
+  `EmailActivityEntry` → Settings UI → 360px). Visual QA of the panel at desktop. **Phases 1–6 remain**
+  (questionnaire delivery → transactional → digest+re-engagement → interactive taps → AI suggestions + intimacy
+  → owner activity view + milestones — each its own PR). **Lessons: (1) an email feature's ENTIRE risk surface
+  is "the BYO secret must never reach the renderer" — resolve the Resend key host-side in the bridge and return
+  only a booleans-only `EmailStatus`/`EmailVerifyResult` (the spec-25 posture); the shared key sits encrypted
+  in `config/email.enc`, decrypt-tested as ciphertext with no raw key. (2) Route EVERY family through ONE gated
+  send-and-log orchestrator (`sendFamilyEmail`) so crisis-suppression + opt-in + pause + fail-closed + logging
+  can't be bypassed by a later family — and reject unbuilt families at the bridge so a hand-crafted IPC call
+  can't send one family's content mislabeled as another. (3) "Connected" must mean fully sendable — require a
+  from-address too, or the readiness flag overstates it and the welcome hook retries every open.**
 - 2026-08-07 — **Build (Sharing redesign slice 1b — the transparency dashboard UI; SPEC 68 §3 → FULLY BUILT;
   on `feat/sharing-redesign-dashboard`).** Rebuilt `/sharing` from a flat unbounded scroll into the unified
   "what reaches anyone" dashboard: a **stats header** (things-you-share split by relationship type · people

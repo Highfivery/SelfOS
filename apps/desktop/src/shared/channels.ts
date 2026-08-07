@@ -3,6 +3,12 @@ import type {
   AiKeyStatus,
   AiProvider,
   AlignmentResult,
+  EmailActivityEntry,
+  EmailPrefs,
+  EmailSendInput,
+  EmailSendResult,
+  EmailStatus,
+  EmailVerifyResult,
   BookManifest,
   ChapterMarkup,
   ChapterVersion,
@@ -374,6 +380,15 @@ export const IpcChannels = {
   memoryOutboundSharing: 'memory:outboundSharing',
   memorySetScopeBatch: 'memory:setScopeBatch',
   memorySetProfileFieldShared: 'memory:setProfileFieldShared',
+  emailStatus: 'email:status',
+  emailVerify: 'email:verify',
+  emailSetConfig: 'email:setConfig',
+  emailSetSharedKey: 'email:setSharedKey',
+  emailClearSharedKey: 'email:clearSharedKey',
+  emailGetPrefs: 'email:getPrefs',
+  emailSetPrefs: 'email:setPrefs',
+  emailSend: 'email:send',
+  emailActivity: 'email:activity',
   insightsAnalyze: 'insights:analyze',
   insightsApprove: 'insights:approve',
   insightsUpdate: 'insights:update',
@@ -671,6 +686,8 @@ export const MIN_OWNER_PIN_LENGTH = 4;
 // the canonical `@selfos/core/schemas` constants (kept in lockstep; both are `'<provider>.apiKey'`).
 export const ANTHROPIC_API_KEY_ID = 'anthropic.apiKey';
 export const OPENAI_API_KEY_ID = 'openai.apiKey';
+/** The secret id for the device-local Resend API key (67-email-engagement §4.1; the `openai.apiKey` posture). */
+export const RESEND_API_KEY_ID = 'resend.apiKey';
 export type { DeviceView } from '@selfos/core/schemas';
 /** 66 §3.3 — re-exported so the bridge + renderer share one rewind outcome type. */
 export type { RewindResult, IntakeRewindOutcome } from '@selfos/core/schemas';
@@ -1150,6 +1167,40 @@ export interface SelfosBridge {
    * when applied.
    */
   memorySetProfileFieldShared(input: { field: PersonFieldKey; shared: boolean }): Promise<boolean>;
+  // --- Email engagement (67-email-engagement §6) — the Resend key never crosses this seam ---
+  /** Renderer-safe email status (no key value): config + resolved readiness. */
+  emailStatus(): Promise<EmailStatus>;
+  /** "Test connection" — verify the resolved Resend key + list its verified domains. Owner-gated. */
+  emailVerify(): Promise<EmailVerifyResult>;
+  /** Set the sending domain / from-address / from-name. Owner-gated (`settings.manage`). */
+  emailSetConfig(input: {
+    sendingDomain?: string;
+    fromAddress?: string;
+    fromName?: string;
+  }): Promise<EmailStatus>;
+  /** Store the household-shared Resend key (sealed into `config/email.enc`; never returned). Owner-gated. */
+  emailSetSharedKey(input: { value: string }): Promise<EmailStatus>;
+  /** Drop the household-shared Resend key. Owner-gated. */
+  emailClearSharedKey(): Promise<EmailStatus>;
+  /** The ACTIVE person's own email prefs (67 §4.2); null until they exist. Gated `email.own`. */
+  emailGetPrefs(): Promise<EmailPrefs | null>;
+  /** Update the active person's own email prefs (address/families/richness/intimacy/paused). Gated `email.own`. */
+  emailSetPrefs(input: {
+    address?: string;
+    families?: Record<string, boolean>;
+    richness?: 'brief' | 'full';
+    intimacyEmailOptIn?: boolean;
+    paused?: boolean;
+  }): Promise<EmailPrefs>;
+  /** Compose + send one family email for the active person, gated + logged (67 §6). Phase 0: `welcome`. */
+  emailSend(input: EmailSendInput): Promise<EmailSendResult>;
+  /** Read logged email activity (own; another person's is `people.manage`-gated in the bridge). */
+  emailActivity(input?: {
+    personId?: string;
+    family?: string;
+    from?: string;
+    to?: string;
+  }): Promise<EmailActivityEntry[]>;
   /** Analyze a submitted assignment's answers into an UNapproved Insight. Budget-gated + metered. */
   insightsAnalyze(input: { assignmentId: string }): Promise<QuestionnaireAnalyzeResult>;
   /** Approve an Insight (apply edits + chosen shareable facts) so it enters the coach's context. */

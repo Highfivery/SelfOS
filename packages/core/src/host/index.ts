@@ -3,5 +3,6 @@ export * from './fileSystem';
 export * from './secretStore';
 export * from './claudeClient';
 export * from './imageClient';
+export * from './emailClient';
 // An in-memory `FileSystem` for tests + the web preview (07-mobile-platform §10, iii-b2).
 export * from './memFileSystem';

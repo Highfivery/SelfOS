@@ -9,7 +9,7 @@ import { useSessionStore } from '../stores/sessionStore';
  * write-only to the renderer: `secretSet`/`secretHas`/`secretClear`, never a `get`). Parametrized by the
  * secret id + copy so both the Claude and OpenAI key controls share one implementation.
  */
-function SecretKeyControl({
+export function SecretKeyControl({
   secretId,
   label,
   configuredHint,

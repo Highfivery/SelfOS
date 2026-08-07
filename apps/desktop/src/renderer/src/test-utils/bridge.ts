@@ -285,6 +285,55 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     memoryOutboundSharing: () => Promise.resolve({ items: [], keptPrivateCount: 0 }),
     memorySetScopeBatch: () => Promise.resolve({ updated: 0 }),
     memorySetProfileFieldShared: () => Promise.resolve(true),
+    emailStatus: () =>
+      Promise.resolve({
+        configured: false,
+        domainVerified: false,
+        hasSharedKey: false,
+        hasDeviceOverride: false,
+        resolvedReady: false,
+        source: 'none' as const,
+      }),
+    emailVerify: () => Promise.resolve({ ok: true as const, domains: [] }),
+    emailSetConfig: () =>
+      Promise.resolve({
+        configured: false,
+        domainVerified: false,
+        hasSharedKey: false,
+        hasDeviceOverride: false,
+        resolvedReady: false,
+        source: 'none' as const,
+      }),
+    emailSetSharedKey: () =>
+      Promise.resolve({
+        configured: true,
+        domainVerified: false,
+        hasSharedKey: true,
+        hasDeviceOverride: false,
+        resolvedReady: true,
+        source: 'shared' as const,
+      }),
+    emailClearSharedKey: () =>
+      Promise.resolve({
+        configured: false,
+        domainVerified: false,
+        hasSharedKey: false,
+        hasDeviceOverride: false,
+        resolvedReady: false,
+        source: 'none' as const,
+      }),
+    emailGetPrefs: () => Promise.resolve(null),
+    emailSetPrefs: () =>
+      Promise.resolve({
+        schemaVersion: 1 as const,
+        families: {},
+        richness: 'brief' as const,
+        intimacyEmailOptIn: false,
+        paused: false,
+        unsubscribeToken: 'mock-token',
+      }),
+    emailSend: () => Promise.resolve({ ok: false as const, reason: 'NOT_CONFIGURED' as const }),
+    emailActivity: () => Promise.resolve([]),
     insightsAnalyze: () => Promise.resolve({ ok: false, reason: 'NO_RESPONSE' }),
     insightsApprove: () => Promise.resolve(null),
     insightsUpdate: () => Promise.resolve(null),

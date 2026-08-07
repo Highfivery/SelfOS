@@ -1,10 +1,14 @@
 import type {
   ClaudeClient,
   ClaudeStreamResult,
+  EmailClient,
+  EmailSendOutcome,
+  EmailStatusPoll,
   ImageClient,
   ImageGenerateOutcome,
 } from '@selfos/core/host';
 import type { SecretStore } from '@selfos/core/host';
+import type { EmailVerifyResult } from '@selfos/core/schemas';
 import { flattenContent } from '@selfos/core/host';
 import { fromBase64 } from '@selfos/core/encoding';
 import { DeviceStateSchema, type DeviceState, type DeviceStatePatch } from '@shared/schemas';
@@ -408,5 +412,21 @@ export function webFakeImageClient(): ImageClient {
         ok: true,
         image: { bytes: fromBase64(TINY_PNG_BASE64), mime: 'image/png' },
       }),
+  };
+}
+
+/** Deterministic offline email client for the web preview / iOS (67 §5.1; desktop is the first real target). */
+export function webFakeEmailClient(): EmailClient {
+  let counter = 0;
+  return {
+    send: (): Promise<EmailSendOutcome> => {
+      counter += 1;
+      return Promise.resolve({ ok: true, id: `web-email-${counter}` });
+    },
+    cancel: (): Promise<void> => Promise.resolve(),
+    status: (_apiKey, ids): Promise<EmailStatusPoll[]> =>
+      Promise.resolve(ids.map((id) => ({ id, status: 'delivered' }))),
+    verify: (): Promise<EmailVerifyResult> =>
+      Promise.resolve({ ok: true, domains: [{ name: 'fake.example', verified: true }] }),
   };
 }

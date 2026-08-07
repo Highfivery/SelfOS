@@ -62,6 +62,10 @@ export const CAPABILITIES = [
   // book projects. Member default ON (a book about yourself is ordinary — not break-glass). The all-data
   // corpus read is story-scoped (§5.1); reader sharing is per-person + publish-gated (§3.5).
   'story.own',
+  // Email engagement (67-email-engagement §5.5). `email.own` = manage one's OWN email prefs + read one's own
+  // email activity/responses. Member default ON. The household CONNECT + the owner Email-activity view are
+  // gated on `settings.manage`/`people.manage` (owner), not this.
+  'email.own',
 ] as const;
 
 export type CapabilityKey = (typeof CAPABILITIES)[number];
@@ -93,6 +97,7 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   'challenges.own': 'Take on their own challenges',
   'together.own': 'Start & join Together sessions with a partner',
   'story.own': 'Write & share their own life story',
+  'email.own': 'Manage their own email preferences',
 };
 
 /**
@@ -149,6 +154,7 @@ export const DEFAULT_ROLES: Role[] = [
       'challenges.own',
       'together.own',
       'story.own',
+      'email.own',
     ]),
   },
   {

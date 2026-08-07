@@ -6,6 +6,7 @@ import {
   Image,
   Info,
   Laptop,
+  Mail,
   MessagesSquare,
   Moon,
   Palette,
@@ -31,6 +32,7 @@ import {
   TestConnectionControl,
 } from './aiControls';
 import { RelaySettingsPanel } from './RelaySettingsPanel';
+import { EmailSettingsPanel } from './EmailSettingsPanel';
 import { RelayMessagesControl } from './RelayMessagesControl';
 import { IntimacyTopicsControl } from './IntimacyTopicsControl';
 import { ProactivityControl } from './ProactivityControl';
@@ -57,6 +59,7 @@ declare module './types' {
     'questionnaires.autoAnalyze': boolean;
     'questionnaires.defaultMessages': RelayMessages;
     'questionnaires.intimacyTopics': null;
+    'email.panel': null; // per-person + household connect; the custom panel owns its state via IPC (67)
     'dreams.memoryEnabled': boolean;
     // Per-person image style/direction/toggle live in `people/<id>/imagePrefs.enc` (a custom control owns
     // its state via IPC), split per use-type; only the MODEL stays an owner-managed vault setting.
@@ -155,6 +158,15 @@ export function registerBuiltinSettings(): void {
     icon: Send,
     order: 6,
     adminOnly: true,
+  });
+  // Email is NOT adminOnly: every member sets their OWN engagement preferences here. The household CONNECT
+  // controls inside the panel are admin-gated (an AdminOnlyBadge), like Dreams' image-model settings (67 §3.1).
+  registerSection({
+    id: 'email',
+    title: 'Email',
+    description: 'Send real email — questionnaire delivery, a weekly digest, and coaching nudges.',
+    icon: Mail,
+    order: 5.8,
   });
   registerSection({
     id: 'devices',
@@ -523,6 +535,15 @@ export function registerBuiltinSettings(): void {
       default: null,
       control: { type: 'custom', render: RelaySettingsPanel },
       adminOnly: true,
+      order: 1,
+    }),
+    defineSetting({
+      key: 'email.panel',
+      section: 'email',
+      label: 'Email',
+      schema: z.null(),
+      default: null,
+      control: { type: 'custom', render: EmailSettingsPanel },
       order: 1,
     }),
     defineSetting({

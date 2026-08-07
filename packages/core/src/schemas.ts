@@ -2176,6 +2176,133 @@ export const AiKeyStatusSchema = z.object({
 });
 export type AiKeyStatus = z.infer<typeof AiKeyStatusSchema>;
 
+// --- Email engagement (67-email-engagement) ---
+
+/** The secret id under which the Resend API key is stored device-local (safeStorage; the `openai.apiKey`
+ * precedent). Single source; re-exported by channels. */
+export const RESEND_API_KEY_ID = 'resend.apiKey';
+
+/**
+ * Household email config (67 §4.1), encrypted under the master key at `config/email.enc` (the
+ * `config/relay.enc` / `config/ai-credentials.enc` precedent — the cloud only ever holds ciphertext, read
+ * host-side, never crossing IPC). `resendApiKey` is the household-shared key; a device-local
+ * `resend.apiKey` override always wins.
+ */
+export const EmailConfigSchema = z.object({
+  schemaVersion: z.literal(1),
+  sendingDomain: z.string().optional(),
+  fromAddress: z.string().optional(),
+  fromName: z.string().optional(),
+  domainVerified: z.boolean().default(false),
+  resendApiKey: z.string().min(1).optional(),
+  updatedAt: z.string().datetime().optional(),
+});
+export type EmailConfig = z.infer<typeof EmailConfigSchema>;
+
+/** Renderer-safe email status (no key value) for Settings → Email (67 §4.1). */
+export const EmailStatusSchema = z.object({
+  configured: z.boolean(),
+  domainVerified: z.boolean(),
+  sendingDomain: z.string().optional(),
+  fromAddress: z.string().optional(),
+  fromName: z.string().optional(),
+  hasSharedKey: z.boolean(),
+  hasDeviceOverride: z.boolean(),
+  resolvedReady: z.boolean(),
+  source: z.enum(['device', 'shared', 'none']),
+});
+export type EmailStatus = z.infer<typeof EmailStatusSchema>;
+
+/** The eight email families (67 §3.2) — drives per-family opt-in, the activity log, and scheduling. */
+export const EmailFamilySchema = z.enum([
+  'questionnaire-delivery',
+  'transactional',
+  'digest',
+  're-engagement',
+  'ai-suggestion',
+  'ai-suggestion-intimacy',
+  'milestone',
+  'welcome',
+]);
+export type EmailFamily = z.infer<typeof EmailFamilySchema>;
+
+/**
+ * Per-person email preferences (67 §4.2), encrypted at `people/<id>/email/prefs.enc`. `address` is the
+ * SEPARATE, opt-in engagement address (distinct from `Person.email`, the delivery-only contact address);
+ * absent ⇒ no engagement email is sent (fail-closed). Conservative defaults; intimacy off.
+ */
+export const EmailPrefsSchema = z.object({
+  schemaVersion: z.literal(1),
+  address: z.string().optional(),
+  families: z.record(EmailFamilySchema, z.boolean()).default({}),
+  richness: z.enum(['brief', 'full']).default('brief'),
+  intimacyEmailOptIn: z.boolean().default(false),
+  paused: z.boolean().default(false),
+  unsubscribeToken: z.string().min(1),
+  updatedAt: z.string().datetime().optional(),
+});
+export type EmailPrefs = z.infer<typeof EmailPrefsSchema>;
+
+/** Delivery lifecycle of one email (67 §4.3) — filled from Resend status polling (no webhook). */
+export const EmailDeliveryStatusSchema = z.enum([
+  'queued',
+  'scheduled',
+  'sent',
+  'delivered',
+  'opened',
+  'clicked',
+  'bounced',
+  'complained',
+  'failed',
+  'canceled',
+]);
+export type EmailDeliveryStatus = z.infer<typeof EmailDeliveryStatusSchema>;
+
+/** One logged email (67 §4.3), in a monthly shard `people/<id>/email/activity/<yyyy-mm>.enc`. */
+export const EmailActivityEntrySchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.literal(1),
+  personId: z.string().min(1),
+  family: EmailFamilySchema,
+  subject: z.string(),
+  toAddress: z.string(),
+  resendMessageId: z.string().optional(),
+  scheduledAt: z.string().datetime().optional(),
+  status: EmailDeliveryStatusSchema,
+  sentAt: z.string().datetime().optional(),
+  deliveredAt: z.string().datetime().optional(),
+  openedAt: z.string().datetime().optional(),
+  clickedAt: z.string().datetime().optional(),
+  clicks: z.array(z.object({ token: z.string(), at: z.string().datetime() })).default([]),
+  tokens: z.array(z.string()).default([]),
+  contentSnapshotPath: z.string().optional(),
+});
+export type EmailActivityEntry = z.infer<typeof EmailActivityEntrySchema>;
+
+/** The renderer-facing trigger for a send (67 §6) — Phase 0 covers the `welcome` family. */
+export const EmailSendInputSchema = z.object({
+  family: EmailFamilySchema,
+});
+export type EmailSendInput = z.infer<typeof EmailSendInputSchema>;
+
+/** The result of a send attempt through `emailSendService` (67 §6). Crypto-free view type. */
+export type EmailSendResult =
+  | { ok: true; entryId: string; resendMessageId?: string }
+  | {
+      ok: false;
+      reason: 'NOT_CONFIGURED' | 'NO_ADDRESS' | 'FAMILY_OFF' | 'PAUSED' | 'CRISIS' | 'SEND_ERROR';
+      message?: string;
+    };
+
+/** The result of the "Test connection" verify (67 §6). Crypto-free view type — no key value. */
+export type EmailVerifyResult =
+  | { ok: true; domains: { name: string; verified: boolean }[] }
+  | {
+      ok: false;
+      reason: 'NO_KEY' | 'AUTH' | 'RATE_LIMIT' | 'NETWORK' | 'API_ERROR';
+      message?: string;
+    };
+
 /**
  * A device's registry entry (32-device-management §4.2), stored encrypted under the master key at
  * `config/devices/<deviceId>.enc` — one file per device so two devices booting at once never clobber a

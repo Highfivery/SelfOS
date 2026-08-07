@@ -1,6 +1,6 @@
 # 67 — Email engagement & re-engagement (Resend)
 
-> **Status:** Approved · _last updated 2026-08-06_
+> **Status:** **Phase 0 Built** (of 7 phases) · _last updated 2026-08-07_
 >
 > SelfOS's first real outbound email. Today the only "email" is a `mailto:` hand-off for questionnaire
 > links — SelfOS has **never actually sent a message**. This spec adds a household-provisioned
@@ -837,6 +837,38 @@ No open questions remain.
 
 ## 12. Changelog
 
+- 2026-08-07 — **Phase 0 BUILT** (infra + connect + the first send). The `email` `BridgeHost` part
+  (`EmailClient` — send/cancel/status/verify) wired to `fetch` as `resendClient()` with a
+  `SELFOS_FAKE_RESEND` offline fake + a `webFakeEmailClient` web/iOS stub; `RESEND_API_KEY_ID` device
+  secret. New `@selfos/core/email`: `emailConfig` (`config/email.enc` + `resolveResendKey` [device →
+  shared → none, the [`25`](25-household-ai-credentials.md) precedent] + `emailStatusOf` — booleans-only,
+  no key value; readiness needs a key AND a from-address), `emailPrefs` (per-person `people/<id>/email/
+prefs.enc`, fail-closed, unsubscribe token minted once, intimacy opt-in coerced off when ineligible),
+  `emailComposer` (pure welcome HTML + plaintext, HTML-escaped, no inline SVG), `emailSend` (the ONE gated
+  send-and-log orchestrator: crisis → configured → address → per-family opt-in → pause; monthly activity
+  shards). New additive schemas (`EmailConfig`/`EmailStatus`/`EmailFamily`/`EmailPrefs`/`EmailActivityEntry`/
+  `EmailSendInput`/`EmailSendResult`/`EmailVerifyResult`) — no `schemaVersion` bump on existing files. New
+  **`email.own`** capability (Member default on); the household connect + owner-activity read are
+  `settings.manage`/`people.manage`-gated in the bridge. Full IPC seam (`email:status`/`verify`/`setConfig`/
+  `setSharedKey`/`clearSharedKey`/`getPrefs`/`setPrefs`/`send`/`activity`) — **the Resend key never crosses
+  it**. Settings → Email panel (admin connect via `SecretKeyControl` + Test connection + sending domain/
+  from-address; per-person engagement address + welcome toggle + pause; the "Connect Resend to turn this
+  on" empty state) + a `useEmailWelcome` cadence hook (welcome sent once per person, idempotent via a bridge
+  "sent once" guard). Family G (welcome) is the pipeline proof; `emailSend` rejects every other (unbuilt)
+  family. Gate green: typecheck (4 pkgs), lint, format, **1795 core + 1506 desktop** unit (+email core [10:
+  resolver/prefs/composer/orchestrator gates], +2 coreBridge two-persona [connect→prefs→welcome→decrypt an
+  activity entry, key never returned + ciphertext on disk; a non-owner can't connect / read another's
+  activity], +3 EmailSettingsPanel RTL), + a decrypt-level E2E (seed a connected config + address → launch →
+  the welcome auto-sends → decrypt an `EmailActivityEntry` → the Settings → Email UI + a 360px guard). Visual
+  QA of the panel at desktop. code-reviewer **ship** (security envelope verified airtight — key never leaves
+  main, gating in the bridge, fail-closed, crisis-first; applied the should-fix restricting `emailSend` to the
+  one built family + the readiness/`domainVerified`/shard-path nits). **Phases 1–6 remain** (A questionnaire
+  delivery → B transactional → C/D digest+re-engagement → interactive taps → E AI suggestions + intimacy →
+  owner activity view + milestones). **Lesson: an email feature's whole risk surface is "the secret must never
+  reach the renderer" — resolve the Resend key host-side in the bridge and return only a booleans-only
+  `EmailStatus`/`EmailVerifyResult`, exactly the [`25`](25-household-ai-credentials.md) posture; and route
+  EVERY family through one gated send-and-log orchestrator so gating (crisis/opt-in/pause/fail-closed) +
+  logging can't be bypassed by adding a family later.**
 - 2026-08-06 — created (Draft). SelfOS's first real email, via BYO Resend: eight email families
   (questionnaire delivery, transactional, weekly digest, re-engagement, AI Coach Suggestions +
   intimacy, milestones, welcome) on a no-backend delivery model (immediate when open + Resend

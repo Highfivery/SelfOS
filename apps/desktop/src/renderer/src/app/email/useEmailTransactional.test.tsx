@@ -25,6 +25,7 @@ const READY: EmailStatus = {
   hasDeviceOverride: true,
   resolvedReady: true,
   source: 'device',
+  intimacyEligible: false,
 };
 
 const PREFS = {

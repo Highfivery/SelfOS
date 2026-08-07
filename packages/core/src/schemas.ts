@@ -2216,6 +2216,9 @@ export const EmailStatusSchema = z.object({
   hasDeviceOverride: z.boolean(),
   resolvedReady: z.boolean(),
   source: z.enum(['device', 'shared', 'none']),
+  /** Whether the person may opt INTO intimacy email — i.e. they've made the shared 18+ acknowledgement
+   *  (67 §8.2). The mutual/partner gates still apply at SEND time; this is the personal opt-in prerequisite. */
+  intimacyEligible: z.boolean().default(false),
 });
 export type EmailStatus = z.infer<typeof EmailStatusSchema>;
 

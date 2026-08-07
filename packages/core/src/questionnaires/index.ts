@@ -16,6 +16,7 @@ export * from './imageGc';
 export * from './contextProviders';
 export * from './recipientHistory';
 export * from './personalizationProfile';
+export * from './coverageModel';
 export * from './changeDetection';
 export * from './profileFeedback';
 export * from './generationService';

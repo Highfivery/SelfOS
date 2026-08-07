@@ -33,12 +33,17 @@ import { loadRelayBundle, RELAY_VERSION } from './relay/relayBundle';
 import { fakeRelayBundle, fakeRelayFetch } from '../shared/relay/fakeRelay';
 import { checkForUpdate } from '@selfos/core/updates';
 import { fakeUpdateFetch } from './updates/fakeUpdateFetch';
+import { fakeResendClient, resendClient } from './email/resendClient';
 import { startVaultWatcher, stopVaultWatcher } from './vaultWatcherManager';
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const encryptor = defaultEncryptor();
 const claudeClient = defaultClaudeClient();
 const imageClient = defaultImageClient();
+// E2E/dev: a deterministic offline Resend (no real account/network), like SELFOS_FAKE_CLAUDE/IMAGE. The env
+// value can force a failure path (`fail`/`noverify`) for the domain-unverified/auth E2E (67 §10).
+const fakeResend = process.env['SELFOS_FAKE_RESEND'];
+const emailClient = fakeResend !== undefined ? fakeResendClient(fakeResend) : resendClient();
 
 function userDataDir(): string {
   return app.getPath('userData');
@@ -100,6 +105,7 @@ export function registerIpcHandlers(): void {
     secrets,
     claude: claudeClient,
     image: imageClient,
+    email: emailClient,
     readDeviceState: () => readDeviceState(userDataDir()),
     updateDeviceState: (patch) => updateDeviceState(userDataDir(), patch),
     readDeviceSettings: () => readDeviceSettings(userDataDir()),
@@ -364,6 +370,15 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.memoryOutboundSharing, bridge.memoryOutboundSharing);
   handle(IpcChannels.memorySetScopeBatch, bridge.memorySetScopeBatch);
   handle(IpcChannels.memorySetProfileFieldShared, bridge.memorySetProfileFieldShared);
+  handle(IpcChannels.emailStatus, bridge.emailStatus);
+  handle(IpcChannels.emailVerify, bridge.emailVerify);
+  handle(IpcChannels.emailSetConfig, bridge.emailSetConfig);
+  handle(IpcChannels.emailSetSharedKey, bridge.emailSetSharedKey);
+  handle(IpcChannels.emailClearSharedKey, bridge.emailClearSharedKey);
+  handle(IpcChannels.emailGetPrefs, bridge.emailGetPrefs);
+  handle(IpcChannels.emailSetPrefs, bridge.emailSetPrefs);
+  handle(IpcChannels.emailSend, bridge.emailSend);
+  handle(IpcChannels.emailActivity, bridge.emailActivity);
   handle(IpcChannels.insightsAnalyze, bridge.insightsAnalyze);
   handle(IpcChannels.insightsApprove, bridge.insightsApprove);
   handle(IpcChannels.insightsUpdate, bridge.insightsUpdate);

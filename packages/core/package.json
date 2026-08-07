@@ -36,6 +36,7 @@
     "./intake": "./src/intake/index.ts",
     "./tests": "./src/tests/index.ts",
     "./intimacy": "./src/intimacy/index.ts",
+    "./email": "./src/email/index.ts",
     "./profile": "./src/profile/index.ts",
     "./relay": "./src/relay/index.ts",
     "./updates": "./src/updates/index.ts",

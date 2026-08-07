@@ -1,7 +1,13 @@
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import type { BootState, StoryDraftProgress, ImageGenProgress } from '@shared/schemas';
 import type { StreamSurface } from '@shared/channels';
-import type { ClaudeClient, FileSystem, ImageClient, SecretStore } from '@selfos/core/host';
+import type {
+  ClaudeClient,
+  EmailClient,
+  FileSystem,
+  ImageClient,
+  SecretStore,
+} from '@selfos/core/host';
 import { loadMasterKey } from '@selfos/core/crypto';
 import { uuid } from '@selfos/core/id';
 import { createCoreBridge, readVaultSettingsValues, type BridgeHost } from '@shared/coreBridge';
@@ -19,6 +25,7 @@ import {
   webDeviceStore,
   webFakeClaudeClient,
   webFakeImageClient,
+  webFakeEmailClient,
   webSecretStore,
 } from './webStores';
 
@@ -52,6 +59,8 @@ interface HostParts {
   claude: ClaudeClient;
   /** Image client: the deterministic fake in the web preview, the real browser-mode OpenAI call on iOS. */
   image: ImageClient;
+  /** Email client: a deterministic fake in the web preview / iOS (67 §5.1; desktop is the first target). */
+  email: EmailClient;
   /** Relay transport: the deterministic in-memory fake in the web preview, real HTTPS on iOS. */
   relay: BridgeHost['relay'];
   /** Subscribe to external vault changes; a no-op in the web preview, the native watcher on iOS. */
@@ -147,6 +156,7 @@ function createBridgeHost(parts: HostParts): BridgeHost {
     secrets,
     claude,
     image: parts.image,
+    email: parts.email,
     readDeviceState: () => deviceStore.read(),
     updateDeviceState: (patch) => deviceStore.update(patch),
     readDeviceSettings: () => deviceSettings.read(),
@@ -249,6 +259,7 @@ export function createWebHost(options: WebHostOptions = {}): BridgeHost {
     secrets: webSecretStore(currentDeviceId()),
     claude: webFakeClaudeClient(),
     image: webFakeImageClient(),
+    email: webFakeEmailClient(),
     // A deterministic in-memory relay so the preview can demo the external-send flow (no Cloudflare).
     relay: { fetch: fakeRelayFetch(), loadBundle: fakeRelayBundle, currentVersion: '1' },
     // The browser preview has no cross-tab/device change feed; reads are always fresh on navigation.
@@ -309,6 +320,7 @@ export function createCapacitorHost(
     secrets: capacitorSecretStore(keychain),
     claude: browserClaudeClient(),
     image: browserImageClient(),
+    email: webFakeEmailClient(),
     // iOS issues real outbound HTTPS for the Cloudflare REST API + the deployed Worker (07 §11.1).
     // The Worker bundle isn't shipped in the iOS app yet, so deploy throws until that's wired.
     relay: {

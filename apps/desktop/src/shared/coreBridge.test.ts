@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { memFileSystem } from '@selfos/core/host';
 import { loadMasterKey, MASTER_KEY_ID } from '@selfos/core/crypto';
 import { toBase64 } from '@selfos/core/encoding';
-import type { ClaudeClient, FileSystem, ImageClient, SecretStore } from '@selfos/core/host';
+import type {
+  ClaudeClient,
+  EmailClient,
+  FileSystem,
+  ImageClient,
+  SecretStore,
+} from '@selfos/core/host';
 import { flattenContent } from '@selfos/core/host';
 import {
   contentKeyFromFragment,
@@ -20,7 +26,7 @@ import {
   type RelayEnv,
 } from '@selfos/core/relay';
 import { getQuestionnaire } from '@selfos/core/questionnaires';
-import { writeEncryptedJson } from '@selfos/core/vault';
+import { readEncryptedJson, writeEncryptedJson } from '@selfos/core/vault';
 import { listInsightsForPerson, saveInsight, summarizeForContext } from '@selfos/core/insights';
 import { getIntakeSession, submitSectionForm } from '@selfos/core/intake';
 import { getTest } from '@selfos/core/tests';
@@ -35,7 +41,7 @@ import {
   pairKeyFor,
 } from '@selfos/core/together';
 import { queryUsage, recordUsage, setPersonBudget } from '@selfos/core/usage';
-import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID } from './channels';
+import { ANTHROPIC_API_KEY_ID, OPENAI_API_KEY_ID, RESEND_API_KEY_ID } from './channels';
 import { DeviceStateSchema } from './schemas';
 import type {
   BootState,
@@ -477,6 +483,13 @@ function makeHost(): {
     generate: () =>
       Promise.resolve({ ok: true, image: { bytes: new Uint8Array([1, 2, 3]), mime: 'image/png' } }),
   };
+  const email: EmailClient = {
+    send: () => Promise.resolve({ ok: true, id: 'test-resend-1' }),
+    cancel: () => Promise.resolve(),
+    status: (_apiKey, ids) => Promise.resolve(ids.map((id) => ({ id, status: 'delivered' }))),
+    verify: () =>
+      Promise.resolve({ ok: true, domains: [{ name: 'test.example', verified: true }] }),
+  };
   const ready = { phase: 'ready' as const, vaultPath: '/vault', hasSettings: true };
   // Derive boot state from the device pointer (like the real `computeBootState`) so unlink — which
   // clears `vaultPath` — recomputes to onboarding here, not a frozen `ready`.
@@ -494,6 +507,7 @@ function makeHost(): {
     secrets,
     claude,
     image,
+    email,
     readDeviceState: () => Promise.resolve(device),
     updateDeviceState: (patch) => {
       // Mirror the real stores: re-validate the merge so a cleared optional (vaultBookmark: undefined)
@@ -603,6 +617,70 @@ describe('createCoreBridge', () => {
     expect(people[0]?.displayName).toBe('Ben');
     expect((await bridge.getActivePerson())?.id).toBe(ownerId);
     expect(host.device().activePersonId).toBe(ownerId);
+  });
+
+  it('email (67 P0): connect → set prefs → send welcome → decrypt an activity entry; key never returned', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    // Owner connects: a from-address + a device-local Resend key (via the existing secret seam).
+    await bridge.emailSetConfig({ fromAddress: 'hi@fam.example', fromName: 'SelfOS' });
+    await bridge.secretSet({ id: RESEND_API_KEY_ID, value: 're-secret-key' });
+
+    const status = await bridge.emailStatus();
+    expect(status).toMatchObject({ configured: true, resolvedReady: true, source: 'device' });
+    expect(JSON.stringify(status)).not.toContain('re-secret-key'); // status never carries the key
+
+    // Fail-closed: no engagement address yet → NO_ADDRESS, nothing logged.
+    expect(await bridge.emailSend({ family: 'welcome' })).toMatchObject({ reason: 'NO_ADDRESS' });
+
+    // Opt in with a separate engagement address, then send the welcome.
+    await bridge.emailSetPrefs({ address: 'me@inbox.example' });
+    const sent = await bridge.emailSend({ family: 'welcome' });
+    expect(sent.ok).toBe(true);
+
+    // Decrypt the activity log: one welcome entry to the engagement address.
+    const activity = await bridge.emailActivity();
+    expect(activity).toHaveLength(1);
+    expect(activity[0]).toMatchObject({
+      family: 'welcome',
+      status: 'sent',
+      toAddress: 'me@inbox.example',
+      personId: ownerId,
+    });
+    expect(activity[0]?.subject).toContain('Welcome');
+
+    // The config file on disk is ciphertext; no raw key leaks even for the shared-key path.
+    await bridge.emailSetSharedKey({ value: 're-shared-key' });
+    const bytes = await host.fs.read('config/email.enc');
+    const rawFile = bytes && new TextDecoder().decode(bytes);
+    expect(rawFile).toContain('aes-256-gcm');
+    expect(rawFile).not.toContain('re-shared-key');
+  });
+
+  it('email (67 §6): a non-owner cannot connect; the owner reads a member’s activity, a member cannot', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    const ctx = (await host.host.vaultAndKey())!;
+    const member = await bridge.peopleSave({ displayName: 'Mel', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+
+    // Seed a welcome activity entry for the owner via the real send (owner has both connect + email.own).
+    await bridge.emailSetConfig({ fromAddress: 'hi@fam.example', fromName: 'SelfOS' });
+    await bridge.secretSet({ id: RESEND_API_KEY_ID, value: 're-key' });
+    await bridge.emailSetPrefs({ address: 'owner@inbox.example' });
+    await bridge.emailSend({ family: 'welcome' });
+
+    // Switch to the member: they can't change the household config (owner-gated) — status stays unchanged.
+    expect((await bridge.sessionSetActive({ personId: member.id })).ok).toBe(true);
+    await bridge.emailSetConfig({ fromAddress: 'evil@member.example' });
+    expect(
+      (await readEncryptedJson(ctx.fs, 'config/email.enc', ctx.key)) as { fromAddress: string },
+    ).toMatchObject({ fromAddress: 'hi@fam.example' });
+    // A member cannot read the owner's activity (people.manage-gated).
+    expect(await bridge.emailActivity({ personId: ownerId })).toHaveLength(0);
+
+    // Back to the owner: they CAN read the member's (empty) activity + their own.
+    expect((await bridge.sessionSetActive({ personId: ownerId, pin: '1234' })).ok).toBe(true);
+    expect(await bridge.emailActivity({ personId: member.id })).toHaveLength(0);
+    expect(await bridge.emailActivity({ personId: ownerId })).toHaveLength(1);
   });
 
   it('household AI key: owner shares → member inherits; member cannot write the shared key (25)', async () => {

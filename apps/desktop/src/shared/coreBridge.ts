@@ -96,6 +96,13 @@ import {
   type OutboundSharing,
   IntakeAnswerValueSchema,
   PersonFieldKeySchema,
+  EmailFamilySchema,
+  EmailSendInputSchema,
+  type EmailActivityEntry,
+  type EmailPrefs,
+  type EmailSendResult,
+  type EmailStatus,
+  type EmailVerifyResult,
   RelationshipTypeSchema,
   type RelationshipType,
   type IntakeState,
@@ -288,7 +295,13 @@ import {
   relayStatusOf,
   writeRelayConfig,
 } from './relay/relayConfig';
-import type { ClaudeClient, FileSystem, ImageClient, SecretStore } from '@selfos/core/host';
+import type {
+  ClaudeClient,
+  EmailClient,
+  FileSystem,
+  ImageClient,
+  SecretStore,
+} from '@selfos/core/host';
 import type { AssertMainOwnedHandled } from '@selfos/core/rebuild-guard';
 import { uuid } from '@selfos/core/id';
 import {
@@ -441,6 +454,18 @@ import {
   shouldAutoReconcile,
   updateInsight,
 } from '@selfos/core/insights';
+import {
+  buildWelcomeEmail,
+  clearSharedResendKey,
+  emailStatusOf,
+  listEmailActivity,
+  readEmailPrefs,
+  resolveResendKey,
+  sendFamilyEmail,
+  setEmailPrefs,
+  updateEmailConfig,
+  writeSharedResendKey,
+} from '@selfos/core/email';
 import {
   createGoal,
   deleteGoal,
@@ -798,6 +823,8 @@ export interface BridgeHost {
   claude: ClaudeClient;
   /** Image-generation client (OpenAI second provider, 13-dream-images §5.1). */
   image: ImageClient;
+  /** Email sender (Resend, 67-email-engagement §5.1). Faked under `SELFOS_FAKE_RESEND`. */
+  email: EmailClient;
 
   // --- Device-local state ---
   readDeviceState(): Promise<DeviceState>;
@@ -1235,6 +1262,26 @@ const SetScopeBatchSchema = z.object({
 const SetProfileFieldSharedSchema = z.object({
   field: PersonFieldKeySchema,
   shared: z.boolean(),
+});
+// 67-email-engagement §6 — email config + prefs inputs.
+const EmailSetConfigSchema = z.object({
+  sendingDomain: z.string().optional(),
+  fromAddress: z.string().optional(),
+  fromName: z.string().optional(),
+});
+const EmailSetSharedKeySchema = z.object({ value: z.string().min(1) });
+const EmailSetPrefsSchema = z.object({
+  address: z.string().optional(),
+  families: z.record(EmailFamilySchema, z.boolean()).optional(),
+  richness: z.enum(['brief', 'full']).optional(),
+  intimacyEmailOptIn: z.boolean().optional(),
+  paused: z.boolean().optional(),
+});
+const EmailActivitySchema = z.object({
+  personId: z.string().optional(),
+  family: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
 });
 const ProfileSuggestionIdSchema = z.string().min(1);
 const AssignmentIdSchema = z.string().min(1);
@@ -4406,6 +4453,159 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       else delete next.privateFields;
       await savePerson(ctx.fs, ctx.key, next);
       return true;
+    },
+    // --- Email engagement (67 §6) — the Resend key is resolved host-side + never returned ---
+    emailStatus: async (): Promise<EmailStatus> => {
+      const ctx = await host.vaultAndKey();
+      const noneStatus: EmailStatus = {
+        configured: false,
+        domainVerified: false,
+        hasSharedKey: false,
+        hasDeviceOverride: false,
+        resolvedReady: false,
+        source: 'none',
+      };
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'email.own'))) return noneStatus;
+      return emailStatusOf(host.secrets, ctx.fs, ctx.key);
+    },
+    emailVerify: async (): Promise<EmailVerifyResult> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage')))
+        return { ok: false, reason: 'NO_KEY' };
+      const resolved = await resolveResendKey(host.secrets, ctx.fs, ctx.key);
+      if (!resolved.key) return { ok: false, reason: 'NO_KEY' };
+      const result = await host.email.verify(resolved.key);
+      // Persist the domain-verification state so `EmailStatus.domainVerified` reflects a real verify.
+      if (result.ok) {
+        await updateEmailConfig(
+          ctx.fs,
+          ctx.key,
+          { domainVerified: result.domains.some((d) => d.verified) },
+          new Date(),
+        );
+      }
+      return result;
+    },
+    emailSetConfig: async (input): Promise<EmailStatus> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage')))
+        return emailStatusOf(
+          host.secrets,
+          ctx?.fs ?? host.fileSystem(''),
+          ctx?.key ?? new Uint8Array(),
+        );
+      await updateEmailConfig(ctx.fs, ctx.key, EmailSetConfigSchema.parse(input), new Date());
+      return emailStatusOf(host.secrets, ctx.fs, ctx.key);
+    },
+    emailSetSharedKey: async (input): Promise<EmailStatus> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage')))
+        return emailStatusOf(
+          host.secrets,
+          ctx?.fs ?? host.fileSystem(''),
+          ctx?.key ?? new Uint8Array(),
+        );
+      const { value } = EmailSetSharedKeySchema.parse(input);
+      await writeSharedResendKey(ctx.fs, ctx.key, value, new Date());
+      return emailStatusOf(host.secrets, ctx.fs, ctx.key);
+    },
+    emailClearSharedKey: async (): Promise<EmailStatus> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage')))
+        return emailStatusOf(
+          host.secrets,
+          ctx?.fs ?? host.fileSystem(''),
+          ctx?.key ?? new Uint8Array(),
+        );
+      await clearSharedResendKey(ctx.fs, ctx.key, new Date());
+      return emailStatusOf(host.secrets, ctx.fs, ctx.key);
+    },
+    emailGetPrefs: async (): Promise<EmailPrefs | null> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'email.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      return readEmailPrefs(ctx.fs, ctx.key, personId);
+    },
+    emailSetPrefs: async (input): Promise<EmailPrefs> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'email.own'))) {
+        // Return a harmless default so the renderer store has a shape; nothing is persisted.
+        return {
+          schemaVersion: 1,
+          families: {},
+          richness: 'brief',
+          intimacyEmailOptIn: false,
+          paused: false,
+          unsubscribeToken: 'unavailable',
+        };
+      }
+      // Intimacy-email eligibility is Phase 5 (the 18+ ack + adult + live partner + shared data); in Phase 0
+      // no intimacy family exists, so eligibility is false — the coercion keeps a stray opt-in OFF (§8.2).
+      return setEmailPrefs(
+        ctx.fs,
+        ctx.key,
+        personId,
+        EmailSetPrefsSchema.parse(input),
+        false,
+        new Date(),
+      );
+    },
+    emailSend: async (input): Promise<EmailSendResult> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'email.own')))
+        return { ok: false, reason: 'NOT_CONFIGURED' };
+      const { family } = EmailSendInputSchema.parse(input);
+      // Phase 0 composes only the welcome family; reject anything else (no scaffolding for the unbuilt
+      // families — else a hand-crafted call would send welcome content mislabeled as another family).
+      if (family !== 'welcome') return { ok: false, reason: 'NOT_CONFIGURED' };
+      const now = new Date();
+      // Welcome is sent ONCE (67 §3.2): if one was already logged for this person, no-op idempotently so a
+      // re-trigger (a re-open, a re-saved address) never re-sends.
+      const prior = await listEmailActivity(ctx.fs, ctx.key, personId, { family: 'welcome' });
+      const sent = prior.find((entry) => entry.status !== 'failed');
+      if (sent) return { ok: true, entryId: sent.id };
+      // Crisis suppresses ALL email (§8.1): a recurring crisis signal blocks the send.
+      const insights = await listInsightsForPerson(ctx.fs, ctx.key, personId);
+      const crisisSuppressed = aggregateCrisisSignal({
+        insights,
+        now,
+        nightmareNudge: false,
+      }).recurring;
+      const resolved = await resolveResendKey(host.secrets, ctx.fs, ctx.key);
+      // Phase 0 composes only the welcome family; later phases add each family's composer.
+      const person = await getPerson(ctx.fs, ctx.key, personId);
+      const composed = buildWelcomeEmail({
+        ...(person?.displayName ? { recipientName: person.displayName } : {}),
+      });
+      return sendFamilyEmail({
+        fs: ctx.fs,
+        key: ctx.key,
+        email: host.email,
+        resendKey: resolved.key,
+        personId,
+        family,
+        composed,
+        crisisSuppressed,
+        now,
+      });
+    },
+    emailActivity: async (input): Promise<EmailActivityEntry[]> => {
+      const ctx = await host.vaultAndKey();
+      const activeId = ctx ? await activePersonId() : null;
+      if (!ctx || !activeId || !(await activePersonCan(ctx.fs, ctx.key, 'email.own'))) return [];
+      const parsed = EmailActivitySchema.parse(input ?? {});
+      const target = parsed.personId ?? activeId;
+      // Reading another person's activity is the owner view — `people.manage`-gated (67 §6).
+      if (target !== activeId && !(await activePersonCan(ctx.fs, ctx.key, 'people.manage')))
+        return [];
+      return listEmailActivity(ctx.fs, ctx.key, target, {
+        ...(parsed.family ? { family: parsed.family as EmailActivityEntry['family'] } : {}),
+        ...(parsed.from ? { from: parsed.from } : {}),
+        ...(parsed.to ? { to: parsed.to } : {}),
+      });
     },
     insightsAnalyze: async (input): Promise<QuestionnaireAnalyzeResult> => {
       const deps = await aiDeps('questionnaires.viewResults');

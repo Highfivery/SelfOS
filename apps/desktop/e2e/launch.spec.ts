@@ -43,6 +43,7 @@ import {
   submitResponse,
 } from '@selfos/core/questionnaires';
 import { getIntakeSession, intakeCatalogSnapshot } from '@selfos/core/intake';
+import { listEmailActivity } from '@selfos/core/email';
 import {
   getInsight,
   listInsightsForPerson,
@@ -377,6 +378,7 @@ function e2eEnv(): Record<string, string> {
   env.SELFOS_FAKE_CLAUDE = '1';
   env.SELFOS_FAKE_RELAY = '1'; // deterministic in-memory relay (no Cloudflare account/network)
   env.SELFOS_FAKE_IMAGE = '1'; // deterministic tiny-PNG image client (no OpenAI network)
+  env.SELFOS_FAKE_RESEND = '1'; // deterministic offline Resend (no real account/network); 67 §10
   // Deterministic update check (no real GitHub call) — default reports an OLD version so the launch check
   // is a no-op (up to date, no notification). Update tests override SELFOS_FAKE_UPDATE per launch (36 §10).
   env.SELFOS_FAKE_UPDATE = '0.0.0';
@@ -4215,6 +4217,109 @@ test('sharing dashboard (68): stats + tabs + folded-in profile/dream surfaces + 
     await w.getByRole('link', { name: 'Home' }).click();
     await w.getByRole('button', { name: 'Manage' }).click();
     await expect.poll(() => w.url()).toContain('/sharing');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('email (67 P0): the Settings panel connects + sets prefs; the welcome auto-sends → decrypt an EmailActivityEntry; 390px', async () => {
+  const { userData, vault } = await seedReadyVault();
+  // The owner's engagement address + connected config, so the welcome cadence fires on launch.
+  await createNodeSecretStore(userData, passthrough).set('resend.apiKey', 're-e2e-key');
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('email e2e: master key missing');
+    await writeEncryptedJson(
+      fs,
+      'config/email.enc',
+      {
+        schemaVersion: 1,
+        fromAddress: 'hi@fam.example',
+        fromName: 'SelfOS',
+        domainVerified: true,
+        updatedAt: '2026-08-07T00:00:00.000Z',
+      },
+      key,
+    );
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/email/prefs.enc',
+      {
+        schemaVersion: 1,
+        address: 'owner@inbox.example',
+        families: {},
+        richness: 'brief',
+        intimacyEmailOptIn: false,
+        paused: false,
+        unsubscribeToken: 'unsub-1',
+        updatedAt: '2026-08-07T00:00:00.000Z',
+      },
+      key,
+    );
+  }
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Home' }).waitFor();
+
+    // The welcome cadence auto-sends on open (idempotent) → decrypt an EmailActivityEntry.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('email e2e: master key missing (2)');
+    await expect
+      .poll(
+        async () => {
+          const raw = await fs.read('people/owner-1/email/activity/2026-08.enc').catch(() => null);
+          return raw ? new TextDecoder().decode(raw) : '';
+        },
+        { timeout: 8000 },
+      )
+      .toContain('aes-256-gcm'); // the shard exists + is ciphertext
+    const activity = await listEmailActivity(fs, key, 'owner-1');
+    expect(activity).toHaveLength(1);
+    expect(activity[0]).toMatchObject({
+      family: 'welcome',
+      status: 'sent',
+      toAddress: 'owner@inbox.example',
+    });
+    expect(activity[0]?.subject).toContain('Welcome');
+
+    // The Settings → Email panel: connect controls (admin) + the engagement address + toggles.
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Email' }).click();
+    await expect(w.getByText('Connect Resend')).toBeVisible();
+    await expect(w.getByText('Admin only')).toBeVisible();
+    await expect(w.getByLabel('Email me at')).toHaveValue('owner@inbox.example');
+    await expect(w.getByRole('switch', { name: /Welcome & getting-started/ })).toBeEnabled();
+
+    // No inner horizontal scrollbar on the Email settings CONTENT at 360px. The Settings section-nav pill
+    // row is an intentional overflow-x (the responsive Settings design), so it's excluded — matching the
+    // standing settings guard; `main` itself must fit (CLAUDE.md §12).
+    await w.setViewportSize({ width: 360, height: 800 });
+    const offenders = await w.evaluate(() => {
+      const bad: string[] = [];
+      document.querySelectorAll('*').forEach((el) => {
+        const ox = getComputedStyle(el).overflowX;
+        const isSectionNav = /sections/.test(el.className);
+        if (
+          !isSectionNav &&
+          el.scrollWidth - el.clientWidth > 1 &&
+          (ox === 'auto' || ox === 'scroll')
+        )
+          bad.push(`${el.tagName}.${el.className}`);
+      });
+      return bad;
+    });
+    expect(offenders).toEqual([]);
+    const mainFits = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return !!main && main.scrollWidth <= main.clientWidth;
+    });
+    expect(mainFits).toBe(true);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

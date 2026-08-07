@@ -388,6 +388,7 @@ export const IpcChannels = {
   emailGetPrefs: 'email:getPrefs',
   emailSetPrefs: 'email:setPrefs',
   emailSend: 'email:send',
+  emailSendQuestionnaireDelivery: 'email:sendQuestionnaireDelivery',
   emailActivity: 'email:activity',
   insightsAnalyze: 'insights:analyze',
   insightsApprove: 'insights:approve',
@@ -1194,6 +1195,19 @@ export interface SelfosBridge {
   }): Promise<EmailPrefs>;
   /** Compose + send one family email for the active person, gated + logged (67 §6). Phase 0: `welcome`. */
   emailSend(input: EmailSendInput): Promise<EmailSendResult>;
+  /**
+   * Family A — send a real, branded questionnaire-delivery email via Resend to a RECIPIENT'S contact
+   * address (67 §3.2 / Phase 1), replacing the `mailto:` hand-off when the household's email is connected.
+   * The `message` is the sender's editable note (already carrying the relay link + PIN); `link` drives the
+   * CTA button. Gated `email.own`; logged under the sender. Returns NOT_CONFIGURED when email isn't set up
+   * (the caller falls back to `mailto:`).
+   */
+  emailSendQuestionnaireDelivery(input: {
+    toAddress: string;
+    subject: string;
+    message: string;
+    link: string;
+  }): Promise<EmailSendResult>;
   /** Read logged email activity (own; another person's is `people.manage`-gated in the bridge). */
   emailActivity(input?: {
     personId?: string;

@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { EmailStatus } from '@shared/schemas';
 import { RelayLinkDelivery, isLikelyEmail, isLikelyPhone } from './RelayLinkDelivery';
 import { useSettingsStore } from '../../../settings/settingsStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
@@ -21,6 +22,15 @@ function renderDelivery(): void {
     />,
   );
 }
+
+const READY_STATUS: EmailStatus = {
+  configured: true,
+  domainVerified: true,
+  hasSharedKey: true,
+  hasDeviceOverride: false,
+  resolvedReady: true,
+  source: 'shared',
+};
 
 describe('RelayLinkDelivery email/phone validation (38 §3.9)', () => {
   it('disables Email on a malformed address, with a hint, and re-enables when fixed', async () => {
@@ -49,6 +59,78 @@ describe('RelayLinkDelivery email/phone validation (38 §3.9)', () => {
     renderDelivery();
     expect(screen.getByRole('button', { name: 'Email' })).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Text' })).toBeEnabled();
+  });
+});
+
+describe('RelayLinkDelivery real Resend send (67 P1 / family A)', () => {
+  it('sends via Resend when email is connected: the button is "Send email" and a success banner shows', async () => {
+    const user = userEvent.setup();
+    const send = vi.fn(() => Promise.resolve({ ok: true as const, entryId: 'e1' }));
+    installMockBridge({
+      emailStatus: () => Promise.resolve(READY_STATUS),
+      emailSendQuestionnaireDelivery: send,
+    });
+    render(
+      <RelayLinkDelivery
+        link="https://relay.example/q/abc"
+        pin="123456"
+        senderName="Ben"
+        sensitive={false}
+      />,
+    );
+
+    // The Email button becomes "Send email" once the ready status resolves.
+    const sendBtn = await screen.findByRole('button', { name: 'Send email' });
+    // Disabled with no recipient email; enabled once a valid one is entered.
+    expect(sendBtn).toBeDisabled();
+    await user.type(screen.getByLabelText(/email/i), 'alex@example.com');
+    expect(sendBtn).toBeEnabled();
+
+    await user.click(sendBtn);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toAddress: 'alex@example.com',
+        link: 'https://relay.example/q/abc',
+      }),
+    );
+    expect(await screen.findByText(/sent to alex@example\.com/i)).toBeInTheDocument();
+  });
+
+  it('surfaces a calm warning + keeps Copy usable when the send fails', async () => {
+    const user = userEvent.setup();
+    installMockBridge({
+      emailStatus: () => Promise.resolve(READY_STATUS),
+      emailSendQuestionnaireDelivery: () =>
+        Promise.resolve({ ok: false as const, reason: 'SEND_ERROR' as const, message: 'bounced' }),
+    });
+    render(
+      <RelayLinkDelivery
+        link="https://relay.example/q/abc"
+        pin="123456"
+        senderName="Ben"
+        sensitive={false}
+      />,
+    );
+    const sendBtn = await screen.findByRole('button', { name: 'Send email' });
+    await user.type(screen.getByLabelText(/email/i), 'alex@example.com');
+    await user.click(sendBtn);
+    expect(await screen.findByText(/couldn’t send that email \(bounced\)/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /copy message/i })).toBeEnabled();
+  });
+
+  it('stays a mailto hand-off (button "Email") when email is not connected', async () => {
+    installMockBridge(); // default status: resolvedReady false
+    render(
+      <RelayLinkDelivery
+        link="https://relay.example/q/abc"
+        pin="123456"
+        senderName="Ben"
+        sensitive={false}
+      />,
+    );
+    // Give the async status a tick; the label must remain the mailto "Email".
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Email' })).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Send email' })).not.toBeInTheDocument();
   });
 });
 

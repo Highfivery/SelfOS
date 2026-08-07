@@ -36,6 +36,65 @@ async function appendActivity(
 }
 
 /**
+ * The shared send-and-log tail every family runs through AFTER its own gating (67 §5.2). It hands the
+ * composed email to Resend and writes an `EmailActivityEntry` regardless of the Resend outcome — a real
+ * attempt (success OR a Resend failure) is always logged; only a pre-send gating miss is not. This is the
+ * one place that both actually sends and logs, so logging can't be bypassed.
+ */
+async function performSend(deps: {
+  fs: FileSystem;
+  key: Uint8Array;
+  email: EmailClient;
+  resendKey: string;
+  from: string;
+  personId: string;
+  family: EmailFamily;
+  toAddress: string;
+  composed: ComposedEmail;
+  scheduledAt?: string;
+  tokens?: string[];
+  now: Date;
+}): Promise<EmailSendResult> {
+  const outcome = await deps.email.send({
+    apiKey: deps.resendKey,
+    from: deps.from,
+    to: deps.toAddress,
+    subject: deps.composed.subject,
+    html: deps.composed.html,
+    text: deps.composed.text,
+    ...(deps.scheduledAt ? { scheduledAt: deps.scheduledAt } : {}),
+  });
+
+  const entry: EmailActivityEntry = {
+    id: uuid(),
+    schemaVersion: 1,
+    personId: deps.personId,
+    family: deps.family,
+    subject: deps.composed.subject,
+    toAddress: deps.toAddress,
+    status: outcome.ok ? (deps.scheduledAt ? 'scheduled' : 'sent') : 'failed',
+    sentAt: deps.now.toISOString(),
+    clicks: [],
+    tokens: deps.tokens ?? [],
+    ...(outcome.ok ? { resendMessageId: outcome.id } : {}),
+    ...(deps.scheduledAt ? { scheduledAt: deps.scheduledAt } : {}),
+  };
+  await appendActivity(deps.fs, deps.key, entry);
+
+  if (!outcome.ok)
+    return {
+      ok: false,
+      reason: 'SEND_ERROR',
+      ...(outcome.message ? { message: outcome.message } : {}),
+    };
+  return {
+    ok: true,
+    entryId: entry.id,
+    ...(outcome.id ? { resendMessageId: outcome.id } : {}),
+  };
+}
+
+/**
  * The one send-and-log orchestrator (67 §5.2) — every family routes through it, so gating + logging can't
  * be bypassed. Gating order: crisis (suppresses ALL email, §8.1) → configured (key + from-line) → the
  * person's engagement address (fail-closed, §4.2) → the per-family opt-in → the global pause. A gating
@@ -68,43 +127,63 @@ export async function sendFamilyEmail(deps: {
   if (!effectiveFamilyEnabled(prefs, family)) return { ok: false, reason: 'FAMILY_OFF' };
   if (prefs.paused) return { ok: false, reason: 'PAUSED' };
 
-  const outcome = await email.send({
-    apiKey: resendKey,
+  return performSend({
+    fs,
+    key,
+    email,
+    resendKey,
     from,
-    to: prefs.address,
-    subject: composed.subject,
-    html: composed.html,
-    text: composed.text,
-    ...(deps.scheduledAt ? { scheduledAt: deps.scheduledAt } : {}),
-  });
-
-  const entry: EmailActivityEntry = {
-    id: uuid(),
-    schemaVersion: 1,
     personId,
     family,
-    subject: composed.subject,
     toAddress: prefs.address,
-    status: outcome.ok ? (deps.scheduledAt ? 'scheduled' : 'sent') : 'failed',
-    sentAt: now.toISOString(),
-    clicks: [],
-    tokens: deps.tokens ?? [],
-    ...(outcome.ok ? { resendMessageId: outcome.id } : {}),
+    composed,
+    now,
     ...(deps.scheduledAt ? { scheduledAt: deps.scheduledAt } : {}),
-  };
-  await appendActivity(fs, key, entry);
+    ...(deps.tokens ? { tokens: deps.tokens } : {}),
+  });
+}
 
-  if (!outcome.ok)
-    return {
-      ok: false,
-      reason: 'SEND_ERROR',
-      ...(outcome.message ? { message: outcome.message } : {}),
-    };
-  return {
-    ok: true,
-    entryId: entry.id,
-    ...(outcome.id ? { resendMessageId: outcome.id } : {}),
-  };
+/**
+ * Family A — questionnaire delivery (67 §3.2 / Phase 1). SelfOS's first send to a RECIPIENT rather than
+ * its own user, so its gating differs from the engagement families: it goes to the recipient's CONTACT
+ * address (passed in, not the sender's engagement `EmailPrefs.address`), it is NOT gated on the recipient's
+ * per-family opt-in / pause (they may not even be a SelfOS person — it's a delivery mechanism), and it is
+ * NOT crisis-suppressed (crisis suppresses only the engagement families C/D/E/F, §7). The only gates are:
+ * the household is configured (a resolvable key + a from-line) and a recipient address is present. The
+ * activity entry is logged under the SENDER (the person who triggered the delivery), with the recipient's
+ * address as `toAddress` — so the owner view attributes it to who sent it (67 §3.7).
+ */
+export async function sendQuestionnaireDeliveryEmail(deps: {
+  fs: FileSystem;
+  key: Uint8Array;
+  email: EmailClient;
+  resendKey: string | undefined;
+  /** The person who triggered the delivery — the activity is logged under them. */
+  senderPersonId: string;
+  /** The recipient's contact address (from the delivery UI / `Person.email`), NOT an engagement address. */
+  toAddress: string;
+  composed: ComposedEmail;
+  scheduledAt?: string;
+  now: Date;
+}): Promise<EmailSendResult> {
+  const config = await readEmailConfig(deps.fs, deps.key);
+  const from = fromLineOf(config);
+  if (!deps.resendKey || !from) return { ok: false, reason: 'NOT_CONFIGURED' };
+  if (!deps.toAddress.trim()) return { ok: false, reason: 'NO_ADDRESS' };
+
+  return performSend({
+    fs: deps.fs,
+    key: deps.key,
+    email: deps.email,
+    resendKey: deps.resendKey,
+    from,
+    personId: deps.senderPersonId,
+    family: 'questionnaire-delivery',
+    toAddress: deps.toAddress,
+    composed: deps.composed,
+    now: deps.now,
+    ...(deps.scheduledAt ? { scheduledAt: deps.scheduledAt } : {}),
+  });
 }
 
 /** Read a person's logged email activity, newest first (67 §6 — the owner view + own-history reads). */

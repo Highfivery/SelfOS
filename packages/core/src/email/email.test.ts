@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import type { EmailClient } from '../host';
-import { buildWelcomeEmail } from './emailComposer';
+import { buildQuestionnaireDeliveryEmail, buildWelcomeEmail } from './emailComposer';
 import {
   emailStatusOf,
   readEmailConfig,
@@ -11,7 +11,7 @@ import {
   writeSharedResendKey,
 } from './emailConfig';
 import { effectiveFamilyEnabled, ensureEmailPrefs, setEmailPrefs } from './emailPrefs';
-import { listEmailActivity, sendFamilyEmail } from './emailSend';
+import { listEmailActivity, sendFamilyEmail, sendQuestionnaireDeliveryEmail } from './emailSend';
 import { RESEND_API_KEY_ID } from '../schemas';
 
 const key = generateMasterKey();
@@ -218,5 +218,109 @@ describe('sendFamilyEmail — the gated orchestrator (67 §5.2/§7/§8)', () => 
     const res = await sendFamilyEmail(base(fs, { email }));
     expect(res).toEqual({ ok: false, reason: 'SEND_ERROR', message: 'domain unverified' });
     expect((await listEmailActivity(fs, key, 'me'))[0]?.status).toBe('failed');
+  });
+});
+
+describe('buildQuestionnaireDeliveryEmail (67 §3.2 / Phase 1 / family A)', () => {
+  it('renders the CTA link, the message body (html + text), and escapes the note; no inline SVG', () => {
+    const email = buildQuestionnaireDeliveryEmail({
+      subject: 'Ben would like your input',
+      message: 'Hi <there>!\n\nOpen the secure link: https://relay.example/q/abc\n\nPIN: 123456',
+      link: 'https://relay.example/q/abc#k=xyz',
+    });
+    expect(email.subject).toBe('Ben would like your input');
+    // The CTA button points at the link; the message body renders as escaped paragraphs.
+    expect(email.html).toContain('href="https://relay.example/q/abc#k=xyz"');
+    expect(email.html).toContain('Open your questionnaire');
+    expect(email.html).toContain('Hi &lt;there&gt;!');
+    expect(email.html).toContain('wellness support, not medical care');
+    expect(email.html).not.toContain('<svg');
+    // Plaintext is the message verbatim (link + PIN preserved for non-HTML clients).
+    expect(email.text).toContain('https://relay.example/q/abc');
+    expect(email.text).toContain('PIN: 123456');
+  });
+});
+
+describe('sendQuestionnaireDeliveryEmail — family A (67 §3.2/§7)', () => {
+  const composed = buildQuestionnaireDeliveryEmail({
+    subject: 'A questionnaire for you',
+    message: 'Open the secure link: https://relay.example/q/abc',
+    link: 'https://relay.example/q/abc',
+  });
+  const deliveryBase = (fs: ReturnType<typeof memFileSystem>, over = {}) => ({
+    fs,
+    key,
+    email: fakeEmail(),
+    resendKey: 're-key' as string | undefined,
+    senderPersonId: 'sender',
+    toAddress: 'alex@example.com',
+    composed,
+    now,
+    ...over,
+  });
+
+  it('sends to the RECIPIENT contact address and logs under the SENDER (no engagement prefs needed)', async () => {
+    const fs = memFileSystem();
+    // Only the household config is set — the recipient has NO EmailPrefs (they may not be a SelfOS person).
+    await updateEmailConfig(fs, key, { fromAddress: 'hi@fam.example', fromName: 'SelfOS' }, now);
+    const email = fakeEmail();
+    const res = await sendQuestionnaireDeliveryEmail(deliveryBase(fs, { email }));
+    expect(res.ok).toBe(true);
+    expect(email.send).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'alex@example.com', from: 'SelfOS <hi@fam.example>' }),
+    );
+    // Logged under the sender, with the recipient's address + family questionnaire-delivery.
+    const log = await listEmailActivity(fs, key, 'sender');
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatchObject({
+      family: 'questionnaire-delivery',
+      status: 'sent',
+      toAddress: 'alex@example.com',
+      personId: 'sender',
+    });
+    // Nothing was logged under the recipient's address as a person id.
+    expect(await listEmailActivity(fs, key, 'alex@example.com')).toHaveLength(0);
+  });
+
+  it('NOT_CONFIGURED when there is no key or no from-line; NO_ADDRESS on a blank recipient (no send/log)', async () => {
+    const fs = memFileSystem();
+    const email = fakeEmail();
+    // No config at all → NOT_CONFIGURED.
+    expect(
+      ((await sendQuestionnaireDeliveryEmail(deliveryBase(fs, { email }))) as { reason: string })
+        .reason,
+    ).toBe('NOT_CONFIGURED');
+    // Key present but no from-address → still NOT_CONFIGURED.
+    expect(
+      (
+        (await sendQuestionnaireDeliveryEmail(
+          deliveryBase(fs, { email, resendKey: undefined }),
+        )) as { reason: string }
+      ).reason,
+    ).toBe('NOT_CONFIGURED');
+    // Configured, but a blank recipient → NO_ADDRESS.
+    await updateEmailConfig(fs, key, { fromAddress: 'hi@fam.example' }, now);
+    expect(
+      (
+        (await sendQuestionnaireDeliveryEmail(deliveryBase(fs, { email, toAddress: '   ' }))) as {
+          reason: string;
+        }
+      ).reason,
+    ).toBe('NO_ADDRESS');
+    expect(email.send).not.toHaveBeenCalled();
+    expect(await listEmailActivity(fs, key, 'sender')).toHaveLength(0);
+  });
+
+  it('a Resend failure is logged as failed and returns SEND_ERROR', async () => {
+    const fs = memFileSystem();
+    await updateEmailConfig(fs, key, { fromAddress: 'hi@fam.example' }, now);
+    const email = fakeEmail({
+      send: vi.fn(() =>
+        Promise.resolve({ ok: false as const, reason: 'API_ERROR' as const, message: 'bounced' }),
+      ),
+    });
+    const res = await sendQuestionnaireDeliveryEmail(deliveryBase(fs, { email }));
+    expect(res).toEqual({ ok: false, reason: 'SEND_ERROR', message: 'bounced' });
+    expect((await listEmailActivity(fs, key, 'sender'))[0]?.status).toBe('failed');
   });
 });

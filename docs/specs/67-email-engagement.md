@@ -1,6 +1,6 @@
 # 67 — Email engagement & re-engagement (Resend)
 
-> **Status:** **Phase 0 Built** (of 7 phases) · _last updated 2026-08-07_
+> **Status:** **Phases 0–1 Built** (of 7 phases) · _last updated 2026-08-07_
 >
 > SelfOS's first real outbound email. Today the only "email" is a `mailto:` hand-off for questionnaire
 > links — SelfOS has **never actually sent a message**. This spec adds a household-provisioned
@@ -613,13 +613,15 @@ valuable.
   booleans-only `EmailStatus` seam; Settings → Email **connect** (admin) + the "Connect Resend…" empty
   state; `EmailPrefs` + per-person prefs UI; `emailSendService` + the activity log; **family G welcome**
   as the pipeline proof. **E2E:** connect via the fake → send a welcome → decrypt an `EmailActivityEntry`.
-- **Phase 1 — Family A (real questionnaire delivery).** Upgrade `RelayLinkDelivery` from `mailto:` to a
-  real Resend send (link + PIN) + an optional recipient reminder (scheduled). Reuses the relay flow.
+- **Phase 1 — Family A (real questionnaire delivery). BUILT.** Upgraded `RelayLinkDelivery` from `mailto:`
+  to a real Resend send (link + PIN) when the household email is connected + ready, keeping the `mailto:`
+  fallback otherwise. The optional recipient reminder was **deferred to Phase 3** (where the scheduling/
+  cancel substrate is built) — an owner-confirmed decision. Reuses the relay flow.
 - **Phase 2 — Family B (transactional).** Map the §3.2 notification-kind subset to immediate sends when
   the app is open; log each.
 - **Phase 3 — Scheduling substrate + families C (digest) + D (re-engagement).** `emailScheduleService` +
   `useEmailScheduler` (reconcile via `scheduledAt`/cancel; poll delivery status); the deterministic
-  digest builder; the re-engagement nudges.
+  digest builder; the re-engagement nudges; the family-A recipient reminder deferred from Phase 1 (§3.2).
 - **Phase 4 — Interactive layer.** The relay Worker `/t/<token>` tap extension (+ `RELAY_VERSION` bump);
   token mint/drain/map; the `EmailResponse` store; the embedded one-question check-in (can deliver an
   auto check-in); the `selfos://` deep-link path; the in-app response history (own-only, editable).
@@ -837,6 +839,18 @@ No open questions remain.
 
 ## 12. Changelog
 
+- 2026-08-07 — **Phase 1 BUILT** (family A — real questionnaire delivery). `RelayLinkDelivery`'s Email
+  button is now a real Resend **"Send email"** when the household email is connected + ready (with the
+  `mailto:` fallback otherwise + a success/failure banner). New core `buildQuestionnaireDeliveryEmail`
+  composer + `sendQuestionnaireDeliveryEmail` orchestrator (a family-A sibling of `sendFamilyEmail`, sharing
+  an extracted `performSend` tail). Family A sends to the **recipient's** contact address (not the sender's
+  engagement `EmailPrefs.address`), is logged under the **sender**, and is **NOT** gated on the recipient's
+  opt-in/pause and **NOT** crisis-suppressed (crisis suppresses only C/D/E/F, §7); its only gates are
+  configured (key + from-line) + a recipient address. New IPC channel `email:sendQuestionnaireDelivery`
+  through the full seam (channels → coreBridge Zod-validated + `email.own`-gated → ipc → preload →
+  test-utils) — the Resend key never crosses it. The optional recipient reminder was **deferred to Phase 3**
+  (owner-confirmed). Tests: core unit (composer + family-A gating), coreBridge two-persona decrypt-level, RTL,
+  - a Playwright E2E decrypting a `questionnaire-delivery` activity entry. **Phases 2–6 remain.**
 - 2026-08-07 — **Phase 0 BUILT** (infra + connect + the first send). The `email` `BridgeHost` part
   (`EmailClient` — send/cancel/status/verify) wired to `fetch` as `resendClient()` with a
   `SELFOS_FAKE_RESEND` offline fake + a `webFakeEmailClient` web/iOS stub; `RESEND_API_KEY_ID` device

@@ -249,6 +249,12 @@ export const DeviceStateSchema = z.object({
    * per-person, the `autoCheckinCheckedAt` precedent. Additive-optional (no schemaVersion bump).
    */
   storyRefreshCheckedAt: z.record(z.string(), z.string()).optional(),
+  /**
+   * Email scheduling cadence throttle (67 §3.4 / Phase 3) — the last time `email:scheduleReconcile` actually
+   * ran for a person (`Record<personId, iso>`). Device-local + per-person, the `autoCheckinCheckedAt`
+   * precedent. Additive-optional (no schemaVersion bump).
+   */
+  emailScheduledAt: z.record(z.string(), z.string()).optional(),
 });
 export type DeviceState = z.infer<typeof DeviceStateSchema>;
 
@@ -2258,6 +2264,9 @@ export const EmailPrefsSchema = z.object({
   richness: z.enum(['brief', 'full']).default('brief'),
   intimacyEmailOptIn: z.boolean().default(false),
   paused: z.boolean().default(false),
+  /** The weekly-digest day (0 = Sunday … 6 = Saturday) + rough local time-of-day (67 §3.2a). */
+  digestDay: z.number().int().min(0).max(6).default(0),
+  digestTime: z.enum(['morning', 'afternoon', 'evening']).default('evening'),
   unsubscribeToken: z.string().min(1),
   updatedAt: z.string().datetime().optional(),
 });
@@ -2319,6 +2328,21 @@ export type EmailSendResult =
       reason: 'NOT_CONFIGURED' | 'NO_ADDRESS' | 'FAMILY_OFF' | 'PAUSED' | 'CRISIS' | 'SEND_ERROR';
       message?: string;
     };
+
+/**
+ * The result of one `email:scheduleReconcile` run (67 §3.4 / Phase 3) — a crypto-free summary of what the
+ * cadence did: how many sent-email statuses it polled + updated, how many scheduled emails it scheduled
+ * (digest / re-engagement / questionnaire reminder), and how many obsolete ones it canceled. `SKIPPED` is
+ * the calm no-op when the 24h throttle hasn't elapsed (auto runs only).
+ */
+export type EmailReconcileResult =
+  | {
+      ok: true;
+      polled: number;
+      scheduled: number;
+      canceled: number;
+    }
+  | { ok: false; reason: 'NOT_CONFIGURED' | 'SKIPPED' };
 
 /** The result of the "Test connection" verify (67 §6). Crypto-free view type — no key value. */
 export type EmailVerifyResult =

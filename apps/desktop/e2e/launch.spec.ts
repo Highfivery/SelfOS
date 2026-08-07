@@ -5033,13 +5033,18 @@ test('email (67 P1 / family A): a minted relay link is delivered by a REAL Resen
     const activity = await listEmailActivity(fs, key, 'owner-1', {
       family: 'questionnaire-delivery',
     });
-    expect(activity).toHaveLength(1);
-    expect(activity[0]).toMatchObject({
+    // The immediate delivery (status 'sent') — plus, since the send was bound to an assignment, a scheduled
+    // Phase-3 reminder (status 'scheduled'), so there are two questionnaire-delivery entries.
+    const delivery = activity.find((e) => e.status === 'sent');
+    expect(delivery).toMatchObject({
       family: 'questionnaire-delivery',
       status: 'sent',
       toAddress: 'alex@example.com',
       personId: 'owner-1',
     });
+    const reminder = activity.find((e) => e.status === 'scheduled');
+    expect(reminder?.sourceKey).toMatch(/^questionnaire-reminder:/);
+    expect(reminder?.scheduledAt).toBeDefined();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -5135,6 +5140,88 @@ test('email (67 P2 / family B): an emailable notification (responses-arrived) tr
     });
     expect(entry?.sourceKey).toContain('responses-arrived:');
     expect(entry?.subject).toContain('Outside view'); // the notification title ("Alex answered …")
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('email (67 P3 / scheduling): the cadence schedules a weekly digest on launch → decrypt a scheduled digest activity entry', async () => {
+  const { userData, vault } = await seedReadyVault();
+  // Connect email + the owner's engagement address (digest on by default) + seed a coaching synthesis so the
+  // digest has content. SELFOS_FAKE_RESEND is on globally (deterministic, no real account/network).
+  await createNodeSecretStore(userData, passthrough).set('resend.apiKey', 're-e2e-p3');
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('email P3 e2e: master key missing');
+    await writeEncryptedJson(
+      fs,
+      'config/email.enc',
+      {
+        schemaVersion: 1,
+        fromAddress: 'hi@fam.example',
+        fromName: 'SelfOS',
+        domainVerified: true,
+        updatedAt: '2026-08-07T00:00:00.000Z',
+      },
+      key,
+    );
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/email/prefs.enc',
+      {
+        schemaVersion: 1,
+        address: 'owner@inbox.example',
+        families: {},
+        richness: 'brief',
+        intimacyEmailOptIn: false,
+        paused: false,
+        digestDay: 0,
+        digestTime: 'evening',
+        unsubscribeToken: 'unsub-p3',
+        updatedAt: '2026-08-07T00:00:00.000Z',
+      },
+      key,
+    );
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/coaching/synthesis.enc',
+      {
+        schemaVersion: 1,
+        observation: 'A steady week of showing up for yourself.',
+        subjectPersonId: 'owner-1',
+        sources: [],
+        computedAt: '2026-08-06T00:00:00.000Z',
+      },
+      key,
+    );
+  }
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Home' }).waitFor();
+
+    // useEmailScheduler runs the reconcile on launch → schedules a digest via Resend `scheduledAt`. Poll the
+    // vault for a `scheduled` digest activity entry with a future scheduledAt.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('email P3 e2e: master key missing (2)');
+    const digest = async () =>
+      (await listEmailActivity(fs, key, 'owner-1', { family: 'digest' }))[0] ?? null;
+    await expect
+      .poll(async () => (await digest())?.status ?? null, { timeout: 8000 })
+      .toBe('scheduled');
+    const entry = await digest();
+    expect(entry).toMatchObject({
+      family: 'digest',
+      status: 'scheduled',
+      toAddress: 'owner@inbox.example',
+    });
+    expect(entry?.scheduledAt).toBeDefined();
+    expect(new Date(entry?.scheduledAt as string).getTime()).toBeGreaterThan(Date.now());
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

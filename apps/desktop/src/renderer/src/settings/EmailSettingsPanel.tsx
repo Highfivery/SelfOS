@@ -7,6 +7,7 @@ import {
   Button,
   Field,
   Inline,
+  Select,
   Stack,
   Switch,
   Text,
@@ -14,6 +15,16 @@ import {
 } from '../design-system/components';
 import { useSessionStore } from '../stores/sessionStore';
 import { SecretKeyControl } from './aiControls';
+
+const DAY_LABELS = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+] as const;
 
 /**
  * Settings → Email (67 §3.1) — the connect + configure surface. Household connection (admin-only, an
@@ -197,6 +208,11 @@ function PrefsSection({
   }, [prefs?.address]);
 
   const welcomeOn = prefs?.families?.welcome ?? true;
+  const transactionalOn = prefs?.families?.transactional ?? true;
+  const digestOn = prefs?.families?.digest ?? true;
+  const reengagementOn = prefs?.families?.['re-engagement'] ?? true;
+  const digestDay = prefs?.digestDay ?? 0;
+  const digestTime = prefs?.digestTime ?? 'evening';
   const paused = prefs?.paused ?? false;
 
   const patch = async (
@@ -257,6 +273,65 @@ function PrefsSection({
         checked={welcomeOn}
         disabled={busy || !connected}
         onChange={(checked) => void patch({ families: { welcome: checked } })}
+      />
+      <ToggleRow
+        label="Transactional alerts"
+        help="A heads-up when something happens for you — a response arrives, a partner invites you, someone shares their story."
+        checked={transactionalOn}
+        disabled={busy || !connected}
+        onChange={(checked) => void patch({ families: { transactional: checked } })}
+      />
+      <ToggleRow
+        label="Weekly digest"
+        help="A gentle weekly look-back: your reflection of the week, momentum, and what’s been happening."
+        checked={digestOn}
+        disabled={busy || !connected}
+        onChange={(checked) => void patch({ families: { digest: checked } })}
+      />
+      {digestOn ? (
+        <Inline gap={3} align="end">
+          <Field label="Digest day">
+            {(f) => (
+              <Select
+                {...f}
+                value={String(digestDay)}
+                disabled={busy || !connected}
+                onChange={(event) => void patch({ digestDay: Number(event.target.value) })}
+              >
+                {DAY_LABELS.map((label, index) => (
+                  <option key={label} value={String(index)}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          <Field label="Time of day">
+            {(f) => (
+              <Select
+                {...f}
+                value={digestTime}
+                disabled={busy || !connected}
+                onChange={(event) =>
+                  void patch({
+                    digestTime: event.target.value as 'morning' | 'afternoon' | 'evening',
+                  })
+                }
+              >
+                <option value="morning">Morning</option>
+                <option value="afternoon">Afternoon</option>
+                <option value="evening">Evening</option>
+              </Select>
+            )}
+          </Field>
+        </Inline>
+      ) : null}
+      <ToggleRow
+        label="Re-engagement nudges"
+        help="If you’ve been away a while with something waiting, one gentle nudge to come back."
+        checked={reengagementOn}
+        disabled={busy || !connected}
+        onChange={(checked) => void patch({ families: { 're-engagement': checked } })}
       />
       <ToggleRow
         label="Pause all email"

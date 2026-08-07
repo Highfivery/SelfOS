@@ -330,12 +330,16 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         richness: 'brief' as const,
         intimacyEmailOptIn: false,
         paused: false,
+        digestDay: 0,
+        digestTime: 'evening' as const,
         unsubscribeToken: 'mock-token',
       }),
     emailSend: () => Promise.resolve({ ok: false as const, reason: 'NOT_CONFIGURED' as const }),
     emailSendQuestionnaireDelivery: () =>
       Promise.resolve({ ok: false as const, reason: 'NOT_CONFIGURED' as const }),
     emailSendTransactional: () =>
+      Promise.resolve({ ok: false as const, reason: 'NOT_CONFIGURED' as const }),
+    emailScheduleReconcile: () =>
       Promise.resolve({ ok: false as const, reason: 'NOT_CONFIGURED' as const }),
     emailActivity: () => Promise.resolve([]),
     insightsAnalyze: () => Promise.resolve({ ok: false, reason: 'NO_RESPONSE' }),

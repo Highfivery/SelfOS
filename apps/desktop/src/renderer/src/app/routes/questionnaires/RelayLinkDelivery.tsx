@@ -75,6 +75,7 @@ export function RelayLinkDelivery({
   sensitive,
   recipientEmail,
   recipientPhone,
+  assignmentId,
   note,
   onDone,
   onRefresh,
@@ -86,6 +87,8 @@ export function RelayLinkDelivery({
   sensitive: boolean;
   recipientEmail?: string;
   recipientPhone?: string;
+  /** When set, a real Resend "Send email" schedules an unanswered-reminder for this assignment (67 Phase 3). */
+  assignmentId?: string;
   /** Contextual line shown above the link (what to do with it). */
   note?: ReactNode;
   /** When provided, renders a "Done" button (omit when embedded inline in a Results card). */
@@ -142,6 +145,7 @@ export function RelayLinkDelivery({
         subject: emailSubjectFrom(messages, senderName),
         message,
         link,
+        ...(assignmentId ? { assignmentId } : {}),
       });
       if (result?.ok) {
         setSendBanner({ tone: 'info', text: `Sent to ${email.trim()}.` });

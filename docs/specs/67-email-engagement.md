@@ -1,6 +1,6 @@
 # 67 — Email engagement & re-engagement (Resend)
 
-> **Status:** **Phases 0–2 Built** (of 7 phases) · _last updated 2026-08-07_
+> **Status:** **Phases 0–3 Built** (of 7 phases) · _last updated 2026-08-07_
 >
 > SelfOS's first real outbound email. Today the only "email" is a `mailto:` hand-off for questionnaire
 > links — SelfOS has **never actually sent a message**. This spec adds a household-provisioned
@@ -562,7 +562,7 @@ family)`; `ensureUnsubscribeToken`.
   crisis; render via `emailComposer`; `email.send`; write an `EmailActivityEntry` + a content snapshot;
   mint + persist any `EmailToken`s. One place that every family routes through, so logging + gating can't
   be bypassed.
-- **`emailScheduleService`**: the C/D/E reconcile — compute the coming window's due emails, diff against
+- **`emailSchedule`**: the C/D/E reconcile (`reconcileEmailSchedule`) — compute the coming window's due emails, diff against
   the activity log's `scheduled` entries, `email.cancel` obsolete + `email.send` (with `scheduledAt`) new.
 - **`emailSuggestionService`** (family E): `hasNewSuggestionData` (the new-data gate) → gap-finder /
   synthesis / recommendation inputs → one metered `generateSuggestion` Claude call → de-dup against the
@@ -624,9 +624,10 @@ valuable.
   opt-in + pause; **not** crisis-suppressed per §7; idempotent on `sourceKey` = the notification's
   `coalesceKey#signature`). The §3.2-named **`new-insight-ready`** signal is **deferred** (no such
   `NotificationKind` exists yet — owner-confirmed). Driven by the `useEmailTransactional` cadence hook.
-- **Phase 3 — Scheduling substrate + families C (digest) + D (re-engagement).** `emailScheduleService` +
+- **Phase 3 — Scheduling substrate + families C (digest) + D (re-engagement). BUILT.** `emailSchedule` +
   `useEmailScheduler` (reconcile via `scheduledAt`/cancel; poll delivery status); the deterministic
-  digest builder; the re-engagement nudges; the family-A recipient reminder deferred from Phase 1 (§3.2).
+  digest builder; the re-engagement nudges; the family-A recipient reminder deferred from Phase 1 (§3.2)
+  is now built.
 - **Phase 4 — Interactive layer.** The relay Worker `/t/<token>` tap extension (+ `RELAY_VERSION` bump);
   token mint/drain/map; the `EmailResponse` store; the embedded one-question check-in (can deliver an
   auto check-in); the `selfos://` deep-link path; the in-app response history (own-only, editable).
@@ -846,6 +847,23 @@ No open questions remain.
 
 ## 12. Changelog
 
+- 2026-08-07 — **Phase 3 BUILT** (scheduling substrate + families C [weekly digest] + D [re-engagement] +
+  the deferred family-A recipient reminder). New core `emailSchedule.ts`: `reconcileEmailSchedule` (poll
+  Resend status via `mapResendStatus`; schedule/cancel the digest + re-engagement via `scheduledAt`/cancel;
+  cancel a reminder once its questionnaire is answered), `gatherDigestContent`/`gatherReEngagement`
+  (host-side, deterministic, no AI), `nextDigestAt`, `scheduleQuestionnaireReminder`, `updateEmailActivity`
+  (in-place status/cancel), constants `RE_ENGAGEMENT_AWAY_DAYS=7` / `RE_ENGAGEMENT_MIN_GAP_DAYS=14` /
+  `QUESTIONNAIRE_REMINDER_DAYS=3` / `RECONCILE_THROTTLE_MS=24h`. New composers `buildDigestEmail`,
+  `buildReEngagementEmail`, `buildQuestionnaireReminderEmail`. Families **A/B are NOT** crisis-suppressed;
+  **C/D ARE** (§7, owner-confirmed). Additive schema: `EmailPrefs.digestDay`/`digestTime` (default
+  Sunday/evening), `DeviceState.emailScheduledAt` (24h throttle marker), `EmailReconcileResult` view type;
+  no `schemaVersion` bump. New IPC channel `email:scheduleReconcile({auto})` (full seam, `email.own`-gated,
+  24h throttle + stamp, key never crosses); `email:sendQuestionnaireDelivery` gained an optional
+  `assignmentId` that schedules the 3-day reminder. New renderer hook `useEmailScheduler` (launch/focus,
+  mirrors `useAutoCheckins`), wired in `AppShell`; Settings → Email gained digest day/time selects +
+  transactional/digest/re-engagement family toggles; `RelayLinkDelivery` threads `assignmentId` from the
+  send panels. Tests: core (`emailSchedule.test.ts`), coreBridge P3 (throttle + stamp + decrypt), settings
+  RTL, + a Playwright E2E (launch → decrypt a scheduled digest activity entry). **Phases 4–6 remain.**
 - 2026-08-07 — **Phase 2 BUILT** (family B — transactional). The emailable notification kinds (35) also
   send a transactional teaser: new core `EMAILABLE_TRANSACTIONAL_KINDS` + `isEmailableTransactionalKind`
   (`responses-arrived`, `answers-updated`, `together-invite`, `together-turn` [teaser only], `story-shared`,

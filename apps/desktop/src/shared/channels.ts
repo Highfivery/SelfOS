@@ -5,6 +5,7 @@ import type {
   AlignmentResult,
   EmailActivityEntry,
   EmailPrefs,
+  EmailReconcileResult,
   EmailSendInput,
   EmailSendResult,
   EmailStatus,
@@ -390,6 +391,7 @@ export const IpcChannels = {
   emailSend: 'email:send',
   emailSendQuestionnaireDelivery: 'email:sendQuestionnaireDelivery',
   emailSendTransactional: 'email:sendTransactional',
+  emailScheduleReconcile: 'email:scheduleReconcile',
   emailActivity: 'email:activity',
   insightsAnalyze: 'insights:analyze',
   insightsApprove: 'insights:approve',
@@ -1193,6 +1195,8 @@ export interface SelfosBridge {
     richness?: 'brief' | 'full';
     intimacyEmailOptIn?: boolean;
     paused?: boolean;
+    digestDay?: number;
+    digestTime?: 'morning' | 'afternoon' | 'evening';
   }): Promise<EmailPrefs>;
   /** Compose + send one family email for the active person, gated + logged (67 §6). Phase 0: `welcome`. */
   emailSend(input: EmailSendInput): Promise<EmailSendResult>;
@@ -1208,6 +1212,8 @@ export interface SelfosBridge {
     subject: string;
     message: string;
     link: string;
+    /** When set (Phase 3), an unanswered-reminder is scheduled for this assignment, canceled on answer. */
+    assignmentId?: string;
   }): Promise<EmailSendResult>;
   /**
    * Family B — send a transactional email (67 §3.2 / Phase 2) to the ACTIVE person's own engagement address,
@@ -1221,6 +1227,13 @@ export interface SelfosBridge {
     title: string;
     body?: string;
   }): Promise<EmailSendResult>;
+  /**
+   * The no-backend email cadence (67 §3.4 / Phase 3) — poll Resend delivery status + reconcile the scheduled
+   * families (weekly digest C, re-engagement D) via Resend `scheduledAt`/cancel, and cancel a questionnaire
+   * reminder whose send was answered. `auto:true` applies the 24h per-person throttle + stamps it; `auto:false`
+   * (a manual run) forces. Gated `email.own`; the Resend key never crosses the seam.
+   */
+  emailScheduleReconcile(input?: { auto?: boolean }): Promise<EmailReconcileResult>;
   /** Read logged email activity (own; another person's is `people.manage`-gated in the bridge). */
   emailActivity(input?: {
     personId?: string;

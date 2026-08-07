@@ -22,6 +22,44 @@ const ActivityShardSchema = z.object({
   entries: z.array(EmailActivityEntrySchema),
 });
 
+/**
+ * Update logged activity entries in place (67 §3.4 / Phase 3) — the status poll + a cancel need to mutate
+ * an already-logged entry (append-only otherwise). The `updater` returns a changed entry or the same one;
+ * only shards with an actual change are rewritten. A corrupt shard is skipped, never crashes. Returns the
+ * number of entries changed.
+ */
+export async function updateEmailActivity(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  updater: (entry: EmailActivityEntry) => EmailActivityEntry,
+): Promise<number> {
+  let changed = 0;
+  for (const name of await fs.list(activityDir(personId))) {
+    if (!name.endsWith('.enc')) continue;
+    const path = `${activityDir(personId)}/${name}`;
+    const raw = await readEncryptedJson(fs, path, key);
+    if (!raw) continue;
+    let entries: EmailActivityEntry[];
+    try {
+      entries = ActivityShardSchema.parse(raw).entries;
+    } catch {
+      continue; // a corrupt shard is quarantined
+    }
+    let shardChanged = false;
+    const next = entries.map((entry) => {
+      const updated = updater(entry);
+      if (updated !== entry) {
+        shardChanged = true;
+        changed += 1;
+      }
+      return updated;
+    });
+    if (shardChanged) await writeEncryptedJson(fs, path, { schemaVersion: 1, entries: next }, key);
+  }
+  return changed;
+}
+
 async function appendActivity(
   fs: FileSystem,
   key: Uint8Array,
@@ -206,6 +244,8 @@ export async function sendQuestionnaireDeliveryEmail(deps: {
   toAddress: string;
   composed: ComposedEmail;
   scheduledAt?: string;
+  /** De-dup/identify key (Phase 3: `questionnaire-reminder:<assignmentId>` for a scheduled reminder). */
+  sourceKey?: string;
   now: Date;
 }): Promise<EmailSendResult> {
   const config = await readEmailConfig(deps.fs, deps.key);
@@ -225,6 +265,7 @@ export async function sendQuestionnaireDeliveryEmail(deps: {
     composed: deps.composed,
     now: deps.now,
     ...(deps.scheduledAt ? { scheduledAt: deps.scheduledAt } : {}),
+    ...(deps.sourceKey ? { sourceKey: deps.sourceKey } : {}),
   });
 }
 

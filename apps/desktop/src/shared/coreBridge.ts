@@ -101,6 +101,7 @@ import {
   isEmailableTransactionalKind,
   type EmailActivityEntry,
   type EmailPrefs,
+  type EmailReconcileResult,
   type EmailSendResult,
   type EmailStatus,
   type EmailVerifyResult,
@@ -463,13 +464,16 @@ import {
   emailStatusOf,
   listEmailActivity,
   readEmailPrefs,
+  reconcileEmailSchedule,
   resolveResendKey,
+  scheduleQuestionnaireReminder,
   sendFamilyEmail,
   sendQuestionnaireDeliveryEmail,
   sendTransactionalEmail,
   setEmailPrefs,
   updateEmailConfig,
   writeSharedResendKey,
+  RECONCILE_THROTTLE_MS,
 } from '@selfos/core/email';
 import {
   createGoal,
@@ -1281,6 +1285,8 @@ const EmailSetPrefsSchema = z.object({
   richness: z.enum(['brief', 'full']).optional(),
   intimacyEmailOptIn: z.boolean().optional(),
   paused: z.boolean().optional(),
+  digestDay: z.number().int().min(0).max(6).optional(),
+  digestTime: z.enum(['morning', 'afternoon', 'evening']).optional(),
 });
 const EmailActivitySchema = z.object({
   personId: z.string().optional(),
@@ -1293,6 +1299,7 @@ const EmailSendQuestionnaireDeliverySchema = z.object({
   subject: z.string(),
   message: z.string(),
   link: z.string(),
+  assignmentId: z.string().optional(),
 });
 const EmailSendTransactionalSchema = z.object({
   kind: z.string(),
@@ -1300,6 +1307,7 @@ const EmailSendTransactionalSchema = z.object({
   title: z.string().min(1).max(200),
   body: z.string().max(400).optional(),
 });
+const EmailReconcileSchema = z.object({ auto: z.boolean().optional() });
 const ProfileSuggestionIdSchema = z.string().min(1);
 const AssignmentIdSchema = z.string().min(1);
 const QuestionnaireIdSchema = z.string().min(1);
@@ -4555,6 +4563,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           richness: 'brief',
           intimacyEmailOptIn: false,
           paused: false,
+          digestDay: 0,
+          digestTime: 'evening',
           unsubscribeToken: 'unavailable',
         };
       }
@@ -4626,7 +4636,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Family A goes to the RECIPIENT's contact address, not the sender's engagement address; it is not
       // crisis-suppressed and not gated on the recipient's opt-in (67 §3.2/§7). The one gate the core applies
       // is that the household is configured + a recipient address is present.
-      return sendQuestionnaireDeliveryEmail({
+      const now = new Date();
+      const result = await sendQuestionnaireDeliveryEmail({
         fs: ctx.fs,
         key: ctx.key,
         email: host.email,
@@ -4634,8 +4645,28 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         senderPersonId: personId,
         toAddress: parsed.toAddress,
         composed,
-        now: new Date(),
+        now,
       });
+      // Phase 3: on a successful delivery to a known assignment, schedule an unanswered-reminder for a few
+      // days out (canceled on the next reconcile once they answer). Best-effort — never fails the delivery.
+      if (result.ok && parsed.assignmentId) {
+        try {
+          await scheduleQuestionnaireReminder({
+            fs: ctx.fs,
+            key: ctx.key,
+            email: host.email,
+            resendKey: resolved.key,
+            senderPersonId: personId,
+            toAddress: parsed.toAddress,
+            originalSubject: parsed.subject,
+            assignmentId: parsed.assignmentId,
+            now,
+          });
+        } catch {
+          // scheduling the reminder is a best-effort follow-up; the delivery already succeeded.
+        }
+      }
+      return result;
     },
     emailSendTransactional: async (input): Promise<EmailSendResult> => {
       const ctx = await host.vaultAndKey();
@@ -4663,6 +4694,52 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         composed,
         now: new Date(),
       });
+    },
+    emailScheduleReconcile: async (input): Promise<EmailReconcileResult> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'email.own')))
+        return { ok: false, reason: 'NOT_CONFIGURED' };
+      const auto = EmailReconcileSchema.parse(input ?? {}).auto ?? true;
+      const now = new Date();
+      // 24h per-person throttle on the AUTO cadence (the autoCheckins precedent); a manual run forces.
+      if (auto) {
+        const device = await host.readDeviceState();
+        const last = device.emailScheduledAt?.[personId];
+        if (last && now.getTime() - new Date(last).getTime() < RECONCILE_THROTTLE_MS)
+          return { ok: false, reason: 'SKIPPED' };
+      }
+      const resolved = await resolveResendKey(host.secrets, ctx.fs, ctx.key);
+      const prefs = await readEmailPrefs(ctx.fs, ctx.key, personId);
+      const insights = await listInsightsForPerson(ctx.fs, ctx.key, personId);
+      const crisisSuppressed = aggregateCrisisSignal({
+        insights,
+        now,
+        nightmareNudge: false,
+      }).recurring;
+      const person = await getPerson(ctx.fs, ctx.key, personId);
+      const result = await reconcileEmailSchedule({
+        fs: ctx.fs,
+        key: ctx.key,
+        email: host.email,
+        resendKey: resolved.key,
+        personId,
+        prefs,
+        crisisSuppressed,
+        now,
+        ...(person?.displayName ? { recipientName: person.displayName } : {}),
+      });
+      // Stamp the throttle only on a real run (not a NOT_CONFIGURED short-circuit) — the memoryRefresh pattern.
+      if (result.ok) {
+        const latest = await host.readDeviceState();
+        await host.updateDeviceState({
+          emailScheduledAt: {
+            ...(latest.emailScheduledAt ?? {}),
+            [personId]: now.toISOString(),
+          },
+        });
+      }
+      return result;
     },
     emailActivity: async (input): Promise<EmailActivityEntry[]> => {
       const ctx = await host.vaultAndKey();

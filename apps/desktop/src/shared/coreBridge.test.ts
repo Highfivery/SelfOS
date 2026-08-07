@@ -31,6 +31,12 @@ import { getQuestionnaire, listAssignments } from '@selfos/core/questionnaires';
 import { readEncryptedJson, writeEncryptedJson } from '@selfos/core/vault';
 import { listInsightsForPerson, saveInsight, summarizeForContext } from '@selfos/core/insights';
 import { getIntakeSession, submitSectionForm } from '@selfos/core/intake';
+import {
+  applyDecline,
+  emptyProfile,
+  NOT_APPLICABLE_SKIP_REASON,
+  writeProfile,
+} from '@selfos/core/questionnaires';
 import { getTest } from '@selfos/core/tests';
 import { matrixRowKey } from '@selfos/core/schemas';
 import { saveGoal } from '@selfos/core/goals';
@@ -2850,6 +2856,56 @@ describe('createCoreBridge', () => {
     const groundLine = sentUserText.split('\n').find((l) => l.includes('GROUND TO OPEN THIS TIME'));
     expect(groundLine).toBeDefined();
     expect(groundLine ?? '').toMatch(/in this order: Oral/i);
+  });
+
+  it('feeds a recipient’s prior skip/decline into the manual generation prompt (spec 69 §5.9)', async () => {
+    const { host, bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const mara = await bridge.peopleSave({ displayName: 'Mara', isSubject: true, tags: [] });
+    const ctx = (await host.host.vaultAndKey())!;
+
+    // Mara previously declined a question as "doesn't apply". Seed her Personalization Profile directly (the
+    // submit→capture path is covered in core; here we prove the BRIDGE reads it into generation, author-blind).
+    await writeProfile(
+      ctx.fs,
+      ctx.key,
+      applyDecline(
+        emptyProfile(mara.id),
+        { questionPrompt: 'How is your commute?', reason: NOT_APPLICABLE_SKIP_REASON },
+        new Date(),
+      ),
+    );
+
+    let sentUserText = '';
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        sentUserText = options.messages.map((m) => m.content).join('\n');
+        // A single question → the semantic pass (which needs >1) doesn't run, so this stays the GEN prompt.
+        const json = JSON.stringify({
+          title: 'X',
+          questions: [{ type: 'shortText', prompt: 'Somewhere new?', required: true }],
+        });
+        onDelta(json);
+        return Promise.resolve({
+          text: json,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    const result = await bridge.questionnairesGenerate({
+      type: 'general',
+      sensitivity: 'standard',
+      existingPrompts: [],
+      recipientPersonId: mara.id,
+    });
+    expect(result.ok).toBe(true);
+    // The differentiated avoid steering reached the model…
+    expect(sentUserText).toMatch(/DON'T APPLY/);
+    expect(sentUserText).toContain('How is your commute?');
+    // …but it stays author-blind — the raw declined content is never returned to the author.
+    expect(JSON.stringify(result)).not.toContain('How is your commute?');
   });
 
   it('the SEMANTIC de-dup pass receives the recipient’s onboarding answers, led + untruncated (§23.5b)', async () => {

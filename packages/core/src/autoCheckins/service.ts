@@ -24,6 +24,7 @@ import { saveQuestionnaire, validateQuestionnaire } from '../questionnaires/ques
 import {
   buildDedupReference,
   gatherRecipientAskedPrompts,
+  gatherRecipientFeedbackGuidance,
   gatherRecipientHistory,
   gatherRecipientInsightFacts,
   gatherRecipientIntimacyAsks,
@@ -31,6 +32,7 @@ import {
   gatherRecipientPriorAnswers,
   gatherRecipientQuestionnaireTitles,
 } from '../questionnaires/recipientHistory';
+import { listCoveredTopics } from '../questionnaires/coveredTopicsStore';
 import type {
   AutoCheckinCreated,
   AutoCheckinIntent,
@@ -165,6 +167,7 @@ export async function runAutoCheckins(input: RunAutoCheckinsInput): Promise<Auto
     const bundle = await buildDedupBundle(
       fs,
       key,
+      authorId,
       elig.recipientPersonId,
       target.explorationFocus,
       now,
@@ -186,7 +189,9 @@ export async function runAutoCheckins(input: RunAutoCheckinsInput): Promise<Auto
         // Topic-level de-dup (§23.5): the topics already sent to this recipient, so the daily gap-finder
         // proposes a NEW area instead of circling the same ones — the previously-missing hard signal on the
         // path that repeats most (a recurring daily send). Enforced deterministically in `suggestQuestionnaires`.
-        ...(bundle.priorTitles.length ? { avoidSuggestions: bundle.priorTitles } : {}),
+        ...(bundle.priorTitles.length || bundle.coveredNotes.length
+          ? { avoidSuggestions: [...bundle.priorTitles, ...bundle.coveredNotes] }
+          : {}),
       });
       if (sug.ok) {
         suggestions = sug.suggestions ?? [];
@@ -239,6 +244,8 @@ export async function runAutoCheckins(input: RunAutoCheckinsInput): Promise<Auto
           : {}),
         // §27.3 — steer this set to intimacy ground not yet worked, and put worked-through ground off-limits.
         ...(intent === 'intimacy' ? { intimacyCoverage: bundle.intimacyCoverage } : {}),
+        // spec 69 §5.9 — learn from the recipient's prior skips/declines (avoid / boundary / reword).
+        ...(bundle.feedbackGuidance ? { feedbackGuidance: bundle.feedbackGuidance } : {}),
         recipient: elig.recipient,
       });
 
@@ -544,6 +551,8 @@ function defaultTitle(intent: AutoCheckinIntent): string {
 async function buildDedupBundle(
   fs: AiDeps['fs'],
   key: Uint8Array,
+  /** The stream owner (author) — reads their per-recipient covered-topic notes (08 §28.3). */
+  authorId: string,
   recipientId: string,
   /** The stream's exploration focus — an EXPLICIT request that re-opens the ground it names (§27.4). */
   explorationFocus: string,
@@ -554,8 +563,12 @@ async function buildDedupBundle(
   recipientAskedPrompts: string[];
   coveredActs: CoveredAct[];
   priorTitles: string[];
+  /** The author's "already covered" topic notes for this recipient (08 §28.3) — fed to the gap-finder avoid-list. */
+  coveredNotes: string[];
   /** Which intimacy ground has already been worked (08 §27.2) — steers the intimacy slot to new ground. */
   intimacyCoverage: IntimacyCoverage;
+  /** Differentiated avoid/boundary/reword steering from the recipient's Personalization Profile (spec 69 §5.9). */
+  feedbackGuidance: string;
 }> {
   const [
     history,
@@ -566,6 +579,8 @@ async function buildDedupBundle(
     session,
     intimacyAsks,
     signals,
+    feedbackGuidance,
+    coveredTopics,
   ] = await Promise.all([
     gatherRecipientHistory(fs, key, recipientId),
     gatherRecipientAskedPrompts(fs, key, recipientId),
@@ -575,10 +590,17 @@ async function buildDedupBundle(
     getIntakeSession(fs, key, recipientId),
     gatherRecipientIntimacyAsks(fs, key, recipientId),
     gatherRecipientMaterialSignals(fs, key, recipientId),
+    gatherRecipientFeedbackGuidance(fs, key, recipientId, now),
+    // §28.3 covered-topics parity (spec 69 §5.2): the auto path used to ignore the author's marked-done notes.
+    listCoveredTopics(fs, key, authorId, recipientId),
   ]);
   const intake = session
     ? formatIntakeForGeneration(session)
     : { text: '', coveredActs: [], prompts: [] };
+  const coveredNotes = coveredTopics.map((t) => t.note);
+  const coveredPrompts = coveredTopics
+    .map((t) => t.sourcePrompt)
+    .filter((p): p is string => Boolean(p));
   const recipientHistory = [
     history,
     intake.text.trim() ? `What they have already answered in onboarding:\n${intake.text}` : '',
@@ -593,9 +615,10 @@ async function buildDedupBundle(
     priorAnswers,
     insightFacts,
     priorPrompts,
+    ...(coveredNotes.length ? { coveredTopics: coveredNotes } : {}),
   });
 
-  const recipientAskedPrompts = [...priorPrompts, ...intake.prompts];
+  const recipientAskedPrompts = [...priorPrompts, ...intake.prompts, ...coveredPrompts];
 
   // §27.2 — the coverage map. `profileEditedAt` comes from the session we already loaded (the gatherer can't
   // read it without forming a `questionnaires → intake` cycle).
@@ -614,6 +637,8 @@ async function buildDedupBundle(
     recipientAskedPrompts,
     coveredActs: intake.coveredActs,
     priorTitles,
+    coveredNotes,
     intimacyCoverage,
+    feedbackGuidance,
   };
 }

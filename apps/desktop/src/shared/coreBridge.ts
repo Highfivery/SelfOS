@@ -695,6 +695,7 @@ import {
   gatherRecipientIntimacyAsks,
   gatherRecipientMaterialSignals,
   gatherRecipientQuestionnaireTitles,
+  gatherRecipientFeedbackGuidance,
   generateQuestions,
   resolveInsightAbout,
   resolveInsightSource,
@@ -1674,8 +1675,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     /** Which intimacy ground has already been worked (08 §27.2) — bounds the "go deeper" framing so a manual
      *  intimacy draft can't re-mine the same rated acts either (#314). */
     intimacyCoverage: IntimacyCoverage;
+    /** Differentiated avoid/boundary/reword steering from the recipient's Personalization Profile — how the
+     *  app learns from their prior skips/declines (spec 69 §5.9). */
+    feedbackGuidance: string;
   }> => {
     const history = await gatherRecipientHistory(fs, key, recipientPersonId);
+    // The recipient's skip/decline steering (spec 69) — read host-side, fed to the model to avoid what they
+    // said doesn't apply / would rather not, and to reword what landed unclear.
+    const feedbackGuidance = await gatherRecipientFeedbackGuidance(fs, key, recipientPersonId);
     // The structured already-asked prompts (08 §23.5) drive the deterministic hard near-dup filter in core.
     const priorPrompts = await gatherRecipientAskedPrompts(fs, key, recipientPersonId);
     // §24.3-A1/A2: the recipient's RAW prior-questionnaire answers + all distilled insight facts (sessions,
@@ -1743,6 +1750,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       dedupReference,
       coveredNotes,
       intimacyCoverage,
+      feedbackGuidance,
     };
   };
 
@@ -4037,6 +4045,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             dedupReference: '',
             coveredNotes: [] as string[],
             intimacyCoverage: undefined,
+            feedbackGuidance: '',
           };
       // Who it's FOR (08 §24.4): the recipient's name/pronouns + the author↔recipient relationship (type +
       // closeness), so generation adopts the right register (partner vs coworker vs child) and personalizes.
@@ -4093,6 +4102,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(known.coveredActs.length ? { coveredIntimacyActs: known.coveredActs } : {}),
         // §27.3 — bounds the "go deeper" framing to ground not yet worked through (#314).
         ...(known.intimacyCoverage ? { intimacyCoverage: known.intimacyCoverage } : {}),
+        // spec 69 §5.9 — learn from their prior skips/declines (avoid / boundary / reword).
+        ...(known.feedbackGuidance ? { feedbackGuidance: known.feedbackGuidance } : {}),
         ...(p.intimacyMode !== undefined ? { intimacyMode: p.intimacyMode } : {}),
         ...(p.count !== undefined ? { count: p.count } : {}),
         ...(recipientFraming ? { recipient: recipientFraming } : {}),
@@ -4234,7 +4245,26 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const deps = await aiDeps();
       if (!deps) return { ok: false, reason: 'DENIED', message: 'Not available.' };
       const { targetPersonId } = SuggestSchema.parse(input);
-      return suggestQuestionnaires(deps, targetPersonId !== undefined ? { targetPersonId } : {});
+      // spec 69 §5.2 — the Home gap-finder now gets the SAME avoid-list as the auto/saved paths (it used to
+      // pass nothing, so it could re-propose already-covered topics forever). Household targets only: the
+      // target's history as avoid-only grounding + the topics already sent (titles) + the author's marked-done
+      // notes (§28.3) as the deterministic `avoidSuggestions`.
+      let recipientHistory = '';
+      let avoidSuggestions: string[] = [];
+      if (targetPersonId !== undefined && (await getPerson(deps.fs, deps.key, targetPersonId))) {
+        const [history, priorTitles, covered] = await Promise.all([
+          gatherRecipientHistory(deps.fs, deps.key, targetPersonId),
+          gatherRecipientQuestionnaireTitles(deps.fs, deps.key, targetPersonId),
+          listCoveredTopics(deps.fs, deps.key, deps.personId, targetPersonId),
+        ]);
+        recipientHistory = history;
+        avoidSuggestions = [...priorTitles, ...covered.map((t) => t.note)];
+      }
+      return suggestQuestionnaires(deps, {
+        ...(targetPersonId !== undefined ? { targetPersonId } : {}),
+        ...(recipientHistory.trim() ? { recipientHistory } : {}),
+        ...(avoidSuggestions.length ? { avoidSuggestions } : {}),
+      });
     },
 
     // --- Recipient-first saved suggestions (08 §18) — author = the active person, gated `questionnaires.create`.
@@ -4380,6 +4410,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(known.coveredActs.length ? { coveredIntimacyActs: known.coveredActs } : {}),
         // §27.3 — bounds the "go deeper" framing to ground not yet worked through (#314).
         ...(known.intimacyCoverage ? { intimacyCoverage: known.intimacyCoverage } : {}),
+        // spec 69 §5.9 — learn from their prior skips/declines (avoid / boundary / reword).
+        ...(known.feedbackGuidance ? { feedbackGuidance: known.feedbackGuidance } : {}),
       });
     },
 

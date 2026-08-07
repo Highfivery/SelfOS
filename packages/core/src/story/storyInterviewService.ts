@@ -3,9 +3,11 @@ import { classifyParseOutcome, extractJsonObject, tolerantArray } from '../ai';
 import { uuid } from '../id';
 import { listInsightsForPerson } from '../insights';
 import { formatIntakeForGeneration, getIntakeSession } from '../intake/intakeService';
+import { listCoveredTopics } from '../questionnaires/coveredTopicsStore';
 import {
   buildDedupReference,
   gatherRecipientAskedPrompts,
+  gatherRecipientFeedbackGuidance,
   gatherRecipientInsightFacts,
   gatherRecipientPriorAnswers,
 } from '../questionnaires/recipientHistory';
@@ -88,22 +90,32 @@ export async function mintStoryCheckInFromTodo(
   // Assemble the same budgeted reference (onboarding-first) + the exact asked-prompt list, so the biographer
   // never re-asks what onboarding or a prior questionnaire already answered ("reads like it hasn't read your
   // file"). Author-blind — fed only to the model.
-  const [priorAnswers, insightFacts, priorPrompts, intakeSession] = await Promise.all([
-    gatherRecipientPriorAnswers(deps.fs, deps.key, deps.personId),
-    gatherRecipientInsightFacts(deps.fs, deps.key, deps.personId),
-    gatherRecipientAskedPrompts(deps.fs, deps.key, deps.personId),
-    getIntakeSession(deps.fs, deps.key, deps.personId),
-  ]);
+  const [priorAnswers, insightFacts, priorPrompts, intakeSession, feedbackGuidance, coveredTopics] =
+    await Promise.all([
+      gatherRecipientPriorAnswers(deps.fs, deps.key, deps.personId),
+      gatherRecipientInsightFacts(deps.fs, deps.key, deps.personId),
+      gatherRecipientAskedPrompts(deps.fs, deps.key, deps.personId),
+      getIntakeSession(deps.fs, deps.key, deps.personId),
+      // spec 69 §5.9 — the biographer learns from the person's own prior skips/declines too.
+      gatherRecipientFeedbackGuidance(deps.fs, deps.key, deps.personId),
+      // §28.3 covered-topics parity (spec 69 §5.2): a self-send, so author = recipient = the person.
+      listCoveredTopics(deps.fs, deps.key, deps.personId, deps.personId),
+    ]);
   const intake = intakeSession
     ? formatIntakeForGeneration(intakeSession)
     : { text: '', prompts: [] as string[] };
+  const coveredNotes = coveredTopics.map((t) => t.note);
+  const coveredPrompts = coveredTopics
+    .map((t) => t.sourcePrompt)
+    .filter((p): p is string => Boolean(p));
   const dedupReference = buildDedupReference({
     intakeText: intake.text,
     priorAnswers,
     insightFacts,
     priorPrompts,
+    ...(coveredNotes.length ? { coveredTopics: coveredNotes } : {}),
   });
-  const recipientAskedPrompts = [...priorPrompts, ...intake.prompts];
+  const recipientAskedPrompts = [...priorPrompts, ...intake.prompts, ...coveredPrompts];
 
   const gen = await generateQuestions(deps, {
     type: 'general',
@@ -118,6 +130,7 @@ export async function mintStoryCheckInFromTodo(
     existingPrompts: [],
     ...(dedupReference ? { dedupReference } : {}),
     ...(recipientAskedPrompts.length > 0 ? { recipientAskedPrompts } : {}),
+    ...(feedbackGuidance ? { feedbackGuidance } : {}),
     count: STORY_CHECKIN_COUNT,
   });
   if (!gen.ok) {

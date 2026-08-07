@@ -396,6 +396,9 @@ export function buildGenerationUserMessage(input: {
     pronouns?: string;
     relationship?: { type: RelationshipType; closeness?: number };
   };
+  // Differentiated steering from the recipient's Personalization Profile (spec 69 §5.9): avoid / boundary /
+  // reword blocks built from their prior skips/declines. This is how the app learns what NOT to ask over time.
+  feedbackGuidance?: string;
 }): string {
   const parts: string[] = [];
   parts.push(`Draft ${input.count} questions for a "${input.type}" questionnaire.`);
@@ -482,6 +485,11 @@ export function buildGenerationUserMessage(input: {
         input.recipientHistory.trim(),
       ].join('\n'),
     );
+  }
+  // The differentiated skip/decline steering (spec 69 §5.9) — placed AFTER the "what is known" block so it
+  // governs it: even if a topic is unexplored, an "it doesn't apply" / boundary signal keeps it off-limits.
+  if (input.feedbackGuidance?.trim()) {
+    parts.push(`\n${input.feedbackGuidance.trim()}`);
   }
   parts.push(`\nReturn the JSON object with a short "title" and the "questions" array.`);
   return parts.filter((p) => p !== '').join('\n');

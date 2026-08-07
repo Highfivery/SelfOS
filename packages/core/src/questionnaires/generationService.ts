@@ -85,6 +85,10 @@ const GeneratedSetSchema = z.object({
 const OPTION_TYPES = new Set(['singleChoice', 'multiChoice', 'ranking', 'thisOrThat']);
 const SCALE_TYPES = new Set(['rating', 'slider']);
 
+/** The stricter fuzzy threshold applied as a deterministic fallback when the semantic de-dup pass degrades
+ *  (spec 69 §5.5) — more aggressive than the standard 0.6 so degraded generation still catches obvious re-asks. */
+const STRICT_DEDUP_THRESHOLD = 0.45;
+
 /** Map a validated generated object to a well-formed Question, dropping ones missing required fields. */
 function toQuestion(raw: z.infer<typeof GeneratedQuestionSchema>): Question | null {
   if (OPTION_TYPES.has(raw.type) && (raw.options?.length ?? 0) < 2) return null;
@@ -136,6 +140,10 @@ export interface GenerateRequest {
     pronouns?: string;
     relationship?: { type: RelationshipType; closeness?: number };
   };
+  // Differentiated steering from the recipient's Personalization Profile (spec 69 §5.9): what they've said
+  // doesn't apply (avoid), touched a boundary (leave alone), or landed unclear (reword). Assembled host-side by
+  // `gatherRecipientFeedbackGuidance`; how the app learns from skips/declines over time.
+  feedbackGuidance?: string;
 }
 
 /** Generate questions from a brief and/or the configured structured context. */
@@ -182,6 +190,9 @@ export async function generateQuestions(
       ? { intimacyCoverage: request.intimacyCoverage }
       : {}),
     ...(request.recipient !== undefined ? { recipient: request.recipient } : {}),
+    ...(request.feedbackGuidance !== undefined
+      ? { feedbackGuidance: request.feedbackGuidance }
+      : {}),
   });
 
   // A generous output budget (thinking is off) that SCALES with the (over-asked) count (08 §23.4) — a 20-question
@@ -255,6 +266,15 @@ export async function generateQuestions(
     // Surface the §26 flag (08 §28.4): the pass fell back to keep-all with no real filter signal (AI-off /
     // over-budget / unparseable / empty). A caller finally reads it so a silent no-op is observable.
     dedupDegraded = sem.degraded === true;
+  }
+  // Consume `degraded`, don't just report it (spec 69 §5.5): when the semantic pass fell back to keep-all, the
+  // only meaning-level de-dup is gone, so tighten the DETERMINISTIC backstop — re-filter against the recipient's
+  // already-asked prompts at a stricter (lower) threshold to catch near-dups the standard 0.6 pass let through.
+  // Applied before the trim, so we keep up to `requestedCount` of the survivors.
+  if (dedupDegraded && askedPrompts.length > 0) {
+    finalQuestions = finalQuestions.filter(
+      (q) => !isNearDuplicate(q.prompt, askedPrompts, STRICT_DEDUP_THRESHOLD),
+    );
   }
   finalQuestions = finalQuestions.slice(0, requestedCount);
 

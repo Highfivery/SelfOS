@@ -3,6 +3,7 @@ import { getPerson } from '../people/peopleService';
 import { listInsightsForPerson } from '../insights';
 import { formatAnswerForDisplay, isDeclined, type AnswerValue } from './answering';
 import { getAssignmentSnapshot, listAssignments } from './assignmentService';
+import { buildFeedbackGuidance, readProfile } from './personalizationProfile';
 import { getResponse } from './responseService';
 
 /**
@@ -308,6 +309,22 @@ export async function countAnsweredQuestionnaires(
     if (response.answers.some((a) => !isDeclined(a.value))) count += 1;
   }
   return count;
+}
+
+/**
+ * The recipient's feedback guidance block for a generation prompt (spec 69 §5.9) — reads their Personalization
+ * Profile and renders the differentiated avoid / boundary / reword steering built from prior skips/declines.
+ * `''` when there is nothing to say. Host-side, author-blind; household recipients only (the caller passes a
+ * household recipient id). Lives here beside the other `gatherRecipient*` de-dup gatherers so every mint path
+ * imports it from one place.
+ */
+export async function gatherRecipientFeedbackGuidance(
+  fs: FileSystem,
+  key: Uint8Array,
+  recipientPersonId: string,
+  now: Date = new Date(),
+): Promise<string> {
+  return buildFeedbackGuidance(await readProfile(fs, key, recipientPersonId), now);
 }
 
 /** The whole answer history as ONE string (the de-dup reference). Byte-identical to the pre-§15.2 output. */

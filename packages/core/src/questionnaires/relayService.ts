@@ -28,6 +28,7 @@ import type { FileSystem } from '../host';
 import { writeEncryptedJson } from '../vault';
 import { assignmentPath, consentPath, snapshotPath } from './paths';
 import { getAssignment, getAssignmentSnapshot } from './assignmentService';
+import { captureResponseFeedback } from './profileFeedback';
 import { getQuestionnaireImage } from './imageService';
 import { saveResponse } from './responseService';
 import { getQuestionnaire, validateQuestionnaire } from './questionnaireService';
@@ -389,6 +390,15 @@ export async function drainRelaySend(
   };
   await writeEncryptedJson(fs, assignmentPath(assignmentId), updated, key);
   await relay.purge(assignment.relay.token);
+  // Learn from any per-question declines the recipient sent via the link (spec 69 §3.3) — same as an in-app
+  // submit. Household recipients only (captured host-side); best-effort, never breaks the drain.
+  if (drained > 0) {
+    try {
+      await captureResponseFeedback(fs, key, assignmentId);
+    } catch {
+      // profile capture is a learning side-effect, not part of the drain
+    }
+  }
   return { assignmentId, drained, declined };
 }
 

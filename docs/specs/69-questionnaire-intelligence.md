@@ -227,6 +227,7 @@ const FeedbackKind = z.enum([
   'unclear', // "Not clear — needs more context" → reword / re-approach differently
   'not-applicable', // "Doesn't apply to me" / not right about me → stop mining this topic
   'prefer-not-to-say', // boundary → back off long-term, rare gentle re-approach much later
+  'skipped', // reasonless / unclassified free-text skip → weak signal (don't re-ask, mild de-prioritize)
   'answered-richly', // strong engagement → this vein is productive
   'bailed', // opened, abandoned → treat as low-engagement signal
 ]);
@@ -243,6 +244,7 @@ const FeedbackEntry = z.object({
 const ChangeEntry = z.object({
   topicId: z.string().optional(),
   metricKey: z.string().optional(), // for numeric shifts (ResponseSet.reAskOf → buildQuestionTrends)
+  label: z.string().optional(), // a human-readable label for the changed thing (e.g. the question prompt)
   kind: z.enum(['numeric-shift', 'contradiction']),
   from: z.string(),
   to: z.string(),
@@ -597,6 +599,15 @@ _These finer points were resolved with the owner (2026-08-07); the defaults belo
 
 ## 15. Changelog
 
+- 2026-08-07 — **Phase 1 BUILT** (feedback loop + concrete fixes). The Personalization Profile store
+  (`personalizationProfile.ts`: feedback ledger + change log, module-local schema, tolerant/bounded); capture of
+  per-question declines at every submit channel (`captureResponseFeedback` in `submitResponse` + `drainRelaySend`,
+  household-only, best-effort) + numeric "what changed?" detection (`detectRecipientNumericShifts`, scale-aware);
+  `buildFeedbackGuidance` (differentiated avoid / boundary / reword + a fresh-window change hint) threaded into all
+  four read paths (manual/auto/story/dream) via a new `feedbackGuidance` request/prompt field; `degraded`
+  consumed (stricter 0.45 fallback); the Home gap-finder given its avoid-list; covered-topics parity across
+  auto/story/dream. Added a `skipped` FeedbackKind and a change `label`. Verified: core+desktop unit + a
+  bridge-level assert-the-prompt test (author-blind). No new user surface (§12). Slices 1a–1e.
 - 2026-08-07 — created (Approved). The per-person Personalization Profile + the unified `planGeneration` engine
   consolidating the [`08 §16–§28`](08-questionnaires.md) generation history; 5 build phases; owner's 11
   resolved decisions recorded.

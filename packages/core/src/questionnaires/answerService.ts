@@ -2,6 +2,7 @@ import type { FileSystem } from '../host';
 import { uuid } from '../id';
 import type { Answer, Assignment, AssignmentStatus, ResponseSet } from '../schemas';
 import { getAssignment, updateAssignmentStatus } from './assignmentService';
+import { captureResponseFeedback } from './profileFeedback';
 import { getResponse, saveResponse } from './responseService';
 
 /**
@@ -136,6 +137,14 @@ export async function submitResponse(
   };
   await saveResponse(fs, key, response);
   await updateAssignmentStatus(fs, key, input.assignmentId, 'submitted');
+  // Learn from any per-question declines: record them in the recipient's Personalization Profile so future
+  // generation stops asking what they said doesn't apply / they'd rather not (spec 69 §3.3). Best-effort —
+  // a capture failure must never break the submit contract.
+  try {
+    await captureResponseFeedback(fs, key, input.assignmentId);
+  } catch {
+    // profile capture is a learning side-effect, not part of the submit
+  }
   return response;
 }
 

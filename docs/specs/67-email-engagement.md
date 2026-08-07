@@ -1,6 +1,6 @@
 # 67 — Email engagement & re-engagement (Resend)
 
-> **Status:** **Phases 0–5 Built** (of 7 phases) · _last updated 2026-08-07_
+> **Status:** **COMPLETE — all 7 phases Built** · _last updated 2026-08-07_
 >
 > SelfOS's first real outbound email. Today the only "email" is a `mailto:` hand-off for questionnaire
 > links — SelfOS has **never actually sent a message**. This spec adds a household-provisioned
@@ -665,9 +665,17 @@ valuable.
   intimacy toggle flips the family AND the distinct `intimacyEmailOptIn`) + the green-light / inventory-offer
   surfaces. **The more/less tuning buttons are minted + drained (they train de-dup via the response history);
   a dedicated weighting model is a future refinement.**
-- **Phase 6 — Owner Email-activity view + delivery health + family F (milestones).** The full owner view
-  (filter/export), delivery-health (bounces/complaints via status polling), and milestone/celebration
-  emails.
+- **Phase 6 — Owner Email-activity view + delivery health + family F (milestones). BUILT — spec 67 is now
+  COMPLETE.** `emailMilestones.ts` — `detectMilestones` (deterministic, no AI: a reached [done] goal, the
+  HIGHEST streak threshold crossed [never a retroactive burst; crisis suppresses the streak, §8], a
+  published Story book), each with a stable `sourceKey`; `buildMilestoneEmail`; the reconcile's step-6 block
+  sends at most one milestone per run (restraint), gated on the `milestone` opt-in + engagement readiness
+  (crisis-suppressed), de-dup'd by sourceKey. `emailActivityView.ts` — `listAllEmailActivity` (every member's
+  activity, name-tagged, newest-first) + the `email:allActivity` IPC (**`people.manage`-gated — owner-only**,
+  never member-facing) + the `OwnerEmailActivityEntry` view type. Renderer: an admin-only `EmailActivityView`
+  subsection (member/family filters, delivery-health counts, CSV export, a scrollable table) + the `milestone`
+  family toggle. Full visibility (the deferred intimacy owner-visibility carve-out stays deferred, default-OFF
+  — owner confirmed "everything", §3.7).
 
 ## 6. IPC / API contracts
 
@@ -689,6 +697,8 @@ active-person-scoped in the bridge. **No channel ever returns the Resend key.**
   **admin-gated** (`people.manage`) for another person; a member reads only their own.
 - **`email:responses` → `EmailResponse[]`** / **`email:editResponse`** — the in-app history (own-only,
   editable).
+- **`email:allActivity` → `OwnerEmailActivityEntry[]`** (Phase 6) — EVERY member's email activity, name-tagged,
+  newest-first, for the owner Email-activity view. **`people.manage`-gated (owner-only)** — a member gets `[]`.
 - **`email:mutualGreenLights` → `MutualGreenLight[]`** (Phase 5) — the active person's couple suggestions
   both partners tapped `im-game` on; own-scoped, read host-side with the master key.
 - **`email:intimacyOffers` → `IntimacyInventoryOffer[]`** / **`email:applyIntimacyOffer({ actKey })` →
@@ -884,6 +894,27 @@ No open questions remain.
 
 ## 12. Changelog
 
+- 2026-08-07 — **Phase 6 BUILT — spec 67 is COMPLETE (all 7 phases).** Owner Email-activity view + delivery
+  health + family F milestones. New `emailMilestones.ts`: `detectMilestones` (deterministic, no AI — a reached
+  [done] goal via `effectiveGoalStatus`; the HIGHEST `STREAK_MILESTONES` [7/30/100/365] threshold crossed via
+  `computeStreak`, never a retroactive burst; **crisis suppresses the streak** so a struggling person is never
+  streak-shamed [§8]; a published Story book via `listBooks`), each with a stable `sourceKey`; `STREAK_MILESTONES`.
+  New composer `buildMilestoneEmail`. The reconcile's step-6 block sends **at most one** milestone per run
+  (restraint), gated on `engagementReady` (crisis-suppressed, §7) + the `milestone` family opt-in, de-dup'd
+  against the activity log's `sourceKey`s (sends each once). New `emailActivityView.ts`: `listAllEmailActivity`
+  (every member's activity, name-tagged, newest-first, read host-side with the master key). New IPC
+  `email:allActivity` — **`people.manage`-gated (owner-only)**, never member-facing (the durable no-owner-access
+  rule); a member gets `[]`. Additive `OwnerEmailActivityEntry` view type (no `schemaVersion` bump). Renderer: an
+  admin-only `EmailActivityView` subsection in `EmailSettingsPanel` (member/family filters, delivery-health
+  counts [bounced/complained], a client-side CSV export via a Blob download, a scrollable table) gated on
+  `people.manage`; plus the `milestone` family toggle. Full visibility is the shipped default (the deferred
+  intimacy owner-visibility carve-out stays deferred, default-OFF — owner confirmed "everything", §3.7). Gate
+  green: typecheck (4 pkgs), lint, format, core (`emailMilestones` 3) + desktop (a two-persona coreBridge P6:
+  the owner sees every member's activity name-tagged + a member gets `[]`; a reached goal schedules a milestone,
+  sent once [de-dup]; EmailSettingsPanel RTL for the owner view + delivery-health + the milestone toggle + the
+  member cannot see the view) unit + a decrypt-level P6 E2E (the owner activity view shows a cross-member
+  bounced email + delivery health). **Spec 67 (all families A–G + the interactive/suggestion/owner layers) is
+  fully built; the only remaining work is the user's own Cloudflare relay re-deploy for the tap routes.**
 - 2026-08-07 — **Phase 5 BUILT** (AI Coach Suggestions — family E + E-int intimacy — the crown jewel,
   incl. the embedded auto-checkin-over-email). New core `emailSuggestionService.ts`: `hasNewSuggestionData`
   (new-data gate — new approved insights / completed sessions / synthesis observation / intimacy overlap),

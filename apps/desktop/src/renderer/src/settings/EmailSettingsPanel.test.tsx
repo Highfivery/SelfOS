@@ -53,7 +53,8 @@ describe('EmailSettingsPanel (67 §3.1)', () => {
     });
     render(<EmailSettingsPanel />);
     expect(await screen.findByText('Connect Resend')).toBeInTheDocument();
-    expect(screen.getByText('Admin only')).toBeInTheDocument();
+    // An owner sees "Admin only" on both the connect section AND the Email-activity view.
+    expect(screen.getAllByText('Admin only').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByLabelText('Resend API key')).toBeInTheDocument();
     expect(screen.getByLabelText('From address')).toBeInTheDocument();
     // Not connected → the toggles show the calm empty state + are disabled.
@@ -258,5 +259,97 @@ describe('EmailSettingsPanel (67 §3.1)', () => {
     expect(screen.getByText('Sensual massage')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Add it' }));
     expect(applyOffer).toHaveBeenCalledWith({ actKey: 'act-1' });
+  });
+
+  it('shows the owner Email-activity view for an admin, with delivery health (67 §3.7 / Phase 6)', async () => {
+    asRole('owner');
+    installMockBridge({
+      emailStatus: () => Promise.resolve(connected),
+      emailGetPrefs: () => Promise.resolve(null),
+      emailAllActivity: () =>
+        Promise.resolve([
+          {
+            id: 'a1',
+            schemaVersion: 1,
+            personId: 'p1',
+            personName: 'Ben',
+            family: 'welcome',
+            subject: 'Welcome to SelfOS',
+            toAddress: 'ben@inbox.example',
+            status: 'delivered',
+            clicks: [],
+            tokens: [],
+            sentAt: '2026-08-20T09:00:00.000Z',
+          },
+          {
+            id: 'a2',
+            schemaVersion: 1,
+            personId: 'p2',
+            personName: 'Angel',
+            family: 'digest',
+            subject: 'Your week on SelfOS',
+            toAddress: 'angel@inbox.example',
+            status: 'bounced',
+            clicks: [],
+            tokens: [],
+            sentAt: '2026-08-21T09:00:00.000Z',
+          },
+        ]),
+    });
+    render(<EmailSettingsPanel />);
+    expect(await screen.findByText('Email activity')).toBeInTheDocument();
+    expect(screen.getByText('Welcome to SelfOS')).toBeInTheDocument();
+    // "Angel" appears in both the member filter option and the table row.
+    expect(screen.getAllByText('Angel').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Delivery health: 1 bounced/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export CSV' })).toBeInTheDocument();
+  });
+
+  it('hides the owner Email-activity view from a non-admin member', async () => {
+    asRole('member');
+    installMockBridge({
+      emailStatus: () => Promise.resolve(connected),
+      emailGetPrefs: () => Promise.resolve(null),
+    });
+    render(<EmailSettingsPanel />);
+    // The per-person prefs render, but the household-wide activity view never does.
+    expect(await screen.findByLabelText('Email me at')).toBeInTheDocument();
+    expect(screen.queryByText('Email activity')).not.toBeInTheDocument();
+  });
+
+  it('toggles the milestone family (67 §3.2 F / Phase 6)', async () => {
+    asRole('member');
+    const setPrefs = vi.fn(() =>
+      Promise.resolve({
+        schemaVersion: 1 as const,
+        address: 'me@inbox.example',
+        families: {},
+        richness: 'brief' as const,
+        intimacyEmailOptIn: false,
+        paused: false,
+        digestDay: 0,
+        digestTime: 'evening' as const,
+        unsubscribeToken: 't',
+      }),
+    );
+    installMockBridge({
+      emailStatus: () => Promise.resolve(connected),
+      emailGetPrefs: () =>
+        Promise.resolve({
+          schemaVersion: 1,
+          address: 'me@inbox.example',
+          families: {},
+          richness: 'brief',
+          intimacyEmailOptIn: false,
+          paused: false,
+          digestDay: 0,
+          digestTime: 'evening',
+          unsubscribeToken: 't',
+        }),
+      emailSetPrefs: setPrefs,
+    });
+    render(<EmailSettingsPanel />);
+    await userEvent.click(await screen.findByRole('switch', { name: /Milestones & celebrations/ }));
+    expect(setPrefs).toHaveBeenCalledWith({ families: { milestone: false } });
   });
 });

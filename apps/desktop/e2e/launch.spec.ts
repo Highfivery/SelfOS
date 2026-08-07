@@ -5407,6 +5407,83 @@ test('email (67 P5 / suggestions): the AI-suggestion family toggle persists + th
   }
 });
 
+test('email (67 P6 / owner view): the owner Email-activity view shows every member’s email + delivery health', async () => {
+  const { userData, vault } = await seedReadyVault();
+  await createNodeSecretStore(userData, passthrough).set('resend.apiKey', 're-e2e-p6');
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('email P6 e2e: master key missing');
+    await writeEncryptedJson(
+      fs,
+      'config/email.enc',
+      {
+        schemaVersion: 1,
+        fromAddress: 'hi@fam.example',
+        fromName: 'SelfOS',
+        domainVerified: true,
+        updatedAt: '2026-08-07T00:00:00.000Z',
+      },
+      key,
+    );
+    // A second member with a bounced email, so the owner sees cross-member activity + delivery health.
+    await upsertPerson(fs, key, { displayName: 'Angel', isSubject: true, tags: [] });
+    const member = (await listPeople(fs, key)).find((p) => p.displayName === 'Angel')!;
+    const entry = (
+      id: string,
+      personId: string,
+      family: string,
+      subject: string,
+      status: string,
+    ) => ({
+      id,
+      schemaVersion: 1 as const,
+      personId,
+      family,
+      subject,
+      toAddress: `${personId}@inbox.example`,
+      status,
+      clicks: [],
+      tokens: [],
+      sentAt: '2026-08-20T09:00:00.000Z',
+    });
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/email/activity/2026-08.enc',
+      {
+        schemaVersion: 1,
+        entries: [entry('e1', 'owner-1', 'welcome', 'Welcome to SelfOS', 'delivered')],
+      },
+      key,
+    );
+    await writeEncryptedJson(
+      fs,
+      `people/${member.id}/email/activity/2026-08.enc`,
+      {
+        schemaVersion: 1,
+        entries: [entry('e2', member.id, 'digest', 'Your week on SelfOS', 'bounced')],
+      },
+      key,
+    );
+  }
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Email' }).click();
+    await expect(w.getByText('Email activity')).toBeVisible();
+    await expect(w.getByText('Welcome to SelfOS')).toBeVisible();
+    await expect(w.getByText('Your week on SelfOS')).toBeVisible();
+    await expect(w.getByText(/Delivery health: 1 bounced/)).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Export CSV' })).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('unified delivery (§17.13): a household send also mints a link the recipient can answer anywhere', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);

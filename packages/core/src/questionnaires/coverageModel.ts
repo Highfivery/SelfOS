@@ -140,13 +140,27 @@ export function applyCoverageAssessments(
 export function buildCoverageGuidance(profile: PersonalizationProfile): string {
   const topics = profile.coverage.topics;
   if (topics.length === 0) return '';
-  const fresh = topics
-    .filter((t) => !t.saturated && (!t.explored || t.depth < NEW_GROUND_DEPTH))
-    .sort((a, b) => a.depth - b.depth)
-    .slice(0, GUIDANCE_CAP)
-    .map((t) => `- ${t.label}`);
+  // The person explicitly asked to explore these (the transparency-panel "explore more" steer, spec 69 §3.4):
+  // they LEAD the new-ground list regardless of depth/explored, and are excluded from "already explored".
+  const requested = topics.filter((t) => t.reopenedBy === 'explicit-request' && !t.saturated);
+  const requestedIds = new Set(requested.map((t) => t.topicId));
+  const fresh = [
+    ...requested.map((t) => `- ${t.label}`),
+    ...topics
+      .filter(
+        (t) =>
+          !t.saturated &&
+          !requestedIds.has(t.topicId) &&
+          (!t.explored || t.depth < NEW_GROUND_DEPTH),
+      )
+      .sort((a, b) => a.depth - b.depth)
+      .map((t) => `- ${t.label}`),
+  ].slice(0, GUIDANCE_CAP);
   const covered = topics
-    .filter((t) => t.explored && t.depth >= NEW_GROUND_DEPTH && !t.saturated)
+    .filter(
+      (t) =>
+        t.explored && t.depth >= NEW_GROUND_DEPTH && !t.saturated && !requestedIds.has(t.topicId),
+    )
     .sort((a, b) => b.depth - a.depth)
     .slice(0, GUIDANCE_CAP)
     .map((t) => `- ${t.label}`);

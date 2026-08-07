@@ -12,6 +12,7 @@ import {
   applyDecline,
   applyEngagement,
   applyReciprocity,
+  applySteer,
   buildFeedbackGuidance,
   CHANGE_CAP,
   classifyDeclineReason,
@@ -277,5 +278,59 @@ describe('applyReciprocity', () => {
       'wants a weekend away',
       'wants rope play',
     ]);
+  });
+});
+
+describe('applySteer (spec 69 §3.4 transparency steer)', () => {
+  it('leave-alone records a not-applicable feedback entry keyed by topic (→ the avoid list)', () => {
+    const p = applySteer(
+      emptyProfile('p1'),
+      { topicId: 'Work & purpose', label: 'Work & purpose', action: 'leave-alone' },
+      at(1),
+    );
+    const entry = p.feedback.find((f) => f.topicId === 'Work & purpose');
+    expect(entry?.kind).toBe('not-applicable');
+    // It reaches the generation avoid list.
+    expect(buildFeedbackGuidance(p, at(2))).toMatch(/DON'T APPLY[\s\S]*Work & purpose/);
+  });
+
+  it('explore-more sets the coverage topic reopenedBy: explicit-request (creating it if absent)', () => {
+    const p = applySteer(
+      emptyProfile('p1'),
+      { topicId: 'Health', lifeArea: 'Health', label: 'Health', action: 'explore-more' },
+      at(1),
+    );
+    const topic = p.coverage.topics.find((t) => t.topicId === 'Health');
+    expect(topic?.reopenedBy).toBe('explicit-request');
+    expect(topic?.saturated).toBe(false);
+  });
+
+  it('explore-more overrides a prior leave-alone (removes the not-applicable entry)', () => {
+    let p = applySteer(
+      emptyProfile('p1'),
+      { topicId: 'Health', label: 'Health', action: 'leave-alone' },
+      at(1),
+    );
+    expect(p.feedback.some((f) => f.topicId === 'Health' && f.kind === 'not-applicable')).toBe(
+      true,
+    );
+    p = applySteer(p, { topicId: 'Health', label: 'Health', action: 'explore-more' }, at(2));
+    expect(p.feedback.some((f) => f.topicId === 'Health')).toBe(false);
+    expect(p.coverage.topics.find((t) => t.topicId === 'Health')?.reopenedBy).toBe(
+      'explicit-request',
+    );
+  });
+
+  it('clear removes both an explore-more reopen and a leave-alone entry, and is a no-op when nothing is set', () => {
+    let p = applySteer(
+      emptyProfile('p1'),
+      { topicId: 'Health', label: 'Health', action: 'explore-more' },
+      at(1),
+    );
+    p = applySteer(p, { topicId: 'Health', label: 'Health', action: 'clear' }, at(2));
+    expect(p.coverage.topics.find((t) => t.topicId === 'Health')?.reopenedBy).toBeUndefined();
+    const before = p;
+    const after = applySteer(before, { topicId: 'Nope', action: 'clear' }, at(3));
+    expect(after).toBe(before); // no change ⇒ identity (no updatedAt churn)
   });
 });

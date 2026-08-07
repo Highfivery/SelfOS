@@ -172,6 +172,10 @@ const bridge: SelfosBridge = {
     ipcRenderer.invoke(IpcChannels.questionnairesSharpenQuestion, input),
   questionnairesMarkCovered: (input) =>
     ipcRenderer.invoke(IpcChannels.questionnairesMarkCovered, input),
+  questionnairesPersonalizationProfile: () =>
+    ipcRenderer.invoke(IpcChannels.questionnairesPersonalizationProfile),
+  questionnairesSteerTopic: (input) =>
+    ipcRenderer.invoke(IpcChannels.questionnairesSteerTopic, input),
   gapfinderSuggest: (input) => ipcRenderer.invoke(IpcChannels.gapfinderSuggest, input),
   questionnaireSuggestionsList: (input) =>
     ipcRenderer.invoke(IpcChannels.questionnaireSuggestionsList, input),

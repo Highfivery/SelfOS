@@ -234,6 +234,7 @@ import type {
   UsageSummary,
 } from './schemas';
 import type { TestForm, TestNarrateResponse, TestSummary } from '@selfos/core/tests';
+import type { QuestionnaireCoverageView, CoverageSteerInput } from '@selfos/core/questionnaires';
 
 /**
  * IPC channel names + the renderer-facing bridge type. This module is zod-free so it is safe to
@@ -377,6 +378,8 @@ export const IpcChannels = {
   questionnairesImproveQuestion: 'questionnaires:improveQuestion',
   questionnairesSharpenQuestion: 'questionnaires:sharpenQuestion',
   questionnairesMarkCovered: 'questionnaires:markCovered',
+  questionnairesPersonalizationProfile: 'questionnaires:personalizationProfile',
+  questionnairesSteerTopic: 'questionnaires:steerTopic',
   gapfinderSuggest: 'gapfinder:suggest',
   questionnaireSuggestionsList: 'questionnaires:suggestionsList',
   questionnaireSuggestionsGenerate: 'questionnaires:suggestionsGenerate',
@@ -706,6 +709,13 @@ export const OPENAI_API_KEY_ID = 'openai.apiKey';
 /** The secret id for the device-local Resend API key (67-email-engagement §4.1; the `openai.apiKey` posture). */
 export const RESEND_API_KEY_ID = 'resend.apiKey';
 export type { DeviceView } from '@selfos/core/schemas';
+export type {
+  QuestionnaireCoverageView,
+  CoverageAreaView,
+  CoverageStatus,
+  MarkedOffView,
+  CoverageSteerInput,
+} from '@selfos/core/questionnaires';
 /** 66 §3.3 — re-exported so the bridge + renderer share one rewind outcome type. */
 export type { RewindResult, IntakeRewindOutcome } from '@selfos/core/schemas';
 
@@ -1132,6 +1142,12 @@ export interface SelfosBridge {
     note: string;
     sourcePrompt?: string;
   }): Promise<{ ok: boolean }>;
+  /** Questionnaire Intelligence transparency (69 §3.4/§6): read the active person's OWN "what SelfOS has
+   * explored" coverage view. Own-scoped in the bridge — never surfaces partner/reciprocity data. */
+  questionnairesPersonalizationProfile(): Promise<QuestionnaireCoverageView>;
+  /** Steer a life area (explore more / leave alone) in the active person's own profile; returns the refreshed
+   * view. Own-scoped. */
+  questionnairesSteerTopic(input: CoverageSteerInput): Promise<QuestionnaireCoverageView>;
   /** Gap-finder: propose the next questionnaires from structured context. Budget-gated + metered. */
   gapfinderSuggest(input: { targetPersonId?: string }): Promise<QuestionnaireSuggestResult>;
   /** Recipient-first saved suggestions (08 §18). Read the author's saved set for one household recipient — no

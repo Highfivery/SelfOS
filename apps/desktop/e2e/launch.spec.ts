@@ -2981,6 +2981,79 @@ test('questionnaires: author a single-choice questionnaire, validate, persist, n
   }
 });
 
+test('questionnaire intelligence (69 §3.4): the Explored tab reads coverage + a steer persists; no overflow', async () => {
+  const { userData, vault } = await seedReadyVault();
+  // Seed an auto check-ins config so the "Auto check-ins" tab shows too — the widest, 4-tab worst case for
+  // the §12 no-inner-scroll guard below.
+  {
+    const fs0 = createNodeFileSystem(vault);
+    const key0 = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    await writeEncryptedJson(
+      fs0,
+      'people/owner-1/questionnaires/autoCheckins.enc',
+      { schemaVersion: 1, enabled: false, targets: [] },
+      key0!,
+    );
+  }
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('tab', { name: 'Explored' }).click();
+    await expect(
+      w.getByRole('heading', { name: 'What SelfOS has explored with you' }),
+    ).toBeVisible();
+
+    // A fresh person: every life area shows as not-yet-explored (the derived skeleton), and Intimacy is read-only.
+    const relationships = w.getByRole('listitem').filter({ hasText: 'Relationships' });
+    await expect(relationships).toBeVisible();
+    await expect(w.getByText('Managed in your intimacy settings')).toBeVisible();
+
+    // "Leave alone" on the Relationships row → the button reflects the pressed state.
+    const leaveAlone = relationships.getByRole('button', { name: 'Leave alone' });
+    await leaveAlone.click();
+    await expect(leaveAlone).toHaveAttribute('aria-pressed', 'true');
+
+    // Read-after-write through the live bridge: leave + return, reopen Explored, the steer persisted.
+    await w.getByRole('link', { name: 'Home' }).click();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('tab', { name: 'Explored' }).click();
+    await expect(
+      w
+        .getByRole('listitem')
+        .filter({ hasText: 'Relationships' })
+        .getByRole('button', { name: 'Leave alone' }),
+    ).toHaveAttribute('aria-pressed', 'true');
+
+    // The Auto check-ins tab is present (4-tab worst case for the overflow guard).
+    await expect(w.getByRole('tab', { name: /Auto check-ins/ })).toBeVisible();
+
+    // ~360px: the panel fills width with no horizontal scrollbar / inner scroller (CLAUDE.md §12).
+    await w.setViewportSize({ width: 360, height: 800 });
+    await expectNoInnerOverflow(w);
+    const mainOverflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(mainOverflow).toBeLessThanOrEqual(1);
+    await w.setViewportSize({ width: 1024, height: 800 });
+  } finally {
+    await app.close();
+  }
+
+  // Decrypt the owner's profile: the steer persisted as a not-applicable feedback entry keyed by the area.
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  const profile = (await readEncryptedJson(
+    fs,
+    'people/owner-1/questionnaires/personalizationProfile.enc',
+    key!,
+  )) as { feedback?: { topicId?: string; kind?: string }[] } | null;
+  expect(
+    profile?.feedback?.some((f) => f.topicId === 'Relationships' && f.kind === 'not-applicable'),
+  ).toBe(true);
+});
+
 test('questionnaires: custom type, sensitivity, matrix + branching round-trip', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);

@@ -699,6 +699,10 @@ import {
   gatherRecipientPartnerContext,
   generateQuestions,
   refreshCoverage,
+  readCoverageView,
+  steerTopic,
+  type QuestionnaireCoverageView,
+  type CoverageSteerInput,
   resolveInsightAbout,
   resolveInsightSource,
   getAssignment,
@@ -1139,6 +1143,13 @@ const MarkCoveredSchema = z.object({
   recipientPersonId: z.string().min(1),
   note: z.string().min(1),
   sourcePrompt: z.string().optional(),
+});
+// A steer from the Explored panel (spec 69 §3.4) — own-scoped in the bridge.
+const SteerTopicSchema = z.object({
+  topicId: z.string().min(1),
+  lifeArea: z.string().optional(),
+  label: z.string().optional(),
+  action: z.enum(['explore-more', 'leave-alone', 'clear']),
 });
 // A recipient flagging a wrong fact in a question they're answering (spec 08 §29 wrong-fact amendment).
 const CorrectFactSchema = z.object({
@@ -4161,6 +4172,35 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         new Date(),
       );
       return { ok: true };
+    },
+    // The Questionnaire-Intelligence transparency read (spec 69 §3.4/§6): the active person's OWN
+    // "what SelfOS has explored" coverage view. Own-scoped — gated `questionnaires.own`, always scoped to the
+    // active person, and the projection surfaces only their own coverage/feedback (never reciprocity / partner
+    // data, §8). An empty view is returned when unavailable rather than throwing.
+    questionnairesPersonalizationProfile: async (): Promise<QuestionnaireCoverageView> => {
+      const empty: QuestionnaireCoverageView = { areas: [], markedOff: [], hasPlacement: false };
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.own'))) return empty;
+      const personId = await activePersonId();
+      if (!personId) return empty;
+      return readCoverageView(ctx.fs, ctx.key, personId, new Date());
+    },
+    // Write a steer (explore more / leave alone) into the active person's OWN profile and return the refreshed
+    // view. Own-scoped: a steer can only ever touch the caller's own Personalization Profile.
+    questionnairesSteerTopic: async (input): Promise<QuestionnaireCoverageView> => {
+      const empty: QuestionnaireCoverageView = { areas: [], markedOff: [], hasPlacement: false };
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.own'))) return empty;
+      const personId = await activePersonId();
+      if (!personId) return empty;
+      const parsed = SteerTopicSchema.parse(input);
+      const p: CoverageSteerInput = {
+        topicId: parsed.topicId,
+        action: parsed.action,
+        ...(parsed.lifeArea !== undefined ? { lifeArea: parsed.lifeArea } : {}),
+        ...(parsed.label !== undefined ? { label: parsed.label } : {}),
+      };
+      return steerTopic(ctx.fs, ctx.key, personId, p, new Date());
     },
     // A recipient flags a wrong fact in a question they're answering (spec 08 wrong-fact amendment). Trace it
     // to the recipient's OWN on-record facts (profile / onboarding / insight), auto-flag a wrong INSIGHT so it

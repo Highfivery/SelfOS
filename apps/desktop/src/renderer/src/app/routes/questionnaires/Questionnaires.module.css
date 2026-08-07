@@ -114,17 +114,21 @@
   background: var(--color-success);
 }
 
-/* Phone width: tighten the three fixed tabs so they FIT the ~312px content — never scroll or wrap (§12). */
+/* Phone width: the up-to-four fixed tabs (Sent / Received / Auto check-ins / Explored) must FIT the ~305px
+   content — never scroll or wrap (§12). The count badges + the auto on/off dot are secondary, so they drop at
+   ≤480px and the labels alone fit (the sharing-dashboard §12 precedent). */
 @media (max-width: 480px) {
+  .tabs {
+    gap: 0;
+  }
   .tab {
-    padding: 9px var(--space-2) 11px;
-    gap: var(--space-1);
+    padding: 9px 6px 11px;
+    gap: 4px;
     font-size: var(--text-sm);
   }
-  .tabCount {
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
+  .tabCount,
+  .autoDot {
+    display: none;
   }
 }
 

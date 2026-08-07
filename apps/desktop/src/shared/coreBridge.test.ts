@@ -2963,6 +2963,75 @@ describe('createCoreBridge', () => {
     expect(sentUserText).toContain('- Money');
   });
 
+  it('transparency read + steer are OWN-scoped, gated, and persist per-person (spec 69 §3.4/§6)', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: angel.id, roleId: 'member', pin: null });
+    const ctx = (await host.host.vaultAndKey())!;
+
+    // As the owner: the read derives the full life-area skeleton (no placement yet); a leave-alone steer
+    // records the mark and returns the refreshed view.
+    const before = await bridge.questionnairesPersonalizationProfile();
+    expect(before.hasPlacement).toBe(false);
+    expect(before.areas.some((a) => a.lifeArea === 'Health & body')).toBe(true);
+
+    const steered = await bridge.questionnairesSteerTopic({
+      topicId: 'Health & body',
+      lifeArea: 'Health & body',
+      label: 'Health & body',
+      action: 'leave-alone',
+    });
+    expect(steered.markedOff.some((m) => m.topicId === 'Health & body')).toBe(true);
+    // Decrypt the owner's profile — the steer persisted as a not-applicable feedback entry.
+    const ownerProfile = await readProfile(ctx.fs, ctx.key, ownerId);
+    expect(
+      ownerProfile.feedback.some(
+        (f) => f.topicId === 'Health & body' && f.kind === 'not-applicable',
+      ),
+    ).toBe(true);
+
+    // Switch to Angel (a member): her read is HER OWN — the owner's mark is absent, and steering writes
+    // ONLY her profile.
+    await bridge.sessionSetActive({ personId: angel.id });
+    const angelView = await bridge.questionnairesPersonalizationProfile();
+    expect(angelView.markedOff).toEqual([]);
+    await bridge.questionnairesSteerTopic({
+      topicId: 'Work & purpose',
+      lifeArea: 'Work & purpose',
+      label: 'Work & purpose',
+      action: 'explore-more',
+    });
+    // Decrypt both profiles: each person's steer is isolated in their own file.
+    const angelProfile = await readProfile(ctx.fs, ctx.key, angel.id);
+    expect(
+      angelProfile.coverage.topics.find((t) => t.topicId === 'Work & purpose')?.reopenedBy,
+    ).toBe('explicit-request');
+    expect(angelProfile.feedback.some((f) => f.topicId === 'Health & body')).toBe(false); // never saw the owner's mark
+    const ownerProfileAfter = await readProfile(ctx.fs, ctx.key, ownerId);
+    expect(
+      ownerProfileAfter.coverage.topics.some((t) => t.topicId === 'Work & purpose' && t.reopenedBy),
+    ).toBe(false); // Angel's explore-more didn't touch the owner
+
+    // A Guest (no `questionnaires.own`) gets an empty view and cannot steer.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.questionnairesPersonalizationProfile()).toEqual({
+      areas: [],
+      markedOff: [],
+      hasPlacement: false,
+    });
+    const guestSteer = await bridge.questionnairesSteerTopic({
+      topicId: 'Health & body',
+      action: 'leave-alone',
+    });
+    expect(guestSteer).toEqual({ areas: [], markedOff: [], hasPlacement: false });
+    // Decrypt the guest's profile — nothing was written.
+    const guestProfile = await readProfile(ctx.fs, ctx.key, guest.id);
+    expect(guestProfile.feedback).toEqual([]);
+  });
+
   it("a self check-in reflects a partner's SHARED desire, never a restricted fact (spec 69 §5.4)", async () => {
     const { host, bridge, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

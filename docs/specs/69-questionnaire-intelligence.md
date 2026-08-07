@@ -599,6 +599,17 @@ _These finer points were resolved with the owner (2026-08-07); the defaults belo
 
 ## 15. Changelog
 
+- 2026-08-07 — **Phase 3 core BUILT** — partner-shared facts + reciprocity (the "partner said X → how do you
+  feel?" example). `gatherRecipientPartnerContext` (`partnerContext.ts`) surfaces a partner's **shared**
+  (non-restricted) facts to a person via the ONE `scopeGrants` gate — a **restricted / flagged / wrong-relationship-type
+  fact NEVER crosses** — and marks Intimacy/Relationships desires as reciprocity candidates → a `partnerContext`
+  prompt block that reflects a partner's stated desire back tactfully ("how do YOU feel about it?"), never
+  quoting it. Wired into the manual bridge + auto self check-ins, gated strictly to **self-sends** (author ==
+  recipient) so an other-person send never surfaces a third party's context to the author. Proven: a core
+  gate test (shared crosses; restricted/private/wrong-type never do) + a two-persona bridge test (a partner's
+  shared desire reaches the self-send prompt with the reciprocity framing; a restricted fact never does).
+  **Phase-3 follow-ons** (minor): feed the recipient's own test subscale NUMBERS, and a persistent
+  reciprocity-candidate ledger (the profile field exists; the live block already delivers the behaviour).
 - 2026-08-07 — **Phase 2 BUILT** (coverage / novelty engine). The per-person coverage map
   (`coverageModel.ts`: one coarse topic per general `LIFE_AREA` + the Intimacy categories folded in from the
   existing `intimacy/coverage` engine; `buildCoverageGuidance` leads with unexplored/low-depth ground and marks

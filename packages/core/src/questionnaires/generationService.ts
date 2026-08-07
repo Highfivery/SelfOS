@@ -144,6 +144,10 @@ export interface GenerateRequest {
   // doesn't apply (avoid), touched a boundary (leave alone), or landed unclear (reword). Assembled host-side by
   // `gatherRecipientFeedbackGuidance`; how the app learns from skips/declines over time.
   feedbackGuidance?: string;
+  // Partner-shared context for a SELF-send (spec 69 §5.4): the facts people close to them have shared TO them,
+  // so a self/auto check-in can personalize + reciprocate a partner's desire. Restricted facts never cross (the
+  // `scopeGrants` gate). Author-blind: only ever set when author == recipient.
+  partnerContext?: string;
 }
 
 /** Generate questions from a brief and/or the configured structured context. */
@@ -193,6 +197,7 @@ export async function generateQuestions(
     ...(request.feedbackGuidance !== undefined
       ? { feedbackGuidance: request.feedbackGuidance }
       : {}),
+    ...(request.partnerContext !== undefined ? { partnerContext: request.partnerContext } : {}),
   });
 
   // A generous output budget (thinking is off) that SCALES with the (over-asked) count (08 §23.4) — a 20-question

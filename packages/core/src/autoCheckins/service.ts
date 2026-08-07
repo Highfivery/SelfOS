@@ -33,6 +33,7 @@ import {
   gatherRecipientQuestionnaireTitles,
 } from '../questionnaires/recipientHistory';
 import { listCoveredTopics } from '../questionnaires/coveredTopicsStore';
+import { gatherRecipientPartnerContext } from '../questionnaires/partnerContext';
 import type {
   AutoCheckinCreated,
   AutoCheckinIntent,
@@ -246,6 +247,8 @@ export async function runAutoCheckins(input: RunAutoCheckinsInput): Promise<Auto
         ...(intent === 'intimacy' ? { intimacyCoverage: bundle.intimacyCoverage } : {}),
         // spec 69 §5.9 — learn from the recipient's prior skips/declines (avoid / boundary / reword).
         ...(bundle.feedbackGuidance ? { feedbackGuidance: bundle.feedbackGuidance } : {}),
+        // spec 69 §5.4 — a self check-in can reflect a partner's shared desire (restricted never crosses).
+        ...(bundle.partnerContext ? { partnerContext: bundle.partnerContext } : {}),
         recipient: elig.recipient,
       });
 
@@ -569,6 +572,8 @@ async function buildDedupBundle(
   intimacyCoverage: IntimacyCoverage;
   /** Differentiated avoid/boundary/reword steering from the recipient's Personalization Profile (spec 69 §5.9). */
   feedbackGuidance: string;
+  /** Partner-shared context — ONLY for a self check-in (author == recipient); restricted never crosses (spec 69 §5.4). */
+  partnerContext: string;
 }> {
   const [
     history,
@@ -620,6 +625,13 @@ async function buildDedupBundle(
 
   const recipientAskedPrompts = [...priorPrompts, ...intake.prompts, ...coveredPrompts];
 
+  // Partner-shared context (spec 69 §5.4) — ONLY for a self check-in (the author checking in on themselves),
+  // so a partner's shared desire can be reflected back. Restricted facts never cross (the gate).
+  const partnerContext =
+    authorId === recipientId
+      ? (await gatherRecipientPartnerContext(fs, key, recipientId)).contextBlock
+      : '';
+
   // §27.2 — the coverage map. `profileEditedAt` comes from the session we already loaded (the gatherer can't
   // read it without forming a `questionnaires → intake` cycle).
   const intimacyCoverage = buildIntimacyCoverage({
@@ -640,5 +652,6 @@ async function buildDedupBundle(
     coveredNotes,
     intimacyCoverage,
     feedbackGuidance,
+    partnerContext,
   };
 }

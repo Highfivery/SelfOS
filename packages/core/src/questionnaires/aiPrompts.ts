@@ -399,6 +399,9 @@ export function buildGenerationUserMessage(input: {
   // Differentiated steering from the recipient's Personalization Profile (spec 69 §5.9): avoid / boundary /
   // reword blocks built from their prior skips/declines. This is how the app learns what NOT to ask over time.
   feedbackGuidance?: string;
+  // Partner-shared context for a SELF-send (spec 69 §5.4): facts people close to them shared TO them, so a
+  // check-in can personalize + reciprocate a partner's desire. Restricted facts never reach here.
+  partnerContext?: string;
 }): string {
   const parts: string[] = [];
   parts.push(`Draft ${input.count} questions for a "${input.type}" questionnaire.`);
@@ -485,6 +488,11 @@ export function buildGenerationUserMessage(input: {
         input.recipientHistory.trim(),
       ].join('\n'),
     );
+  }
+  // Partner-shared context for a self-send (spec 69 §5.4) — positive personalization + reciprocity. Placed with
+  // the "what is known" material (it's the person's own coaching context); restricted facts never reach here.
+  if (input.partnerContext?.trim()) {
+    parts.push(`\n${input.partnerContext.trim()}`);
   }
   // The differentiated skip/decline steering (spec 69 §5.9) — placed AFTER the "what is known" block so it
   // governs it: even if a topic is unexplored, an "it doesn't apply" / boundary signal keeps it off-limits.

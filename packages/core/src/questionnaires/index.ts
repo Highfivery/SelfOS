@@ -18,6 +18,7 @@ export * from './recipientHistory';
 export * from './personalizationProfile';
 export * from './coverageModel';
 export * from './coverageService';
+export * from './partnerContext';
 export * from './changeDetection';
 export * from './profileFeedback';
 export * from './generationService';

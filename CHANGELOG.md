@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.47.0](https://github.com/Highfivery/SelfOS/compare/v0.46.0...v0.47.0) (2026-08-07)
+
+
+### Features
+
+* **questionnaires:** coverage/novelty engine — always new ground (spec 69 Phase 2) ([#376](https://github.com/Highfivery/SelfOS/issues/376)) ([57d7a28](https://github.com/Highfivery/SelfOS/commit/57d7a28cb86942fb5371eaab76556166965cf904))
+* **questionnaires:** learn from skips/declines + notice change (spec 69 Phase 1) ([#374](https://github.com/Highfivery/SelfOS/issues/374)) ([53a2f76](https://github.com/Highfivery/SelfOS/commit/53a2f76501590e41dac4c3ff17f01c29fc9f164c))
+* **questionnaires:** partner-shared facts + reciprocity (spec 69 Phase 3) ([#377](https://github.com/Highfivery/SelfOS/issues/377)) ([efe2fd0](https://github.com/Highfivery/SelfOS/commit/efe2fd0dc9df83387907d60a80aebd58ce5df43f))
+* **questionnaires:** test-metric tailoring + reciprocity ledger (spec 69 Phase 3 follow-ons) ([#378](https://github.com/Highfivery/SelfOS/issues/378)) ([e6c1c91](https://github.com/Highfivery/SelfOS/commit/e6c1c91412a637222e549bc68a60318ab39608d9))
+
 ## [0.46.0](https://github.com/Highfivery/SelfOS/compare/v0.45.4...v0.46.0) (2026-08-07)
 
 

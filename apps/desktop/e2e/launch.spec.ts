@@ -5047,6 +5047,101 @@ test('email (67 P1 / family A): a minted relay link is delivered by a REAL Resen
   }
 });
 
+test('email (67 P2 / family B): an emailable notification (responses-arrived) triggers a transactional email on launch → decrypt a transactional activity entry', async () => {
+  const { userData, vault } = await seedReadyVault();
+  // Connect the household email + the owner's engagement address (transactional is on by default), and seed
+  // an EXTERNAL answered send so the owner has a `responses-arrived` notification on launch (SELFOS_FAKE_RESEND
+  // is on globally). External (not self) → it isn't filtered out of the responses-arrived derivation.
+  await createNodeSecretStore(userData, passthrough).set('resend.apiKey', 're-e2e-p2');
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('email P2 e2e: master key missing');
+    await writeEncryptedJson(
+      fs,
+      'config/email.enc',
+      {
+        schemaVersion: 1,
+        fromAddress: 'hi@fam.example',
+        fromName: 'SelfOS',
+        domainVerified: true,
+        updatedAt: '2026-08-07T00:00:00.000Z',
+      },
+      key,
+    );
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/email/prefs.enc',
+      {
+        schemaVersion: 1,
+        address: 'owner@inbox.example',
+        families: {},
+        richness: 'brief',
+        intimacyEmailOptIn: false,
+        paused: false,
+        unsubscribeToken: 'unsub-p2',
+        updatedAt: '2026-08-07T00:00:00.000Z',
+      },
+      key,
+    );
+    const q = await saveQuestionnaire(
+      fs,
+      key,
+      {
+        title: 'Outside view',
+        type: 'general',
+        sensitivity: 'standard',
+        recipient: { kind: 'external', displayName: 'Alex' },
+        questions: [
+          { id: 'q1', type: 'shortText', prompt: 'How do I come across?', required: true },
+        ],
+      },
+      'owner-1',
+    );
+    const a = await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'owner-1',
+      recipient: { kind: 'external', displayName: 'Alex' },
+      channel: 'inApp',
+      privacy: 'standard',
+      senderVisibleToRecipient: true,
+    });
+    await submitResponse(fs, key, {
+      assignmentId: a.id,
+      answers: [{ questionId: 'q1', value: 'Warm and direct' }],
+    });
+  }
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Home' }).waitFor();
+
+    // On launch, useNotificationSources derives the responses-arrived candidate and useEmailTransactional
+    // sends one transactional email for it. Poll the vault for a `transactional` activity entry.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('email P2 e2e: master key missing (2)');
+    const transactional = async () =>
+      (await listEmailActivity(fs, key, 'owner-1', { family: 'transactional' }))[0] ?? null;
+    await expect
+      .poll(async () => (await transactional())?.status ?? null, { timeout: 8000 })
+      .toBe('sent');
+    const entry = await transactional();
+    expect(entry).toMatchObject({
+      family: 'transactional',
+      status: 'sent',
+      toAddress: 'owner@inbox.example',
+    });
+    expect(entry?.sourceKey).toContain('responses-arrived:');
+    expect(entry?.subject).toContain('Outside view'); // the notification title ("Alex answered …")
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('unified delivery (§17.13): a household send also mints a link the recipient can answer anywhere', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);

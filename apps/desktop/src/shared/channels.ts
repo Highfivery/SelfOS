@@ -389,6 +389,7 @@ export const IpcChannels = {
   emailSetPrefs: 'email:setPrefs',
   emailSend: 'email:send',
   emailSendQuestionnaireDelivery: 'email:sendQuestionnaireDelivery',
+  emailSendTransactional: 'email:sendTransactional',
   emailActivity: 'email:activity',
   insightsAnalyze: 'insights:analyze',
   insightsApprove: 'insights:approve',
@@ -1207,6 +1208,18 @@ export interface SelfosBridge {
     subject: string;
     message: string;
     link: string;
+  }): Promise<EmailSendResult>;
+  /**
+   * Family B — send a transactional email (67 §3.2 / Phase 2) to the ACTIVE person's own engagement address,
+   * mirroring an in-app notification (35). Called by the `useEmailTransactional` cadence hook for each
+   * emailable notification kind; **idempotent on `sourceKey`** (the notification's `coalesceKey#signature`),
+   * so a re-open never re-sends. Gated `email.own`; only the emailable notification kinds are accepted.
+   */
+  emailSendTransactional(input: {
+    kind: string;
+    sourceKey: string;
+    title: string;
+    body?: string;
   }): Promise<EmailSendResult>;
   /** Read logged email activity (own; another person's is `people.manage`-gated in the bridge). */
   emailActivity(input?: {

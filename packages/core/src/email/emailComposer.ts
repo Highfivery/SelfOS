@@ -132,3 +132,34 @@ export function buildQuestionnaireDeliveryEmail(input: {
 
   return { subject: input.subject, html, text: input.message };
 }
+
+/**
+ * Family B — a transactional alert (67 §3.2 / Phase 2). A branded teaser mirroring an in-app notification
+ * (35): the notification's title as the heading, its optional body as a line, and an "Open SelfOS" prompt.
+ * Deliberately content-light — a `together-turn` alert never carries the message, only that it's your turn
+ * (§3.11). The subject is the title. The one-click `selfos://` deep link lands with Phase 4; until then the
+ * prompt is plain text (no dead link). No inline SVG (§9).
+ */
+export function buildTransactionalEmail(input: { title: string; body?: string }): ComposedEmail {
+  const title = input.title.trim();
+  const body = input.body?.trim();
+
+  const html = shell(
+    [
+      `<h1 style="font-size:20px;margin:0 0 12px;color:#241f1a;">${esc(title)}</h1>`,
+      body ? `<p style="margin:0 0 14px;">${esc(body)}</p>` : '',
+      '<p style="margin:0;color:#6e665c;">Open SelfOS to see it.</p>',
+    ].join(''),
+  );
+
+  const text = [
+    title,
+    ...(body ? ['', body] : []),
+    '',
+    'Open SelfOS to see it.',
+    '',
+    NOT_MEDICAL,
+  ].join('\n');
+
+  return { subject: title, html, text };
+}

@@ -1,6 +1,6 @@
 # 67 — Email engagement & re-engagement (Resend)
 
-> **Status:** **Phases 0–1 Built** (of 7 phases) · _last updated 2026-08-07_
+> **Status:** **Phases 0–2 Built** (of 7 phases) · _last updated 2026-08-07_
 >
 > SelfOS's first real outbound email. Today the only "email" is a `mailto:` hand-off for questionnaire
 > links — SelfOS has **never actually sent a message**. This spec adds a household-provisioned
@@ -169,8 +169,9 @@ Each family has a **trigger**, **content**, **cadence/scheduling**, and **gating
 **Family B — which notification kinds email.** Only the genuinely time-sensitive or **reaches another
 person** kinds ([`35`](35-notification-system.md) `NOTIFICATION_KINDS`): `responses-arrived`,
 `answers-updated`, `together-invite`, `together-turn` (a teaser only — never the message), `story-shared`,
-`auto-checkin-incoming`, and a **new-insight-ready** signal. Kinds that are purely local/housekeeping —
-`sync-conflict`, `update-available` — **stay in-app** (never email).
+`auto-checkin-incoming`, and a **new-insight-ready** signal (deferred until such a `NotificationKind`
+exists — the other six are the built `EMAILABLE_TRANSACTIONAL_KINDS`). Kinds that are purely
+local/housekeeping — `sync-conflict`, `update-available` — **stay in-app** (never email).
 
 **§3.2a Digest cadence.** The weekly digest (family C) defaults to **Sunday evening, in the person's local
 time**, and is **per-person configurable** (day + rough time-of-day) in Settings → Email (§3.1). The
@@ -617,8 +618,12 @@ valuable.
   to a real Resend send (link + PIN) when the household email is connected + ready, keeping the `mailto:`
   fallback otherwise. The optional recipient reminder was **deferred to Phase 3** (where the scheduling/
   cancel substrate is built) — an owner-confirmed decision. Reuses the relay flow.
-- **Phase 2 — Family B (transactional).** Map the §3.2 notification-kind subset to immediate sends when
-  the app is open; log each.
+- **Phase 2 — Family B (transactional). BUILT.** Maps the §3.2 emailable notification-kind subset
+  (`EMAILABLE_TRANSACTIONAL_KINDS`) to immediate sends when the app is open, one teaser per fresh candidate,
+  via `sendTransactionalEmail` (routes through `sendFamilyEmail` — engagement address + `transactional`
+  opt-in + pause; **not** crisis-suppressed per §7; idempotent on `sourceKey` = the notification's
+  `coalesceKey#signature`). The §3.2-named **`new-insight-ready`** signal is **deferred** (no such
+  `NotificationKind` exists yet — owner-confirmed). Driven by the `useEmailTransactional` cadence hook.
 - **Phase 3 — Scheduling substrate + families C (digest) + D (re-engagement).** `emailScheduleService` +
   `useEmailScheduler` (reconcile via `scheduledAt`/cancel; poll delivery status); the deterministic
   digest builder; the re-engagement nudges; the family-A recipient reminder deferred from Phase 1 (§3.2).
@@ -703,8 +708,10 @@ human unprompted**, so the safety envelope is central.
 ### 8.1 Not-medical + crisis
 
 Emails carry the standard wellness/not-medical framing ([`05 §7`](05-conversations.md)). **Crisis
-suppresses ALL email** (§7): `aggregateCrisisSignal.recurring` → no digest, no re-engagement, no
-suggestion, no milestone. **Wellbeing/mood email never carries distress content** — a mood dip routes the
+suppresses the scheduled/AI families C/D/E/F** (§7): `aggregateCrisisSignal.recurring` → no digest, no
+re-engagement, no suggestion, no milestone. The **transactional (B)** and **questionnaire-delivery (A)**
+families are time-sensitive relays of an existing in-app signal and are **not** crisis-suppressed.
+**Wellbeing/mood email never carries distress content** — a mood dip routes the
 person to **in-app** support ([`40`](40-proactive-coaching.md)/[`51`](51-wellbeing-reflections.md) crisis
 routing), **never** an email about a crisis. Email is never a crisis-routing channel.
 
@@ -839,6 +846,20 @@ No open questions remain.
 
 ## 12. Changelog
 
+- 2026-08-07 — **Phase 2 BUILT** (family B — transactional). The emailable notification kinds (35) also
+  send a transactional teaser: new core `EMAILABLE_TRANSACTIONAL_KINDS` + `isEmailableTransactionalKind`
+  (`responses-arrived`, `answers-updated`, `together-invite`, `together-turn` [teaser only], `story-shared`,
+  `auto-checkin-incoming`; **`new-insight-ready` deferred** — no such `NotificationKind` exists yet,
+  owner-confirmed) in `@selfos/core/schemas`. New `buildTransactionalEmail` composer +
+  `sendTransactionalEmail` orchestrator — routes through `sendFamilyEmail` (engagement address +
+  `transactional` opt-in + pause), **`crisisSuppressed: false`** (§7 scopes crisis suppression to C/D/E/F
+  — the "ALL email" headers are rhetorical), idempotent on `sourceKey`. Additive `EmailActivityEntry.sourceKey`
+  (= the notification's `coalesceKey#signature`) threaded through `performSend`/`sendFamilyEmail`; no
+  `schemaVersion` bump. New IPC channel `email:sendTransactional` (full seam, `email.own`-gated,
+  allowlist-validated, key never crosses). New renderer hook `useEmailTransactional` (one teaser per fresh
+  emailable candidate, de-duped), wired in `AppShell`. Tests: core (composer, allowlist,
+  idempotency/retry/opt-in), coreBridge two-persona decrypt-level, hook RTL, + a Playwright E2E (external
+  answered send → launch → decrypt a transactional activity entry). **Phases 3–6 remain.**
 - 2026-08-07 — **Phase 1 BUILT** (family A — real questionnaire delivery). `RelayLinkDelivery`'s Email
   button is now a real Resend **"Send email"** when the household email is connected + ready (with the
   `mailto:` fallback otherwise + a success/failure banner). New core `buildQuestionnaireDeliveryEmail`

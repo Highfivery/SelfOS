@@ -40,9 +40,12 @@ export function sessionStatus(
  */
 export function turnHint(session: TogetherSessionSummary, partnerName: string): string | null {
   if (session.status !== 'active') return null;
+  // Coach-directed (§3.6): "not your turn" means the coach is engaging your partner — which isn't always
+  // because YOU just replied (it can be your partner's reply the coach followed up on), so the copy stays
+  // neutral about who acted last (issue #369).
   return session.yourTurn
     ? `${partnerName} is waiting on your reply.`
-    : `You replied — it's ${partnerName}'s move.`;
+    : `It's ${partnerName}'s move.`;
 }
 
 /** A short, human relative time from an ISO timestamp — "just now", "2h ago", "yesterday", "5 days ago". */

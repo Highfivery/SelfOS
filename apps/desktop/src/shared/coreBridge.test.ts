@@ -7083,7 +7083,11 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await asPerson(host, ben);
     const benView = await bridge.togetherGet(sessionId);
     expect(benView?.messages.map((m) => m.role)).toEqual(['user', 'assistant']); // shared, both see it
-    expect(benView?.yourTurn).toBe(true); // Angel + the coach wrote last → Ben's turn
+    // Coach-directed turn (§3.6, issue #369): the coach followed up on Angel's message, so it's ANGEL's
+    // turn — Ben is NOT prompted; Angel is.
+    expect(benView?.yourTurn).toBe(false);
+    await asPerson(host, angel);
+    expect((await bridge.togetherGet(sessionId))?.yourTurn).toBe(true);
   });
 
   it('a private aside (+ its coach reply) is hidden from the partner; her turn/unread badges are unchanged (§3.6)', async () => {

@@ -427,6 +427,41 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-07 — **Fix + durable turn-model decision (Together turn state told the WRONG partner "your turn";
+  member-reported [#369]; SPEC 58 §3.6 amended; on `fix/together-turn-state-369`).** In a couples session Angel
+  wrote, Ben replied, and the coach followed up **directed at Ben** — yet Angel's session read "awaiting your
+  response." **Diagnosed against the code, not assumed:** `turnStateFor` derived the turn purely from the newest
+  HUMAN message (spec §3.6's documented **alternating** model: "your turn when the newest human message isn't
+  yours"). But a couples turn almost always ends with the coach's reply, which is **directed at the partner who
+  just spoke** (`replyToMessageId` → their message; the coach msg's `authorPersonId` = the turn-runner) — so
+  after Ben speaks + the coach follows up TO BEN, the alternating model wrongly nudges Angel. The code matched the
+  spec, so this was a **product/turn-model fork, not a code-vs-spec bug** — I asked (AskUserQuestion) rather than
+  unilaterally flip a documented model + a deliberately-commented test. **Owner chose the coach-directed model:**
+  the turn follows whom the coach's latest shared follow-up addressed (coach → X ⇒ X's turn; the other partner is
+  NOT prompted, even if they spoke earlier). Only a **bare trailing human message** (coach hasn't replied — a
+  failed turn) falls back to the newest-human rule; a coach message with **no reply target** (a guided opener,
+  addressed to the room) also falls through, so a brand-new session's turn is unchanged. Private asides are
+  **excluded from the shared-turn derivation** (a side-channel never drives the shared turn) and a tombstone
+  never flips it. Renderer-wide effect for free: the sessions-board grouping (Your turn / Waiting on <partner>),
+  the Home Together card, the `together-turn` notification, and the nav "waiting" badge all derive from the one
+  `yourTurn` (`digestFor` → `turnStateFor`) — a single source of truth, so only the core function changed. The
+  now-inaccurate turn-hint copy ("You replied — it's X's move", which assumed the viewer acted last) → neutral
+  "It's X's move." Spec §3.6 rewritten to the coach-directed model. Gate green (in an isolated worktree — a
+  concurrent session had hijacked the shared tree): typecheck (4 pkgs), lint, format, **1851 core** unit (+3
+  `turnStateFor` [the exact #369 scenario reproduced — fails without the fix; the symmetric coach-→-viewer case;
+  the opener falls through] + the `togetherChatService` real-message-shape assertion flipped to coach-directed),
+  **1531 desktop** unit (the coreBridge couples-turn integration test now asserts both viewers; the board-group +
+  turn-hint RTL updated), + **3 Together E2E** (a new #369 walk: Ben writes → coach follows up with Ben → Angel's
+  board reads "Waiting on Ben"/"It's Ben's move", NOT "Your turn"; the board-grouping + #206 wrap-up E2Es
+  re-pointed — the latter surfaced that Ben now correctly gets a "Your turn" toast, whose text collided with the
+  card title, so its click was made role-specific). **Lesson: a turn indicator that keys only on "the newest
+  human message isn't mine" is wrong the moment the coach follows up with the partner who just spoke — derive the
+  turn from whom the coach ADDRESSED (its `replyToMessageId` target), and when a bug report contradicts a
+  DOCUMENTED spec model, it's a product fork to confirm + update the spec in lockstep, not a silent code change.
+  Process: a concurrent session switched the SHARED working tree onto its branch and its commit swept my
+  uncommitted Together edits in — recovered by reconstructing the 8-file changeset in a `git worktree` off
+  origin/main (checkout the purely-mine files from that commit; re-apply the two entangled hunks by hand) and
+  never touching the other session's active branch.**
 - 2026-08-07 — **Build (Email engagement — Phase 0: Resend infra + connect + the welcome send; SPEC 67 §5.6
   Phase 0; on `feat/email-phase-0`).** SelfOS's first real outbound email — the foundation for the 7-phase
   email feature. New **`EmailClient` `BridgeHost` part** (send/cancel/status/verify) wired to `fetch` as

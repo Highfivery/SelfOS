@@ -1,5 +1,6 @@
 import type { FileSystem } from '../host';
 import { summarizeOpenCommitments } from '../goals';
+import { summarizeEmailResponsesForContext } from '../email/emailResponse';
 import {
   insightFeedsContext,
   listInsightsForPerson,
@@ -173,6 +174,21 @@ export async function buildContext(
   // the same context bound. `new Date()` is correct here — this is the live, time-of-call context assembly.
   const commitments = await summarizeOpenCommitments(fs, key, personId, new Date());
   if (commitments) lines.push(commitments);
+
+  // Email response loop (67 §3.6): a bounded awareness of what the person tapped in a recent SelfOS email.
+  // Intimacy taps feed only an intimacy-topic call (the restricted own-context rule). Solo coaching only —
+  // skipped for a Together couples prompt (`ownContextOnly`/`excludeRestricted`), which gives each partner a
+  // dedicated block and must not re-admit a person's private email intimacy reactions.
+  if (!ownContextOnly && !options?.excludeRestricted) {
+    const emailResponses = await summarizeEmailResponsesForContext(
+      fs,
+      key,
+      personId,
+      (topic?.lifeAreas ?? []).includes('Intimacy'),
+      new Date(),
+    );
+    if (emailResponses) lines.push(emailResponses);
+  }
 
   return lines.join('\n');
 }

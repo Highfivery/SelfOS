@@ -27,7 +27,7 @@ import {
   unlock as kvUnlock,
   type RelayEnv,
 } from '@selfos/core/relay';
-import { getQuestionnaire } from '@selfos/core/questionnaires';
+import { getQuestionnaire, listAssignments } from '@selfos/core/questionnaires';
 import { readEncryptedJson, writeEncryptedJson } from '@selfos/core/vault';
 import { listInsightsForPerson, saveInsight, summarizeForContext } from '@selfos/core/insights';
 import { getIntakeSession, submitSectionForm } from '@selfos/core/intake';
@@ -189,6 +189,19 @@ function makeHost(): {
             fantasies: ['Rivals-to-lovers roleplay'],
           }),
           usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      }
+      // Email AI Coach Suggestion (67 §3.3 / Phase 5): the system asks for {"headline","body"} and the user
+      // text carries "Suggestion type:". Return a distinct suggestion so the reconcile schedules an E email.
+      if (userText.includes('Suggestion type:')) {
+        const intimacy = userText.includes('couple suggestion');
+        return Promise.resolve({
+          text: JSON.stringify(
+            intimacy
+              ? { headline: 'A shared idea', body: 'Something you both said you are into.' }
+              : { headline: 'A small step', body: 'Notice one good moment today and name it.' },
+          ),
+          usage: { inputTokens: 4, outputTokens: 6, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
       // Goal suggestions (60 §3.1.3): "Propose the goals JSON." → a JSON array of goal objects, one carrying
@@ -847,6 +860,61 @@ describe('createCoreBridge', () => {
     expect((await bridge.sessionSetActive({ personId: other.id })).ok).toBe(true);
     expect(await bridge.emailResponses()).toHaveLength(0);
     expect(await bridge.emailEditResponse({ id: responses[0]!.id, answer: 'hijack' })).toBeNull();
+  });
+
+  it('email (67 P5 / suggestions): a fresh signal schedules an AI Coach Suggestion with an embedded check-in; a tap drains → an EmailResponse + submits the check-in', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.emailSetConfig({ fromAddress: 'hi@fam.example', fromName: 'SelfOS' });
+    await bridge.secretSet({ id: RESEND_API_KEY_ID, value: 're-key' });
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-suggest' });
+    await bridge.emailSetPrefs({ address: 'owner@inbox.example' });
+    await bridge.relayConnect({ apiToken: 'cf', accountId: 'acct' });
+    const ctx = (await host.host.vaultAndKey())!;
+    // A fresh approved insight (no observation / no stale goal) → the new-data gate passes AND the engine
+    // picks the `check-in` type, so it mints a real self auto check-in with tappable options.
+    await saveInsight(ctx.fs, ctx.key, {
+      id: 'i-fresh',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: ownerId,
+      summary: 'You have been thinking about rest lately.',
+      facts: [{ id: 'i-fresh-f', text: 'wants more rest', shareable: false }],
+      confidence: 'medium',
+      categories: ['Emotions & patterns'],
+      approved: true,
+      provenance: { at: new Date().toISOString() },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Reconcile → generates + schedules an ai-suggestion email + mints the tappable check-in tokens.
+    expect((await bridge.emailScheduleReconcile({ auto: false })).ok).toBe(true);
+    const suggestionActivity = await bridge.emailActivity({ family: 'ai-suggestion' });
+    expect(suggestionActivity).toHaveLength(1);
+    expect(suggestionActivity[0]).toMatchObject({ family: 'ai-suggestion', status: 'scheduled' });
+
+    // The tokens include the embedded check-in options; tap "Yes".
+    const tokenNames = await ctx.fs.list(`people/${ownerId}/email/tokens`);
+    let yesToken = '';
+    for (const name of tokenNames) {
+      const raw = (await readEncryptedJson(
+        ctx.fs,
+        `people/${ownerId}/email/tokens/${name}`,
+        ctx.key,
+      )) as { token: string; answer: string; kind: string; assignmentId?: string };
+      if (raw.kind === 'checkin-answer' && raw.answer === 'Yes') yesToken = raw.token;
+    }
+    expect(yesToken).not.toBe('');
+    await host.host.relay.fetch(`https://relay.example/t/${yesToken}`);
+
+    // Next reconcile drains the tap → a checkin-answer response + the auto check-in is recorded (submitted).
+    expect((await bridge.emailScheduleReconcile({ auto: false })).ok).toBe(true);
+    const responses = await bridge.emailResponses();
+    const checkin = responses.find((r) => r.kind === 'checkin-answer');
+    expect(checkin).toMatchObject({ family: 'ai-suggestion', answer: 'Yes' });
+    // The minted self auto check-in is now answered (a self send → the owner is the recipient).
+    const mine = await listAssignments(ctx.fs, ctx.key, { recipientPersonId: ownerId });
+    expect(mine.some((a) => a.status === 'submitted' || a.status === 'analyzed')).toBe(true);
   });
 
   it('email (67 §6): a non-owner cannot connect; the owner reads a member’s activity, a member cannot', async () => {

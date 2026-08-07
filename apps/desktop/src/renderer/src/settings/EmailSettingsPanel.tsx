@@ -38,8 +38,9 @@ const DAY_LABELS = [
  * connected, the per-person toggles show "Connect Resend to turn this on" (never a dead toggle). The Resend
  * key never crosses to the renderer — the panel reads only the booleans-only `EmailStatus`.
  *
- * Phase 0 exposes the `welcome` family toggle only (the one built family — §12: no scaffolding for unbuilt
- * families); later phases surface each family's toggle + the digest day/time + the intimacy opt-in as they land.
+ * Surfaces every built family's toggle (welcome / transactional / digest / re-engagement / AI suggestions +
+ * the gated intimacy opt-in), the digest day/time, the drained-response history, and the Phase-5 response-loop
+ * surfaces (mutual green light + intimacy-inventory offer). Each self-hides until it has something to show.
  */
 export function EmailSettingsPanel(): JSX.Element {
   const canManage = useSessionStore((state) => state.can('settings.manage'));
@@ -60,7 +61,69 @@ export function EmailSettingsPanel(): JSX.Element {
     <Stack gap={4}>
       {canManage ? <ConnectSection status={status} onChanged={() => void refresh()} /> : null}
       <PrefsSection connected={connected} prefs={prefs} onSaved={(next) => setPrefs(next)} />
+      <GreenLightsSection />
+      <IntimacyOffersSection />
       <ResponsesSection />
+    </Stack>
+  );
+}
+
+/**
+ * "You're both up for this" (67 §3.6) — a couple suggestion both partners tapped "I'm game" on (via email).
+ * Own-scoped, self-hides when there are none.
+ */
+function GreenLightsSection(): JSX.Element | null {
+  const [greens, setGreens] = useState<
+    { partnerId: string; partnerName: string; label: string; sharedSuggestionKey: string }[]
+  >([]);
+  useEffect(() => {
+    void (async () => setGreens((await window.selfos?.emailMutualGreenLights()) ?? []))();
+  }, []);
+  if (greens.length === 0) return null;
+  return (
+    <Stack gap={2}>
+      <Text weight={600}>You’re both up for this</Text>
+      {greens.map((g) => (
+        <Text key={g.sharedSuggestionKey} size="sm">
+          You and <strong>{g.partnerName}</strong> both said yes to a suggestion SelfOS emailed you.
+        </Text>
+      ))}
+    </Stack>
+  );
+}
+
+/**
+ * Intimacy-inventory-update offers (67 §3.6) — when you tapped "I'm game" on an intimacy email, an in-app
+ * offer to mark that in your inventory. NEVER silent: it's applied only on your explicit tap here.
+ */
+function IntimacyOffersSection(): JSX.Element | null {
+  const [offers, setOffers] = useState<{ actKey: string; actLabel: string }[]>([]);
+  const load = async (): Promise<void> => {
+    setOffers((await window.selfos?.emailIntimacyOffers()) ?? []);
+  };
+  useEffect(() => {
+    void load();
+  }, []);
+  if (offers.length === 0) return null;
+  const apply = async (actKey: string): Promise<void> => {
+    await window.selfos?.emailApplyIntimacyOffer({ actKey });
+    await load();
+  };
+  return (
+    <Stack gap={2}>
+      <Text weight={600}>Update your intimacy inventory?</Text>
+      <Text size="sm" tone="secondary">
+        You said you’re into these in a recent email. Add them to your inventory? (Nothing changes
+        unless you tap.)
+      </Text>
+      {offers.map((o) => (
+        <Inline key={o.actKey} gap={2} align="center">
+          <Text size="sm">{o.actLabel}</Text>
+          <Button variant="secondary" onClick={() => void apply(o.actKey)}>
+            Add it
+          </Button>
+        </Inline>
+      ))}
     </Stack>
   );
 }
@@ -301,6 +364,9 @@ function PrefsSection({
   const reengagementOn = prefs?.families?.['re-engagement'] ?? true;
   const digestDay = prefs?.digestDay ?? 0;
   const digestTime = prefs?.digestTime ?? 'evening';
+  const suggestionsOn = prefs?.families?.['ai-suggestion'] ?? true;
+  const intimacyOn = prefs?.families?.['ai-suggestion-intimacy'] ?? false;
+  const intimacyEmailOptIn = prefs?.intimacyEmailOptIn ?? false;
   const paused = prefs?.paused ?? false;
 
   const patch = async (
@@ -420,6 +486,25 @@ function PrefsSection({
         checked={reengagementOn}
         disabled={busy || !connected}
         onChange={(checked) => void patch({ families: { 're-engagement': checked } })}
+      />
+      <ToggleRow
+        label="AI coach suggestions"
+        help="Once or twice a week, a warm, personal suggestion from your coach — a reflection to sit with, something to try, or a quick check-in you can answer right from the email."
+        checked={suggestionsOn}
+        disabled={busy || !connected}
+        onChange={(checked) => void patch({ families: { 'ai-suggestion': checked } })}
+      />
+      <ToggleRow
+        label="Intimacy suggestions by email"
+        help="Explicit, act-specific suggestions built only from what you and a partner have BOTH said you’re into. Wanting explicit content in the app is separate from wanting it in your inbox — this is off unless you turn it on, and needs both partners’ 18+ and shared-inventory consent."
+        checked={intimacyOn && intimacyEmailOptIn}
+        disabled={busy || !connected}
+        onChange={(checked) =>
+          void patch({
+            families: { 'ai-suggestion-intimacy': checked },
+            intimacyEmailOptIn: checked,
+          })
+        }
       />
       <ToggleRow
         label="Pause all email"

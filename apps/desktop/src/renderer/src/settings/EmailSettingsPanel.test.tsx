@@ -195,4 +195,68 @@ describe('EmailSettingsPanel (67 §3.1)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save response' }));
     expect(editResponse).toHaveBeenCalledWith({ id: 'r1', answer: 'Come back soon' });
   });
+
+  it('toggles the AI-suggestion + intimacy families (67 §3.3 / Phase 5)', async () => {
+    asRole('member');
+    const setPrefs = vi.fn(() =>
+      Promise.resolve({
+        schemaVersion: 1 as const,
+        address: 'me@inbox.example',
+        families: {},
+        richness: 'brief' as const,
+        intimacyEmailOptIn: false,
+        paused: false,
+        digestDay: 0,
+        digestTime: 'evening' as const,
+        unsubscribeToken: 't',
+      }),
+    );
+    installMockBridge({
+      emailStatus: () => Promise.resolve(connected),
+      emailGetPrefs: () =>
+        Promise.resolve({
+          schemaVersion: 1,
+          address: 'me@inbox.example',
+          families: {},
+          richness: 'brief',
+          intimacyEmailOptIn: false,
+          paused: false,
+          digestDay: 0,
+          digestTime: 'evening',
+          unsubscribeToken: 't',
+        }),
+      emailSetPrefs: setPrefs,
+    });
+    render(<EmailSettingsPanel />);
+    await userEvent.click(await screen.findByRole('switch', { name: /AI coach suggestions/ }));
+    expect(setPrefs).toHaveBeenCalledWith({ families: { 'ai-suggestion': false } });
+    // The intimacy toggle flips BOTH the family AND the distinct intimacy-email opt-in (67 §8.2).
+    await userEvent.click(screen.getByRole('switch', { name: /Intimacy suggestions by email/ }));
+    expect(setPrefs).toHaveBeenCalledWith({
+      families: { 'ai-suggestion-intimacy': true },
+      intimacyEmailOptIn: true,
+    });
+  });
+
+  it('shows the mutual green light + intimacy-inventory offer surfaces (67 §3.6 / Phase 5)', async () => {
+    asRole('member');
+    const applyOffer = vi.fn(() => Promise.resolve(true));
+    installMockBridge({
+      emailStatus: () => Promise.resolve(connected),
+      emailGetPrefs: () => Promise.resolve(null),
+      emailMutualGreenLights: () =>
+        Promise.resolve([
+          { partnerId: 'b', partnerName: 'Bea', label: 'an idea', sharedSuggestionKey: 'sk1' },
+        ]),
+      emailIntimacyOffers: () =>
+        Promise.resolve([{ actKey: 'act-1', actLabel: 'Sensual massage', currentRating: 2 }]),
+      emailApplyIntimacyOffer: applyOffer,
+    });
+    render(<EmailSettingsPanel />);
+    expect(await screen.findByText(/You’re both up for this/)).toBeInTheDocument();
+    expect(screen.getByText(/Bea/)).toBeInTheDocument();
+    expect(screen.getByText('Sensual massage')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add it' }));
+    expect(applyOffer).toHaveBeenCalledWith({ actKey: 'act-1' });
+  });
 });

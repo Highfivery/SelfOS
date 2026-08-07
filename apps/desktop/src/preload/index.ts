@@ -200,6 +200,10 @@ const bridge: SelfosBridge = {
   emailScheduleReconcile: (input) => ipcRenderer.invoke(IpcChannels.emailScheduleReconcile, input),
   emailResponses: () => ipcRenderer.invoke(IpcChannels.emailResponses),
   emailEditResponse: (input) => ipcRenderer.invoke(IpcChannels.emailEditResponse, input),
+  emailMutualGreenLights: () => ipcRenderer.invoke(IpcChannels.emailMutualGreenLights),
+  emailIntimacyOffers: () => ipcRenderer.invoke(IpcChannels.emailIntimacyOffers),
+  emailApplyIntimacyOffer: (input) =>
+    ipcRenderer.invoke(IpcChannels.emailApplyIntimacyOffer, input),
   emailActivity: (input) => ipcRenderer.invoke(IpcChannels.emailActivity, input),
   insightsAnalyze: (input) => ipcRenderer.invoke(IpcChannels.insightsAnalyze, input),
   insightsApprove: (input) => ipcRenderer.invoke(IpcChannels.insightsApprove, input),

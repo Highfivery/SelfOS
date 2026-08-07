@@ -23,6 +23,7 @@ import {
   savePerson,
   saveRelationship,
   setAccount,
+  upsertPerson,
 } from '@selfos/core/people';
 import { getGoal, saveGoal } from '@selfos/core/goals';
 import { hashPin } from '@selfos/core/crypto';
@@ -43,7 +44,7 @@ import {
   submitResponse,
 } from '@selfos/core/questionnaires';
 import { getIntakeSession, intakeCatalogSnapshot } from '@selfos/core/intake';
-import { listEmailActivity, listEmailResponses } from '@selfos/core/email';
+import { listEmailActivity, listEmailResponses, readEmailPrefs } from '@selfos/core/email';
 import {
   getInsight,
   listInsightsForPerson,
@@ -70,7 +71,9 @@ import {
   listPulseCheckIns,
   pairKeyFor,
   saveAgreement,
+  setYnmOptIn,
 } from '@selfos/core/together';
+import { acknowledgeAdult } from '@selfos/core/conversations';
 import {
   getBook,
   getChapter,
@@ -5290,6 +5293,113 @@ test('email (67 P4 / interactive): the response history renders in Settings → 
       })
       .toBe('changed my mind');
     expect((await listEmailResponses(fs, key, 'owner-1'))[0]?.edited).toBe(true);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('email (67 P5 / suggestions): the AI-suggestion family toggle persists + the mutual green light renders', async () => {
+  const { userData, vault } = await seedReadyVault();
+  await createNodeSecretStore(userData, passthrough).set('resend.apiKey', 're-e2e-p5');
+  {
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('email P5 e2e: master key missing');
+    await writeEncryptedJson(
+      fs,
+      'config/email.enc',
+      {
+        schemaVersion: 1,
+        fromAddress: 'hi@fam.example',
+        fromName: 'SelfOS',
+        domainVerified: true,
+        updatedAt: '2026-08-07T00:00:00.000Z',
+      },
+      key,
+    );
+    // A partner + a mutual green light: both the owner + the partner tapped "I'm game" on the SAME shared key.
+    // The green light re-checks live intimacy consent, so seed a partner edge + both 18+ acks + both YNM opt-ins.
+    await upsertPerson(fs, key, { displayName: 'Bea', isSubject: true, tags: [] });
+    const partner = (await listPeople(fs, key)).find((p) => p.displayName === 'Bea')!;
+    await saveRelationship(fs, key, {
+      id: 'rel-p5',
+      schemaVersion: 2,
+      fromPersonId: 'owner-1',
+      toPersonId: partner.id,
+      type: 'partner',
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    });
+    const seedTime = new Date('2026-08-28T00:00:00.000Z');
+    await acknowledgeAdult(fs, key, 'owner-1');
+    await acknowledgeAdult(fs, key, partner.id);
+    await setYnmOptIn(fs, key, 'owner-1', partner.id, true, seedTime);
+    await setYnmOptIn(fs, key, partner.id, 'owner-1', true, seedTime);
+    const sugg = (id: string, partnerId: string) => ({
+      id,
+      schemaVersion: 1 as const,
+      family: 'ai-suggestion-intimacy' as const,
+      suggestionType: 'intimacy' as const,
+      text: 'a shared idea',
+      partnerPersonId: partnerId,
+      sharedSuggestionKey: 'sk-e2e',
+      tokens: [],
+      sentAt: '2026-08-28T00:00:00.000Z',
+    });
+    const resp = (id: string, suggestionId: string) => ({
+      id,
+      schemaVersion: 1 as const,
+      family: 'ai-suggestion-intimacy' as const,
+      kind: 'intimacy-reaction' as const,
+      answer: 'im-game',
+      suggestionId,
+      sensitivity: 'intimacy' as const,
+      source: 'relay-tap' as const,
+      edited: false,
+      respondedAt: '2026-08-29T00:00:00.000Z',
+    });
+    await writeEncryptedJson(
+      fs,
+      'people/owner-1/email/suggestions/so.enc',
+      sugg('so', partner.id),
+      key,
+    );
+    await writeEncryptedJson(fs, 'people/owner-1/email/responses/ro.enc', resp('ro', 'so'), key);
+    await writeEncryptedJson(
+      fs,
+      `people/${partner.id}/email/suggestions/sp.enc`,
+      sugg('sp', 'owner-1'),
+      key,
+    );
+    await writeEncryptedJson(
+      fs,
+      `people/${partner.id}/email/responses/rp.enc`,
+      resp('rp', 'sp'),
+      key,
+    );
+  }
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Email' }).click();
+    // The mutual green light surface renders (both tapped "I'm game" on the shared suggestion).
+    await expect(w.getByText('You’re both up for this')).toBeVisible();
+    await expect(w.getByText(/Bea/)).toBeVisible();
+
+    // Toggling the AI-suggestion family persists to the encrypted vault.
+    await w.getByRole('switch', { name: /AI coach suggestions/ }).click();
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('email P5 e2e: master key missing (2)');
+    await expect
+      .poll(async () => (await readEmailPrefs(fs, key, 'owner-1'))?.families?.['ai-suggestion'], {
+        timeout: 5000,
+      })
+      .toBe(false);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

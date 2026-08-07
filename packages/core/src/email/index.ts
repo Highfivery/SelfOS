@@ -6,3 +6,6 @@ export * from './emailComposer';
 export * from './emailSend';
 export * from './emailSchedule';
 export * from './emailResponse';
+export * from './emailResponseEffects';
+export * from './emailSuggestionService';
+export * from './emailIntimacy';

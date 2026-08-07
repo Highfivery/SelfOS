@@ -2,6 +2,7 @@ import type { EmailClient, FileSystem } from '../host';
 import type {
   EmailActivityEntry,
   EmailDeliveryStatus,
+  EmailFamily,
   EmailPrefs,
   EmailReconcileResult,
 } from '../schemas';
@@ -19,13 +20,31 @@ import { computeStreak } from '../home/streak';
 import { computeLifeRings } from '../home/rings';
 import { generateRelayToken } from '../relay';
 import { uuid } from '../id';
+import { saveQuestionnaire } from '../questionnaires/questionnaireService';
+import { createAssignment } from '../questionnaires/assignmentService';
+import type { AiDeps } from '../questionnaires/aiCall';
+import type { QuestionnaireInput } from '../schemas';
 import { effectiveFamilyEnabled, readEmailPrefs } from './emailPrefs';
 import { fromLineOf, readEmailConfig } from './emailConfig';
 import { drainEmailTaps, mintEmailToken, type TapDrainer } from './emailResponse';
+import { applyEmailCheckinAnswers } from './emailResponseEffects';
+import { resolveIntimacyEmailTarget } from './emailIntimacy';
+import {
+  buildAvoidSet,
+  gatherSuggestionSignals,
+  generateSuggestion,
+  hasNewSuggestionData,
+  listSentSuggestions,
+  recordSentSuggestion,
+  suggestionLookbackFloor,
+  SUGGESTION_MAX_PER_WEEK,
+  SUGGESTION_MIN_GAP_DAYS,
+} from './emailSuggestionService';
 import {
   buildDigestEmail,
   buildQuestionnaireReminderEmail,
   buildReEngagementEmail,
+  buildSuggestionEmail,
   type DigestContent,
   type ReEngagementContent,
 } from './emailComposer';
@@ -317,6 +336,187 @@ async function cancelScheduled(
   return 1;
 }
 
+/** How far ahead an AI suggestion is scheduled (67 §3.4) — a gentle delay so it reaches a closed app. */
+const SUGGESTION_SCHEDULE_HOURS = 20;
+/** The tappable options an embedded email check-in offers (67 §3.5). */
+const CHECKIN_OPTIONS = ['Yes', 'Somewhat', 'Not really'];
+
+/**
+ * Try to compose + schedule ONE AI Coach Suggestion for a family (67 §3.3 / Phase 5). Returns 1 when it
+ * scheduled an email, else 0 (family off / no new data / de-dup'd / intimacy not eligible / model declined).
+ * A `check-in` type mints a real self auto check-in assignment whose tappable options drain back + analyze.
+ */
+async function trySuggestion(ctx: {
+  fs: FileSystem;
+  key: Uint8Array;
+  email: EmailClient;
+  resendKey: string;
+  personId: string;
+  aiDeps: AiDeps;
+  prefs: EmailPrefs;
+  family: 'ai-suggestion' | 'ai-suggestion-intimacy';
+  recipientName?: string | undefined;
+  relay?: TapDrainer | undefined;
+  relayEndpoint?: string | undefined;
+  now: Date;
+}): Promise<number> {
+  const { fs, key, personId, family, prefs, aiDeps, now } = ctx;
+  const nowMs = now.getTime();
+  const intimacy = family === 'ai-suggestion-intimacy';
+
+  if (!effectiveFamilyEnabled(prefs, family)) return 0;
+  let intimacyTarget: Awaited<ReturnType<typeof resolveIntimacyEmailTarget>> = null;
+  if (intimacy) {
+    if (!prefs.intimacyEmailOptIn) return 0; // the distinct intimacy-email consent (§8.2)
+    intimacyTarget = await resolveIntimacyEmailTarget(fs, key, personId);
+    if (!intimacyTarget) return 0; // no eligible partner / no shared, consented signal
+  }
+
+  const history = await listSentSuggestions(fs, key, personId, family);
+  const sinceAt = history[0]?.sentAt ? new Date(history[0].sentAt) : suggestionLookbackFloor(now);
+  const signals = await gatherSuggestionSignals(fs, key, personId, sinceAt, now);
+  if (!hasNewSuggestionData(signals, intimacyTarget?.overlap.length ?? 0)) return 0;
+
+  const avoid = await buildAvoidSet(fs, key, personId, family, now);
+  const generated = await generateSuggestion(aiDeps, {
+    family,
+    signals,
+    avoid,
+    ...(ctx.recipientName ? { recipientName: ctx.recipientName } : {}),
+    ...(intimacyTarget
+      ? {
+          intimacyOverlap: intimacyTarget.overlap,
+          partnerName: intimacyTarget.partnerName,
+          partnerPersonId: intimacyTarget.partnerId,
+          sharedSuggestionKey: intimacyTarget.sharedSuggestionKey,
+        }
+      : {}),
+  });
+  if (!generated) return 0;
+  // NOTE: `runClaude` already records the `email.suggest` usage event internally — do NOT re-record it here
+  // (that would double-count against the person's budget). `generated.usage` is returned only for tests.
+
+  const { suggestion, sent } = generated;
+  const interactionId = uuid();
+  const endpoint = ctx.relayEndpoint?.replace(/\/+$/, '');
+  const mintedTokens: string[] = [];
+
+  // Mint one interactive tap → a { label, url } button, when a relay is provisioned (§3.5). Without a relay
+  // the suggestion still sends as a plain nudge (no buttons).
+  const mintTap = async (
+    kind: 'reaction' | 'intimacy-reaction' | 'checkin-answer' | 'tuning',
+    answer: string,
+    label: string,
+    extra?: { questionId?: string; assignmentId?: string },
+  ): Promise<{ label: string; url: string } | null> => {
+    if (!ctx.relay || !endpoint) return null;
+    const token = generateRelayToken();
+    await mintEmailToken(fs, key, personId, {
+      token,
+      schemaVersion: 1,
+      interactionId,
+      family,
+      suggestionId: sent.id,
+      ...(extra?.questionId ? { questionId: extra.questionId } : {}),
+      ...(extra?.assignmentId ? { assignmentId: extra.assignmentId } : {}),
+      kind,
+      answer,
+      ...(suggestion.sharedSuggestionKey
+        ? { sharedSuggestionKey: suggestion.sharedSuggestionKey }
+        : {}),
+      mintedAt: now.toISOString(),
+    });
+    mintedTokens.push(token);
+    return { label, url: `${endpoint}/t/${token}` };
+  };
+
+  let reactions: { label: string; url: string }[] = [];
+  let tuning: { label: string; url: string }[] = [];
+
+  if (suggestion.suggestionType === 'check-in' && ctx.relay && endpoint) {
+    // Deliver a real self auto check-in: a one-question assignment whose tappable options drain back (§3.5).
+    const questionId = uuid();
+    const draft: QuestionnaireInput = {
+      title: suggestion.headline,
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId },
+      questions: [
+        {
+          id: questionId,
+          type: 'singleChoice',
+          prompt: suggestion.body,
+          required: false,
+          options: CHECKIN_OPTIONS,
+        },
+      ],
+    };
+    try {
+      const questionnaire = await saveQuestionnaire(fs, key, draft, personId);
+      const assignment = await createAssignment(fs, key, {
+        questionnaireId: questionnaire.id,
+        senderPersonId: personId,
+        recipient: { kind: 'person', personId },
+        channel: 'inApp',
+        privacy: 'standard',
+        senderVisibleToRecipient: true,
+      });
+      for (const option of CHECKIN_OPTIONS) {
+        const tap = await mintTap('checkin-answer', option, option, {
+          questionId,
+          assignmentId: assignment.id,
+        });
+        if (tap) reactions.push(tap);
+      }
+    } catch {
+      reactions = []; // minting the assignment failed → fall through to a plain reaction suggestion
+    }
+  }
+
+  if (reactions.length === 0) {
+    // Standard reactions (intimacy uses the same three at the intimacy tier) + more/less tuning.
+    const reactionKind = intimacy ? 'intimacy-reaction' : 'reaction';
+    const r1 = await mintTap(reactionKind, 'im-game', intimacy ? 'We’re into it' : 'I’m game');
+    const r2 = await mintTap(reactionKind, 'maybe-later', 'Maybe later');
+    const r3 = await mintTap(reactionKind, 'not-for-me', 'Not for me');
+    reactions = [r1, r2, r3].filter((t): t is { label: string; url: string } => t !== null);
+    const t1 = await mintTap('tuning', 'more', 'More like this');
+    const t2 = await mintTap('tuning', 'less', 'Less like this');
+    tuning = [t1, t2].filter((t): t is { label: string; url: string } => t !== null);
+  }
+
+  await recordSentSuggestion(fs, key, personId, { ...sent, tokens: mintedTokens });
+
+  const composed = buildSuggestionEmail({
+    ...(ctx.recipientName ? { recipientName: ctx.recipientName } : {}),
+    headline: suggestion.headline,
+    body: suggestion.body,
+    // The intimacy family's consent-aware secondary line (67 §8.2) — reassures WHY this reached the inbox.
+    ...(intimacy
+      ? {
+          detail:
+            'Built only from what you and your partner have both said you’re into — you can turn these off in Settings → Email.',
+        }
+      : {}),
+    ...(reactions.length > 0 ? { reactions } : {}),
+    ...(tuning.length > 0 ? { tuning } : {}),
+  });
+  const res = await sendFamilyEmail({
+    fs,
+    key,
+    email: ctx.email,
+    resendKey: ctx.resendKey,
+    personId,
+    family,
+    composed,
+    crisisSuppressed: false, // gated by engagementReady (crisis already excluded)
+    scheduledAt: iso(nowMs + SUGGESTION_SCHEDULE_HOURS * 60 * 60 * 1000),
+    sourceKey: `suggestion:${sent.id}`,
+    now,
+  });
+  return res.ok ? 1 : 0;
+}
+
 /**
  * The no-backend email cadence (67 §3.4 / Phase 3) — run on launch/focus while the app is open. It (1)
  * polls Resend for the delivery status of recently-sent emails and records it, (2) reconciles the weekly
@@ -339,6 +539,9 @@ export async function reconcileEmailSchedule(deps: {
   relay?: TapDrainer;
   /** The relay endpoint base (Phase 4) — for building `<endpoint>/t/<token>` one-click links. */
   relayEndpoint?: string;
+  /** The AI bundle (Phase 5) — enables family E AI Coach Suggestions + analyzing an emailed check-in.
+   *  Absent (AI off / no key) ⇒ no suggestion email is generated (never a dead surface). */
+  ai?: { client: AiDeps['client']; apiKey: string | null; model: string; override?: boolean };
   now: Date;
 }): Promise<EmailReconcileResult> {
   const { fs, key, email, resendKey, personId, now } = deps;
@@ -348,12 +551,29 @@ export async function reconcileEmailSchedule(deps: {
   const from = fromLineOf(config);
   if (!resendKey || !from) return { ok: false, reason: 'NOT_CONFIGURED' };
 
+  // The AI bundle for family E generation + analyzing an emailed check-in (Phase 5); null when AI is off.
+  const aiDeps: AiDeps | null =
+    deps.ai && deps.ai.apiKey
+      ? {
+          fs,
+          key,
+          client: deps.ai.client,
+          apiKey: deps.ai.apiKey,
+          model: deps.ai.model,
+          personId,
+          now,
+          ...(deps.ai.override ? { override: true } : {}),
+        }
+      : null;
+
   // 0) Drain any one-click email taps back into responses (Phase 4) BEFORE gating — a `pause` tap that
   // turned off the re-engagement family must be reflected this same run, so re-read prefs after a drain.
+  // A drained embedded check-in answer (Phase 5) is then submitted + analyzed like an in-app answer.
   let prefs = deps.prefs;
   if (deps.relay) {
     const drained = await drainEmailTaps(fs, key, personId, deps.relay, now);
     if (drained.length > 0) prefs = await readEmailPrefs(fs, key, personId);
+    if (aiDeps) await applyEmailCheckinAnswers(aiDeps, personId);
   }
 
   const scoped = { fs, key, email, resendKey, personId };
@@ -520,6 +740,62 @@ export async function reconcileEmailSchedule(deps: {
       now,
     });
     if (res.ok) scheduled += 1;
+  }
+
+  // 5) AI Coach Suggestions (E / E-int) — at most SUGGESTION_MAX_PER_WEEK per person across BOTH E families,
+  // spaced by SUGGESTION_MIN_GAP_DAYS, only when there's genuinely-new data + a metered call succeeds.
+  const E_FAMILIES: EmailFamily[] = ['ai-suggestion', 'ai-suggestion-intimacy'];
+  const eRecent = activity.filter(
+    (e) =>
+      E_FAMILIES.includes(e.family) &&
+      e.status !== 'canceled' &&
+      withinDays(e.sentAt ?? e.scheduledAt, nowMs, 7),
+  );
+  const eLivePending = activity.some(
+    (e) => E_FAMILIES.includes(e.family) && isLivePending(e, nowMs),
+  );
+  const eGapClear = !eRecent.some((e) =>
+    withinDays(e.sentAt ?? e.scheduledAt, nowMs, SUGGESTION_MIN_GAP_DAYS),
+  );
+  if (
+    engagementReady &&
+    aiDeps &&
+    prefs &&
+    !eLivePending &&
+    eRecent.length < SUGGESTION_MAX_PER_WEEK &&
+    eGapClear
+  ) {
+    // Prefer a non-intimacy suggestion; fall back to the gated intimacy slot. Only ONE E email per run.
+    const sent =
+      (await trySuggestion({
+        fs,
+        key,
+        email,
+        resendKey,
+        personId,
+        aiDeps,
+        prefs,
+        family: 'ai-suggestion',
+        ...(deps.recipientName ? { recipientName: deps.recipientName } : {}),
+        relay: deps.relay,
+        relayEndpoint: deps.relayEndpoint,
+        now,
+      })) ||
+      (await trySuggestion({
+        fs,
+        key,
+        email,
+        resendKey,
+        personId,
+        aiDeps,
+        prefs,
+        family: 'ai-suggestion-intimacy',
+        ...(deps.recipientName ? { recipientName: deps.recipientName } : {}),
+        relay: deps.relay,
+        relayEndpoint: deps.relayEndpoint,
+        now,
+      }));
+    scheduled += sent;
   }
 
   return { ok: true, polled, scheduled, canceled };

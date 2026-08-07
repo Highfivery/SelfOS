@@ -1,6 +1,6 @@
 # 67 — Email engagement & re-engagement (Resend)
 
-> **Status:** **Phases 0–4 Built** (of 7 phases) · _last updated 2026-08-07_
+> **Status:** **Phases 0–5 Built** (of 7 phases) · _last updated 2026-08-07_
 >
 > SelfOS's first real outbound email. Today the only "email" is a `mailto:` hand-off for questionnaire
 > links — SelfOS has **never actually sent a message**. This spec adds a household-provisioned
@@ -478,6 +478,7 @@ export type SentSuggestion = z.infer<typeof SentSuggestionSchema>;
     family: EmailFamilySchema,
     suggestionId: z.string().optional(),
     questionId: z.string().optional(), // for an embedded check-in
+    assignmentId: z.string().optional(), // the self auto check-in an embedded check-in tap answers (Phase 5)
     kind: z.enum(['reaction', 'intimacy-reaction', 'checkin-answer', 'tuning']),
     answer: z.string(), // 'im-game'|'maybe-later'|'not-for-me'|'more'|'less'|<value>
     sharedSuggestionKey: z.string().optional(), // carried through for mutual green light
@@ -494,6 +495,8 @@ export type SentSuggestion = z.infer<typeof SentSuggestionSchema>;
     family: EmailFamilySchema,
     suggestionId: z.string().optional(),
     questionId: z.string().optional(),
+    assignmentId: z.string().optional(), // the auto check-in a `checkin-answer` tap answered (Phase 5)
+    sharedSuggestionKey: z.string().optional(), // couple pairing — mutual green light (Phase 5)
     kind: z.enum(['reaction', 'intimacy-reaction', 'checkin-answer', 'tuning']),
     answer: z.string(),
     sensitivity: z.enum(['standard', 'restricted', 'intimacy']).default('standard'),
@@ -645,9 +648,23 @@ valuable.
   avoid-set, more/less tuning) beyond the built `pause`. Accepted risk (§3.5): `GET /t/` is a destructive
   side effect a mail-client link prefetch could trigger — the spec chose one-click/no-PIN for low-stakes
   signals.
-- **Phase 5 — Family E (AI Coach Suggestions) + E-int (intimacy).** `emailSuggestionService` (new-data
-  gate, de-dup, one metered call, shared-data-only couples, both-partners' copies); mutual green light;
-  the intimacy family (all gates + the inventory-update offer); more/less tuning.
+- **Phase 5 — Family E (AI Coach Suggestions) + E-int (intimacy). BUILT.** `emailSuggestionService`
+  (`hasNewSuggestionData` new-data gate; `generateSuggestion` — ONE metered `email.suggest` `runClaude`
+  call, budget-gated, tolerant parse; `isNearDuplicate` de-dup; `buildAvoidSet` — a `not-for-me` avoids a
+  subject forever, a `maybe-later` resurfaces after 3 weeks, kept SEPARATE per family). The reconcile's
+  step-5 E block schedules ≤2/week (across both E families, 3-day gap), preferring non-intimacy then the
+  gated intimacy slot; the embedded one-question **check-in** mints a REAL self auto check-in
+  (`saveQuestionnaire`+`createAssignment`) whose tapped options drain back → `submitResponse` +
+  `analyzeAssignment`. `emailIntimacy` (`resolveIntimacyEmailTarget` — both 18+-acked + both YNM opted-in +
+  a non-empty mutual `computeYnmOverlap`, re-checked live; `explicitFraming` register; the never-silent
+  inventory-update offer). `emailResponseEffects` (mutual green light — a cross-partner `im-game` match on a
+  shared key; `applyEmailCheckinAnswers`). `buildContext` feeds recent taps into coaching context (intimacy
+  taps only on an intimacy-topic call; skipped for Together couples prompts). New IPC
+  `email:mutualGreenLights` / `email:intimacyOffers` / `email:applyIntimacyOffer` (own-scoped); the Claude
+  key is resolved host-side, never crossing IPC. Renderer: the AI-suggestion + intimacy family toggles (the
+  intimacy toggle flips the family AND the distinct `intimacyEmailOptIn`) + the green-light / inventory-offer
+  surfaces. **The more/less tuning buttons are minted + drained (they train de-dup via the response history);
+  a dedicated weighting model is a future refinement.**
 - **Phase 6 — Owner Email-activity view + delivery health + family F (milestones).** The full owner view
   (filter/export), delivery-health (bounces/complaints via status polling), and milestone/celebration
   emails.
@@ -670,10 +687,16 @@ active-person-scoped in the bridge. **No channel ever returns the Resend key.**
   tap drain + schedule reconcile; `auto:true` applies the 24h throttle + stamps `emailScheduledAt`.
 - **`email:activity({ personId?, family?, from?, to? })` → `EmailActivityEntry[]`** — the owner view read,
   **admin-gated** (`people.manage`) for another person; a member reads only their own.
-- **`email:responses` → `EmailResponse[]`** / **`email:editResponse` / `email:updateInventoryFromResponse`**
-  — the in-app history (own-only) + the explicit intimacy-inventory-update offer.
+- **`email:responses` → `EmailResponse[]`** / **`email:editResponse`** — the in-app history (own-only,
+  editable).
+- **`email:mutualGreenLights` → `MutualGreenLight[]`** (Phase 5) — the active person's couple suggestions
+  both partners tapped `im-game` on; own-scoped, read host-side with the master key.
+- **`email:intimacyOffers` → `IntimacyInventoryOffer[]`** / **`email:applyIntimacyOffer({ actKey })` →
+  `boolean`** (Phase 5) — the pending intimacy-inventory-update offers + the explicit-confirm apply
+  (never silent; own-data only, via `submitSectionForm`).
 - **Relay tap drain** rides the existing relay transport (drain-secret authed): the bridge calls
-  `drainEmailTaps` during `email:scheduleReconcile`; no new renderer channel.
+  `drainEmailTaps` during `email:scheduleReconcile`; no new renderer channel. Family E generation runs
+  inside the reconcile (the Claude key is resolved host-side, never crossing IPC).
 
 **Claude usage.** Family E's `generateSuggestion` is one metered call under a new **`email.suggest`**
 usage type ([`06`](06-ai-usage-and-budgets.md); admin cost visibility is unchanged — the usage dashboard
@@ -861,6 +884,39 @@ No open questions remain.
 
 ## 12. Changelog
 
+- 2026-08-07 — **Phase 5 BUILT** (AI Coach Suggestions — family E + E-int intimacy — the crown jewel,
+  incl. the embedded auto-checkin-over-email). New core `emailSuggestionService.ts`: `hasNewSuggestionData`
+  (new-data gate — new approved insights / completed sessions / synthesis observation / intimacy overlap),
+  `gatherSuggestionSignals`, `generateSuggestion` (ONE metered `email.suggest` `runClaude` call, budget-gated
+  - truncation-safe via runClaude, tolerant JSON parse, `isNearDuplicate` de-dup), `buildAvoidSet`
+    (per-family: `not-for-me` avoids a subject forever, `maybe-later` resurfaces after `RESURFACE_WEEKS`=3;
+    the `ai-suggestion` and `ai-suggestion-intimacy` families keep SEPARATE avoid-sets), `SentSuggestion`
+    history. `emailIntimacy.ts`: `resolveIntimacyEmailTarget` (gated on BOTH partners 18+-acked +
+    BOTH Yes/No/Maybe opted-in + a non-empty mutual `computeYnmOverlap` — shared-data-only, re-checked live so
+    a partner→ex change or a removed opt-in revokes it immediately) + `listIntimacyInventoryOffers` /
+    `applyIntimacyInventoryOffer` (never-silent, explicit-confirm inventory bump via `submitSectionForm`).
+    `emailResponseEffects.ts`: `computeMutualGreenLights` (a cross-partner `im-game` match on a shared
+    `sharedSuggestionKey`, read host-side with the master key like `relationshipSynthesisService`) +
+    `applyEmailCheckinAnswers` (a drained `checkin-answer` → `submitResponse` + `analyzeAssignment`, idempotent
+    on assignment status). `emailSchedule.ts` reconcile: an `ai` bundle (Claude client + host-resolved key +
+    model); step-0 applies drained check-in answers; a step-5 E block schedules ≤`SUGGESTION_MAX_PER_WEEK`=2
+    per week (across both E families, `SUGGESTION_MIN_GAP_DAYS`=3 apart), preferring non-intimacy then the
+    gated intimacy slot. A `check-in` suggestion mints a REAL self auto check-in
+    (`saveQuestionnaire`+`createAssignment`, privacy `standard`) whose tapped options are `checkin-answer`
+    tokens. E/E-int stay crisis-suppressed (via `engagementReady`). `buildContext` feeds recent taps into
+    coaching context (`summarizeEmailResponsesForContext` — intimacy taps only on an intimacy-topic call;
+    skipped for `ownContextOnly`/`excludeRestricted` couples prompts). Additive schema (no `schemaVersion`
+    bump): `SentSuggestion`, `EmailSuggestionType`, `MutualGreenLight` / `IntimacyInventoryOffer` view types,
+    `assignmentId` + `sharedSuggestionKey` on `EmailToken`/`EmailResponse`; new `email.suggest` usage label.
+    New IPC `email:mutualGreenLights` / `email:intimacyOffers` / `email:applyIntimacyOffer` (email.own-gated,
+    own-scoped); the reconcile builds the `ai` bundle host-side so the Claude key never crosses IPC. Renderer:
+    the AI-suggestion + intimacy family toggles (the intimacy toggle flips the family AND the distinct
+    `intimacyEmailOptIn`), the mutual-green-light + intimacy-inventory-offer surfaces in `EmailSettingsPanel`.
+    Gate green: typecheck (4 pkgs), lint, format, core (`emailSuggestion` 8, `emailIntimacy` 4,
+    `emailResponseEffects` 2) + desktop (a two-persona coreBridge crown-jewel: a fresh insight → generate a
+    check-in suggestion → mint tokens → tap → drain → response + the auto check-in submitted; own-scoping;
+    EmailSettingsPanel RTL for the E toggles + green-light/offer surfaces) unit + a decrypt-level P5 E2E
+    (the AI-suggestion toggle persists + the mutual green light renders). **Phase 6 remains.**
 - 2026-08-07 — **Phase 4 BUILT** (interactive tap layer — one-click email responses via the zero-knowledge
   relay). Relay Worker gained `GET /t/<token>` (records a tap — `tapKey` / `TAP_TTL_SECONDS`=30d, idempotent
   first-tap-wins, no PIN, strict-CSP page) + drain-secret-authed `POST /api/admin/drainTaps`; **`RELAY_VERSION`

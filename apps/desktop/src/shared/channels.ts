@@ -11,6 +11,8 @@ import type {
   EmailSendResult,
   EmailStatus,
   EmailVerifyResult,
+  IntimacyInventoryOffer,
+  MutualGreenLight,
   BookManifest,
   ChapterMarkup,
   ChapterVersion,
@@ -395,6 +397,9 @@ export const IpcChannels = {
   emailScheduleReconcile: 'email:scheduleReconcile',
   emailResponses: 'email:responses',
   emailEditResponse: 'email:editResponse',
+  emailMutualGreenLights: 'email:mutualGreenLights',
+  emailIntimacyOffers: 'email:intimacyOffers',
+  emailApplyIntimacyOffer: 'email:applyIntimacyOffer',
   emailActivity: 'email:activity',
   insightsAnalyze: 'insights:analyze',
   insightsApprove: 'insights:approve',
@@ -1241,6 +1246,12 @@ export interface SelfosBridge {
   emailResponses(): Promise<EmailResponse[]>;
   /** Edit one of the active person's own email responses in place (own-only, editable). Gated `email.own`. */
   emailEditResponse(input: { id: string; answer: string }): Promise<EmailResponse | null>;
+  /** The active person's mutual green lights — a couple suggestion both partners tapped "I'm game" on (67 §3.6). */
+  emailMutualGreenLights(): Promise<MutualGreenLight[]>;
+  /** Pending offers to update the intimacy inventory from an emailed "I'm game" tap (67 §3.6). Gated `email.own`. */
+  emailIntimacyOffers(): Promise<IntimacyInventoryOffer[]>;
+  /** Apply one intimacy-inventory offer — an explicit-confirm bump of the act in the active person's own intake. */
+  emailApplyIntimacyOffer(input: { actKey: string }): Promise<boolean>;
   /** Read logged email activity (own; another person's is `people.manage`-gated in the bridge). */
   emailActivity(input?: {
     personId?: string;

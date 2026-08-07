@@ -314,3 +314,58 @@ export function buildReEngagementEmail(content: ReEngagementContent): ComposedEm
   ].join('\n');
   return { subject, html, text };
 }
+
+/** Content for an AI Coach Suggestion email (67 §3.3 family E / Phase 5). */
+export interface SuggestionContent {
+  recipientName?: string;
+  headline: string;
+  body: string;
+  /** A secondary line (e.g. an intimacy suggestion's consent-aware framing). */
+  detail?: string;
+  /** The primary reaction buttons (e.g. I'm game / Maybe later / Not for me — or a check-in's options). */
+  reactions?: { label: string; url: string }[];
+  /** Optional "more like this / less like this" tuning buttons (67 §3.6). */
+  tuning?: { label: string; url: string }[];
+}
+
+/**
+ * Family E — an AI Coach Suggestion email (67 §3.3 / Phase 5). A single, warm, AI-authored suggestion +
+ * one-click reaction buttons (and optional more/less tuning) when the relay is provisioned. The body is
+ * treated as plain text (escaped). No inline SVG (§9); buttons are bulletproof inline-styled links.
+ */
+export function buildSuggestionEmail(content: SuggestionContent): ComposedEmail {
+  const name = content.recipientName?.trim();
+  const subject = content.headline;
+  const reactions = content.reactions ?? [];
+  const tuning = content.tuning ?? [];
+
+  const html = shell(
+    [
+      `<h1 style="font-size:20px;margin:0 0 12px;color:#241f1a;">${esc(name ? `Hi ${name}` : content.headline)}</h1>`,
+      name ? `<p style="margin:0 0 12px;font-weight:600;">${esc(content.headline)}</p>` : '',
+      `<p style="margin:0 0 14px;">${esc(content.body)}</p>`,
+      content.detail ? `<p style="margin:0 0 14px;color:#6e665c;">${esc(content.detail)}</p>` : '',
+      ...reactions.map((t) => ctaButton(t.url, t.label) + ' '),
+      tuning.length > 0
+        ? '<p style="margin:14px 0 4px;font-size:13px;color:#948b7e;">Tune what SelfOS sends:</p>' +
+          tuning.map((t) => ctaButton(t.url, t.label) + ' ').join('')
+        : '',
+    ].join(''),
+  );
+
+  const text = [
+    name ? `Hi ${name}` : content.headline,
+    '',
+    ...(name ? [content.headline, ''] : []),
+    content.body,
+    ...(content.detail ? ['', content.detail] : []),
+    ...(reactions.length > 0 ? ['', ...reactions.map((t) => `${t.label}: ${t.url}`)] : []),
+    ...(tuning.length > 0
+      ? ['', 'Tune what SelfOS sends:', ...tuning.map((t) => `${t.label}: ${t.url}`)]
+      : []),
+    '',
+    NOT_MEDICAL,
+  ].join('\n');
+
+  return { subject, html, text };
+}

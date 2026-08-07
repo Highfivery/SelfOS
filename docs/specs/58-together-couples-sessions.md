@@ -309,8 +309,12 @@ the message thread, the composer, and the pinned crisis footer.
   **suggestions** (violet-edged: a compatibility questionnaire "Send to both" / a guided exercise /
   a joint challenge). Artifact actions are one-tap and always confirmable before anything sends.
 - **Kebab**: pause for me (§8.3) · leave session (§8.3) · wrap up & reflect (either partner; §3.8).
-- **Turn state**: a session is "your turn" when the newest human message **in your projection**
-  isn't yours. It's a nudge, never a lock — both partners can write at any time, in any order. When the
+- **Turn state** (coach-directed, issue #369): a session is "your turn" when the coach is currently
+  engaging **you** — i.e. the newest shared message in your projection is the coach's follow-up on
+  **your** message (or, before the coach has replied, the newest human message is your partner's). When
+  the coach follows up on your **partner's** message, it's their turn and you are **not** prompted —
+  even if you spoke earlier in the exchange. Private asides never drive the shared turn, and a tombstone
+  never flips it. It's a nudge, never a lock — both partners can write at any time, in any order. When the
   session is **wrapped up** (`complete`, §3.8), the pill reads **"Wrapped up"** and the composer
   collapses behind **"Reopen to keep talking"** — a shared message reopens it.
 - **Freshness**: the Together stores subscribe to the existing `vault:changed` watcher event

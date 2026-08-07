@@ -383,6 +383,9 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.emailScheduleReconcile, bridge.emailScheduleReconcile);
   handle(IpcChannels.emailResponses, bridge.emailResponses);
   handle(IpcChannels.emailEditResponse, bridge.emailEditResponse);
+  handle(IpcChannels.emailMutualGreenLights, bridge.emailMutualGreenLights);
+  handle(IpcChannels.emailIntimacyOffers, bridge.emailIntimacyOffers);
+  handle(IpcChannels.emailApplyIntimacyOffer, bridge.emailApplyIntimacyOffer);
   handle(IpcChannels.emailActivity, bridge.emailActivity);
   handle(IpcChannels.insightsAnalyze, bridge.insightsAnalyze);
   handle(IpcChannels.insightsApprove, bridge.insightsApprove);

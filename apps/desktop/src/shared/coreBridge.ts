@@ -106,6 +106,8 @@ import {
   type EmailSendResult,
   type EmailStatus,
   type EmailVerifyResult,
+  type IntimacyInventoryOffer,
+  type MutualGreenLight,
   RelationshipTypeSchema,
   type RelationshipType,
   type IntakeState,
@@ -462,10 +464,13 @@ import {
   buildTransactionalEmail,
   buildWelcomeEmail,
   clearSharedResendKey,
+  computeMutualGreenLights,
   editEmailResponse,
   emailStatusOf,
+  applyIntimacyInventoryOffer,
   listEmailActivity,
   listEmailResponses,
+  listIntimacyInventoryOffers,
   readEmailPrefs,
   reconcileEmailSchedule,
   resolveResendKey,
@@ -1312,6 +1317,7 @@ const EmailSendTransactionalSchema = z.object({
 });
 const EmailReconcileSchema = z.object({ auto: z.boolean().optional() });
 const EmailEditResponseSchema = z.object({ id: z.string().min(1), answer: z.string() });
+const EmailIntimacyOfferSchema = z.object({ actKey: z.string().min(1) });
 const ProfileSuggestionIdSchema = z.string().min(1);
 const AssignmentIdSchema = z.string().min(1);
 const QuestionnaireIdSchema = z.string().min(1);
@@ -4735,6 +4741,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             relayEndpoint: relayConfig.endpointUrl,
           }
         : {};
+      // The AI bundle (Phase 5) — enables family E AI Coach Suggestions + analyzing an emailed check-in. The
+      // Claude key is resolved host-side and never crosses IPC; absent ⇒ no suggestion email is generated.
+      const aiKey = (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null;
       const result = await reconcileEmailSchedule({
         fs: ctx.fs,
         key: ctx.key,
@@ -4746,6 +4755,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         now,
         ...(person?.displayName ? { recipientName: person.displayName } : {}),
         ...relayParts,
+        ai: { client: host.claude, apiKey: aiKey, model: await host.activeModel() },
       });
       // Stamp the throttle only on a real run (not a NOT_CONFIGURED short-circuit) — the memoryRefresh pattern.
       if (result.ok) {
@@ -4772,6 +4782,27 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const { id, answer } = EmailEditResponseSchema.parse(input);
       // Own-scoped — the active person edits only their OWN responses (the path is under their vault).
       return editEmailResponse(ctx.fs, ctx.key, personId, id, answer);
+    },
+    emailMutualGreenLights: async (): Promise<MutualGreenLight[]> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'email.own'))) return [];
+      // Own-scoped: the active person's green lights with their partners (67 §3.6).
+      return computeMutualGreenLights(ctx.fs, ctx.key, personId);
+    },
+    emailIntimacyOffers: async (): Promise<IntimacyInventoryOffer[]> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'email.own'))) return [];
+      return listIntimacyInventoryOffers(ctx.fs, ctx.key, personId);
+    },
+    emailApplyIntimacyOffer: async (input): Promise<boolean> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'email.own'))) return false;
+      const { actKey } = EmailIntimacyOfferSchema.parse(input);
+      // Own-data only — an explicit-confirm inventory bump on the ACTIVE person's own intake (67 §3.6).
+      return applyIntimacyInventoryOffer(ctx.fs, ctx.key, personId, actKey, new Date());
     },
     emailActivity: async (input): Promise<EmailActivityEntry[]> => {
       const ctx = await host.vaultAndKey();

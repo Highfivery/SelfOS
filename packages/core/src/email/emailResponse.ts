@@ -80,6 +80,52 @@ export async function listEmailResponses(
   return out.sort((a, b) => (a.respondedAt < b.respondedAt ? 1 : -1));
 }
 
+/**
+ * A bounded coaching-context grounding line from the person's recent email taps (67 §3.6 — "all responses
+ * feed general AI coaching context"). Standard reactions always feed; INTIMACY responses feed ONLY when the
+ * call's topic is intimacy (the restricted own-context rule — passed as `intimacyTopic`). Operational
+ * re-engagement taps (`im-here`/`pause`) are not coaching signals and are excluded. Returns '' when nothing
+ * qualifies.
+ */
+export async function summarizeEmailResponsesForContext(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  intimacyTopic: boolean,
+  now: Date,
+): Promise<string> {
+  const WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+  const responses = (await listEmailResponses(fs, key, personId)).filter(
+    (r) =>
+      now.getTime() - new Date(r.respondedAt).getTime() <= WINDOW_MS &&
+      (r.family === 'ai-suggestion' || r.family === 'ai-suggestion-intimacy') &&
+      (r.sensitivity !== 'intimacy' || intimacyTopic),
+  );
+  if (responses.length === 0) return '';
+  const phrase = (r: EmailResponse): string | null => {
+    switch (r.answer) {
+      case 'im-game':
+        return 'was up for a suggestion SelfOS emailed';
+      case 'not-for-me':
+        return 'declined a suggestion SelfOS emailed (not for them)';
+      case 'maybe-later':
+        return 'set a suggestion aside for later';
+      case 'more':
+        return 'wants more suggestions like a recent one';
+      case 'less':
+        return 'wants fewer suggestions like a recent one';
+      default:
+        return r.kind === 'checkin-answer' ? `answered a quick email check-in "${r.answer}"` : null;
+    }
+  };
+  const items = responses
+    .slice(0, 5)
+    .map(phrase)
+    .filter((p): p is string => p !== null);
+  if (items.length === 0) return '';
+  return `Recently, via email, they ${items.join('; ')}.`;
+}
+
 /** Edit a response's answer in place (67 §3.6 — the editable-history posture). Stamps `edited`. */
 export async function editEmailResponse(
   fs: FileSystem,
@@ -165,6 +211,8 @@ export async function drainEmailTaps(
       family: token.family,
       ...(token.suggestionId ? { suggestionId: token.suggestionId } : {}),
       ...(token.questionId ? { questionId: token.questionId } : {}),
+      ...(token.assignmentId ? { assignmentId: token.assignmentId } : {}),
+      ...(token.sharedSuggestionKey ? { sharedSuggestionKey: token.sharedSuggestionKey } : {}),
       kind: token.kind,
       answer: token.answer,
       sensitivity,

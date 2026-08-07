@@ -2336,6 +2336,8 @@ export const EmailTokenSchema = z.object({
   family: EmailFamilySchema,
   suggestionId: z.string().optional(),
   questionId: z.string().optional(),
+  /** The auto check-in assignment an embedded check-in tap answers (67 §3.5, kind `checkin-answer`). */
+  assignmentId: z.string().optional(),
   kind: EmailTokenKindSchema,
   /** 'im-here'|'pause'|'im-game'|'maybe-later'|'not-for-me'|'more'|'less'|<answer value>. */
   answer: z.string(),
@@ -2355,6 +2357,10 @@ export const EmailResponseSchema = z.object({
   family: EmailFamilySchema,
   suggestionId: z.string().optional(),
   questionId: z.string().optional(),
+  /** The auto check-in assignment this answered (for a drained `checkin-answer` response, 67 §3.5). */
+  assignmentId: z.string().optional(),
+  /** The couple-suggestion pairing key (for mutual green light — both partners' `im-game` on one key). */
+  sharedSuggestionKey: z.string().optional(),
   kind: EmailTokenKindSchema,
   answer: z.string(),
   sensitivity: z.enum(['standard', 'restricted', 'intimacy']).default('standard'),
@@ -2363,6 +2369,51 @@ export const EmailResponseSchema = z.object({
   edited: z.boolean().default(false),
 });
 export type EmailResponse = z.infer<typeof EmailResponseSchema>;
+
+/** The suggestion type an E email carries (67 §3.3 / §4.4) — one per email, picked by the freshest signal. */
+export const EmailSuggestionTypeSchema = z.enum([
+  'together-topic',
+  'check-in',
+  'something-to-try',
+  'question-to-sit-with',
+  'intimacy',
+]);
+export type EmailSuggestionType = z.infer<typeof EmailSuggestionTypeSchema>;
+
+/**
+ * A sent AI Coach Suggestion (67 §4.4), at `people/<id>/email/suggestions/<id>.enc`. Drives the family E
+ * de-dup (its `text` is the fuzzy/semantic de-dup key) + resurface/avoid (via `subjectKey`) + the mutual
+ * green light (a couple suggestion's two copies share a `sharedSuggestionKey`). De-dup history is kept
+ * PER-FAMILY (`ai-suggestion` vs `ai-suggestion-intimacy` keep separate avoid-sets, §3.3).
+ */
+export const SentSuggestionSchema = z.object({
+  id: z.string().min(1),
+  schemaVersion: z.literal(1),
+  family: z.enum(['ai-suggestion', 'ai-suggestion-intimacy']),
+  suggestionType: EmailSuggestionTypeSchema,
+  text: z.string(), // the de-dup key (08 fuzzy dedup)
+  subjectKey: z.string().optional(), // a normalized subject (e.g. an intimacy act key) for avoid-set / resurface
+  partnerPersonId: z.string().optional(), // couple suggestion — the other partner
+  sharedSuggestionKey: z.string().optional(), // both partners' copies share this — mutual-green-light pairing
+  tokens: z.array(z.string()).default([]), // the interactive tokens minted for it
+  sentAt: z.string().datetime(),
+});
+export type SentSuggestion = z.infer<typeof SentSuggestionSchema>;
+
+/** "You're both up for this" (67 §3.6) — a couple suggestion both partners tapped `im-game` on (a view type). */
+export interface MutualGreenLight {
+  partnerId: string;
+  partnerName: string;
+  label: string;
+  sharedSuggestionKey: string;
+}
+
+/** A pending in-app offer to update the intimacy inventory from an emailed `im-game` tap (67 §3.6, a view type). */
+export interface IntimacyInventoryOffer {
+  actKey: string;
+  actLabel: string;
+  currentRating: number;
+}
 
 /** The renderer-facing trigger for a send (67 §6) — Phase 0 covers the `welcome` family. */
 export const EmailSendInputSchema = z.object({

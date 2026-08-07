@@ -1,4 +1,7 @@
 import { z } from 'zod';
+// Type-only (erased at compile) — no runtime cycle, so schemas.ts stays free of a value import from
+// people/. `SharingCategory` labels the sharing bucket of a shared intake answer on `OutboundSharingItem`.
+import type { SharingCategory } from './people/sharingPresets';
 
 /**
  * Zod schemas are the single source of truth for IPC payload shapes (00-architecture §6.1).
@@ -720,9 +723,15 @@ export function factSharedWithViewer(
  * crypto-free view type (defined here in the schemas shim) so the IPC/renderer may reference it.
  */
 export interface OutboundSharingItem {
-  /** Stable id: the `InsightFact.id`, or `<sectionId>.<questionId>` for a shared intake answer. */
+  /**
+   * Stable id: the `InsightFact.id`, `<sectionId>.<questionId>` for a shared intake answer,
+   * `field:<PersonFieldKey>` for a profile field, or `dreamImage:<dreamId>` for a dream image (68 §4.1).
+   */
   id: string;
-  kind: 'fact' | 'intakeAnswer';
+  // 68 §4.1: `profileField` (15-shareability) + `dreamImage` (13-dream-images) fold in the two surfaces the
+  // flat page omitted, so the dashboard is the one complete "what reaches anyone" view. A closed union →
+  // renderers get a compile-checked switch.
+  kind: 'fact' | 'intakeAnswer' | 'profileField' | 'dreamImage';
   /** The item's own text/label (own data → shown in full). */
   text: string;
   /** Legacy broadcast (`shareable: true`) — reaches EVERY related person. The new UIs never set it. */
@@ -733,10 +742,22 @@ export interface OutboundSharingItem {
   personIds: string[];
   /** The concrete related people currently receiving it, resolved against the live graph. */
   recipients: { id: string; displayName: string }[];
+  // 68 §4.1 (additive, optional): the display life-area — from `InsightFact.lifeArea` for a fact, or a
+  // field→life-area map for a profile field — driving the By-category grouping. Absent ⇒ "Other".
+  lifeArea?: LifeArea;
+  // 68 §4.1 (additive, optional): the `SharingCategory` of a shared intake answer (from
+  // `questionCategory(section, q)`), the other By-category input. `sharingItemCategory(item)` resolves a
+  // single display bucket from `lifeArea` | `category` | `kind` so every kind groups uniformly.
+  category?: SharingCategory;
 }
 
 export interface OutboundSharing {
   items: OutboundSharingItem[];
+  /**
+   * The count of the person's OWN `restricted` (sensitive/break-glass) facts that are NEVER outbound — the
+   * "kept private" reassurance stat (68 §3.1/§4.2). A count only, never the private items' text.
+   */
+  keptPrivateCount: number;
 }
 
 /** The call-type/topic signal a caller passes so context selects the relevant portrait facts

@@ -362,6 +362,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.questionnaireSuggestionMaterialize, bridge.questionnaireSuggestionMaterialize);
   handle(IpcChannels.insightsList, bridge.insightsList);
   handle(IpcChannels.memoryOutboundSharing, bridge.memoryOutboundSharing);
+  handle(IpcChannels.memorySetScopeBatch, bridge.memorySetScopeBatch);
+  handle(IpcChannels.memorySetProfileFieldShared, bridge.memorySetProfileFieldShared);
   handle(IpcChannels.insightsAnalyze, bridge.insightsAnalyze);
   handle(IpcChannels.insightsApprove, bridge.insightsApprove);
   handle(IpcChannels.insightsUpdate, bridge.insightsUpdate);

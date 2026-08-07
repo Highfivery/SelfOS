@@ -22,12 +22,12 @@ import {
 import { getQuestionnaire } from '@selfos/core/questionnaires';
 import { writeEncryptedJson } from '@selfos/core/vault';
 import { listInsightsForPerson, saveInsight, summarizeForContext } from '@selfos/core/insights';
-import { submitSectionForm } from '@selfos/core/intake';
+import { getIntakeSession, submitSectionForm } from '@selfos/core/intake';
 import { getTest } from '@selfos/core/tests';
 import { matrixRowKey } from '@selfos/core/schemas';
 import { saveGoal } from '@selfos/core/goals';
 import { listChallenges, recordCheckIn } from '@selfos/core/challenges';
-import { buildContext } from '@selfos/core/people';
+import { buildContext, getPerson } from '@selfos/core/people';
 import { buildStoryCorpus, corpusText, saveProposals } from '@selfos/core/story';
 import {
   captureJointChallengeFromMarker,
@@ -2876,7 +2876,189 @@ describe('createCoreBridge', () => {
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
-    expect(await bridge.memoryOutboundSharing()).toEqual({ items: [] });
+    expect(await bridge.memoryOutboundSharing()).toEqual({ items: [], keptPrivateCount: 0 });
+  });
+
+  it('memory:setScopeBatch REPLACES the scope of facts + answers, own-scoped + gated (68 §6)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    const ctx = (await host.host.vaultAndKey())!;
+    const at = new Date().toISOString();
+    await saveInsight(ctx.fs, ctx.key, {
+      id: 'sb1',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: ownerId,
+      summary: 's',
+      facts: [
+        { id: 'f1', text: 'one', shareable: false, shareableTypes: ['friend'] },
+        { id: 'f2', text: 'two', shareable: false, shareableTypes: ['sibling'] },
+      ],
+      confidence: 'low',
+      categories: [],
+      approved: true,
+      provenance: { at },
+      createdAt: at,
+      updatedAt: at,
+    });
+    await bridge.intakeSubmitForm({
+      sectionId: 'values',
+      answers: { values: ['Honesty'] },
+      sharing: { values: ['sibling'] },
+    });
+
+    const res = await bridge.memorySetScopeBatch({
+      types: ['partner'],
+      factTargets: [{ insightId: 'sb1', factId: 'f1' }],
+      answerTargets: [{ sectionId: 'values', questionId: 'values' }],
+    });
+    expect(res.updated).toBe(2);
+
+    // Decrypt: the targeted fact + answer are rescoped; the sibling fact is untouched.
+    const insight = (await listInsightsForPerson(ctx.fs, ctx.key, ownerId)).find(
+      (i) => i.id === 'sb1',
+    )!;
+    expect(insight.facts.find((f) => f.id === 'f1')?.shareableTypes).toEqual(['partner']);
+    expect(insight.facts.find((f) => f.id === 'f2')?.shareableTypes).toEqual(['sibling']);
+    const session = (await getIntakeSession(ctx.fs, ctx.key, ownerId))!;
+    expect(session.sections.find((s) => s.id === 'values')?.answerSharing?.values).toEqual([
+      'partner',
+    ]);
+
+    // A member can't reach the OWNER's items (own-scoped) — their batch is a no-op, owner's data intact.
+    const member = await bridge.peopleSave({ displayName: 'Mel', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    expect((await bridge.sessionSetActive({ personId: member.id })).ok).toBe(true);
+    expect(
+      (
+        await bridge.memorySetScopeBatch({
+          types: ['sibling'],
+          factTargets: [{ insightId: 'sb1', factId: 'f1' }],
+          answerTargets: [{ sectionId: 'values', questionId: 'values' }],
+        })
+      ).updated,
+    ).toBe(0);
+    const still = (await listInsightsForPerson(ctx.fs, ctx.key, ownerId)).find(
+      (i) => i.id === 'sb1',
+    )!;
+    expect(still.facts.find((f) => f.id === 'f1')?.shareableTypes).toEqual(['partner']);
+
+    // A Guest (no memory.own) is denied entirely.
+    const guest = await bridge.peopleSave({ displayName: 'Gee', isSubject: false, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    expect((await bridge.sessionSetActive({ personId: guest.id })).ok).toBe(true);
+    expect(
+      (await bridge.memorySetScopeBatch({ types: ['partner'], factTargets: [], answerTargets: [] }))
+        .updated,
+    ).toBe(0);
+  });
+
+  it('memory:setScopeBatch skips answer targets for a memory.own-only caller, still applies facts (68 §6/§7)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    const ctx = (await host.host.vaultAndKey())!;
+
+    // A custom role WITH memory.own but WITHOUT intake.own.
+    const view = await bridge.accessGet();
+    const member = view.roles.find((r) => r.id === 'member')!;
+    await bridge.accessSaveRole({
+      ...member,
+      id: 'reader',
+      name: 'Reader',
+      capabilities: { ...member.capabilities, 'intake.own': false },
+    });
+    const reader = await bridge.peopleSave({ displayName: 'Ren', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: reader.id, roleId: 'reader', pin: null });
+
+    // Seed the reader's OWN insight + intake answer (as the owner, host-side), then act AS the reader.
+    const at = new Date().toISOString();
+    await saveInsight(ctx.fs, ctx.key, {
+      id: 'rd1',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: reader.id,
+      summary: 's',
+      facts: [{ id: 'rf', text: 'a thing', shareable: false, shareableTypes: ['friend'] }],
+      confidence: 'low',
+      categories: [],
+      approved: true,
+      provenance: { at },
+      createdAt: at,
+      updatedAt: at,
+    });
+    await writeEncryptedJson(
+      ctx.fs,
+      `people/${reader.id}/intake/session.enc`,
+      {
+        id: `intake-${reader.id}`,
+        schemaVersion: 1,
+        personId: reader.id,
+        status: 'inProgress',
+        sections: [
+          {
+            id: 'values',
+            status: 'complete',
+            restricted: false,
+            messages: [],
+            answers: { values: ['Kindness'] },
+            answerSharing: { values: ['sibling'] },
+          },
+        ],
+        startedAt: at,
+        updatedAt: at,
+      },
+      ctx.key,
+    );
+
+    expect((await bridge.sessionSetActive({ personId: reader.id })).ok).toBe(true);
+    const res = await bridge.memorySetScopeBatch({
+      types: ['partner'],
+      factTargets: [{ insightId: 'rd1', factId: 'rf' }],
+      answerTargets: [{ sectionId: 'values', questionId: 'values' }],
+    });
+    expect(res.updated).toBe(1); // fact applied, answer skipped
+
+    const insight = (await listInsightsForPerson(ctx.fs, ctx.key, reader.id)).find(
+      (i) => i.id === 'rd1',
+    )!;
+    expect(insight.facts.find((f) => f.id === 'rf')?.shareableTypes).toEqual(['partner']);
+    const session = (await getIntakeSession(ctx.fs, ctx.key, reader.id))!;
+    // Answer scope UNCHANGED — the caller lacks intake.own, so its answer target was skipped, not errored.
+    expect(session.sections.find((s) => s.id === 'values')?.answerSharing?.values).toEqual([
+      'sibling',
+    ]);
+    // The owner isn't referenced here — just proving the reader's own data moved.
+    expect(ownerId).toBeTruthy();
+  });
+
+  it('memory:setProfileFieldShared flips the ACTIVE person’s own privateFields; own-scoped, no people.manage (68 §6)', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    const ctx = (await host.host.vaultAndKey())!;
+    // A member (no people.manage) with a populated, shared field.
+    const member = await bridge.peopleSave({
+      displayName: 'Moe',
+      isSubject: true,
+      tags: [],
+      occupation: 'Baker',
+    });
+    await bridge.accessSetAccount({ personId: member.id, roleId: 'member', pin: null });
+    expect((await bridge.sessionSetActive({ personId: member.id })).ok).toBe(true);
+
+    // Lock it (share → private).
+    expect(await bridge.memorySetProfileFieldShared({ field: 'occupation', shared: false })).toBe(
+      true,
+    );
+    expect((await getPerson(ctx.fs, ctx.key, member.id))?.privateFields).toContain('occupation');
+    // Another person's record is never touched.
+    expect((await getPerson(ctx.fs, ctx.key, ownerId))?.privateFields ?? []).not.toContain(
+      'occupation',
+    );
+
+    // Unlock it (private → share) removes it from privateFields.
+    expect(await bridge.memorySetProfileFieldShared({ field: 'occupation', shared: true })).toBe(
+      true,
+    );
+    expect((await getPerson(ctx.fs, ctx.key, member.id))?.privateFields ?? []).not.toContain(
+      'occupation',
+    );
   });
 
   it('insights:update scopes a fact to a relationship type + deliberately un-restricts a sensitive one (44 §3.4)', async () => {

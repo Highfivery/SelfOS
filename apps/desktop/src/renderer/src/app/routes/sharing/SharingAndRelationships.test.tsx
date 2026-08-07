@@ -40,7 +40,11 @@ function renderPage(): void {
 
 afterEach(() => {
   clearMockBridge();
-  useInsightStore.setState({ insights: [], outbound: { items: [] }, loaded: false });
+  useInsightStore.setState({
+    insights: [],
+    outbound: { items: [], keptPrivateCount: 0 },
+    loaded: false,
+  });
   usePeopleStore.setState({ people: [], loaded: false });
   useSessionStore.setState({ activePerson: null });
 });
@@ -66,7 +70,7 @@ describe('Sharing & relationships page', () => {
       relationshipsGetSynthesis: () => Promise.resolve(null),
       relationshipsSynthesize: synth,
       insightsList: () => Promise.resolve([]),
-      memoryOutboundSharing: () => Promise.resolve({ items: [] }),
+      memoryOutboundSharing: () => Promise.resolve({ items: [], keptPrivateCount: 0 }),
     });
     renderPage();
 
@@ -92,7 +96,7 @@ describe('Sharing & relationships page', () => {
       peopleList: () => Promise.resolve([activeP1]),
       relationshipsList: () => Promise.resolve([]),
       insightsList: () => Promise.resolve([]),
-      memoryOutboundSharing: () => Promise.resolve({ items: [] }),
+      memoryOutboundSharing: () => Promise.resolve({ items: [], keptPrivateCount: 0 }),
     });
     renderPage();
     expect(

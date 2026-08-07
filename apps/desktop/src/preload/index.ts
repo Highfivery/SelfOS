@@ -183,6 +183,9 @@ const bridge: SelfosBridge = {
     ipcRenderer.invoke(IpcChannels.questionnaireSuggestionMaterialize, input),
   insightsList: () => ipcRenderer.invoke(IpcChannels.insightsList),
   memoryOutboundSharing: () => ipcRenderer.invoke(IpcChannels.memoryOutboundSharing),
+  memorySetScopeBatch: (input) => ipcRenderer.invoke(IpcChannels.memorySetScopeBatch, input),
+  memorySetProfileFieldShared: (input) =>
+    ipcRenderer.invoke(IpcChannels.memorySetProfileFieldShared, input),
   insightsAnalyze: (input) => ipcRenderer.invoke(IpcChannels.insightsAnalyze, input),
   insightsApprove: (input) => ipcRenderer.invoke(IpcChannels.insightsApprove, input),
   insightsUpdate: (input) => ipcRenderer.invoke(IpcChannels.insightsUpdate, input),

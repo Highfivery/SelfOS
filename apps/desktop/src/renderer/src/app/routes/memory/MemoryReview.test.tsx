@@ -49,7 +49,7 @@ afterEach(() => {
   clearMockBridge();
   useInsightStore.setState({
     insights: [],
-    outbound: { items: [] },
+    outbound: { items: [], keptPrivateCount: 0 },
     loaded: false,
     lastReconciledAt: undefined,
     proposals: [],

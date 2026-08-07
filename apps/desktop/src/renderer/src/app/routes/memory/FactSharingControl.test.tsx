@@ -13,7 +13,11 @@ const fact = (over: Partial<InsightFact> & { id: string; text: string }): Insigh
 
 afterEach(() => {
   clearMockBridge();
-  useInsightStore.setState({ insights: [], outbound: { items: [] }, loaded: false });
+  useInsightStore.setState({
+    insights: [],
+    outbound: { items: [], keptPrivateCount: 0 },
+    loaded: false,
+  });
 });
 
 describe('FactSharingControl', () => {

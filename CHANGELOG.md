@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.46.0](https://github.com/Highfivery/SelfOS/compare/v0.45.4...v0.46.0) (2026-08-07)
+
+
+### Features
+
+* **email:** add the Resend send path, connect + welcome (email Phase 0, 67 §5.6) ([#361](https://github.com/Highfivery/SelfOS/issues/361)) ([e9276e5](https://github.com/Highfivery/SelfOS/commit/e9276e56dc9d59ea4f061ba91df221bff7e1b18a))
+* **email:** email AI coach suggestions + intimacy + embedded check-in (Phase 5, 67 §3.3) ([#366](https://github.com/Highfivery/SelfOS/issues/366)) ([46c9428](https://github.com/Highfivery/SelfOS/commit/46c9428110558856ca874ac158cec09a770dab66))
+* **email:** interactive tap layer — one-click email responses (email Phase 4, 67 §3.5/§3.6) ([#365](https://github.com/Highfivery/SelfOS/issues/365)) ([51d36b1](https://github.com/Highfivery/SelfOS/commit/51d36b10196ad7088d6e2019b98534fc9885e1ef))
+* **email:** owner activity view + delivery health + milestones (Phase 6, 67 §3.2) ([#368](https://github.com/Highfivery/SelfOS/issues/368)) ([3b2c040](https://github.com/Highfivery/SelfOS/commit/3b2c040ab0f1f084026cc39c33861f9491b2ec4e))
+* **email:** redesign the owner activity view + store the sent email content ([#371](https://github.com/Highfivery/SelfOS/issues/371)) ([f5be7a3](https://github.com/Highfivery/SelfOS/commit/f5be7a3766bbeae0ff8b9657dd5562e64f804991))
+* **email:** send questionnaire delivery via Resend (email Phase 1, family A, 67 §5.6) ([#362](https://github.com/Highfivery/SelfOS/issues/362)) ([fd53b56](https://github.com/Highfivery/SelfOS/commit/fd53b5663e87fbef5ed354440edfd733b8282c9d))
+* **email:** transactional alerts email in-app notifications (email Phase 2, family B, 67 §5.6) ([#363](https://github.com/Highfivery/SelfOS/issues/363)) ([223d43b](https://github.com/Highfivery/SelfOS/commit/223d43b46b7ca37e8c07a101636e66bae84b5c2d))
+* **email:** weekly digest + re-engagement + delivery scheduling (email Phase 3, 67 §5.6) ([#364](https://github.com/Highfivery/SelfOS/issues/364)) ([7bac726](https://github.com/Highfivery/SelfOS/commit/7bac726b34be73be64f400ce041ceef02f07e076))
+* **sharing:** extend outbound-sharing core for the transparency dashboard (68 §4/§5.2/§6) ([#358](https://github.com/Highfivery/SelfOS/issues/358)) ([7f528ba](https://github.com/Highfivery/SelfOS/commit/7f528ba7e2bf7ea1a57dea411b59daee0e1b5874))
+* **sharing:** rebuild /sharing into the unified transparency dashboard (68 §3) ([#360](https://github.com/Highfivery/SelfOS/issues/360)) ([a0719cd](https://github.com/Highfivery/SelfOS/commit/a0719cd086af6f5f63b870e24c3a9d0b133ccb8f))
+
+
+### Bug Fixes
+
+* **email:** the "Intimacy suggestions by email" toggle now enables ([#370](https://github.com/Highfivery/SelfOS/issues/370)) ([2dc1ee6](https://github.com/Highfivery/SelfOS/commit/2dc1ee672693657851dfd3722a10c5102f13f295))
+* **relay:** reuse an existing KV namespace on re-connect instead of failing ([#367](https://github.com/Highfivery/SelfOS/issues/367)) ([d2c4999](https://github.com/Highfivery/SelfOS/commit/d2c49992e49c2af7c465571adf1eabc5b15057f4))
+
 ## [0.45.4](https://github.com/Highfivery/SelfOS/compare/v0.45.3...v0.45.4) (2026-08-04)
 
 

@@ -65,6 +65,30 @@ describe('applyCoverageAssessments', () => {
     expect(merged.find((t) => t.topicId === 'Money')).toMatchObject({ explored: false, depth: 0 });
   });
 
+  it('does NOT sub-divide a lightly-touched area — coarse-first (§13 / §26.3 live tuning)', () => {
+    const merged = applyCoverageAssessments(deriveCoverageSkeleton(), [
+      // Barely explored (0.3) → its "strands" are noise; no sub-topics minted.
+      {
+        lifeArea: 'Relationships',
+        depth: 0.3,
+        subTopics: [
+          { label: 'Marriage', depth: 0.1 },
+          { label: 'Friendship', depth: 0 },
+        ],
+      },
+      // Explored (0.6) → sub-topics ARE minted (they tell explored strands apart).
+      {
+        lifeArea: 'Work & purpose',
+        depth: 0.6,
+        subTopics: [{ label: 'Career meaning', depth: 0.2 }],
+      },
+    ]);
+    expect(
+      merged.some((t) => t.lifeArea === 'Relationships' && t.topicId !== 'Relationships'),
+    ).toBe(false);
+    expect(merged.find((t) => t.topicId === 'Work & purpose:career-meaning')).toBeDefined();
+  });
+
   it('clamps out-of-range depths', () => {
     const merged = applyCoverageAssessments(deriveCoverageSkeleton(), [
       { lifeArea: 'Money', depth: 5 },

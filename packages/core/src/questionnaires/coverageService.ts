@@ -44,8 +44,10 @@ area has been explored in the digest and return a "depth" from 0 to 1:
 - 0.7 = explored in real depth
 - 1.0 = thoroughly explored from many angles
 
-Only where an area has clearly SEVERAL distinct strands, you may add up to 3 "subTopics", each a short label
-with its own depth, so the app can tell which strands are new. Keep sub-topics rare — most areas need none.
+Sub-topics are RARE — most areas need NONE, and returning none is the right default. Only add "subTopics"
+(up to 3) for an area you scored 0.5 or higher (already explored in real depth) that genuinely has SEVERAL
+distinct strands with their own coverage, so the app can tell which strand is still new. Do NOT sub-divide a
+lightly-touched area (below 0.5), and never invent a strand you have no real data about.
 
 Return ONLY a JSON array, one object per life area you were given, like:
 [{"lifeArea":"Work & purpose","depth":0.6,"subTopics":[{"label":"Career direction","depth":0.2}]}, ...]

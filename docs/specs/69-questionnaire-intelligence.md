@@ -601,6 +601,16 @@ _These finer points were resolved with the owner (2026-08-07); the defaults belo
 
 ## 15. Changelog
 
+- 2026-08-09 — **Phase 5 — live-model prompt tuning DONE (§26.3).** Ran the real coverage-placement +
+  generation-with-steering prompts against `claude-sonnet-4-6` on crafted inputs. The run **validated the
+  steering** — generation led with the unexplored areas, avoided the declined topics, and stayed light after a
+  bailed signal; the empty-digest placement returned all-zero as intended. The one issue: coverage placement
+  **over-generated sub-topics** — it sub-divided barely-touched (0.3-depth) areas into near-empty strands,
+  against the "keep rare / coarse-first" intent (§13). Tuned in two places: (1) `COVERAGE_SYSTEM` now says
+  sub-topics are rare, only for an area scored ≥ 0.5 with genuinely distinct strands, never an invented one;
+  (2) a code guard in `applyCoverageAssessments` (`SUBTOPIC_MIN_PARENT_DEPTH`) only mints sub-topics for a
+  parent area at/above `NEW_GROUND_DEPTH`, so coarse-first holds regardless of the model. This is the last §26.3
+  follow-up — **spec 69 is now complete.**
 - 2026-08-09 — **Phase 5 (the `bailed` signal) BUILT** — closing the question-quality self-selection gap. A
   check-in the recipient OPENED but never submitted, left untouched past `BAILED_STALE_DAYS` (7d), is now
   detected as abandonment (`detectRecipientBailed`, `changeDetection.ts` — deterministic, no AI, author-blind:

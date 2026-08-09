@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { CheckCircle2, Circle, CircleDashed, Compass, Minus } from 'lucide-react';
 import type { CoverageAreaView, CoverageStatus } from '@shared/channels';
 import { useCoverageStore } from '../../../stores/coverageStore';
@@ -133,9 +134,13 @@ export function ExploredPanel(): JSX.Element {
                           </button>
                         </div>
                       ) : (
-                        <span className={styles.readonlyNote}>
-                          Managed in your intimacy settings
-                        </span>
+                        <Link
+                          to="/onboarding"
+                          state={{ openSection: 'intimacy' }}
+                          className={styles.readonlyNote}
+                        >
+                          Shaped by your onboarding intimacy answers
+                        </Link>
                       )}
                     </li>
                   );

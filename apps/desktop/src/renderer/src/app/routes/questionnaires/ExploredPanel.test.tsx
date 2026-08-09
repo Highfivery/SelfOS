@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import type { QuestionnaireCoverageView, SelfosBridge } from '@shared/channels';
 import { ExploredPanel } from './ExploredPanel';
@@ -52,7 +53,11 @@ afterEach(() => {
 describe('ExploredPanel (spec 69 §3.4)', () => {
   it('renders the coverage read + marked-off list; Intimacy is read-only', async () => {
     installMockBridge({ questionnairesPersonalizationProfile: () => Promise.resolve(view()) });
-    render(<ExploredPanel />);
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
     expect(await screen.findByText('Work & purpose')).toBeInTheDocument();
     expect(screen.getByText('Money')).toBeInTheDocument();
     // Coverage status shown as text (never color-only).
@@ -60,8 +65,11 @@ describe('ExploredPanel (spec 69 §3.4)', () => {
     expect(screen.getByText('Not yet explored')).toBeInTheDocument();
     // The marked-off decline surfaces.
     expect(screen.getByText('How is your commute?')).toBeInTheDocument();
-    // Intimacy is read-only — no steer buttons in its row.
-    expect(screen.getByText('Managed in your intimacy settings')).toBeInTheDocument();
+    // Intimacy is read-only — no steer buttons; instead a link to the onboarding intimacy section (§3.4).
+    const intimacyLink = screen.getByRole('link', {
+      name: 'Shaped by your onboarding intimacy answers',
+    });
+    expect(intimacyLink).toHaveAttribute('href', '/onboarding');
     // General areas each get Explore more / Leave alone.
     expect(screen.getAllByRole('button', { name: 'Explore more' })).toHaveLength(2);
   });
@@ -78,7 +86,11 @@ describe('ExploredPanel (spec 69 §3.4)', () => {
     });
     // Seed the loaded view directly (deterministic — no async-load race on the singleton store).
     useCoverageStore.setState({ view: view(), loaded: true });
-    render(<ExploredPanel />);
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
     await screen.findByText('Money');
     // Explore more on the Money row (2nd general area).
     await userEvent.click(screen.getAllByRole('button', { name: 'Explore more' })[1]!);
@@ -99,7 +111,11 @@ describe('ExploredPanel (spec 69 §3.4)', () => {
       questionnairesPersonalizationProfile: () =>
         Promise.resolve({ areas: [], markedOff: [], hasPlacement: false }),
     });
-    render(<ExploredPanel />);
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
     expect(await screen.findByText(/hasn’t explored anything with you yet/)).toBeInTheDocument();
   });
 });

@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.48.0](https://github.com/Highfivery/SelfOS/compare/v0.47.0...v0.48.0) (2026-08-09)
+
+
+### Features
+
+* **questionnaires:** spec 69 Phase 4 (email unification) + Phase 5 follow-ons ([#381](https://github.com/Highfivery/SelfOS/issues/381)) ([8302220](https://github.com/Highfivery/SelfOS/commit/8302220a2a1a2bd57fadc475cbe84b344ad3bf72))
+* **questionnaires:** the "bailed" abandonment signal (spec 69 Phase 5 §5.2) ([#382](https://github.com/Highfivery/SelfOS/issues/382)) ([2093538](https://github.com/Highfivery/SelfOS/commit/209353833e73bc16528af78a934b11064122331c))
+* **questionnaires:** the Explored transparency tab + steer (spec 69 Phase 5 §3.4) ([#379](https://github.com/Highfivery/SelfOS/issues/379)) ([e138080](https://github.com/Highfivery/SelfOS/commit/e13808024a7e0495f2f0fcb0d03971dce911c7b3))
+
+
+### Bug Fixes
+
+* **together:** the turn follows whom the coach addressed, not merely the last human message ([#372](https://github.com/Highfivery/SelfOS/issues/372)) ([6227677](https://github.com/Highfivery/SelfOS/commit/622767749ea0902ff1953a7d805f48f150cd96f0))
+
 ## [0.47.0](https://github.com/Highfivery/SelfOS/compare/v0.46.0...v0.47.0) (2026-08-07)
 
 

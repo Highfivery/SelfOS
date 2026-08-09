@@ -11300,6 +11300,43 @@ test('together (58): lifecycle + aside projection (crown jewel) + prompt capture
   }
 });
 
+test('together (58) issue #369: the turn follows whom the coach addressed — the OTHER partner is not prompted', async () => {
+  const { userData, vault } = await seedTogetherReady();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Ben starts a session + writes; the coach's follow-up is DIRECTED AT BEN (replies to his message).
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Feeling distant lately');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+    await w.getByLabel('Message').fill('I feel like we barely talk anymore.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/I hear you, Ben/)).toBeVisible();
+
+    // Angel accepts → back to her board. The coach is engaging BEN, so it must read "Waiting on Ben",
+    // NOT "Your turn" (before the fix Angel was wrongly told it was her turn).
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByText('Feeling distant lately').click();
+    await w.getByRole('button', { name: 'Continue' }).click();
+    await w.getByRole('link', { name: /Together/ }).click(); // back to the sessions board
+    await expect(w.getByRole('region', { name: 'Waiting on Ben' })).toBeVisible();
+    await expect(w.getByRole('region', { name: 'Your turn' })).toHaveCount(0);
+    await expect(w.getByText("It's Ben's move.")).toBeVisible();
+
+    // Ben's board: it IS his turn (the coach followed up with him).
+    await switchTogetherPerson(w, 'Ben');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await expect(w.getByRole('region', { name: 'Your turn' })).toBeVisible();
+    await expect(w.getByText('Angel is waiting on your reply.')).toBeVisible();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('together (58) phase I2: the coach sends a private note to ONE partner; the other never sees it (§3.14 Part B, decrypt)', async () => {
   const { userData, vault } = await seedTogetherReady();
   const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });
@@ -11541,10 +11578,12 @@ test('together (58) issue #206: "Wrap up & reflect" CLOSES OUT an active session
     await w.getByRole('button', { name: 'Continue' }).click();
     await expect(w.getByText('Let’s do screen-free dinners.')).toBeVisible();
 
-    // Back to Ben — the session is active with a live composer + the "Wrap up & reflect" affordance.
+    // Back to Ben — the session is active with a live composer + the "Wrap up & reflect" affordance. The coach
+    // followed up on Ben's message, so it's now his turn (§3.6, #369) → a "Your turn" toast names the session
+    // too; target the board card by its role so the click isn't ambiguous.
     await switchTogetherPerson(w, 'Ben');
     await w.getByRole('link', { name: /Together/ }).click();
-    await w.getByText('Planning our week').click();
+    await w.getByRole('button', { name: /Open conversation Planning our week/ }).click();
     await expect(w.getByLabel('Message')).toBeVisible();
 
     // The coach re-affirms the SAME "screen-free dinners" agreement (a repeated [[SELFOS:AGREEMENT]] marker) —
@@ -12047,7 +12086,8 @@ test('together (58): the sessions board groups by whose move it is + spells out 
       w.getByRole('region', { name: 'Invitations you sent' }).getByText('Reconnecting'),
     ).toBeVisible();
 
-    // Angel sees it as an "Open invitation"; accepting makes it HER turn (Ben messaged last), spelled out.
+    // Angel sees it as an "Open invitation". After she accepts, the coach's follow-up was directed at BEN
+    // (his message), so it's BEN's turn — her board reads "Waiting on Ben", not "Your turn" (§3.6, #369).
     await switchTogetherPerson(w, 'Angel');
     await w.getByRole('link', { name: /Together/ }).click();
     const invite = w.getByRole('region', { name: 'Open invitation' });
@@ -12057,9 +12097,9 @@ test('together (58): the sessions board groups by whose move it is + spells out 
     await expect(w.getByText('I really missed you.')).toBeVisible(); // Ben's message in her thread
 
     await w.getByRole('link', { name: /Together/ }).click();
-    const mine = w.getByRole('region', { name: 'Your turn' });
-    await expect(mine.getByText('Reconnecting')).toBeVisible();
-    await expect(mine.getByText('Ben is waiting on your reply.')).toBeVisible();
+    const waiting = w.getByRole('region', { name: 'Waiting on Ben' });
+    await expect(waiting.getByText('Reconnecting')).toBeVisible();
+    await expect(waiting.getByText("It's Ben's move.")).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

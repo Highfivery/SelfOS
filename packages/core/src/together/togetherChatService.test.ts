@@ -495,13 +495,17 @@ describe('coach-initiated private clarification (§3.14 Part B — the PRIVATE m
     // Projection: only Angel sees the private note; Ben never does (§5.2).
     expect(projectMessages(messages, ANGEL).some((m) => m.id === privateNote?.id)).toBe(true);
     expect(projectMessages(messages, BEN).some((m) => m.id === privateNote?.id)).toBe(false);
-    // A private coach note is a NOTE, not a turn — it's an `assistant` message, so `turnStateFor` (which
-    // counts only human messages) never treats it as someone's turn.
+    // A private coach note is a NOTE, not a turn — an `assistant` message excluded from the shared-turn
+    // derivation, so it never flips whose turn it is.
     expect(projectMessages(messages, ANGEL).find((m) => m.id === privateNote?.id)?.role).toBe(
       'assistant',
     );
-    // Angel's "your turn" is driven solely by Ben's human message, unchanged by the note.
-    expect(turnStateFor(messages, ANGEL)).toBe(true);
+    // The coach's PUBLIC reply followed up on Ben's message, so it's Ben's turn — Angel is NOT prompted
+    // (issue #369), and the private note doesn't change that (it matches the turn with the note removed).
+    const withoutNote = messages.filter((m) => m.id !== privateNote?.id);
+    expect(turnStateFor(messages, ANGEL)).toBe(false);
+    expect(turnStateFor(messages, ANGEL)).toBe(turnStateFor(withoutNote, ANGEL));
+    expect(turnStateFor(messages, BEN)).toBe(true);
   });
 
   it('an UNRESOLVABLE `to` is dropped (no leak) — the marker is still stripped, no private note minted', async () => {

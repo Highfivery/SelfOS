@@ -312,6 +312,36 @@ describe('turnStateFor + unreadCountFor', () => {
     expect(unreadCountFor(withAside, B, undefined)).toBe(unreadCountFor(messages, B, undefined));
   });
 
+  it("follows the coach's reply target, not merely the newest human message (issue #369)", () => {
+    // A spoke, then B answered, then the coach followed up DIRECTED AT B (replies to B's message, so the
+    // coach message carries B's id — the turn-runner). It's B's turn, so A must NOT be told "your turn".
+    const withCoachReply = [
+      msg(A, 'user', '1'),
+      msg(B, 'user', '2', { id: 'b-msg' }),
+      msg(B, 'assistant', '3', { replyToMessageId: 'b-msg' }),
+    ];
+    expect(turnStateFor(withCoachReply, A)).toBe(false); // the coach addressed B — not A's turn
+    expect(turnStateFor(withCoachReply, B)).toBe(true); // …it's B's turn to reply to the coach
+  });
+
+  it("a coach reply directed at the viewer IS the viewer's turn", () => {
+    // Symmetric: the coach's followup replies to A's message, so it's A's turn to respond.
+    const toA = [
+      msg(B, 'user', '1'),
+      msg(A, 'user', '2', { id: 'a-msg' }),
+      msg(A, 'assistant', '3', { replyToMessageId: 'a-msg' }),
+    ];
+    expect(turnStateFor(toA, A)).toBe(true);
+    expect(turnStateFor(toA, B)).toBe(false);
+  });
+
+  it('a coach message with no reply target (an opener) leaves the turn to the newest human rule', () => {
+    // A guided opener addressed to the room shouldn't hand the turn to whoever's id it happens to carry.
+    const openerOnly = [msg(A, 'assistant', '1')]; // no replyToMessageId, no human yet
+    expect(turnStateFor(openerOnly, A)).toBe(false);
+    expect(turnStateFor(openerOnly, B)).toBe(false);
+  });
+
   it('unread counts others’ messages (incl. the coach) newer than lastRead only', () => {
     expect(unreadCountFor(messages, A, undefined)).toBe(2); // the coach reply + B's message
     expect(unreadCountFor(messages, A, '2')).toBe(1); // only B's message is newer than '2'

@@ -633,14 +633,30 @@ export function projectMessages(
   });
 }
 
-/** "Your turn" (§3.6): the newest human message in the viewer's projection isn't theirs. A nudge, not a lock. */
+/**
+ * "Your turn" (§3.6) — whom the coach is currently waiting on, over the viewer's projection. A nudge, not a lock.
+ *
+ * A couples turn almost always ends with the coach's reply, and that reply is DIRECTED at the partner who just
+ * spoke (`replyToMessageId` → their message, mirrored by the coach message's `authorPersonId`, the turn-runner).
+ * So the turn follows the coach's target, NOT merely "the newest human message isn't yours": when Ben answers
+ * and the coach follows up TO BEN, it's still Ben's turn — the other partner must not be told "your turn"
+ * (issue #369). Only when the coach hasn't replied yet (a bare trailing human message, e.g. a failed turn) does
+ * the newest human message decide it. Asides are a private side-channel and never drive the shared turn; a
+ * tombstone must never flip it (66 §3.3).
+ */
 export function turnStateFor(messages: TogetherMessage[], viewerId: string): boolean {
-  // A tombstone must never flip whose turn it is (66 §3.3).
-  const projected = projectMessages(messages, viewerId).filter(
-    (m) => m.role === 'user' && !m.redacted,
-  );
-  const newest = projected[projected.length - 1];
-  return newest ? newest.authorPersonId !== viewerId : false;
+  const shared = projectMessages(messages, viewerId).filter((m) => !m.redacted && !m.privateAside);
+  const newest = shared[shared.length - 1];
+  if (!newest) return false;
+  // The coach's latest shared reply — whose turn is the partner it addressed (its `replyToMessageId` target).
+  // A coach message with no resolvable target (e.g. a guided opener, addressed to the room) falls through to the
+  // newest-human rule, so a brand-new session's turn state is unchanged.
+  if (newest.role === 'assistant' && newest.replyToMessageId) {
+    const target = shared.find((m) => m.id === newest.replyToMessageId);
+    if (target && target.role === 'user') return target.authorPersonId === viewerId;
+  }
+  const newestHuman = [...shared].reverse().find((m) => m.role === 'user');
+  return newestHuman ? newestHuman.authorPersonId !== viewerId : false;
 }
 
 /**

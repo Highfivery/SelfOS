@@ -385,7 +385,7 @@ describe('TogetherSessionsBoard (§3.2)', () => {
     expect(screen.getByRole('region', { name: 'Invitations you sent' })).toBeInTheDocument();
     // The turn is spelled out in plain words on each active card.
     expect(screen.getByText('Angel is waiting on your reply.')).toBeInTheDocument();
-    expect(screen.getByText(/it.s Angel.s move/)).toBeInTheDocument();
+    expect(screen.getByText(/It.s Angel.s move/)).toBeInTheDocument();
     // Past sessions live in a collapsed "Wrapped up" details.
     const wrapped = screen.getByText('Wrapped up').closest('details')!;
     expect(wrapped).not.toHaveAttribute('open');
@@ -396,7 +396,7 @@ describe('TogetherSessionsBoard (§3.2)', () => {
       'Angel is waiting on your reply.',
     );
     expect(turnHint(summary({ status: 'active', yourTurn: false }), 'Angel')).toBe(
-      "You replied — it's Angel's move.",
+      "It's Angel's move.",
     );
     expect(turnHint(summary({ status: 'invited' }), 'Angel')).toBeNull();
   });

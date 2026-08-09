@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { EmailStatus } from '@selfos/core/schemas';
 import { DEFAULT_ROLES } from '@shared/capabilities';
@@ -82,7 +82,12 @@ describe('EmailSettingsPanel (67 §3.1)', () => {
         }),
     });
     render(<EmailSettingsPanel />);
-    expect(await screen.findByLabelText('Email me at')).toHaveValue('me@inbox.example');
+    // The address populates via a two-tick async chain (parent loads `prefs`, then the child effect copies it
+    // into the input's local state), so wait for the VALUE — `findByLabelText` alone resolves on the still-empty
+    // field and races the load under suite pressure (the recurring flake).
+    await waitFor(() =>
+      expect(screen.getByLabelText('Email me at')).toHaveValue('me@inbox.example'),
+    );
     expect(screen.queryByText('Connect Resend')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Resend API key')).not.toBeInTheDocument();
     // Connected → the welcome toggle is enabled.

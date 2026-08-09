@@ -244,14 +244,25 @@ describe('buildFeedbackGuidance', () => {
     );
   });
 
-  it('is empty for weak signals only (a plain skip + a bailed engagement)', () => {
-    let p = applyDecline(
+  it('is empty for a weak signal only (a plain reasonless skip)', () => {
+    const p = applyDecline(
       emptyProfile('p1'),
       { questionPrompt: 'Q', reason: 'later please' },
       at(1),
     );
-    p = applyEngagement(p, { topicId: 'x', engagement: 'bailed' }, at(2));
-    expect(buildFeedbackGuidance(p, at(3))).toBe('');
+    expect(buildFeedbackGuidance(p, at(2))).toBe('');
+  });
+
+  it('steers toward shorter/simpler questionnaires after a recent abandonment (bailed, spec 69 §5.2)', () => {
+    const p = applyEngagement(
+      emptyProfile('p1'),
+      { topicId: 'a1', questionPrompt: 'A long survey', engagement: 'bailed' },
+      at(1),
+    );
+    const g = buildFeedbackGuidance(p, at(2));
+    expect(g).toMatch(/left check-ins UNFINISHED/);
+    // Topic-agnostic: it must NOT name the unfinished check-in (it's about length, not what to ask).
+    expect(g).not.toContain('A long survey');
   });
 
   it('surfaces a productive vein (answered-richly) as a deepen-with-a-fresh-angle hint (spec 69 §5.2)', () => {

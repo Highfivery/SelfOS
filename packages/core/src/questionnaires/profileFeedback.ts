@@ -3,7 +3,7 @@ import { getPerson } from '../people/peopleService';
 
 import { isAnswered, isDeclined, type AnswerValue } from './answering';
 import { getAssignment, getAssignmentSnapshot } from './assignmentService';
-import { detectRecipientNumericShifts } from './changeDetection';
+import { detectRecipientBailed, detectRecipientNumericShifts } from './changeDetection';
 import {
   applyChange,
   applyDecline,
@@ -87,6 +87,21 @@ export async function captureResponseFeedback(
         profile = next;
         changed = true;
       }
+    }
+  }
+
+  // Question-quality self-selection (spec 69 §5.2 / Phase 5): a check-in they opened but abandoned (stale,
+  // unsubmitted) is a "bailed" low-engagement signal → keep future questionnaires here short + simple. Keyed
+  // by the assignment so re-detecting the same one refreshes rather than piles up.
+  for (const bailed of await detectRecipientBailed(fs, key, recipientId, now)) {
+    const next = applyEngagement(
+      profile,
+      { topicId: bailed.assignmentId, questionPrompt: bailed.title, engagement: 'bailed' },
+      now,
+    );
+    if (next !== profile) {
+      profile = next;
+      changed = true;
     }
   }
 

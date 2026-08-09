@@ -11,9 +11,10 @@ import {
   PREFER_NOT_TO_SAY_SKIP_REASON,
   UNCLEAR_SKIP_REASON,
 } from './answering';
-import { submitResponse } from './answerService';
+import { openAssignment, submitResponse } from './answerService';
 import { createAssignment } from './assignmentService';
 import { readProfile } from './personalizationProfile';
+import { captureResponseFeedback } from './profileFeedback';
 import { saveQuestionnaire } from './questionnaireService';
 import { gatherRecipientFeedbackGuidance } from './recipientHistory';
 
@@ -153,5 +154,49 @@ describe('captureResponseFeedback (via submitResponse) → the Personalization P
     const profile = await readProfile(fs, key, 'p5');
     expect(profile.feedback.some((f) => f.kind === 'answered-richly')).toBe(false);
     expect(profile.feedback.some((f) => f.kind === 'not-applicable')).toBe(true);
+  });
+});
+
+describe('captureResponseFeedback → the "bailed" abandonment signal (spec 69 §5.2)', () => {
+  async function ask(fs: FileSystem, recipientId: string, title: string): Promise<string> {
+    const q = await saveQuestionnaire(fs, key, {
+      title,
+      type: 'general',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'Tell me?', required: false }],
+    });
+    const a = await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'author',
+      recipient: { kind: 'person', personId: recipientId },
+      channel: 'inApp',
+      privacy: 'private',
+      senderVisibleToRecipient: true,
+    });
+    return a.id;
+  }
+
+  it('records a stale opened-but-unsubmitted check-in as bailed → a "keep it short" steer', async () => {
+    const fs = memFileSystem();
+    await upsertPerson(fs, key, { id: 'p1', displayName: 'Pat', isSubject: true, tags: [] });
+    // Abandoned: opened, never submitted.
+    const abandoned = await ask(fs, 'p1', 'A long survey');
+    await openAssignment(fs, key, abandoned);
+    // A different one they DO finish (gives capture a submitted response to run against).
+    const finished = await ask(fs, 'p1', 'A quick one');
+    await submitResponse(fs, key, {
+      assignmentId: finished,
+      answers: [{ questionId: 'q1', value: 'ok' }],
+    });
+
+    // Run capture at a point where the abandoned one is stale.
+    const later = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
+    await captureResponseFeedback(fs, key, finished, later);
+
+    const profile = await readProfile(fs, key, 'p1');
+    expect(profile.feedback.some((f) => f.kind === 'bailed' && f.topicId === abandoned)).toBe(true);
+    // …and it steers generation toward shorter/simpler questionnaires (topic-agnostic).
+    const guidance = await gatherRecipientFeedbackGuidance(fs, key, 'p1', later);
+    expect(guidance).toMatch(/left check-ins UNFINISHED/);
   });
 });

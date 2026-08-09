@@ -92,3 +92,43 @@ export async function detectRecipientNumericShifts(
   }
   return shifts;
 }
+
+/**
+ * Question-quality self-selection — the "bailed" signal (spec 69 §5.2 / Phase 5). A check-in the recipient
+ * OPENED (or started) but never submitted, left untouched past `BAILED_STALE_DAYS`, is an abandonment: a
+ * low-engagement signal that future questionnaires here should be SHORTER and simpler (de-prioritize length /
+ * complexity), NOT a topic to avoid. Deterministic (no AI), household-recipient-scoped, author-blind.
+ *
+ * Detected at submit time (`captureResponseFeedback` scans the person's other opened-not-submitted sends) — a
+ * complementary signal to `answered-richly`. Keyed by the assignment so re-detecting the same one refreshes
+ * rather than piles up.
+ */
+export const BAILED_STALE_DAYS = 7;
+const BAILED_DAY_MS = 24 * 60 * 60 * 1000;
+
+export interface BailedSend {
+  assignmentId: string;
+  title: string;
+}
+
+export async function detectRecipientBailed(
+  fs: FileSystem,
+  key: Uint8Array,
+  recipientPersonId: string,
+  now: Date,
+): Promise<BailedSend[]> {
+  const cutoff = new Date(now.getTime() - BAILED_STALE_DAYS * BAILED_DAY_MS).toISOString();
+  const asked = await listAssignments(fs, key, { recipientPersonId });
+  const out: BailedSend[] = [];
+  for (const a of asked) {
+    // Started but not finished: only `opened` / `inProgress` (submitted / declined / expired / revoked are done).
+    if (a.status !== 'opened' && a.status !== 'inProgress') continue;
+    if (a.updatedAt >= cutoff) continue; // touched recently — not abandoned yet
+    // Defensive: a submitted response means it's finished regardless of a stale status.
+    const response = await getResponse(fs, key, a.id);
+    if (response?.submittedAt) continue;
+    const snapshot = await getAssignmentSnapshot(fs, key, a.id);
+    out.push({ assignmentId: a.id, title: snapshot?.title ?? 'a check-in' });
+  }
+  return out;
+}

@@ -601,6 +601,17 @@ _These finer points were resolved with the owner (2026-08-07); the defaults belo
 
 ## 15. Changelog
 
+- 2026-08-07 — **Phase 5 (question-quality self-selection) BUILT.** The `answered-richly` engagement signal —
+  defined since Phase 1 but never captured — is now recorded at submit: `captureResponseFeedback` marks a
+  response "richly engaged" when the person answered a healthy majority substantively (`RICH_ENGAGEMENT_RATIO`
+  0.6, min 2 real answers), recording each answered question as a productive vein. `buildFeedbackGuidance` reads
+  it as a bounded "they engaged RICHLY here — a DEEPER, fresh angle is justified (a permitted exception to the
+  new-ground bias); never re-ask the same question" hint — feeding the §5.2 depth-when-justified lever without
+  fighting the strong-new-ground default. A topic the person later marked off wins (excluded from the productive
+  list). Verified: profileFeedback capture (rich on a substantive submit; none on a mostly-skipped one) +
+  buildFeedbackGuidance (productive section; marked-off exclusion). **Honest gap:** `bailed` (opened-then-
+  abandoned) remains a follow-on — it needs an abandonment detector over opened-not-submitted assignments, not a
+  submit hook, so it isn't captured here.
 - 2026-08-07 — **Phase 4 (full unification) BUILT** — email joins the one steering universe. The story
   biographer topic pass was already unified in Phase 1/2 (`storyInterviewService.runGapPass` calls
   `gatherRecipientFeedbackGuidance` + `buildDedupReference` + `coveredTopics`), so Phase 4 reduced to the one

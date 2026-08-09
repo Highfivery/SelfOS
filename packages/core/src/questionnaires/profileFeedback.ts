@@ -1,11 +1,25 @@
 import type { FileSystem } from '../host';
 import { getPerson } from '../people/peopleService';
 
-import { isDeclined, type AnswerValue } from './answering';
+import { isAnswered, isDeclined, type AnswerValue } from './answering';
 import { getAssignment, getAssignmentSnapshot } from './assignmentService';
 import { detectRecipientNumericShifts } from './changeDetection';
-import { applyChange, applyDecline, readProfile, writeProfile } from './personalizationProfile';
+import {
+  applyChange,
+  applyDecline,
+  applyEngagement,
+  readProfile,
+  writeProfile,
+} from './personalizationProfile';
 import { getResponse } from './responseService';
+
+/**
+ * Question-quality self-selection (spec 69 §5.2 / Phase 5): a response is "richly engaged" when the person
+ * answered a healthy majority of its questions substantively (not skipped). Below this, we don't claim rich
+ * engagement (their skips are already captured as feedback). ≥2 real answers guards a 1-question form.
+ */
+const RICH_ENGAGEMENT_RATIO = 0.6;
+const RICH_ENGAGEMENT_MIN = 2;
 
 /**
  * Capture the per-question declines (spec 69 §3.3 / 08 §25.5) from a just-submitted response into the
@@ -38,8 +52,13 @@ export async function captureResponseFeedback(
   const byId = new Map(response.answers.map((a) => [a.questionId, a.value] as const));
   let profile = await readProfile(fs, key, recipientId);
   let changed = false;
+  const answeredPrompts: string[] = [];
   for (const q of snapshot.questions) {
     const value = byId.get(q.id) as AnswerValue | undefined;
+    if (isAnswered(q, value)) {
+      answeredPrompts.push(q.prompt);
+      continue;
+    }
     if (!isDeclined(value)) continue;
     profile = applyDecline(
       profile,
@@ -51,6 +70,24 @@ export async function captureResponseFeedback(
       now,
     );
     changed = true;
+  }
+
+  // Question-quality self-selection (spec 69 §5.2 / Phase 5): when the person engaged richly (answered a
+  // healthy majority substantively), mark those questions as a productive vein — going DEEPER here (a new
+  // angle, never the same question) is a justified exception to the strong-new-ground bias.
+  const total = snapshot.questions.length;
+  if (
+    total > 0 &&
+    answeredPrompts.length >= RICH_ENGAGEMENT_MIN &&
+    answeredPrompts.length / total >= RICH_ENGAGEMENT_RATIO
+  ) {
+    for (const prompt of answeredPrompts) {
+      const next = applyEngagement(profile, { questionPrompt: prompt, engagement: 'rich' }, now);
+      if (next !== profile) {
+        profile = next;
+        changed = true;
+      }
+    }
   }
 
   // spec 69 §5.8 — also detect any numeric re-ask shift ("used to say X, now Y") and log it as an unexplored

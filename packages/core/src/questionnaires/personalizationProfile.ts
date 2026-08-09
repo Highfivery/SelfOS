@@ -415,7 +415,7 @@ const CURATION_FOR_ACTION: Record<'ask' | 'not-this' | 'go-deeper' | 'clear', Ca
 };
 
 /** A candidate is live in the feed / steers generation while it hasn't been asked and isn't "Not this". */
-const isActiveCandidate = (c: NextCandidate): boolean =>
+export const isActiveCandidate = (c: NextCandidate): boolean =>
   c.mintedAssignmentId === undefined && c.curation !== 'skipped';
 
 /**

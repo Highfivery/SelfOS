@@ -234,7 +234,11 @@ import type {
   UsageSummary,
 } from './schemas';
 import type { TestForm, TestNarrateResponse, TestSummary } from '@selfos/core/tests';
-import type { QuestionnaireCoverageView, CoverageSteerInput } from '@selfos/core/questionnaires';
+import type {
+  QuestionnaireCoverageView,
+  CoverageSteerInput,
+  CandidateCurateInput,
+} from '@selfos/core/questionnaires';
 import type { AutoCheckinStreamActivity } from '@selfos/core/auto-checkins';
 
 /**
@@ -381,6 +385,8 @@ export const IpcChannels = {
   questionnairesMarkCovered: 'questionnaires:markCovered',
   questionnairesPersonalizationProfile: 'questionnaires:personalizationProfile',
   questionnairesSteerTopic: 'questionnaires:steerTopic',
+  questionnairesCurateCandidate: 'questionnaires:curateCandidate',
+  questionnairesRefreshNextCandidates: 'questionnaires:refreshNextCandidates',
   gapfinderSuggest: 'gapfinder:suggest',
   questionnaireSuggestionsList: 'questionnaires:suggestionsList',
   questionnaireSuggestionsGenerate: 'questionnaires:suggestionsGenerate',
@@ -717,6 +723,8 @@ export type {
   CoverageStatus,
   MarkedOffView,
   CoverageSteerInput,
+  CandidateFeedItem,
+  CandidateCurateInput,
 } from '@selfos/core/questionnaires';
 export type { AutoCheckinStreamActivity } from '@selfos/core/auto-checkins';
 /** 66 §3.3 — re-exported so the bridge + renderer share one rewind outcome type. */
@@ -1151,6 +1159,12 @@ export interface SelfosBridge {
   /** Steer a life area (explore more / leave alone) in the active person's own profile; returns the refreshed
    * view. Own-scoped. */
   questionnairesSteerTopic(input: CoverageSteerInput): Promise<QuestionnaireCoverageView>;
+  /** Adaptive Exploration (70 §3.2/§6): curate a candidate in the OWN feed (Ask me this / Not this / Go deeper
+   * / clear); returns the refreshed view. Cheap, no AI. Own-scoped. */
+  questionnairesCurateCandidate(input: CandidateCurateInput): Promise<QuestionnaireCoverageView>;
+  /** Adaptive Exploration (70 §3.2/§5.4): the manual "Look for more" — force a candidate refresh for the active
+   * person. Budget-gated + metered `questionnaire.profile`; returns the refreshed view. Own-scoped. */
+  questionnairesRefreshNextCandidates(): Promise<QuestionnaireCoverageView>;
   /** Gap-finder: propose the next questionnaires from structured context. Budget-gated + metered. */
   gapfinderSuggest(input: { targetPersonId?: string }): Promise<QuestionnaireSuggestResult>;
   /** Recipient-first saved suggestions (08 §18). Read the author's saved set for one household recipient — no

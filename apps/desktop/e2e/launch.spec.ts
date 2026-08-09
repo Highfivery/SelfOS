@@ -2981,17 +2981,49 @@ test('questionnaires: author a single-choice questionnaire, validate, persist, n
   }
 });
 
-test('questionnaire intelligence (69 §3.4): the Explored tab reads coverage + a steer persists; no overflow', async () => {
+test('adaptive exploration (70 §3): the Explored tab leads with the candidate feed; curation + a steer persist; no overflow', async () => {
   const { userData, vault } = await seedReadyVault();
-  // Seed an auto check-ins config so the "Auto check-ins" tab shows too — the widest, 4-tab worst case for
-  // the §12 no-inner-scroll guard below.
   {
     const fs0 = createNodeFileSystem(vault);
     const key0 = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    // An auto check-ins config so the "Auto check-ins" tab shows too — the 4-tab worst case for the §12 guard.
     await writeEncryptedJson(
       fs0,
       'people/owner-1/questionnaires/autoCheckins.enc',
       { schemaVersion: 1, enabled: false, targets: [] },
+      key0!,
+    );
+    // Seed the forward-first candidate feed (spec 70 §3.2) as the daily refresh would.
+    await writeEncryptedJson(
+      fs0,
+      'people/owner-1/questionnaires/personalizationProfile.enc',
+      {
+        schemaVersion: 1,
+        personId: 'owner-1',
+        updatedAt: '2026-08-09T00:00:00.000Z',
+        coverage: { topics: [] },
+        feedback: [],
+        changes: [],
+        candidatesRefreshedAt: '2026-08-09T00:00:00.000Z',
+        candidates: [
+          {
+            id: 'cand-keep',
+            lifeArea: 'Money',
+            prompt: 'What would financial security feel like for you?',
+            kind: 'new',
+            curation: 'none',
+            at: '2026-08-09T00:00:00.000Z',
+          },
+          {
+            id: 'cand-skip',
+            lifeArea: 'Relationships',
+            prompt: 'How is your love life these days?',
+            kind: 'new',
+            curation: 'none',
+            at: '2026-08-09T00:00:00.000Z',
+          },
+        ],
+      },
       key0!,
     );
   }
@@ -3000,33 +3032,45 @@ test('questionnaire intelligence (69 §3.4): the Explored tab reads coverage + a
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Questionnaires' }).click();
     await w.getByRole('tab', { name: 'Explored' }).click();
+
+    // The candidate feed LEADS the panel (forward-first).
     await expect(
-      w.getByRole('heading', { name: 'What SelfOS has explored with you' }),
+      w.getByRole('heading', { name: 'What SelfOS is curious about next' }),
     ).toBeVisible();
+    await expect(w.getByText('What would financial security feel like for you?')).toBeVisible();
+    // The honest overview never reads "done" — no "explored/done" language in the panel body (the "Explored"
+    // TAB name is unchanged; scope the check to the panel content).
+    await expect(w.getByRole('heading', { name: 'How well I know you' })).toBeVisible();
+    await expect(w.locator('#qpanel-explored').getByText(/\bexplored\b/i)).toHaveCount(0);
 
-    // A fresh person: every life area shows as not-yet-explored (the derived skeleton), and Intimacy is read-only.
+    // "Not this" on the love-life candidate drops it from the feed.
+    const skipCard = w
+      .getByRole('listitem')
+      .filter({ hasText: 'How is your love life these days?' });
+    await skipCard.getByRole('button', { name: 'Not this' }).click();
+    await expect(w.getByText('How is your love life these days?')).toHaveCount(0);
+    // "Ask me this" pins the money candidate.
+    const keepCard = w
+      .getByRole('listitem')
+      .filter({ hasText: 'What would financial security feel like for you?' });
+    await keepCard.getByRole('button', { name: 'Ask me this' }).click();
+    await expect(keepCard.getByRole('button', { name: 'Asking this' })).toBeVisible();
+
+    // A "Leave alone" area steer on Relationships (the overview retains the area-level steers).
     const relationships = w.getByRole('listitem').filter({ hasText: 'Relationships' });
-    await expect(relationships).toBeVisible();
-    // Intimacy has no steer — instead a link to the onboarding intimacy section (HashRouter → #/onboarding).
-    await expect(
-      w.getByRole('link', { name: 'Shaped by your onboarding intimacy answers' }),
-    ).toHaveAttribute('href', /\/onboarding$/);
+    await relationships.getByRole('button', { name: 'Leave alone' }).click();
 
-    // "Leave alone" on the Relationships row → the button reflects the pressed state.
-    const leaveAlone = relationships.getByRole('button', { name: 'Leave alone' });
-    await leaveAlone.click();
-    await expect(leaveAlone).toHaveAttribute('aria-pressed', 'true');
-
-    // Read-after-write through the live bridge: leave + return, reopen Explored, the steer persisted.
+    // Read-after-write through the live bridge: leave + return, reopen Explored — curation + steer persisted.
     await w.getByRole('link', { name: 'Home' }).click();
     await w.getByRole('link', { name: 'Questionnaires' }).click();
     await w.getByRole('tab', { name: 'Explored' }).click();
     await expect(
       w
         .getByRole('listitem')
-        .filter({ hasText: 'Relationships' })
-        .getByRole('button', { name: 'Leave alone' }),
-    ).toHaveAttribute('aria-pressed', 'true');
+        .filter({ hasText: 'What would financial security feel like for you?' })
+        .getByRole('button', { name: 'Asking this' }),
+    ).toBeVisible();
+    await expect(w.getByText('How is your love life these days?')).toHaveCount(0); // stayed skipped
 
     // The Auto check-ins tab is present (4-tab worst case for the overflow guard).
     await expect(w.getByRole('tab', { name: /Auto check-ins/ })).toBeVisible();
@@ -3044,14 +3088,19 @@ test('questionnaire intelligence (69 §3.4): the Explored tab reads coverage + a
     await app.close();
   }
 
-  // Decrypt the owner's profile: the steer persisted as a not-applicable feedback entry keyed by the area.
+  // Decrypt the owner's profile: the candidate curation + the area steer persisted (own-scoped).
   const fs = createNodeFileSystem(vault);
   const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
   const profile = (await readEncryptedJson(
     fs,
     'people/owner-1/questionnaires/personalizationProfile.enc',
     key!,
-  )) as { feedback?: { topicId?: string; kind?: string }[] } | null;
+  )) as {
+    feedback?: { topicId?: string; kind?: string }[];
+    candidates?: { id: string; curation?: string }[];
+  } | null;
+  expect(profile?.candidates?.find((c) => c.id === 'cand-skip')?.curation).toBe('skipped');
+  expect(profile?.candidates?.find((c) => c.id === 'cand-keep')?.curation).toBe('asked');
   expect(
     profile?.feedback?.some((f) => f.topicId === 'Relationships' && f.kind === 'not-applicable'),
   ).toBe(true);

@@ -427,6 +427,39 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-09 — **Build (Adaptive Exploration P2 — the forward-first Explored panel + curation IPC; SPEC 70 §12
+  P2; mockup approved FIRST; on `feat/adaptive-exploration-p2`, a worktree off the merged P1).** Rebuilds the
+  Questionnaires "Explored" tab from the backward "Explored ✓" report into the §3.1 hybrid: the **candidate feed
+  leads** (curatable — Ask me this / Not this / Go deeper, `new ground` / `go deeper` tags, pinned state, a
+  budget-gated "Look for more" + a pre-first-refresh calm state), over an **honest area overview** on a
+  never-"done" **New → Getting to know you → Knows you well** scale (text + a subtle meter, never color-only; a
+  HIGH 0.7 bar for the top, matching the P1 `COVERAGE_SYSTEM` anchor, so a 0.5 area is still only "getting to know
+  you") with the retained Explore-more / Leave-alone steers. Core `transparencyView.ts` adds `CandidateFeedItem`
+  - pure `projectCandidateFeed` (own active candidates — not minted, not skipped — pinned→go-deeper→new, capped)
+  - `curateCandidate`; two new **own-scoped** IPC channels (`questionnaires:curateCandidate` [cheap] +
+    `questionnaires:refreshNextCandidates` [budget-gated metered pass via `aiDeps('questionnaires.own')`, fail-safe])
+    gated `questionnaires.own` + active-person-scoped in the bridge. The Intimacy overview row stays **read-only in
+    P2** ("Sourced from every intimacy signal") — P3 makes it first-class. **The whole read/curate/refresh path is
+    own-scoped** (the person's own profile only; the view type structurally has no reciprocity/partner field).
+    **Mockup shown + owner-approved before coding** (the durable redesign rule). code-reviewer **fix-first**: the
+    one safety should-fix — an `Intimacy`-area candidate could surface in the feed **before** the shared 18+ ack
+    (P1's candidate pass can propose intimacy candidates from the coverage guidance) — is fixed now
+    (`projectCandidateFeed` withholds intimacy-area candidates unless the ack is present, threaded from the bridge
+    reading `getGuidancePrefs().adultAcknowledged`; the fail-safe default is **gated-on**); plus the honest-failure
+    should-fix ("Look for more" now surfaces a calm "AI unavailable / over budget" note via a `refreshDegraded`
+    flag instead of a silent no-op) + the DRY/no-op nits (a shared `emptyCoverageView` factory, an exported
+    `isActiveCandidate`, skip the vault write on a no-op curate/steer). Gate green: typecheck/lint/format, **1940
+    core + full desktop** unit (`projectCandidateFeed` ordering/exclusions + the intimacy-18+ gate + honest-scale
+    mapping; a two-persona coreBridge test [curate own-scoped + per-person isolation + the intimacy candidate
+    withheld-until-ack]; RTL feed/curate/look-for-more/degraded/steer) + a decrypt-level E2E (seed the feed → "Not
+    this" drops a candidate + "Ask me this" pins one + a Leave-alone steer → reopen persists → decrypt the profile
+    → 360px overflow guard) + real-Electron visual QA at desktop + 360px (matches the approved mockup). **Lesson: a
+    forward-first candidate FEED is a new surface for explicit content, so the 18+ gate has to move to the feed
+    projection (withhold Intimacy-area candidates unless acked, fail-safe gated-on) — the overview row can stay
+    (P3 formalizes it), but any candidate the pass proposes is shown, so the display is where the consent gate
+    belongs; and a "spends your allowance" button that silently no-ops on a degraded AI pass is dishonest — thread
+    a `refreshDegraded` flag so the panel says so.** **Remaining:** P3 (Intimacy first-class gated area), P4 (silent
+    partner wishlist).
 - 2026-08-09 — **Build (Adaptive Exploration P1 — the candidate-feed engine + honest depth; SPEC 70 §12 P1;
   on `feat/adaptive-exploration-p1`, a worktree off origin/main).** First of four phases reimagining the
   Questionnaires "Explored" tab from a backward "Explored ✓" report into a forward-first candidate feed. P1 is

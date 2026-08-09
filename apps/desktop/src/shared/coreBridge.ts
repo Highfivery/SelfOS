@@ -701,6 +701,10 @@ import {
   gatherRecipientPartnerContext,
   generateQuestions,
   refreshCoverage,
+  refreshNextCandidates,
+  markCandidateAsked,
+  readProfile,
+  writeProfile,
   readCoverageView,
   steerTopic,
   type QuestionnaireCoverageView,
@@ -5045,11 +5049,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // spec 69 §5.6 — ride the SAME reconcile cadence (launch/focus, 24h throttle, ≥N-new-signals gate) to
       // refresh the active person's coverage map, so generation steers to genuinely new ground. Metered
       // `questionnaire.profile`, budget-gated + fail-safe inside `refreshCoverage`. Best-effort: a coverage
-      // failure never fails the memory refresh.
+      // failure never fails the memory refresh. Then refresh the forward-first candidate feed (spec 70 §3.2/§5.4)
+      // on the SAME cadence, right after — it reads the freshly-placed coverage map to propose "what's next".
       try {
         await refreshCoverage(deps, deps.personId);
+        await refreshNextCandidates(deps, deps.personId);
       } catch {
-        // coverage refresh is a side-benefit of this cadence, not part of the memory-refresh contract
+        // coverage/candidate refresh is a side-benefit of this cadence, not part of the memory-refresh contract
       }
       // Consume the 24h throttle window only when the pass DIDN'T fail for a no-spend transient reason
       // (AI off / over budget / a stream ERROR — all bail before metering). Those should retry on the next
@@ -7162,6 +7168,25 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         senderVisibleToRecipient: senderVisible,
         ...(expiresAt !== undefined ? { expiresAt } : {}),
       });
+
+      // spec 70 §5.5 — a candidate that was just asked drops off the recipient's "what's next" feed + stops
+      // steering generation. Best-effort + immediate for this direct path; the daily `refreshNextCandidates`
+      // self-heals anything missed. Own-scoped: stamps the RECIPIENT's own profile with the prompts they were
+      // asked (no cross-person data — the def's own questions).
+      try {
+        const askedPrompts = def.questions.map((q) => q.prompt.trim()).filter(Boolean);
+        if (askedPrompts.length) {
+          const profile = await readProfile(ctx.fs, ctx.key, recipientPersonId);
+          const stamped = markCandidateAsked(
+            profile,
+            { assignmentId: assignment.id, askedPrompts },
+            new Date(),
+          );
+          if (stamped !== profile) await writeProfile(ctx.fs, ctx.key, stamped);
+        }
+      } catch {
+        // candidate bookkeeping is best-effort; never fail a send over it
+      }
 
       // 08 §17.13 — unified delivery: ALSO mint a relay link so the recipient can answer in their Inbox OR
       // anywhere via the link. Only when the sender can deliver externally AND a relay is connected;

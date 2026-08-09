@@ -417,6 +417,33 @@ _Proposed defaults; flag any to change before build._
 
 ## 15. Changelog
 
+- 2026-08-09 — **P1 (model + generation core) BUILT** (§12). The forward-first candidate feed's engine, no user
+  surface yet (the panel is P2). (1) The `NextCandidate` schema + `candidates`/`candidatesRefreshedAt` fields on
+  the Personalization Profile — **additive-optional, tolerant-parsed, no `schemaVersion` bump** (the
+  [`69 §4.1`](69-questionnaire-intelligence.md) precedent; an absent field on a pre-70 profile derives an empty
+  feed). (2) Pure `applyCandidateCuration` (ask/not-this/go-deeper/clear → the persisted curation state),
+  `markCandidateAsked` (stamp a candidate whose prompt was actually asked → drops off + stops steering),
+  `mergeCandidates` (carry pins forward, drop asked, never re-propose a `skipped` phrasing, per-area +
+  total caps that never drop a pin), and `buildCandidateGuidance` (the positive prompt block — pinned ★ leads,
+  new vs. go-deeper split, skipped/minted excluded). (3) `buildCandidateGuidance` folded into the shared
+  `gatherRecipientFeedbackGuidance` seam, so candidates steer all five generation paths (manual/auto/dream/email/
+  story) with zero per-path wiring — "what you see is what gets asked". (4) `refreshNextCandidates` — a separate
+  metered `questionnaire.profile` pass (owner-confirmed over folding into the coverage call: each independently
+  fail-safe + testable), riding the daily reconcile cadence right after `refreshCoverage`, fed the CHEAP reads
+  (distilled insight facts + intake + the freshly-placed coverage map + the feedback ledger — not a second full
+  re-decrypt of every response); tolerant-parsed, budget-gated, fail-safe (a degraded pass leaves the last-good
+  candidates). (5) `COVERAGE_SYSTEM` recalibrated for honest depth (§5.2) — a conservative, round-down scale that
+  reserves 0.7+ for sustained multi-angle exploration, so the map reads truthfully (the display New/Getting/Knows-
+  you-well relabel is P2). (6) Wired into the bridge: `refreshNextCandidates` on the `memoryRefresh` cadence
+  (best-effort), and `markCandidateAsked` at the manual `assignmentsCreate` path (immediate own-scoped drop-off;
+  the daily refresh self-heals as the backstop). Own-scoped throughout (a person's own data → their own profile;
+  no cross-person crossing). Verified: core units (curation/asked-drops-off/merge caps/guidance excludes
+  skipped+minted; `refreshNextCandidates` populate + fail-safe + pin-carry-forward, asserting the steering
+  reaches the model) + a two-persona coreBridge test (the cadence refreshes the feed, candidates steer
+  generation, and an asked candidate drops off — decrypt-level). No RTL/E2E (P1 has no surface, §12). Gate green:
+  typecheck/lint/format, 1935 core + 1544 desktop unit. **§13 defaults kept as written** (≤10 feed / ≤3 per area;
+  "Not this" declines that candidate, not a topic ban). **Remaining:** P2 (forward-first panel + curation IPC),
+  P3 (Intimacy first-class gated area), P4 (partner wishlist).
 - 2026-08-09 — created + Approved. The forward-first Adaptive Exploration surface (candidate feed + honest
   overview + first-class gated Intimacy) + the silent "Explore with your partner" wishlist; amends
   [`69 §3.4`](69-questionnaire-intelligence.md); 8 owner decisions recorded; 4 build phases.

@@ -8,19 +8,27 @@ import {
   UNCLEAR_SKIP_REASON,
 } from './answering';
 import {
+  applyCandidateCuration,
   applyChange,
   applyDecline,
   applyEngagement,
   applyReciprocity,
   applySteer,
+  buildCandidateGuidance,
   buildFeedbackGuidance,
+  CANDIDATE_CAP,
+  CANDIDATES_PER_AREA,
   CHANGE_CAP,
   classifyDeclineReason,
   emptyProfile,
   FEEDBACK_CAP,
+  markCandidateAsked,
   markChangesExplored,
+  mergeCandidates,
   readProfile,
   writeProfile,
+  type NextCandidate,
+  type PersonalizationProfile,
 } from './personalizationProfile';
 
 const key = generateMasterKey();
@@ -79,6 +87,23 @@ describe('readProfile / writeProfile', () => {
     // The whole feedback array `.catch([])`es to empty; the read never throws.
     expect(back.personId).toBe('p1');
     expect(back.feedback).toEqual([]);
+  });
+
+  it('reads a pre-spec-70 profile (no candidate fields) as an empty feed — additive, no version bump', async () => {
+    const fs = memFileSystem();
+    // A profile written before spec 70 existed: no `candidates` / `candidatesRefreshedAt`.
+    const legacy = {
+      schemaVersion: 1,
+      personId: 'p1',
+      updatedAt: new Date(0).toISOString(),
+      coverage: { topics: [] },
+      feedback: [],
+      changes: [],
+    };
+    await writeProfile(fs, key, legacy as never);
+    const back = await readProfile(fs, key, 'p1');
+    expect(back.candidates).toEqual([]);
+    expect(back.candidatesRefreshedAt).toBeUndefined();
   });
 });
 
@@ -371,5 +396,228 @@ describe('applySteer (spec 69 §3.4 transparency steer)', () => {
     const before = p;
     const after = applySteer(before, { topicId: 'Nope', action: 'clear' }, at(3));
     expect(after).toBe(before); // no change ⇒ identity (no updatedAt churn)
+  });
+});
+
+// ── Candidate feed (spec 70 §3.2) ───────────────────────────────────────────────────────────────────────────
+
+const candidate = (
+  over: Partial<NextCandidate> & { id: string; prompt: string },
+): NextCandidate => ({
+  lifeArea: 'Work & purpose',
+  kind: 'new',
+  curation: 'none',
+  at: at(1).toISOString(),
+  ...over,
+});
+
+const withCandidates = (candidates: NextCandidate[]): PersonalizationProfile => ({
+  ...emptyProfile('p1'),
+  candidates,
+});
+
+describe('applyCandidateCuration', () => {
+  it('maps each panel action to the persisted curation state', () => {
+    let p = withCandidates([candidate({ id: 'c1', prompt: 'What drives you?' })]);
+    p = applyCandidateCuration(p, { candidateId: 'c1', action: 'ask' }, at(2));
+    expect(p.candidates[0]?.curation).toBe('asked');
+    p = applyCandidateCuration(p, { candidateId: 'c1', action: 'not-this' }, at(3));
+    expect(p.candidates[0]?.curation).toBe('skipped');
+    p = applyCandidateCuration(p, { candidateId: 'c1', action: 'go-deeper' }, at(4));
+    expect(p.candidates[0]?.curation).toBe('go-deeper');
+    p = applyCandidateCuration(p, { candidateId: 'c1', action: 'clear' }, at(5));
+    expect(p.candidates[0]?.curation).toBe('none');
+  });
+
+  it('is a no-op for an unknown or already-minted candidate (identity, no churn)', () => {
+    const p = withCandidates([
+      candidate({ id: 'c1', prompt: 'A', mintedAssignmentId: 'a1' }),
+      candidate({ id: 'c2', prompt: 'B', curation: 'asked' }),
+    ]);
+    expect(applyCandidateCuration(p, { candidateId: 'nope', action: 'ask' }, at(2))).toBe(p);
+    // already-minted candidate can't be re-curated
+    expect(applyCandidateCuration(p, { candidateId: 'c1', action: 'ask' }, at(2))).toBe(p);
+    // no-change action returns identity
+    expect(applyCandidateCuration(p, { candidateId: 'c2', action: 'ask' }, at(2))).toBe(p);
+  });
+});
+
+describe('markCandidateAsked', () => {
+  it('stamps a candidate whose prompt was actually asked so it drops off + stops steering', () => {
+    const p = withCandidates([
+      candidate({ id: 'c1', prompt: 'What does a good day at work look like for you?' }),
+      candidate({ id: 'c2', prompt: 'What do you do to unwind?' }),
+    ]);
+    const stamped = markCandidateAsked(
+      p,
+      { assignmentId: 'a1', askedPrompts: ['what does a good work day look like for you'] },
+      at(2),
+    );
+    expect(stamped.candidates.find((c) => c.id === 'c1')?.mintedAssignmentId).toBe('a1');
+    expect(stamped.candidates.find((c) => c.id === 'c2')?.mintedAssignmentId).toBeUndefined();
+    // The minted one is excluded from generation steering.
+    const guidance = buildCandidateGuidance(stamped);
+    expect(guidance).not.toContain('good day at work');
+    expect(guidance).toContain('unwind');
+  });
+
+  it('is idempotent + a no-op when nothing matches (identity)', () => {
+    const p = withCandidates([candidate({ id: 'c1', prompt: 'What drives you?' })]);
+    expect(markCandidateAsked(p, { assignmentId: 'a1', askedPrompts: [] }, at(2))).toBe(p);
+    expect(
+      markCandidateAsked(p, { assignmentId: 'a1', askedPrompts: ['totally unrelated'] }, at(2)),
+    ).toBe(p);
+    const once = markCandidateAsked(
+      p,
+      { assignmentId: 'a1', askedPrompts: ['what drives you'] },
+      at(2),
+    );
+    expect(once.candidates[0]?.mintedAssignmentId).toBe('a1');
+    expect(
+      markCandidateAsked(once, { assignmentId: 'a2', askedPrompts: ['what drives you'] }, at(3)),
+    ).toBe(once);
+  });
+});
+
+describe('mergeCandidates', () => {
+  it('carries pinned candidates forward, drops asked ones, and never re-proposes a skipped phrasing', () => {
+    const p = withCandidates([
+      candidate({ id: 'pin', prompt: 'What are you most proud of lately?', curation: 'asked' }),
+      candidate({ id: 'skip', prompt: 'How is your love life?', curation: 'skipped' }),
+      candidate({ id: 'old', prompt: 'What does rest mean to you?' }),
+    ]);
+    // "old" was actually asked; the proposal re-offers the skipped phrasing + a genuinely new one.
+    const merged = mergeCandidates(
+      p,
+      [
+        { lifeArea: 'Relationships', prompt: 'how is your love life', kind: 'new' },
+        { lifeArea: 'Health & body', prompt: 'What helps you sleep well?', kind: 'new' },
+      ],
+      ['what does rest mean to you'],
+      at(2),
+    );
+    const prompts = merged.candidates.map((c) => c.prompt);
+    expect(prompts).toContain('What are you most proud of lately?'); // pin carried forward
+    expect(prompts).not.toContain('What does rest mean to you?'); // asked → dropped
+    expect(prompts).toContain('What helps you sleep well?'); // genuinely new → added
+    // the skipped phrasing is not re-proposed as a fresh candidate...
+    expect(
+      merged.candidates.filter((c) => c.prompt.toLowerCase() === 'how is your love life'),
+    ).toHaveLength(0);
+    // ...but the person's existing skip is preserved (still declined).
+    expect(merged.candidates.find((c) => c.id === 'skip')?.curation).toBe('skipped');
+    expect(merged.candidatesRefreshedAt).toBe(at(2).toISOString());
+  });
+
+  it('caps proposals per life area', () => {
+    // Genuinely distinct prompts (no shared subject tokens) so the per-area cap — not the near-dup filter — limits them.
+    const topics = [
+      'How do you feel about your savings?',
+      'What would financial freedom look like?',
+      'Where does debt weigh on you?',
+      'Which purchase last brought you joy?',
+      'When did money first stress you out?',
+    ];
+    const proposed = topics.map((prompt) => ({ lifeArea: 'Money', prompt, kind: 'new' as const }));
+    expect(proposed.length).toBeGreaterThan(CANDIDATES_PER_AREA);
+    const merged = mergeCandidates(emptyProfile('p1'), proposed, [], at(2));
+    expect(merged.candidates.filter((c) => c.lifeArea === 'Money')).toHaveLength(
+      CANDIDATES_PER_AREA,
+    );
+  });
+
+  it('declined ("Not this") candidates never block their area or freeze the feed (spec 70 §13)', () => {
+    // Three declined candidates in one area — "Not this" is not a topic ban, so a fresh set still fills it.
+    const declined: NextCandidate[] = [
+      candidate({
+        id: 's1',
+        lifeArea: 'Money',
+        prompt: 'How do you feel about your savings?',
+        curation: 'skipped',
+      }),
+      candidate({
+        id: 's2',
+        lifeArea: 'Money',
+        prompt: 'What would financial freedom look like?',
+        curation: 'skipped',
+      }),
+      candidate({
+        id: 's3',
+        lifeArea: 'Money',
+        prompt: 'Where does debt weigh on you?',
+        curation: 'skipped',
+      }),
+    ];
+    const proposed = [
+      {
+        lifeArea: 'Money',
+        prompt: 'What did your family teach you about money?',
+        kind: 'new' as const,
+      },
+      {
+        lifeArea: 'Money',
+        prompt: 'When did you last feel financially secure?',
+        kind: 'new' as const,
+      },
+      // …but re-proposing a declined phrasing verbatim is still dropped (the de-dup memory).
+      { lifeArea: 'Money', prompt: 'How do you feel about your savings?', kind: 'new' as const },
+    ];
+    const merged = mergeCandidates(withCandidates(declined), proposed, [], at(2));
+    const activeMoney = merged.candidates.filter(
+      (c) => c.lifeArea === 'Money' && c.curation === 'none',
+    );
+    // The area re-filled up to the per-area cap despite three declines sitting in it.
+    expect(activeMoney).toHaveLength(CANDIDATES_PER_AREA - 1); // 2 genuinely-new (the 3rd was a declined re-ask)
+    expect(activeMoney.map((c) => c.prompt)).toContain(
+      'What did your family teach you about money?',
+    );
+    // The declined phrasing was NOT re-added as an active candidate.
+    expect(activeMoney.map((c) => c.prompt)).not.toContain('How do you feel about your savings?');
+    // The declines are retained (bounded de-dup memory), still marked skipped.
+    expect(merged.candidates.filter((c) => c.curation === 'skipped')).toHaveLength(3);
+    // buildCandidateGuidance shows the fresh candidates, not the declines.
+    const g = buildCandidateGuidance(merged);
+    expect(g).toContain('What did your family teach you about money?');
+    expect(g).not.toContain('How do you feel about your savings?');
+  });
+
+  it('bounds the stored set, keeping curated candidates', () => {
+    // Index-tagged tokens so no two prompts near-duplicate (each `existingN entryN` is unique to its index).
+    const existing = Array.from({ length: CANDIDATE_CAP }, (_, i) =>
+      candidate({ id: `e${i}`, lifeArea: `Area ${i}`, prompt: `existing${i} entry${i}` }),
+    );
+    existing[0] = { ...existing[0]!, curation: 'asked' };
+    const proposed = Array.from({ length: 5 }, (_, i) => ({
+      lifeArea: `New area ${i}`,
+      prompt: `fresh${i} item${i}`,
+      kind: 'new' as const,
+    }));
+    const merged = mergeCandidates(withCandidates(existing), proposed, [], at(2));
+    expect(merged.candidates).toHaveLength(CANDIDATE_CAP);
+    // The pinned candidate is never dropped by the cap (curated candidates sort first).
+    expect(merged.candidates.some((c) => c.id === 'e0' && c.curation === 'asked')).toBe(true);
+  });
+});
+
+describe('buildCandidateGuidance', () => {
+  it('leads with pinned (★), splits new vs go-deeper, and excludes skipped/minted; empty ⇒ ""', () => {
+    expect(buildCandidateGuidance(emptyProfile('p1'))).toBe('');
+    const p = withCandidates([
+      candidate({ id: 'c1', prompt: 'A plain new question', kind: 'new' }),
+      candidate({ id: 'c2', prompt: 'A pinned question', kind: 'new', curation: 'asked' }),
+      candidate({ id: 'c3', prompt: 'A deeper thread', kind: 'go-deeper' }),
+      candidate({ id: 'c4', prompt: 'A declined question', kind: 'new', curation: 'skipped' }),
+      candidate({ id: 'c5', prompt: 'An asked question', kind: 'new', mintedAssignmentId: 'a1' }),
+    ]);
+    const g = buildCandidateGuidance(p);
+    expect(g).toContain('QUESTIONS SELFOS IS CURIOUS ABOUT ASKING THIS PERSON NEXT');
+    expect(g).toContain('★ A pinned question');
+    expect(g).toContain('New ground');
+    expect(g).toContain('Threads worth going deeper on');
+    expect(g).toContain('A deeper thread');
+    expect(g).not.toContain('A declined question'); // skipped excluded
+    expect(g).not.toContain('An asked question'); // minted excluded
+    // pinned leads its section (before the plain new one).
+    expect(g.indexOf('A pinned question')).toBeLessThan(g.indexOf('A plain new question'));
   });
 });

@@ -2,12 +2,19 @@ import { describe, expect, it } from 'vitest';
 
 import { generateMasterKey } from '../crypto';
 import type { ClaudeClient, FileSystem } from '../host';
+import { flattenContent } from '../host/claudeClient';
 
 import { memFileSystem } from '../host/memFileSystem';
 
 import type { AiDeps } from './aiCall';
-import { refreshCoverage } from './coverageService';
-import { readProfile } from './personalizationProfile';
+import { refreshCoverage, refreshNextCandidates } from './coverageService';
+import {
+  applyCandidateCuration,
+  applyDecline,
+  readProfile,
+  writeProfile,
+} from './personalizationProfile';
+import { NOT_APPLICABLE_SKIP_REASON } from './answering';
 import { gatherRecipientFeedbackGuidance } from './recipientHistory';
 
 const key = generateMasterKey();
@@ -22,6 +29,30 @@ const client = (text: string): ClaudeClient => ({
     });
   },
 });
+
+/** A client that records every system/user prompt it is handed, so we can assert what reaches the model. */
+const capturingClient = (
+  text: string,
+): { client: ClaudeClient; prompts: { system: string; user: string }[] } => {
+  const prompts: { system: string; user: string }[] = [];
+  return {
+    prompts,
+    client: {
+      send: () => Promise.resolve(''),
+      stream: (o, onDelta) => {
+        prompts.push({
+          system: o.system,
+          user: o.messages.map((m) => flattenContent(m.content)).join('\n'),
+        });
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    },
+  };
+};
 
 const deps = (fs: FileSystem, text: string, apiKey: string | null = 'sk-test'): AiDeps => ({
   fs,
@@ -88,5 +119,87 @@ describe('refreshCoverage', () => {
     const res = await refreshCoverage(deps(fs, 'not json at all'), 'p1');
     expect(res).toMatchObject({ ok: false, degraded: true });
     expect((await readProfile(fs, key, 'p1')).coverage.topics).toEqual([]);
+  });
+});
+
+const CANDIDATES = JSON.stringify([
+  { lifeArea: 'Money', prompt: 'What would financial security feel like for you?', kind: 'new' },
+  { lifeArea: 'Health & body', prompt: 'What helps you actually rest?', kind: 'new' },
+  {
+    lifeArea: 'Work & purpose',
+    prompt: 'What part of your work still feels unfinished?',
+    kind: 'go-deeper',
+  },
+]);
+
+describe('refreshNextCandidates', () => {
+  it('proposes candidates from the coverage + feedback steering and persists them', async () => {
+    const fs = memFileSystem();
+    // Seed a placed coverage map + a declined topic so there is real steering to assert reaches the model.
+    await refreshCoverage(deps(fs, ASSESSMENTS), 'p1');
+    let profile = await readProfile(fs, key, 'p1');
+    profile = applyDecline(
+      profile,
+      {
+        topicId: 'Money',
+        questionPrompt: 'How much do you earn?',
+        reason: NOT_APPLICABLE_SKIP_REASON,
+      },
+      new Date('2026-08-07T00:00:00.000Z'),
+    );
+    await writeProfile(fs, key, profile);
+
+    const cap = capturingClient(CANDIDATES);
+    const res = await refreshNextCandidates({ ...deps(fs, ''), client: cap.client }, 'p1');
+    expect(res.ok).toBe(true);
+
+    // The steering reached the model (assert the PROMPT, not just the outcome — the durable lesson).
+    const user = cap.prompts.map((p) => p.user).join('\n');
+    expect(user).toContain('NEW / UNEXPLORED GROUND'); // coverage steering leads with new ground
+    expect(user).toContain('How much do you earn?'); // the declined topic is in the avoid steering
+    expect(cap.prompts.some((p) => p.system.includes('candidate questions'))).toBe(true);
+
+    const after = await readProfile(fs, key, 'p1');
+    expect(after.candidates.map((c) => c.prompt)).toContain(
+      'What would financial security feel like for you?',
+    );
+    expect(after.candidates.find((c) => c.kind === 'go-deeper')?.prompt).toContain('unfinished');
+    expect(after.candidatesRefreshedAt).toBeTruthy();
+  });
+
+  it('is fail-safe: a no-key pass leaves the last-good candidates untouched', async () => {
+    const fs = memFileSystem();
+    await refreshNextCandidates(deps(fs, CANDIDATES), 'p1'); // populate
+    const before = (await readProfile(fs, key, 'p1')).candidates;
+    expect(before.length).toBeGreaterThan(0);
+
+    const res = await refreshNextCandidates(deps(fs, CANDIDATES, null), 'p1'); // no key → degrade
+    expect(res).toMatchObject({ ok: false, degraded: true });
+    expect((await readProfile(fs, key, 'p1')).candidates).toEqual(before);
+  });
+
+  it('is fail-safe on a garbled reply (keeps candidates, flags degraded)', async () => {
+    const fs = memFileSystem();
+    await refreshNextCandidates(deps(fs, CANDIDATES), 'p1'); // populate
+    const before = (await readProfile(fs, key, 'p1')).candidates;
+    const res = await refreshNextCandidates(deps(fs, 'not json at all'), 'p1');
+    expect(res).toMatchObject({ ok: false, degraded: true });
+    expect((await readProfile(fs, key, 'p1')).candidates).toEqual(before);
+  });
+
+  it('carries a pinned candidate forward across a refresh (curation preserved)', async () => {
+    const fs = memFileSystem();
+    await refreshNextCandidates(deps(fs, CANDIDATES), 'p1');
+    let profile = await readProfile(fs, key, 'p1');
+    const money = profile.candidates.find((c) => c.lifeArea === 'Money')!;
+    profile = applyCandidateCuration(profile, { candidateId: money.id, action: 'ask' }, new Date());
+    await writeProfile(fs, key, profile);
+
+    // Re-run with the same proposal: the pin survives, and the re-offered prompt isn't duplicated.
+    const after = await refreshNextCandidates(deps(fs, CANDIDATES), 'p1');
+    expect(after.ok).toBe(true);
+    const reread = await readProfile(fs, key, 'p1');
+    expect(reread.candidates.find((c) => c.id === money.id)?.curation).toBe('asked');
+    expect(reread.candidates.filter((c) => c.lifeArea === 'Money')).toHaveLength(1);
   });
 });

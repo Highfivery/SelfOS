@@ -643,6 +643,8 @@ import {
   type GoalRaiseGoal,
 } from '@selfos/core/coaching';
 import {
+  autoCheckinSentActivity,
+  type AutoCheckinStreamActivity,
   getAutoCheckinBlocks,
   getAutoCheckinConfig,
   listIncomingAutoCheckinStreams,
@@ -5370,6 +5372,17 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return [];
       return listIncomingAutoCheckinStreams(ctx.fs, ctx.key, personId);
+    },
+    // The per-stream compact read (spec 69 §3.4/§13): the OWNER's own sent activity for each other-person
+    // stream (count + latest date). Own-scoped — only what the active person sent; never the target's data.
+    // Gated `questionnaires.autoCheckin` (the same gate that owns the config surface it renders on).
+    autoCheckinsSentActivity: async (): Promise<Record<string, AutoCheckinStreamActivity>> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.autoCheckin')))
+        return {};
+      const personId = await activePersonId();
+      if (!personId) return {};
+      return autoCheckinSentActivity(ctx.fs, ctx.key, personId);
     },
     autoCheckinsGetBlocks: async (): Promise<AutoCheckinBlocks> => {
       const ctx = await host.vaultAndKey();

@@ -27,7 +27,12 @@ import {
   unlock as kvUnlock,
   type RelayEnv,
 } from '@selfos/core/relay';
-import { getQuestionnaire, listAssignments } from '@selfos/core/questionnaires';
+import {
+  createAssignment,
+  getQuestionnaire,
+  listAssignments,
+  saveQuestionnaire,
+} from '@selfos/core/questionnaires';
 import { readEncryptedJson, writeEncryptedJson } from '@selfos/core/vault';
 import { listInsightsForPerson, saveInsight, summarizeForContext } from '@selfos/core/insights';
 import { getIntakeSession, submitSectionForm } from '@selfos/core/intake';
@@ -1970,6 +1975,61 @@ describe('createCoreBridge', () => {
       expect(forOwner.some((s) => s.senderPersonId === ownerId)).toBe(false);
       expect(forOwner.every((s) => !s.active)).toBe(true);
       expect((await bridge.autoCheckinsGetBlocks()).blockedSenders).toEqual([]);
+    });
+
+    it('sentActivity (spec 69 §13): the owner’s OWN sent count per other-person stream; gated + own-scoped', async () => {
+      const { bridge, host, ownerId } = await freshOwner();
+      const partner = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+      const ctx = (await host.host.vaultAndKey())!;
+      // Seed two auto-checkin sends from the owner to the partner + one hand-authored (non-auto) send.
+      const mkAuto = async (): Promise<void> => {
+        const q = await saveQuestionnaire(ctx.fs, ctx.key, {
+          title: 'Auto',
+          type: 'general',
+          sensitivity: 'standard',
+          autoCheckin: {
+            targetId: 't',
+            intent: 'explore',
+            rationale: 'new ground',
+            generatedAt: new Date().toISOString(),
+          },
+          questions: [{ id: 'q1', type: 'shortText', prompt: 'How are you?', required: false }],
+        });
+        await createAssignment(ctx.fs, ctx.key, {
+          questionnaireId: q.id,
+          senderPersonId: ownerId,
+          recipient: { kind: 'person', personId: partner.id },
+          channel: 'inApp',
+          privacy: 'private',
+          senderVisibleToRecipient: true,
+        });
+      };
+      await mkAuto();
+      await mkAuto();
+      const manual = await saveQuestionnaire(ctx.fs, ctx.key, {
+        title: 'Manual',
+        type: 'general',
+        sensitivity: 'standard',
+        questions: [{ id: 'q1', type: 'shortText', prompt: 'Q?', required: false }],
+      });
+      await createAssignment(ctx.fs, ctx.key, {
+        questionnaireId: manual.id,
+        senderPersonId: ownerId,
+        recipient: { kind: 'person', personId: partner.id },
+        channel: 'inApp',
+        privacy: 'private',
+        senderVisibleToRecipient: true,
+      });
+
+      // The owner sees exactly their 2 auto sends to the partner (the manual one is excluded).
+      const activity = await bridge.autoCheckinsSentActivity();
+      expect(activity[partner.id]?.sentCount).toBe(2);
+      expect(activity[partner.id]?.latestAt).toBeTruthy();
+
+      // A member without the capability gets nothing (gated).
+      await bridge.accessSetAccount({ personId: partner.id, roleId: 'guest', pin: null });
+      await bridge.sessionSetActive({ personId: partner.id });
+      expect(await bridge.autoCheckinsSentActivity()).toEqual({});
     });
   });
 

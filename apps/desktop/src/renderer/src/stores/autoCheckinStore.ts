@@ -4,6 +4,7 @@ import type {
   AutoCheckinTarget,
   IncomingAutoCheckinStream,
 } from '@shared/schemas';
+import type { AutoCheckinStreamActivity } from '@shared/channels';
 import { useBudgetStore } from './budgetStore';
 import { useInboxStore } from './inboxStore';
 
@@ -19,6 +20,8 @@ interface AutoCheckinStoreState {
   config: AutoCheckinConfig | null;
   /** Streams OTHER people have configured targeting the active person (§3.3a) — "Check-ins others send you". */
   incoming: IncomingAutoCheckinStream[];
+  /** The owner's OWN sent activity per other-person stream (spec 69 §13) — { personId: {count, latest} }. */
+  sentActivity: Record<string, AutoCheckinStreamActivity>;
   loaded: boolean;
   running: boolean;
   error: string | null;
@@ -36,6 +39,7 @@ interface AutoCheckinStoreState {
 const EMPTY = {
   config: null,
   incoming: [],
+  sentActivity: {},
   loaded: false,
   running: false,
   error: null,
@@ -45,11 +49,12 @@ const EMPTY = {
 export const useAutoCheckinStore = create<AutoCheckinStoreState>((set) => ({
   ...EMPTY,
   load: async () => {
-    const [config, incoming] = await Promise.all([
+    const [config, incoming, sentActivity] = await Promise.all([
       window.selfos?.autoCheckinsGetConfig() ?? null,
       window.selfos?.autoCheckinsIncomingStreams() ?? [],
+      window.selfos?.autoCheckinsSentActivity() ?? {},
     ]);
-    set({ config, incoming, loaded: true });
+    set({ config, incoming, sentActivity, loaded: true });
   },
   setBlock: async (senderPersonId, blocked) => {
     await window.selfos?.autoCheckinsSetBlock({ senderPersonId, blocked });

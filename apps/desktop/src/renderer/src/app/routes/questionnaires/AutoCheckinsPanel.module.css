@@ -37,3 +37,9 @@
   padding-top: var(--space-3);
   border-top: 1px solid var(--color-border);
 }
+
+/* The per-stream compact read (spec 69 §13) — the owner's own sent activity for an other-person stream. */
+.sentActivity {
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--color-border);
+}

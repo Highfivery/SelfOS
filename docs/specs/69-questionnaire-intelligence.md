@@ -601,6 +601,16 @@ _These finer points were resolved with the owner (2026-08-07); the defaults belo
 
 ## 15. Changelog
 
+- 2026-08-07 — **Phase 5 (per-stream compact read) BUILT** (§13). On the Auto check-ins tab, each stream an
+  owner points at ANOTHER person now shows the owner's OWN sent activity — "You've sent N check-ins · latest
+  <date>" (or a "none yet" line). Own-scoped by construction (Q3-resolved): it counts only the owner's own
+  auto-checkin sends (`autoCheckinSentActivity` — two cheap list reads: auto-checkin questionnaire defs + the
+  owner's sent assignments, no per-snapshot decrypt), never the target's coverage/answers/feedback. New
+  own-scoped `autoCheckins:sentActivity` IPC (gated `questionnaires.autoCheckin`, active-person-scoped); the
+  panel reads it from `autoCheckinStore`. Verified: core (count per target; self + manual sends excluded), a
+  two-persona coreBridge test (owner's count + a Guest denial), RTL (the read + the "none yet" state), and an
+  E2E (seed auto-sends → the line renders + a 360px overflow guard). **Live-model prompt tuning** remains the
+  one on-device Phase-5 item (needs a real API key). With this, spec 69 is complete except that on-device pass.
 - 2026-08-07 — **Phase 5 (question-quality self-selection) BUILT.** The `answered-richly` engagement signal —
   defined since Phase 1 but never captured — is now recorded at submit: `captureResponseFeedback` marks a
   response "richly engaged" when the person answered a healthy majority substantively (`RICH_ENGAGEMENT_RATIO`

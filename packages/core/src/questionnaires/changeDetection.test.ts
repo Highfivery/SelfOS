@@ -6,9 +6,13 @@ import { memFileSystem } from '../host/memFileSystem';
 import { upsertPerson } from '../people/peopleService';
 import type { Question } from '../schemas';
 
-import { submitResponse } from './answerService';
+import { openAssignment, submitResponse } from './answerService';
 import { createAssignment } from './assignmentService';
-import { detectRecipientNumericShifts } from './changeDetection';
+import {
+  BAILED_STALE_DAYS,
+  detectRecipientBailed,
+  detectRecipientNumericShifts,
+} from './changeDetection';
 import { gatherRecipientFeedbackGuidance } from './recipientHistory';
 import { readProfile } from './personalizationProfile';
 import { saveQuestionnaire } from './questionnaireService';
@@ -121,5 +125,55 @@ describe('capture records a change and it reaches generation guidance', () => {
     expect(guidance).toContain('RECENTLY CHANGED');
     expect(guidance).toContain('How satisfied are you with your career?');
     expect(guidance).toContain('2/5 → 5/5');
+  });
+});
+
+describe('detectRecipientBailed (spec 69 §5.2 — abandonment)', () => {
+  async function ask(fs: FileSystem, recipientId: string): Promise<string> {
+    const q = await saveQuestionnaire(fs, key, {
+      title: 'A long one',
+      type: 'general',
+      sensitivity: 'standard',
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'Tell me everything?', required: false }],
+    });
+    const a = await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'author',
+      recipient: { kind: 'person', personId: recipientId },
+      channel: 'inApp',
+      privacy: 'private',
+      senderVisibleToRecipient: true,
+    });
+    return a.id;
+  }
+
+  it('flags an opened-but-unsubmitted check-in only once it has gone stale', async () => {
+    const fs = memFileSystem();
+    await upsertPerson(fs, key, { id: 'p1', displayName: 'Pat', isSubject: true, tags: [] });
+    const id = await ask(fs, 'p1');
+    await openAssignment(fs, key, id); // status → 'opened', updatedAt ≈ now
+
+    // Right after opening → not abandoned yet.
+    const soon = new Date(Date.now() + 60 * 1000);
+    expect(await detectRecipientBailed(fs, key, 'p1', soon)).toEqual([]);
+
+    // Eight days later, still unsubmitted → bailed.
+    const later = new Date(Date.now() + (BAILED_STALE_DAYS + 1) * 24 * 60 * 60 * 1000);
+    const bailed = await detectRecipientBailed(fs, key, 'p1', later);
+    expect(bailed).toHaveLength(1);
+    expect(bailed[0]?.title).toBe('A long one');
+  });
+
+  it('does NOT flag a submitted check-in as bailed', async () => {
+    const fs = memFileSystem();
+    await upsertPerson(fs, key, { id: 'p2', displayName: 'Sam', isSubject: true, tags: [] });
+    const id = await ask(fs, 'p2');
+    await openAssignment(fs, key, id);
+    await submitResponse(fs, key, {
+      assignmentId: id,
+      answers: [{ questionId: 'q1', value: 'done' }],
+    });
+    const later = new Date(Date.now() + (BAILED_STALE_DAYS + 1) * 24 * 60 * 60 * 1000);
+    expect(await detectRecipientBailed(fs, key, 'p2', later)).toEqual([]);
   });
 });

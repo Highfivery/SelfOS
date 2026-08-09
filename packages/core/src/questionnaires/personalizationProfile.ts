@@ -474,6 +474,8 @@ const GUIDANCE_LIST_CAP = 30;
  * value) resets `detectedAt`, so it re-surfaces.
  */
 const CHANGE_FRESH_DAYS = 45;
+/** How long a recent abandonment ("bailed") keeps steering toward shorter/simpler questionnaires (§5.2). */
+const BAILED_FRESH_DAYS = 45;
 
 function uniqLabels(labels: readonly string[]): string[] {
   const seen = new Set<string>();
@@ -496,7 +498,8 @@ function uniqLabels(labels: readonly string[]): string[] {
  *                         re-approach is allowed, so it drops off the avoid list).
  * - `unclear`           → a reword list (if you cover this ground, ask it a different, more concrete way).
  * - `answered-richly`   → a productive vein: going DEEPER (a fresh angle) here is justified (spec 69 §5.2).
- * `skipped` / `bailed` are not steered here (a weak signal). Pure; `''` when there is nothing to say.
+ * - `bailed`            → recent abandonment → a general "keep it short + simple" note (topic-agnostic).
+ * `skipped` is not steered here (a weak signal). Pure; `''` when there is nothing to say.
  */
 export function buildFeedbackGuidance(profile: PersonalizationProfile, now: Date): string {
   const cutoff = new Date(now.getTime() - PREFER_NOT_COOLDOWN_DAYS * MS_PER_DAY).toISOString();
@@ -546,6 +549,16 @@ export function buildFeedbackGuidance(profile: PersonalizationProfile, now: Date
         ` (a justified exception to the new-ground bias); never re-ask the same question:\n${p
           .map((l) => `- ${l}`)
           .join('\n')}`,
+    );
+  // Question-quality self-selection — the "bailed" signal (spec 69 §5.2 / Phase 5): recent abandonment means
+  // future questionnaires should be lighter. Topic-agnostic on purpose (it's about LENGTH/complexity, not what
+  // to ask), so we emit one general note rather than naming the unfinished check-ins.
+  const bailedCutoff = new Date(now.getTime() - BAILED_FRESH_DAYS * MS_PER_DAY).toISOString();
+  const bailedRecently = profile.feedback.some((f) => f.kind === 'bailed' && f.at >= bailedCutoff);
+  if (bailedRecently)
+    sections.push(
+      `They've recently left check-ins UNFINISHED — keep questions here SHORT and easy to answer; favor fewer,` +
+        ` lighter questions over long or complex ones.`,
     );
   // Recent, unexplored changes (spec 69 §5.8): "used to say X, now Y" → invite exploration of the shift.
   const changeCutoff = new Date(now.getTime() - CHANGE_FRESH_DAYS * MS_PER_DAY).toISOString();

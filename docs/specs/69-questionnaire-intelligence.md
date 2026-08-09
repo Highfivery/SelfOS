@@ -601,6 +601,16 @@ _These finer points were resolved with the owner (2026-08-07); the defaults belo
 
 ## 15. Changelog
 
+- 2026-08-09 — **Phase 5 (the `bailed` signal) BUILT** — closing the question-quality self-selection gap. A
+  check-in the recipient OPENED but never submitted, left untouched past `BAILED_STALE_DAYS` (7d), is now
+  detected as abandonment (`detectRecipientBailed`, `changeDetection.ts` — deterministic, no AI, author-blind:
+  scans `opened`/`inProgress` assignments whose `updatedAt` has gone stale and that have no submitted response).
+  Captured at submit (`captureResponseFeedback` scans the person's other unfinished sends, keyed by assignment
+  so re-detecting refreshes) and read by `buildFeedbackGuidance` as a **topic-agnostic** "they've left check-ins
+  unfinished — keep questions SHORT + simple; favor fewer, lighter questions" note (it steers LENGTH/complexity,
+  not what to ask, so it never names the unfinished check-in — no re-ask risk). `answered-richly` (built earlier)
+  - `bailed` now complete the §5.2 engagement lever. Verified: detector (stale→bailed / recent→not / submitted→
+    not), capture-on-submit, and the guidance note (present + topic-free); full core (1922) + desktop (1543) green.
 - 2026-08-07 — **Phase 5 (per-stream compact read) BUILT** (§13). On the Auto check-ins tab, each stream an
   owner points at ANOTHER person now shows the owner's OWN sent activity — "You've sent N check-ins · latest
   <date>" (or a "none yet" line). Own-scoped by construction (Q3-resolved): it counts only the owner's own

@@ -23,6 +23,12 @@ export const GENERAL_LIFE_AREAS = LIFE_AREAS.filter(
 
 /** A general area whose depth is below this counts as unexplored → generation leads here. */
 export const NEW_GROUND_DEPTH = 0.4;
+/**
+ * Coarse-first (spec 69 §13): only sub-divide an area that is ALREADY reasonably explored — sub-topics exist to
+ * tell an explored area's strands apart (which strand is still new), which is meaningless for a barely-touched
+ * area. Live tuning (§26.3) showed the model otherwise sub-divides 0.3-depth areas with near-empty strands.
+ */
+export const SUBTOPIC_MIN_PARENT_DEPTH = NEW_GROUND_DEPTH;
 /** Any measurable coverage counts as "explored". */
 const EXPLORED_DEPTH = 0.15;
 /** Approximate intimacy-category depth from its send count (mirrors the intimacy SATURATION of 3). */
@@ -114,6 +120,9 @@ export function applyCoverageAssessments(
     }
     const depth = clamp01(a.depth);
     out.push({ ...t, depth, explored: depth >= EXPLORED_DEPTH });
+    // Coarse-first: only sub-divide an already-explored area (§13 / §26.3 live tuning) — a barely-touched
+    // area's "strands" are just noise; lead on the whole area instead.
+    if (depth < SUBTOPIC_MIN_PARENT_DEPTH) continue;
     for (const sub of a.subTopics ?? []) {
       const label = sub.label.trim();
       const key = slug(label);

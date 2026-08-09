@@ -26,6 +26,10 @@ export const CAPABILITIES = [
   // EXPLICIT_GRANT_ONLY capability: it ships OFF for non-owner roles and is granted only by an explicit
   // toggle in the Roles matrix. The Owner (full-access) always has it.
   'questionnaires.readRaw',
+  // Questionnaire Intelligence transparency (69-questionnaire-intelligence §3.4/§6) — read one's OWN
+  // "what SelfOS has explored" coverage view + steer topics (explore more / leave alone). Member default ON;
+  // own-scoped in the bridge (the read/steer only ever touch the active person's own Personalization Profile).
+  'questionnaires.own',
   // Dreams (12-dreams §12). `dreams.own` = capture + analyze + view one's own dreams; `dreams.shareContext`
   // = promote a specific dream-insight fact into a related person's context (off by default per dream).
   // There is intentionally no "view others' dreams" capability — dreams are dreamer-only (12 §8.4).
@@ -85,6 +89,7 @@ export const CAPABILITY_LABELS: Record<CapabilityKey, string> = {
   'questionnaires.viewResults': 'View questionnaire results',
   'questionnaires.sendExternal': 'Send questionnaires to external people',
   'questionnaires.autoCheckin': 'Auto-generate check-ins from their data',
+  'questionnaires.own': 'See & steer what SelfOS has explored with them',
   'questionnaires.readRaw': 'Reveal raw private answers (break-glass)',
   'dreams.own': 'Log & analyze their own dreams',
   'dreams.shareContext': 'Share a dream insight into a relationship',
@@ -145,6 +150,7 @@ export const DEFAULT_ROLES: Role[] = [
       'questionnaires.viewResults',
       'questionnaires.sendExternal',
       'questionnaires.autoCheckin',
+      'questionnaires.own',
       'dreams.own',
       'dreams.shareContext',
       'dreams.generateImage',

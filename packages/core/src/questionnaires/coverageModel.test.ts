@@ -145,4 +145,24 @@ describe('buildCoverageGuidance', () => {
     expect(guidance).toContain('- Money');
     expect(guidance).not.toContain('- Oral');
   });
+
+  it('leads an explicit-request (explore-more) area regardless of depth, and excludes it from "already explored"', () => {
+    const guidance = buildCoverageGuidance(
+      withTopics([
+        {
+          topicId: 'Work & purpose',
+          lifeArea: 'Work & purpose',
+          label: 'Work & purpose',
+          explored: true,
+          depth: 0.9, // deeply explored...
+          askedCount: 0,
+          saturated: false,
+          reopenedBy: 'explicit-request', // ...but the person asked to explore it more
+        },
+      ]),
+    );
+    // It appears in the NEW/lead section, not the "already explored / leave these" section.
+    const leadSection = guidance.slice(0, guidance.indexOf('Already explored') + 1 || undefined);
+    expect(leadSection).toContain('- Work & purpose');
+  });
 });

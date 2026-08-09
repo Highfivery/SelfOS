@@ -361,6 +361,11 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.questionnairesImproveQuestion, bridge.questionnairesImproveQuestion);
   handle(IpcChannels.questionnairesSharpenQuestion, bridge.questionnairesSharpenQuestion);
   handle(IpcChannels.questionnairesMarkCovered, bridge.questionnairesMarkCovered);
+  handle(
+    IpcChannels.questionnairesPersonalizationProfile,
+    bridge.questionnairesPersonalizationProfile,
+  );
+  handle(IpcChannels.questionnairesSteerTopic, bridge.questionnairesSteerTopic);
   handle(IpcChannels.gapfinderSuggest, bridge.gapfinderSuggest);
   handle(IpcChannels.questionnaireSuggestionsList, bridge.questionnaireSuggestionsList);
   handle(IpcChannels.questionnaireSuggestionsGenerate, bridge.questionnaireSuggestionsGenerate);

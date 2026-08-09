@@ -10,6 +10,7 @@ import { useSessionStore } from '../../../stores/sessionStore';
 import { useSettingsStore } from '../../../settings/settingsStore';
 import { useInboxStore } from '../../../stores/inboxStore';
 import { useAutoCheckinStore } from '../../../stores/autoCheckinStore';
+import { useCoverageStore } from '../../../stores/coverageStore';
 import { clearMockBridge, elevateToOwner, installMockBridge } from '../../../test-utils/bridge';
 
 /** A minimal household Person for the recipient picker (08 §17.3: a questionnaire is bound to one). */
@@ -54,7 +55,8 @@ afterEach(() => {
   useAutoCheckinStore.setState({ config: null, loaded: false });
   usePeopleStore.setState({ people: [], loaded: false });
   useSettingsStore.setState({ values: {} });
-  useSessionStore.setState({});
+  useSessionStore.setState({ activePerson: null, access: null });
+  useCoverageStore.getState().reset();
 });
 
 /** Turn AI on for the renderer (settings flag + a stubbed key) so the AI surfaces become ready. */
@@ -1943,5 +1945,22 @@ describe('Questionnaires', () => {
     )) as HTMLSelectElement;
     expect(sort.value).toBe('received');
     expect(screen.getByRole('option', { name: 'Recently answered' })).toBeInTheDocument();
+  });
+
+  it('hides the Explored tab (69 §3.4) without questionnaires.own', async () => {
+    installMockBridge({ questionnairesList: () => Promise.resolve([]) });
+    renderApp();
+    await screen.findByRole('tab', { name: 'Sent' });
+    expect(screen.queryByRole('tab', { name: 'Explored' })).not.toBeInTheDocument();
+  });
+
+  it('shows the Explored tab for an owner and opens the coverage panel (69 §3.4)', async () => {
+    installMockBridge({ questionnairesList: () => Promise.resolve([]) });
+    elevateToOwner(); // owner has questionnaires.own
+    renderApp();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Explored' }));
+    expect(
+      await screen.findByRole('heading', { name: 'What SelfOS has explored with you' }),
+    ).toBeInTheDocument();
   });
 });

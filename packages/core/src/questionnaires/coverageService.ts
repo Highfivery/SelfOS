@@ -72,6 +72,34 @@ function buildUser(digest: string): string {
   ].join('\n');
 }
 
+/**
+ * Compute the deterministic (send-history driven, no AI) intimacy coverage for a person — the same assembly
+ * `refreshCoverage` uses, exported so the transparency read (spec 69 §3.4) derives the coverage skeleton the
+ * same way. Reads the person's OWN data only.
+ */
+export async function deriveIntimacyCoverageFor(
+  fs: import('../host').FileSystem,
+  key: Uint8Array,
+  personId: string,
+  now: Date,
+): Promise<ReturnType<typeof buildIntimacyCoverage>> {
+  const [session, intimacyAsks, signals] = await Promise.all([
+    getIntakeSession(fs, key, personId),
+    gatherRecipientIntimacyAsks(fs, key, personId),
+    gatherRecipientMaterialSignals(fs, key, personId),
+  ]);
+  const intake = session
+    ? formatIntakeForGeneration(session)
+    : { text: '', coveredActs: [], prompts: [] };
+  return buildIntimacyCoverage({
+    coveredActs: intake.coveredActs,
+    askedIntimacy: intimacyAsks,
+    ...(signals.newMaterialAt !== undefined ? { newMaterialAt: signals.newMaterialAt } : {}),
+    ...(session?.updatedAt ? { profileEditedAt: session.updatedAt } : {}),
+    now,
+  });
+}
+
 export interface CoverageRefreshResult {
   ok: boolean;
   degraded?: boolean;

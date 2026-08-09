@@ -355,6 +355,116 @@ export function applyReciprocity(
   };
 }
 
+/**
+ * A steer action from the transparency panel (spec 69 §3.4). Reuses the existing ledger + coverage rather
+ * than a new persisted field:
+ * - `leave-alone`  → record a `not-applicable` feedback entry for the topic (→ the avoid list, reversible)
+ *                    and clear any prior `explore-more` reopen on its coverage topic.
+ * - `explore-more` → set the coverage topic's `reopenedBy: 'explicit-request'` (un-saturated), so it LEADS
+ *                    the coverage guidance regardless of depth, and clear any prior avoid/boundary entry for
+ *                    it (the person is explicitly overriding a past "leave it alone"). The two are mutually
+ *                    exclusive per topic, so each toggle undoes the other.
+ * - `clear`        → neutral: remove any explore-more reopen AND any avoid/boundary entry for the topic (the
+ *                    person toggled a steer back off).
+ */
+export function applySteer(
+  profile: PersonalizationProfile,
+  input: {
+    topicId: string;
+    lifeArea?: string;
+    label?: string;
+    action: 'explore-more' | 'leave-alone' | 'clear';
+  },
+  now: Date,
+): PersonalizationProfile {
+  const topicId = input.topicId.trim();
+  if (!topicId) return profile;
+  const label = input.label?.trim() || topicId;
+  const nowIso = now.toISOString();
+
+  const dropReopen = (topics: readonly CoverageTopic[]): CoverageTopic[] =>
+    topics.map((t) => {
+      if (t.topicId !== topicId || t.reopenedBy !== 'explicit-request') return t;
+      const { reopenedBy: _reopenedBy, ...rest } = t;
+      void _reopenedBy;
+      return rest;
+    });
+  const dropSuppression = (feedback: readonly FeedbackEntry[]): FeedbackEntry[] =>
+    feedback.filter(
+      (f) =>
+        !(
+          (f.kind === 'not-applicable' || f.kind === 'prefer-not-to-say') &&
+          norm(f.topicId) === norm(topicId)
+        ),
+    );
+
+  if (input.action === 'clear') {
+    const hadReopen = profile.coverage.topics.some(
+      (t) => t.topicId === topicId && t.reopenedBy === 'explicit-request',
+    );
+    const feedback = dropSuppression(profile.feedback);
+    const hadSuppression = feedback.length !== profile.feedback.length;
+    if (!hadReopen && !hadSuppression) return profile; // nothing to clear — don't churn updatedAt
+    return {
+      ...profile,
+      coverage: { ...profile.coverage, topics: dropReopen(profile.coverage.topics) },
+      feedback,
+      updatedAt: nowIso,
+    };
+  }
+
+  if (input.action === 'leave-alone') {
+    // Drop any prior explore-more reopen on the coverage topic (the toggle undoes it).
+    const topics = dropReopen(profile.coverage.topics);
+    // Record (or refresh) a not-applicable feedback entry keyed by topic → the avoid list.
+    const entry: FeedbackEntry = {
+      topicId,
+      questionPrompt: label,
+      kind: 'not-applicable',
+      at: nowIso,
+    };
+    const keptFeedback = profile.feedback.filter(
+      (f) => !(f.kind === 'not-applicable' && norm(f.topicId) === norm(topicId)),
+    );
+    return {
+      ...profile,
+      coverage: { ...profile.coverage, topics },
+      feedback: prependCapped(keptFeedback, entry, FEEDBACK_CAP),
+      updatedAt: nowIso,
+    };
+  }
+
+  // explore-more: the person explicitly overrides any past "leave alone" and asks for this ground.
+  const keptFeedback = dropSuppression(profile.feedback);
+  const existing = profile.coverage.topics.find((t) => t.topicId === topicId);
+  let topics: CoverageTopic[];
+  if (existing) {
+    topics = profile.coverage.topics.map((t) =>
+      t.topicId === topicId ? { ...t, reopenedBy: 'explicit-request', saturated: false } : t,
+    );
+  } else {
+    topics = [
+      ...profile.coverage.topics,
+      {
+        topicId,
+        lifeArea: input.lifeArea?.trim() || topicId,
+        label,
+        explored: false,
+        depth: 0,
+        askedCount: 0,
+        saturated: false,
+        reopenedBy: 'explicit-request',
+      },
+    ];
+  }
+  return {
+    ...profile,
+    coverage: { ...profile.coverage, topics },
+    feedback: keptFeedback,
+    updatedAt: nowIso,
+  };
+}
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /** Cap each guidance list so the prompt block stays bounded. */
 const GUIDANCE_LIST_CAP = 30;

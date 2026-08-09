@@ -559,9 +559,11 @@ keep additions additive.
 - **Phase 4 — Full unification.** Route email embedded check-ins fully onto `planGeneration` (retiring the
   siloed `buildAvoidSet` universe); wire the story biographer topic pass into the shared coverage/feedback; one
   shared "asked/covered" universe so email ↔ questionnaires ↔ story stop overlapping.
-- **Phase 5 — Evolution & quality polish.** Periodic profile refresh (§5.6); question-quality self-selection
-  (favor veins that answered richly, retire ones that bail/skip); **live-model prompt tuning** (the deferred
-  [`08 §26.3`](08-questionnaires.md) follow-up); the light user-facing transparency/steer surface (§3.4).
+- **Phase 5 — Evolution & quality polish.** Periodic profile refresh (§5.6, **built in Phase 2** — rides the
+  reconcile cadence); the light user-facing transparency/steer surface (§3.4, **BUILT** — see the changelog);
+  question-quality self-selection (favor veins that answered richly, retire ones that bail/skip) and **live-model
+  prompt tuning** (the deferred [`08 §26.3`](08-questionnaires.md) follow-up, needs a real API key) remain as
+  Phase-5 follow-ons.
 
 ## 13. Finer points — resolved
 
@@ -599,6 +601,26 @@ _These finer points were resolved with the owner (2026-08-07); the defaults belo
 
 ## 15. Changelog
 
+- 2026-08-07 — **Phase 5 (transparency surface) BUILT** — the "Explored" tab (§3.4). A new own-scoped
+  `questionnaires.own` capability (Member default ON, reconciles into existing vaults) + two own-scoped IPC
+  channels — `questionnaires:personalizationProfile` (read the active person's coverage view) and
+  `questionnaires:steerTopic` (write a steer) — both gated `questionnaires.own` and active-person-scoped in the
+  bridge (the trust boundary). Core `transparencyView.ts` projects the person's OWN Personalization Profile into
+  a `QuestionnaireCoverageView`: one coarse row per life area (a text+icon explored / lightly-touched / not-yet
+  status; Intimacy aggregated read-only, no per-category enumeration) + a marked-off list from the feedback
+  ledger. It NEVER surfaces reciprocity candidates or any partner-derived content (§6/§8 — "own coverage/feedback
+  view only"): the view type structurally has no reciprocity field. The steer reuses the existing ledger +
+  coverage (no schema change, decision reused): **leave-alone** → a `not-applicable` feedback entry (→ the avoid
+  list, reversible); **explore-more** → the coverage topic's `reopenedBy: 'explicit-request'` (un-saturated),
+  which now LEADS `buildCoverageGuidance` regardless of depth so the steer actually reaches generation; **clear**
+  → neutral toggle-off. The renderer adds a 4th "Explored" tab (gated) + `ExploredPanel` + a per-person
+  `coverageStore` (reset on the active-person switch). Verified: core unit (`applySteer`, `projectCoverageView`,
+  `mergeProfileCoverage`, `buildCoverageGuidance` leads explicit-request), a two-persona coreBridge test
+  (own-scoped + decrypt per-person isolation + a Guest denial + no partner data), RTL, and a Playwright E2E
+  (steer → decrypt the profile + a 4-tab 360px overflow guard; the §12 tab strip drops its count badges at
+  ≤480px so all four tabs fit). **Deferred Phase-5 follow-ons:** question-quality self-selection, live-model
+  prompt tuning (needs a real key), and the compact per-stream read (needs its own cross-person privacy design).
+  No new user-facing surface beyond the tab; §12 full-width, no `max-width` cap.
 - 2026-08-07 — **Phase 3 core BUILT** — partner-shared facts + reciprocity (the "partner said X → how do you
   feel?" example). `gatherRecipientPartnerContext` (`partnerContext.ts`) surfaces a partner's **shared**
   (non-restricted) facts to a person via the ONE `scopeGrants` gate — a **restricted / flagged / wrong-relationship-type

@@ -15,7 +15,9 @@ import type { Recipient } from '@shared/schemas';
 import { useQuestionnaireStore } from '../../../stores/questionnaireStore';
 import { useInboxStore } from '../../../stores/inboxStore';
 import { useAutoCheckinStore } from '../../../stores/autoCheckinStore';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { Banner, Button, Card, Heading, Text } from '../../../design-system/components';
+import { ExploredPanel } from './ExploredPanel';
 import { InboxAnswer } from '../inbox/InboxAnswer';
 import { receivedStatus } from '../inbox/inboxStatus';
 import { QuestionnaireBuilder, type BuilderSeed } from './QuestionnaireBuilder';
@@ -125,7 +127,10 @@ export function Questionnaires(): JSX.Element {
 
   // Which top-level tab is showing (§3.1 redesign): your Sent library, questionnaires Received by you, or
   // the Auto check-ins config. Session state — defaults to Sent.
-  const [tab, setTab] = useState<'sent' | 'received' | 'auto'>('sent');
+  const [tab, setTab] = useState<'sent' | 'received' | 'auto' | 'explored'>('sent');
+  // The "Explored" tab (69 §3.4) — the person's own "what SelfOS has explored" coverage + steer. Gated on
+  // `questionnaires.own` (Member default ON); own-scoped in the bridge.
+  const exploredAvailable = useSessionStore((s) => s.can('questionnaires.own'));
   // Collapse (status groups) and "show more" expansion. Session state — resets when you leave the page.
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
@@ -198,7 +203,8 @@ export function Questionnaires(): JSX.Element {
   // it — the component doesn't remount), fall back to Sent so the content area is never left blank.
   useEffect(() => {
     if (tab === 'auto' && !autoAvailable) setTab('sent');
-  }, [tab, autoAvailable]);
+    if (tab === 'explored' && !exploredAvailable) setTab('sent');
+  }, [tab, autoAvailable, exploredAvailable]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -273,10 +279,11 @@ export function Questionnaires(): JSX.Element {
 
   // The WAI-ARIA tabs pattern: roving tabindex (only the active tab is in the tab order) + arrow/Home/End
   // move + activate focus across the currently-visible tabs.
-  const visibleTabs: ('sent' | 'received' | 'auto')[] = [
+  const visibleTabs: ('sent' | 'received' | 'auto' | 'explored')[] = [
     'sent',
     'received',
     ...(autoAvailable ? (['auto'] as const) : []),
+    ...(exploredAvailable ? (['explored'] as const) : []),
   ];
   const onTabKeyDown = (e: KeyboardEvent): void => {
     const idx = visibleTabs.indexOf(tab);
@@ -377,6 +384,21 @@ export function Questionnaires(): JSX.Element {
                   title={autoConfig?.enabled ? 'On' : 'Off'}
                   aria-hidden="true"
                 />
+              </button>
+            ) : null}
+            {exploredAvailable ? (
+              <button
+                type="button"
+                role="tab"
+                id="qtab-explored"
+                aria-controls="qpanel-explored"
+                aria-selected={tab === 'explored'}
+                tabIndex={tab === 'explored' ? 0 : -1}
+                className={`${styles.tab} ${tab === 'explored' ? styles.tabActive : ''}`}
+                onClick={() => setTab('explored')}
+                onKeyDown={onTabKeyDown}
+              >
+                Explored
               </button>
             ) : null}
           </div>
@@ -608,6 +630,7 @@ export function Questionnaires(): JSX.Element {
               <AutoCheckinsPanel />
             </div>
           ) : null}
+          {tab === 'explored' && exploredAvailable ? <ExploredPanel /> : null}
         </>
       ) : (
         <div className={styles.detail}>

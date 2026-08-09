@@ -117,18 +117,41 @@ describe('captureResponseFeedback (via submitResponse) → the Personalization P
     expect((await readProfile(fs, key, 'p9')).feedback).toEqual([]);
   });
 
-  it('records nothing (and yields no guidance) when there are no declines', async () => {
+  it('records RICH engagement (spec 69 §5.2) when the person answers substantively, steering deeper', async () => {
     const fs = memFileSystem();
     await upsertPerson(fs, key, { id: 'p4', displayName: 'Lee', isSubject: true, tags: [] });
     const id = await seed(fs, 'p4');
+    // Both questions answered substantively → 2/2 ≥ 0.6 → a productive vein.
     await submitResponse(fs, key, {
       assignmentId: id,
       answers: [
-        { questionId: 'q1', value: 'going well' },
+        { questionId: 'q1', value: 'work has been busy but genuinely rewarding' },
         { questionId: 'q2', value: true },
       ],
     });
-    expect((await readProfile(fs, key, 'p4')).feedback).toEqual([]);
-    expect(await gatherRecipientFeedbackGuidance(fs, key, 'p4')).toBe('');
+    const profile = await readProfile(fs, key, 'p4');
+    expect(profile.feedback.every((f) => f.kind === 'answered-richly')).toBe(true);
+    expect(profile.feedback.map((f) => f.questionPrompt)).toContain('How is work going?');
+    // …and it steers generation to go DEEPER on that productive ground (never a re-ask).
+    const guidance = await gatherRecipientFeedbackGuidance(fs, key, 'p4');
+    expect(guidance).toMatch(/engaged RICHLY/);
+    expect(guidance).toContain('How is work going?');
+  });
+
+  it('does NOT claim rich engagement on a mostly-skipped submit', async () => {
+    const fs = memFileSystem();
+    await upsertPerson(fs, key, { id: 'p5', displayName: 'Sam', isSubject: true, tags: [] });
+    const id = await seed(fs, 'p5');
+    // Only 1 of 2 answered (0.5 < 0.6) → no rich claim; just the decline.
+    await submitResponse(fs, key, {
+      assignmentId: id,
+      answers: [
+        { questionId: 'q1', value: 'fine' },
+        { questionId: 'q2', value: { declined: true, reason: NOT_APPLICABLE_SKIP_REASON } },
+      ],
+    });
+    const profile = await readProfile(fs, key, 'p5');
+    expect(profile.feedback.some((f) => f.kind === 'answered-richly')).toBe(false);
+    expect(profile.feedback.some((f) => f.kind === 'not-applicable')).toBe(true);
   });
 });

@@ -172,4 +172,50 @@ describe('AutoCheckinsPanel', () => {
     await userEvent.click(screen.getByLabelText('Receive questions from Ben'));
     expect(setBlock).toHaveBeenCalledWith({ senderPersonId: 'ben', blocked: true });
   });
+
+  it('shows the per-stream compact read of the owner’s own sent activity (spec 69 §13)', async () => {
+    signIn('owner');
+    usePeopleStore.setState({
+      people: [ME, { ...ME, id: 'partner', displayName: 'Pat' }],
+      relationships: [],
+      loaded: true,
+    });
+    const personTarget: AutoCheckinTarget = {
+      id: 't-partner',
+      target: { kind: 'person', personId: 'partner' },
+      enabled: true,
+      includeIntimacy: false,
+      explorationFocus: '',
+      cadence: 'weekly',
+    };
+    mount(
+      { schemaVersion: 1, enabled: true, targets: [personTarget] },
+      {
+        autoCheckinsSentActivity: () =>
+          Promise.resolve({ partner: { sentCount: 3, latestAt: '2026-08-05T00:00:00.000Z' } }),
+      },
+    );
+    expect(await screen.findByText('Pat')).toBeInTheDocument();
+    expect(screen.getByText(/You’ve sent 3 check-ins · latest/)).toBeInTheDocument();
+  });
+
+  it('shows a “none yet” per-stream read when the owner hasn’t sent to a target', async () => {
+    signIn('owner');
+    usePeopleStore.setState({
+      people: [ME, { ...ME, id: 'partner', displayName: 'Pat' }],
+      relationships: [],
+      loaded: true,
+    });
+    const personTarget: AutoCheckinTarget = {
+      id: 't-partner',
+      target: { kind: 'person', personId: 'partner' },
+      enabled: true,
+      includeIntimacy: false,
+      explorationFocus: '',
+      cadence: 'weekly',
+    };
+    mount({ schemaVersion: 1, enabled: true, targets: [personTarget] });
+    expect(await screen.findByText('Pat')).toBeInTheDocument();
+    expect(screen.getByText(/haven’t sent any check-ins yet/)).toBeInTheDocument();
+  });
 });

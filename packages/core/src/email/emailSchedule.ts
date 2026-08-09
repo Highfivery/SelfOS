@@ -11,6 +11,8 @@ import { listDreams } from '../dreams/dreamService';
 import { listGoals } from '../goals/goalService';
 import { listInsightsForPerson } from '../insights/insightStore';
 import { listAssignments } from '../questionnaires/assignmentService';
+import { gatherRecipientFeedbackGuidance } from '../questionnaires/recipientHistory';
+import { listCoveredTopics } from '../questionnaires/coveredTopicsStore';
 import { getSynthesis } from '../coaching/coachingSynthesisService';
 import { aggregateCrisisSignal } from '../coaching/crisisSignal';
 import { computeMomentum } from '../recommendations/momentum';
@@ -380,10 +382,24 @@ async function trySuggestion(ctx: {
   if (!hasNewSuggestionData(signals, intimacyTarget?.overlap.length ?? 0)) return 0;
 
   const avoid = await buildAvoidSet(fs, key, personId, family, now);
+  // Spec 69 P4 — email joins the ONE steering universe: the recipient's shared coverage + feedback guidance
+  // (steer to new ground + honor declines) and the covered-topics worked elsewhere (questionnaires / story).
+  // The email `avoid`-set (past suggestions + not-for-me/maybe-later) stays email-only on top.
+  const [feedbackGuidance, covered] = await Promise.all([
+    gatherRecipientFeedbackGuidance(fs, key, personId, now),
+    // Covered-topics are keyed by (author, recipient); an email suggestion is self-directed, so both are the
+    // person — the topics they've marked "already covered" for themselves.
+    listCoveredTopics(fs, key, personId, personId),
+  ]);
+  const steering = {
+    ...(feedbackGuidance.trim() ? { feedbackGuidance } : {}),
+    ...(covered.length ? { coveredTopics: covered.map((t) => t.note) } : {}),
+  };
   const generated = await generateSuggestion(aiDeps, {
     family,
     signals,
     avoid,
+    ...(Object.keys(steering).length ? { steering } : {}),
     ...(ctx.recipientName ? { recipientName: ctx.recipientName } : {}),
     ...(intimacyTarget
       ? {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { AutoCheckinCadence, AutoCheckinTarget } from '@shared/schemas';
+import type { AutoCheckinStreamActivity } from '@shared/channels';
 import { useAutoCheckinStore } from '../../../stores/autoCheckinStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
@@ -18,6 +19,22 @@ import {
   Textarea,
 } from '../../../design-system/components';
 import styles from './AutoCheckinsPanel.module.css';
+
+/**
+ * The per-stream compact read (spec 69 §13): the OWNER's OWN sent activity for an other-person stream — a
+ * count + latest date of what they've sent. Never the target's coverage/answers (own-scoped, §6/§8).
+ */
+function sentActivityLine(activity: AutoCheckinStreamActivity | undefined): string {
+  if (!activity || activity.sentCount === 0) return 'You haven’t sent any check-ins yet.';
+  const n = activity.sentCount;
+  const count = `You’ve sent ${n} check-in${n === 1 ? '' : 's'}`;
+  if (!activity.latestAt) return `${count}.`;
+  const when = new Date(activity.latestAt);
+  const latest = Number.isNaN(when.getTime())
+    ? ''
+    : ` · latest ${when.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+  return `${count}${latest}.`;
+}
 
 const CADENCES: { value: AutoCheckinCadence; label: string }[] = [
   { value: 'daily', label: 'Daily' },
@@ -42,6 +59,7 @@ export function AutoCheckinsPanel(): JSX.Element | null {
   const setConfig = useAutoCheckinStore((s) => s.setConfig);
   const setBlock = useAutoCheckinStore((s) => s.setBlock);
   const run = useAutoCheckinStore((s) => s.run);
+  const sentActivity = useAutoCheckinStore((s) => s.sentActivity);
 
   const can = useSessionStore((s) => s.can);
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
@@ -204,6 +222,11 @@ export function AutoCheckinsPanel(): JSX.Element | null {
                                 </Text>
                               </Stack>
                             </Inline>
+                            {isPerson && t.target.kind === 'person' ? (
+                              <Text size="xs" tone="secondary" className={styles.sentActivity}>
+                                {sentActivityLine(sentActivity[t.target.personId])}
+                              </Text>
+                            ) : null}
                           </Stack>
                         ) : null}
                       </div>

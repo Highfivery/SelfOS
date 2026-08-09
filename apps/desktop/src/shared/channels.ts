@@ -235,6 +235,7 @@ import type {
 } from './schemas';
 import type { TestForm, TestNarrateResponse, TestSummary } from '@selfos/core/tests';
 import type { QuestionnaireCoverageView, CoverageSteerInput } from '@selfos/core/questionnaires';
+import type { AutoCheckinStreamActivity } from '@selfos/core/auto-checkins';
 
 /**
  * IPC channel names + the renderer-facing bridge type. This module is zod-free so it is safe to
@@ -430,6 +431,7 @@ export const IpcChannels = {
   autoCheckinsEnsureSeed: 'autoCheckins:ensureSeed',
   autoCheckinsRun: 'autoCheckins:run',
   autoCheckinsIncomingStreams: 'autoCheckins:incomingStreams',
+  autoCheckinsSentActivity: 'autoCheckins:sentActivity',
   autoCheckinsGetBlocks: 'autoCheckins:getBlocks',
   autoCheckinsSetBlock: 'autoCheckins:setBlock',
   // Your Story (64-your-story §5.6)
@@ -716,6 +718,7 @@ export type {
   MarkedOffView,
   CoverageSteerInput,
 } from '@selfos/core/questionnaires';
+export type { AutoCheckinStreamActivity } from '@selfos/core/auto-checkins';
 /** 66 §3.3 — re-exported so the bridge + renderer share one rewind outcome type. */
 export type { RewindResult, IntakeRewindOutcome } from '@selfos/core/schemas';
 
@@ -1394,6 +1397,8 @@ export interface SelfosBridge {
    * NOT gated on `questionnaires.autoCheckin` (a person can be targeted without holding it).
    */
   autoCheckinsIncomingStreams(): Promise<IncomingAutoCheckinStream[]>;
+  /** The per-stream compact read (69 §3.4/§13) — the OWNER's own sent activity per other-person stream. */
+  autoCheckinsSentActivity(): Promise<Record<string, AutoCheckinStreamActivity>>;
   /** The active person's own block list (63 §6.6) — senders whose check-ins they've turned off. */
   autoCheckinsGetBlocks(): Promise<AutoCheckinBlocks>;
   /**

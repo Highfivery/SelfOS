@@ -244,14 +244,42 @@ describe('buildFeedbackGuidance', () => {
     );
   });
 
-  it('is empty when there is no steering signal (a plain skip / engagement only)', () => {
+  it('is empty for weak signals only (a plain skip + a bailed engagement)', () => {
     let p = applyDecline(
       emptyProfile('p1'),
       { questionPrompt: 'Q', reason: 'later please' },
       at(1),
     );
-    p = applyEngagement(p, { topicId: 'x', engagement: 'rich' }, at(2));
+    p = applyEngagement(p, { topicId: 'x', engagement: 'bailed' }, at(2));
     expect(buildFeedbackGuidance(p, at(3))).toBe('');
+  });
+
+  it('surfaces a productive vein (answered-richly) as a deepen-with-a-fresh-angle hint (spec 69 §5.2)', () => {
+    const p = applyEngagement(
+      emptyProfile('p1'),
+      { questionPrompt: 'What are you proudest of at work?', engagement: 'rich' },
+      at(1),
+    );
+    const g = buildFeedbackGuidance(p, at(2));
+    expect(g).toMatch(/engaged RICHLY/);
+    expect(g).toContain('What are you proudest of at work?');
+  });
+
+  it('does not surface a productive vein for a topic they later marked off', () => {
+    let p = applyEngagement(
+      emptyProfile('p1'),
+      { questionPrompt: 'Money worries?', engagement: 'rich' },
+      at(1),
+    );
+    p = applyDecline(
+      p,
+      { questionPrompt: 'Money worries?', reason: NOT_APPLICABLE_SKIP_REASON },
+      at(2),
+    );
+    const g = buildFeedbackGuidance(p, at(3));
+    // Marked-off wins: it's in the avoid list, never the productive list.
+    expect(g).toMatch(/DON'T APPLY/);
+    expect(g).not.toMatch(/engaged RICHLY/);
   });
 });
 

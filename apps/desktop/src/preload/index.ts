@@ -235,6 +235,7 @@ const bridge: SelfosBridge = {
   autoCheckinsEnsureSeed: () => ipcRenderer.invoke(IpcChannels.autoCheckinsEnsureSeed),
   autoCheckinsRun: (input) => ipcRenderer.invoke(IpcChannels.autoCheckinsRun, input),
   autoCheckinsIncomingStreams: () => ipcRenderer.invoke(IpcChannels.autoCheckinsIncomingStreams),
+  autoCheckinsSentActivity: () => ipcRenderer.invoke(IpcChannels.autoCheckinsSentActivity),
   autoCheckinsGetBlocks: () => ipcRenderer.invoke(IpcChannels.autoCheckinsGetBlocks),
   autoCheckinsSetBlock: (input) => ipcRenderer.invoke(IpcChannels.autoCheckinsSetBlock, input),
   storyBookTypes: () => ipcRenderer.invoke(IpcChannels.storyBookTypes),

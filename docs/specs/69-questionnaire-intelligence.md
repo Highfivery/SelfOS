@@ -601,6 +601,43 @@ _These finer points were resolved with the owner (2026-08-07); the defaults belo
 
 ## 15. Changelog
 
+- 2026-08-07 — **Phase 5 (per-stream compact read) BUILT** (§13). On the Auto check-ins tab, each stream an
+  owner points at ANOTHER person now shows the owner's OWN sent activity — "You've sent N check-ins · latest
+  <date>" (or a "none yet" line). Own-scoped by construction (Q3-resolved): it counts only the owner's own
+  auto-checkin sends (`autoCheckinSentActivity` — two cheap list reads: auto-checkin questionnaire defs + the
+  owner's sent assignments, no per-snapshot decrypt), never the target's coverage/answers/feedback. New
+  own-scoped `autoCheckins:sentActivity` IPC (gated `questionnaires.autoCheckin`, active-person-scoped); the
+  panel reads it from `autoCheckinStore`. Verified: core (count per target; self + manual sends excluded), a
+  two-persona coreBridge test (owner's count + a Guest denial), RTL (the read + the "none yet" state), and an
+  E2E (seed auto-sends → the line renders + a 360px overflow guard). **Live-model prompt tuning** remains the
+  one on-device Phase-5 item (needs a real API key). With this, spec 69 is complete except that on-device pass.
+- 2026-08-07 — **Phase 5 (question-quality self-selection) BUILT.** The `answered-richly` engagement signal —
+  defined since Phase 1 but never captured — is now recorded at submit: `captureResponseFeedback` marks a
+  response "richly engaged" when the person answered a healthy majority substantively (`RICH_ENGAGEMENT_RATIO`
+  0.6, min 2 real answers), recording each answered question as a productive vein. `buildFeedbackGuidance` reads
+  it as a bounded "they engaged RICHLY here — a DEEPER, fresh angle is justified (a permitted exception to the
+  new-ground bias); never re-ask the same question" hint — feeding the §5.2 depth-when-justified lever without
+  fighting the strong-new-ground default. A topic the person later marked off wins (excluded from the productive
+  list). Verified: profileFeedback capture (rich on a substantive submit; none on a mostly-skipped one) +
+  buildFeedbackGuidance (productive section; marked-off exclusion). **Honest gap:** `bailed` (opened-then-
+  abandoned) remains a follow-on — it needs an abandonment detector over opened-not-submitted assignments, not a
+  submit hook, so it isn't captured here.
+- 2026-08-07 — **Phase 4 (full unification) BUILT** — email joins the one steering universe. The story
+  biographer topic pass was already unified in Phase 1/2 (`storyInterviewService.runGapPass` calls
+  `gatherRecipientFeedbackGuidance` + `buildDedupReference` + `coveredTopics`), so Phase 4 reduced to the one
+  remaining siloed path: **email**. Email produces a short coaching nudge (headline+body + tap reactions), not
+  questions, so it consumes the shared STEERING rather than becoming a questionnaire: `generateSuggestion`
+  (`emailSuggestionService.ts`) gains a `steering: { feedbackGuidance?, coveredTopics? }` input, and
+  `emailSchedule.ts` gathers `gatherRecipientFeedbackGuidance` (coverage + differentiated feedback → steer to
+  new ground + honor declines) + `listCoveredTopics(personId, personId)` (self-covered topics) and threads them
+  in, so an email nudge stops re-suggesting ground a questionnaire / the biographer already covered. Email keeps
+  its own per-family `buildAvoidSet` (past suggestions + not-for-me/maybe-later subjects) on top — email tap
+  responses stay **email-only** (a casual nudge dismissal is not a topic-level "doesn't apply"; §11 decision-scoped).
+  Author-blind (the raw steering never returns in the suggestion). No new AI spend (a bigger prompt on the
+  existing metered `email.suggest` call); no schema/IPC/renderer change. Verified: a `generateSuggestion`
+  prompt-assertion test (the steering + covered-topics reach the model, author-blind; omitted when empty) + the
+  full email suite green. **Live-model prompt tuning** (the §08 §26.3 deferred follow-up) remains the one
+  on-device Phase-5 item (needs a real API key).
 - 2026-08-07 — **Phase 5 (transparency surface) BUILT** — the "Explored" tab (§3.4). A new own-scoped
   `questionnaires.own` capability (Member default ON, reconciles into existing vaults) + two own-scoped IPC
   channels — `questionnaires:personalizationProfile` (read the active person's coverage view) and

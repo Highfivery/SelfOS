@@ -12934,6 +12934,91 @@ test('auto check-ins (63): an owner streams check-ins to a partner, including un
   }
 });
 
+test('questionnaire intelligence (69 §13): the Auto check-ins tab shows the owner’s own per-stream sent activity', async () => {
+  const { userData, vault } = await seedReadyVault();
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('per-stream activity e2e: master key missing');
+  // A partner + an owner config with a person-target for them.
+  await savePerson(fs, key, {
+    id: 'angel-1',
+    schemaVersion: 1,
+    displayName: 'Angel',
+    isSubject: true,
+    tags: [],
+    createdAt: 'now',
+    updatedAt: 'now',
+  });
+  await setAccount(fs, key, { personId: 'angel-1', roleId: 'member' });
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/questionnaires/autoCheckins.enc',
+    {
+      schemaVersion: 1,
+      enabled: true,
+      targets: [
+        {
+          id: 't-angel',
+          target: { kind: 'person', personId: 'angel-1' },
+          enabled: true,
+          includeIntimacy: false,
+          explorationFocus: '',
+          cadence: 'weekly',
+        },
+      ],
+    },
+    key,
+  );
+  // Two auto-checkin sends from the owner to Angel (what the per-stream read counts).
+  for (let i = 0; i < 2; i++) {
+    const q = await saveQuestionnaire(fs, key, {
+      title: 'Auto check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      autoCheckin: {
+        targetId: 't-angel',
+        intent: 'explore',
+        rationale: 'new ground',
+        generatedAt: '2026-08-05T00:00:00.000Z',
+      },
+      questions: [{ id: 'q1', type: 'shortText', prompt: 'How are you?', required: false }],
+    });
+    await createAssignment(fs, key, {
+      questionnaireId: q.id,
+      senderPersonId: 'owner-1',
+      recipient: { kind: 'person', personId: 'angel-1' },
+      channel: 'inApp',
+      privacy: 'private',
+      senderVisibleToRecipient: true,
+    });
+  }
+
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_NO_AUTO_CHECKIN_CADENCE: '1' },
+  });
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Questionnaires' }).click();
+    await w.getByRole('tab', { name: /Auto check-ins/ }).click();
+    // The per-stream compact read: the owner's own count + latest, for the Angel stream.
+    await expect(w.getByText('Angel').first()).toBeVisible();
+    await expect(w.getByText(/You’ve sent 2 check-ins · latest/)).toBeVisible();
+    // ~360px: no horizontal overflow / inner scroller while the read renders (§12).
+    await w.setViewportSize({ width: 360, height: 900 });
+    await expectNoInnerOverflow(w);
+    const mainOverflow = await w.evaluate(() => {
+      const main = document.querySelector('main');
+      return main ? main.scrollWidth - main.clientWidth : 0;
+    });
+    expect(mainOverflow).toBeLessThanOrEqual(1);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('auto check-ins (63): a recurring crisis signal pauses generation entirely', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');

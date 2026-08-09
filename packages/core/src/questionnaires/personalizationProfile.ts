@@ -495,13 +495,15 @@ function uniqLabels(labels: readonly string[]): string[] {
  * - `prefer-not-to-say` → a boundary; avoided only while within `PREFER_NOT_COOLDOWN_DAYS` (after that a fresh
  *                         re-approach is allowed, so it drops off the avoid list).
  * - `unclear`           → a reword list (if you cover this ground, ask it a different, more concrete way).
- * `skipped` / engagement kinds are not steered here (a weak signal). Pure; `''` when there is nothing to say.
+ * - `answered-richly`   → a productive vein: going DEEPER (a fresh angle) here is justified (spec 69 §5.2).
+ * `skipped` / `bailed` are not steered here (a weak signal). Pure; `''` when there is nothing to say.
  */
 export function buildFeedbackGuidance(profile: PersonalizationProfile, now: Date): string {
   const cutoff = new Date(now.getTime() - PREFER_NOT_COOLDOWN_DAYS * MS_PER_DAY).toISOString();
   const avoid: string[] = [];
   const boundary: string[] = [];
   const reword: string[] = [];
+  const productive: string[] = [];
   for (const f of profile.feedback) {
     const label = f.questionPrompt ?? f.topicId;
     if (!label) continue;
@@ -509,11 +511,15 @@ export function buildFeedbackGuidance(profile: PersonalizationProfile, now: Date
     else if (f.kind === 'prefer-not-to-say') {
       if (f.at >= cutoff) boundary.push(label);
     } else if (f.kind === 'unclear') reword.push(label);
+    else if (f.kind === 'answered-richly') productive.push(label);
   }
   const sections: string[] = [];
   const a = uniqLabels(avoid);
   const b = uniqLabels(boundary);
   const r = uniqLabels(reword);
+  // A productive vein is only a justification to go DEEPER — don't drown out the strong-new-ground bias, so
+  // avoid a topic they've explicitly marked off / bounded (it may co-occur if a prior question landed both ways).
+  const p = uniqLabels(productive.filter((l) => !a.includes(l) && !b.includes(l)));
   if (a.length)
     sections.push(
       `They have indicated these DON'T APPLY to them — do NOT ask about these or closely related things:\n${a
@@ -530,6 +536,16 @@ export function buildFeedbackGuidance(profile: PersonalizationProfile, now: Date
     sections.push(
       `These questions landed as UNCLEAR to them — if you cover this ground at all, ask it a DIFFERENT, more` +
         ` concrete and specific way (never the same wording):\n${r.map((l) => `- ${l}`).join('\n')}`,
+    );
+  // Question-quality self-selection (spec 69 §5.2 / Phase 5): the person engaged RICHLY here — this vein is
+  // productive, so going DEEPER (a fresh, more specific angle) is a justified exception to the new-ground bias.
+  // Never re-ask the same question (the de-dup reference forbids that separately).
+  if (p.length)
+    sections.push(
+      `They engaged RICHLY with these — this ground is productive, so a DEEPER, fresh angle here is welcome` +
+        ` (a justified exception to the new-ground bias); never re-ask the same question:\n${p
+          .map((l) => `- ${l}`)
+          .join('\n')}`,
     );
   // Recent, unexplored changes (spec 69 §5.8): "used to say X, now Y" → invite exploration of the shift.
   const changeCutoff = new Date(now.getTime() - CHANGE_FRESH_DAYS * MS_PER_DAY).toISOString();

@@ -195,6 +195,14 @@ interface GenerateInput {
   partnerName?: string;
   partnerPersonId?: string;
   sharedSuggestionKey?: string;
+  /**
+   * The shared Questionnaire-Intelligence steering (spec 69 §3.2 — email joins the one universe): the
+   * recipient's coverage + differentiated feedback guidance (`gatherRecipientFeedbackGuidance`) so the email
+   * nudge steers to genuinely NEW ground + honors declines, and the covered-topics the app has already worked
+   * elsewhere (questionnaires / story) so email stops re-suggesting them. Email keeps its own per-family
+   * `avoid`-set on top (past suggestions + not-for-me/maybe-later subjects) — those stay email-only (§69 P4).
+   */
+  steering?: { feedbackGuidance?: string; coveredTopics?: string[] };
 }
 
 /**
@@ -255,6 +263,15 @@ export async function generateSuggestion(
         '. Frank and specific, within policy; never assume anything beyond this shared list.',
     );
   }
+  // The shared Questionnaire-Intelligence steering (spec 69 P4): steer to new ground + honor declines, and
+  // don't re-suggest ground already covered by a questionnaire / the biographer.
+  if (input.steering?.feedbackGuidance?.trim())
+    contextLines.push(input.steering.feedbackGuidance.trim());
+  if (input.steering?.coveredTopics && input.steering.coveredTopics.length > 0)
+    contextLines.push(
+      'ALREADY COVERED elsewhere (do NOT suggest a check-in about any of these — cover new ground instead): ' +
+        input.steering.coveredTopics.slice(0, 12).join(' | '),
+    );
   if (input.avoid.texts.length > 0)
     contextLines.push(
       'AVOID (do not re-phrase any of these recent suggestions): ' +

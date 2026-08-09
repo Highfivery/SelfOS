@@ -51,14 +51,23 @@ describe('projectCoverageView', () => {
     expect(byArea['Money']).toBe('new');
   });
 
-  it('marks general areas steerable and Intimacy read-only', () => {
+  it('marks general areas steerable; Intimacy is 18+-gated (steerable only once acked) (spec 70 §3.4)', () => {
     const topics: CoverageTopic[] = [
       topic({ topicId: 'Work & purpose', lifeArea: 'Work & purpose' }),
       topic({ topicId: 'Intimacy:oral', lifeArea: 'Intimacy', label: 'Oral' }),
     ];
-    const view = projectCoverageView(topics, emptyProfile('p1'), now);
-    expect(view.areas.find((a) => a.lifeArea === 'Work & purpose')?.steerable).toBe(true);
-    expect(view.areas.find((a) => a.lifeArea === 'Intimacy')?.steerable).toBe(false);
+    // Not acked: general areas steer; the Intimacy row is 18+-gated (not steerable yet) but present.
+    const gated = projectCoverageView(topics, emptyProfile('p1'), now, false);
+    const gatedIntimacy = gated.areas.find((a) => a.lifeArea === 'Intimacy');
+    expect(gated.areas.find((a) => a.lifeArea === 'Work & purpose')?.steerable).toBe(true);
+    expect(gatedIntimacy?.steerable).toBe(false);
+    expect(gatedIntimacy?.adultGated).toBe(true);
+    expect(gatedIntimacy?.topicId).toBe('Intimacy'); // steers at the AREA level, never one category
+    expect(gated.adultAcknowledged).toBe(false);
+    // Acked: the Intimacy row becomes steerable like any area.
+    const acked = projectCoverageView(topics, emptyProfile('p1'), now, true);
+    expect(acked.areas.find((a) => a.lifeArea === 'Intimacy')?.steerable).toBe(true);
+    expect(acked.adultAcknowledged).toBe(true);
   });
 
   it('surfaces marked-off topics from the ledger, and NEVER surfaces reciprocity/partner data (spec 69 §6/§8)', () => {

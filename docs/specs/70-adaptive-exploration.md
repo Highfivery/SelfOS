@@ -417,6 +417,30 @@ _Proposed defaults; flag any to change before build._
 
 ## 15. Changelog
 
+- 2026-08-09 — **P3 (Intimacy as a first-class, 18+-gated area) BUILT** (§12). The last two intimacy pieces —
+  P2 had already gated intimacy **candidates** in the feed behind the 18+ ack and removed the
+  [`#386`](69-questionnaire-intelligence.md) onboarding-only framing, so P3 makes the Intimacy overview **row**
+  first-class. **Owner decision (asked, §3.4 left it open):** the panel offers an **inline "I'm 18+" unlock** on
+  the Intimacy row — confirming does the SHARED `adultAcknowledged` acknowledgement (the same guidance-prefs gate
+  as guided sessions / Together, via a new own-scoped `questionnaires:acknowledgeAdult` channel) and unlocks
+  steering + surfaces intimacy candidates right there; once acked the row is fully steerable (Explore more / Leave
+  alone) like any area. Core `transparencyView.ts`: the Intimacy row is `steerable` only once `adultAcknowledged`
+  (a general area always is), steers at a stable **area-level** `topicId: 'Intimacy'` (never a single category, so
+  the per-category intimacy coverage engine is untouched), and carries `adultGated`; the view gains
+  `adultAcknowledged`. The panel's `AreaRow` shows the "18+" badge (always for intimacy) + the inline unlock when
+  not acked, else the steers; `coverageStore` gains `acknowledgeAdult`. All the intimacy signals were already
+  sourced by the existing `buildIntimacyCoverage` (onboarding + intimacy questionnaires + sessions), so no new
+  backend sourcing was needed. Own-scoped throughout (the ack acks only the active person). code-reviewer
+  **ship** (consent parity + own-scoping + the area-level topicId verified sound); applied the one defense-in-depth
+  nit — an Intimacy "explore more" (leaning in) is now re-gated on the 18+ ack **in the bridge** (not just the UI —
+  the bridge is the trust boundary, §8), so a crafted un-acked intimacy explore-more is a no-op ("Leave alone" +
+  "clear" stay allowed — backing off never adds exposure) + a two-persona test asserts the owner's ack never leaks
+  to another person's gate. Gate green:
+  typecheck/lint/format, 1940 core + full desktop unit (core intimacy-gated-steerable + area-level topicId + the
+  panel unlock RTL; a two-persona coreBridge test — the intimacy candidate + steering are withheld until
+  `questionnaires:acknowledgeAdult`, then surface) + a decrypt-level E2E (intimacy candidate withheld → inline
+  unlock → surfaces + row steerable → decrypt the guidance prefs `adultAcknowledged`) + real-Electron visual QA
+  (the Intimacy row with its 18+ badge + steers after acking). **Remaining:** P4 (silent partner wishlist).
 - 2026-08-09 — **P2 (the forward-first Explored panel + curation IPC) BUILT** (§12; mockup approved first).
   Rebuilds the [`69 §3.4`](69-questionnaire-intelligence.md) Explored tab top-to-bottom into the §3.1 hybrid:
   the **candidate feed leads**, over an **honest area overview**. (1) Core `transparencyView.ts` — recalibrated

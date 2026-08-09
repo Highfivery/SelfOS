@@ -3007,7 +3007,10 @@ test('questionnaire intelligence (69 §3.4): the Explored tab reads coverage + a
     // A fresh person: every life area shows as not-yet-explored (the derived skeleton), and Intimacy is read-only.
     const relationships = w.getByRole('listitem').filter({ hasText: 'Relationships' });
     await expect(relationships).toBeVisible();
-    await expect(w.getByText('Managed in your intimacy settings')).toBeVisible();
+    // Intimacy has no steer — instead a link to the onboarding intimacy section (HashRouter → #/onboarding).
+    await expect(
+      w.getByRole('link', { name: 'Shaped by your onboarding intimacy answers' }),
+    ).toHaveAttribute('href', /\/onboarding$/);
 
     // "Leave alone" on the Relationships row → the button reflects the pressed state.
     const leaveAlone = relationships.getByRole('button', { name: 'Leave alone' });

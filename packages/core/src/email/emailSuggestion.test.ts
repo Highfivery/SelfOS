@@ -208,3 +208,63 @@ describe('buildAvoidSet (67 §3.3/§3.6 — per-family)', () => {
     expect(await listSentSuggestions(fs, key, PERSON, 'ai-suggestion-intimacy')).toHaveLength(1);
   });
 });
+
+describe('generateSuggestion — shared steering (spec 69 P4: email joins the one universe)', () => {
+  /** A client that captures the assembled user message so we can assert what reached the model. */
+  function capturingClient(reply: string): { client: ClaudeClient; seen: () => string } {
+    let captured = '';
+    const result: ClaudeStreamResult = {
+      text: reply,
+      usage: { inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0 },
+      stopReason: 'end_turn',
+    };
+    const client: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options) => {
+        captured = options.messages.map((m) => m.content).join('\n');
+        return Promise.resolve(result);
+      },
+    };
+    return { client, seen: () => captured };
+  }
+
+  it('feeds the coverage/feedback guidance + covered-topics avoid into the prompt, author-blind', async () => {
+    const fs = memFileSystem();
+    const { client, seen } = capturingClient(
+      '{"headline":"A fresh angle","body":"Notice something new this week."}',
+    );
+    const out = await generateSuggestion(deps(fs, client), {
+      family: 'ai-suggestion',
+      signals: { ...emptySignals, observation: 'You have been reflecting on rest.' },
+      avoid: { texts: [], subjects: new Set() },
+      steering: {
+        feedbackGuidance:
+          "WHERE THIS PERSON HAS AND HASN'T BEEN EXPLORED (steer strongly to NEW ground):\nNEW / UNEXPLORED GROUND — lead here:\n- Money",
+        coveredTopics: ['their commute routine', 'their morning coffee'],
+      },
+    });
+    expect(out).not.toBeNull();
+    const prompt = seen();
+    // The shared steering reached the model…
+    expect(prompt).toContain('NEW / UNEXPLORED GROUND');
+    expect(prompt).toContain('ALREADY COVERED elsewhere');
+    expect(prompt).toContain('their commute routine');
+    // …but it stays author-blind: the raw steering never comes back in the suggestion.
+    expect(JSON.stringify(out)).not.toContain('their commute routine');
+    expect(JSON.stringify(out)).not.toContain('NEW / UNEXPLORED GROUND');
+  });
+
+  it('omits the steering blocks entirely when there is nothing to steer', async () => {
+    const fs = memFileSystem();
+    const { client, seen } = capturingClient(
+      '{"headline":"A small step","body":"One kind thing today."}',
+    );
+    await generateSuggestion(deps(fs, client), {
+      family: 'ai-suggestion',
+      signals: { ...emptySignals, observation: 'A reflection.' },
+      avoid: { texts: [], subjects: new Set() },
+    });
+    expect(seen()).not.toContain('ALREADY COVERED elsewhere');
+    expect(seen()).not.toContain('WHERE THIS PERSON');
+  });
+});

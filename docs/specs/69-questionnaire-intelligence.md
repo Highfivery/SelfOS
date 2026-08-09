@@ -601,6 +601,22 @@ _These finer points were resolved with the owner (2026-08-07); the defaults belo
 
 ## 15. Changelog
 
+- 2026-08-07 — **Phase 4 (full unification) BUILT** — email joins the one steering universe. The story
+  biographer topic pass was already unified in Phase 1/2 (`storyInterviewService.runGapPass` calls
+  `gatherRecipientFeedbackGuidance` + `buildDedupReference` + `coveredTopics`), so Phase 4 reduced to the one
+  remaining siloed path: **email**. Email produces a short coaching nudge (headline+body + tap reactions), not
+  questions, so it consumes the shared STEERING rather than becoming a questionnaire: `generateSuggestion`
+  (`emailSuggestionService.ts`) gains a `steering: { feedbackGuidance?, coveredTopics? }` input, and
+  `emailSchedule.ts` gathers `gatherRecipientFeedbackGuidance` (coverage + differentiated feedback → steer to
+  new ground + honor declines) + `listCoveredTopics(personId, personId)` (self-covered topics) and threads them
+  in, so an email nudge stops re-suggesting ground a questionnaire / the biographer already covered. Email keeps
+  its own per-family `buildAvoidSet` (past suggestions + not-for-me/maybe-later subjects) on top — email tap
+  responses stay **email-only** (a casual nudge dismissal is not a topic-level "doesn't apply"; §11 decision-scoped).
+  Author-blind (the raw steering never returns in the suggestion). No new AI spend (a bigger prompt on the
+  existing metered `email.suggest` call); no schema/IPC/renderer change. Verified: a `generateSuggestion`
+  prompt-assertion test (the steering + covered-topics reach the model, author-blind; omitted when empty) + the
+  full email suite green. **Live-model prompt tuning** (the §08 §26.3 deferred follow-up) remains the one
+  on-device Phase-5 item (needs a real API key).
 - 2026-08-07 — **Phase 5 (transparency surface) BUILT** — the "Explored" tab (§3.4). A new own-scoped
   `questionnaires.own` capability (Member default ON, reconciles into existing vaults) + two own-scoped IPC
   channels — `questionnaires:personalizationProfile` (read the active person's coverage view) and

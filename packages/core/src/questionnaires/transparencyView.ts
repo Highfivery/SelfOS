@@ -1,29 +1,42 @@
 import type { FileSystem } from '../host';
 
 import { deriveIntimacyCoverageFor } from './coverageService';
-import { deriveCoverageSkeleton, NEW_GROUND_DEPTH } from './coverageModel';
+import { deriveCoverageSkeleton } from './coverageModel';
 import {
+  applyCandidateCuration,
   applySteer,
+  FEED_CANDIDATE_CAP,
+  isActiveCandidate,
   readProfile,
   writeProfile,
+  type CandidateCuration,
   type CoverageTopic,
+  type NextCandidateKind,
   type PersonalizationProfile,
 } from './personalizationProfile';
 
 /**
- * The Questionnaire-Intelligence transparency read (spec 69 §3.4/§6) — projects a person's OWN Personalization
- * Profile into a calm, own-scoped "what SelfOS has explored with you" view for the Explored panel.
+ * The Adaptive-Exploration transparency read (spec 70 §3 / spec 69 §3.4/§6) — projects a person's OWN
+ * Personalization Profile into a calm, own-scoped, FORWARD-FIRST view for the Explored panel: the candidate
+ * feed SelfOS is curious about next, over an honest "how well I know you" overview that never reads "done".
  *
- * Own-scoped by construction: the projection reads only the active person's own coverage map + their own
+ * Own-scoped by construction: the projection reads only the active person's own coverage map + candidates +
  * feedback ledger. It NEVER surfaces reciprocity candidates or any partner-derived content (spec 69 §6/§8 —
  * "the read returns the viewer's own coverage/feedback view only"). Coverage rows carry no answer content,
- * only life-area labels + a coarse explored/lightly-touched/not-yet status.
+ * only life-area labels + a coarse new / getting-to-know / knows-well status.
  */
 
-/** Any coverage below this counts as "lightly touched" (a fact or two); below it is "not yet". */
+/** Any measurable coverage counts as "getting to know you" (some); below it is "new" (nothing yet). */
 const LIGHT_DEPTH = 0.15;
+/**
+ * Honest depth (spec 70 §3.3/§5.2): a HIGH bar for the top of the scale — "knows you well" is reserved for an
+ * area genuinely explored from many angles (matching the recalibrated `COVERAGE_SYSTEM`'s 0.7 anchor), so the
+ * overview never over-reads as "done".
+ */
+const KNOWS_WELL_DEPTH = 0.7;
 
-export type CoverageStatus = 'explored' | 'lightly-touched' | 'not-yet';
+/** The honest, never-"done" scale (spec 70 §3.3): New → Getting to know you → Knows you well. */
+export type CoverageStatus = 'new' | 'getting-to-know' | 'knows-well';
 
 /** One life-area row in the Explored panel. */
 export interface CoverageAreaView {
@@ -49,7 +62,24 @@ export interface MarkedOffView {
   at: string;
 }
 
+/** One candidate in the forward-first feed (spec 70 §3.2) — what SelfOS is curious about asking next. */
+export interface CandidateFeedItem {
+  id: string;
+  lifeArea: string;
+  prompt: string;
+  kind: NextCandidateKind;
+  curation: CandidateCuration;
+}
+
 export interface QuestionnaireCoverageView {
+  /** The forward-first candidate feed (spec 70 §3.2) — leads the panel. Own data only. */
+  candidates: CandidateFeedItem[];
+  /** When the candidate feed was last refreshed (drives the "refreshes daily" / pre-first-refresh states). */
+  candidatesRefreshedAt?: string;
+  /** Set by the manual "Look for more" (spec 70 §5.4) when its AI pass degraded (no key / over budget /
+   *  unparseable) — the last-good feed is returned unchanged, and the panel surfaces a calm note (honest
+   *  failure). Never set on an ordinary read/curate/steer. */
+  refreshDegraded?: boolean;
   areas: CoverageAreaView[];
   markedOff: MarkedOffView[];
   /** Whether an AI coverage-placement pass has run (else the read is a fresh, all-uncovered skeleton). */
@@ -65,8 +95,48 @@ export interface CoverageSteerInput {
   action: 'explore-more' | 'leave-alone' | 'clear';
 }
 
+/** A candidate curation tap from the panel (spec 70 §3.2). Own-scoped in the bridge. */
+export interface CandidateCurateInput {
+  candidateId: string;
+  action: 'ask' | 'not-this' | 'go-deeper' | 'clear';
+}
+
 const statusOf = (depth: number): CoverageStatus =>
-  depth >= NEW_GROUND_DEPTH ? 'explored' : depth >= LIGHT_DEPTH ? 'lightly-touched' : 'not-yet';
+  depth >= KNOWS_WELL_DEPTH ? 'knows-well' : depth >= LIGHT_DEPTH ? 'getting-to-know' : 'new';
+
+/**
+ * Project the person's OWN active candidate feed (spec 70 §3.2): candidates they haven't been asked and haven't
+ * declined, pinned ("Ask me this") first, then go-deeper threads, then new ground — bounded to the feed cap.
+ * Own data only (a candidate is derived from the person's own answers/coverage). Pure.
+ *
+ * Intimacy candidates are **18+-gated** (spec 70 §3.4 / §8): an `Intimacy`-area candidate is withheld from the
+ * feed unless the person has done the shared 18+ acknowledgement — so explicit candidates never surface
+ * un-acked. Defaults to NOT-acked (fail-safe: the gate is on unless the caller confirms the ack).
+ */
+export function projectCandidateFeed(
+  profile: PersonalizationProfile,
+  adultAcknowledged = false,
+): CandidateFeedItem[] {
+  const active = profile.candidates.filter(
+    (c) => isActiveCandidate(c) && (adultAcknowledged || c.lifeArea !== 'Intimacy'),
+  );
+  const rank = (c: (typeof active)[number]): number => {
+    if (c.curation === 'asked') return 0; // pinned leads
+    if (c.kind === 'go-deeper' || c.curation === 'go-deeper') return 1;
+    return 2; // new ground
+  };
+  return active
+    .slice()
+    .sort((a, b) => rank(a) - rank(b) || b.at.localeCompare(a.at))
+    .slice(0, FEED_CANDIDATE_CAP)
+    .map((c) => ({
+      id: c.id,
+      lifeArea: c.lifeArea,
+      prompt: c.prompt,
+      kind: c.kind,
+      curation: c.curation,
+    }));
+}
 
 const norm = (s: string | undefined): string => (s ?? '').trim().toLowerCase();
 /** How long a `prefer-not-to-say` boundary stays shown as "marked off" (mirrors the cooldown the engine uses). */
@@ -110,6 +180,7 @@ export function projectCoverageView(
   topics: readonly CoverageTopic[],
   profile: PersonalizationProfile,
   now: Date,
+  adultAcknowledged = false,
 ): QuestionnaireCoverageView {
   // Group by life area, preserving first-seen order (general areas from the skeleton, then Intimacy).
   const order: string[] = [];
@@ -162,6 +233,10 @@ export function projectCoverageView(
   }
 
   return {
+    candidates: projectCandidateFeed(profile, adultAcknowledged),
+    ...(profile.candidatesRefreshedAt
+      ? { candidatesRefreshedAt: profile.candidatesRefreshedAt }
+      : {}),
     areas,
     markedOff,
     hasPlacement: Boolean(profile.coverage.lastPlacementAt),
@@ -180,6 +255,7 @@ export async function readCoverageView(
   key: Uint8Array,
   personId: string,
   now: Date,
+  adultAcknowledged = false,
 ): Promise<QuestionnaireCoverageView> {
   const [profile, intimacy] = await Promise.all([
     readProfile(fs, key, personId),
@@ -187,7 +263,7 @@ export async function readCoverageView(
   ]);
   const skeleton = deriveCoverageSkeleton(intimacy);
   const topics = mergeProfileCoverage(skeleton, profile.coverage.topics);
-  return projectCoverageView(topics, profile, now);
+  return projectCoverageView(topics, profile, now, adultAcknowledged);
 }
 
 /**
@@ -200,9 +276,29 @@ export async function steerTopic(
   personId: string,
   input: CoverageSteerInput,
   now: Date,
+  adultAcknowledged = false,
 ): Promise<QuestionnaireCoverageView> {
   const profile = await readProfile(fs, key, personId);
   const next = applySteer(profile, input, now);
-  await writeProfile(fs, key, next);
-  return readCoverageView(fs, key, personId, now);
+  if (next !== profile) await writeProfile(fs, key, next); // skip the vault write on a no-op steer
+  return readCoverageView(fs, key, personId, now, adultAcknowledged);
+}
+
+/**
+ * Apply a candidate curation tap (Ask me this / Not this / Go deeper / clear) to the active person's own feed
+ * and return the refreshed view (spec 70 §3.2). Cheap, no AI. Own-scoped: only ever writes the caller's own
+ * Personalization Profile.
+ */
+export async function curateCandidate(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  input: CandidateCurateInput,
+  now: Date,
+  adultAcknowledged = false,
+): Promise<QuestionnaireCoverageView> {
+  const profile = await readProfile(fs, key, personId);
+  const next = applyCandidateCuration(profile, input, now);
+  if (next !== profile) await writeProfile(fs, key, next); // skip the vault write on a no-op tap
+  return readCoverageView(fs, key, personId, now, adultAcknowledged);
 }

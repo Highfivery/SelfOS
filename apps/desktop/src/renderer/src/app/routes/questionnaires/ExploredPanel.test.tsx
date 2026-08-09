@@ -2,19 +2,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
-import type { QuestionnaireCoverageView, SelfosBridge } from '@shared/channels';
+import type { CandidateFeedItem, QuestionnaireCoverageView, SelfosBridge } from '@shared/channels';
 import { ExploredPanel } from './ExploredPanel';
 import { useCoverageStore } from '../../../stores/coverageStore';
 import { clearMockBridge, installMockBridge } from '../../../test-utils/bridge';
 
+const candidate = (over: Partial<CandidateFeedItem> = {}): CandidateFeedItem => ({
+  id: 'c1',
+  lifeArea: 'Money',
+  prompt: 'What would financial security feel like for you?',
+  kind: 'new',
+  curation: 'none',
+  ...over,
+});
+
 const view = (over: Partial<QuestionnaireCoverageView> = {}): QuestionnaireCoverageView => ({
   hasPlacement: true,
+  candidatesRefreshedAt: '2026-08-09T00:00:00.000Z',
+  candidates: [candidate()],
   areas: [
     {
       topicId: 'Work & purpose',
       lifeArea: 'Work & purpose',
       label: 'Work & purpose',
-      status: 'explored',
+      status: 'knows-well',
       depth: 0.8,
       steerable: true,
       steered: false,
@@ -23,7 +34,7 @@ const view = (over: Partial<QuestionnaireCoverageView> = {}): QuestionnaireCover
       topicId: 'Money',
       lifeArea: 'Money',
       label: 'Money',
-      status: 'not-yet',
+      status: 'new',
       depth: 0,
       steerable: true,
       steered: false,
@@ -32,7 +43,7 @@ const view = (over: Partial<QuestionnaireCoverageView> = {}): QuestionnaireCover
       topicId: 'Intimacy',
       lifeArea: 'Intimacy',
       label: 'Intimacy',
-      status: 'lightly-touched',
+      status: 'getting-to-know',
       depth: 0.2,
       steerable: false,
       steered: false,
@@ -50,28 +61,95 @@ afterEach(() => {
   useCoverageStore.getState().reset();
 });
 
-describe('ExploredPanel (spec 69 §3.4)', () => {
-  it('renders the coverage read + marked-off list; Intimacy is read-only', async () => {
+describe('ExploredPanel (spec 70 §3)', () => {
+  it('leads with the candidate feed, then the honest overview (never "done"); Intimacy is read-only', async () => {
     installMockBridge({ questionnairesPersonalizationProfile: () => Promise.resolve(view()) });
     render(
       <MemoryRouter>
         <ExploredPanel />
       </MemoryRouter>,
     );
-    expect(await screen.findByText('Work & purpose')).toBeInTheDocument();
-    expect(screen.getByText('Money')).toBeInTheDocument();
-    // Coverage status shown as text (never color-only).
-    expect(screen.getByText('Explored')).toBeInTheDocument();
-    expect(screen.getByText('Not yet explored')).toBeInTheDocument();
+    // The candidate feed leads.
+    expect(await screen.findByText('What SelfOS is curious about next')).toBeInTheDocument();
+    expect(
+      screen.getByText('What would financial security feel like for you?'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('new ground')).toBeInTheDocument();
+    // The honest overview — never "done"; status is text (not color-only).
+    expect(screen.getByText('How well I know you')).toBeInTheDocument();
+    expect(screen.getByText('Knows you well')).toBeInTheDocument();
+    expect(screen.getByText('New')).toBeInTheDocument();
+    // No "Explored/done" language anywhere.
+    expect(screen.queryByText(/explored/i)).toBeNull();
     // The marked-off decline surfaces.
     expect(screen.getByText('How is your commute?')).toBeInTheDocument();
-    // Intimacy is read-only — no steer buttons; instead a link to the onboarding intimacy section (§3.4).
-    const intimacyLink = screen.getByRole('link', {
-      name: 'Shaped by your onboarding intimacy answers',
+    // Intimacy is read-only — no steer buttons on its row (P2), sourced from every intimacy signal.
+    expect(screen.getByText('Sourced from every intimacy signal')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Explore more' })).toHaveLength(2); // Work + Money only
+  });
+
+  it('a candidate curation tap calls the bridge and refreshes the view', async () => {
+    const curate = vi
+      .fn<SelfosBridge['questionnairesCurateCandidate']>()
+      .mockResolvedValue(view({ candidates: [candidate({ curation: 'asked' })] }));
+    installMockBridge({
+      questionnairesPersonalizationProfile: () => Promise.resolve(view()),
+      questionnairesCurateCandidate: curate,
     });
-    expect(intimacyLink).toHaveAttribute('href', '/onboarding');
-    // General areas each get Explore more / Leave alone.
-    expect(screen.getAllByRole('button', { name: 'Explore more' })).toHaveLength(2);
+    useCoverageStore.setState({ view: view(), loaded: true });
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
+    await screen.findByText('What would financial security feel like for you?');
+    await userEvent.click(screen.getByRole('button', { name: 'Ask me this' }));
+    await waitFor(() => expect(curate).toHaveBeenCalledWith({ candidateId: 'c1', action: 'ask' }));
+    // The refreshed view marks the candidate pinned.
+    expect(await screen.findByRole('button', { name: 'Asking this' })).toBeInTheDocument();
+  });
+
+  it('"Look for more" calls the refresh bridge (budget-gated pass)', async () => {
+    const refresh = vi
+      .fn<SelfosBridge['questionnairesRefreshNextCandidates']>()
+      .mockResolvedValue(view());
+    // Pre-first-refresh: no candidates and no `candidatesRefreshedAt` at all.
+    const { candidatesRefreshedAt: _drop, ...preRefresh } = view({ candidates: [] });
+    void _drop;
+    installMockBridge({
+      questionnairesPersonalizationProfile: () => Promise.resolve(preRefresh),
+      questionnairesRefreshNextCandidates: refresh,
+    });
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
+    // Pre-first-refresh calm state.
+    expect(await screen.findByText(/still getting to know you/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Look for more' }));
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+    expect(
+      await screen.findByText('What would financial security feel like for you?'),
+    ).toBeInTheDocument();
+  });
+
+  it('"Look for more" surfaces an honest message when the pass is degraded (no key / over budget)', async () => {
+    const refresh = vi
+      .fn<SelfosBridge['questionnairesRefreshNextCandidates']>()
+      .mockResolvedValue(view({ candidates: [], refreshDegraded: true }));
+    installMockBridge({
+      questionnairesPersonalizationProfile: () => Promise.resolve(view({ candidates: [] })),
+      questionnairesRefreshNextCandidates: refresh,
+    });
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
+    await screen.findByRole('button', { name: 'Look for more' });
+    await userEvent.click(screen.getByRole('button', { name: 'Look for more' }));
+    expect(await screen.findByText(/Couldn’t look for more right now/)).toBeInTheDocument();
   });
 
   it('a steer calls the bridge and updates the view', async () => {
@@ -84,15 +162,13 @@ describe('ExploredPanel (spec 69 §3.4)', () => {
       questionnairesPersonalizationProfile: () => Promise.resolve(view()),
       questionnairesSteerTopic: steer,
     });
-    // Seed the loaded view directly (deterministic — no async-load race on the singleton store).
     useCoverageStore.setState({ view: view(), loaded: true });
     render(
       <MemoryRouter>
         <ExploredPanel />
       </MemoryRouter>,
     );
-    await screen.findByText('Money');
-    // Explore more on the Money row (2nd general area).
+    await screen.findByText('How well I know you');
     await userEvent.click(screen.getAllByRole('button', { name: 'Explore more' })[1]!);
     await waitFor(() =>
       expect(steer).toHaveBeenCalledWith({
@@ -102,20 +178,6 @@ describe('ExploredPanel (spec 69 §3.4)', () => {
         action: 'explore-more',
       }),
     );
-    // The refreshed view marks Money as being explored more.
     expect(await screen.findByText('Exploring more')).toBeInTheDocument();
-  });
-
-  it('shows a calm empty state before any exploration', async () => {
-    installMockBridge({
-      questionnairesPersonalizationProfile: () =>
-        Promise.resolve({ areas: [], markedOff: [], hasPlacement: false }),
-    });
-    render(
-      <MemoryRouter>
-        <ExploredPanel />
-      </MemoryRouter>,
-    );
-    expect(await screen.findByText(/hasn’t explored anything with you yet/)).toBeInTheDocument();
   });
 });

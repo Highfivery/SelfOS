@@ -278,9 +278,13 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     questionnairesSharpenQuestion: () => Promise.resolve({ ok: true, prompt: 'sharpened' }),
     questionnairesMarkCovered: () => Promise.resolve({ ok: true }),
     questionnairesPersonalizationProfile: () =>
-      Promise.resolve({ areas: [], markedOff: [], hasPlacement: false }),
+      Promise.resolve({ candidates: [], areas: [], markedOff: [], hasPlacement: false }),
     questionnairesSteerTopic: () =>
-      Promise.resolve({ areas: [], markedOff: [], hasPlacement: false }),
+      Promise.resolve({ candidates: [], areas: [], markedOff: [], hasPlacement: false }),
+    questionnairesCurateCandidate: () =>
+      Promise.resolve({ candidates: [], areas: [], markedOff: [], hasPlacement: false }),
+    questionnairesRefreshNextCandidates: () =>
+      Promise.resolve({ candidates: [], areas: [], markedOff: [], hasPlacement: false }),
     gapfinderSuggest: () => Promise.resolve({ ok: true, suggestions: [] }),
     questionnaireSuggestionsList: () => Promise.resolve([]),
     questionnaireSuggestionsGenerate: () => Promise.resolve({ ok: true, saved: [], added: 0 }),

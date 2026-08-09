@@ -1954,13 +1954,13 @@ describe('Questionnaires', () => {
     expect(screen.queryByRole('tab', { name: 'Explored' })).not.toBeInTheDocument();
   });
 
-  it('shows the Explored tab for an owner and opens the coverage panel (69 §3.4)', async () => {
+  it('shows the Explored tab for an owner and opens the forward-first panel (spec 70 §3)', async () => {
     installMockBridge({ questionnairesList: () => Promise.resolve([]) });
     elevateToOwner(); // owner has questionnaires.own
     renderApp();
     await userEvent.click(await screen.findByRole('tab', { name: 'Explored' }));
     expect(
-      await screen.findByRole('heading', { name: 'What SelfOS has explored with you' }),
+      await screen.findByRole('heading', { name: 'What SelfOS is curious about next' }),
     ).toBeInTheDocument();
   });
 });

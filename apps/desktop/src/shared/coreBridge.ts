@@ -707,8 +707,10 @@ import {
   writeProfile,
   readCoverageView,
   steerTopic,
+  curateCandidate,
   type QuestionnaireCoverageView,
   type CoverageSteerInput,
+  type CandidateCurateInput,
   resolveInsightAbout,
   resolveInsightSource,
   getAssignment,
@@ -1156,6 +1158,17 @@ const SteerTopicSchema = z.object({
   lifeArea: z.string().optional(),
   label: z.string().optional(),
   action: z.enum(['explore-more', 'leave-alone', 'clear']),
+});
+const CurateCandidateSchema = z.object({
+  candidateId: z.string().min(1),
+  action: z.enum(['ask', 'not-this', 'go-deeper', 'clear']),
+});
+/** The empty Explored view returned when the caller is denied / has no active person (a fresh literal each call). */
+const emptyCoverageView = (): QuestionnaireCoverageView => ({
+  candidates: [],
+  areas: [],
+  markedOff: [],
+  hasPlacement: false,
 });
 // A recipient flagging a wrong fact in a question they're answering (spec 08 §29 wrong-fact amendment).
 const CorrectFactSchema = z.object({
@@ -4184,21 +4197,22 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     // active person, and the projection surfaces only their own coverage/feedback (never reciprocity / partner
     // data, §8). An empty view is returned when unavailable rather than throwing.
     questionnairesPersonalizationProfile: async (): Promise<QuestionnaireCoverageView> => {
-      const empty: QuestionnaireCoverageView = { areas: [], markedOff: [], hasPlacement: false };
       const ctx = await host.vaultAndKey();
-      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.own'))) return empty;
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.own')))
+        return emptyCoverageView();
       const personId = await activePersonId();
-      if (!personId) return empty;
-      return readCoverageView(ctx.fs, ctx.key, personId, new Date());
+      if (!personId) return emptyCoverageView();
+      const acked = (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
+      return readCoverageView(ctx.fs, ctx.key, personId, new Date(), acked);
     },
     // Write a steer (explore more / leave alone) into the active person's OWN profile and return the refreshed
     // view. Own-scoped: a steer can only ever touch the caller's own Personalization Profile.
     questionnairesSteerTopic: async (input): Promise<QuestionnaireCoverageView> => {
-      const empty: QuestionnaireCoverageView = { areas: [], markedOff: [], hasPlacement: false };
       const ctx = await host.vaultAndKey();
-      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.own'))) return empty;
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.own')))
+        return emptyCoverageView();
       const personId = await activePersonId();
-      if (!personId) return empty;
+      if (!personId) return emptyCoverageView();
       const parsed = SteerTopicSchema.parse(input);
       const p: CoverageSteerInput = {
         topicId: parsed.topicId,
@@ -4206,7 +4220,32 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(parsed.lifeArea !== undefined ? { lifeArea: parsed.lifeArea } : {}),
         ...(parsed.label !== undefined ? { label: parsed.label } : {}),
       };
-      return steerTopic(ctx.fs, ctx.key, personId, p, new Date());
+      const acked = (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
+      return steerTopic(ctx.fs, ctx.key, personId, p, new Date(), acked);
+    },
+    // Curate a candidate in the active person's OWN feed (spec 70 §3.2). Cheap, no AI; own-scoped in the bridge.
+    questionnairesCurateCandidate: async (input): Promise<QuestionnaireCoverageView> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.own')))
+        return emptyCoverageView();
+      const personId = await activePersonId();
+      if (!personId) return emptyCoverageView();
+      const parsed: CandidateCurateInput = CurateCandidateSchema.parse(input);
+      const acked = (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
+      return curateCandidate(ctx.fs, ctx.key, personId, parsed, new Date(), acked);
+    },
+    // The manual "Look for more" (spec 70 §5.4): force a candidate refresh for the active person, then return
+    // the refreshed OWN view. Budget-gated + metered `questionnaire.profile` INSIDE `refreshNextCandidates`
+    // (fail-safe — a no-key / over-budget / degraded pass leaves the last-good feed, surfaced as `refreshDegraded`
+    // so the panel can say so honestly). Own-scoped.
+    questionnairesRefreshNextCandidates: async (): Promise<QuestionnaireCoverageView> => {
+      const deps = await aiDeps('questionnaires.own');
+      if (!deps) return emptyCoverageView();
+      const result = await refreshNextCandidates(deps, deps.personId);
+      const acked =
+        (await getGuidancePrefs(deps.fs, deps.key, deps.personId)).adultAcknowledged === true;
+      const view = await readCoverageView(deps.fs, deps.key, deps.personId, new Date(), acked);
+      return result.ok ? view : { ...view, refreshDegraded: true };
     },
     // A recipient flags a wrong fact in a question they're answering (spec 08 wrong-fact amendment). Trace it
     // to the recipient's OWN on-record facts (profile / onboarding / insight), auto-flag a wrong INSIGHT so it

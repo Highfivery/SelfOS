@@ -366,6 +366,11 @@ export function registerIpcHandlers(): void {
     bridge.questionnairesPersonalizationProfile,
   );
   handle(IpcChannels.questionnairesSteerTopic, bridge.questionnairesSteerTopic);
+  handle(IpcChannels.questionnairesCurateCandidate, bridge.questionnairesCurateCandidate);
+  handle(
+    IpcChannels.questionnairesRefreshNextCandidates,
+    bridge.questionnairesRefreshNextCandidates,
+  );
   handle(IpcChannels.gapfinderSuggest, bridge.gapfinderSuggest);
   handle(IpcChannels.questionnaireSuggestionsList, bridge.questionnaireSuggestionsList);
   handle(IpcChannels.questionnaireSuggestionsGenerate, bridge.questionnaireSuggestionsGenerate);

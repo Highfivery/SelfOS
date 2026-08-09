@@ -417,6 +417,37 @@ _Proposed defaults; flag any to change before build._
 
 ## 15. Changelog
 
+- 2026-08-09 — **P2 (the forward-first Explored panel + curation IPC) BUILT** (§12; mockup approved first).
+  Rebuilds the [`69 §3.4`](69-questionnaire-intelligence.md) Explored tab top-to-bottom into the §3.1 hybrid:
+  the **candidate feed leads**, over an **honest area overview**. (1) Core `transparencyView.ts` — recalibrated
+  the display scale to the honest, never-"done" **New → Getting to know you → Knows you well** (§3.3), with a
+  HIGH bar for the top (`KNOWS_WELL_DEPTH = 0.7`, matching the P1 `COVERAGE_SYSTEM` anchor, so a 0.5 area is
+  still only "getting to know you"); added `CandidateFeedItem` + pure `projectCandidateFeed` (own active
+  candidates — not minted, not skipped — pinned-first, then go-deeper, then new, feed-capped) + `curateCandidate`
+  - `CandidateCurateInput`; extended `QuestionnaireCoverageView` with `candidates` + `candidatesRefreshedAt`. (2)
+    Two new **own-scoped** IPC channels — `questionnaires:curateCandidate` (Ask me this / Not this / Go deeper /
+    clear; cheap, no AI) and `questionnaires:refreshNextCandidates` (the manual **"Look for more"** — budget-gated,
+    metered `questionnaire.profile` via `aiDeps('questionnaires.own')`, fail-safe: a no-key/over-budget pass leaves
+    the last-good feed) — both gated `questionnaires.own` + active-person-scoped in the bridge (the trust boundary;
+    no partner/reciprocity data ever crosses — the view has no such field). (3) Renderer — `ExploredPanel` rebuilt
+    (feed cards with the `new ground` / `go deeper` tag + curation buttons + pinned state, the "Look for more" +
+    "refreshes daily" note, the pre-first-refresh calm state; the honest overview with a **text + meter** status
+    [never color-only, §9] + the retained Explore-more / Leave-alone; a `prefers-reduced-motion`-aware spinner);
+    `coverageStore` gains `curate` + `lookForMore`. The **Intimacy row stays read-only in P2** ("Sourced from every
+    intimacy signal") — P3 makes it first-class + 18+-gated and removes the [`#386`](69-questionnaire-intelligence.md)
+    onboarding-only framing. **code-reviewer fix-first:** the one safety should-fix — an `Intimacy`-area candidate
+    could surface in the feed before the shared 18+ ack — is fixed now (`projectCandidateFeed` withholds
+    intimacy-area candidates unless the ack is present, threaded from the bridge; fail-safe default is gated-on),
+    plus the honest-failure should-fix (the manual "Look for more" now surfaces a calm "AI unavailable / over
+    budget" note via a `refreshDegraded` flag instead of a silent no-op) and the DRY/no-op nits (a shared empty-view
+    factory, an exported `isActiveCandidate`, and skipping the vault write on a no-op curate/steer). Verified: core
+    (`projectCandidateFeed` ordering/exclusions + the intimacy-18+ gate, honest-scale mapping,
+    `curateCandidate` own round-trip) + a two-persona coreBridge test (curate persists own-scoped + per-person
+    isolation, a member's tap never touches the owner) + RTL (feed leads, curation + Look-for-more + steer call the
+    bridge) + a decrypt-level E2E (seed the feed → "Not this" drops a candidate + "Ask me this" pins one + a Leave-
+    alone steer → reopen persists → decrypt the profile → 360px overflow guard). Visual QA at desktop + 360px
+    (real-Electron capture — matches the approved mockup). Gate green: typecheck/lint/format, 1939 core + desktop
+    unit. **Remaining:** P3 (Intimacy first-class gated area), P4 (silent partner wishlist).
 - 2026-08-09 — **P1 (model + generation core) BUILT** (§12). The forward-first candidate feed's engine, no user
   surface yet (the panel is P2). (1) The `NextCandidate` schema + `candidates`/`candidatesRefreshedAt` fields on
   the Personalization Profile — **additive-optional, tolerant-parsed, no `schemaVersion` bump** (the

@@ -3154,6 +3154,7 @@ describe('createCoreBridge', () => {
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
     expect(await bridge.questionnairesPersonalizationProfile()).toEqual({
+      candidates: [],
       areas: [],
       markedOff: [],
       hasPlacement: false,
@@ -3162,10 +3163,81 @@ describe('createCoreBridge', () => {
       topicId: 'Health & body',
       action: 'leave-alone',
     });
-    expect(guestSteer).toEqual({ areas: [], markedOff: [], hasPlacement: false });
+    expect(guestSteer).toEqual({ candidates: [], areas: [], markedOff: [], hasPlacement: false });
     // Decrypt the guest's profile — nothing was written.
     const guestProfile = await readProfile(ctx.fs, ctx.key, guest.id);
     expect(guestProfile.feedback).toEqual([]);
+  });
+
+  it('candidate curation is OWN-scoped, persists, and drives the forward-first feed (spec 70 §3.2/§6)', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: angel.id, roleId: 'member', pin: null });
+    const ctx = (await host.host.vaultAndKey())!;
+
+    // Seed the owner's OWN profile with two candidates (as the daily refresh would).
+    const seedAt = '2026-08-09T00:00:00.000Z';
+    await writeProfile(ctx.fs, ctx.key, {
+      ...emptyProfile(ownerId),
+      candidatesRefreshedAt: seedAt,
+      candidates: [
+        {
+          id: 'cand-keep',
+          lifeArea: 'Money',
+          prompt: 'What would financial security feel like for you?',
+          kind: 'new',
+          curation: 'none',
+          at: seedAt,
+        },
+        {
+          id: 'cand-skip',
+          lifeArea: 'Relationships',
+          prompt: 'How is your love life?',
+          kind: 'new',
+          curation: 'none',
+          at: seedAt,
+        },
+        {
+          id: 'cand-intimacy',
+          lifeArea: 'Intimacy',
+          prompt: 'An explicit intimacy question',
+          kind: 'new',
+          curation: 'none',
+          at: seedAt,
+        },
+      ],
+    });
+
+    // The read leads with the feed — but the Intimacy candidate is WITHHELD until the 18+ ack (spec 70 §3.4/§8).
+    const before = await bridge.questionnairesPersonalizationProfile();
+    expect(before.candidates.map((c) => c.id).sort()).toEqual(['cand-keep', 'cand-skip']);
+    expect(before.candidates.some((c) => c.id === 'cand-intimacy')).toBe(false);
+
+    // "Not this" drops it from the feed; "Ask me this" pins the other. Both persist to the OWN profile.
+    const afterNot = await bridge.questionnairesCurateCandidate({
+      candidateId: 'cand-skip',
+      action: 'not-this',
+    });
+    expect(afterNot.candidates.map((c) => c.id)).toEqual(['cand-keep']); // skipped → off the feed
+    await bridge.questionnairesCurateCandidate({ candidateId: 'cand-keep', action: 'ask' });
+    const ownerProfile = await readProfile(ctx.fs, ctx.key, ownerId);
+    expect(ownerProfile.candidates.find((c) => c.id === 'cand-skip')?.curation).toBe('skipped');
+    expect(ownerProfile.candidates.find((c) => c.id === 'cand-keep')?.curation).toBe('asked');
+
+    // After the shared 18+ acknowledgement, the withheld Intimacy candidate surfaces (spec 70 §3.4/§8).
+    await bridge.guidedAcknowledgeAdult();
+    const acked = await bridge.questionnairesPersonalizationProfile();
+    expect(acked.candidates.some((c) => c.id === 'cand-intimacy')).toBe(true);
+
+    // Own-scoped: switching to Angel, her feed is empty and curating there never touches the owner's.
+    await bridge.sessionSetActive({ personId: angel.id });
+    expect((await bridge.questionnairesPersonalizationProfile()).candidates).toEqual([]);
+    await bridge.questionnairesCurateCandidate({ candidateId: 'cand-keep', action: 'not-this' });
+    const angelProfile = await readProfile(ctx.fs, ctx.key, angel.id);
+    expect(angelProfile.candidates).toEqual([]); // no such candidate in HER profile — nothing written
+    // The owner's pins/skips are untouched by Angel's tap.
+    const ownerAfter = await readProfile(ctx.fs, ctx.key, ownerId);
+    expect(ownerAfter.candidates.find((c) => c.id === 'cand-keep')?.curation).toBe('asked');
   });
 
   it("a self check-in reflects a partner's SHARED desire, never a restricted fact (spec 69 §5.4)", async () => {

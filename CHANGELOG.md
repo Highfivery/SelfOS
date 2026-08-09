@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.49.0](https://github.com/Highfivery/SelfOS/compare/v0.48.0...v0.49.0) (2026-08-09)
+
+
+### Features
+
+* **questionnaires:** link the Explored Intimacy row to its onboarding section ([#386](https://github.com/Highfivery/SelfOS/issues/386)) ([d207b9b](https://github.com/Highfivery/SelfOS/commit/d207b9b5cf54f6a722be3e573343061f1bf79543))
+
+
+### Bug Fixes
+
+* **questionnaires:** rein in coverage sub-topic sprawl (spec 69 §26.3 live tuning) ([#383](https://github.com/Highfivery/SelfOS/issues/383)) ([a4ce215](https://github.com/Highfivery/SelfOS/commit/a4ce21548be8339a3f4e974b97b737a7dffdb18f))
+
 ## [0.48.0](https://github.com/Highfivery/SelfOS/compare/v0.47.0...v0.48.0) (2026-08-09)
 
 

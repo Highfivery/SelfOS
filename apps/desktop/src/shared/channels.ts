@@ -387,6 +387,7 @@ export const IpcChannels = {
   questionnairesSteerTopic: 'questionnaires:steerTopic',
   questionnairesCurateCandidate: 'questionnaires:curateCandidate',
   questionnairesRefreshNextCandidates: 'questionnaires:refreshNextCandidates',
+  questionnairesAcknowledgeAdult: 'questionnaires:acknowledgeAdult',
   gapfinderSuggest: 'gapfinder:suggest',
   questionnaireSuggestionsList: 'questionnaires:suggestionsList',
   questionnaireSuggestionsGenerate: 'questionnaires:suggestionsGenerate',
@@ -1165,6 +1166,10 @@ export interface SelfosBridge {
   /** Adaptive Exploration (70 §3.2/§5.4): the manual "Look for more" — force a candidate refresh for the active
    * person. Budget-gated + metered `questionnaire.profile`; returns the refreshed view. Own-scoped. */
   questionnairesRefreshNextCandidates(): Promise<QuestionnaireCoverageView>;
+  /** Adaptive Exploration (70 §3.4): the inline "I'm 18+" unlock on the Intimacy row — does the SHARED 18+
+   * acknowledgement for the active person (same gate as guided/Together), then returns the refreshed view (the
+   * Intimacy row becomes steerable + intimacy candidates surface). Own-scoped. */
+  questionnairesAcknowledgeAdult(): Promise<QuestionnaireCoverageView>;
   /** Gap-finder: propose the next questionnaires from structured context. Budget-gated + metered. */
   gapfinderSuggest(input: { targetPersonId?: string }): Promise<QuestionnaireSuggestResult>;
   /** Recipient-first saved suggestions (08 §18). Read the author's saved set for one household recipient — no

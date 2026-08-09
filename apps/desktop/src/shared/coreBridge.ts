@@ -1168,6 +1168,7 @@ const emptyCoverageView = (): QuestionnaireCoverageView => ({
   candidates: [],
   areas: [],
   markedOff: [],
+  adultAcknowledged: false,
   hasPlacement: false,
 });
 // A recipient flagging a wrong fact in a question they're answering (spec 08 §29 wrong-fact amendment).
@@ -4214,13 +4215,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return emptyCoverageView();
       const parsed = SteerTopicSchema.parse(input);
+      const acked = (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
+      // Gate an Intimacy "explore more" (leaning IN) on the 18+ ack IN THE BRIDGE, not just the UI (spec 70 §8 —
+      // intimacy steering stays behind the ack; the renderer hides it, but the bridge is the trust boundary).
+      // "Leave alone" (backing off) + "clear" are always allowed — they never add explicit exposure. A crafted
+      // un-acked "explore more" on Intimacy is a no-op that just returns the current view.
+      if (parsed.topicId === 'Intimacy' && parsed.action === 'explore-more' && !acked) {
+        return readCoverageView(ctx.fs, ctx.key, personId, new Date(), acked);
+      }
       const p: CoverageSteerInput = {
         topicId: parsed.topicId,
         action: parsed.action,
         ...(parsed.lifeArea !== undefined ? { lifeArea: parsed.lifeArea } : {}),
         ...(parsed.label !== undefined ? { label: parsed.label } : {}),
       };
-      const acked = (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
       return steerTopic(ctx.fs, ctx.key, personId, p, new Date(), acked);
     },
     // Curate a candidate in the active person's OWN feed (spec 70 §3.2). Cheap, no AI; own-scoped in the bridge.
@@ -4246,6 +4254,18 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         (await getGuidancePrefs(deps.fs, deps.key, deps.personId)).adultAcknowledged === true;
       const view = await readCoverageView(deps.fs, deps.key, deps.personId, new Date(), acked);
       return result.ok ? view : { ...view, refreshDegraded: true };
+    },
+    // The inline "I'm 18+" unlock on the Intimacy row (spec 70 §3.4): do the SHARED 18+ acknowledgement for the
+    // active person (the same `adultAcknowledged` gate as guided/Together), then return the refreshed OWN view.
+    // Own-scoped; no AI.
+    questionnairesAcknowledgeAdult: async (): Promise<QuestionnaireCoverageView> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.own')))
+        return emptyCoverageView();
+      const personId = await activePersonId();
+      if (!personId) return emptyCoverageView();
+      await acknowledgeAdult(ctx.fs, ctx.key, personId);
+      return readCoverageView(ctx.fs, ctx.key, personId, new Date(), true);
     },
     // A recipient flags a wrong fact in a question they're answering (spec 08 wrong-fact amendment). Trace it
     // to the recipient's OWN on-record facts (profile / onboarding / insight), auto-flag a wrong INSIGHT so it

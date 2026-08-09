@@ -3157,13 +3157,20 @@ describe('createCoreBridge', () => {
       candidates: [],
       areas: [],
       markedOff: [],
+      adultAcknowledged: false,
       hasPlacement: false,
     });
     const guestSteer = await bridge.questionnairesSteerTopic({
       topicId: 'Health & body',
       action: 'leave-alone',
     });
-    expect(guestSteer).toEqual({ candidates: [], areas: [], markedOff: [], hasPlacement: false });
+    expect(guestSteer).toEqual({
+      candidates: [],
+      areas: [],
+      markedOff: [],
+      adultAcknowledged: false,
+      hasPlacement: false,
+    });
     // Decrypt the guest's profile — nothing was written.
     const guestProfile = await readProfile(ctx.fs, ctx.key, guest.id);
     expect(guestProfile.feedback).toEqual([]);
@@ -3224,14 +3231,31 @@ describe('createCoreBridge', () => {
     expect(ownerProfile.candidates.find((c) => c.id === 'cand-skip')?.curation).toBe('skipped');
     expect(ownerProfile.candidates.find((c) => c.id === 'cand-keep')?.curation).toBe('asked');
 
-    // After the shared 18+ acknowledgement, the withheld Intimacy candidate surfaces (spec 70 §3.4/§8).
-    await bridge.guidedAcknowledgeAdult();
-    const acked = await bridge.questionnairesPersonalizationProfile();
+    // The inline "I'm 18+" unlock (spec 70 §3.4): the Intimacy row is 18+-gated (not steerable) + its candidate
+    // withheld; acking through the OWN channel surfaces the candidate AND makes the Intimacy row steerable.
+    const beforeAck = await bridge.questionnairesPersonalizationProfile();
+    expect(beforeAck.adultAcknowledged).toBe(false);
+    expect(beforeAck.areas.find((a) => a.lifeArea === 'Intimacy')?.steerable).toBe(false);
+    const acked = await bridge.questionnairesAcknowledgeAdult();
+    expect(acked.adultAcknowledged).toBe(true);
     expect(acked.candidates.some((c) => c.id === 'cand-intimacy')).toBe(true);
+    expect(acked.areas.find((a) => a.lifeArea === 'Intimacy')?.steerable).toBe(true);
 
-    // Own-scoped: switching to Angel, her feed is empty and curating there never touches the owner's.
+    // Own-scoped: switching to Angel, her feed is empty and curating there never touches the owner's — and the
+    // owner's 18+ ack did NOT leak to her (the guidance-prefs are per-person), so her Intimacy row stays gated.
     await bridge.sessionSetActive({ personId: angel.id });
-    expect((await bridge.questionnairesPersonalizationProfile()).candidates).toEqual([]);
+    const angelView = await bridge.questionnairesPersonalizationProfile();
+    expect(angelView.candidates).toEqual([]);
+    expect(angelView.adultAcknowledged).toBe(false);
+    // A crafted un-acked "explore more" on Angel's Intimacy row is a no-op at the bridge (spec 70 §8).
+    const angelIntimacySteer = await bridge.questionnairesSteerTopic({
+      topicId: 'Intimacy',
+      action: 'explore-more',
+    });
+    expect(angelIntimacySteer.areas.find((a) => a.lifeArea === 'Intimacy')?.steered ?? false).toBe(
+      false,
+    );
+    expect((await readProfile(ctx.fs, ctx.key, angel.id)).coverage.topics).toEqual([]); // nothing written
     await bridge.questionnairesCurateCandidate({ candidateId: 'cand-keep', action: 'not-this' });
     const angelProfile = await readProfile(ctx.fs, ctx.key, angel.id);
     expect(angelProfile.candidates).toEqual([]); // no such candidate in HER profile — nothing written

@@ -427,6 +427,28 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-09 — **Build + owner decision (Adaptive Exploration P3 — Intimacy as a first-class, 18+-gated area;
+  SPEC 70 §12 P3; on `feat/adaptive-exploration-p3`, a worktree off the merged P2).** P2 had already gated
+  intimacy CANDIDATES behind the 18+ ack + removed the onboarding-only framing, so P3 makes the Intimacy overview
+  **row** first-class. **Owner decision (asked — §3.4 left the consent-UX open): an inline "I'm 18+" unlock** on
+  the Intimacy row — confirming does the SHARED `adultAcknowledged` acknowledgement (the same guidance-prefs gate
+  as guided sessions / Together, via a new own-scoped `questionnaires:acknowledgeAdult` channel) and unlocks
+  steering + surfaces intimacy candidates in place; once acked the row is fully steerable (Explore more / Leave
+  alone) like any area. Core `transparencyView.ts`: the Intimacy row is `steerable` only once `adultAcknowledged`
+  (a general area always is), steers at a stable **area-level** `topicId: 'Intimacy'` (never a single category —
+  so the per-category intimacy coverage engine is untouched), carries `adultGated`; the view gains
+  `adultAcknowledged`. The panel's `AreaRow` shows the "18+" badge (always for intimacy) + the inline unlock when
+  not acked, else the steers. All intimacy SIGNALS were already sourced by the existing `buildIntimacyCoverage`
+  (onboarding + intimacy questionnaires + sessions), so no new backend sourcing was needed. Own-scoped throughout
+  (the ack acks only the active person). Gate green: typecheck/lint/format, **1940 core + full desktop** unit
+  (core intimacy-gated-steerable + area-level topicId + the panel unlock RTL; a two-persona coreBridge test — the
+  intimacy candidate + steering are withheld until `questionnaires:acknowledgeAdult`, then surface) + a
+  decrypt-level E2E (intimacy candidate withheld → inline unlock → surfaces + steerable → decrypt the guidance
+  prefs `adultAcknowledged`) + real-Electron visual QA. **Lesson: a first-class gated area is cleanest as a
+  DISPLAY gate (steerable only when acked + an inline unlock that reuses the ONE shared consent gate, never a
+  parallel weaker one) — the signals are already sourced, so the work is surfacing + consent, and an aggregated
+  area row must steer at a stable area-level topicId, never one of its underlying categories.** **Remaining:** P4
+  (silent partner wishlist).
 - 2026-08-09 — **Build (Adaptive Exploration P2 — the forward-first Explored panel + curation IPC; SPEC 70 §12
   P2; mockup approved FIRST; on `feat/adaptive-exploration-p2`, a worktree off the merged P1).** Rebuilds the
   Questionnaires "Explored" tab from the backward "Explored ✓" report into the §3.1 hybrid: the **candidate feed

@@ -47,10 +47,14 @@ export interface CoverageAreaView {
   status: CoverageStatus;
   /** 0..1 — the deepest coverage in this area (for a subtle meter; shown as text too, never color-only). */
   depth: number;
-  /** General areas can be steered here; Intimacy is read-only (it has its own gated coverage engine). */
+  /** Whether this area can be steered right now — true for a general area, and for Intimacy only once the 18+
+   *  ack is done (spec 70 §3.4/§8). */
   steerable: boolean;
   /** True when the person has explicitly asked to explore this area more (the "explore more" steer). */
   steered: boolean;
+  /** Present + true for the Intimacy row — an 18+ area (the panel shows the 18+ badge + the unlock affordance
+   *  when not yet acknowledged, spec 70 §3.4). */
+  adultGated?: boolean;
 }
 
 /** One topic the person has marked off (a decline / a "leave alone" steer). */
@@ -82,6 +86,9 @@ export interface QuestionnaireCoverageView {
   refreshDegraded?: boolean;
   areas: CoverageAreaView[];
   markedOff: MarkedOffView[];
+  /** Whether the person has done the shared 18+ acknowledgement (spec 70 §3.4) — gates the Intimacy row's
+   *  steering + candidates. The panel shows an inline "Confirm you're 18+" unlock on the Intimacy row when false. */
+  adultAcknowledged: boolean;
   /** Whether an AI coverage-placement pass has run (else the read is a fresh, all-uncovered skeleton). */
   hasPlacement: boolean;
   lastPlacementAt?: string;
@@ -195,18 +202,23 @@ export function projectCoverageView(
   const areas: CoverageAreaView[] = order.map((lifeArea) => {
     const group = groups.get(lifeArea)!;
     const depth = group.reduce((m, t) => (t.depth > m ? t.depth : m), 0);
-    const steerable = lifeArea !== 'Intimacy';
+    const isIntimacy = lifeArea === 'Intimacy';
+    // Intimacy is first-class + steerable (spec 70 §3.4) — but only once the 18+ ack is done (§8). A general
+    // area is always steerable.
+    const steerable = !isIntimacy || adultAcknowledged;
     const steered = group.some((t) => t.reopenedBy === 'explicit-request');
-    // The steer target is the general life-area topic (topicId === lifeArea in the skeleton).
+    // The steer target: a general area's stable topicId IS its life-area name; Intimacy aggregates per-category
+    // topics, so it steers at the AREA level under a stable `'Intimacy'` id (never a single category).
     const areaTopic = group.find((t) => t.topicId === lifeArea) ?? group[0]!;
     return {
-      topicId: areaTopic.topicId,
+      topicId: isIntimacy ? 'Intimacy' : areaTopic.topicId,
       lifeArea,
       label: lifeArea,
       status: statusOf(depth),
       depth,
       steerable,
       steered,
+      ...(isIntimacy ? { adultGated: true } : {}),
     };
   });
 
@@ -239,6 +251,7 @@ export function projectCoverageView(
       : {}),
     areas,
     markedOff,
+    adultAcknowledged,
     hasPlacement: Boolean(profile.coverage.lastPlacementAt),
     ...(profile.coverage.lastPlacementAt
       ? { lastPlacementAt: profile.coverage.lastPlacementAt }

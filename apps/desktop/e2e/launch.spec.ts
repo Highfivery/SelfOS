@@ -3022,6 +3022,14 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
             curation: 'none',
             at: '2026-08-09T00:00:00.000Z',
           },
+          {
+            id: 'cand-intimacy',
+            lifeArea: 'Intimacy',
+            prompt: 'An explicit intimacy question',
+            kind: 'new',
+            curation: 'none',
+            at: '2026-08-09T00:00:00.000Z',
+          },
         ],
       },
       key0!,
@@ -3056,8 +3064,23 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
     await keepCard.getByRole('button', { name: 'Ask me this' }).click();
     await expect(keepCard.getByRole('button', { name: 'Asking this' })).toBeVisible();
 
+    // Intimacy is 18+-gated (spec 70 §3.4): the explicit candidate is WITHHELD and the row shows the inline
+    // unlock, not steer buttons.
+    await expect(w.getByText('An explicit intimacy question')).toHaveCount(0);
+    // The overview Intimacy row carries the "18+" badge (the candidate card does not) — disambiguates the two
+    // once the candidate surfaces after acking.
+    const intimacyRow = w
+      .getByRole('listitem')
+      .filter({ hasText: 'Intimacy' })
+      .filter({ hasText: '18+' });
+    await expect(intimacyRow.getByRole('button', { name: /18 or older/i })).toBeVisible();
+    // Acknowledge 18+ → the intimacy candidate surfaces and the row becomes steerable.
+    await intimacyRow.getByRole('button', { name: /18 or older/i }).click();
+    await expect(w.getByText('An explicit intimacy question')).toBeVisible();
+    await expect(intimacyRow.getByRole('button', { name: 'Explore more' })).toBeVisible();
+
     // A "Leave alone" area steer on Relationships (the overview retains the area-level steers).
-    const relationships = w.getByRole('listitem').filter({ hasText: 'Relationships' });
+    const relationships = w.getByRole('listitem').filter({ hasText: 'Relationships' }).first();
     await relationships.getByRole('button', { name: 'Leave alone' }).click();
 
     // Read-after-write through the live bridge: leave + return, reopen Explored — curation + steer persisted.
@@ -3104,6 +3127,11 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
   expect(
     profile?.feedback?.some((f) => f.topicId === 'Relationships' && f.kind === 'not-applicable'),
   ).toBe(true);
+  // The inline 18+ unlock persisted the shared acknowledgement (spec 70 §3.4).
+  const prefs = (await readEncryptedJson(fs, 'people/owner-1/guidance/prefs.enc', key!)) as {
+    adultAcknowledged?: boolean;
+  } | null;
+  expect(prefs?.adultAcknowledged).toBe(true);
 });
 
 test('questionnaires: custom type, sensitivity, matrix + branching round-trip', async () => {

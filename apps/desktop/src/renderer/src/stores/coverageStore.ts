@@ -22,10 +22,13 @@ interface CoverageStoreState {
   curating: string | null;
   /** True while the manual "Look for more" candidate refresh is running (it spends). */
   refreshing: boolean;
+  /** True while the inline 18+ unlock is being acknowledged. */
+  acking: boolean;
   load: () => Promise<void>;
   steer: (input: CoverageSteerInput) => Promise<void>;
   curate: (input: CandidateCurateInput) => Promise<void>;
   lookForMore: () => Promise<void>;
+  acknowledgeAdult: () => Promise<void>;
   reset: () => void;
 }
 
@@ -36,6 +39,7 @@ const EMPTY = {
   steering: null,
   curating: null,
   refreshing: false,
+  acking: false,
 } satisfies Partial<CoverageStoreState>;
 
 export const useCoverageStore = create<CoverageStoreState>((set) => ({
@@ -81,6 +85,15 @@ export const useCoverageStore = create<CoverageStoreState>((set) => ({
       });
     } catch {
       set({ refreshing: false, error: 'We couldn’t look for more right now. Try again.' });
+    }
+  },
+  acknowledgeAdult: async () => {
+    set({ acking: true, error: null });
+    try {
+      const view = (await window.selfos?.questionnairesAcknowledgeAdult()) ?? null;
+      set({ view, acking: false });
+    } catch {
+      set({ acking: false, error: 'We couldn’t save that. Try again.' });
     }
   },
   reset: () => set({ ...EMPTY }),

@@ -47,9 +47,11 @@ const view = (over: Partial<QuestionnaireCoverageView> = {}): QuestionnaireCover
       depth: 0.2,
       steerable: false,
       steered: false,
+      adultGated: true,
     },
   ],
   markedOff: [{ label: 'How is your commute?', kind: 'not-applicable', at: 'now' }],
+  adultAcknowledged: false,
   ...over,
 });
 
@@ -62,7 +64,7 @@ afterEach(() => {
 });
 
 describe('ExploredPanel (spec 70 §3)', () => {
-  it('leads with the candidate feed, then the honest overview (never "done"); Intimacy is read-only', async () => {
+  it('leads with the candidate feed, then the honest overview (never "done"); Intimacy is 18+-gated', async () => {
     installMockBridge({ questionnairesPersonalizationProfile: () => Promise.resolve(view()) });
     render(
       <MemoryRouter>
@@ -83,9 +85,34 @@ describe('ExploredPanel (spec 70 §3)', () => {
     expect(screen.queryByText(/explored/i)).toBeNull();
     // The marked-off decline surfaces.
     expect(screen.getByText('How is your commute?')).toBeInTheDocument();
-    // Intimacy is read-only — no steer buttons on its row (P2), sourced from every intimacy signal.
-    expect(screen.getByText('Sourced from every intimacy signal')).toBeInTheDocument();
+    // Intimacy (18+) is gated until acked: it shows the 18+ badge + the inline unlock, NOT the steer buttons.
+    expect(screen.getByText('18+')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /18 or older/i })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Explore more' })).toHaveLength(2); // Work + Money only
+  });
+
+  it('the Intimacy row unlocks its steers via the inline 18+ acknowledgement (spec 70 §3.4)', async () => {
+    const ack = vi.fn<SelfosBridge['questionnairesAcknowledgeAdult']>().mockResolvedValue(
+      view({
+        adultAcknowledged: true,
+        areas: view().areas.map((a) => (a.lifeArea === 'Intimacy' ? { ...a, steerable: true } : a)),
+      }),
+    );
+    installMockBridge({
+      questionnairesPersonalizationProfile: () => Promise.resolve(view()),
+      questionnairesAcknowledgeAdult: ack,
+    });
+    useCoverageStore.setState({ view: view(), loaded: true });
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: /18 or older/i }));
+    await waitFor(() => expect(ack).toHaveBeenCalled());
+    // After acking, the Intimacy row is steerable (3 Explore-more: Work + Money + Intimacy) and the unlock is gone.
+    expect(await screen.findAllByRole('button', { name: 'Explore more' })).toHaveLength(3);
+    expect(screen.queryByRole('button', { name: /18 or older/i })).toBeNull();
   });
 
   it('a candidate curation tap calls the bridge and refreshes the view', async () => {

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { ArrowDownRight, Compass, Minus, Pin, RefreshCw, Sparkles, X } from 'lucide-react';
+import { ArrowDownRight, Compass, Lock, Minus, Pin, RefreshCw, Sparkles, X } from 'lucide-react';
 import type { CandidateFeedItem, CoverageAreaView, CoverageStatus } from '@shared/channels';
 import { useCoverageStore } from '../../../stores/coverageStore';
 import { Banner, Card, Heading, Stack, Text } from '../../../design-system/components';
@@ -88,6 +88,9 @@ function CandidateCard({ item }: { item: CandidateFeedItem }): JSX.Element {
 function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
   const steer = useCoverageStore((s) => s.steer);
   const steering = useCoverageStore((s) => s.steering);
+  const acknowledgeAdult = useCoverageStore((s) => s.acknowledgeAdult);
+  const acking = useCoverageStore((s) => s.acking);
+  const adultAcknowledged = useCoverageStore((s) => s.view?.adultAcknowledged ?? false);
   const markedOff = useCoverageStore((s) => s.view?.markedOff ?? []);
   const isLeftAlone = markedOff.some(
     (m) => m.topicId === area.topicId && m.kind === 'not-applicable',
@@ -95,13 +98,16 @@ function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
   const busy = steering === area.topicId;
   const status = STATUS[area.status];
   const pct = Math.round(Math.max(0, Math.min(1, area.depth)) * 100);
+  // The Intimacy row is an 18+ area: it needs the shared acknowledgement before it becomes steerable + before
+  // intimacy candidates surface (spec 70 §3.4). Until then, show an inline unlock instead of the steers.
+  const needsUnlock = area.adultGated === true && !adultAcknowledged;
 
   return (
     <li className={styles.area}>
       <div className={styles.areaMain}>
         <span className={styles.areaLabel}>
           {area.label}
-          {!area.steerable ? <span className={styles.adultBadge}>18+</span> : null}
+          {area.adultGated ? <span className={styles.adultBadge}>18+</span> : null}
         </span>
         <div className={styles.meterRow}>
           <span className={styles.meter} aria-hidden="true">
@@ -113,7 +119,20 @@ function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
           <span className={`${styles.status} ${status.className}`}>{status.label}</span>
         </div>
       </div>
-      {area.steerable ? (
+      {needsUnlock ? (
+        <div className={styles.unlockRow}>
+          <span className={styles.unlockNote}>For 18+. Confirm to explore this.</span>
+          <button
+            type="button"
+            className={styles.unlockBtn}
+            disabled={acking}
+            onClick={() => void acknowledgeAdult()}
+          >
+            <Lock size={14} aria-hidden="true" />
+            I’m 18 or older
+          </button>
+        </div>
+      ) : area.steerable ? (
         <div className={styles.areaActions}>
           <button
             type="button"
@@ -150,9 +169,7 @@ function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
             Leave alone
           </button>
         </div>
-      ) : (
-        <span className={styles.readonlyNote}>Sourced from every intimacy signal</span>
-      )}
+      ) : null}
     </li>
   );
 }

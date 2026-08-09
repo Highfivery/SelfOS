@@ -38,6 +38,7 @@ import { listInsightsForPerson, saveInsight, summarizeForContext } from '@selfos
 import { getIntakeSession, submitSectionForm } from '@selfos/core/intake';
 import {
   applyDecline,
+  buildCandidateGuidance,
   emptyProfile,
   NOT_APPLICABLE_SKIP_REASON,
   readProfile,
@@ -3021,6 +3022,81 @@ describe('createCoreBridge', () => {
     expect(result.ok).toBe(true);
     expect(sentUserText).toContain('NEW / UNEXPLORED GROUND');
     expect(sentUserText).toContain('- Money');
+  });
+
+  it('the cadence refreshes the candidate feed; candidates steer generation + drop off once asked (spec 70 §3.2/§5.5)', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+
+    const candidatePrompt = 'What would a lighter week look like for you?';
+    let generationUserText = '';
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        const user = options.messages.map((m) => m.content).join('\n');
+        let text: string;
+        if (user.includes('Life areas to score')) {
+          text = JSON.stringify([
+            { lifeArea: 'Work & purpose', depth: 0.9 },
+            { lifeArea: 'Money', depth: 0 },
+          ]);
+        } else if (user.includes('candidate questions now')) {
+          // The candidate pass: propose a non-trivial set (the offline fake stays imperfect — §10).
+          text = JSON.stringify([
+            { lifeArea: 'Health & body', prompt: candidatePrompt, kind: 'new' },
+            { lifeArea: 'Money', prompt: 'What does financial security mean to you?', kind: 'new' },
+          ]);
+        } else {
+          generationUserText = user;
+          text = JSON.stringify({
+            title: 'X',
+            questions: [{ type: 'shortText', prompt: 'Somewhere new?', required: true }],
+          });
+        }
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    // The reconcile cadence now refreshes coverage AND the forward-first candidate feed (spec 70 §5.4).
+    await bridge.memoryRefresh({ auto: false });
+    const ctx = (await host.host.vaultAndKey())!;
+    const profile = await readProfile(ctx.fs, ctx.key, ownerId);
+    expect(profile.candidates.map((c) => c.prompt)).toContain(candidatePrompt);
+    expect(profile.candidatesRefreshedAt).toBeTruthy();
+
+    // A self-send draws generation from the candidate feed — the block reaches the model (assert the PROMPT).
+    await bridge.questionnairesGenerate({
+      type: 'general',
+      sensitivity: 'standard',
+      existingPrompts: [],
+      recipientPersonId: ownerId,
+    });
+    expect(generationUserText).toContain(
+      'QUESTIONS SELFOS IS CURIOUS ABOUT ASKING THIS PERSON NEXT',
+    );
+    expect(generationUserText).toContain(candidatePrompt);
+
+    // Asked-drops-off (spec 70 §5.5): actually ask the candidate's question → `markCandidateAsked` stamps it,
+    // so it stops steering + drops off the feed. Own-scoped (the recipient's own def prompts).
+    const saved = await bridge.questionnairesSave({
+      title: 'Rest',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: ownerId },
+      questions: [{ id: 'q1', type: 'shortText', prompt: candidatePrompt, required: true }],
+    });
+    await bridge.assignmentsCreate({ questionnaireId: saved.id });
+    const afterAsk = await readProfile(ctx.fs, ctx.key, ownerId);
+    const stamped = afterAsk.candidates.find((c) => c.prompt === candidatePrompt);
+    expect(stamped?.mintedAssignmentId).toBeTruthy();
+    // The stamped candidate no longer steers generation; a still-active candidate keeps the feed alive.
+    const guidance = buildCandidateGuidance(afterAsk);
+    expect(guidance).not.toContain(candidatePrompt);
+    expect(guidance).toContain('What does financial security mean to you?');
   });
 
   it('transparency read + steer are OWN-scoped, gated, and persist per-person (spec 69 §3.4/§6)', async () => {

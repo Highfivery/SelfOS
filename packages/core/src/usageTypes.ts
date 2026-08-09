@@ -11,7 +11,7 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'questionnaire.dedup': 'Questionnaire — de-dup pass',
   'questionnaire.suggest': 'Questionnaire — suggestions',
   'questionnaire.analyze': 'Questionnaire — analysis',
-  'questionnaire.profile': 'Questionnaire — coverage placement',
+  'questionnaire.profile': 'Questionnaire — coverage & next-topics',
   'dream.analyze': 'Dream analysis',
   'dream.patterns': 'Dream patterns',
   'dream.imagePrompt': 'Dream image — prompt',

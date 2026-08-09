@@ -1,12 +1,14 @@
 import { z } from 'zod';
 
 import type { FileSystem } from '../host';
+import { uuid } from '../id';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import {
   NOT_APPLICABLE_SKIP_REASON,
   PREFER_NOT_TO_SAY_SKIP_REASON,
   UNCLEAR_SKIP_REASON,
 } from './answering';
+import { isNearDuplicate } from './dedup';
 
 /**
  * The per-person **Personalization Profile** (spec 69 §4) — one encrypted doc at
@@ -29,6 +31,20 @@ const SCHEMA_VERSION = 1;
 export const FEEDBACK_CAP = 300;
 export const CHANGE_CAP = 100;
 export const RECIPROCITY_CAP = 100;
+/**
+ * Candidate caps (spec 70 §3.2/§13): the stored set is bounded (never drops a person's pinned candidate), the
+ * FEED shows at most `FEED_CANDIDATE_CAP`, and a refresh proposes at most `CANDIDATES_PER_AREA` per life area so
+ * one area can't crowd the feed.
+ */
+export const CANDIDATE_CAP = 16;
+export const FEED_CANDIDATE_CAP = 10;
+export const CANDIDATES_PER_AREA = 3;
+/**
+ * Declined ("Not this") candidates are retained ONLY as bounded de-dup memory (so the next refresh doesn't
+ * re-propose the exact phrasing) — separate from the active feed cap, and aged out, so repeated "Not this" is
+ * never a topic ban (spec 70 §13; the area-level "Leave alone" is the topic ban).
+ */
+export const SKIPPED_CANDIDATE_CAP = 24;
 
 /**
  * "Prefer not to say" backs off long-term; a gentle re-approach is allowed only after this window, and only
@@ -103,6 +119,34 @@ const ReciprocityCandidateSchema = z.object({
 });
 export type ReciprocityCandidate = z.infer<typeof ReciprocityCandidateSchema>;
 
+/** A candidate is either NEW ground or a GO-DEEPER follow-up on a thread already touched (spec 70 §3.2). */
+export const NextCandidateKindSchema = z.enum(['new', 'go-deeper']);
+export type NextCandidateKind = z.infer<typeof NextCandidateKindSchema>;
+
+/**
+ * How the person has curated a candidate (spec 70 §3.2):
+ * - `asked`     — "Ask me this" → pinned; leads the next generation.
+ * - `skipped`   — "Not this" → declines THIS candidate (a different one next refresh); NOT a topic ban.
+ * - `go-deeper` — "Go deeper" → mark the underlying thread for a deeper follow-up.
+ * - `none`      — un-curated.
+ */
+export const CandidateCurationSchema = z.enum(['asked', 'skipped', 'go-deeper', 'none']);
+export type CandidateCuration = z.infer<typeof CandidateCurationSchema>;
+
+/** A cached candidate question SelfOS is curious about asking this person next (spec 70 §3.2/§4.1). */
+const NextCandidateSchema = z.object({
+  id: z.string(),
+  lifeArea: z.string(),
+  topicId: z.string().optional(),
+  prompt: z.string(),
+  kind: NextCandidateKindSchema,
+  curation: CandidateCurationSchema.catch('none').default('none'),
+  /** Set once generation actually minted an assignment asking it → drops off the feed + stops steering. */
+  mintedAssignmentId: z.string().optional(),
+  at: z.string(),
+});
+export type NextCandidate = z.infer<typeof NextCandidateSchema>;
+
 export const PersonalizationProfileSchema = z.object({
   schemaVersion: z.number().default(SCHEMA_VERSION),
   personId: z.string(),
@@ -115,6 +159,10 @@ export const PersonalizationProfileSchema = z.object({
     .default({ topics: [] }),
   feedback: z.array(FeedbackEntrySchema).catch([]).default([]),
   changes: z.array(ChangeEntrySchema).catch([]).default([]),
+  // The forward-first candidate feed (spec 70 §3.2) — additive-optional, tolerant-parsed, no schemaVersion bump
+  // (the spec 69 §4.1 precedent). Absent on a pre-spec-70 profile → an empty feed derived on the next refresh.
+  candidates: z.array(NextCandidateSchema).catch([]).default([]),
+  candidatesRefreshedAt: z.string().optional(),
   relational: z
     .object({ reciprocity: z.array(ReciprocityCandidateSchema).catch([]).default([]) })
     .optional(),
@@ -133,6 +181,7 @@ export function emptyProfile(personId: string): PersonalizationProfile {
     coverage: { topics: [] },
     feedback: [],
     changes: [],
+    candidates: [],
   };
 }
 
@@ -352,6 +401,155 @@ export function applyReciprocity(
     ...profile,
     relational: { reciprocity: [...added, ...existing].slice(0, RECIPROCITY_CAP) },
     updatedAt: now.toISOString(),
+  };
+}
+
+// ── Candidate feed (spec 70 §3.2) — the forward-first "what SelfOS is curious about next" pool ──────────────
+
+/** The panel/IPC curation action → the persisted curation state. */
+const CURATION_FOR_ACTION: Record<'ask' | 'not-this' | 'go-deeper' | 'clear', CandidateCuration> = {
+  ask: 'asked',
+  'not-this': 'skipped',
+  'go-deeper': 'go-deeper',
+  clear: 'none',
+};
+
+/** A candidate is live in the feed / steers generation while it hasn't been asked and isn't "Not this". */
+const isActiveCandidate = (c: NextCandidate): boolean =>
+  c.mintedAssignmentId === undefined && c.curation !== 'skipped';
+
+/**
+ * Apply a curation tap to one candidate (spec 70 §3.2). Cheap, no AI: writes the candidate's curation state so
+ * the next generation honors it (`ask` pins/leads, `not-this` excludes, `go-deeper` biases the thread to depth,
+ * `clear` un-curates). A no-op for an unknown / already-minted candidate. Pure — returns a new profile.
+ */
+export function applyCandidateCuration(
+  profile: PersonalizationProfile,
+  input: { candidateId: string; action: 'ask' | 'not-this' | 'go-deeper' | 'clear' },
+  now: Date,
+): PersonalizationProfile {
+  const curation = CURATION_FOR_ACTION[input.action];
+  let changed = false;
+  const candidates = profile.candidates.map((c) => {
+    if (c.id !== input.candidateId || c.mintedAssignmentId !== undefined) return c;
+    if (c.curation === curation) return c;
+    changed = true;
+    return { ...c, curation };
+  });
+  if (!changed) return profile;
+  return { ...profile, candidates, updatedAt: now.toISOString() };
+}
+
+/**
+ * Stamp every not-yet-minted candidate whose prompt was actually asked (near-duplicates one of `askedPrompts`)
+ * with the assignment that asked it, so it drops off the feed + stops steering generation (spec 70 §3.2/§5.5).
+ * Pure; idempotent (an already-stamped candidate is untouched). `''`-safe.
+ */
+export function markCandidateAsked(
+  profile: PersonalizationProfile,
+  input: { assignmentId: string; askedPrompts: readonly string[] },
+  now: Date,
+): PersonalizationProfile {
+  const asked = input.askedPrompts.map((p) => p.trim()).filter(Boolean);
+  if (asked.length === 0) return profile;
+  let changed = false;
+  const candidates = profile.candidates.map((c) => {
+    if (c.mintedAssignmentId !== undefined) return c;
+    if (!isNearDuplicate(c.prompt, asked)) return c;
+    changed = true;
+    return { ...c, mintedAssignmentId: input.assignmentId };
+  });
+  if (!changed) return profile;
+  return { ...profile, candidates, updatedAt: now.toISOString() };
+}
+
+/**
+ * Merge a fresh AI-proposed candidate set into the profile (spec 70 §5.3), preserving curation + minted state
+ * and honoring the person's steering. Pure — returns a new profile.
+ *
+ * - Existing candidates that were **actually asked** (minted, or their prompt now near-duplicates an already-asked
+ *   prompt) drop off the feed — the self-heal backstop for a mint path that didn't call `markCandidateAsked`.
+ * - Surviving existing candidates (incl. the person's `asked`/`skipped`/`go-deeper` curation) carry forward.
+ * - A proposed candidate is dropped when it near-duplicates an already-asked prompt, a surviving candidate, or a
+ *   `skipped` one (the person declined that phrasing — never re-propose it identically, spec 70 §3.2).
+ * - Per-area (`CANDIDATES_PER_AREA`) + total (`CANDIDATE_CAP`) caps bound the feed; curated candidates are kept
+ *   preferentially so a cap never silently drops a person's pin.
+ */
+export function mergeCandidates(
+  profile: PersonalizationProfile,
+  proposed: readonly {
+    lifeArea: string;
+    prompt: string;
+    kind: NextCandidateKind;
+    topicId?: string;
+  }[],
+  askedPrompts: readonly string[],
+  now: Date,
+): PersonalizationProfile {
+  const asked = askedPrompts.map((p) => p.trim()).filter(Boolean);
+  const wasAsked = (prompt: string): boolean => asked.length > 0 && isNearDuplicate(prompt, asked);
+
+  // Existing candidates that weren't actually asked survive. Split ACTIVE (in the feed / steering) from DECLINED
+  // ("Not this"). Declined ones are kept ONLY as bounded de-dup memory — never counted toward the caps and never
+  // blocking their area — so repeated "Not this" declines THAT phrasing, never the topic (spec 70 §3.2/§13).
+  const activeSurvivors: NextCandidate[] = [];
+  const declinedSurvivors: NextCandidate[] = [];
+  for (const c of profile.candidates) {
+    if (c.mintedAssignmentId !== undefined) continue; // already asked → gone from the feed
+    if (wasAsked(c.prompt)) continue; // asked via some path we didn't stamp → drop it (self-heal)
+    if (c.curation === 'skipped') declinedSurvivors.push(c);
+    else activeSurvivors.push(c);
+  }
+
+  const nowIso = now.toISOString();
+  // Per-area + de-dup accounting is over ACTIVE candidates only, so a declined area can always be re-filled.
+  const perArea = new Map<string, number>();
+  for (const c of activeSurvivors) perArea.set(c.lifeArea, (perArea.get(c.lifeArea) ?? 0) + 1);
+  const seen = activeSurvivors.map((c) => c.prompt);
+  const declined = declinedSurvivors.map((c) => c.prompt);
+
+  const fresh: NextCandidate[] = [];
+  for (const p of proposed) {
+    const prompt = p.prompt.trim();
+    if (!prompt) continue;
+    if (wasAsked(prompt)) continue;
+    if (isNearDuplicate(prompt, seen)) continue;
+    if (declined.length > 0 && isNearDuplicate(prompt, declined)) continue;
+    if ((perArea.get(p.lifeArea) ?? 0) >= CANDIDATES_PER_AREA) continue;
+    perArea.set(p.lifeArea, (perArea.get(p.lifeArea) ?? 0) + 1);
+    seen.push(prompt);
+    fresh.push({
+      id: uuid(),
+      lifeArea: p.lifeArea,
+      ...(p.topicId ? { topicId: p.topicId } : {}),
+      prompt,
+      kind: p.kind,
+      curation: 'none',
+      at: nowIso,
+    });
+  }
+
+  // The active feed: pinned / go-deeper-curated candidates first (a cap never drops them while the curated set
+  // stays under CANDIDATE_CAP — the common case), then newest.
+  const active = [...activeSurvivors, ...fresh]
+    .sort((a, b) => {
+      const ca = a.curation !== 'none' ? 0 : 1;
+      const cb = b.curation !== 'none' ? 0 : 1;
+      if (ca !== cb) return ca - cb;
+      return b.at.localeCompare(a.at);
+    })
+    .slice(0, CANDIDATE_CAP);
+  // Declined candidates are bounded de-dup memory (newest first) that ages out — so a "Not this" declines the
+  // phrasing now, and a fresh angle on that ground is allowed again once it falls out of the window.
+  const declinedKept = [...declinedSurvivors]
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .slice(0, SKIPPED_CANDIDATE_CAP);
+
+  return {
+    ...profile,
+    candidates: [...active, ...declinedKept],
+    candidatesRefreshedAt: nowIso,
+    updatedAt: nowIso,
   };
 }
 
@@ -575,4 +773,46 @@ export function buildFeedbackGuidance(profile: PersonalizationProfile, now: Date
   return `WHAT THEY'VE TOLD YOU ABOUT PRIOR QUESTIONS (learn from this — it is how you get smarter over time):\n${sections.join(
     '\n\n',
   )}`;
+}
+
+/**
+ * The candidate feed as a generation-prompt block (spec 70 §3.2/§5.5) — "what SelfOS is curious about asking
+ * this person next", so generation draws from the same candidates the person sees + curates ("what you see is
+ * what gets asked"). Pinned (`asked`) candidates lead within their section; `skipped` + already-minted ones are
+ * excluded; a `go-deeper`-curated candidate is treated as a deeper-follow-up thread regardless of its `kind`.
+ * `''` when there is nothing to steer with (no candidates yet). Pure.
+ */
+export function buildCandidateGuidance(profile: PersonalizationProfile): string {
+  const active = profile.candidates.filter(isActiveCandidate);
+  if (active.length === 0) return '';
+  const isGoDeeper = (c: NextCandidate): boolean =>
+    c.kind === 'go-deeper' || c.curation === 'go-deeper';
+  // Pinned ("Ask me this") leads within each section; ★-marked so the model knows the top priority.
+  const order = (list: NextCandidate[]): NextCandidate[] =>
+    [...list].sort((a, b) => {
+      const pa = a.curation === 'asked' ? 0 : 1;
+      const pb = b.curation === 'asked' ? 0 : 1;
+      return pa - pb;
+    });
+  const line = (c: NextCandidate): string =>
+    `- ${c.curation === 'asked' ? '★ ' : ''}${c.prompt.trim()}`;
+  const newGround = order(active.filter((c) => !isGoDeeper(c)))
+    .slice(0, FEED_CANDIDATE_CAP)
+    .map(line);
+  const deeper = order(active.filter(isGoDeeper)).slice(0, FEED_CANDIDATE_CAP).map(line);
+  const sections: string[] = [];
+  if (newGround.length)
+    sections.push(`New ground SelfOS wants to open up:\n${newGround.join('\n')}`);
+  if (deeper.length)
+    sections.push(
+      `Threads worth going deeper on (a fresh, more specific angle):\n${deeper.join('\n')}`,
+    );
+  if (sections.length === 0) return '';
+  return (
+    `QUESTIONS SELFOS IS CURIOUS ABOUT ASKING THIS PERSON NEXT (spec 70 §3.2) — draw generation PRIMARILY from` +
+    ` these; they were chosen for this person, and the ones marked ★ are top priority (they explicitly asked` +
+    ` for them). Ask them in your own words, on their own terms; never quote this list back:\n${sections.join(
+      '\n\n',
+    )}`
+  );
 }

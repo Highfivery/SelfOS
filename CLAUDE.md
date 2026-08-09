@@ -427,6 +427,41 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-09 — **Build (Adaptive Exploration P1 — the candidate-feed engine + honest depth; SPEC 70 §12 P1;
+  on `feat/adaptive-exploration-p1`, a worktree off origin/main).** First of four phases reimagining the
+  Questionnaires "Explored" tab from a backward "Explored ✓" report into a forward-first candidate feed. P1 is
+  MODEL + GENERATION CORE ONLY — **no user surface** (the panel is P2). Reuses spec 69's machinery, no parallel
+  generator. Built: (1) additive `NextCandidate` schema + `candidates`/`candidatesRefreshedAt` on the
+  Personalization Profile — tolerant-parsed, **no `schemaVersion` bump** (the 69 §4.1 precedent; a pre-70
+  profile reads an empty feed, tested). (2) Pure `applyCandidateCuration` (ask/not-this/go-deeper/clear),
+  `markCandidateAsked` (near-dup stamp → drops off + stops steering), `mergeCandidates`, and
+  `buildCandidateGuidance` (pinned ★ leads, new vs go-deeper split, skipped/minted excluded). (3)
+  `buildCandidateGuidance` **folded into the shared `gatherRecipientFeedbackGuidance` seam** → steers all five
+  generation paths (manual/auto/dream/email/story) with zero per-path wiring — "what you see is what gets asked".
+  (4) `refreshNextCandidates` — a **separate** metered `questionnaire.profile` pass (owner-confirmed over folding
+  into the coverage call: each independently fail-safe + testable), riding the daily reconcile cadence after
+  `refreshCoverage`, fed the CHEAP reads (distilled insight facts + intake + the freshly-placed coverage map +
+  the feedback ledger — no second full re-decrypt of every response); tolerant-parsed, budget-gated, fail-safe
+  (a degraded pass leaves the last-good candidates). (5) `COVERAGE_SYSTEM` recalibrated for **honest depth** —
+  a conservative, round-down scale that reserves 0.7+ for sustained multi-angle exploration (the display
+  New/Getting/Knows-you-well relabel is P2). (6) Wired into the bridge: `refreshNextCandidates` on the
+  `memoryRefresh` cadence, `markCandidateAsked` at the manual `assignmentsCreate` path (immediate own-scoped
+  drop-off; the daily refresh self-heals as the backstop). Own-scoped throughout (a person's own data → their
+  own profile; no cross-person crossing). code-reviewer **fix-first**: the one should-fix — `skipped` ("Not
+  this") candidates were counting toward the per-area/total caps and never aging out, turning repeated "Not this"
+  into a de-facto topic ban (contradicting §13/§7); now declined candidates are **bounded de-dup memory only**
+  (a separate `SKIPPED_CANDIDATE_CAP`, aged out, never blocking their area), so "Not this" declines the phrasing,
+  never the topic — plus the nits (cap the candidate grounding before assembly so the trailing instruction is
+  never truncated; the `questionnaire.profile` usage label now reads "coverage & next-topics"). Gate green:
+  typecheck/lint/format, **1937 core + 1544 desktop** unit (candidate curation/asked-drops-off/merge-caps/
+  declined-never-a-topic-ban/guidance-excludes-skipped+minted; `refreshNextCandidates` populate + fail-safe +
+  pin-carry-forward asserting the steering reaches the model; a two-persona coreBridge cadence→feed→steer→
+  drop-off decrypt test; a pre-70-profile additive-parse test). No RTL/E2E (P1 has no surface, §12). **§13
+  defaults kept** (≤10 feed / ≤3 per area; "Not this" ≠ topic ban). **Lesson: a candidate cap must never let a
+  DECLINE occupy a slot — a "skip this one" that counts toward the per-area/total cap silently becomes a topic
+  ban and can freeze the whole feed; keep declines as bounded, aging de-dup memory, separate from the active
+  feed's caps.** **Remaining:** P2 (forward-first panel + curation IPC), P3 (Intimacy first-class gated area),
+  P4 (silent partner wishlist).
 - 2026-08-07 — **Fix + durable turn-model decision (Together turn state told the WRONG partner "your turn";
   member-reported [#369]; SPEC 58 §3.6 amended; on `fix/together-turn-state-369`).** In a couples session Angel
   wrote, Ben replied, and the coach followed up **directed at Ben** — yet Angel's session read "awaiting your

@@ -21,11 +21,14 @@ function plain(text: string): string {
     .trim();
 }
 
-/** Pick the one session to feature: your-turn first, then a pending invite, then most recently active. */
+/** Pick the one session to feature: ready-to-wrap-up first, then your-turn, then a pending invite, then recent. */
 function primarySession(
   sessions: TogetherSessionSummary[],
   myId: string | null,
 ): TogetherSessionSummary | undefined {
+  // §3.8 — a concluded session (a light close-out) leads over a turn.
+  const readyToWrap = sessions.find((s) => s.status === 'active' && s.readyToWrapUp);
+  if (readyToWrap) return readyToWrap;
   const yourTurn = sessions.find((s) => s.yourTurn && s.status !== 'complete');
   if (yourTurn) return yourTurn;
   const invited = sessions.find((s) => s.status === 'invited' && s.initiatorPersonId !== myId);
@@ -76,9 +79,15 @@ export function TogetherHomeCard({
   if (!session) return null;
 
   const name = partnerName(session, myId);
-  // Show WHOSE turn it is explicitly: yours, the partner's, or a pending invite.
-  const pill =
-    session.status === 'invited' ? 'Invitation' : session.yourTurn ? 'Your turn' : `${name}’s turn`;
+  const readyToWrapUp = session.status === 'active' && session.readyToWrapUp;
+  // Show WHOSE turn it is explicitly: ready to wrap up, yours, the partner's, or a pending invite.
+  const pill = readyToWrapUp
+    ? 'Ready to wrap up'
+    : session.status === 'invited'
+      ? 'Invitation'
+      : session.yourTurn
+        ? 'Your turn'
+        : `${name}’s turn`;
 
   const connection = pulse?.checkInSeries.find((s) => /connection/i.test(s.label));
   const connectionValue = connection?.points.at(-1)?.y;
@@ -93,7 +102,11 @@ export function TogetherHomeCard({
           <Heading level={2} className={styles.sectionTitle}>
             <Heart size={16} aria-hidden="true" /> Together · {name}
           </Heading>
-          <span className={session.yourTurn ? styles.statusPill : styles.statusPillMuted}>
+          <span
+            className={
+              readyToWrapUp || session.yourTurn ? styles.statusPill : styles.statusPillMuted
+            }
+          >
             {pill}
           </span>
         </div>

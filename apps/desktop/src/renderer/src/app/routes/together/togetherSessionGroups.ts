@@ -2,6 +2,7 @@ import type { TogetherSessionSummary } from '@shared/schemas';
 
 /**
  * Grouping for the "Your sessions" board (58 §3.2), ordered by what needs the viewer's attention first:
+ *   - readyToWrapUp   — an active session the coach signalled has reached a natural close (§3.8) — wrap up
  *   - yourTurn        — an active session where it's your move (you owe a reply)
  *   - openInvitation  — someone invited YOU (you accept/decline)
  *   - waiting         — an active session where it's your partner's move
@@ -10,6 +11,7 @@ import type { TogetherSessionSummary } from '@shared/schemas';
  * A `declined` session never reaches the list (the bridge omits the decliner's, §3.5), so there's no group.
  */
 export type TogetherGroupKey =
+  | 'readyToWrapUp'
   | 'yourTurn'
   | 'openInvitation'
   | 'waiting'
@@ -22,6 +24,7 @@ export interface TogetherSessionGroup {
 }
 
 const ORDER: TogetherGroupKey[] = [
+  'readyToWrapUp',
   'yourTurn',
   'openInvitation',
   'waiting',
@@ -36,6 +39,8 @@ export function groupKeyFor(
   const iInitiated = session.initiatorPersonId === myId;
   switch (session.status) {
     case 'active':
+      // §3.8 — a concluded session leads the board (a light close-out), above turns.
+      if (session.readyToWrapUp) return 'readyToWrapUp';
       return session.yourTurn ? 'yourTurn' : 'waiting';
     case 'invited':
       return iInitiated ? 'invitedByYou' : 'openInvitation';
@@ -71,6 +76,8 @@ export function groupTogetherSessions(
 /** The group heading — names the partner where it clarifies whose move it is (single-partner board). */
 export function groupTitle(key: TogetherGroupKey, partnerName: string): string {
   switch (key) {
+    case 'readyToWrapUp':
+      return 'Ready to wrap up';
     case 'yourTurn':
       return 'Your turn';
     case 'openInvitation':

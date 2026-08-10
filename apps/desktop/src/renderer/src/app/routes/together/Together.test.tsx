@@ -64,6 +64,7 @@ function summary(over: Partial<TogetherSessionSummary> = {}): TogetherSessionSum
     ],
     status: 'active',
     yourTurn: true,
+    readyToWrapUp: false,
     unreadCount: 0,
     createdAt: 'now',
     ...over,
@@ -338,6 +339,10 @@ describe('session card status + relative time', () => {
     expect(sessionStatus({ ...base, status: 'active', yourTurn: false }, ME).label).toBe(
       'Their turn',
     );
+    // §3.8 — a concluded session reads "Ready to wrap up" (a warm tone), not a turn.
+    expect(
+      sessionStatus({ ...base, status: 'active', yourTurn: true, readyToWrapUp: true }, ME),
+    ).toEqual({ label: 'Ready to wrap up', tone: 'warning' });
     // An incoming invitation (I'm NOT the initiator) is ball-in-your-court → accent.
     expect(sessionStatus({ ...base, status: 'invited', initiatorPersonId: PARTNER }, ME)).toEqual({
       label: 'Open invitation',
@@ -398,6 +403,10 @@ describe('TogetherSessionsBoard (§3.2)', () => {
     expect(turnHint(summary({ status: 'active', yourTurn: false }), 'Angel')).toBe(
       "It's Angel's move.",
     );
+    // §3.8 — a concluded session prompts wrapping up instead of a turn.
+    expect(
+      turnHint(summary({ status: 'active', yourTurn: true, readyToWrapUp: true }), 'Angel'),
+    ).toMatch(/wrap up & reflect, or keep talking/i);
     expect(turnHint(summary({ status: 'invited' }), 'Angel')).toBeNull();
   });
 });

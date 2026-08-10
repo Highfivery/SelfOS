@@ -44,6 +44,27 @@ describe('buildActivityFeed', () => {
     expect(feed.find((e) => e.id === 'session:s1')?.actionable).toBe(false);
   });
 
+  it('suppresses the together "your turn" feed event for a ready-to-wrap-up session (§3.8)', () => {
+    // The coach-directed turn (#369) can be true at the same time as readyToWrapUp; the feed must not
+    // emit a phantom "your turn" event for a session the rest of the UI shows as "Ready to wrap up".
+    const feed = buildActivityFeed({
+      now,
+      together: [
+        {
+          id: 't1',
+          partnerName: 'Angel',
+          yourTurn: true,
+          readyToWrapUp: true,
+          unreadCount: 0,
+          status: 'active',
+          lastMessageAt: hoursAgo(1),
+          createdAt: daysAgo(2),
+        },
+      ],
+    });
+    expect(feed.find((e) => e.id === 'together:t1')).toBeUndefined();
+  });
+
   it('excludes approved insights (captured memory) and surfaces only drafts as needs-review', () => {
     const feed = buildActivityFeed({
       now,

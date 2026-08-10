@@ -154,7 +154,9 @@ export function Together(): JSX.Element {
   };
   const attnCount = mySessions.filter(
     (s) =>
-      (s.status === 'active' && s.yourTurn) ||
+      // §3.8 — a ready-to-wrap-up session needs the viewer's attention too (for BOTH partners, not just the
+      // coach-addressed one), so it counts toward the tab badge alongside a turn or an open invitation.
+      (s.status === 'active' && (s.yourTurn || s.readyToWrapUp)) ||
       (s.status === 'invited' && s.initiatorPersonId !== myId),
   ).length;
   const pulseDue = pulseView ? pulseIsDue(pulseView, Date.now()) : false;

@@ -19,6 +19,7 @@ import {
   reapTogetherForPerson,
   removeMessagesFrom,
   awaitingTogetherReply,
+  readyToWrapUpFor,
   turnStateFor,
   unreadCountFor,
   updateState,
@@ -347,6 +348,42 @@ describe('turnStateFor + unreadCountFor', () => {
     expect(unreadCountFor(messages, A, '2')).toBe(1); // only B's message is newer than '2'
     expect(unreadCountFor(messages, A, '3')).toBe(0);
     expect(unreadCountFor(messages, B, undefined)).toBe(2); // A's message + the coach reply
+  });
+});
+
+describe('readyToWrapUpFor (§3.8)', () => {
+  it('true when the newest shared message is a wrap-up-flagged coach reply', () => {
+    const m = [
+      msg(A, 'user', '1'),
+      msg(B, 'assistant', '2', { wrapUpSuggested: true, replyToMessageId: 'personA-1' }),
+    ];
+    expect(readyToWrapUpFor(m)).toBe(true);
+  });
+
+  it('is reversible — a human message after the wrap-up signal clears it (they kept talking)', () => {
+    const m = [
+      msg(A, 'user', '1'),
+      msg(B, 'assistant', '2', { wrapUpSuggested: true }),
+      msg(A, 'user', '3'), // kept the conversation going
+    ];
+    expect(readyToWrapUpFor(m)).toBe(false);
+  });
+
+  it('ignores a private aside — a side-channel never signals the shared wrap-up', () => {
+    const m = [
+      msg(A, 'user', '1'),
+      msg(B, 'assistant', '2', { wrapUpSuggested: true, privateAside: true }),
+    ];
+    expect(readyToWrapUpFor(m)).toBe(false);
+  });
+
+  it('digestFor gates readyToWrapUp on an ACTIVE session (not once wrapped up)', () => {
+    const m = [msg(A, 'user', '1'), msg(B, 'assistant', '2', { wrapUpSuggested: true })];
+    const st = states(state(A, { rulesAckAt: '1' }), state(B, { rulesAckAt: '1' }));
+    // Active → ready to wrap up.
+    expect(digestFor(session(), st, null, m, A, NOW).readyToWrapUp).toBe(true);
+    // Explicitly wrapped up (a report timestamp after the last message) → complete, never "ready to wrap up".
+    expect(digestFor(session(), st, '3', m, A, NOW).readyToWrapUp).toBe(false);
   });
 });
 

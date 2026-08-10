@@ -1605,6 +1605,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       participants: await togetherParticipants(fs, key, session),
       status: digest.status,
       yourTurn: digest.yourTurn,
+      readyToWrapUp: digest.readyToWrapUp,
       unreadCount: digest.unreadCount,
       ...(digest.lastMessageSnippet !== undefined
         ? { lastMessageSnippet: digest.lastMessageSnippet }

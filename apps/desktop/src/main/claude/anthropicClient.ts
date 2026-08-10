@@ -1066,6 +1066,19 @@ export function fakeClaudeClient(): ClaudeClient {
           const target = [a, b].find((n) => n && n !== authorName) ?? b;
           reply += ` [[SELFOS:PRIVATE:{"to":"${target}","text":"PRIVATECOACHNOTE — a gentle check just for you."}]]`;
         }
+        // 58 §3.8: when the pair reach a natural close (a "we found it" / "wrap up" cue), append the WRAPUP
+        // marker so an E2E can drive the ready-to-wrap-up state through the real UI. Stripped from the reply.
+        // Key on the LATEST partner message only (not the whole transcript) so a later message with no close
+        // cue reverses the state — otherwise an early "wrap up" would stick to every subsequent reply.
+        const lastPartnerText = [...options.messages].reverse().find((m) => m.role === 'user');
+        if (
+          lastPartnerText &&
+          /we found it|wrap up|feels done|that.?s a good place/i.test(
+            flattenContent(lastPartnerText.content),
+          )
+        ) {
+          reply += ' [[SELFOS:WRAPUP]]';
+        }
         for (const word of reply.split(' ')) onDelta(`${word} `);
         return Promise.resolve({
           text: reply,

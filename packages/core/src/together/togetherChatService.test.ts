@@ -12,6 +12,7 @@ import {
   createSession,
   listMessages,
   projectMessages,
+  readyToWrapUpFor,
   turnStateFor,
   updateState,
 } from './togetherService';
@@ -314,6 +315,32 @@ describe('runTogetherTurn (§5.1 invariants)', () => {
     const messages = await listMessages(fs, key, session.id);
     // The user message stays; NO blank coach message was persisted.
     expect(messages.map((m) => m.role)).toEqual(['user']);
+  });
+
+  it('§3.8 — a coach reply with the WRAPUP marker flags the message + strips the token', async () => {
+    const fs = memFileSystem();
+    const session = await seed(fs);
+    const { client } = captureClient('That’s a real step for you both. [[SELFOS:WRAPUP]]');
+    const result = await runTogetherTurn({
+      fs,
+      key,
+      client,
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      session,
+      authorPersonId: BEN,
+      userText: 'I think we found it.',
+      onDelta: () => {},
+      now: new Date('2026-07-10T12:08:00.000Z'),
+    });
+    expect(result.ok).toBe(true);
+    const messages = await listMessages(fs, key, session.id);
+    const coach = messages.find((m) => m.role === 'assistant');
+    expect(coach?.wrapUpSuggested).toBe(true);
+    expect(coach?.content).not.toContain('SELFOS:WRAPUP'); // the token never shows
+    expect(coach?.content).toContain('a real step');
+    // The prompt taught the marker convention.
+    expect(readyToWrapUpFor(messages)).toBe(true);
   });
 
   it('NO_KEY / initiator-over-budget block the turn; the PARTNER’s own budget never gates (§6.2)', async () => {

@@ -14,6 +14,7 @@ export const CHECK_IN_ATTENTION_DAYS = 7;
 export const SEND_QUESTIONNAIRE_STALE_DAYS = 30;
 
 export type AttentionKind =
+  | 'together-wrapup'
   | 'together-turn'
   | 'together-invite'
   | 'analyze-responses'
@@ -77,8 +78,22 @@ export function needsAttention(input: AttentionInput): AttentionItem[] {
 
   // Together — it's your turn (someone's waiting on you), else a pending invitation.
   if (can.together) {
-    const yourTurn = input.togetherSessions.find((s) => s.yourTurn && s.status !== 'complete');
-    if (yourTurn) {
+    // §3.8 — a concluded session leads with a gentle wrap-up prompt, above a turn.
+    const readyToWrap = input.togetherSessions.find(
+      (s) => s.status === 'active' && s.readyToWrapUp,
+    );
+    const yourTurn = input.togetherSessions.find(
+      (s) => s.yourTurn && !s.readyToWrapUp && s.status !== 'complete',
+    );
+    if (readyToWrap) {
+      const name = partnerName(readyToWrap, activePersonId);
+      items.push({
+        kind: 'together-wrapup',
+        label: `Ready to wrap up with ${name}`,
+        detail: 'Your session reached a natural close — wrap up & reflect',
+        route: '/together',
+      });
+    } else if (yourTurn) {
       const name = partnerName(yourTurn, activePersonId);
       items.push({
         kind: 'together-turn',

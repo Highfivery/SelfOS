@@ -15,6 +15,7 @@ function s(over: Partial<TogetherSessionSummary>): TogetherSessionSummary {
     ],
     status: 'active',
     yourTurn: false,
+    readyToWrapUp: false,
     unreadCount: 0,
     createdAt: 'now',
     ...over,
@@ -25,6 +26,10 @@ describe('togetherSessionGroups', () => {
   it('buckets each session by whose move it is', () => {
     expect(groupKeyFor(s({ status: 'active', yourTurn: true }), ME)).toBe('yourTurn');
     expect(groupKeyFor(s({ status: 'active', yourTurn: false }), ME)).toBe('waiting');
+    // §3.8 — a concluded session leads the board regardless of whose "turn" it technically is.
+    expect(groupKeyFor(s({ status: 'active', yourTurn: true, readyToWrapUp: true }), ME)).toBe(
+      'readyToWrapUp',
+    );
     expect(groupKeyFor(s({ status: 'invited', initiatorPersonId: 'p' }), ME)).toBe(
       'openInvitation',
     );

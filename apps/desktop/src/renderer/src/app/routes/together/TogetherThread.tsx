@@ -321,11 +321,16 @@ export function TogetherThread({
   const [reopened, setReopened] = useState(false);
 
   const other = session.participants.find((p) => p.personId !== me);
+  // §3.8 — a concluded session (the coach signalled a natural close) reads "Ready to wrap up", not a turn —
+  // matching the card/board, so the in-session header never shows the phantom turn the user reported.
+  const readyToWrapUp = !completed && session.readyToWrapUp;
   const turnLabel = completed
     ? 'Wrapped up'
-    : session.yourTurn
-      ? 'Your turn'
-      : `Waiting for ${other?.displayName ?? 'your partner'}`;
+    : readyToWrapUp
+      ? 'Ready to wrap up'
+      : session.yourTurn
+        ? 'Your turn'
+        : `Waiting for ${other?.displayName ?? 'your partner'}`;
 
   const steps = session.guide?.kind === 'structured' ? (session.guide.steps ?? []) : [];
   const currentStep = session.guideStep ?? 0;
@@ -339,7 +344,9 @@ export function TogetherThread({
         <Inline gap={2} align="center">
           <span
             className={styles.turnPill}
-            data-turn={completed ? 'done' : session.yourTurn ? 'you' : 'them'}
+            data-turn={
+              completed ? 'done' : readyToWrapUp ? 'wrap' : session.yourTurn ? 'you' : 'them'
+            }
           >
             {turnLabel}
           </span>

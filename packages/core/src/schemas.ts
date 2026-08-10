@@ -65,6 +65,7 @@ export const NOTIFICATION_KINDS = [
   'answers-updated', // 56-answer-review-edit §3.2 — a recipient edited answers after the sender analyzed them
   'together-invite', // 58-together §3.11 — a partner invited you to a Together session
   'together-turn', // 58-together §3.11 — your turn in a Together session (coalesced per session, projection signature)
+  'together-wrapup', // 58-together §3.8 — the coach signalled a natural close; a gentle "wrap up & reflect?" nudge
   'together-private', // 58-together §3.14 Part B — the coach left a private note just for you in a Together session
   'auto-checkin-ready', // 63-auto-checkins §6.4 — an auto-generated check-in is waiting in the inbox
   'auto-checkin-enabled', // 63-auto-checkins §5.1 — the one-time "Auto check-ins is now on" seed notice
@@ -3695,6 +3696,11 @@ export const TogetherMessageSchema = z.object({
   // (both are `assistant` + `privateAside` + authored-for-viewer). Drives the `together-private` signal so it
   // fires only for an unprompted note, never for a reply the viewer just watched arrive. Additive-optional.
   coachInitiated: z.boolean().optional(),
+  // §3.8 — the coach appended a `[[SELFOS:WRAPUP]]` marker on this (shared) reply because the conversation
+  // reached a natural close, so the session is "ready to wrap up" (the derived state that replaces the turn
+  // indicator until someone wraps up or keeps talking). Set only on a non-aside coach message; the marker
+  // itself is stripped from `content`. Additive-optional (the `coachInitiated` precedent) — no version bump.
+  wrapUpSuggested: z.boolean().optional(),
   // 66 §3.3/§8.3 — this record IS a tombstone left where messages were removed. In a couples context a
   // transcript that silently rewrites itself is disorienting, so removal leaves a neutral placeholder for
   // both partners: the content is gone, the fact that something was there is not hidden. Additive-optional
@@ -3750,6 +3756,10 @@ export interface TogetherSessionSummary {
   participants: TogetherParticipant[];
   status: TogetherStatus;
   yourTurn: boolean;
+  /** §3.8 — the coach signalled a natural close (the newest shared message is a wrap-up-flagged coach reply),
+   *  so the turn indicator is replaced with a "ready to wrap up & reflect" prompt. Cleared once someone sends
+   *  another message (they kept talking) or wraps up. Active sessions only. */
+  readyToWrapUp: boolean;
   unreadCount: number;
   lastMessageSnippet?: string;
   lastMessageAt?: string;

@@ -339,6 +339,7 @@ describe('Home — the "For you" engine', () => {
             ],
             status: 'invited' as const,
             yourTurn: false,
+            readyToWrapUp: false,
             unreadCount: 0,
             createdAt: 'now',
           },

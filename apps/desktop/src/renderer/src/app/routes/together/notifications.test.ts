@@ -17,6 +17,7 @@ function summary(over: Partial<TogetherSessionSummary>): TogetherSessionSummary 
     ],
     status: 'active',
     yourTurn: false,
+    readyToWrapUp: false,
     unreadCount: 0,
     createdAt: '2026-07-10T00:00:00.000Z',
     ...over,
@@ -63,6 +64,27 @@ describe('togetherNotificationCandidates (§3.11)', () => {
       coalesceKey: 'together-turn:s1',
       signature: '2026-07-11T00:00:00.000Z',
       title: 'Your turn with Angel — “Us”',
+    });
+  });
+
+  it('fires together-wrapup (not a turn) for a concluded session (§3.8)', () => {
+    const out = togetherNotificationCandidates(
+      [
+        summary({
+          status: 'active',
+          yourTurn: true, // the coach's closing reply technically addressed the viewer…
+          readyToWrapUp: true, // …but it's ready to wrap up, so we nudge that, not a turn
+          topic: 'Us',
+          lastMessageAt: '2026-07-11T00:00:00.000Z',
+        }),
+      ],
+      ME,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      kind: 'together-wrapup',
+      coalesceKey: 'together-wrapup:s1',
+      title: 'Ready to wrap up with Angel — “Us”',
     });
   });
 

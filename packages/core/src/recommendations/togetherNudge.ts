@@ -57,8 +57,12 @@ export function computeTogetherHomeNudge(
     };
   }
 
-  // 2. An active session where it's the viewer's turn to reply.
-  const turn = mostRecent(summaries.filter((s) => s.status === 'active' && s.yourTurn));
+  // 2. An active session where it's the viewer's turn to reply. A concluded session ready to wrap up (§3.8)
+  // is NOT a turn — it's surfaced as a wrap-up prompt elsewhere (needs-attention + notification), so exclude
+  // it here rather than nudge a phantom turn.
+  const turn = mostRecent(
+    summaries.filter((s) => s.status === 'active' && s.yourTurn && !s.readyToWrapUp),
+  );
   if (turn) {
     return {
       kind: 'turn',

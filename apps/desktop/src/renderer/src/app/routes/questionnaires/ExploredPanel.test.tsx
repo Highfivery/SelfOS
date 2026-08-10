@@ -51,6 +51,7 @@ const view = (over: Partial<QuestionnaireCoverageView> = {}): QuestionnaireCover
     },
   ],
   markedOff: [{ label: 'How is your commute?', kind: 'not-applicable', at: 'now' }],
+  partners: [],
   adultAcknowledged: false,
   ...over,
 });
@@ -177,6 +178,47 @@ describe('ExploredPanel (spec 70 §3)', () => {
     await screen.findByRole('button', { name: 'Look for more' });
     await userEvent.click(screen.getByRole('button', { name: 'Look for more' }));
     expect(await screen.findByText(/Couldn’t look for more right now/)).toBeInTheDocument();
+  });
+
+  it('renders an "Explore with your partner" card; adding a wish calls the bridge (spec 70 §3.5)', async () => {
+    const withPartner = view({
+      partners: [
+        {
+          partnerId: 'ben',
+          partnerName: 'Ben',
+          wishes: [{ id: 'w1', note: 'plan more date nights', intimacy: false }],
+        },
+      ],
+    });
+    const addWish = vi
+      .fn<SelfosBridge['questionnairesAddPartnerWish']>()
+      .mockResolvedValue(withPartner);
+    installMockBridge({
+      questionnairesPersonalizationProfile: () => Promise.resolve(withPartner),
+      questionnairesAddPartnerWish: addWish,
+    });
+    useCoverageStore.setState({ view: withPartner, loaded: true });
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Explore with Ben')).toBeInTheDocument();
+    // The existing wish shows, and it says the partner never sees it (silent).
+    expect(screen.getByText('plan more date nights')).toBeInTheDocument();
+    expect(screen.getByText(/they never see that you asked/i)).toBeInTheDocument();
+    // Add a new wish.
+    await userEvent.type(
+      screen.getByLabelText('Something to explore with Ben'),
+      'take a cooking class',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await waitFor(() =>
+      expect(addWish).toHaveBeenCalledWith({
+        partnerPersonId: 'ben',
+        note: 'take a cooking class',
+      }),
+    );
   });
 
   it('a steer calls the bridge and updates the view', async () => {

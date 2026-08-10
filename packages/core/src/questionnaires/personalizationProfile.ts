@@ -39,6 +39,12 @@ export const RECIPROCITY_CAP = 100;
 export const CANDIDATE_CAP = 16;
 export const FEED_CANDIDATE_CAP = 10;
 export const CANDIDATES_PER_AREA = 3;
+/** Bound "Explore with your partner" wishes so the doc + the partner's prompt stay economical (spec 70 §3.5). */
+export const PARTNER_WISH_CAP = 40;
+/** How many wishes per partner reach the partner's generation prompt (bounded to keep the steer focused). */
+export const PARTNER_WISH_GUIDANCE_CAP = 8;
+/** A wish note longer than this is trimmed (a wish is a short topic, not an essay). */
+export const PARTNER_WISH_MAX_LEN = 300;
 /**
  * Declined ("Not this") candidates are retained ONLY as bounded de-dup memory (so the next refresh doesn't
  * re-propose the exact phrasing) — separate from the active feed cap, and aged out, so repeated "Not this" is
@@ -119,6 +125,21 @@ const ReciprocityCandidateSchema = z.object({
 });
 export type ReciprocityCandidate = z.infer<typeof ReciprocityCandidateSchema>;
 
+/**
+ * One "Explore with your partner" wish (spec 70 §3.5) — the person's OWN free-text about a topic to explore WITH
+ * a connected partner. Stored in the REQUESTER's profile; it silently steers the PARTNER's generation (never
+ * quoted, never attributed). An `intimacy` wish only steers intimacy questions when BOTH partners hold the 18+
+ * ack (§8).
+ */
+const PartnerWishSchema = z.object({
+  id: z.string(),
+  partnerPersonId: z.string(),
+  note: z.string(),
+  intimacy: z.boolean().catch(false).default(false),
+  at: z.string(),
+});
+export type PartnerWish = z.infer<typeof PartnerWishSchema>;
+
 /** A candidate is either NEW ground or a GO-DEEPER follow-up on a thread already touched (spec 70 §3.2). */
 export const NextCandidateKindSchema = z.enum(['new', 'go-deeper']);
 export type NextCandidateKind = z.infer<typeof NextCandidateKindSchema>;
@@ -164,7 +185,11 @@ export const PersonalizationProfileSchema = z.object({
   candidates: z.array(NextCandidateSchema).catch([]).default([]),
   candidatesRefreshedAt: z.string().optional(),
   relational: z
-    .object({ reciprocity: z.array(ReciprocityCandidateSchema).catch([]).default([]) })
+    .object({
+      reciprocity: z.array(ReciprocityCandidateSchema).catch([]).default([]),
+      // "Explore with your partner" wishes (spec 70 §3.5) — additive-optional, tolerant, no schemaVersion bump.
+      partnerWishes: z.array(PartnerWishSchema).catch([]).default([]),
+    })
     .optional(),
 });
 export type PersonalizationProfile = z.infer<typeof PersonalizationProfileSchema>;
@@ -399,7 +424,64 @@ export function applyReciprocity(
   if (added.length === 0) return profile;
   return {
     ...profile,
-    relational: { reciprocity: [...added, ...existing].slice(0, RECIPROCITY_CAP) },
+    relational: {
+      reciprocity: [...added, ...existing].slice(0, RECIPROCITY_CAP),
+      partnerWishes: profile.relational?.partnerWishes ?? [],
+    },
+    updatedAt: now.toISOString(),
+  };
+}
+
+// ── "Explore with your partner" wishes (spec 70 §3.5) ──────────────────────────────────────────────────────
+
+/**
+ * Add a partner wish to the person's OWN profile (spec 70 §3.5). Trims + bounds the note; de-dups an identical
+ * (partner, note) so re-adding refreshes rather than bloats; caps the total. A blank note is a no-op. Pure.
+ */
+export function addPartnerWish(
+  profile: PersonalizationProfile,
+  input: { partnerPersonId: string; note: string; intimacy?: boolean },
+  now: Date,
+): PersonalizationProfile {
+  const note = input.note.trim().slice(0, PARTNER_WISH_MAX_LEN);
+  const partnerPersonId = input.partnerPersonId.trim();
+  if (!note || !partnerPersonId) return profile;
+  const existing = profile.relational?.partnerWishes ?? [];
+  const kept = existing.filter(
+    (w) => !(w.partnerPersonId === partnerPersonId && norm(w.note) === norm(note)),
+  );
+  const entry: PartnerWish = {
+    id: uuid(),
+    partnerPersonId,
+    note,
+    intimacy: input.intimacy === true,
+    at: now.toISOString(),
+  };
+  return {
+    ...profile,
+    relational: {
+      reciprocity: profile.relational?.reciprocity ?? [],
+      partnerWishes: [entry, ...kept].slice(0, PARTNER_WISH_CAP),
+    },
+    updatedAt: now.toISOString(),
+  };
+}
+
+/** Remove a partner wish by id from the person's OWN profile (spec 70 §3.5). No-op if absent. Pure. */
+export function removePartnerWish(
+  profile: PersonalizationProfile,
+  wishId: string,
+  now: Date,
+): PersonalizationProfile {
+  const existing = profile.relational?.partnerWishes ?? [];
+  const kept = existing.filter((w) => w.id !== wishId);
+  if (kept.length === existing.length) return profile;
+  return {
+    ...profile,
+    relational: {
+      reciprocity: profile.relational?.reciprocity ?? [],
+      partnerWishes: kept,
+    },
     updatedAt: now.toISOString(),
   };
 }

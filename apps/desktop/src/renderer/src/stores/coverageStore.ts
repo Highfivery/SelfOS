@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type {
+  AddPartnerWishInput,
   CandidateCurateInput,
   CoverageSteerInput,
   QuestionnaireCoverageView,
@@ -29,6 +30,10 @@ interface CoverageStoreState {
   curate: (input: CandidateCurateInput) => Promise<void>;
   lookForMore: () => Promise<void>;
   acknowledgeAdult: () => Promise<void>;
+  /** The partnerId currently mid-wish-write, so the panel can disable just that card. */
+  wishing: string | null;
+  addPartnerWish: (input: AddPartnerWishInput) => Promise<void>;
+  removePartnerWish: (input: { wishId: string; partnerId: string }) => Promise<void>;
   reset: () => void;
 }
 
@@ -40,6 +45,7 @@ const EMPTY = {
   curating: null,
   refreshing: false,
   acking: false,
+  wishing: null,
 } satisfies Partial<CoverageStoreState>;
 
 export const useCoverageStore = create<CoverageStoreState>((set) => ({
@@ -94,6 +100,24 @@ export const useCoverageStore = create<CoverageStoreState>((set) => ({
       set({ view, acking: false });
     } catch {
       set({ acking: false, error: 'We couldn’t save that. Try again.' });
+    }
+  },
+  addPartnerWish: async (input) => {
+    set({ wishing: input.partnerPersonId, error: null });
+    try {
+      const view = (await window.selfos?.questionnairesAddPartnerWish(input)) ?? null;
+      set({ view, wishing: null });
+    } catch {
+      set({ wishing: null, error: 'We couldn’t save that. Try again.' });
+    }
+  },
+  removePartnerWish: async ({ wishId, partnerId }) => {
+    set({ wishing: partnerId, error: null });
+    try {
+      const view = (await window.selfos?.questionnairesRemovePartnerWish({ wishId })) ?? null;
+      set({ view, wishing: null });
+    } catch {
+      set({ wishing: null, error: 'We couldn’t save that. Try again.' });
     }
   },
   reset: () => set({ ...EMPTY }),

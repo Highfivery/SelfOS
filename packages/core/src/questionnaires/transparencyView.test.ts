@@ -91,6 +91,7 @@ describe('projectCoverageView', () => {
             explored: false,
           },
         ],
+        partnerWishes: [],
       },
     };
     const view = projectCoverageView([], profile, now);

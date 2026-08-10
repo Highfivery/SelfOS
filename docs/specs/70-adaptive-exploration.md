@@ -1,6 +1,6 @@
 # 70 — Adaptive Exploration surface — "what's next," not "what's done"
 
-> **Status:** Approved · _last updated 2026-08-09_
+> **Status:** Built (all 4 phases) · _last updated 2026-08-09_
 >
 > Reimagines the [`69 §3.4`](69-questionnaire-intelligence.md) "Explored" tab from a backward-looking,
 > binary coverage report ("this area is Explored ✓") into a **forward-first, dynamic** surface that shows
@@ -417,6 +417,34 @@ _Proposed defaults; flag any to change before build._
 
 ## 15. Changelog
 
+- 2026-08-09 — **P4 (the silent "Explore with your partner" wishlist) BUILT — SPEC 70 IS NOW COMPLETE (all 4
+  phases)** (§12). The final phase: a person steers what their connected partner is asked, silently. (1)
+  `personalizationProfile.ts` — `PartnerWish` in `relational.partnerWishes` (additive, tolerant, no
+  `schemaVersion` bump) + pure `addPartnerWish`/`removePartnerWish` (trim/dedup/cap). (2) New `partnerWishes.ts`
+  — `buildPartnerWishGuidance(requesterId, partnerId, bothAdultAcked)` reads the REQUESTER's OWN wishes aimed at
+  the partner, **re-gates on a LIVE `partner` edge** (a removed edge drops the steer — the §8 re-gate), filters
+  intimacy wishes unless **both** partners hold the 18+ ack, and returns a **SILENT reciprocity-register block**
+  (the model weaves the topics in as its own questions, on their own terms, and is told to **NEVER attribute or
+  say someone requested them**) — it **never reads the partner's own data**. (3) `transparencyView.ts` — the
+  Explored read gains `partners: PartnerWishGroupView[]` (one card per live-partner edge, the person's OWN wishes
+  - the partner's display name — never the partner's coverage/answers) + `addPartnerWishAndRead`/
+    `removePartnerWishAndRead`. (4) Two own-scoped IPC channels `questionnaires:addPartnerWish` (re-checked against
+    a **live partner edge in the bridge** — a person may only wish for a partner they're connected to) +
+    `:removePartnerWish`. (5) **Three generation-path wirings** — the manual send (`assembleRecipientBundle`,
+    author→partner), auto check-ins (`runAutoCheckins`, owner→target, merging with the per-target exploration
+    focus), and Together (`buildTogetherSystemPrompt`, **both** partners' wishes, mutual) — each folds the silent
+    guidance in, each resolving both 18+ acks for the intimacy gate. (6) Renderer — the "Explore with <partner>"
+    card (free-text add + list + remove; an intimacy toggle only when the person has acked 18+; the "they never
+    see that you asked" reassurance). Own-scoped throughout; the partner's [`63 §3.3a`](63-auto-checkins.md)
+    see-and-stop controls still apply to anything steered. Gate green: typecheck/lint/format, 1948 core + full
+    desktop unit (partner-wish apply-fns; `buildPartnerWishGuidance` gating — live-edge / intimacy-both-acked /
+    self / silent-never-attributed; a **two-persona coreBridge test** — a wish steers the PARTNER's generation
+    prompt SILENTLY [prompt-assertion: the topic reaches the prompt, the "never say these came from anyone"
+    framing is present, no raw attribution], live-edge gated [a non-partner wish is a no-op], own-scoped [the wish
+    lives in the requester's profile; the partner has none]; RTL card add/remove) + a decrypt-level E2E (seed a
+    partner → add a wish through the real UI → decrypt the OWNER's profile → 360px) + real-Electron visual QA (the
+    card reads clean, with the silent-steering reassurance). **Spec 70 is complete — the Explored tab is now a
+    forward-first candidate feed + honest overview + first-class gated Intimacy + the silent partner wishlist.**
 - 2026-08-09 — **P3 (Intimacy as a first-class, 18+-gated area) BUILT** (§12). The last two intimacy pieces —
   P2 had already gated intimacy **candidates** in the feed behind the 18+ ack and removed the
   [`#386`](69-questionnaire-intelligence.md) onboarding-only framing, so P3 makes the Intimacy overview **row**

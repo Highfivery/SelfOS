@@ -24,6 +24,7 @@ import {
   saveRelationship,
   setAccount,
   upsertPerson,
+  upsertRelationship,
 } from '@selfos/core/people';
 import { getGoal, saveGoal } from '@selfos/core/goals';
 import { hashPin } from '@selfos/core/crypto';
@@ -2986,6 +2987,17 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
   {
     const fs0 = createNodeFileSystem(vault);
     const key0 = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    // A connected partner (a live `partner` edge) so the "Explore with your partner" card renders (spec 70 §3.5).
+    const partner = await upsertPerson(fs0, key0!, {
+      displayName: 'Robin',
+      isSubject: true,
+      tags: [],
+    });
+    await upsertRelationship(fs0, key0!, {
+      fromPersonId: 'owner-1',
+      toPersonId: partner.id,
+      type: 'partner',
+    });
     // An auto check-ins config so the "Auto check-ins" tab shows too — the 4-tab worst case for the §12 guard.
     await writeEncryptedJson(
       fs0,
@@ -3095,6 +3107,12 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
     ).toBeVisible();
     await expect(w.getByText('How is your love life these days?')).toHaveCount(0); // stayed skipped
 
+    // "Explore with your partner" (spec 70 §3.5): the card renders for the connected partner; add a wish.
+    await expect(w.getByRole('heading', { name: 'Explore with Robin' })).toBeVisible();
+    await w.getByLabel('Something to explore with Robin').fill('plan a proper holiday together');
+    await w.getByRole('button', { name: 'Add' }).click();
+    await expect(w.getByText('plan a proper holiday together')).toBeVisible();
+
     // The Auto check-ins tab is present (4-tab worst case for the overflow guard).
     await expect(w.getByRole('tab', { name: /Auto check-ins/ })).toBeVisible();
 
@@ -3121,7 +3139,12 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
   )) as {
     feedback?: { topicId?: string; kind?: string }[];
     candidates?: { id: string; curation?: string }[];
+    relational?: { partnerWishes?: { note?: string }[] };
   } | null;
+  // The partner wish persisted to the OWNER's own profile (spec 70 §3.5).
+  expect(
+    profile?.relational?.partnerWishes?.some((w) => w.note === 'plan a proper holiday together'),
+  ).toBe(true);
   expect(profile?.candidates?.find((c) => c.id === 'cand-skip')?.curation).toBe('skipped');
   expect(profile?.candidates?.find((c) => c.id === 'cand-keep')?.curation).toBe('asked');
   expect(

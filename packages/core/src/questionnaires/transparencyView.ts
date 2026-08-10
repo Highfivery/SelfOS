@@ -1,13 +1,17 @@
 import type { FileSystem } from '../host';
+import { getPerson } from '../people/peopleService';
+import { listRelationships, livePartnerIds } from '../people/relationshipService';
 
 import { deriveIntimacyCoverageFor } from './coverageService';
 import { deriveCoverageSkeleton } from './coverageModel';
 import {
+  addPartnerWish,
   applyCandidateCuration,
   applySteer,
   FEED_CANDIDATE_CAP,
   isActiveCandidate,
   readProfile,
+  removePartnerWish,
   writeProfile,
   type CandidateCuration,
   type CoverageTopic,
@@ -86,6 +90,9 @@ export interface QuestionnaireCoverageView {
   refreshDegraded?: boolean;
   areas: CoverageAreaView[];
   markedOff: MarkedOffView[];
+  /** One card per connected partner (a live `partner` edge) with this person's OWN wishes (spec 70 §3.5).
+   *  Empty when the person has no partner edge. Never surfaces the partner's own coverage/answers. */
+  partners: PartnerWishGroupView[];
   /** Whether the person has done the shared 18+ acknowledgement (spec 70 §3.4) — gates the Intimacy row's
    *  steering + candidates. The panel shows an inline "Confirm you're 18+" unlock on the Intimacy row when false. */
   adultAcknowledged: boolean;
@@ -106,6 +113,27 @@ export interface CoverageSteerInput {
 export interface CandidateCurateInput {
   candidateId: string;
   action: 'ask' | 'not-this' | 'go-deeper' | 'clear';
+}
+
+/** One "Explore with your partner" wish, as shown on the panel (spec 70 §3.5). The person's OWN input. */
+export interface PartnerWishView {
+  id: string;
+  note: string;
+  intimacy: boolean;
+}
+
+/** One connected-partner card on the Explored panel (spec 70 §3.5): the partner + this person's own wishes. */
+export interface PartnerWishGroupView {
+  partnerId: string;
+  partnerName: string;
+  wishes: PartnerWishView[];
+}
+
+/** Add / remove a partner wish from the panel (spec 70 §3.5). Own-scoped + live-edge-gated in the bridge. */
+export interface AddPartnerWishInput {
+  partnerPersonId: string;
+  note: string;
+  intimacy?: boolean;
 }
 
 const statusOf = (depth: number): CoverageStatus =>
@@ -251,6 +279,7 @@ export function projectCoverageView(
       : {}),
     areas,
     markedOff,
+    partners: [], // filled by `readCoverageView` (needs the relationship graph + people); pure projection has none
     adultAcknowledged,
     hasPlacement: Boolean(profile.coverage.lastPlacementAt),
     ...(profile.coverage.lastPlacementAt
@@ -276,7 +305,74 @@ export async function readCoverageView(
   ]);
   const skeleton = deriveCoverageSkeleton(intimacy);
   const topics = mergeProfileCoverage(skeleton, profile.coverage.topics);
-  return projectCoverageView(topics, profile, now, adultAcknowledged);
+  const projected = projectCoverageView(topics, profile, now, adultAcknowledged);
+  const partners = await gatherPartnerWishGroups(fs, key, personId, profile);
+  return { ...projected, partners };
+}
+
+/**
+ * The "Explore with your partner" cards (spec 70 §3.5) — one per CONNECTED partner (a live `partner` edge),
+ * carrying this person's OWN wishes for them. Own-scoped: reads only the requester's own wishes + the partner's
+ * display name (which the requester can already see). Never the partner's coverage/answers. Absent partner edge
+ * ⇒ no card. Pure-ish (the relationship graph + a name lookup per partner).
+ */
+async function gatherPartnerWishGroups(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  profile: PersonalizationProfile,
+): Promise<PartnerWishGroupView[]> {
+  const rels = await listRelationships(fs, key);
+  // The live partner edges this person is on (preserving first-seen order).
+  const partnerIds = livePartnerIds(rels, personId);
+  if (partnerIds.length === 0) return [];
+  const wishes = profile.relational?.partnerWishes ?? [];
+  const groups: PartnerWishGroupView[] = [];
+  for (const partnerId of partnerIds) {
+    const person = await getPerson(fs, key, partnerId);
+    if (!person) continue; // a dangling edge to a deleted person → no card
+    groups.push({
+      partnerId,
+      partnerName: person.displayName,
+      wishes: wishes
+        .filter((w) => w.partnerPersonId === partnerId)
+        .map((w) => ({ id: w.id, note: w.note, intimacy: w.intimacy })),
+    });
+  }
+  return groups;
+}
+
+/**
+ * Add a partner wish to the active person's OWN profile and return the refreshed view (spec 70 §3.5). Own-scoped;
+ * the caller (bridge) has already re-checked the live partner edge. Pure-ish (read → apply → write → read).
+ */
+export async function addPartnerWishAndRead(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  input: AddPartnerWishInput,
+  now: Date,
+  adultAcknowledged = false,
+): Promise<QuestionnaireCoverageView> {
+  const profile = await readProfile(fs, key, personId);
+  const next = addPartnerWish(profile, input, now);
+  if (next !== profile) await writeProfile(fs, key, next);
+  return readCoverageView(fs, key, personId, now, adultAcknowledged);
+}
+
+/** Remove a partner wish by id from the active person's OWN profile and return the refreshed view (spec 70 §3.5). */
+export async function removePartnerWishAndRead(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  wishId: string,
+  now: Date,
+  adultAcknowledged = false,
+): Promise<QuestionnaireCoverageView> {
+  const profile = await readProfile(fs, key, personId);
+  const next = removePartnerWish(profile, wishId, now);
+  if (next !== profile) await writeProfile(fs, key, next);
+  return readCoverageView(fs, key, personId, now, adultAcknowledged);
 }
 
 /**

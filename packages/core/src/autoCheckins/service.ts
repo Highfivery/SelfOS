@@ -1,4 +1,5 @@
 import { getGuidancePrefs } from '../conversations/guidanceService';
+import { allAdultAcknowledged } from '../together/adultGate';
 import {
   type CoveredAct,
   formatIntakeForGeneration,
@@ -34,6 +35,7 @@ import {
 } from '../questionnaires/recipientHistory';
 import { listCoveredTopics } from '../questionnaires/coveredTopicsStore';
 import { gatherRecipientPartnerContext } from '../questionnaires/partnerContext';
+import { buildPartnerWishGuidance } from '../questionnaires/partnerWishes';
 import type {
   AutoCheckinCreated,
   AutoCheckinIntent,
@@ -632,6 +634,23 @@ async function buildDedupBundle(
       ? (await gatherRecipientPartnerContext(fs, key, recipientId)).contextBlock
       : '';
 
+  // "Explore with your partner" (spec 70 §3.5/§5.6) — for an OTHER-person auto check-in (the owner sends to a
+  // partner), silently fold the owner's OWN wishes about the recipient into the steering (merges with, doesn't
+  // replace, the stream's exploration focus). Live-edge + both-18+-acked gated inside `buildPartnerWishGuidance`.
+  const partnerWishGuidance =
+    authorId === recipientId
+      ? ''
+      : await buildPartnerWishGuidance(
+          fs,
+          key,
+          authorId,
+          recipientId,
+          await allAdultAcknowledged(fs, key, [authorId, recipientId]),
+        );
+  const combinedFeedbackGuidance = [feedbackGuidance, partnerWishGuidance]
+    .filter((s) => s.trim() !== '')
+    .join('\n\n');
+
   // §27.2 — the coverage map. `profileEditedAt` comes from the session we already loaded (the gatherer can't
   // read it without forming a `questionnaires → intake` cycle).
   const intimacyCoverage = buildIntimacyCoverage({
@@ -651,7 +670,7 @@ async function buildDedupBundle(
     priorTitles,
     coveredNotes,
     intimacyCoverage,
-    feedbackGuidance,
+    feedbackGuidance: combinedFeedbackGuidance,
     partnerContext,
   };
 }

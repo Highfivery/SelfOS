@@ -4,6 +4,7 @@ import { memFileSystem } from '../host/memFileSystem';
 import type { EmailClient } from '../host';
 import {
   buildQuestionnaireDeliveryEmail,
+  buildSuggestionEmail,
   buildTransactionalEmail,
   buildWelcomeEmail,
 } from './emailComposer';
@@ -151,6 +152,36 @@ describe('buildWelcomeEmail (67 §3.2 / Phase 0)', () => {
     const email = buildWelcomeEmail({ recipientName: '<b>x</b>' });
     expect(email.html).not.toContain('<b>x</b>');
     expect(email.html).toContain('&lt;b&gt;x&lt;/b&gt;');
+  });
+});
+
+describe('buildSuggestionEmail — never a dead-end (67 §3.3 / family E)', () => {
+  const base = {
+    recipientName: 'Ben',
+    headline: 'The quiet you go when you want to be seen',
+    body: 'You’ve noticed a pull to be truly seen — what does that quieting protect, and what does it cost you?',
+  };
+
+  it('adds an "Open SelfOS" prompt when there are no relay tap buttons (no relay)', () => {
+    const email = buildSuggestionEmail(base); // no reactions/tuning → no relay
+    expect(email.html).toContain('Open SelfOS to reflect on this');
+    expect(email.text).toContain('Open SelfOS to reflect on this');
+    // Still carries the reflection + the not-medical line, and no inline SVG (§9).
+    expect(email.html).toContain('want to be seen');
+    expect(email.html).toContain('wellness support, not medical care');
+    expect(email.html).not.toContain('<svg');
+  });
+
+  it('omits the fallback prompt when relay reaction buttons are present (the buttons are the affordance)', () => {
+    const email = buildSuggestionEmail({
+      ...base,
+      reactions: [
+        { label: 'I’m game', url: 'https://relay.example/t/aaa' },
+        { label: 'Not for me', url: 'https://relay.example/t/bbb' },
+      ],
+    });
+    expect(email.html).toContain('/t/aaa'); // the clickable answer button
+    expect(email.html).not.toContain('Open SelfOS to reflect on this'); // no redundant fallback
   });
 });
 

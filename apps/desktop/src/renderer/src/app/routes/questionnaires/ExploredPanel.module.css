@@ -10,7 +10,7 @@
 
 .layout {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 264px minmax(0, 1fr);
   gap: var(--space-6);
   align-items: start;
 }
@@ -18,7 +18,7 @@
 .subnav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
   position: sticky;
   top: var(--space-4);
   min-width: 0;
@@ -27,9 +27,9 @@
 .navItem {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   width: 100%;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-3);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
@@ -51,18 +51,38 @@
 .navIcon {
   display: inline-flex;
   flex: none;
+  color: var(--color-text-tertiary);
 }
+.navItemOn .navIcon {
+  color: var(--color-accent-text);
+}
+/* One line, ellipsized — never the awkward icon-beside-a-wrapping-label look. */
 .navLabel {
   flex: 1;
   min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+/* The count is a pill badge so it reads as a distinct signal, not trailing text. */
 .navCount {
   flex: none;
+  min-width: 22px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
   font-size: 0.75rem;
-  color: var(--color-text-tertiary);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  line-height: 1.5;
 }
 .navItemOn .navCount {
-  color: var(--color-accent-text);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-solid-text);
 }
 
 .sectionPanel {

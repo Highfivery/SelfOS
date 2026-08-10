@@ -320,7 +320,8 @@ export function ExploredPanel(): JSX.Element {
   // The "left alone" list shows the specific question-level declines not already reflected on an area row.
   const declines = markedOff.filter((m) => !m.topicId || !areaTopicIds.has(m.topicId));
   const hasEverRefreshed = Boolean(view?.candidatesRefreshedAt);
-  const partnerName = partners.length === 1 ? partners[0]?.partnerName : undefined;
+  // The nav uses just the first name so the label stays on one line; the section itself keeps the full name.
+  const partnerFirst = partners.length === 1 ? partners[0]?.partnerName.split(' ')[0] : undefined;
 
   // The Explored sections, each its own full-width view (spec 70 §3, sub-nav layout). Partner/left-alone only
   // appear when they have content.
@@ -341,7 +342,7 @@ export function ExploredPanel(): JSX.Element {
       ? [
           {
             id: 'partner' as const,
-            label: partnerName ? `Explore with ${partnerName}` : 'Explore with a partner',
+            label: partnerFirst ? `Explore with ${partnerFirst}` : 'Explore with a partner',
             count: partners.length,
             icon: <Heart size={16} />,
           },

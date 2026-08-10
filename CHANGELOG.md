@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.50.0](https://github.com/Highfivery/SelfOS/compare/v0.49.0...v0.50.0) (2026-08-10)
+
+
+### Features
+
+* **questionnaires:** adaptive exploration P1 — candidate-feed engine + honest depth ([#388](https://github.com/Highfivery/SelfOS/issues/388)) ([519a304](https://github.com/Highfivery/SelfOS/commit/519a30479bdcbc94ecfca48829d6ecdb883215bb))
+* **questionnaires:** adaptive exploration P2 — forward-first Explored panel + curation IPC ([#390](https://github.com/Highfivery/SelfOS/issues/390)) ([8738094](https://github.com/Highfivery/SelfOS/commit/8738094b8ce9efbd1e17db25dd30267ae144fb0b))
+* **questionnaires:** adaptive exploration P3 — Intimacy as a first-class, 18+-gated area ([#391](https://github.com/Highfivery/SelfOS/issues/391)) ([feb9ce8](https://github.com/Highfivery/SelfOS/commit/feb9ce8651f55549ade4450685e932f5e97ba5fd))
+* **questionnaires:** silent "explore with your partner" wishlist (spec 70 §3.5, P4) ([#392](https://github.com/Highfivery/SelfOS/issues/392)) ([de6eb37](https://github.com/Highfivery/SelfOS/commit/de6eb374189827f3e933021c6365f727e4822942))
+
 ## [0.49.0](https://github.com/Highfivery/SelfOS/compare/v0.48.0...v0.49.0) (2026-08-09)
 
 

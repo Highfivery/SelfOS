@@ -427,6 +427,26 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-10 — **Fix (AI-suggestion email had no way to respond — a dead-end with no relay; member-reported;
+  SPEC 67 §3.3; on `fix/suggestion-email-fallback`).** A member got a coaching-suggestion email ("The quiet you
+  go when you want to be seen") that posed a reflective question with no clickable answer. Diagnosed against the
+  code (not assumed): the answer affordances (reaction taps "I'm game/Maybe later/Not for me" + "More/Less"
+  tuning) are minted as **relay taps** (`endpoint/t/<token>`, RELAY_VERSION 3) — `emailSchedule.mintTap` returns
+  `null` when no relay is provisioned (`emailScheduleReconcile` reads `readRelayConfig`, the SAME relay as
+  Settings → Relay), so with only Resend connected (no Cloudflare relay) `reactions`/`tuning` come through empty.
+  AND `buildSuggestionEmail` rendered **no fallback at all** in that case — a total dead-end (unlike the digest/
+  re-engagement/welcome families, which always close with an "Open SelfOS" line). Fix: `buildSuggestionEmail` now
+  appends an **"Open SelfOS to reflect on this…"** closing line (html + text) when `reactions.length === 0` (a
+  desktop app has no web URL to link, so it's a text prompt, matching the other families); when relay buttons ARE
+  present they're the affordance and the closer is omitted. The REAL clickable in-email answers require the
+  Cloudflare relay deployed at **v3** (the `/t/<token>` tap route, worker `handler.ts`) — a member setup step
+  (Settings → Relay → connect/Update relay), not a code fix. Gate green: typecheck/lint/format, **1958 core**
+  unit (+2 `buildSuggestionEmail`: no-relay adds the prompt + keeps the not-medical line + no inline SVG;
+  relay-present omits the redundant prompt while rendering the `/t/` button). **Lesson: an email that asks a
+  question must never dead-end — the interactive one-click answers are relay-gated (a hosted `/t/<token>`
+  endpoint the button links to, since a desktop app has no clickable URL), so when the relay isn't provisioned
+  the composer must still close with an "Open SelfOS" prompt; every OTHER email family already did, the
+  suggestion family was the lone gap.**
 - 2026-08-10 — **Polish (Explored sub-nav — wider column, no awkward wrapping, count-badges pop; user-requested;
   on `feat/explored-subnav-polish`).** Follow-up to the sub-nav: the items read as "icon + wrapping title + a
   number" with a long partner name ("Explore with Angel Marshall") wrapping to two lines. Widened the nav column

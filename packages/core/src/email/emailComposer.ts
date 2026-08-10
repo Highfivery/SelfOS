@@ -368,6 +368,12 @@ export function buildSuggestionEmail(content: SuggestionContent): ComposedEmail 
   const subject = content.headline;
   const reactions = content.reactions ?? [];
   const tuning = content.tuning ?? [];
+  // Without a relay there are no one-click tap buttons to mint, so the email would otherwise dead-end with no
+  // way to engage — always close with an "Open SelfOS" prompt in that case (a desktop app has no web URL to
+  // link, so this is a text prompt, matching the digest / re-engagement families). When reactions ARE present,
+  // the buttons are the affordance and the closer would be redundant.
+  const noRelay = reactions.length === 0;
+  const openPrompt = 'Open SelfOS to reflect on this — it’ll be there whenever you’re ready.';
 
   const html = shell(
     [
@@ -380,6 +386,7 @@ export function buildSuggestionEmail(content: SuggestionContent): ComposedEmail 
         ? '<p style="margin:14px 0 4px;font-size:13px;color:#948b7e;">Tune what SelfOS sends:</p>' +
           tuning.map((t) => ctaButton(t.url, t.label) + ' ').join('')
         : '',
+      noRelay ? `<p style="margin:14px 0 0;color:#6e665c;">${esc(openPrompt)}</p>` : '',
     ].join(''),
   );
 
@@ -393,6 +400,7 @@ export function buildSuggestionEmail(content: SuggestionContent): ComposedEmail 
     ...(tuning.length > 0
       ? ['', 'Tune what SelfOS sends:', ...tuning.map((t) => `${t.label}: ${t.url}`)]
       : []),
+    ...(noRelay ? ['', openPrompt] : []),
     '',
     NOT_MEDICAL,
   ].join('\n');

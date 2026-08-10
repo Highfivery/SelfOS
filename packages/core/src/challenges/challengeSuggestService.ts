@@ -12,7 +12,12 @@ import {
 import { uuid } from '../id';
 import { checkBudget, costOf, queryUsage, recordUsage } from '../usage';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
-import { digestableInsights, feedableInsights, listInsightsForPerson } from '../insights';
+import {
+  digestableInsights,
+  feedableInsights,
+  listInsightsForPerson,
+  ownSubjectInsights,
+} from '../insights';
 import { summarizeOpenCommitments } from '../goals';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { clampComfort, normalizeDomain, normalizeLifeArea } from './challengeService';
@@ -205,7 +210,13 @@ export async function suggestChallenge(
   if (!apiKey) return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };
 
   // Behind the context-feed boundary (a muted dream / restricted / flagged fact never feeds it), like synthesis.
-  const insights = await feedableInsights(fs, key, await listInsightsForPerson(fs, key, personId));
+  // Own-subject only (#129): a challenge is FOR this person, so a partner's answers (an about-someone-else
+  // response the person sent) must not ground it.
+  const insights = await feedableInsights(
+    fs,
+    key,
+    ownSubjectInsights(await listInsightsForPerson(fs, key, personId)),
+  );
   const recent = recentApprovedInsights(insights, now);
   const commitments = await summarizeOpenCommitments(fs, key, personId, now);
   if (recent.length === 0 && !commitments) {

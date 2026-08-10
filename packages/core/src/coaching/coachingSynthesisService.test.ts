@@ -350,4 +350,58 @@ describe('synthesize (40 §3.3)', () => {
     await synthesize(deps(capturing));
     expect(captured).not.toContain('WHOLLY corrected');
   });
+
+  it('excludes about-someone-else responses (#129) from the weekly reflection digest', async () => {
+    let captured = '';
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options) => {
+        captured = flattenContent(options.messages.at(-1)?.content ?? '');
+        return Promise.resolve({
+          text: JSON.stringify({ observation: 'ok', sources: [] }),
+          usage: { inputTokens: 5, outputTokens: 5, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    // Two of Ben's OWN insights + a questionnaire he SENT to Angel (about her, `aboutPersonId`).
+    await saveInsight(fs, key, insight('s1', { summary: 'Ben weighed a career change' }));
+    await saveInsight(fs, key, insight('s2'));
+    await saveInsight(
+      fs,
+      key,
+      insight('about-angel', {
+        source: 'questionnaire',
+        summary: 'Angel’s intimate life is multisensory',
+        facts: [{ id: 'af', text: 'enjoys handing over control', shareable: false }],
+        provenance: {
+          at: now.toISOString(),
+          aboutPersonId: 'angel',
+          aboutName: 'Angel',
+        },
+      }),
+    );
+    const res = await synthesize(deps(capturing));
+    expect(res.ok).toBe(true);
+    expect(captured).toContain('career change'); // Ben's own material — reflected
+    expect(captured).not.toContain('handing over control'); // Angel's answer — never Ben's reflection
+    expect(captured).not.toContain('Angel'); // no partner content in Ben's weekly digest
+  });
+
+  it('an all-about-others history yields EMPTY — a partner’s responses don’t trigger the reflection', async () => {
+    const capturing = jsonClient();
+    // Only about-someone-else insights → none count toward the recent gate.
+    await saveInsight(
+      fs,
+      key,
+      insight('a1', { provenance: { at: now.toISOString(), aboutPersonId: 'angel' } }),
+    );
+    await saveInsight(
+      fs,
+      key,
+      insight('a2', { provenance: { at: now.toISOString(), aboutPersonId: 'angel' } }),
+    );
+    const res = await synthesize(deps(capturing));
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.reason).toBe('EMPTY');
+  });
 });

@@ -251,6 +251,31 @@ export async function insightFeedsContext(
   return parsed.data.informsContext !== false;
 }
 
+/**
+ * True when an insight's facts are about the SUBJECT themselves — NOT a #129 "response about someone else"
+ * (an insight from a questionnaire or auto check-in the subject SENT, whose facts describe the RECIPIENT, is
+ * attributed to the sender but stamped `provenance.aboutPersonId`/`aboutName`). First-person, addressed-to-you
+ * surfaces — the "curious about next" candidate feed + coverage (70 §3), the weekly reflection + AI-suggestion
+ * emails (40/67), and challenge suggestions (52) — must use only these, or a partner's answers surface as the
+ * person's own material. The coaching CONTEXT (`summarizeForContext`) and Memory's "Responses to your
+ * questionnaires" section deliberately KEEP the about-others ones (#129), so this is applied per-consumer,
+ * never inside those paths.
+ *
+ * Limitation: this checks only the STAMPED `aboutPersonId`/`aboutName` markers, so a pre-#129 sent-questionnaire
+ * insight (analyzed before those markers existed, never stamped) reads as about-self and is NOT excluded. The
+ * markers have been written since 2026-07-08, so every insight analyzed after that is caught; catching legacy
+ * ones would need the async assignment-join `aboutResolver.resolveInsightAbout` does, which is too heavy for
+ * this pure hot-path predicate. Memory's read-path still resolves legacy cases correctly via that join.
+ */
+export function isInsightAboutSelf(insight: Insight): boolean {
+  return !insight.provenance.aboutPersonId && !insight.provenance.aboutName;
+}
+
+/** Keep only insights whose facts are about the subject themselves (drops #129 about-someone-else responses). */
+export function ownSubjectInsights(insights: Insight[]): Insight[] {
+  return insights.filter(isInsightAboutSelf);
+}
+
 /** Filter a list of insights to those that may currently feed context (15-shareability §4.2). */
 export async function feedableInsights(
   fs: FileSystem,

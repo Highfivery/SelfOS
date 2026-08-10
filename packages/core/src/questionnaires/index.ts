@@ -20,6 +20,7 @@ export * from './coverageModel';
 export * from './coverageService';
 export * from './transparencyView';
 export * from './partnerContext';
+export * from './partnerWishes';
 export * from './changeDetection';
 export * from './profileFeedback';
 export * from './generationService';

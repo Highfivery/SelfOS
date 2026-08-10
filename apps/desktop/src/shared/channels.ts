@@ -238,6 +238,7 @@ import type {
   QuestionnaireCoverageView,
   CoverageSteerInput,
   CandidateCurateInput,
+  AddPartnerWishInput,
 } from '@selfos/core/questionnaires';
 import type { AutoCheckinStreamActivity } from '@selfos/core/auto-checkins';
 
@@ -388,6 +389,8 @@ export const IpcChannels = {
   questionnairesCurateCandidate: 'questionnaires:curateCandidate',
   questionnairesRefreshNextCandidates: 'questionnaires:refreshNextCandidates',
   questionnairesAcknowledgeAdult: 'questionnaires:acknowledgeAdult',
+  questionnairesAddPartnerWish: 'questionnaires:addPartnerWish',
+  questionnairesRemovePartnerWish: 'questionnaires:removePartnerWish',
   gapfinderSuggest: 'gapfinder:suggest',
   questionnaireSuggestionsList: 'questionnaires:suggestionsList',
   questionnaireSuggestionsGenerate: 'questionnaires:suggestionsGenerate',
@@ -726,6 +729,9 @@ export type {
   CoverageSteerInput,
   CandidateFeedItem,
   CandidateCurateInput,
+  PartnerWishView,
+  PartnerWishGroupView,
+  AddPartnerWishInput,
 } from '@selfos/core/questionnaires';
 export type { AutoCheckinStreamActivity } from '@selfos/core/auto-checkins';
 /** 66 §3.3 — re-exported so the bridge + renderer share one rewind outcome type. */
@@ -1170,6 +1176,11 @@ export interface SelfosBridge {
    * acknowledgement for the active person (same gate as guided/Together), then returns the refreshed view (the
    * Intimacy row becomes steerable + intimacy candidates surface). Own-scoped. */
   questionnairesAcknowledgeAdult(): Promise<QuestionnaireCoverageView>;
+  /** Adaptive Exploration (70 §3.5): add an "Explore with your partner" wish (the person's OWN input); returns
+   * the refreshed view. Own-scoped + re-checked against a live partner edge in the bridge. */
+  questionnairesAddPartnerWish(input: AddPartnerWishInput): Promise<QuestionnaireCoverageView>;
+  /** Adaptive Exploration (70 §3.5): remove one of the person's OWN partner wishes; returns the refreshed view. */
+  questionnairesRemovePartnerWish(input: { wishId: string }): Promise<QuestionnaireCoverageView>;
   /** Gap-finder: propose the next questionnaires from structured context. Budget-gated + metered. */
   gapfinderSuggest(input: { targetPersonId?: string }): Promise<QuestionnaireSuggestResult>;
   /** Recipient-first saved suggestions (08 §18). Read the author's saved set for one household recipient — no

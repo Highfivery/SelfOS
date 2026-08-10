@@ -8,6 +8,7 @@ import {
   UNCLEAR_SKIP_REASON,
 } from './answering';
 import {
+  addPartnerWish,
   applyCandidateCuration,
   applyChange,
   applyDecline,
@@ -25,7 +26,9 @@ import {
   markCandidateAsked,
   markChangesExplored,
   mergeCandidates,
+  PARTNER_WISH_CAP,
   readProfile,
+  removePartnerWish,
   writeProfile,
   type NextCandidate,
   type PersonalizationProfile,
@@ -619,5 +622,65 @@ describe('buildCandidateGuidance', () => {
     expect(g).not.toContain('An asked question'); // minted excluded
     // pinned leads its section (before the plain new one).
     expect(g.indexOf('A pinned question')).toBeLessThan(g.indexOf('A plain new question'));
+  });
+});
+
+// ── Partner wishes (spec 70 §3.5) ───────────────────────────────────────────────────────────────────────────
+
+describe('addPartnerWish / removePartnerWish', () => {
+  it('adds a wish to the OWN profile, dedups an identical (partner, note), and removes by id', () => {
+    let p = addPartnerWish(
+      emptyProfile('a'),
+      { partnerPersonId: 'b', note: 'try cooking together' },
+      at(1),
+    );
+    expect(p.relational?.partnerWishes).toHaveLength(1);
+    expect(p.relational!.partnerWishes[0]).toMatchObject({
+      partnerPersonId: 'b',
+      note: 'try cooking together',
+      intimacy: false,
+    });
+    // Re-adding the same (partner, note) refreshes rather than bloats.
+    p = addPartnerWish(p, { partnerPersonId: 'b', note: 'try cooking together' }, at(5));
+    expect(p.relational?.partnerWishes).toHaveLength(1);
+    // A different partner + an intimacy wish are separate entries.
+    p = addPartnerWish(p, { partnerPersonId: 'b', note: 'more foreplay', intimacy: true }, at(6));
+    p = addPartnerWish(p, { partnerPersonId: 'c', note: 'talk about money' }, at(7));
+    expect(p.relational?.partnerWishes).toHaveLength(3);
+    expect(p.relational?.partnerWishes.find((w) => w.note === 'more foreplay')?.intimacy).toBe(
+      true,
+    );
+    // Remove by id (read the CURRENT id — a re-add mints a fresh one).
+    const removeId = p.relational!.partnerWishes.find((w) => w.note === 'try cooking together')!.id;
+    p = removePartnerWish(p, removeId, at(8));
+    expect(p.relational?.partnerWishes.some((w) => w.id === removeId)).toBe(false);
+    expect(p.relational?.partnerWishes).toHaveLength(2);
+  });
+
+  it('a blank note is a no-op; removing a missing id is a no-op (identity)', () => {
+    const p = emptyProfile('a');
+    expect(addPartnerWish(p, { partnerPersonId: 'b', note: '   ' }, at(1))).toBe(p);
+    const withOne = addPartnerWish(p, { partnerPersonId: 'b', note: 'x' }, at(1));
+    expect(removePartnerWish(withOne, 'nope', at(2))).toBe(withOne);
+  });
+
+  it('caps the stored wishes at PARTNER_WISH_CAP (newest kept)', () => {
+    let p = emptyProfile('a');
+    for (let i = 0; i < PARTNER_WISH_CAP + 5; i++) {
+      p = addPartnerWish(p, { partnerPersonId: 'b', note: `wish number ${i}` }, at(i));
+    }
+    expect(p.relational?.partnerWishes).toHaveLength(PARTNER_WISH_CAP);
+    expect(p.relational?.partnerWishes[0]?.note).toBe(`wish number ${PARTNER_WISH_CAP + 4}`);
+  });
+
+  it('preserves the reciprocity ledger when adding a wish', () => {
+    let p = applyReciprocity(
+      emptyProfile('a'),
+      [{ fromPartnerId: 'b', note: 'partner likes X' }],
+      at(1),
+    );
+    p = addPartnerWish(p, { partnerPersonId: 'b', note: 'a wish' }, at(2));
+    expect(p.relational?.reciprocity).toHaveLength(1);
+    expect(p.relational?.partnerWishes).toHaveLength(1);
   });
 });

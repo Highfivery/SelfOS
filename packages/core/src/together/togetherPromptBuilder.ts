@@ -2,6 +2,7 @@ import type { FileSystem } from '../host';
 import type { ContextTopic, TogetherSession } from '../schemas';
 import { buildContext, getPerson } from '../people';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
+import { buildPartnerWishGuidance } from '../questionnaires/partnerWishes';
 import { buildGroundingPack } from './groundingPack';
 import { listStates } from './togetherService';
 import { getTogetherGuide, togetherGuideLifeAreas } from './togetherCatalog';
@@ -212,6 +213,24 @@ export async function buildTogetherSystemPrompt(
 
   const grounding = await buildGroundingPack(fs, key, session, nameOf);
   if (grounding) parts.push(grounding);
+
+  // "Explore with your partner" (spec 70 §3.5/§5.6) — fold in BOTH partners' OWN wishes about the other
+  // (mutual; the couples register keeps it balanced). Each is silent (never quoted/attributed) + gated inside
+  // `buildPartnerWishGuidance` on a live partner edge; an intimacy wish only applies when BOTH have acked
+  // (`allAdultAcked`). Appended after grounding so the boundary always leads.
+  for (const pid of session.participantIds) {
+    for (const other of session.participantIds) {
+      if (other === pid) continue;
+      const wish = await buildPartnerWishGuidance(
+        fs,
+        key,
+        pid,
+        other,
+        options.allAdultAcked === true,
+      );
+      if (wish) parts.push(wish);
+    }
+  }
 
   // The guide addendum + (structured) step convention (Phase E), appended AFTER context + grounding so the
   // boundary always leads. The addendum's `frame()` restates the not-therapy line; a structured guide adds the

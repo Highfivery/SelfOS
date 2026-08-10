@@ -708,9 +708,13 @@ import {
   readCoverageView,
   steerTopic,
   curateCandidate,
+  addPartnerWishAndRead,
+  removePartnerWishAndRead,
+  buildPartnerWishGuidance,
   type QuestionnaireCoverageView,
   type CoverageSteerInput,
   type CandidateCurateInput,
+  type AddPartnerWishInput,
   resolveInsightAbout,
   resolveInsightSource,
   getAssignment,
@@ -1168,9 +1172,16 @@ const emptyCoverageView = (): QuestionnaireCoverageView => ({
   candidates: [],
   areas: [],
   markedOff: [],
+  partners: [],
   adultAcknowledged: false,
   hasPlacement: false,
 });
+const AddPartnerWishSchema = z.object({
+  partnerPersonId: z.string().min(1),
+  note: z.string().min(1).max(300),
+  intimacy: z.boolean().optional(),
+});
+const RemovePartnerWishSchema = z.object({ wishId: z.string().min(1) });
 // A recipient flagging a wrong fact in a question they're answering (spec 08 §29 wrong-fact amendment).
 const CorrectFactSchema = z.object({
   assignmentId: z.string().min(1),
@@ -1719,7 +1730,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     const history = await gatherRecipientHistory(fs, key, recipientPersonId);
     // The recipient's skip/decline steering (spec 69) — read host-side, fed to the model to avoid what they
     // said doesn't apply / would rather not, and to reword what landed unclear.
-    const feedbackGuidance = await gatherRecipientFeedbackGuidance(fs, key, recipientPersonId);
+    const recipientFeedback = await gatherRecipientFeedbackGuidance(fs, key, recipientPersonId);
+    // "Explore with your partner" (spec 70 §3.5) — when the AUTHOR sends to a partner, silently fold in the
+    // author's OWN wishes about the recipient (never quoted/attributed; live-edge + both-18+-acked gated inside
+    // `buildPartnerWishGuidance`). Never for a self-send (that's the partnerContext reciprocity path above).
+    const partnerWishGuidance =
+      recipientPersonId === authorId
+        ? ''
+        : await buildPartnerWishGuidance(
+            fs,
+            key,
+            authorId,
+            recipientPersonId,
+            await allAdultAcknowledged(fs, key, [authorId, recipientPersonId]),
+          );
+    const feedbackGuidance = [recipientFeedback, partnerWishGuidance]
+      .filter((s) => s.trim() !== '')
+      .join('\n\n');
     // Partner-shared context (spec 69 §5.4) — ONLY when the author is generating for THEMSELVES (a self check-in),
     // so a partner's shared desire can be reflected back. Never for an other-person send (that'd surface a third
     // party's context to the author). Restricted facts are excluded by the gate regardless.
@@ -4266,6 +4293,43 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return emptyCoverageView();
       await acknowledgeAdult(ctx.fs, ctx.key, personId);
       return readCoverageView(ctx.fs, ctx.key, personId, new Date(), true);
+    },
+    // Add an "Explore with your partner" wish to the active person's OWN profile (spec 70 §3.5). Own-scoped +
+    // re-checked against a LIVE partner edge in the bridge (a person may only wish for a partner they're actually
+    // connected to). Silent: this only stores the requester's own free text — it never reads the partner's data.
+    questionnairesAddPartnerWish: async (input): Promise<QuestionnaireCoverageView> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.own')))
+        return emptyCoverageView();
+      const personId = await activePersonId();
+      if (!personId) return emptyCoverageView();
+      const parsed = AddPartnerWishSchema.parse(input);
+      const wishInput: AddPartnerWishInput = {
+        partnerPersonId: parsed.partnerPersonId,
+        note: parsed.note,
+        ...(parsed.intimacy !== undefined ? { intimacy: parsed.intimacy } : {}),
+      };
+      const acked = (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
+      // Re-gate: only a LIVE `partner` edge between the two lets a wish be added (the trust boundary).
+      const rels = await listRelationships(ctx.fs, ctx.key);
+      const livePartner = rels.some(
+        (e) =>
+          e.type === 'partner' &&
+          ((e.fromPersonId === personId && e.toPersonId === wishInput.partnerPersonId) ||
+            (e.fromPersonId === wishInput.partnerPersonId && e.toPersonId === personId)),
+      );
+      if (!livePartner) return readCoverageView(ctx.fs, ctx.key, personId, new Date(), acked);
+      return addPartnerWishAndRead(ctx.fs, ctx.key, personId, wishInput, new Date(), acked);
+    },
+    questionnairesRemovePartnerWish: async (input): Promise<QuestionnaireCoverageView> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.own')))
+        return emptyCoverageView();
+      const personId = await activePersonId();
+      if (!personId) return emptyCoverageView();
+      const { wishId } = RemovePartnerWishSchema.parse(input);
+      const acked = (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
+      return removePartnerWishAndRead(ctx.fs, ctx.key, personId, wishId, new Date(), acked);
     },
     // A recipient flags a wrong fact in a question they're answering (spec 08 wrong-fact amendment). Trace it
     // to the recipient's OWN on-record facts (profile / onboarding / insight), auto-flag a wrong INSIGHT so it

@@ -1,6 +1,21 @@
-import { useEffect } from 'react';
-import { ArrowDownRight, Compass, Lock, Minus, Pin, RefreshCw, Sparkles, X } from 'lucide-react';
-import type { CandidateFeedItem, CoverageAreaView, CoverageStatus } from '@shared/channels';
+import { useEffect, useState } from 'react';
+import {
+  ArrowDownRight,
+  Compass,
+  Heart,
+  Lock,
+  Minus,
+  Pin,
+  RefreshCw,
+  Sparkles,
+  X,
+} from 'lucide-react';
+import type {
+  CandidateFeedItem,
+  CoverageAreaView,
+  CoverageStatus,
+  PartnerWishGroupView,
+} from '@shared/channels';
 import { useCoverageStore } from '../../../stores/coverageStore';
 import { Banner, Card, Heading, Stack, Text } from '../../../design-system/components';
 import styles from './ExploredPanel.module.css';
@@ -174,6 +189,106 @@ function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
   );
 }
 
+function PartnerCard({ group }: { group: PartnerWishGroupView }): JSX.Element {
+  const addPartnerWish = useCoverageStore((s) => s.addPartnerWish);
+  const removePartnerWish = useCoverageStore((s) => s.removePartnerWish);
+  const wishing = useCoverageStore((s) => s.wishing);
+  const adultAcknowledged = useCoverageStore((s) => s.view?.adultAcknowledged ?? false);
+  const [note, setNote] = useState('');
+  const [intimacy, setIntimacy] = useState(false);
+  const busy = wishing === group.partnerId;
+
+  const submit = (): void => {
+    const trimmed = note.trim();
+    if (!trimmed || busy) return;
+    // Only ever flag intimacy while the person currently holds the 18+ ack — so a stale local
+    // `intimacy: true` can't ride along after the toggle unmounts (the checkbox only shows when acked).
+    void addPartnerWish({
+      partnerPersonId: group.partnerId,
+      note: trimmed,
+      ...(intimacy && adultAcknowledged ? { intimacy: true } : {}),
+    });
+    setNote('');
+    setIntimacy(false);
+  };
+
+  return (
+    <Card>
+      <Stack gap={2}>
+        <div>
+          <Heading level={3}>Explore with {group.partnerName}</Heading>
+          <Text tone="secondary">
+            Something you’d like SelfOS to explore with {group.partnerName}. It weaves these into
+            their check-ins naturally — they never see that you asked.
+          </Text>
+        </div>
+        {group.wishes.length > 0 ? (
+          <ul className={styles.wishList}>
+            {group.wishes.map((w) => (
+              <li key={w.id} className={styles.wish}>
+                <span className={styles.wishNote}>
+                  {w.intimacy ? (
+                    <span className={styles.wishIntimacy}>
+                      <Heart size={12} aria-hidden="true" />
+                      18+
+                    </span>
+                  ) : null}
+                  {w.note}
+                </span>
+                <button
+                  type="button"
+                  className={styles.wishRemove}
+                  aria-label={`Remove “${w.note}”`}
+                  disabled={busy}
+                  onClick={() =>
+                    void removePartnerWish({ wishId: w.id, partnerId: group.partnerId })
+                  }
+                >
+                  <X size={14} aria-hidden="true" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <div className={styles.wishAdd}>
+          <input
+            type="text"
+            className={styles.wishInput}
+            value={note}
+            maxLength={300}
+            placeholder={`Something to explore with ${group.partnerName}…`}
+            aria-label={`Something to explore with ${group.partnerName}`}
+            disabled={busy}
+            onChange={(e) => setNote(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') submit();
+            }}
+          />
+          <button
+            type="button"
+            className={styles.wishAddBtn}
+            disabled={busy || note.trim() === ''}
+            onClick={submit}
+          >
+            Add
+          </button>
+        </div>
+        {adultAcknowledged ? (
+          <label className={styles.wishIntimacyToggle}>
+            <input
+              type="checkbox"
+              checked={intimacy}
+              disabled={busy}
+              onChange={(e) => setIntimacy(e.target.checked)}
+            />
+            An intimacy topic (18+)
+          </label>
+        ) : null}
+      </Stack>
+    </Card>
+  );
+}
+
 export function ExploredPanel(): JSX.Element {
   const view = useCoverageStore((s) => s.view);
   const loaded = useCoverageStore((s) => s.loaded);
@@ -293,6 +408,10 @@ export function ExploredPanel(): JSX.Element {
                 </Card>
               </section>
             ) : null}
+
+            {(view?.partners ?? []).map((group) => (
+              <PartnerCard key={group.partnerId} group={group} />
+            ))}
           </>
         )}
       </Stack>

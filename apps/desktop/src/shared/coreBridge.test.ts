@@ -3157,6 +3157,7 @@ describe('createCoreBridge', () => {
       candidates: [],
       areas: [],
       markedOff: [],
+      partners: [],
       adultAcknowledged: false,
       hasPlacement: false,
     });
@@ -3168,6 +3169,7 @@ describe('createCoreBridge', () => {
       candidates: [],
       areas: [],
       markedOff: [],
+      partners: [],
       adultAcknowledged: false,
       hasPlacement: false,
     });
@@ -3262,6 +3264,80 @@ describe('createCoreBridge', () => {
     // The owner's pins/skips are untouched by Angel's tap.
     const ownerAfter = await readProfile(ctx.fs, ctx.key, ownerId);
     expect(ownerAfter.candidates.find((c) => c.id === 'cand-keep')?.curation).toBe('asked');
+  });
+
+  it('a partner wish SILENTLY steers the partner’s generation; live-edge gated + own-scoped (spec 70 §3.5/§8)', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const ctx = (await host.host.vaultAndKey())!;
+    const ben = await bridge.peopleSave({ displayName: 'Ben', isSubject: true, tags: [] });
+    const cleo = await bridge.peopleSave({ displayName: 'Cleo', isSubject: true, tags: [] });
+    // Ben is the owner's partner; Cleo is NOT connected.
+    await bridge.relationshipsSave({ fromPersonId: ownerId, toPersonId: ben.id, type: 'partner' });
+
+    // Capture the generation prompt.
+    let generationUserText = '';
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        generationUserText = options.messages.map((m) => m.content).join('\n');
+        const text = JSON.stringify({
+          title: 'X',
+          questions: [{ type: 'shortText', prompt: 'A question', required: true }],
+        });
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    // The owner adds a wish to explore something with Ben → the view shows it under Ben's card.
+    const view = await bridge.questionnairesAddPartnerWish({
+      partnerPersonId: ben.id,
+      note: 'take a spontaneous weekend trip',
+    });
+    const benCard = view.partners.find((p) => p.partnerId === ben.id);
+    expect(benCard?.partnerName).toBe('Ben');
+    expect(benCard?.wishes.map((w) => w.note)).toContain('take a spontaneous weekend trip');
+    // Own-scoped: the wish is stored in the OWNER's profile.
+    expect(
+      (await readProfile(ctx.fs, ctx.key, ownerId)).relational?.partnerWishes.some(
+        (w) => w.partnerPersonId === ben.id && w.note === 'take a spontaneous weekend trip',
+      ),
+    ).toBe(true);
+
+    // A wish for a NON-partner (Cleo) is a no-op — the live-edge gate in the bridge rejects it.
+    const afterCleo = await bridge.questionnairesAddPartnerWish({
+      partnerPersonId: cleo.id,
+      note: 'should not stick',
+    });
+    expect(afterCleo.partners.some((p) => p.partnerId === cleo.id)).toBe(false); // no card (no edge)
+    expect(
+      (await readProfile(ctx.fs, ctx.key, ownerId)).relational?.partnerWishes.some(
+        (w) => w.partnerPersonId === cleo.id,
+      ),
+    ).toBe(false); // nothing written
+
+    // The owner generates a questionnaire FOR Ben → the wish topic reaches the prompt, SILENTLY (never attributed).
+    await bridge.questionnairesGenerate({
+      type: 'general',
+      sensitivity: 'standard',
+      existingPrompts: [],
+      recipientPersonId: ben.id,
+    });
+    expect(generationUserText).toContain('take a spontaneous weekend trip');
+    expect(generationUserText).toMatch(/never say these came from anyone/i);
+    // The prompt never tells the model to say the partner/owner requested it (silent).
+    expect(generationUserText).not.toMatch(/the owner wants|requested by the owner/i);
+
+    // Own-scoped: Ben never has a partner-wish about the owner (he added none), and his read is his own.
+    await bridge.sessionSetActive({ personId: ben.id });
+    const benView = await bridge.questionnairesPersonalizationProfile();
+    // Ben's card for the owner (a live partner edge) exists but carries NO wishes (the owner's are the owner's).
+    const bensCardForOwner = benView.partners.find((p) => p.partnerId === ownerId);
+    expect(bensCardForOwner?.wishes ?? []).toEqual([]);
   });
 
   it("a self check-in reflects a partner's SHARED desire, never a restricted fact (spec 69 §5.4)", async () => {

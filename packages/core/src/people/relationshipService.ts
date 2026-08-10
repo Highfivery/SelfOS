@@ -70,3 +70,30 @@ export async function upsertRelationship(
 export async function deleteRelationship(fs: FileSystem, id: string): Promise<void> {
   await fs.remove(relationshipPath(id));
 }
+
+/** Whether `a` and `b` share a live `partner` edge (order-independent). The trust-boundary predicate for
+ * anything that steers/reads across a partner link (spec 70 §8) — single-sourced so it can't drift. */
+export function livePartnerEdge(relationships: Relationship[], a: string, b: string): boolean {
+  return relationships.some(
+    (e) =>
+      e.type === 'partner' &&
+      ((e.fromPersonId === a && e.toPersonId === b) ||
+        (e.fromPersonId === b && e.toPersonId === a)),
+  );
+}
+
+/** The distinct person ids `personId` holds a live `partner` edge to (first-seen order). */
+export function livePartnerIds(relationships: Relationship[], personId: string): string[] {
+  const ids: string[] = [];
+  for (const e of relationships) {
+    if (e.type !== 'partner') continue;
+    const other =
+      e.fromPersonId === personId
+        ? e.toPersonId
+        : e.toPersonId === personId
+          ? e.fromPersonId
+          : null;
+    if (other && !ids.includes(other)) ids.push(other);
+  }
+  return ids;
+}

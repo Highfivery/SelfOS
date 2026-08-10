@@ -427,6 +427,33 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-09 — **Build (Adaptive Exploration P4 — the silent "Explore with your partner" wishlist; SPEC 70 IS
+  NOW COMPLETE, all 4 phases; on `feat/adaptive-exploration-p4`, a worktree off the merged P3).** The final,
+  most privacy-sensitive phase: a person steers what their connected partner is asked, **silently**. New
+  `PartnerWish` in the profile's `relational.partnerWishes` (additive, tolerant, no `schemaVersion` bump) + pure
+  `addPartnerWish`/`removePartnerWish`; a new `partnerWishes.ts` with **`buildPartnerWishGuidance(requesterId,
+partnerId, bothAdultAcked)`** — reads the REQUESTER's OWN wishes aimed at the partner, **re-gates on a LIVE
+  `partner` edge** (a removed edge drops the steer), filters intimacy wishes unless **both** hold the 18+ ack,
+  and returns a **SILENT reciprocity-register block** (the model weaves the topics in as its own questions and
+  is told to NEVER attribute/quote/say-someone-requested them) — it **never reads the partner's own data**. The
+  Explored view gains `partners: PartnerWishGroupView[]` (own wishes + the partner's display name only); two
+  own-scoped IPC channels (`addPartnerWish` re-checked against a **live partner edge in the bridge** + `remove`).
+  **Three generation-path wirings** — the manual send (`assembleRecipientBundle`), auto check-ins
+  (`runAutoCheckins`, merging with the per-target exploration focus), and Together (`buildTogetherSystemPrompt`,
+  **both** partners' wishes, mutual) — each folds the silent guidance in + resolves both 18+ acks for the
+  intimacy gate. The renderer adds the "Explore with <partner>" card (add/list/remove; intimacy toggle only when
+  acked; a "they never see that you asked" reassurance). Own-scoped throughout; the partner's spec-63 §3.3a
+  see-and-stop still applies. Gate green: typecheck/lint/format, **1948 core + full desktop** unit (apply-fns;
+  `buildPartnerWishGuidance` gating [live-edge / intimacy-both-acked / self / silent]; a **two-persona
+  coreBridge** prompt-assertion test — a wish steers the PARTNER's generation SILENTLY [topic present, "never
+  say these came from anyone" framing present, no raw attribution], live-edge gated, own-scoped, non-partner
+  rejected; RTL card add/remove) + a decrypt-level E2E (seed a partner → add a wish through the UI → decrypt the
+  OWNER's profile → 360px) + real-Electron visual QA. **Lesson: a "silent partner steering" feature is safe when
+  the steer function reads ONLY the requester's own free text + the relationship graph (never the partner's
+  data), returns a topic block the model presents as its OWN curiosity (never attributed), and re-gates on a
+  LIVE partner edge every read — so a removed edge or a revoked 18+ ack drops the steer with no stale access;
+  wire it into every generation path the person can reach the partner through (manual/auto/Together), resolving
+  both acks at each caller for the intimacy gate. SPEC 70 (Adaptive Exploration) is now COMPLETE.**
 - 2026-08-09 — **Build + owner decision (Adaptive Exploration P3 — Intimacy as a first-class, 18+-gated area;
   SPEC 70 §12 P3; on `feat/adaptive-exploration-p3`, a worktree off the merged P2).** P2 had already gated
   intimacy CANDIDATES behind the 18+ ack + removed the onboarding-only framing, so P3 makes the Intimacy overview

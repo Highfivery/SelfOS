@@ -9,6 +9,7 @@ import { saveResponse } from './responseService';
 import {
   buildDedupReference,
   gatherRecipientHistory,
+  gatherRecipientInsightFacts,
   gatherRecipientPriorAnswers,
   gatherRecipientPriorAnswersByAssignment,
   gatherRecipientQuestionnaireTitles,
@@ -74,6 +75,47 @@ describe('gatherRecipientHistory (08 §17.4)', () => {
     const fs = memFileSystem();
     const p = await upsertPerson(fs, key, { displayName: 'New', isSubject: true, tags: [] });
     expect(await gatherRecipientHistory(fs, key, p.id)).toBe('');
+  });
+
+  it('excludes about-someone-else responses (#129) — a partner’s answers are never Ben’s own material', async () => {
+    const fs = memFileSystem();
+    const ben = await upsertPerson(fs, key, { displayName: 'Ben', isSubject: true, tags: [] });
+    // Ben's OWN insight (about himself) — must be included.
+    await saveInsight(fs, key, {
+      id: 'own',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: ben.id,
+      summary: 'Ben has been weighing a career change.',
+      facts: [{ id: 'of', text: 'Considering leaving his current job', shareable: true }],
+      confidence: 'high',
+      categories: [],
+      approved: true,
+      provenance: { at: now },
+      createdAt: now,
+      updatedAt: now,
+    });
+    // A questionnaire Ben SENT to his partner Angel: attributed to Ben (the sender) but ABOUT Angel
+    // (`provenance.aboutPersonId`). Its facts describe Angel's intimate life — never Ben's own material.
+    await saveInsight(fs, key, {
+      id: 'about-angel',
+      schemaVersion: 1,
+      source: 'questionnaire',
+      subjectPersonId: ben.id,
+      summary: 'Angel’s intimate life is multisensory and mutually engaged.',
+      facts: [{ id: 'af', text: 'Enjoys handing over control during sex', shareable: true }],
+      confidence: 'high',
+      categories: [],
+      approved: true,
+      provenance: { at: now, aboutPersonId: 'angel', aboutName: 'Angel' },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const facts = await gatherRecipientInsightFacts(fs, key, ben.id);
+    expect(facts).toMatch(/career change/i); // Ben's own insight — kept
+    expect(facts).not.toMatch(/handing over control/i); // Angel's answer — never Ben's material
+    expect(facts).not.toMatch(/Angel/); // no partner content bleeds into Ben's feed/coverage grounding
   });
 });
 

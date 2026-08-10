@@ -427,6 +427,45 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-10 — **Fix (cross-person attribution: a partner's answers surfaced as YOUR own material — the candidate
+  feed, weekly-reflection + AI-suggestion emails, and challenge suggestions; member-reported [Ben got intimacy
+  candidates phrased for Angel about him, a "Hi Ben" weekly email describing Angel, and a "This person's intimate
+  life…" insight]; on `fix/insight-attribution-own-subject`).** Diagnosed against the code (not assumed): when a
+  questionnaire OR auto check-in is analyzed, its insight is attributed to `subjectPersonId: senderPersonId`
+  (`analysisService.ts`) but its facts are ABOUT the recipient, stamped `provenance.aboutPersonId`/`aboutName`
+  (the #129 design; Memory correctly segregates these into "Responses to your questionnaires"). But the newer
+  **first-person, addressed-to-you** surfaces consumed ALL of a person's insights without excluding the
+  about-someone-else ones — so a household member who SENDS questionnaires/auto-check-ins to their partner had the
+  partner's answers surface as their own material. Fix: one shared pure predicate
+  **`isInsightAboutSelf`/`ownSubjectInsights`** (`insightStore.ts`, drops any insight carrying `aboutPersonId`/
+  `aboutName`), applied per-consumer at every first-person surface — `gatherRecipientInsightFacts` +
+  `gatherRecipientMaterialSignals` (the spec-70 candidate feed + coverage + ALL generation/de-dup grounding),
+  `coachingSynthesisService.synthesize` (the weekly reflection), `emailSuggestionService.gatherSuggestionSignals`
+  (the AI-suggestion email — the code-reviewer caught this sibling email surface I'd missed), the
+  `emailSchedule` "areas explored" momentum stat, and `challengeSuggestService.suggestChallenge`. **Deliberately
+  NOT applied** to the coaching CONTEXT (`summarizeForContext`/`buildContext`), Memory's Responses read-path, or
+  the relationship/partner surfaces (`relationshipSynthesisService`/`partnerContext`) — those KEEP about-others on
+  purpose (#129), so a coach still learns from what you shared about a partner; it just isn't mistaken for your
+  OWN profile. Nice side effect: an all-about-others history now yields an EMPTY weekly reflection (own-subject
+  filter runs BEFORE the recent-count gate) instead of a partner-content one; crisis aggregation stays inclusive
+  (safety-first). **Honest limitation (documented in the predicate's docstring):** it checks only the STAMPED
+  markers, so a pre-#129 (before 2026-07-08) sent-questionnaire insight reads as about-self and isn't excluded —
+  catching legacy ones needs the async assignment-join Memory's read-path uses, too heavy for a pure hot-path
+  predicate. code-reviewer **fix-first** (both should-fixes applied: the missed AI-suggestion email consumer + the
+  legacy-blind-spot doc caveat; nits: the digest momentum stat). Gate green: typecheck/lint/format, **1954 core +
+  1550 desktop** unit (a direct helper unit; a recipientHistory test — an about-Angel insight is excluded from the
+  candidate-feed grounding while Ben's own is kept, non-vacuous; two coachingSynthesis tests — the digest excludes
+  about-others + an all-about-others history → EMPTY; two email-suggestion tests — a partner's answer neither
+  triggers nor populates the email). No new E2E (the fix is pure grounding assembly with no new UI; the candidate
+  feed is AI-generated, so it's asserted at the grounding-assembly defect point — the P4 prompt-assertion pattern).
+  **Heads-up: existing about-partner candidates already written into a profile persist until `refreshNextCandidates`
+  regenerates from the now-fixed grounding (no data migration ships); "Look for more" forces an immediate refresh.**
+  **Lesson: an insight attributed to a SUBJECT can still be ABOUT someone else (`provenance.aboutPersonId`, the
+  #129 sent-questionnaire/auto-check-in case) — so EVERY first-person "about you" surface (feed, coverage, weekly
+  reflection, suggestion + digest emails, challenge suggestions) must filter to own-subject, while the coaching
+  context + relationship surfaces deliberately keep about-others; when you add such a surface, reach for
+  `ownSubjectInsights`, and grep for ALL sibling consumers (the AI-suggestion email was a second email surface the
+  first pass missed).**
 - 2026-08-09 — **Build (Adaptive Exploration P4 — the silent "Explore with your partner" wishlist; SPEC 70 IS
   NOW COMPLETE, all 4 phases; on `feat/adaptive-exploration-p4`, a worktree off the merged P3).** The final,
   most privacy-sensitive phase: a person steers what their connected partner is asked, **silently**. New

@@ -7,8 +7,10 @@ import {
   digestableInsights,
   flagInsightFact,
   getInsight,
+  isInsightAboutSelf,
   listInsightsForPerson,
   listRelatedShareableInsights,
+  ownSubjectInsights,
   reapOrphanShares,
   saveInsight,
   selectPortraitFacts,
@@ -750,6 +752,26 @@ describe('insightStore', () => {
       await reapOrphanShares(fs, key, 'gone');
       const i1 = await getInsight(fs, key, 'p1', 'i1');
       expect(i1?.updatedAt).toBe('2026-05-01T00:00:00.000Z');
+    });
+  });
+
+  describe('isInsightAboutSelf / ownSubjectInsights (#129 — first-person surfaces)', () => {
+    it('is true only when no about-someone-else marker is set', () => {
+      const own = insight({ id: 'own', subjectPersonId: 'ben' });
+      const aboutId = insight({
+        id: 'r1',
+        subjectPersonId: 'ben',
+        provenance: { at: '2026-06-10T00:00:00.000Z', aboutPersonId: 'angel' },
+      });
+      const aboutName = insight({
+        id: 'r2',
+        subjectPersonId: 'ben',
+        provenance: { at: '2026-06-10T00:00:00.000Z', aboutName: 'A friend' },
+      });
+      expect(isInsightAboutSelf(own)).toBe(true);
+      expect(isInsightAboutSelf(aboutId)).toBe(false);
+      expect(isInsightAboutSelf(aboutName)).toBe(false);
+      expect(ownSubjectInsights([own, aboutId, aboutName]).map((i) => i.id)).toEqual(['own']);
     });
   });
 });

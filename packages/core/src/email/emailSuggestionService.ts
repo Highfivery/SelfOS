@@ -10,7 +10,7 @@ import type {
 import { SentSuggestionSchema } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { uuid } from '../id';
-import { listInsightsForPerson } from '../insights/insightStore';
+import { listInsightsForPerson, ownSubjectInsights } from '../insights/insightStore';
 import { listConversations } from '../conversations/conversationService';
 import { conversationStatus } from '../schemas';
 import { listGoals } from '../goals/goalService';
@@ -78,7 +78,11 @@ export async function gatherSuggestionSignals(
     listGoals(fs, key, personId),
     getSynthesis(fs, key, personId),
   ]);
-  const newInsights = insights.filter((i) => i.approved && afterOrEq(i.createdAt, sinceMs));
+  // Own-subject only (#129): a suggestion email speaks to this person about THEMSELVES, so a questionnaire/
+  // auto check-in they SENT (an insight about the RECIPIENT) must never trigger or populate their own email.
+  const newInsights = ownSubjectInsights(insights).filter(
+    (i) => i.approved && afterOrEq(i.createdAt, sinceMs),
+  );
   const newSessionCount = conversations.filter(
     (c) => conversationStatus(c) === 'complete' && afterOrEq(c.endedAt ?? c.updatedAt, sinceMs),
   ).length;

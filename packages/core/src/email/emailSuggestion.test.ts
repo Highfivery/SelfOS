@@ -6,8 +6,11 @@ import type { AiDeps } from '../questionnaires/aiCall';
 import { queryUsage } from '../usage';
 import { writeEncryptedJson } from '../vault';
 import type { EmailResponse, SentSuggestion } from '../schemas';
+import { saveInsight } from '../insights';
+import type { Insight } from '../schemas';
 import {
   buildAvoidSet,
+  gatherSuggestionSignals,
   generateSuggestion,
   hasNewSuggestionData,
   listSentSuggestions,
@@ -41,6 +44,48 @@ describe('hasNewSuggestionData (67 §3.3)', () => {
     expect(hasNewSuggestionData({ ...emptySignals, newSessionCount: 1 })).toBe(true);
     expect(hasNewSuggestionData({ ...emptySignals, observation: 'a reflection' })).toBe(true);
     expect(hasNewSuggestionData(emptySignals, 2)).toBe(true); // intimacy overlap
+  });
+});
+
+describe('gatherSuggestionSignals — own-subject only (#129)', () => {
+  const insight = (id: string, over: Partial<Insight>): Insight => ({
+    id,
+    schemaVersion: 1,
+    source: 'questionnaire',
+    subjectPersonId: PERSON,
+    summary: `summary-${id}`,
+    facts: [],
+    confidence: 'medium',
+    categories: [],
+    approved: true,
+    provenance: { at: '2026-08-20T00:00:00.000Z' },
+    createdAt: '2026-08-20T00:00:00.000Z',
+    updatedAt: '2026-08-20T00:00:00.000Z',
+    ...over,
+  });
+  const since = new Date('2026-08-01T00:00:00.000Z');
+
+  it('excludes an about-someone-else response so it neither triggers nor populates the email', async () => {
+    const fs = memFileSystem();
+    // A questionnaire this person SENT to their partner — attributed to them, but about Angel.
+    await saveInsight(
+      fs,
+      key,
+      insight('about-angel', {
+        summary: 'Angel’s intimate life is multisensory',
+        provenance: { at: '2026-08-20T00:00:00.000Z', aboutPersonId: 'angel', aboutName: 'Angel' },
+      }),
+    );
+    const signals = await gatherSuggestionSignals(fs, key, PERSON, since, now);
+    expect(signals.newInsights).toHaveLength(0);
+    expect(hasNewSuggestionData(signals)).toBe(false); // a partner's answers never trigger your email
+  });
+
+  it('keeps the person’s own insight', async () => {
+    const fs = memFileSystem();
+    await saveInsight(fs, key, insight('own', { summary: 'weighing a career change' }));
+    const signals = await gatherSuggestionSignals(fs, key, PERSON, since, now);
+    expect(signals.newInsights.map((i) => i.id)).toEqual(['own']);
   });
 });
 

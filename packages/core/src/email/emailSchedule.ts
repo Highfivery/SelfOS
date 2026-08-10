@@ -9,7 +9,7 @@ import type {
 import { listConversations } from '../conversations/conversationService';
 import { listDreams } from '../dreams/dreamService';
 import { listGoals } from '../goals/goalService';
-import { listInsightsForPerson } from '../insights/insightStore';
+import { listInsightsForPerson, ownSubjectInsights } from '../insights/insightStore';
 import { listAssignments } from '../questionnaires/assignmentService';
 import { gatherRecipientFeedbackGuidance } from '../questionnaires/recipientHistory';
 import { listCoveredTopics } from '../questionnaires/coveredTopicsStore';
@@ -161,11 +161,13 @@ export async function gatherDigestContent(
     listGoals(fs, key, personId),
   ]);
 
+  // Crisis stays inclusive (safety-first — never filter a distress signal, even one surfaced via a partner's
+  // response). But the "areas explored" momentum stat is about THIS person, so it counts own-subject only (#129).
   const crisis = aggregateCrisisSignal({ insights, now, nightmareNudge: false }).recurring;
 
   const sessionsRecent = conversations.filter((c) => withinDays(c.updatedAt, nowMs, 7)).length;
   const dreamsRecent = dreams.filter((d) => withinDays(d.createdAt, nowMs, 7)).length;
-  const areasExplored = new Set(insights.flatMap((i) => i.categories)).size;
+  const areasExplored = new Set(ownSubjectInsights(insights).flatMap((i) => i.categories)).size;
   const goalsMoving = goals.filter(
     (g) =>
       (g.status === 'open' || g.status === 'inProgress') &&

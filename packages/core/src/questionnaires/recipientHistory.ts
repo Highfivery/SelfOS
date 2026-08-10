@@ -1,6 +1,6 @@
 import type { FileSystem } from '../host';
 import { getPerson } from '../people/peopleService';
-import { listInsightsForPerson } from '../insights';
+import { listInsightsForPerson, ownSubjectInsights } from '../insights';
 import { formatAnswerForDisplay, isDeclined, type AnswerValue } from './answering';
 import { getAssignmentSnapshot, listAssignments } from './assignmentService';
 import { buildCoverageGuidance } from './coverageModel';
@@ -101,7 +101,10 @@ export async function gatherRecipientInsightFacts(
   key: Uint8Array,
   recipientPersonId: string,
 ): Promise<string> {
-  const insights = await listInsightsForPerson(fs, key, recipientPersonId);
+  // Own-subject only (#129): a questionnaire/auto check-in the person SENT produces an insight attributed to
+  // them but ABOUT the recipient — that's a partner's material, not theirs, so it must never ground "what to
+  // ask THEM next" / how well we know them / de-dup of their own answers.
+  const insights = ownSubjectInsights(await listInsightsForPerson(fs, key, recipientPersonId));
   if (insights.length === 0) return '';
   const lines: string[] = [
     'Themes they have already explored (from sessions, reflections, tests, dreams):',
@@ -263,7 +266,8 @@ export async function gatherRecipientMaterialSignals(
   key: Uint8Array,
   recipientPersonId: string,
 ): Promise<{ newMaterialAt?: string }> {
-  const insights = await listInsightsForPerson(fs, key, recipientPersonId);
+  // Own-subject only (#129) — an about-someone-else response must not read as this person's new material.
+  const insights = ownSubjectInsights(await listInsightsForPerson(fs, key, recipientPersonId));
   let newest: string | undefined;
   for (const insight of insights) {
     const at = insight.updatedAt || insight.createdAt;

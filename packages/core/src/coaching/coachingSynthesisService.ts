@@ -13,7 +13,12 @@ import {
 } from '../schemas';
 import { checkBudget, costOf, queryUsage, recordUsage } from '../usage';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
-import { digestableInsights, feedableInsights, listInsightsForPerson } from '../insights';
+import {
+  digestableInsights,
+  feedableInsights,
+  listInsightsForPerson,
+  ownSubjectInsights,
+} from '../insights';
 import { getPatternStats } from '../dreams';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 
@@ -224,7 +229,14 @@ export async function synthesize(deps: SynthesizeDeps): Promise<CoachingSynthesi
   // (`informsContext: false`) must NOT leak its insight into this AI pass — exactly the cross-feature link the
   // synthesis is most likely to surface. `feedableInsights` drops those (and missing/corrupt-dream cases
   // fail-closed), matching `summarizeForContext`.
-  const insights = await feedableInsights(fs, key, await listInsightsForPerson(fs, key, personId));
+  // Own-subject only (#129): the weekly reflection speaks to the person about THEMSELVES ("Hi Ben… this week
+  // one thread keeps surfacing"), so a questionnaire/auto check-in they SENT — whose insight is about the
+  // RECIPIENT — must never become their own reflection. (The coaching context keeps those; this surface can't.)
+  const insights = await feedableInsights(
+    fs,
+    key,
+    ownSubjectInsights(await listInsightsForPerson(fs, key, personId)),
+  );
   // Gate on RECENT (in-window) approved insights, not all-time — so an all-stale history can't bill an
   // empty digest (the digest itself only covers the same window).
   const recent = recentApprovedInsights(insights, now);

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import type { CandidateFeedItem, QuestionnaireCoverageView, SelfosBridge } from '@shared/channels';
@@ -219,6 +219,36 @@ describe('ExploredPanel (spec 70 §3)', () => {
         note: 'take a cooking class',
       }),
     );
+  });
+
+  it('shows the at-a-glance strip and promotes the partner card + left-alone into a side rail', async () => {
+    const withPartner = view({
+      partners: [
+        {
+          partnerId: 'ben',
+          partnerName: 'Ben',
+          wishes: [{ id: 'w1', note: 'plan more date nights', intimacy: false }],
+        },
+      ],
+    });
+    installMockBridge({
+      questionnairesPersonalizationProfile: () => Promise.resolve(withPartner),
+    });
+    useCoverageStore.setState({ view: withPartner, loaded: true });
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
+    // At-a-glance strip: queued count, area count, and who you're steering with.
+    expect(await screen.findByText('Queued to ask you')).toBeInTheDocument();
+    expect(screen.getByText('Areas of your life')).toBeInTheDocument();
+    expect(screen.getByText('Exploring with')).toBeInTheDocument();
+    // The partner card + "Left alone" are promoted into the side rail (not buried at the bottom).
+    const rail = screen.getByRole('complementary', { name: /partner steering and left-alone/i });
+    expect(within(rail).getByText('Explore with Ben')).toBeInTheDocument();
+    expect(within(rail).getByText('Left alone')).toBeInTheDocument();
+    expect(within(rail).getByText('How is your commute?')).toBeInTheDocument();
   });
 
   it('a steer calls the bridge and updates the view', async () => {

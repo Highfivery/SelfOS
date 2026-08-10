@@ -304,10 +304,20 @@ export function ExploredPanel(): JSX.Element {
   const candidates = view?.candidates ?? [];
   const areas = view?.areas ?? [];
   const markedOff = view?.markedOff ?? [];
+  const partners = view?.partners ?? [];
   const areaTopicIds = new Set(areas.map((a) => a.topicId));
   // The "marked off" section shows the specific question-level declines not already reflected on an area row.
   const declines = markedOff.filter((m) => !m.topicId || !areaTopicIds.has(m.topicId));
   const hasEverRefreshed = Boolean(view?.candidatesRefreshedAt);
+
+  // The rail holds the promoted "Explore with <partner>" card(s) + the "left alone" list; two-column only when
+  // there's something to put there (else the coverage would sit beside an empty rail).
+  const hasRail = partners.length > 0 || declines.length > 0;
+  const newAreas = areas.filter((a) => a.status === 'new').length;
+  const learningAreas = areas.filter((a) => a.status === 'getting-to-know').length;
+  const areaSub =
+    newAreas > 0 || learningAreas > 0 ? `${newAreas} new · ${learningAreas} learning` : undefined;
+  const partnerNames = partners.map((p) => p.partnerName).join(', ');
 
   return (
     <div
@@ -325,93 +335,135 @@ export function ExploredPanel(): JSX.Element {
           </Text>
         ) : (
           <>
-            <section>
-              <div className={styles.sectionHead}>
-                <Heading level={3}>What SelfOS is curious about next</Heading>
-                <Text tone="secondary">
-                  Concrete things it might ask you next, drawn from your own answers. Keep, skip, or
-                  go deeper — what you keep is what it asks. It never shows what anyone else shared.
-                </Text>
-              </div>
+            <Text tone="secondary" className={styles.lead}>
+              A quiet look at where SelfOS is getting to know you — and where it’s steering next. It
+              never shows what anyone else shared. Tell it where to go deeper, or what to leave
+              alone.
+            </Text>
 
-              {candidates.length > 0 ? (
-                <ul className={styles.candidateList}>
-                  {candidates.map((c) => (
-                    <CandidateCard key={c.id} item={c} />
-                  ))}
-                </ul>
-              ) : (
-                <Card>
-                  <Text tone="secondary">
-                    {hasEverRefreshed
-                      ? 'Nothing queued right now. Look for more, or check back after your next check-in.'
-                      : 'SelfOS is still getting to know you. New questions appear here after your next check-in — or look for some now.'}
-                  </Text>
-                </Card>
-              )}
-
-              <div className={styles.feedFoot}>
-                <button
-                  type="button"
-                  className={styles.lookMoreBtn}
-                  disabled={refreshing}
-                  onClick={() => void lookForMore()}
-                >
-                  <RefreshCw
-                    size={14}
-                    aria-hidden="true"
-                    className={refreshing ? styles.spin : ''}
-                  />
-                  {refreshing ? 'Looking…' : 'Look for more'}
-                </button>
-                <span className={styles.feedNote}>
-                  Refreshes on its own. Looking now uses a little of your AI allowance.
-                </span>
-              </div>
-            </section>
-
-            <section>
-              <div className={styles.sectionHead}>
-                <Heading level={3}>How well I know you</Heading>
-                <Text tone="secondary">
-                  There’s always more to learn — this never reads “done”. Tell it where to lean in
-                  or ease off.
-                </Text>
-              </div>
-              {areas.length > 0 ? (
-                <Card>
-                  <ul className={styles.areaList}>
-                    {areas.map((area) => (
-                      <AreaRow key={area.topicId} area={area} />
-                    ))}
-                  </ul>
-                </Card>
-              ) : null}
-            </section>
-
-            {declines.length > 0 ? (
-              <section>
-                <div className={styles.sectionHead}>
-                  <Heading level={3}>Things you’ve told SelfOS to leave alone</Heading>
-                </div>
-                <Card>
-                  <ul className={styles.chipList}>
-                    {declines.map((m, i) => (
-                      <li key={`${m.label}-${i}`} className={styles.chip}>
-                        <span>{m.label}</span>
-                        <span className={styles.chipKind}>
-                          {m.kind === 'not-applicable' ? 'Doesn’t apply' : 'Prefer not to say'}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              </section>
+            {areas.length > 0 ? (
+              <ul className={styles.glance}>
+                <li className={styles.stat}>
+                  <span className={styles.statK}>Queued to ask you</span>
+                  <span className={styles.statV}>
+                    {candidates.length}
+                    <small> question{candidates.length === 1 ? '' : 's'}</small>
+                  </span>
+                </li>
+                <li className={styles.stat}>
+                  <span className={styles.statK}>Areas of your life</span>
+                  <span className={styles.statV}>
+                    {areas.length}
+                    {areaSub ? <small> · {areaSub}</small> : null}
+                  </span>
+                </li>
+                {partners.length > 0 ? (
+                  <li className={styles.stat}>
+                    <span className={styles.statK}>Exploring with</span>
+                    <span className={styles.statV}>
+                      <span className={styles.statNames}>{partnerNames}</span>
+                    </span>
+                  </li>
+                ) : null}
+              </ul>
             ) : null}
 
-            {(view?.partners ?? []).map((group) => (
-              <PartnerCard key={group.partnerId} group={group} />
-            ))}
+            <div className={hasRail ? styles.cols : styles.single}>
+              <section className={styles.colFeed}>
+                <div className={styles.sectionHead}>
+                  <Heading level={3}>What SelfOS is curious about next</Heading>
+                  <Text tone="secondary">
+                    Concrete things it might ask you next, drawn from your own answers. Keep, skip,
+                    or go deeper — what you keep is what it asks. It never shows what anyone else
+                    shared.
+                  </Text>
+                </div>
+
+                {candidates.length > 0 ? (
+                  <ul className={styles.candidateList}>
+                    {candidates.map((c) => (
+                      <CandidateCard key={c.id} item={c} />
+                    ))}
+                  </ul>
+                ) : (
+                  <Card>
+                    <Text tone="secondary">
+                      {hasEverRefreshed
+                        ? 'Nothing queued right now. Look for more, or check back after your next check-in.'
+                        : 'SelfOS is still getting to know you. New questions appear here after your next check-in — or look for some now.'}
+                    </Text>
+                  </Card>
+                )}
+
+                <div className={styles.feedFoot}>
+                  <button
+                    type="button"
+                    className={styles.lookMoreBtn}
+                    disabled={refreshing}
+                    onClick={() => void lookForMore()}
+                  >
+                    <RefreshCw
+                      size={14}
+                      aria-hidden="true"
+                      className={refreshing ? styles.spin : ''}
+                    />
+                    {refreshing ? 'Looking…' : 'Look for more'}
+                  </button>
+                  <span className={styles.feedNote}>
+                    Refreshes on its own. Looking now uses a little of your AI allowance.
+                  </span>
+                </div>
+              </section>
+
+              <section className={styles.colCoverage}>
+                <div className={styles.sectionHead}>
+                  <Heading level={3}>How well I know you</Heading>
+                  <Text tone="secondary">
+                    There’s always more to learn — this never reads “done”. Tell it where to lean in
+                    or ease off.
+                  </Text>
+                </div>
+                {areas.length > 0 ? (
+                  <Card>
+                    <ul className={styles.areaList}>
+                      {areas.map((area) => (
+                        <AreaRow key={area.topicId} area={area} />
+                      ))}
+                    </ul>
+                  </Card>
+                ) : null}
+              </section>
+
+              {hasRail ? (
+                <aside className={styles.rail} aria-label="Partner steering and left-alone topics">
+                  {partners.map((group) => (
+                    <PartnerCard key={group.partnerId} group={group} />
+                  ))}
+
+                  {declines.length > 0 ? (
+                    <section>
+                      <div className={styles.sectionHead}>
+                        <Heading level={3}>Left alone</Heading>
+                      </div>
+                      <Card>
+                        <ul className={styles.chipList}>
+                          {declines.map((m, i) => (
+                            <li key={`${m.label}-${i}`} className={styles.chip}>
+                              <span>{m.label}</span>
+                              <span className={styles.chipKind}>
+                                {m.kind === 'not-applicable'
+                                  ? 'Doesn’t apply'
+                                  : 'Prefer not to say'}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </Card>
+                    </section>
+                  ) : null}
+                </aside>
+              ) : null}
+            </div>
           </>
         )}
       </Stack>

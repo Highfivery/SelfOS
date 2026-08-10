@@ -427,6 +427,18 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-10 — **Polish (Explored sub-nav — wider column, no awkward wrapping, count-badges pop; user-requested;
+  on `feat/explored-subnav-polish`).** Follow-up to the sub-nav: the items read as "icon + wrapping title + a
+  number" with a long partner name ("Explore with Angel Marshall") wrapping to two lines. Widened the nav column
+  (220→264px), made the label single-line + ellipsized (never the icon-beside-a-2-line-label look), used just the
+  partner's FIRST name in the nav label ("Explore with Angel"; the section keeps the full name), and turned the
+  count into a pill **badge** (surface-alt chip; the active item's badge is accent-filled + `--color-accent-solid-text`)
+  so it reads as a distinct signal, not trailing text. Renderer-only (CSS + a one-line first-name derivation).
+  Gate green: typecheck/lint/format, 9 ExploredPanel RTL (single-name test partners unaffected) + the
+  adaptive-exploration E2E; real-Electron visual QA with a two-word partner name confirmed one line + the badges.
+  **Lesson: a section nav label built from a display name wraps on long/multi-word names — use the FIRST name in
+  the nav (keep the full name in the section body) + ellipsize as insurance, and give a count its own pill badge
+  (accent-filled when active) so it pops instead of reading as trailing text.**
 - 2026-08-10 — **Build (Explored tab v2 — left sub-nav + a delete affordance; user-requested; mockup (2 options)
   approved FIRST, owner picked Option B; SPEC 70 §3.2; on `feat/explored-subnav`).** After the two-column redesign
   the user said it felt "very squished" and wanted a way to DELETE stale candidate-feed items (the wrong-person

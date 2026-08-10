@@ -523,6 +523,25 @@ export function applyCandidateCuration(
 }
 
 /**
+ * Clear the whole candidate feed (spec 70 §3.2) — mark every ACTIVE candidate "skipped" (like tapping ✕ on
+ * each), so the feed empties and the next refresh proposes fresh ones. Already-minted candidates are left
+ * untouched (they've been asked, not shown). Pure; a no-op (unchanged profile) when the feed is already empty.
+ */
+export function clearCandidateFeed(
+  profile: PersonalizationProfile,
+  now: Date,
+): PersonalizationProfile {
+  let changed = false;
+  const candidates = profile.candidates.map((c) => {
+    if (!isActiveCandidate(c)) return c;
+    changed = true;
+    return { ...c, curation: 'skipped' as CandidateCuration };
+  });
+  if (!changed) return profile;
+  return { ...profile, candidates, updatedAt: now.toISOString() };
+}
+
+/**
  * Stamp every not-yet-minted candidate whose prompt was actually asked (near-duplicates one of `askedPrompts`)
  * with the assignment that asked it, so it drops off the feed + stops steering generation (spec 70 §3.2/§5.5).
  * Pure; idempotent (an already-stamped candidate is untouched). `''`-safe.

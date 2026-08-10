@@ -387,6 +387,7 @@ export const IpcChannels = {
   questionnairesPersonalizationProfile: 'questionnaires:personalizationProfile',
   questionnairesSteerTopic: 'questionnaires:steerTopic',
   questionnairesCurateCandidate: 'questionnaires:curateCandidate',
+  questionnairesClearCandidateFeed: 'questionnaires:clearCandidateFeed',
   questionnairesRefreshNextCandidates: 'questionnaires:refreshNextCandidates',
   questionnairesAcknowledgeAdult: 'questionnaires:acknowledgeAdult',
   questionnairesAddPartnerWish: 'questionnaires:addPartnerWish',
@@ -1169,6 +1170,8 @@ export interface SelfosBridge {
   /** Adaptive Exploration (70 §3.2/§6): curate a candidate in the OWN feed (Ask me this / Not this / Go deeper
    * / clear); returns the refreshed view. Cheap, no AI. Own-scoped. */
   questionnairesCurateCandidate(input: CandidateCurateInput): Promise<QuestionnaireCoverageView>;
+  /** Clear the whole candidate feed (mark every active candidate skipped). Own-scoped. */
+  questionnairesClearCandidateFeed(): Promise<QuestionnaireCoverageView>;
   /** Adaptive Exploration (70 §3.2/§5.4): the manual "Look for more" — force a candidate refresh for the active
    * person. Budget-gated + metered `questionnaire.profile`; returns the refreshed view. Own-scoped. */
   questionnairesRefreshNextCandidates(): Promise<QuestionnaireCoverageView>;

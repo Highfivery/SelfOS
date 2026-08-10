@@ -8,6 +8,7 @@ import {
   Pin,
   RefreshCw,
   Sparkles,
+  Trash2,
   X,
 } from 'lucide-react';
 import type {
@@ -52,12 +53,24 @@ function CandidateCard({ item }: { item: CandidateFeedItem }): JSX.Element {
           {deeper ? 'go deeper' : 'new ground'}
         </span>
         <span className={styles.candidateArea}>{item.lifeArea}</span>
-        {pinned ? (
-          <span className={styles.pinnedTag}>
-            <Pin size={12} aria-hidden="true" />
-            Pinned
-          </span>
-        ) : null}
+        <span className={styles.candidateHeadRight}>
+          {pinned ? (
+            <span className={styles.pinnedTag}>
+              <Pin size={12} aria-hidden="true" />
+              Pinned
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className={styles.candidateRemove}
+            aria-label={`Remove this question: ${item.prompt}`}
+            title="Remove this question"
+            disabled={busy}
+            onClick={() => curate({ candidateId: item.id, action: 'not-this' })}
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </span>
       </div>
       <p className={styles.candidatePrompt}>{item.prompt}</p>
       <div className={styles.candidateActions}>
@@ -70,15 +83,6 @@ function CandidateCard({ item }: { item: CandidateFeedItem }): JSX.Element {
         >
           <Pin size={14} aria-hidden="true" />
           {pinned ? 'Asking this' : 'Ask me this'}
-        </button>
-        <button
-          type="button"
-          className={styles.curateBtn}
-          disabled={busy}
-          onClick={() => curate({ candidateId: item.id, action: 'not-this' })}
-        >
-          <X size={14} aria-hidden="true" />
-          Not this
         </button>
         <button
           type="button"
@@ -289,13 +293,20 @@ function PartnerCard({ group }: { group: PartnerWishGroupView }): JSX.Element {
   );
 }
 
+type ExploredSection = 'curious' | 'coverage' | 'partner' | 'left-alone';
+
 export function ExploredPanel(): JSX.Element {
   const view = useCoverageStore((s) => s.view);
   const loaded = useCoverageStore((s) => s.loaded);
   const error = useCoverageStore((s) => s.error);
   const refreshing = useCoverageStore((s) => s.refreshing);
+  const clearing = useCoverageStore((s) => s.clearing);
   const load = useCoverageStore((s) => s.load);
   const lookForMore = useCoverageStore((s) => s.lookForMore);
+  const clearFeed = useCoverageStore((s) => s.clearFeed);
+
+  const [section, setSection] = useState<ExploredSection>('curious');
+  const [confirmClear, setConfirmClear] = useState(false);
 
   useEffect(() => {
     if (!loaded) void load();
@@ -306,18 +317,49 @@ export function ExploredPanel(): JSX.Element {
   const markedOff = view?.markedOff ?? [];
   const partners = view?.partners ?? [];
   const areaTopicIds = new Set(areas.map((a) => a.topicId));
-  // The "marked off" section shows the specific question-level declines not already reflected on an area row.
+  // The "left alone" list shows the specific question-level declines not already reflected on an area row.
   const declines = markedOff.filter((m) => !m.topicId || !areaTopicIds.has(m.topicId));
   const hasEverRefreshed = Boolean(view?.candidatesRefreshedAt);
+  const partnerName = partners.length === 1 ? partners[0]?.partnerName : undefined;
 
-  // The rail holds the promoted "Explore with <partner>" card(s) + the "left alone" list; two-column only when
-  // there's something to put there (else the coverage would sit beside an empty rail).
-  const hasRail = partners.length > 0 || declines.length > 0;
-  const newAreas = areas.filter((a) => a.status === 'new').length;
-  const learningAreas = areas.filter((a) => a.status === 'getting-to-know').length;
-  const areaSub =
-    newAreas > 0 || learningAreas > 0 ? `${newAreas} new · ${learningAreas} learning` : undefined;
-  const partnerNames = partners.map((p) => p.partnerName).join(', ');
+  // The Explored sections, each its own full-width view (spec 70 §3, sub-nav layout). Partner/left-alone only
+  // appear when they have content.
+  const navItems: { id: ExploredSection; label: string; count: number; icon: JSX.Element }[] = [
+    {
+      id: 'curious',
+      label: 'Curious next',
+      count: candidates.length,
+      icon: <Sparkles size={16} />,
+    },
+    {
+      id: 'coverage',
+      label: 'How well it knows you',
+      count: areas.length,
+      icon: <Compass size={16} />,
+    },
+    ...(partners.length > 0
+      ? [
+          {
+            id: 'partner' as const,
+            label: partnerName ? `Explore with ${partnerName}` : 'Explore with a partner',
+            count: partners.length,
+            icon: <Heart size={16} />,
+          },
+        ]
+      : []),
+    ...(declines.length > 0
+      ? [
+          {
+            id: 'left-alone' as const,
+            label: 'Left alone',
+            count: declines.length,
+            icon: <Minus size={16} />,
+          },
+        ]
+      : []),
+  ];
+  // Fall back to the feed if the active section is no longer available (e.g. the last decline was cleared).
+  const active = navItems.some((n) => n.id === section) ? section : 'curious';
 
   return (
     <div
@@ -341,128 +383,168 @@ export function ExploredPanel(): JSX.Element {
               alone.
             </Text>
 
-            {areas.length > 0 ? (
-              <ul className={styles.glance}>
-                <li className={styles.stat}>
-                  <span className={styles.statK}>Queued to ask you</span>
-                  <span className={styles.statV}>
-                    {candidates.length}
-                    <small> question{candidates.length === 1 ? '' : 's'}</small>
-                  </span>
-                </li>
-                <li className={styles.stat}>
-                  <span className={styles.statK}>Areas of your life</span>
-                  <span className={styles.statV}>
-                    {areas.length}
-                    {areaSub ? <small> · {areaSub}</small> : null}
-                  </span>
-                </li>
-                {partners.length > 0 ? (
-                  <li className={styles.stat}>
-                    <span className={styles.statK}>Exploring with</span>
-                    <span className={styles.statV}>
-                      <span className={styles.statNames}>{partnerNames}</span>
-                    </span>
-                  </li>
-                ) : null}
-              </ul>
-            ) : null}
-
-            <div className={hasRail ? styles.cols : styles.single}>
-              <section className={styles.colFeed}>
-                <div className={styles.sectionHead}>
-                  <Heading level={3}>What SelfOS is curious about next</Heading>
-                  <Text tone="secondary">
-                    Concrete things it might ask you next, drawn from your own answers. Keep, skip,
-                    or go deeper — what you keep is what it asks. It never shows what anyone else
-                    shared.
-                  </Text>
-                </div>
-
-                {candidates.length > 0 ? (
-                  <ul className={styles.candidateList}>
-                    {candidates.map((c) => (
-                      <CandidateCard key={c.id} item={c} />
-                    ))}
-                  </ul>
-                ) : (
-                  <Card>
-                    <Text tone="secondary">
-                      {hasEverRefreshed
-                        ? 'Nothing queued right now. Look for more, or check back after your next check-in.'
-                        : 'SelfOS is still getting to know you. New questions appear here after your next check-in — or look for some now.'}
-                    </Text>
-                  </Card>
-                )}
-
-                <div className={styles.feedFoot}>
+            <div className={styles.layout}>
+              <nav className={styles.subnav} aria-label="Explored sections">
+                {navItems.map((n) => (
                   <button
+                    key={n.id}
                     type="button"
-                    className={styles.lookMoreBtn}
-                    disabled={refreshing}
-                    onClick={() => void lookForMore()}
+                    className={`${styles.navItem} ${active === n.id ? styles.navItemOn : ''}`}
+                    aria-current={active === n.id ? 'page' : undefined}
+                    onClick={() => {
+                      setSection(n.id);
+                      setConfirmClear(false);
+                    }}
                   >
-                    <RefreshCw
-                      size={14}
-                      aria-hidden="true"
-                      className={refreshing ? styles.spin : ''}
-                    />
-                    {refreshing ? 'Looking…' : 'Look for more'}
+                    <span className={styles.navIcon} aria-hidden="true">
+                      {n.icon}
+                    </span>
+                    <span className={styles.navLabel}>{n.label}</span>
+                    <span className={styles.navCount}>{n.count}</span>
                   </button>
-                  <span className={styles.feedNote}>
-                    Refreshes on its own. Looking now uses a little of your AI allowance.
-                  </span>
-                </div>
-              </section>
+                ))}
+              </nav>
 
-              <section className={styles.colCoverage}>
-                <div className={styles.sectionHead}>
-                  <Heading level={3}>How well I know you</Heading>
-                  <Text tone="secondary">
-                    There’s always more to learn — this never reads “done”. Tell it where to lean in
-                    or ease off.
-                  </Text>
-                </div>
-                {areas.length > 0 ? (
-                  <Card>
-                    <ul className={styles.areaList}>
-                      {areas.map((area) => (
-                        <AreaRow key={area.topicId} area={area} />
-                      ))}
-                    </ul>
-                  </Card>
-                ) : null}
-              </section>
-
-              {hasRail ? (
-                <aside className={styles.rail} aria-label="Partner steering and left-alone topics">
-                  {partners.map((group) => (
-                    <PartnerCard key={group.partnerId} group={group} />
-                  ))}
-
-                  {declines.length > 0 ? (
-                    <section>
+              <div className={styles.sectionPanel}>
+                {active === 'curious' ? (
+                  <section>
+                    <div className={styles.feedHead}>
                       <div className={styles.sectionHead}>
-                        <Heading level={3}>Left alone</Heading>
+                        <Heading level={3}>What SelfOS is curious about next</Heading>
+                        <Text tone="secondary">
+                          Concrete things it might ask you next, drawn from your own answers. Keep
+                          it, remove it, or go deeper — what you keep is what it asks. It never
+                          shows what anyone else shared.
+                        </Text>
                       </div>
+                      {candidates.length > 0 ? (
+                        confirmClear ? (
+                          <span className={styles.confirmRow}>
+                            <Text tone="secondary">Remove all {candidates.length}?</Text>
+                            <button
+                              type="button"
+                              className={styles.dangerBtn}
+                              disabled={clearing}
+                              onClick={() => {
+                                void clearFeed();
+                                setConfirmClear(false);
+                              }}
+                            >
+                              Clear all
+                            </button>
+                            <button
+                              type="button"
+                              className={styles.clearBtn}
+                              onClick={() => setConfirmClear(false)}
+                            >
+                              Cancel
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            className={styles.clearBtn}
+                            disabled={clearing}
+                            onClick={() => setConfirmClear(true)}
+                          >
+                            <Trash2 size={14} aria-hidden="true" />
+                            Clear all
+                          </button>
+                        )
+                      ) : null}
+                    </div>
+
+                    {candidates.length > 0 ? (
+                      <ul className={styles.candidateList}>
+                        {candidates.map((c) => (
+                          <CandidateCard key={c.id} item={c} />
+                        ))}
+                      </ul>
+                    ) : (
                       <Card>
-                        <ul className={styles.chipList}>
-                          {declines.map((m, i) => (
-                            <li key={`${m.label}-${i}`} className={styles.chip}>
-                              <span>{m.label}</span>
-                              <span className={styles.chipKind}>
-                                {m.kind === 'not-applicable'
-                                  ? 'Doesn’t apply'
-                                  : 'Prefer not to say'}
-                              </span>
-                            </li>
+                        <Text tone="secondary">
+                          {hasEverRefreshed
+                            ? 'Nothing queued right now. Look for more, or check back after your next check-in.'
+                            : 'SelfOS is still getting to know you. New questions appear here after your next check-in — or look for some now.'}
+                        </Text>
+                      </Card>
+                    )}
+
+                    <div className={styles.feedFoot}>
+                      <button
+                        type="button"
+                        className={styles.lookMoreBtn}
+                        disabled={refreshing}
+                        onClick={() => void lookForMore()}
+                      >
+                        <RefreshCw
+                          size={14}
+                          aria-hidden="true"
+                          className={refreshing ? styles.spin : ''}
+                        />
+                        {refreshing ? 'Looking…' : 'Look for more'}
+                      </button>
+                      <span className={styles.feedNote}>
+                        Refreshes on its own. Looking now uses a little of your AI allowance.
+                      </span>
+                    </div>
+                  </section>
+                ) : null}
+
+                {active === 'coverage' ? (
+                  <section>
+                    <div className={styles.sectionHead}>
+                      <Heading level={3}>How well I know you</Heading>
+                      <Text tone="secondary">
+                        There’s always more to learn — this never reads “done”. Tell it where to
+                        lean in or ease off.
+                      </Text>
+                    </div>
+                    {areas.length > 0 ? (
+                      <Card>
+                        <ul className={styles.areaList}>
+                          {areas.map((area) => (
+                            <AreaRow key={area.topicId} area={area} />
                           ))}
                         </ul>
                       </Card>
-                    </section>
-                  ) : null}
-                </aside>
-              ) : null}
+                    ) : null}
+                  </section>
+                ) : null}
+
+                {active === 'partner' ? (
+                  <section>
+                    <Stack gap={3}>
+                      {partners.map((group) => (
+                        <PartnerCard key={group.partnerId} group={group} />
+                      ))}
+                    </Stack>
+                  </section>
+                ) : null}
+
+                {active === 'left-alone' ? (
+                  <section>
+                    <div className={styles.sectionHead}>
+                      <Heading level={3}>Left alone</Heading>
+                      <Text tone="secondary">
+                        Things you’ve told SelfOS not to explore. It steers clear of these.
+                      </Text>
+                    </div>
+                    <Card>
+                      <ul className={styles.chipList}>
+                        {declines.map((m, i) => (
+                          <li key={`${m.label}-${i}`} className={styles.chip}>
+                            <span>{m.label}</span>
+                            <span className={styles.chipKind}>
+                              {m.kind === 'not-applicable' ? 'Doesn’t apply' : 'Prefer not to say'}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </Card>
+                  </section>
+                ) : null}
+              </div>
             </div>
           </>
         )}

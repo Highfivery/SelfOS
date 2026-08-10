@@ -6,110 +6,143 @@
   max-width: 78ch;
 }
 
-/* ── At-a-glance strip ─────────────────────────────────────────────────────── */
+/* ── Left sub-nav layout: a vertical section nav beside the active section's full-width panel ── */
 
-.glance {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--space-3);
-}
-
-.stat {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-}
-.statK {
-  font-size: 0.75rem;
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.statV {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  min-width: 0;
-  font-size: 1.375rem;
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-.statV small {
-  font-size: 0.75rem;
-  font-weight: 400;
-  color: var(--color-text-tertiary);
-}
-.statNames {
-  font-size: 0.9375rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
-/* ── Two-column layout: feed + coverage (main) beside a sticky partner rail ─── */
-
-.single {
-  display: flex;
-  flex-direction: column;
+  grid-template-columns: 220px minmax(0, 1fr);
   gap: var(--space-6);
-}
-
-.cols {
-  display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(320px, 1fr);
-  gap: var(--space-5);
   align-items: start;
 }
-.cols .colFeed {
-  grid-column: 1;
-  grid-row: 1;
-  min-width: 0;
-}
-.cols .colCoverage {
-  grid-column: 1;
-  grid-row: 2;
-  min-width: 0;
-  margin-top: var(--space-6);
-}
-.cols .rail {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  position: sticky;
-  top: var(--space-5);
-  align-self: start;
-  min-width: 0;
+
+.subnav {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 2px;
+  position: sticky;
+  top: var(--space-4);
+  min-width: 0;
 }
 
-/* Stack on narrow widths: feed → partner rail → coverage, so the partner card is never buried. */
-@media (max-width: 900px) {
-  .cols {
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  text-align: left;
+  cursor: pointer;
+}
+.navItem:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text-primary);
+}
+.navItemOn {
+  background: var(--color-accent-subtle-bg);
+  border-color: var(--color-border);
+  color: var(--color-accent-text);
+  font-weight: 500;
+}
+.navIcon {
+  display: inline-flex;
+  flex: none;
+}
+.navLabel {
+  flex: 1;
+  min-width: 0;
+}
+.navCount {
+  flex: none;
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+}
+.navItemOn .navCount {
+  color: var(--color-accent-text);
+}
+
+.sectionPanel {
+  min-width: 0;
+}
+
+/* On narrow widths the nav becomes a wrapping pill row above the content (no horizontal scroll). */
+@media (max-width: 767px) {
+  .layout {
     display: flex;
     flex-direction: column;
-    gap: var(--space-6);
+    gap: var(--space-4);
   }
-  .cols .colFeed {
-    order: 1;
-  }
-  .cols .rail {
-    order: 2;
+  .subnav {
     position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--space-2);
   }
-  .cols .colCoverage {
-    order: 3;
-    margin-top: 0;
+  .navItem {
+    width: auto;
+    border-color: var(--color-border);
+    border-radius: var(--radius-pill);
   }
+}
+
+/* The feed section header: title + a Clear-all affordance on the right. */
+.feedHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+.feedHead .sectionHead {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 200px;
+}
+.clearBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: none;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.clearBtn:hover:not(:disabled) {
+  color: var(--color-text-primary);
+}
+.confirmRow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  flex-wrap: wrap;
+}
+.dangerBtn {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-subtle-bg);
+  color: var(--color-danger);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* Match the module's disabled convention (an in-flight remove / clear dims + stops the pointer). */
+.candidateRemove:disabled,
+.clearBtn:disabled,
+.dangerBtn:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .sectionHead {
@@ -173,11 +206,39 @@
   color: var(--color-text-tertiary);
 }
 
+/* Right-aligned group in the card header: the pinned tag (if any) + the ✕ remove. */
+.candidateHeadRight {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  flex: none;
+}
+
+.candidateRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.candidateRemove:hover:not(:disabled) {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  background: var(--color-danger-subtle-bg);
+}
+
 .pinnedTag {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-left: auto;
   font-size: 0.6875rem;
   font-weight: 500;
   color: var(--color-accent-text);

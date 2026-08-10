@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.2](https://github.com/Highfivery/SelfOS/compare/v0.51.1...v0.51.2) (2026-08-10)
+
+
+### Bug Fixes
+
+* **together:** a concluded session prompts "wrap up & reflect", not a phantom turn ([#400](https://github.com/Highfivery/SelfOS/issues/400)) ([a226491](https://github.com/Highfivery/SelfOS/commit/a226491447888ec3cec1f3c801eb7dd1c469e3fd))
+
 ## [0.51.1](https://github.com/Highfivery/SelfOS/compare/v0.51.0...v0.51.1) (2026-08-10)
 
 

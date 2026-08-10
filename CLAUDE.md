@@ -427,6 +427,35 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-10 — **Build (Questionnaires → Explored tab redesign — two-column layout with the partner card promoted
+  to a sticky rail; user-requested UI/UX improvement; mockup approved FIRST; SPEC 70 §3; on
+  `feat/explored-two-column`).** The user: "Explore with <partner>" got lost at the bottom of a long single-column
+  scroll (below the candidate feed + 10 coverage rows) — asked to redesign so things are found easier, mockup
+  first. Showed an interactive Artifact mockup in the app's real tokens (two columns + a promoted partner rail +
+  an at-a-glance strip) → approved "as shown" → built it renderer-only in `ExploredPanel.tsx`/`.module.css` (no
+  data/IPC/schema change; the `CandidateCard`/`AreaRow`/`PartnerCard` sub-components + all their content/roles
+  unchanged). New layout: a lead line + an **at-a-glance strip** (queued questions · areas + status breakdown ·
+  who you're steering with, all derived from the view) over a **two-column grid** — the candidate feed + "How
+  well I know you" coverage in the main column (col 1, rows 1–2), and a **sticky right rail** (col 2) holding the
+  **"Explore with <partner>" card(s) + "Left alone"** so the partner card is visible immediately without
+  scrolling. Two-column only when the rail has content (`partners.length > 0 || declines.length > 0`), else a
+  single-column `.single` flex (no empty rail beside coverage). At ≤900px the grid becomes a flex column ordered
+  **feed → partner rail → coverage** (CSS `order`) so the partner card is never buried on narrow widths either.
+  Fixed my initial CSS to the codebase convention (raw `rem` font-sizes — there are no `--font-size-*` tokens;
+  `font-weight: 500` for emphasis, not 600). Gate green: typecheck/lint/format, **1550 desktop** unit (+1
+  ExploredPanel RTL: the at-a-glance strip renders + the partner card + "Left alone" are promoted into a
+  `role="complementary"` rail; the 7 existing RTL tests pass unchanged — the restructure preserved every role/
+  label), and the existing adaptive-exploration **E2E** (which navigates the Explored tab with a seeded partner +
+  the §12 360px overflow guard `expectNoInnerOverflow` + `main` scrollWidth ≤ 1) passes with the new layout.
+  Real-Electron visual QA at desktop (matches the mockup — partner card top-right in the sticky rail, at-a-glance
+  strip, two-column feed+coverage) + 360px (stacks single-column, no real overflow — the screenshot's left-edge
+  clip is the documented macOS traffic-light artifact, absent on the real iOS target; both scrollWidth guards
+  pass). **Lesson: "find it easier" for a buried card is a LAYOUT fix — promote it into a sticky side rail (visible
+  without scrolling) and keep a single-column fallback when the rail is empty; on narrow widths use CSS `order` to
+  keep the promoted item above the long list rather than letting it fall back to the bottom. Mockup-first for any
+  redesign (an Artifact in the app's real tokens for a full-width desktop layout, since the inline `visualize`
+  widget caps at 680px), and match the module's existing raw-`rem`/weight-500 CSS convention — there are no
+  `--font-size-*` tokens.**
 - 2026-08-10 — **Fix (cross-person attribution: a partner's answers surfaced as YOUR own material — the candidate
   feed, weekly-reflection + AI-suggestion emails, and challenge suggestions; member-reported [Ben got intimacy
   candidates phrased for Angel about him, a "Hi Ben" weekly email describing Angel, and a "This person's intimate

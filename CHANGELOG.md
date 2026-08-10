@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.51.0](https://github.com/Highfivery/SelfOS/compare/v0.50.0...v0.51.0) (2026-08-10)
+
+
+### Features
+
+* **questionnaires:** left sub-nav for the Explored tab + a clear delete for feed items ([#396](https://github.com/Highfivery/SelfOS/issues/396)) ([b4a8217](https://github.com/Highfivery/SelfOS/commit/b4a82170b9a496c0fe50c54f090fe99e50941606))
+* **questionnaires:** redesign the Explored tab — two columns with a promoted partner rail ([#395](https://github.com/Highfivery/SelfOS/issues/395)) ([3c0e74d](https://github.com/Highfivery/SelfOS/commit/3c0e74da7d52002db88d8a400455ee767f1d18c3))
+
+
+### Bug Fixes
+
+* **insights:** exclude about-someone-else responses from first-person surfaces ([#129](https://github.com/Highfivery/SelfOS/issues/129)) ([#393](https://github.com/Highfivery/SelfOS/issues/393)) ([ac4b87e](https://github.com/Highfivery/SelfOS/commit/ac4b87e594acc9c4e44c6e8aef8eeaf1293136f8))
+
 ## [0.50.0](https://github.com/Highfivery/SelfOS/compare/v0.49.0...v0.50.0) (2026-08-10)
 
 

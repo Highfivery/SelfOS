@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.1](https://github.com/Highfivery/SelfOS/compare/v0.51.0...v0.51.1) (2026-08-10)
+
+
+### Bug Fixes
+
+* **email:** never dead-end the AI-suggestion email — add an Open-SelfOS fallback with no relay ([#398](https://github.com/Highfivery/SelfOS/issues/398)) ([3ce9bf7](https://github.com/Highfivery/SelfOS/commit/3ce9bf7ed61f236627016767366ffd8fbc1a87c9))
+
 ## [0.51.0](https://github.com/Highfivery/SelfOS/compare/v0.50.0...v0.51.0) (2026-08-10)
 
 

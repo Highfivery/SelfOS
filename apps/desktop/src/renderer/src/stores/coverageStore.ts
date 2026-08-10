@@ -23,11 +23,14 @@ interface CoverageStoreState {
   curating: string | null;
   /** True while the manual "Look for more" candidate refresh is running (it spends). */
   refreshing: boolean;
+  /** True while "Clear all" is emptying the feed. */
+  clearing: boolean;
   /** True while the inline 18+ unlock is being acknowledged. */
   acking: boolean;
   load: () => Promise<void>;
   steer: (input: CoverageSteerInput) => Promise<void>;
   curate: (input: CandidateCurateInput) => Promise<void>;
+  clearFeed: () => Promise<void>;
   lookForMore: () => Promise<void>;
   acknowledgeAdult: () => Promise<void>;
   /** The partnerId currently mid-wish-write, so the panel can disable just that card. */
@@ -44,6 +47,7 @@ const EMPTY = {
   steering: null,
   curating: null,
   refreshing: false,
+  clearing: false,
   acking: false,
   wishing: null,
 } satisfies Partial<CoverageStoreState>;
@@ -74,6 +78,15 @@ export const useCoverageStore = create<CoverageStoreState>((set) => ({
       set({ view, curating: null });
     } catch {
       set({ curating: null, error: 'We couldn’t save that. Try again.' });
+    }
+  },
+  clearFeed: async () => {
+    set({ clearing: true, error: null });
+    try {
+      const view = (await window.selfos?.questionnairesClearCandidateFeed()) ?? null;
+      set({ view, clearing: false });
+    } catch {
+      set({ clearing: false, error: 'We couldn’t clear that. Try again.' });
     }
   },
   lookForMore: async () => {

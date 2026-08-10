@@ -3053,21 +3053,19 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
     await w.getByRole('link', { name: 'Questionnaires' }).click();
     await w.getByRole('tab', { name: 'Explored' }).click();
 
-    // The candidate feed LEADS the panel (forward-first).
+    // The candidate feed is the default section (forward-first).
     await expect(
       w.getByRole('heading', { name: 'What SelfOS is curious about next' }),
     ).toBeVisible();
     await expect(w.getByText('What would financial security feel like for you?')).toBeVisible();
-    // The honest overview never reads "done" — no "explored/done" language in the panel body (the "Explored"
-    // TAB name is unchanged; scope the check to the panel content).
-    await expect(w.getByRole('heading', { name: 'How well I know you' })).toBeVisible();
-    await expect(w.locator('#qpanel-explored').getByText(/\bexplored\b/i)).toHaveCount(0);
+    // The intimacy candidate is WITHHELD from the feed until 18+ is acked (spec 70 §3.4).
+    await expect(w.getByText('An explicit intimacy question')).toHaveCount(0);
 
-    // "Not this" on the love-life candidate drops it from the feed.
+    // The ✕ removes the love-life candidate from the feed (maps to a decline).
     const skipCard = w
       .getByRole('listitem')
       .filter({ hasText: 'How is your love life these days?' });
-    await skipCard.getByRole('button', { name: 'Not this' }).click();
+    await skipCard.getByRole('button', { name: /Remove this question/ }).click();
     await expect(w.getByText('How is your love life these days?')).toHaveCount(0);
     // "Ask me this" pins the money candidate.
     const keepCard = w
@@ -3076,24 +3074,25 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
     await keepCard.getByRole('button', { name: 'Ask me this' }).click();
     await expect(keepCard.getByRole('button', { name: 'Asking this' })).toBeVisible();
 
-    // Intimacy is 18+-gated (spec 70 §3.4): the explicit candidate is WITHHELD and the row shows the inline
-    // unlock, not steer buttons.
-    await expect(w.getByText('An explicit intimacy question')).toHaveCount(0);
-    // The overview Intimacy row carries the "18+" badge (the candidate card does not) — disambiguates the two
-    // once the candidate surfaces after acking.
+    // The coverage section is its own sub-nav item — the honest overview never reads "done".
+    await w.getByRole('button', { name: /How well it knows you/ }).click();
+    await expect(w.getByRole('heading', { name: 'How well I know you' })).toBeVisible();
+    await expect(w.locator('#qpanel-explored').getByText(/\bexplored\b/i)).toHaveCount(0);
+    // The Intimacy row carries the "18+" badge + the inline unlock, not steer buttons.
     const intimacyRow = w
       .getByRole('listitem')
       .filter({ hasText: 'Intimacy' })
       .filter({ hasText: '18+' });
     await expect(intimacyRow.getByRole('button', { name: /18 or older/i })).toBeVisible();
-    // Acknowledge 18+ → the intimacy candidate surfaces and the row becomes steerable.
+    // Acknowledge 18+ → the row becomes steerable, and the intimacy candidate surfaces back on the feed.
     await intimacyRow.getByRole('button', { name: /18 or older/i }).click();
-    await expect(w.getByText('An explicit intimacy question')).toBeVisible();
     await expect(intimacyRow.getByRole('button', { name: 'Explore more' })).toBeVisible();
-
-    // A "Leave alone" area steer on Relationships (the overview retains the area-level steers).
+    // A "Leave alone" area steer on Relationships (the coverage rows keep the area-level steers).
     const relationships = w.getByRole('listitem').filter({ hasText: 'Relationships' }).first();
     await relationships.getByRole('button', { name: 'Leave alone' }).click();
+    // Back on the feed, the intimacy candidate now shows (18+ acked).
+    await w.getByRole('button', { name: /Curious next/ }).click();
+    await expect(w.getByText('An explicit intimacy question')).toBeVisible();
 
     // Read-after-write through the live bridge: leave + return, reopen Explored — curation + steer persisted.
     await w.getByRole('link', { name: 'Home' }).click();
@@ -3107,7 +3106,8 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
     ).toBeVisible();
     await expect(w.getByText('How is your love life these days?')).toHaveCount(0); // stayed skipped
 
-    // "Explore with your partner" (spec 70 §3.5): the card renders for the connected partner; add a wish.
+    // "Explore with your partner" (spec 70 §3.5): its own sub-nav section; the card renders; add a wish.
+    await w.getByRole('button', { name: /Explore with Robin/ }).click();
     await expect(w.getByRole('heading', { name: 'Explore with Robin' })).toBeVisible();
     await w.getByLabel('Something to explore with Robin').fill('plan a proper holiday together');
     await w.getByRole('button', { name: 'Add' }).click();

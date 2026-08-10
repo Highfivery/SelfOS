@@ -427,6 +427,34 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-10 — **Build (Explored tab v2 — left sub-nav + a delete affordance; user-requested; mockup (2 options)
+  approved FIRST, owner picked Option B; SPEC 70 §3.2; on `feat/explored-subnav`).** After the two-column redesign
+  the user said it felt "very squished" and wanted a way to DELETE stale candidate-feed items (the wrong-person
+  ones the attribution fix stopped generating but that persisted). Diagnosed first: "Not this" ALREADY removed an
+  item (curate → `not-this` → `skipped` → excluded from `projectCandidateFeed`), it just wasn't obvious as a
+  delete. Showed a mockup of two de-squish directions (secondary tabs vs a left sub-nav); owner picked the **left
+  sub-nav** (Settings-style) + confirmed the ✕ = "just drop this one" (no topic ban). Built (renderer + one bulk
+  op): the panel restructured into a vertical **section nav** — Curious next (feed) · How well it knows you
+  (coverage) · Explore with `<partner>` · Left alone — each rendering **full-width** in the content panel (partner/
+  left-alone nav items appear only with content; a `navItems.some(...) ? section : 'curious'` fallback when a
+  section empties). Each candidate card's "Not this" text button → a clear **✕ icon** in the card header
+  (aria-label "Remove this question: `<prompt>`", mapping to the SAME existing `not-this` action — no new
+  semantics). A **"Clear all"** (two-step inline confirm) backed by a NEW bulk op that mirrors the `curateCandidate`
+  seam exactly: core `clearCandidateFeed` (pure — marks every ACTIVE candidate skipped, leaves minted/already-
+  skipped untouched, no-op identity when empty) + `clearCandidateFeedAndRead` + a new own-scoped IPC
+  `questionnaires:clearCandidateFeed` (gated `questionnaires.own` + active-person-scoped in the bridge, returns
+  `emptyCoverageView()` on denial) + store `clearFeed()`. §12 responsive: at ≤767px the sub-nav becomes a wrapping
+  pill row (no horizontal scroll). Gate green: typecheck/lint/format, **1956 core + full desktop** unit (a
+  `clearCandidateFeed` core unit; 9 ExploredPanel RTL rewritten for the sub-nav incl. a ✕-removes + Clear-all
+  test) + the adaptive-exploration E2E updated to navigate the sub-nav + use the ✕ + a decrypt of the persisted
+  skip. Real-Electron visual QA at desktop (roomy feed + coverage sections, the ✕ + Clear all) + 360px (nav →
+  wrapping pills, both overflow guards pass). **Lesson: when a redesign makes a page feel "squished," the fix is
+  often to STOP showing everything at once — a section sub-nav (each view full-width) beats cramming; and a
+  "delete" the user can't find may already exist under a different label ("Not this") — make it an obvious ✕
+  before building a new mechanism, and add a bulk "Clear all" by mirroring the existing single-item curate seam
+  (gated + own-scoped), not a new privacy surface. Process footgun (bit again): `git checkout <e2e file>` to strip
+  a temporary screenshot injection ALSO reverts the real uncommitted edits in that file — commit first, or
+  re-apply.**
 - 2026-08-10 — **Build (Questionnaires → Explored tab redesign — two-column layout with the partner card promoted
   to a sticky rail; user-requested UI/UX improvement; mockup approved FIRST; SPEC 70 §3; on
   `feat/explored-two-column`).** The user: "Explore with <partner>" got lost at the bottom of a long single-column

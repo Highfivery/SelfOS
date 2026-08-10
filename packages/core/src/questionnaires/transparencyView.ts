@@ -7,6 +7,7 @@ import { deriveCoverageSkeleton } from './coverageModel';
 import {
   addPartnerWish,
   applyCandidateCuration,
+  clearCandidateFeed,
   applySteer,
   FEED_CANDIDATE_CAP,
   isActiveCandidate,
@@ -409,5 +410,19 @@ export async function curateCandidate(
   const profile = await readProfile(fs, key, personId);
   const next = applyCandidateCuration(profile, input, now);
   if (next !== profile) await writeProfile(fs, key, next); // skip the vault write on a no-op tap
+  return readCoverageView(fs, key, personId, now, adultAcknowledged);
+}
+
+/** Clear the whole candidate feed for the active person + return the refreshed OWN view (spec 70 §3.2). */
+export async function clearCandidateFeedAndRead(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  now: Date,
+  adultAcknowledged = false,
+): Promise<QuestionnaireCoverageView> {
+  const profile = await readProfile(fs, key, personId);
+  const next = clearCandidateFeed(profile, now);
+  if (next !== profile) await writeProfile(fs, key, next);
   return readCoverageView(fs, key, personId, now, adultAcknowledged);
 }

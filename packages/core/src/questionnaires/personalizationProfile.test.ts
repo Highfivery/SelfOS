@@ -10,6 +10,8 @@ import {
 import {
   addPartnerWish,
   applyCandidateCuration,
+  clearCandidateFeed,
+  isActiveCandidate,
   applyChange,
   applyDecline,
   applyEngagement,
@@ -442,6 +444,29 @@ describe('applyCandidateCuration', () => {
     expect(applyCandidateCuration(p, { candidateId: 'c1', action: 'ask' }, at(2))).toBe(p);
     // no-change action returns identity
     expect(applyCandidateCuration(p, { candidateId: 'c2', action: 'ask' }, at(2))).toBe(p);
+  });
+});
+
+describe('clearCandidateFeed', () => {
+  it('marks every ACTIVE candidate skipped, leaving minted + already-skipped ones untouched', () => {
+    const p = withCandidates([
+      candidate({ id: 'c1', prompt: 'A' }),
+      candidate({ id: 'c2', prompt: 'B', curation: 'asked' }),
+      candidate({ id: 'c3', prompt: 'C', curation: 'skipped' }),
+      candidate({ id: 'c4', prompt: 'D', mintedAssignmentId: 'a1' }),
+    ]);
+    const cleared = clearCandidateFeed(p, at(9));
+    // No active candidate remains → the feed is empty.
+    expect(cleared.candidates.filter(isActiveCandidate)).toHaveLength(0);
+    expect(cleared.candidates.find((c) => c.id === 'c1')?.curation).toBe('skipped');
+    expect(cleared.candidates.find((c) => c.id === 'c2')?.curation).toBe('skipped'); // was 'asked'
+    // The already-minted candidate keeps its minted stamp (it was asked, not shown).
+    expect(cleared.candidates.find((c) => c.id === 'c4')?.mintedAssignmentId).toBe('a1');
+  });
+
+  it('is a no-op (identity) when the feed is already empty', () => {
+    const p = withCandidates([candidate({ id: 'c1', prompt: 'A', curation: 'skipped' })]);
+    expect(clearCandidateFeed(p, at(9))).toBe(p);
   });
 });
 

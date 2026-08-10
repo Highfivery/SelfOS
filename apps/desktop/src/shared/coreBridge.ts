@@ -708,6 +708,7 @@ import {
   readCoverageView,
   steerTopic,
   curateCandidate,
+  clearCandidateFeedAndRead,
   addPartnerWishAndRead,
   removePartnerWishAndRead,
   buildPartnerWishGuidance,
@@ -4268,6 +4269,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const parsed: CandidateCurateInput = CurateCandidateSchema.parse(input);
       const acked = (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
       return curateCandidate(ctx.fs, ctx.key, personId, parsed, new Date(), acked);
+    },
+    // Clear the whole candidate feed for the active person (spec 70 §3.2). Cheap, no AI; own-scoped in the bridge.
+    questionnairesClearCandidateFeed: async (): Promise<QuestionnaireCoverageView> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'questionnaires.own')))
+        return emptyCoverageView();
+      const personId = await activePersonId();
+      if (!personId) return emptyCoverageView();
+      const acked = (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
+      return clearCandidateFeedAndRead(ctx.fs, ctx.key, personId, new Date(), acked);
     },
     // The manual "Look for more" (spec 70 §5.4): force a candidate refresh for the active person, then return
     // the refreshed OWN view. Budget-gated + metered `questionnaire.profile` INSIDE `refreshNextCandidates`

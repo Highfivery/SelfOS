@@ -72,24 +72,29 @@ describe('ExploredPanel (spec 70 §3)', () => {
         <ExploredPanel />
       </MemoryRouter>,
     );
-    // The candidate feed leads.
+    // The candidate feed is the default section.
     expect(await screen.findByText('What SelfOS is curious about next')).toBeInTheDocument();
     expect(
       screen.getByText('What would financial security feel like for you?'),
     ).toBeInTheDocument();
     expect(screen.getByText('new ground')).toBeInTheDocument();
-    // The honest overview — never "done"; status is text (not color-only).
-    expect(screen.getByText('How well I know you')).toBeInTheDocument();
+
+    // The coverage section (its own sub-nav item) — honest overview, never "done"; status is text.
+    await userEvent.click(screen.getByRole('button', { name: /How well it knows you/ }));
+    expect(await screen.findByText('How well I know you')).toBeInTheDocument();
     expect(screen.getByText('Knows you well')).toBeInTheDocument();
     expect(screen.getByText('New')).toBeInTheDocument();
-    // No "Explored/done" language anywhere.
-    expect(screen.queryByText(/explored/i)).toBeNull();
-    // The marked-off decline surfaces.
-    expect(screen.getByText('How is your commute?')).toBeInTheDocument();
     // Intimacy (18+) is gated until acked: it shows the 18+ badge + the inline unlock, NOT the steer buttons.
     expect(screen.getByText('18+')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /18 or older/i })).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: 'Explore more' })).toHaveLength(2); // Work + Money only
+
+    // The "left alone" section holds the marked-off decline.
+    await userEvent.click(screen.getByRole('button', { name: /Left alone/ }));
+    expect(await screen.findByText('How is your commute?')).toBeInTheDocument();
+
+    // No "Explored/done" language anywhere in the panel.
+    expect(screen.queryByText(/explored/i)).toBeNull();
   });
 
   it('the Intimacy row unlocks its steers via the inline 18+ acknowledgement (spec 70 §3.4)', async () => {
@@ -109,6 +114,7 @@ describe('ExploredPanel (spec 70 §3)', () => {
         <ExploredPanel />
       </MemoryRouter>,
     );
+    await userEvent.click(await screen.findByRole('button', { name: /How well it knows you/ }));
     await userEvent.click(await screen.findByRole('button', { name: /18 or older/i }));
     await waitFor(() => expect(ack).toHaveBeenCalled());
     // After acking, the Intimacy row is steerable (3 Explore-more: Work + Money + Intimacy) and the unlock is gone.
@@ -203,7 +209,9 @@ describe('ExploredPanel (spec 70 §3)', () => {
         <ExploredPanel />
       </MemoryRouter>,
     );
-    expect(await screen.findByText('Explore with Ben')).toBeInTheDocument();
+    // The partner section is its own sub-nav item.
+    await userEvent.click(await screen.findByRole('button', { name: /Explore with Ben/ }));
+    expect(await screen.findByRole('heading', { name: 'Explore with Ben' })).toBeInTheDocument();
     // The existing wish shows, and it says the partner never sees it (silent).
     expect(screen.getByText('plan more date nights')).toBeInTheDocument();
     expect(screen.getByText(/they never see that you asked/i)).toBeInTheDocument();
@@ -221,7 +229,7 @@ describe('ExploredPanel (spec 70 §3)', () => {
     );
   });
 
-  it('shows the at-a-glance strip and promotes the partner card + left-alone into a side rail', async () => {
+  it('the left sub-nav lists each section (partner/left-alone only when they have content)', async () => {
     const withPartner = view({
       partners: [
         {
@@ -235,20 +243,73 @@ describe('ExploredPanel (spec 70 §3)', () => {
       questionnairesPersonalizationProfile: () => Promise.resolve(withPartner),
     });
     useCoverageStore.setState({ view: withPartner, loaded: true });
+    const nav = render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
+    // All four section nav items are present (partner + left-alone because they have content here).
+    const sections = await screen.findByRole('navigation', { name: /Explored sections/i });
+    expect(within(sections).getByRole('button', { name: /Curious next/ })).toBeInTheDocument();
+    expect(
+      within(sections).getByRole('button', { name: /How well it knows you/ }),
+    ).toBeInTheDocument();
+    expect(within(sections).getByRole('button', { name: /Explore with Ben/ })).toBeInTheDocument();
+    expect(within(sections).getByRole('button', { name: /Left alone/ })).toBeInTheDocument();
+
+    // With no partner and no declines, only the two core sections show.
+    nav.unmount();
+    useCoverageStore.setState({ view: view({ markedOff: [] }), loaded: true });
     render(
       <MemoryRouter>
         <ExploredPanel />
       </MemoryRouter>,
     );
-    // At-a-glance strip: queued count, area count, and who you're steering with.
-    expect(await screen.findByText('Queued to ask you')).toBeInTheDocument();
-    expect(screen.getByText('Areas of your life')).toBeInTheDocument();
-    expect(screen.getByText('Exploring with')).toBeInTheDocument();
-    // The partner card + "Left alone" are promoted into the side rail (not buried at the bottom).
-    const rail = screen.getByRole('complementary', { name: /partner steering and left-alone/i });
-    expect(within(rail).getByText('Explore with Ben')).toBeInTheDocument();
-    expect(within(rail).getByText('Left alone')).toBeInTheDocument();
-    expect(within(rail).getByText('How is your commute?')).toBeInTheDocument();
+    const bare = await screen.findByRole('navigation', { name: /Explored sections/i });
+    expect(within(bare).getByRole('button', { name: /Curious next/ })).toBeInTheDocument();
+    expect(within(bare).queryByRole('button', { name: /Explore with/ })).toBeNull();
+    expect(within(bare).queryByRole('button', { name: /Left alone/ })).toBeNull();
+  });
+
+  it('the ✕ removes a candidate; Clear all empties the feed (spec 70 §3.2)', async () => {
+    const curate = vi
+      .fn<SelfosBridge['questionnairesCurateCandidate']>()
+      // Removing c1 leaves c2, so the feed (and Clear all) is still there.
+      .mockResolvedValue(view({ candidates: [candidate({ id: 'c2', prompt: 'Another one?' })] }));
+    const clearFeed = vi
+      .fn<SelfosBridge['questionnairesClearCandidateFeed']>()
+      .mockResolvedValue(view({ candidates: [] }));
+    installMockBridge({
+      questionnairesPersonalizationProfile: () =>
+        Promise.resolve(
+          view({
+            candidates: [candidate({ id: 'c1' }), candidate({ id: 'c2', prompt: 'Another one?' })],
+          }),
+        ),
+      questionnairesCurateCandidate: curate,
+      questionnairesClearCandidateFeed: clearFeed,
+    });
+    useCoverageStore.setState({
+      view: view({
+        candidates: [candidate({ id: 'c1' }), candidate({ id: 'c2', prompt: 'Another one?' })],
+      }),
+      loaded: true,
+    });
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
+    // ✕ on the first card removes just that one (maps to 'not-this').
+    const removes = await screen.findAllByRole('button', { name: /Remove this question/ });
+    await userEvent.click(removes[0]!);
+    await waitFor(() =>
+      expect(curate).toHaveBeenCalledWith({ candidateId: 'c1', action: 'not-this' }),
+    );
+    // Clear all is a two-step confirm, then calls the bulk bridge.
+    await userEvent.click(screen.getByRole('button', { name: /Clear all/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' })); // the confirm
+    await waitFor(() => expect(clearFeed).toHaveBeenCalled());
   });
 
   it('a steer calls the bridge and updates the view', async () => {
@@ -267,6 +328,7 @@ describe('ExploredPanel (spec 70 §3)', () => {
         <ExploredPanel />
       </MemoryRouter>,
     );
+    await userEvent.click(await screen.findByRole('button', { name: /How well it knows you/ }));
     await screen.findByText('How well I know you');
     await userEvent.click(screen.getAllByRole('button', { name: 'Explore more' })[1]!);
     await waitFor(() =>

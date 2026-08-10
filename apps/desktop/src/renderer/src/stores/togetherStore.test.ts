@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { TogetherSessionView, TogetherTurnResult } from '@shared/schemas';
-import { appendTogetherChunk, useTogetherStore } from './togetherStore';
+import { appendTogetherChunk, togetherWaitingCount, useTogetherStore } from './togetherStore';
 import { useSessionStore } from './sessionStore';
 import { clearMockBridge, installMockBridge } from '../test-utils/bridge';
 
@@ -17,6 +17,7 @@ function view(id: string, over: Partial<TogetherSessionView> = {}): TogetherSess
     ],
     status: 'active',
     yourTurn: true,
+    readyToWrapUp: false,
     unreadCount: 0,
     createdAt: '2026-07-21T00:00:00.000Z',
     messages: [],
@@ -178,5 +179,20 @@ describe('togetherStore — no forced navigation when a turn resolves after swit
     useTogetherStore.setState({ sending: false });
     appendTogetherChunk({ sessionId: 'B', delta: '!' });
     expect(useTogetherStore.getState().streaming).toBe('hi there');
+  });
+});
+
+describe('togetherWaitingCount (§3.1/§3.8)', () => {
+  it('counts a ready-to-wrap-up session for BOTH partners, not just the addressed one', () => {
+    // The coach-addressed partner has yourTurn true; the other partner has yourTurn false — but a concluded
+    // session needs BOTH partners' attention to wrap up, so both should count.
+    const addressed = view('a', { yourTurn: true, readyToWrapUp: true });
+    const other = view('b', { yourTurn: false, readyToWrapUp: true });
+    expect(togetherWaitingCount([addressed], ME)).toBe(1);
+    expect(togetherWaitingCount([other], ME)).toBe(1);
+  });
+
+  it('does not count a plain their-turn active session', () => {
+    expect(togetherWaitingCount([view('c', { yourTurn: false })], ME)).toBe(0);
   });
 });

@@ -428,6 +428,7 @@ export function togetherWaitingCount(
   return sessions.filter(
     (s) =>
       (s.status === 'invited' && s.initiatorPersonId !== myId) ||
-      (s.status === 'active' && s.yourTurn),
+      // §3.8 — a ready-to-wrap-up session needs attention for BOTH partners, not just the addressed one.
+      (s.status === 'active' && (s.yourTurn || s.readyToWrapUp)),
   ).length;
 }

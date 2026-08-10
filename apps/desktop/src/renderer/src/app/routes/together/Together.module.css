@@ -373,6 +373,11 @@
   border: 2px solid var(--color-accent-solid);
   padding: calc(var(--space-4) - 1px);
 }
+/* §3.8 — a concluded session ready to wrap up: a warm border, distinct from the accent "your turn". */
+.sessionCard[data-turn='wrap'] {
+  border: 2px solid var(--color-warning);
+  padding: calc(var(--space-4) - 1px);
+}
 /* The whole card content is the clickable open target — a bare button that fills the card. */
 .sessionCardOpen {
   display: flex;
@@ -432,6 +437,9 @@
 }
 .turnHint[data-turn='you'] {
   color: var(--color-accent-text);
+}
+.turnHint[data-turn='wrap'] {
+  color: var(--color-warning-subtle-text);
 }
 
 /* ── Session groups (by whose move it is) ────────────────────────────────────── */
@@ -823,6 +831,11 @@
 .turnPill[data-turn='you'] {
   background: var(--color-accent-subtle-bg);
   color: var(--color-accent-text);
+}
+/* §3.8 — a concluded session's header pill reads "Ready to wrap up" in the warning tone (matches the card). */
+.turnPill[data-turn='wrap'] {
+  background: var(--color-warning-subtle-bg);
+  color: var(--color-warning-subtle-text);
 }
 
 /* ── Ceremony ───────────────────────────────────────────────────────────────── */

@@ -14,6 +14,8 @@ export function sessionStatus(
   const iInitiated = session.initiatorPersonId === myId;
   switch (session.status) {
     case 'active':
+      // §3.8 — a concluded session (the coach signalled a natural close) reads "Ready to wrap up", not a turn.
+      if (session.readyToWrapUp) return { label: 'Ready to wrap up', tone: 'warning' };
       return session.yourTurn
         ? { label: 'Your turn', tone: 'accent' }
         : { label: 'Their turn', tone: 'neutral' };
@@ -40,6 +42,10 @@ export function sessionStatus(
  */
 export function turnHint(session: TogetherSessionSummary, partnerName: string): string | null {
   if (session.status !== 'active') return null;
+  // §3.8 — the coach signalled a natural close: prompt wrapping up instead of a turn (either can keep talking).
+  if (session.readyToWrapUp) {
+    return 'You’ve reached a natural pause — wrap up & reflect, or keep talking.';
+  }
   // Coach-directed (§3.6): "not your turn" means the coach is engaging your partner — which isn't always
   // because YOU just replied (it can be your partner's reply the coach followed up on), so the copy stays
   // neutral about who acted last (issue #369).
@@ -109,12 +115,14 @@ export function TogetherSessionCard({
       : `A free conversation to talk something through with ${partnerName}.`;
   const when = relativeTime(session.lastMessageAt ?? session.createdAt);
   const hint = turnHint(session, partnerName);
+  const readyToWrapUp = session.status === 'active' && session.readyToWrapUp;
+  const cardTurn = readyToWrapUp ? 'wrap' : status.tone === 'accent' ? 'you' : undefined;
   const withdrawable = onWithdraw != null && canWithdraw(session, myId);
 
   return (
     // The card is a container (not a button) so its actions — e.g. Withdraw — can live INSIDE it. The whole
     // content is one clickable "open" button; the actions sit below a hairline, still within the card border.
-    <div className={styles.sessionCard} data-turn={status.tone === 'accent' ? 'you' : undefined}>
+    <div className={styles.sessionCard} data-turn={cardTurn}>
       <button type="button" className={styles.sessionCardOpen} onClick={onOpen}>
         <div className={styles.sessionCardHead}>
           <div>
@@ -127,7 +135,10 @@ export function TogetherSessionCard({
         </div>
         <div className={styles.sessionSubject}>{subject}</div>
         {hint ? (
-          <div className={styles.turnHint} data-turn={session.yourTurn ? 'you' : 'them'}>
+          <div
+            className={styles.turnHint}
+            data-turn={readyToWrapUp ? 'wrap' : session.yourTurn ? 'you' : 'them'}
+          >
             {hint}
           </div>
         ) : null}

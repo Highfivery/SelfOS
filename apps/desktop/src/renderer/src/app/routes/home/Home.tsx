@@ -463,6 +463,7 @@ export function Home(): JSX.Element {
         id: t.id,
         ...(partnerName ? { partnerName } : {}),
         yourTurn: t.yourTurn,
+        readyToWrapUp: t.readyToWrapUp,
         unreadCount: t.unreadCount,
         status: t.status,
         ...(t.lastMessageAt ? { lastMessageAt: t.lastMessageAt } : {}),

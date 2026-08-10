@@ -660,6 +660,19 @@ export function turnStateFor(messages: TogetherMessage[], viewerId: string): boo
 }
 
 /**
+ * "Ready to wrap up" (§3.8) — the coach signalled a natural close: the newest SHARED message (non-aside,
+ * non-tombstone) is a coach reply flagged `wrapUpSuggested` (from its `[[SELFOS:WRAPUP]]` marker). Viewer-
+ * independent (a shared coach reply is the same for both partners), and reversible for free — the moment
+ * either partner sends another message it becomes the newest shared message, so this reads false again. When
+ * true, the UI replaces the turn indicator with a wrap-up prompt (the turn is a phantom at a concluded session).
+ */
+export function readyToWrapUpFor(messages: TogetherMessage[]): boolean {
+  const shared = messages.filter((m) => !m.privateAside && !m.redacted);
+  const last = shared[shared.length - 1];
+  return last?.role === 'assistant' && last.wrapUpSuggested === true;
+}
+
+/**
  * Whether the coach still owes this viewer a reply (66 §3.2) — the newest non-blank message in THEIR
  * projection is a human one. Derived from the transcript, not from transient error state, so a session
  * reopened days later still offers recovery instead of dead-ending (the 05 §4.1 fix, ported to Together).
@@ -699,6 +712,8 @@ export function unreadCountFor(
 export interface SessionDigest {
   status: TogetherStatus;
   yourTurn: boolean;
+  /** §3.8 — the coach signalled a natural close (active sessions only); replaces the turn with a wrap-up prompt. */
+  readyToWrapUp: boolean;
   unreadCount: number;
   viewerAcked: boolean;
   lastMessageSnippet?: string;
@@ -737,6 +752,8 @@ export function digestFor(
   return {
     status,
     yourTurn: turnStateFor(messages, viewerId),
+    // Gated on `active`: a wrapped-up / ended session is never "ready to wrap up" (it already is / can't be).
+    readyToWrapUp: status === 'active' && readyToWrapUpFor(messages),
     unreadCount: unreadCountFor(messages, viewerId, vState?.lastReadMessageAt),
     viewerAcked: Boolean(vState?.rulesAckAt),
     ...(last

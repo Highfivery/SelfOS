@@ -16,6 +16,7 @@ import {
   stripCoachMarkers,
 } from '../conversations/guidedSteps';
 import { parseAgreementMarker } from '../conversations/agreementMarker';
+import { WRAP_UP_MARKER } from '../conversations/wrapUp';
 import { parseSuggestMarker } from '../conversations/suggestMarker';
 import { parsePrivateMarker } from '../conversations/privateMarker';
 import { getTogetherGuide } from './togetherCatalog';
@@ -320,6 +321,10 @@ async function generateCoachReply(
   const guide = session.guideId ? getTogetherGuide(session.guideId) : undefined;
   const declaredStep =
     !privateAside && guide?.kind === 'structured' ? parseLatestStep(result.text) : null;
+  // §3.8 — a SHARED coach reply may append `[[SELFOS:WRAPUP]]` when the conversation reached a natural close;
+  // flag the message so the session reads "ready to wrap up" (the marker is stripped from `content` above/below
+  // by `stripCoachMarkers`). Never on an aside — a private side-channel never signals the shared wrap-up.
+  const wrapUpSuggested = !privateAside && result.text.includes(WRAP_UP_MARKER);
   const coach: TogetherMessage = {
     id: uuid(),
     schemaVersion: 1,
@@ -330,6 +335,7 @@ async function generateCoachReply(
     ...(privateAside ? { privateAside: true } : {}),
     ...(reply ? { replyToMessageId: reply } : {}),
     ...(declaredStep !== null ? { guideStep: declaredStep } : {}),
+    ...(wrapUpSuggested ? { wrapUpSuggested: true } : {}),
   };
   await appendMessage(fs, key, session.id, coach);
 

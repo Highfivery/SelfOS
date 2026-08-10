@@ -20,6 +20,7 @@ const session = (over: Partial<TogetherSessionSummary>): TogetherSessionSummary 
   ],
   status: 'active',
   yourTurn: false,
+  readyToWrapUp: false,
   unreadCount: 0,
   createdAt: 'now',
   ...over,

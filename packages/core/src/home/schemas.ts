@@ -157,6 +157,8 @@ export interface ActivityFeedInput {
     id: string;
     partnerName?: string;
     yourTurn: boolean;
+    /** §3.8 — the coach signalled a natural close; the "your turn" feed event is suppressed for it. */
+    readyToWrapUp?: boolean;
     unreadCount: number;
     status: string;
     lastMessageAt?: string;

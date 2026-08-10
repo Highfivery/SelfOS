@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Archive, ChevronRight, Clock, MailOpen, Reply, Send } from 'lucide-react';
+import { Archive, ChevronRight, Clock, MailOpen, Reply, Send, Sparkles } from 'lucide-react';
 import type { TogetherCatalogEntry, TogetherSessionSummary } from '@shared/schemas';
 import { Heading, Stack, Text } from '../../../design-system/components';
 import { TogetherSessionCard } from './TogetherSessionCard';
@@ -12,6 +12,7 @@ import {
 import styles from './Together.module.css';
 
 const GROUP_ICON: Record<TogetherGroupKey, typeof Reply> = {
+  readyToWrapUp: Sparkles,
   yourTurn: Reply,
   openInvitation: MailOpen,
   waiting: Clock,

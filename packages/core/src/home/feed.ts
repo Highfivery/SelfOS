@@ -122,7 +122,9 @@ export function buildActivityFeed(input: ActivityFeedInput): ActivityEvent[] {
   }
 
   for (const t of input.together ?? []) {
-    if (!t.yourTurn) continue;
+    // §3.8 — a concluded session is "ready to wrap up", not a turn: don't emit a phantom "your turn" event
+    // (the coach-directed turn (#369) can be true at the same time as readyToWrapUp).
+    if (!t.yourTurn || t.readyToWrapUp) continue;
     events.push(
       make({
         id: `together:${t.id}`,

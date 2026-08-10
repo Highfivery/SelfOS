@@ -16,6 +16,7 @@ import type { AttentionItem, AttentionKind } from './attention';
 import styles from './Home.module.css';
 
 const KIND_ICON: Record<AttentionKind, LucideIcon> = {
+  'together-wrapup': Sparkles,
   'together-turn': Heart,
   'together-invite': Mail,
   'analyze-responses': Sparkles,

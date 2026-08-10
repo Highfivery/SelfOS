@@ -11440,6 +11440,65 @@ test('together (58) issue #369: the turn follows whom the coach addressed — th
   }
 });
 
+test('together (58) §3.8: a concluded session reads "Ready to wrap up" for both partners, not a turn (reversible)', async () => {
+  const { userData, vault } = await seedTogetherReady();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    // Ben starts + signals a natural close ("we found it") → the coach's reply carries WRAPUP (fake hook).
+    await w.getByRole('link', { name: /Together/ }).click();
+    await w.getByRole('button', { name: 'New session' }).first().click();
+    await w.getByPlaceholder('e.g. Feeling disconnected lately').fill('Working through it');
+    await w.getByRole('button', { name: 'Send invitation' }).click();
+    await w.getByLabel('Message').fill('I think we found it — a good place to wrap up.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/I hear you, Ben/)).toBeVisible();
+
+    // Angel accepts → the session is active for both, and the coach signalled a close.
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: /Together/ }).click();
+    // Scope the open to the board region — a notification toast also carries the topic (strict-mode safety).
+    await w
+      .getByRole('region', { name: 'Open invitation' })
+      .getByText('Working through it')
+      .click();
+    await w.getByRole('button', { name: 'Continue' }).click();
+    await w.getByRole('link', { name: /Together/ }).click();
+    // Angel's board: "Ready to wrap up" — NOT a turn.
+    await expect(w.getByRole('region', { name: 'Ready to wrap up' })).toBeVisible();
+    await expect(w.getByRole('region', { name: 'Your turn' })).toHaveCount(0);
+    await expect(w.getByText(/wrap up & reflect, or keep talking/i)).toBeVisible();
+
+    // Ben's board: also "Ready to wrap up".
+    await switchTogetherPerson(w, 'Ben');
+    await w.getByRole('link', { name: /Together/ }).click();
+    await expect(w.getByRole('region', { name: 'Ready to wrap up' })).toBeVisible();
+
+    // Opening the concluded session: the in-session header pill also reads "Ready to wrap up" (not a turn).
+    await w
+      .getByRole('region', { name: 'Ready to wrap up' })
+      .getByText('Working through it')
+      .click();
+    await expect(
+      w.locator("[data-turn='wrap']").filter({ hasText: 'Ready to wrap up' }),
+    ).toBeVisible();
+
+    // Reversible: Ben keeps talking → the coach replies (no close cue), so it's a normal turn again.
+    await w.getByLabel('Message').fill('Actually, one more thing on my mind.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await expect(w.getByText(/one more thing/)).toBeVisible();
+    // Wait for the SECOND coach reply (no WRAPUP cue this time) to persist before the board re-derives, so
+    // the region check isn't racing the still-in-flight turn.
+    await expect(w.getByText(/I hear you, Ben/)).toHaveCount(2);
+    await w.getByRole('link', { name: /Together/ }).click();
+    await expect(w.getByRole('region', { name: 'Ready to wrap up' })).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('together (58) phase I2: the coach sends a private note to ONE partner; the other never sees it (§3.14 Part B, decrypt)', async () => {
   const { userData, vault } = await seedTogetherReady();
   const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });

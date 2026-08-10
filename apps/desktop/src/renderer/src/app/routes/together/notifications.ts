@@ -27,7 +27,18 @@ export function togetherNotificationCandidates(
         action: { type: 'navigate', to: `/together/session/${session.id}` },
       });
     }
-    if (session.status === 'active' && session.yourTurn) {
+    // §3.8 — a concluded session nudges "wrap up & reflect" instead of a (phantom) turn.
+    if (session.status === 'active' && session.readyToWrapUp) {
+      out.push({
+        kind: 'together-wrapup',
+        coalesceKey: `together-wrapup:${session.id}`,
+        signature: session.lastMessageAt ?? session.createdAt,
+        title: session.topic
+          ? `Ready to wrap up with ${withName} — “${session.topic}”`
+          : `Ready to wrap up & reflect with ${withName}`,
+        action: { type: 'navigate', to: `/together/session/${session.id}` },
+      });
+    } else if (session.status === 'active' && session.yourTurn) {
       out.push({
         kind: 'together-turn',
         coalesceKey: `together-turn:${session.id}`,

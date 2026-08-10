@@ -110,6 +110,19 @@ its own. Suggest sparingly, only when it truly fits, never from a private aside.
 signal, never shown; never mention or explain it.`;
 
 /**
+ * Teach the coach the wrap-up signal (§3.8 — the WRAPUP marker). When a couples session reaches a natural,
+ * satisfying close, the coach appends a silent token so the app can offer "wrap up & reflect" instead of
+ * leaving a phantom turn. Mirrors the solo `WRAP_UP_INSTRUCTION`, worded for two partners.
+ */
+export const TOGETHER_WRAP_UP_INSTRUCTION = `Privately, if (and only if) this session has reached a natural, \
+satisfying close for BOTH partners — you've helped them land somewhere, named a next step or a takeaway, and \
+neither is mid-thought or waiting to say more — append the exact token [[SELFOS:WRAPUP]] as the very last thing \
+in your reply, on its own line. It tells the app the conversation has concluded so it can gently offer to wrap \
+up and reflect; it is NEVER shown to either partner, so never mention or explain it, and never use it while the \
+conversation is still open, one partner still has more to say, or you've just asked a question. Only on the \
+shared conversation — never from a private aside.`;
+
+/**
  * Ground the coaching in what SelfOS already knows, and make the coach VERIFY rather than assume (§3.14
  * Part A / Phase I1). Appended with the addendum, BEFORE the per-participant context blocks it refers to.
  * It must NOT reference a coach-initiated private channel (Phase I2) — for I1 the coach only holds sensitive
@@ -187,6 +200,7 @@ export async function buildTogetherSystemPrompt(
     AGREEMENT_INSTRUCTION,
     JOINT_CHALLENGE_INSTRUCTION,
     SUGGEST_INSTRUCTION,
+    TOGETHER_WRAP_UP_INSTRUCTION,
   ];
 
   // A guided couples session (§3.10) foregrounds its group's life-areas for per-call fact selection; a

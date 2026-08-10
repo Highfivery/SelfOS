@@ -48,6 +48,7 @@ function summary(over: Partial<TogetherSessionSummary> = {}): TogetherSessionSum
     ],
     status: 'active',
     yourTurn: false,
+    readyToWrapUp: false,
     unreadCount: 0,
     createdAt: '2026-07-01T00:00:00.000Z',
     ...over,

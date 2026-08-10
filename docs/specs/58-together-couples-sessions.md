@@ -348,6 +348,20 @@ initiator-billed, `extendedThinking: false`), so the analysis, artifacts, and de
 - **Wrap up & reflect** — the same analysis, and it marks the session **done** (sets `report.wrappedUp`,
   so the session derives `complete`, §4.3). Also reachable via the coach's `[[SELFOS:WRAPUP]]` hint.
 
+**Ready-to-wrap-up state (the coach signal → replaces the turn).** A couples session that has reached a
+natural close would otherwise show a phantom turn forever (the turn is derived from whom the coach last
+addressed, §3.6), so the coach is taught to append a silent `[[SELFOS:WRAPUP]]` marker when the
+conversation has landed for **both** partners (mirrors the solo `WRAP_UP_INSTRUCTION`). The marker is
+stripped from the saved + streamed text and flags that coach message (`TogetherMessage.wrapUpSuggested`,
+additive-optional). The **derived** `readyToWrapUp` (in the digest + `TogetherSessionSummary`) is true
+when the newest **shared** message is a wrap-up-flagged coach reply — viewer-independent and **reversible
+for free**: the moment either partner sends another message it's the newest, so `readyToWrapUp` reads
+false again (they kept talking). Gated on `active` (a wrapped-up session is never "ready to wrap up"). When
+true, every turn surface shows **"Ready to wrap up"** instead of a turn — the session card pill + hint, a
+top **"Ready to wrap up"** board group (above Your turn), the Home Together card + needs-attention item,
+and a `together-wrapup` notification (in place of the `together-turn` nudge). Wrapping up (or continuing)
+clears it.
+
 Both are **idempotent** (reuse the report + twin ids) and **de-dup action items** against the pair
 ledger, so running one then the other (or either twice) **never doubles** the report, twins, or action
 items. The pass runs over the **mutually-visible transcript only — every `privateAside` message (and

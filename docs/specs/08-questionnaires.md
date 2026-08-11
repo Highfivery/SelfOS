@@ -4065,112 +4065,97 @@ place. The existing skip + wrong-fact flows (unit + E2E) stay green.
   status (with a clock glyph), and the Results view's per-response Analyze buttons read a short **"Waiting…"**
   instead of "Analysis unavailable". Purely presentational — the one-at-a-time gating is unchanged.
 
-## 32. 2026-08-11 amendment — "That's not right about me": rewrite the whole question, and quote the source
+## 32. 2026-08-11 amendment — "That's not right about me": rewrite the question for real
 
-> **Status: BUILT** (`feat/questionnaire-full-question-correction`; mockup reviewed + approved 2026-08-11). Member-reported: flagging a wrong fact
-> _"just rewrote the question with the answers still not making sense"_, and the follow-up _"Where does this
-> come from?"_ row _"isn't helpful at all because it doesn't show where it actually came from"_. Amends §29
-> (the correction flow) and §30 (the inline panel). Inbox (household recipient) only, as §29.
+> **Status: BUILT** (`fix/questionnaire-correction-answers-dont-fit`). Member-reported, twice. First: flagging a
+> wrong fact _"just rewrote the question with the answers still not making sense"_, and _"Where does this come
+> from?"_ _"doesn't show where it actually came from"_. Then, on the first attempt at a fix: _"the options it came
+> back with have nothing to do with the question"_, _"IT SHOULD REWRITE THE SENDER'S QUESTIONNAIRE"_ and
+> _"structure is frozen should also be able to be changed"_. Supersedes §29's correction model; §30's inline
+> panel placement stands.
 
-### 32.1 The two defects
+### 32.1 What was wrong
 
-Both are scope limits of the §29 build, not regressions:
+The correction could only ever **reword the prompt**. `resolveFactCorrection` was handed a bare prompt string —
+it never saw the options — and the renderer applied the result as a display overlay. Three consequences, all
+reported:
 
-1. **Only the prompt is rewritten.** `resolveFactCorrection` is handed a bare `questionPrompt` string — it
-   never sees `options`, `help`, `scale` labels or `matrix` rows — and returns only `rewrittenPrompt`. The
-   renderer's `promptOverrides` writes back exactly one field. So a question whose **answers** carry the wrong
-   fact ("It's sharper at 39", "About the same as at 35") is reworded above answers that still state it.
-2. **The source is never named.** The core service resolves the matched record and the bridge assembles the
-   full candidate list, but **both are discarded at the seam** — only `source`/`sourceLabel` cross. With
-   `source: 'unknown'` the panel can only offer three blind Profile / Onboarding / Memory buttons, and each
-   calls `navigate()`, which unmounts the answering session and loses every draft answer + the rewording.
+1. **The answers kept the wrong fact.** A question whose ANSWERS carried the bad detail was corrected above
+   answers that still stated it.
+2. **The source was never named.** The matched record and the candidate list were both discarded at the seam, so
+   an unmatched correction could only offer three blind Profile / Onboarding / Memory buttons — and each
+   `navigate()` unmounted the answering session.
+3. **The bad question survived.** The rewrite was local and ephemeral, so the same question came back.
 
-### 32.2 Owner decisions (asked before building)
+A first attempt kept the "never touch the sender's questionnaire" premise and added a display shim
+(`labelOverrides`) that mapped the answer back to the sender's ORIGINAL option string. That was wrong on its own
+terms: it recorded an answer the person never picked, in order to keep a "count" for a question that shouldn't
+have been asked that way. It also forced same-count, same-order rewording, which is why a genuinely unrelated
+option set could only be met with "I can't fix these, skip it".
 
-- **Unsalvageable answers → an honest exit** (not an AI-replaced option set). Rewording can fix wording; it
-  can't fix an option set that's structurally wrong, and replacing one would break the sender's counts.
-- **A profile fact gets an inline confirm** — SelfOS proposes the corrected value, the recipient taps to
-  apply. Never a silent write (§29.2 stands); the tap is the guided fix.
-- **The rewording stays local + ephemeral**, as today. Not persisted with the response.
+### 32.2 The model
 
-### 32.3 The rewrite covers every visible label — and never changes a value
+**A wrong question is rewritten for real.** `resolveFactCorrection` receives the whole question as JSON and
+returns a whole **corrected question** — prompt, help, answer **type**, options and **how many** there are,
+scale anchors, matrix rows. Nothing about the question is frozen except its **identity**, because other records
+point at it: `id` (answers, branch rules, the response set), `canonicalId` (the compatibility pairing, §3.6) and
+`metricKey` (the trend series, §3.7).
 
-`resolveFactCorrection` now takes and returns a **`QuestionLabels`** bundle (the pure, crypto-free
-`questionLabels.ts`, importable by the renderer): `prompt`, `help`, `options`, `scaleLabels` (min/mid/max),
-`matrixRows`, `matrixPointLabels`. Only the fields the question actually has are sent and accepted back.
+**The correction is written at source** (`correctSnapshotQuestion` + `saveQuestionnaire`):
 
-**The integrity guarantee is structural, not a mapping.** A rewritten label is applied for **display only**,
-via a new optional `labelOverrides?: Record<questionId, QuestionLabels>` prop on `@selfos/answering`'s
-`QuestionnaireForm`. The underlying `Question` is untouched, so:
+- into **this send's frozen snapshot**, so Results show what was actually asked. Every send holds its own
+  snapshot, so no other recipient's copy or recorded answers are touched — which is what makes editing a
+  "frozen" artifact safe here.
+- into **the questionnaire itself**, when the corrector authored it — an auto check-in is sent from you to you,
+  which is exactly where a bad question would otherwise come back. A recipient correcting a question **someone
+  else** wrote fixes their own send but never silently edits that person's authored content.
+- any **draft answer to the old question is cleared**: it answered a question that no longer exists.
 
-- the stored answer is still the **sender's original option string** — their Results stay countable;
-- `BranchRuleSchema` triggers, which match on option strings, keep working;
-- `isAnswered` / `unansweredRequired` / matrix row keys are unaffected.
+**The answer is recorded against the corrected question.** There is no display shim and no mapping. What they
+read is what was asked, and what they pick is what's stored.
 
-Two structural guards in `sanitizeRewrite`, each rejecting the whole array and keeping the originals:
+**Branch rules are repaired** (`repairBranchRules`). A rule names its trigger by option string, so replacing an
+option set can strand a follow-up whose condition can never be met again. A stranded rule is **dropped** — the
+follow-up becomes unconditional — rather than left dangling, because a question you can see and skip beats one
+that silently vanishes.
 
-- **Length** — the count and order of options, matrix rows and scale points are frozen, so only wording can
-  change.
-- **Uniqueness** — a label stands in for its option, so two options sharing a label would make the choice
-  ambiguous and silently record the wrong one. This is a live risk, not a theoretical one: dropping the wrong
-  detail is exactly what collapses "sharper at 39" and "sharper than at 35" into one phrase. The reserved
-  `Other` option is likewise **pinned** — renaming it would turn off the write-in, since `allowOther` is
-  derived from the option list.
+**A malformed rewrite is refused, never persisted.** `sanitizeCorrectedQuestion` validates against
+`QuestionSchema` AND the questionnaire validator's own `questionShapeProblems` (shared, not a second copy), so a
+correction can only ever produce a question the app would have accepted from an author. Options must also be
+**distinct** — an option string IS the stored answer, so duplicates make the recorded choice ambiguous, and
+"drop the wrong detail" is exactly what collapses two options into one phrase.
 
-The old `promptOverrides` (prompt-only, applied by spreading over the question) is replaced by
-`labelOverrides`, which also drives the **navigator, the "See all questions" overview and the Review step** —
-otherwise the last screen before Send would restate the very fact the recipient just corrected. A second
-correction **merges** over the first rather than replacing it, so a prompt-only follow-up can't revert an
-earlier answer rewording.
+### 32.3 Two different objections (§32.7)
 
-When the model judges the answer set can't be fixed by rewording it returns **`answersStillWrong: true`**; the
-panel says so plainly and offers one tap to **skip the question as "not clear"** — which already flags it to
-the sender as a question-quality signal (§25.2 `UNCLEAR_SKIP_REASON`). No dead end, no silent bad answer.
+The same affordance receives two unrelated complaints, and conflating them produced the second report:
 
-### 32.4 The source is quoted where you are
+- **`wrongFact`** — the question asserts something untrue about them. Traced to the record it came from, which
+  is quoted in place with what happened to it: a wrong **insight** fact is auto-flagged inaccurate; a **profile**
+  field is proposed for an explicit tap (allowlisted fields, format-validated birthday); **onboarding** is
+  routed. When the classifier can't match a record, they pick from the records actually checked — bounded and
+  clipped, since a mature vault holds hundreds of insight facts.
+- **`answersDontFit`** — nothing on file is disputed; the options are simply wrong. **No record picker**, ever.
+  Asking someone which of their records is wrong when they said "these answers don't match the question" answers
+  a question they never asked.
 
-`FactCorrectionOutcome` stops discarding what the bridge already knows:
+**Nothing navigates away.** Every fix happens in the panel, so a half-finished questionnaire survives it.
 
-- **`quote`** — the matched record's real `text` + human `label` + `source`, rendered in place ("Your Memory ·
-  _'Turned 39 last May'_"), with what already happened to it ("Marked inaccurate — it won't shape questions
-  again"). An insight fact is still auto-flagged, exactly as §29.2.
-- **`candidates`** — for the `unknown` case, the same on-record list the bridge assembled for the model, so
-  the recipient **picks the wrong record** instead of guessing a section. A new recipient-scoped
-  `assignments:correctFactChoose` flags the chosen insight fact (or routes a profile/onboarding pick).
-  "None of these" writes nothing.
-- **`profileFix`** — for a `profile` match, the field + current value + the model's proposed corrected value.
-  Applied only on an explicit tap, through a new recipient-scoped `assignments:applyProfileFix` restricted to
-  an **allowlist of the same fields the bridge reads** (`CORRECTABLE_PROFILE_FIELDS`: `birthday`,
-  `occupation`, `relationshipStatus`, `parentalStatus`, `location`) — a member correcting their OWN profile
-  needs no `people.manage`. A proposed **birthday is format-validated** (a real `YYYY-MM-DD`) before it is
-  written: it's parsed downstream by `ageFromBirthday` and has no editor for a subject (18 §14.6 moved it to
-  onboarding), so a malformed value would silently drop their age from every context with no way to repair it.
+### 32.4 Scope + safety
 
-The candidate list is **capped** (`MAX_CORRECTION_CANDIDATES`, most-recent insight facts + all profile fields
+Recipient-scoped as §29 (the recipient IS the subject, re-checked via `recipientAssignment`); the relay page
+omits `wrongFact` and shows none of this. The AI classification remains best-effort — a wrong or low-confidence
+match degrades to the candidate picker, and a rewrite that isn't a valid question is refused outright rather
+than overwriting a working one.
 
-- onboarding): a mature vault holds hundreds of insight facts, and an unbounded picker is both unusable and a
-  §12 overflow hazard.
+### 32.5 Testing
 
-**Nothing navigates away.** Every fix happens in the panel, so the in-progress questionnaire survives it. The
-deep-links are gone.
-
-### 32.5 Scope + safety
-
-Unchanged from §29: recipient-scoped (the recipient IS the subject, so every read/write is their own data,
-re-checked via `recipientAssignment`); the sender's stored questionnaire is never mutated; the relay page
-omits `wrongFact` and shows none of this. The AI classification remains best-effort — a wrong or
-low-confidence match now degrades to the **candidate picker** rather than three blind buttons, and still
-never mis-edits data.
-
-### 32.6 Testing
-
-- **Core** — `questionLabels` extract/apply round-trip; a length-mismatched option array is rejected and the
-  originals kept; `answersStillWrong` surfaces; a rewrite reaches the model with the options included.
-- **coreBridge** — the outcome carries the quote + candidates; `correctFactChoose` flags the chosen fact;
-  `applyProfileFix` writes only an allowlisted field on the ACTIVE person and rejects anything else;
-  non-recipient → `NO_PERMISSION`.
-- **Renderer** — `labelOverrides` changes the displayed option text while the submitted VALUE stays the
-  sender's original (the integrity guarantee, asserted directly); the panel quotes the source; the candidate
-  picker renders for `unknown`; `answersStillWrong` offers the skip exit.
-- **E2E** — a recipient flags a wrong fact on a choice question → prompt AND options are reworded in place →
-  answering it decrypts to the **original** option string, and the wrong insight fact is flagged inaccurate.
+- **Core** — `sanitizeCorrectedQuestion` accepts a genuine rewrite (new wording, a DIFFERENT number of options,
+  a type change) and REFUSES a structurally broken one; identity is preserved; `repairBranchRules` keeps a
+  surviving trigger and drops a stranded one; `answersDontFit` never resolves to a record.
+- **coreBridge** — the correction is written into the SNAPSHOT and the DEFINITION (decrypt-asserted); the
+  candidate picker appears only for an unmatched `wrongFact`; `applyProfileFix` rejects a non-allowlisted field
+  before any write; non-recipient → `NO_PERMISSION`.
+- **Renderer** — the rewritten question renders and its NEW option is what gets submitted; the source is quoted;
+  no picker for `answersDontFit`.
+- **E2E** — both objections end-to-end: prompt and options replaced, source quoted, no nav row, the insight
+  flagged, the questionnaire itself corrected, and the submitted answer decrypting to the CORRECTED option.

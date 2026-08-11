@@ -137,6 +137,17 @@ it. The ONLY exception is a genuine product/UX/permission FORK the user must dec
 above) — and even then you ask **now**, you do not park it. "The gate is green on the partial fix" is not done
 if a known defect rode along unfixed. See memory [[always-address-what-needs-addressing]].
 
+**NEVER PATCH AROUND A WRONG DESIGN — REFACTOR IT, however large.** (2026-08-11, forceful.) When the existing
+model is _wrong_, do not build a shim, a display layer, or a compatibility mapping to preserve it — change it.
+"That's how it works today" is not a reason; an existing constraint is only worth keeping if it's still TRUE.
+The trigger: if you catch yourself engineering complexity to defend an invariant, stop and ask whether the
+invariant should exist at all. A large refactor that makes the model correct beats a small change that keeps it
+wrong. (The wrong-fact correction shipped a `labelOverrides` display shim + option-value mapping purely to
+protect "the sender's questionnaire is never touched" and "the answer is stored against their ORIGINAL option"
+— both of which are nonsense when the question itself was wrong: it recorded an answer the person never picked,
+and left the bad question in place to recur. The right fix was to rewrite the question for real and delete the
+shim.)
+
 **NEVER fix a bug whose cause you have only ASSUMED — diagnose the real root cause FIRST, then fix.**
 (2026-06-16, after a costly violation.) When something fails, do NOT pattern-match to a plausible cause and
 start changing code — **reproduce/verify the actual cause against the real system before touching anything.**
@@ -426,6 +437,38 @@ placing anything. Specifically:
 ## Changelog
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
+
+- 2026-08-11 — **Refactor (questionnaire correction: rewrite the question FOR REAL, at source; member-reported
+  twice; SPEC 08 §32 rewritten; on `fix/questionnaire-correction-answers-dont-fit`).** The v0.51.3 §32 build was
+  reported worse, and the member was right on every point. It could only REWORD labels, applied as a display
+  overlay (`labelOverrides`) that mapped the answer back to the sender's ORIGINAL option string — so it recorded
+  an answer the person never picked, in order to keep a "count" for a question that shouldn't have been asked
+  that way; it forced same-count/same-order rewording, so genuinely unrelated options could only be met with
+  "I can't fix these, skip it"; and it left the bad question in place to recur. Worse, "the answers don't fit"
+  was treated as an unmatched WRONG-FACT, so it rendered a wall of "which of your records is wrong?" buttons —
+  answering a question the member never asked, unbounded and overflowing. **The fix was to delete the premise,
+  not patch around it** (the new §6 no-workarounds rule): the correction now returns a WHOLE corrected question
+  (prompt, help, answer TYPE, options and how many) and writes it **at source** — into this send's frozen
+  snapshot (each send holds its own, so nobody else's copy or answers are touched) AND into the questionnaire
+  itself when the corrector authored it (an auto check-in is you→you, exactly where a bad question recurs) —
+  clears the stale draft answer, repairs branch rules stranded by a replaced option set (drop the rule so the
+  follow-up is visible, never silently vanishing), and records the answer against the CORRECTED question. The
+  whole `labelOverrides`/`mapAnswer`/`LabelledControl` shim is deleted from `@selfos/answering`. A malformed
+  rewrite is refused, never persisted — validated against `QuestionSchema` AND the questionnaire validator's own
+  per-question rules, now EXPORTED as `questionShapeProblems` and shared rather than copied. A new `problem`
+  classification (`wrongFact` | `answersDontFit` | `other`) means only a wrong-FACT objection can ever resolve to
+  a record, so the picker (bounded + clipped) appears only when someone actually disputed something on file.
+  Gate green: typecheck (4 pkgs), lint, format, **1974 core + 1558 desktop** unit (+`sanitizeCorrectedQuestion`
+  accepts a real rewrite [fewer options, a type change] + REFUSES a broken/duplicate-option one + preserves
+  identity; +`repairBranchRules` keeps a surviving trigger, drops a stranded one; +coreBridge decrypt-asserts the
+  correction lands in BOTH the snapshot and the definition; +RTL asserts the NEW option is what's submitted),
+  +2 E2E walks (both objections end-to-end, decrypt-asserting the corrected questionnaire and the stored answer).
+  **Lesson: when a member says a fix is "worse", the premise is usually the bug — "the sender's questionnaire is
+  never touched" and "the answer is stored against their original option" both sound like integrity guarantees
+  but are nonsense once the QUESTION is wrong: they preserve a count for a question that shouldn't have been
+  asked and record a choice nobody made. Deleting the constraint made the feature simpler AND correct. Also: one
+  affordance receiving two unrelated complaints must CLASSIFY them — treating "these answers don't fit" as an
+  unmatched wrong-fact is what produced a nonsensical record picker.**
 
 - 2026-08-11 — **Build (questionnaire wrong-fact correction: rewrite the WHOLE question, and quote the source;
   member-reported; mockup approved FIRST; SPEC 08 §32; on `feat/questionnaire-full-question-correction`).** Two

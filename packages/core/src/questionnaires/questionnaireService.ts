@@ -1,7 +1,12 @@
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
 import type { AssertMainOwnedHandled } from '../rebuildGuard';
-import { QuestionnaireSchema, type Questionnaire, type QuestionnaireInput } from '../schemas';
+import {
+  QuestionnaireSchema,
+  type Question,
+  type Questionnaire,
+  type QuestionnaireInput,
+} from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { DEFS_DIR, defPath } from './paths';
 
@@ -133,19 +138,30 @@ const NEEDS_OPTIONS: ReadonlySet<string> = new Set([
  * Returns human-readable problems (empty array = valid). Enforced before a send; the builder can also
  * surface it live. Drafts are allowed to be invalid (not enforced by `saveQuestionnaire`).
  */
+/**
+ * The structural rules ONE question must satisfy to be answerable, independent of the questionnaire it sits
+ * in. Exported so the wrong-fact correction path (§32) can validate a rewritten question with exactly these
+ * rules instead of growing a second copy that drifts from this one.
+ */
+export function questionShapeProblems(q: Question): string[] {
+  const problems: string[] = [];
+  if (NEEDS_OPTIONS.has(q.type) && (q.options?.length ?? 0) < 2) {
+    problems.push(`"${q.prompt}" (${q.type}) needs at least two options.`);
+  }
+  if ((q.type === 'rating' || q.type === 'slider') && !q.scale) {
+    problems.push(`"${q.prompt}" (${q.type}) needs a scale.`);
+  }
+  if (q.type === 'matrix' && (q.matrix?.rows.length ?? 0) === 0) {
+    problems.push(`"${q.prompt}" (matrix) needs at least one row.`);
+  }
+  return problems;
+}
+
 export function validateQuestionnaire(input: Questionnaire | QuestionnaireInput): string[] {
   const problems: string[] = [];
   if (input.questions.length === 0) problems.push('A questionnaire needs at least one question.');
   input.questions.forEach((q, index) => {
-    if (NEEDS_OPTIONS.has(q.type) && (q.options?.length ?? 0) < 2) {
-      problems.push(`"${q.prompt}" (${q.type}) needs at least two options.`);
-    }
-    if ((q.type === 'rating' || q.type === 'slider') && !q.scale) {
-      problems.push(`"${q.prompt}" (${q.type}) needs a scale.`);
-    }
-    if (q.type === 'matrix' && (q.matrix?.rows.length ?? 0) === 0) {
-      problems.push(`"${q.prompt}" (matrix) needs at least one row.`);
-    }
+    problems.push(...questionShapeProblems(q));
     if (q.branch) {
       // A branch shows this question only once its trigger has been answered, so the trigger MUST be a
       // strictly-earlier question (38 §3.9). This single backward-only rule also makes a circular branch

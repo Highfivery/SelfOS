@@ -35,6 +35,7 @@ import {
   createCompatibilitySend,
   getAlignmentReport,
   getAssignmentSnapshot,
+  getQuestionnaire,
   getResponse,
   listAssignments,
   listCoveredTopics,
@@ -5961,9 +5962,7 @@ test('inbox: “That’s not right about me” rewords the question AND its answ
     // Flag the wrong fact → the correction shows INLINE (below), greying/disabling the question — not a
     // banner that pops above the questions and scrolls the page (spec 08 §30).
     await w.getByRole('button', { name: /That’s not right about me/ }).click();
-    await w
-      .getByLabel(/what’s wrong about this question/i)
-      .fill('I turned 41 last May, not 39 — and none of these answers fit.');
+    await w.getByLabel(/what’s wrong about this question/i).fill('I turned 41 last May, not 39.');
     await w.getByRole('button', { name: 'Fix it' }).click();
 
     // §32.3 — the prompt is reworded…
@@ -5980,10 +5979,12 @@ test('inbox: “That’s not right about me” rewords the question AND its answ
     await expectNoInnerOverflow(w);
     await w.setViewportSize({ width: 1280, height: 900 });
 
-    await w.getByRole('button', { name: 'Answer the reworded question' }).click();
+    await w.getByRole('button', { name: 'Answer the rewritten question' }).click();
 
-    // §32.3 — the ANSWERS are reworded too (the reported defect: they used to keep the wrong fact).
-    await expect(w.getByRole('radio', { name: 'Reworded answer 1' })).toBeVisible();
+    // §32.3 — the ANSWERS are genuinely replaced (the reported defect: they used to keep the wrong fact),
+    // and the rewrite may change how MANY there are — three became three here, with an honest "neither".
+    await expect(w.getByRole('radio', { name: 'Rewritten answer one' })).toBeVisible();
+    await expect(w.getByRole('radio', { name: 'Neither, it varies' })).toBeVisible();
     await expect(w.getByRole('radio', { name: 'Good at 39' })).toHaveCount(0);
 
     // Decrypt: the wrong insight fact is now flagged inaccurate → it stops feeding future questions/context.
@@ -5994,9 +5995,24 @@ test('inbox: “That’s not right about me” rewords the question AND its answ
       })
       .toBe(true);
 
-    // The integrity guarantee (§32.3): answering the REWORDED option stores the SENDER'S original string,
-    // so their Results stay countable and any branch rule keyed on it keeps matching.
-    await w.getByRole('radio', { name: 'Reworded answer 1' }).click();
+    // The question is corrected AT SOURCE: the send's own snapshot now holds the rewritten question…
+    await expect
+      .poll(async () => {
+        const snap = await getAssignmentSnapshot(fs, key, assignment.id);
+        return snap?.questions[0]?.prompt;
+      })
+      .toBe('How did turning 41 feel?');
+    // …and so does the questionnaire itself, since the corrector authored it — it can't come back.
+    await expect
+      .poll(async () => {
+        const def = await getQuestionnaire(fs, key, q.id);
+        return def?.questions[0]?.options;
+      })
+      .toEqual(['Rewritten answer one', 'Rewritten answer two', 'Neither, it varies']);
+
+    // The answer is recorded against the CORRECTED question — the option they actually picked, not a
+    // wording they never chose.
+    await w.getByRole('radio', { name: 'Rewritten answer one' }).click();
     await w.getByRole('button', { name: 'Review & send' }).click();
     await w.getByRole('button', { name: 'Send answers' }).click();
     await expect
@@ -6004,7 +6020,112 @@ test('inbox: “That’s not right about me” rewords the question AND its answ
         const set = await getResponse(fs, key, assignment.id);
         return set?.answers?.[0]?.value;
       })
-      .toBe('Good at 39');
+      .toBe('Rewritten answer one');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('inbox: “the answers don’t fit” REPLACES the answers, and never asks which record is wrong (08 §32.7)', async () => {
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+  if (!key) throw new Error('answers-dont-fit e2e: master key missing');
+
+  // Facts on record — the picker used to render ALL of these, which is the reported regression.
+  await saveInsight(fs, key, {
+    id: 'i-many',
+    schemaVersion: 1,
+    source: 'session',
+    subjectPersonId: 'owner-1',
+    summary: 'about them',
+    facts: [
+      { id: 'f1', text: 'They feel most themselves when caring for others', shareable: false },
+      {
+        id: 'f2',
+        text: 'Unqualified praise lands differently than mixed feedback',
+        shareable: false,
+      },
+    ],
+    confidence: 'medium',
+    categories: [],
+    approved: true,
+    provenance: { at: new Date().toISOString() },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  const q = await saveQuestionnaire(
+    fs,
+    key,
+    {
+      title: 'Check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: 'owner-1' },
+      questions: [
+        {
+          id: 'qq1',
+          type: 'singleChoice',
+          prompt: 'Which pull is stronger right now?',
+          required: false,
+          options: ['Nothing to do with the question', 'Also unrelated'],
+        },
+      ],
+    },
+    'owner-1',
+  );
+  const assignment = await createAssignment(fs, key, {
+    questionnaireId: q.id,
+    senderPersonId: 'owner-1',
+    recipient: { kind: 'person', personId: 'owner-1' },
+    channel: 'inApp',
+    privacy: 'standard',
+    senderVisibleToRecipient: true,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /Inbox/ }).click();
+    await w.getByRole('button', { name: /Check-in/ }).click();
+
+    await w.getByRole('button', { name: /That’s not right about me/ }).click();
+    await w
+      .getByLabel(/what’s wrong about this question/i)
+      .fill('the answers dont match the question');
+    await w.getByRole('button', { name: 'Fix it' }).click();
+
+    // NO record picker — they weren't disputing anything on file (the reported nonsense).
+    await expect(w.getByText(/Rewrote this question/)).toBeVisible();
+    await expect(w.getByText(/which one is wrong/i)).toHaveCount(0);
+    await expect(w.getByText(/your onboarding answers/)).toHaveCount(0);
+    await expect(w.getByText(/caring for others/)).toHaveCount(0);
+    await expectNoInnerOverflow(w);
+
+    // The ANSWERS are actually replaced — including an honest "neither" that wasn't there before.
+    await w.getByRole('button', { name: 'Answer the rewritten question' }).click();
+    await expect(w.getByRole('radio', { name: 'Neither, it varies' })).toBeVisible();
+    await expect(w.getByRole('radio', { name: 'Nothing to do with the question' })).toHaveCount(0);
+
+    // Corrected at source, and the answer is recorded against the corrected question.
+    await expect
+      .poll(async () => {
+        const def = await getQuestionnaire(fs, key, q.id);
+        return def?.questions[0]?.options;
+      })
+      .toEqual(['Rewritten answer one', 'Rewritten answer two', 'Neither, it varies']);
+    await w.getByRole('radio', { name: 'Neither, it varies' }).click();
+    await w.getByRole('button', { name: 'Review & send' }).click();
+    await w.getByRole('button', { name: 'Send answers' }).click();
+    await expect
+      .poll(async () => {
+        const set = await getResponse(fs, key, assignment.id);
+        return set?.answers?.[0]?.value;
+      })
+      .toBe('Neither, it varies');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

@@ -29,6 +29,7 @@ import {
 } from '@selfos/core/relay';
 import {
   createAssignment,
+  getAssignmentSnapshot,
   getQuestionnaire,
   listAssignments,
   saveQuestionnaire,
@@ -2570,9 +2571,16 @@ describe('createCoreBridge', () => {
       send: () => Promise.resolve(''),
       stream: (_o, onDelta) => {
         const text = JSON.stringify({
+          problem: 'wrongFact',
           matchedIndex: 1,
-          prompt: 'How did turning 41 feel?',
-          options: ['Good', 'Hard', 'Same as before'],
+          question: {
+            id: 'q1',
+            type: 'singleChoice',
+            prompt: 'How did turning 41 feel?',
+            required: false,
+            // A real rewrite: FEWER options than the original three, which the old model forbade.
+            options: ['Good', 'Hard'],
+          },
         });
         onDelta(text);
         return Promise.resolve({
@@ -2595,9 +2603,14 @@ describe('createCoreBridge', () => {
       sourceText: 'They turned 39 last May',
       sourceLabel: 'your Memory',
     });
-    // §32.3 — the ANSWERS are reworded too, not just the prompt.
-    expect(res.rewrite?.prompt).toBe('How did turning 41 feel?');
-    expect(res.rewrite?.options).toEqual(['Good', 'Hard', 'Same as before']);
+    // §32.3 — the whole QUESTION is rewritten, answers included, and written back to the send.
+    expect(res.question?.prompt).toBe('How did turning 41 feel?');
+    expect(res.question?.options).toEqual(['Good', 'Hard']);
+    const snapshot = await getAssignmentSnapshot(ctx.fs, ctx.key, assignment.id);
+    expect(snapshot?.questions[0]?.options).toEqual(['Good', 'Hard']);
+    // …and into the questionnaire itself, since the corrector authored it — so it can't come back.
+    const savedDef = await getQuestionnaire(ctx.fs, ctx.key, q.id);
+    expect(savedDef?.questions[0]?.options).toEqual(['Good', 'Hard']);
     // The wrong insight fact is now flagged inaccurate → it stops feeding future questions/context.
     const insights = await listInsightsForPerson(ctx.fs, ctx.key, ownerId);
     expect(insights[0]?.facts[0]?.flaggedInaccurate).toBe(true);
@@ -2649,8 +2662,14 @@ describe('createCoreBridge', () => {
       send: () => Promise.resolve(''),
       stream: (_o, onDelta) => {
         const text = JSON.stringify({
+          problem: 'wrongFact',
           matchedIndex: 0,
-          prompt: 'How did your last birthday feel?',
+          question: {
+            id: 'q1',
+            type: 'shortText',
+            prompt: 'How did your last birthday feel?',
+            required: false,
+          },
         });
         onDelta(text);
         return Promise.resolve({

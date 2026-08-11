@@ -180,20 +180,108 @@ describe('Inbox', () => {
     expect(dismiss).toHaveBeenCalledWith('a1');
   });
 
-  it('“That’s not right about me” rewords the question AND its answers, quoting the source (§32)', async () => {
+  it('“That’s not right about me” rewrites the question AND its answers, quoting the source (§32)', async () => {
+    const corrected = {
+      id: 'qq1',
+      type: 'singleChoice' as const,
+      prompt: 'How did turning 41 feel?',
+      required: false,
+      // A genuine rewrite: FEWER options than the original three, and wording that drops the wrong fact.
+      options: ['Good', 'Hard'],
+    };
     const correctFact = vi.fn(() =>
       Promise.resolve({
         ok: true as const,
-        rewrite: {
-          prompt: 'How did turning 41 feel?',
-          options: ['Good', 'Hard', 'Same as before'],
-        },
+        problem: 'wrongFact' as const,
+        question: corrected,
         source: 'insight' as const,
         sourceLabel: 'your Memory',
         sourceText: 'Turned 39 last May',
         insightFlagged: true,
       }),
     );
+    const submit = vi.fn(() => Promise.resolve());
+    // The host rewrites the send's snapshot, so re-reading it returns the CORRECTED question.
+    let asked = {
+      id: 'qq1',
+      type: 'singleChoice' as const,
+      prompt: 'How did turning 39 feel?',
+      required: false,
+      options: ['Good at 39', 'Hard at 39', 'Same as 35'],
+    };
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([item()]),
+      assignmentsGet: () =>
+        Promise.resolve(
+          detail({
+            questionnaire: {
+              id: 'q1',
+              schemaVersion: 1,
+              version: 1,
+              title: 'Weekly check-in',
+              type: 'role-feedback',
+              sensitivity: 'standard',
+              questions: [asked],
+              createdAt: 'now',
+              updatedAt: 'now',
+            },
+          }),
+        ),
+      assignmentsCorrectFact: () => {
+        asked = corrected;
+        return correctFact();
+      },
+      assignmentsSubmit: submit,
+    });
+    renderInbox();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    expect(await screen.findByText('How did turning 39 feel?')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /That’s not right about me/ }));
+    await userEvent.type(
+      screen.getByLabelText(/what’s wrong about this question/i),
+      'I turned 41, not 39.',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Fix it' }));
+
+    expect(correctFact).toHaveBeenCalled();
+    expect(await screen.findByText('How did turning 41 feel?')).toBeInTheDocument();
+    // §32.4 — the source is QUOTED in place, not a row of section buttons.
+    expect(screen.getByText(/Turned 39 last May/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Onboarding' })).not.toBeInTheDocument();
+
+    // §32.3 — the ANSWERS are genuinely replaced, and the answer is recorded against the CORRECTED
+    // question. No mapping back to a wording the person never chose.
+    await userEvent.click(screen.getByRole('button', { name: 'Answer the rewritten question' }));
+    expect(await screen.findByRole('radio', { name: 'Good' })).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'Good at 39' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Good' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Review & send' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Send answers' }));
+    expect(submit).toHaveBeenCalledWith({
+      assignmentId: 'a1',
+      answers: [{ questionId: 'qq1', value: 'Good' }],
+    });
+  });
+
+  it('“the answers don’t fit” REPLACES the answers, and never asks which record is wrong (§32.7)', async () => {
+    // The member-reported regression: objecting to the ANSWERS showed a wall of "which of your records is
+    // wrong?" buttons — answering a question they never asked — and left the answers untouched.
+    const corrected = {
+      id: 'qq1',
+      type: 'singleChoice' as const,
+      prompt: 'Which pull is stronger right now?',
+      required: false,
+      options: ['Staying in control', 'Handing it over', 'Neither, it varies'],
+    };
+    let asked = {
+      id: 'qq1',
+      type: 'singleChoice' as const,
+      prompt: 'Which pull is stronger right now?',
+      required: false,
+      options: ['Nothing to do with this', 'Also unrelated'],
+    };
     const submit = vi.fn(() => Promise.resolve());
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item()]),
@@ -207,65 +295,50 @@ describe('Inbox', () => {
               title: 'Weekly check-in',
               type: 'role-feedback',
               sensitivity: 'standard',
-              questions: [
-                {
-                  id: 'qq1',
-                  type: 'singleChoice',
-                  prompt: 'How did turning 39 feel?',
-                  required: false,
-                  options: ['Good at 39', 'Hard at 39', 'Same as 35'],
-                },
-              ],
+              questions: [asked],
               createdAt: 'now',
               updatedAt: 'now',
             },
           }),
         ),
-      assignmentsCorrectFact: correctFact,
+      assignmentsCorrectFact: () => {
+        asked = corrected;
+        return Promise.resolve({
+          ok: true as const,
+          problem: 'answersDontFit' as const,
+          question: corrected,
+          source: 'unknown' as const,
+        });
+      },
       assignmentsSubmit: submit,
     });
     renderInbox();
 
     await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
-    expect(await screen.findByText('How did turning 39 feel?')).toBeInTheDocument();
-
-    // Flag the wrong fact → describe it → Fix it.
-    await userEvent.click(screen.getByRole('button', { name: /That’s not right about me/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /That’s not right about me/ }));
     await userEvent.type(
       screen.getByLabelText(/what’s wrong about this question/i),
-      'I turned 41, not 39 — and none of these answers fit.',
+      'the answers dont match the question',
     );
     await userEvent.click(screen.getByRole('button', { name: 'Fix it' }));
 
-    // The question no longer carries the prompt text, and the bridge is asked about the QUESTION (the host
-    // no longer sends a prompt string — the snapshot is the source of truth).
-    expect(correctFact).toHaveBeenCalledWith({
-      assignmentId: 'a1',
-      questionId: 'qq1',
-      correction: 'I turned 41, not 39 — and none of these answers fit.',
-    });
-    expect(await screen.findByText('How did turning 41 feel?')).toBeInTheDocument();
-    // The old wording survives ONLY as the struck-through "what changed" line, never as the live question.
-    expect(screen.getByText('How did turning 39 feel?').closest('s')).not.toBeNull();
+    // No record picker — they weren't disputing anything on file.
+    expect(await screen.findByText(/Rewrote this question/)).toBeInTheDocument();
+    expect(screen.queryByText(/which one is wrong/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/your onboarding answers/)).not.toBeInTheDocument();
 
-    // §32.4 — the source is QUOTED in place, not a row of section buttons.
-    expect(screen.getByText(/Turned 39 last May/)).toBeInTheDocument();
-    expect(screen.getByText(/Where it came from · your Memory/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Onboarding' })).not.toBeInTheDocument();
-
-    // §32.3 — the ANSWERS are reworded too (the reported defect).
-    await userEvent.click(screen.getByRole('button', { name: 'Answer the reworded question' }));
-    expect(await screen.findByRole('radio', { name: 'Good' })).toBeInTheDocument();
-    expect(screen.queryByRole('radio', { name: 'Good at 39' })).not.toBeInTheDocument();
-
-    // …but the STORED value is still the sender's own option string, so their Results stay countable and
-    // any branch rule keyed on it keeps matching (the integrity guarantee, §32.3).
-    await userEvent.click(screen.getByRole('radio', { name: 'Good' }));
+    // The answers are genuinely replaced, including an honest "neither".
+    await userEvent.click(screen.getByRole('button', { name: 'Answer the rewritten question' }));
+    expect(await screen.findByRole('radio', { name: 'Neither, it varies' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('radio', { name: 'Nothing to do with this' }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Neither, it varies' }));
     await userEvent.click(screen.getByRole('button', { name: 'Review & send' }));
     await userEvent.click(screen.getByRole('button', { name: 'Send answers' }));
     expect(submit).toHaveBeenCalledWith({
       assignmentId: 'a1',
-      answers: [{ questionId: 'qq1', value: 'Good at 39' }],
+      answers: [{ questionId: 'qq1', value: 'Neither, it varies' }],
     });
   });
 
@@ -277,7 +350,13 @@ describe('Inbox', () => {
       assignmentsCorrectFact: () =>
         Promise.resolve({
           ok: true as const,
-          rewrite: { prompt: 'How did your last birthday feel?' },
+          problem: 'wrongFact' as const,
+          question: {
+            id: 'qq1',
+            type: 'shortText' as const,
+            prompt: 'How did your last birthday feel?',
+            required: false,
+          },
           source: 'profile' as const,
           sourceLabel: 'your birthday',
           sourceText: 'age: 39 (born 1987-05-14)',

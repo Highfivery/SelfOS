@@ -153,7 +153,6 @@ import type {
   DreamSynthesisResult,
   CorrectableProfileField,
   FactCorrectionOutcome,
-  QuestionLabels,
   GuidanceState,
   GuidedSuggestResult,
   ImageFeature,
@@ -1977,8 +1976,6 @@ export interface SelfosBridge {
     assignmentId: string;
     questionId: string;
     correction: string;
-    /** A rewrite already applied to their view, so a SECOND correction reasons about what they can see. */
-    applied?: QuestionLabels;
   }): Promise<FactCorrectionOutcome>;
   /**
    * Point at the on-record record that's wrong, when the classifier couldn't match one (08 §32.4). No AI and

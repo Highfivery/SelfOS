@@ -3,29 +3,27 @@ import { classifyParseOutcome, extractJsonObject } from '../ai/jsonSalvage';
 import type { CorrectableProfileField, Question } from '../schemas';
 import { runClaude, type AiDeps } from './aiCall';
 import { SAFETY } from './aiPrompts';
-import {
-  questionLabels,
-  type ProposedRewrite,
-  sanitizeRewrite,
-  type QuestionLabels,
-  type QuestionRewrite,
-} from './questionLabels';
+import { sanitizeCorrectedQuestion } from './questionCorrection';
 
 /**
- * Correct a WRONG fact in a questionnaire question (spec 08 §29, extended by §32). The recipient answering
- * has flagged that a detail the question states about them is wrong (e.g. "you turned 39" but they're 41).
- * This resolves WHERE the wrong fact came from (best-effort AI classification against their on-record facts)
- * AND rewrites the question so it no longer asserts the wrong detail.
+ * Correct a question a recipient says is wrong (spec 08 §29, rewritten by §32).
  *
- * §32: the rewrite covers every VISIBLE label — prompt, help, option labels, scale anchors, matrix rows — not
- * just the prompt, because the wrong fact is often carried by the answers ("It's sharper at 39"). Structure is
- * never touched: `sanitizeRewrite` rejects any list whose length changed, so option count/order, matrix row
- * keys and branch triggers are frozen and the stored answer is still the sender's own option string.
+ * Two different objections arrive through the same affordance:
+ * - a **wrong fact** — the question states something untrue about them ("you turned 39"); the claim is traced
+ *   back to the record it came from so it can be fixed at source and stop recurring;
+ * - **the answers don't fit** — nothing on file is disputed; the option set is simply wrong for the question.
  *
- * The source fix (flagging a wrong insight / applying a profile correction) is the caller's job; this service
- * only classifies + rewrites. Author-blind in the same sense as generation — the recipient's own facts are
- * assembled host-side and never returned to the sender.
+ * Either way the question is REWRITTEN FOR REAL — prompt, help, answer type, options and how many there are —
+ * and the corrected question replaces the original in the send being answered. There is no display shim and no
+ * mapping back to the sender's original wording: the person answers the corrected question, and that is what
+ * gets recorded.
+ *
+ * Author-blind in the same sense as generation — the recipient's own facts are assembled host-side and never
+ * returned to the sender.
  */
+
+/** What the recipient is objecting to — only a `wrongFact` disputes a record on file (08 §32.7). */
+export type CorrectionProblem = 'wrongFact' | 'answersDontFit' | 'other';
 
 /** One on-record fact about the recipient, with the metadata the caller needs to correct it at source. */
 export interface KnownFact {
@@ -45,8 +43,10 @@ export interface KnownFact {
 
 export interface FactCorrectionResult {
   ok: boolean;
-  /** The question's visible labels, reworded so none of them states the wrong detail (§32.3). */
-  rewrite?: QuestionRewrite;
+  /** What they objected to — only `wrongFact` disputes something on file (§32.7). */
+  problem?: CorrectionProblem;
+  /** The corrected question, ready to replace the original in the send (and the questionnaire). */
+  question?: Question;
   /** The record the correction contradicts, when the model matched one confidently. */
   matched?: KnownFact;
   /**
@@ -60,130 +60,79 @@ export interface FactCorrectionResult {
 }
 
 const CorrectionSchema = z.object({
+  // What the recipient is actually objecting to — only a `wrongFact` disputes an on-record claim (§32.7).
+  problem: z.enum(['wrongFact', 'answersDontFit', 'other']).catch('wrongFact'),
   // The 1-based index of the matched fact in the numbered list, or 0 for "none clearly matches".
   matchedIndex: z.number().int().catch(0),
-  prompt: z.string().min(1),
-  help: z.string().optional().catch(undefined),
-  options: z.array(z.string()).optional().catch(undefined),
-  scaleLabels: z
-    .object({
-      min: z.string().optional().catch(undefined),
-      mid: z.string().optional().catch(undefined),
-      max: z.string().optional().catch(undefined),
-    })
-    .optional()
-    .catch(undefined),
-  matrixRows: z.array(z.string()).optional().catch(undefined),
-  matrixPointLabels: z.array(z.string()).optional().catch(undefined),
-  answersStillWrong: z.boolean().optional().catch(undefined),
+  // The corrected question, parsed loosely here and validated properly by `sanitizeCorrectedQuestion`
+  // against the real `QuestionSchema` — so a malformed rewrite can never overwrite a working question.
+  question: z.record(z.string(), z.unknown()).optional().catch(undefined),
   correctedValue: z.string().optional().catch(undefined),
 });
 
 const CORRECTION_SYSTEM = `${SAFETY}
 
-The person answering a questionnaire has flagged that a detail this question states ABOUT THEM is wrong. You are given the question's visible text (its prompt and, where it has them, its answer options, help line, scale anchors and matrix rows), their correction in their own words, and a NUMBERED list of facts currently on record about them. Do all of the following:
-1. Decide which numbered record (if any) the correction contradicts. Return its NUMBER, or 0 if none of them clearly matches.
-2. Reword EVERY piece of visible text that states or depends on the wrong detail — the prompt AND the answer options, help line, scale anchors and matrix rows. A wrong fact is often carried by the answers ("It's sharper at 39"), and rewording only the prompt leaves the question unanswerable. Use their corrected detail when it's clear, otherwise drop the wrong assumption entirely and ask the underlying question plainly.
-3. Return every list you were given with EXACTLY the same number of entries, in the same order — you are rewording labels, not changing the question. Never add, drop or reorder an option, matrix row or scale point. Never change the answer type. Do not invent new facts. Return a field unchanged if it was already fine.
-4. If the answer options are not merely badly worded but structurally wrong for the question — the wrong kind of answer entirely, so no rewording could make them fit — set "answersStillWrong" to true.
-5. If the matched record is a profile field and their correction states the corrected value plainly, return it as "correctedValue" in that field's own format (a date as YYYY-MM-DD, otherwise their own wording). Omit it if they didn't say.
-Return ONLY a JSON object: {"matchedIndex": number, "prompt": string, "help"?: string, "options"?: string[], "scaleLabels"?: {"min"?: string, "mid"?: string, "max"?: string}, "matrixRows"?: string[], "matrixPointLabels"?: string[], "answersStillWrong"?: boolean, "correctedValue"?: string}.`;
+The person answering a questionnaire has flagged that something about this question is wrong FOR THEM. You are given the question as JSON, their objection in their own words, and a NUMBERED list of facts currently on record about them.
 
-/**
- * Render the question's visible text for the model — only the parts this question actually has.
- *
- * `applied` is any rewrite already showing on the recipient's screen, so a SECOND correction reasons about
- * what they can actually see rather than the original wording. Display text only; never a stored value.
- */
-function describeQuestion(q: Question, applied?: AppliedLabels): string {
-  const base = questionLabels(q);
-  const l: QuestionLabels = { ...base };
-  if (applied) {
-    if (applied.prompt !== undefined) l.prompt = applied.prompt;
-    if (applied.help !== undefined) l.help = applied.help;
-    if (applied.options !== undefined) l.options = applied.options;
-    if (applied.scaleLabels !== undefined) {
-      const sc = applied.scaleLabels;
-      l.scaleLabels = {
-        ...(sc.min !== undefined ? { min: sc.min } : {}),
-        ...(sc.mid !== undefined ? { mid: sc.mid } : {}),
-        ...(sc.max !== undefined ? { max: sc.max } : {}),
-      };
-    }
-    if (applied.matrixRows !== undefined) l.matrixRows = applied.matrixRows;
-    if (applied.matrixPointLabels !== undefined) l.matrixPointLabels = applied.matrixPointLabels;
-  }
-  const lines = [`Prompt: "${l.prompt}"`, `Answer type: ${q.type}`];
-  if (l.help) lines.push(`Help line: "${l.help}"`);
-  if (l.options)
-    lines.push(
-      `Options (${l.options.length}):\n${l.options.map((o, i) => `  ${i + 1}. ${o}`).join('\n')}`,
-    );
-  if (l.scaleLabels) {
-    const parts = [
-      l.scaleLabels.min != null ? `min "${l.scaleLabels.min}"` : null,
-      l.scaleLabels.mid != null ? `mid "${l.scaleLabels.mid}"` : null,
-      l.scaleLabels.max != null ? `max "${l.scaleLabels.max}"` : null,
-    ].filter(Boolean);
-    lines.push(`Scale anchors: ${parts.join(', ')}`);
-  }
-  if (l.matrixRows)
-    lines.push(
-      `Matrix rows (${l.matrixRows.length}):\n${l.matrixRows.map((r, i) => `  ${i + 1}. ${r}`).join('\n')}`,
-    );
-  if (l.matrixPointLabels)
-    lines.push(
-      `Matrix point labels (${l.matrixPointLabels.length}): ${l.matrixPointLabels.join(' | ')}`,
-    );
-  return lines.join('\n');
-}
+FIRST, classify what they are objecting to:
+- "wrongFact" — the question states or assumes a DETAIL ABOUT THEM that is untrue ("I'm 41, not 39", "I don't have kids").
+- "answersDontFit" — the ANSWER OPTIONS are wrong for the question or leave them no honest choice ("none of these match", "these answers make no sense", "these have nothing to do with the question").
+- "other" — anything else (confusing, badly worded, irrelevant).
 
-/** The already-applied labels as they arrive over IPC — optional keys may be explicitly `undefined`. */
-type AppliedLabels = Omit<ProposedRewrite, 'answersStillWrong'>;
+THEN rewrite the question into one they can actually answer, and return the WHOLE corrected question as JSON:
+1. Fix everything that is wrong — the prompt, the help line, and the answer options. You may change how many options there are, replace them entirely, reorder them, and change the answer "type" when a different kind of answer genuinely fits better. Give them a real, honest set of choices for THIS question, including a genuine "neither" / "it varies" where the honest answer isn't currently in the list.
+2. Keep the question's INTENT — what it is trying to learn about them. Do not turn it into a different question.
+3. Keep "id" exactly as given. Never invent facts about them.
+4. The corrected question must be internally consistent: "singleChoice", "multiChoice", "thisOrThat" and "ranking" need an "options" array of at least two DISTINCT options; "rating" and "slider" need a "scale" with numeric min/max; "matrix" needs "matrix.rows"; "shortText", "longText", "yesNo" and "date" take no options.
+5. Only for "wrongFact": decide which numbered record the objection contradicts and return its NUMBER, or 0 if none clearly matches. For "answersDontFit" and "other" ALWAYS return 0 — they are not disputing a record, so never guess one.
+6. If the matched record is a profile field and their correction states the corrected value plainly, return it as "correctedValue" in that field's own format (a date as YYYY-MM-DD, otherwise their own wording). Omit it if they didn't say.
+Return ONLY a JSON object: {"problem": "wrongFact" | "answersDontFit" | "other", "matchedIndex": number, "question": { ...the whole corrected question... }, "correctedValue"?: string}.`;
 
 /** Classify + rewrite. One budget-gated, metered call; tolerant parse; honest failure (37). */
 export async function resolveFactCorrection(
   deps: AiDeps,
-  input: {
-    question: Question;
-    correction: string;
-    knownFacts: KnownFact[];
-    /** A rewrite already applied to the recipient's view, when they're correcting it a second time. */
-    applied?: AppliedLabels;
-  },
+  input: { question: Question; correction: string; knownFacts: KnownFact[] },
 ): Promise<FactCorrectionResult> {
   const facts = input.knownFacts;
   const numbered = facts.length
     ? facts.map((f, i) => `${i + 1}. [${f.source}] ${f.text}`).join('\n')
     : '(no facts on record)';
   const user = [
-    `The question they're answering:\n${describeQuestion(input.question, input.applied)}`,
+    `The question they're answering:\n${JSON.stringify(input.question, null, 2)}`,
     `What they say is wrong: "${input.correction}"`,
     `Facts on record about them:\n${numbered}`,
     `Return the JSON object.`,
   ].join('\n\n');
 
-  // A full-question rewrite returns several lists, so it needs more room than the §29 prompt-only reply.
-  const call = await runClaude(deps, CORRECTION_SYSTEM, user, 'questionnaire.generate', 1500);
+  // A whole-question rewrite is a larger reply than the §29 prompt-only one.
+  const call = await runClaude(deps, CORRECTION_SYSTEM, user, 'questionnaire.generate', 2000);
   if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
 
   const parsed = CorrectionSchema.safeParse(extractJsonObject(call.text)).data;
-  if (!parsed?.prompt.trim()) {
+  const question = sanitizeCorrectedQuestion(
+    input.question,
+    parsed?.question as Partial<Question> | undefined,
+  );
+  if (!question) {
+    // A reply we can't turn into a VALID question is an honest failure — never overwrite a working question
+    // with a broken one (a choice type with no options, a collapsed option set) just because JSON came back.
     const { reason, message } = classifyParseOutcome(call.text, 'correction');
     return { ok: false, reason, usage: call.usage, message };
   }
-  // Map the 1-based index → the KnownFact (0 or out-of-range → no confident match → the caller falls back to
-  // letting the person pick the source).
-  const idx = parsed.matchedIndex - 1;
-  const matched = idx >= 0 && idx < facts.length ? facts[idx] : undefined;
-  // A proposed value is only meaningful for a profile field the caller can actually write.
+  // Only a wrong-FACT objection disputes a record. For "the answers don't fit" there is nothing on file to
+  // trace, so a matched index is meaningless — ignore it rather than quoting an unrelated record at them.
+  const problem = parsed?.problem ?? 'wrongFact';
+  const idx = (parsed?.matchedIndex ?? 0) - 1;
+  const matched =
+    problem === 'wrongFact' && idx >= 0 && idx < facts.length ? facts[idx] : undefined;
   const proposedValue =
-    matched?.source === 'profile' && matched.field && parsed.correctedValue?.trim()
+    matched?.source === 'profile' && matched.field && parsed?.correctedValue?.trim()
       ? parsed.correctedValue.trim()
       : undefined;
   return {
     ok: true,
-    rewrite: sanitizeRewrite(input.question, parsed),
+    problem,
+    question,
     ...(matched ? { matched } : {}),
     ...(proposedValue ? { proposedValue } : {}),
     usage: call.usage,

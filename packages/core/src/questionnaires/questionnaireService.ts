@@ -139,6 +139,32 @@ const NEEDS_OPTIONS: ReadonlySet<string> = new Set([
  * surface it live. Drafts are allowed to be invalid (not enforced by `saveQuestionnaire`).
  */
 /**
+ * Clean a generated or rewritten option list — or reject it outright.
+ *
+ * An option string IS the stored answer, so the bar is higher than "the model returned an array":
+ * - blanks are dropped BEFORE the count is checked (counting first let `['Real', '  ']` through as a
+ *   two-option question that rendered with a single choice — unanswerable);
+ * - duplicates are rejected (case-insensitively): two identical choices give the person no way to express a
+ *   difference, and both record the same value.
+ *
+ * Returns null when the list can't be salvaged, so the caller can drop the question rather than ship a
+ * choice nobody can answer. Shared by generation, the compatibility-variant rewrite and corrections so the
+ * three can't drift.
+ */
+export function normalizeOptions(raw: readonly string[] | undefined): string[] | null {
+  if (!raw) return null;
+  const cleaned = raw.map((o) => o.trim()).filter(Boolean);
+  if (cleaned.length < 2) return null;
+  const seen = new Set<string>();
+  for (const o of cleaned) {
+    const k = o.toLowerCase();
+    if (seen.has(k)) return null;
+    seen.add(k);
+  }
+  return cleaned;
+}
+
+/**
  * The structural rules ONE question must satisfy to be answerable, independent of the questionnaire it sits
  * in. Exported so the wrong-fact correction path (§32) can validate a rewritten question with exactly these
  * rules instead of growing a second copy that drifts from this one.

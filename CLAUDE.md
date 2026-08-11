@@ -438,6 +438,28 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-11 — **Fix (questionnaire GENERATION: the options must answer the prompt; member-reported; SPEC 08
+  §32.8; on `fix/questionnaire-generation-options-quality`).** The follow-on to §32 — correcting a bad question
+  makes it fixable, it doesn't stop it being generated. **Reproduced two real defects before fixing** (a probe
+  driving `generateQuestions` with a canned reply): (1) a choice question could ship with **ONE option** —
+  blanks were trimmed AFTER the `>= 2` count check, so `['Real', '  ']` passed as two and rendered a single
+  unanswerable choice; (2) **duplicate options survived** — two identical choices, no way to express a
+  difference, same recorded value either way. Both reach the person as "the answers don't match the question".
+  The same hole existed in the compatibility-variant rewrite, which accepted a blank/duplicated rewrite as long
+  as the COUNT matched. All three now share ONE exported `normalizeOptions` (beside `questionShapeProblems` in
+  `questionnaireService`, so generation / variants / corrections can't drift): trim → drop blanks → reject
+  case-insensitive duplicates → reject fewer than two; an unsalvageable list DROPS the question (one fewer
+  question beats a choice nobody can answer). The reported symptom itself — a nuanced question as a forced
+  binary with no true answer, so the only honest response was to skip — is a generation-QUALITY problem, fixed
+  in `ANSWER_TYPE_GUIDE`: options must be direct plausible answers to the exact prompt, distinct, mutually
+  exclusive, and must COVER the honest range (both / neither / it depends / it varies), with a two-option forced
+  choice reserved for a genuine either/or and free text as the fallback. Gate green: typecheck (4 pkgs), lint,
+  format, **1976 core + 1558 desktop** unit (+2: the drop-unusable-options regression, **verified to FAIL when
+  the ordering fix is reverted**, and a guidance-reaches-the-model assertion), 32 questionnaire/inbox/auto-checkin
+  E2E. **Lesson: `filter(Boolean)` AFTER a length check is a silent data bug — a blank entry pads the count and
+  the guard passes; normalize first, then count. And prompt guidance that isn't asserted in a test silently
+  rots, so assert the instruction reaches the model.**
+
 - 2026-08-11 — **Refactor (questionnaire correction: rewrite the question FOR REAL, at source; member-reported
   twice; SPEC 08 §32 rewritten; on `fix/questionnaire-correction-answers-dont-fit`).** The v0.51.3 §32 build was
   reported worse, and the member was right on every point. It could only REWORD labels, applied as a display

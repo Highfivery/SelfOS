@@ -30,6 +30,7 @@ import {
   VARIANT_SYSTEM,
   type IntimacyGenerateMode,
 } from './aiPrompts';
+import { normalizeOptions } from './questionnaireService';
 import { runClaude, type AiDeps } from './aiCall';
 import { gatherGenerationContext, type GenerationContextRequest } from './contextProviders';
 import { readCustomIntimacyTopics } from './customTypeService';
@@ -91,7 +92,12 @@ const STRICT_DEDUP_THRESHOLD = 0.45;
 
 /** Map a validated generated object to a well-formed Question, dropping ones missing required fields. */
 function toQuestion(raw: z.infer<typeof GeneratedQuestionSchema>): Question | null {
-  if (OPTION_TYPES.has(raw.type) && (raw.options?.length ?? 0) < 2) return null;
+  // Clean the options FIRST: counting before trimming let a blank entry pad the list, so a question could
+  // ship with a single choice. A list that can't be salvaged drops the whole question — a choice question
+  // nobody can answer is worse than one fewer question.
+  const needsOptions = OPTION_TYPES.has(raw.type);
+  const options = needsOptions ? normalizeOptions(raw.options) : null;
+  if (needsOptions && !options) return null;
   if (SCALE_TYPES.has(raw.type) && !raw.scale) return null;
   return {
     id: uuid(),
@@ -99,9 +105,7 @@ function toQuestion(raw: z.infer<typeof GeneratedQuestionSchema>): Question | nu
     prompt: raw.prompt.trim(),
     required: raw.required ?? false,
     ...(raw.help?.trim() ? { help: raw.help.trim() } : {}),
-    ...(OPTION_TYPES.has(raw.type) && raw.options
-      ? { options: raw.options.map((o) => o.trim()).filter(Boolean) }
-      : {}),
+    ...(options ? { options } : {}),
     ...(SCALE_TYPES.has(raw.type) && raw.scale ? { scale: raw.scale } : {}),
   };
 }
@@ -354,10 +358,13 @@ export async function generateVariant(
   const questions: Question[] = input.questions.map((q, i) => {
     const out = variants[i];
     const personalized = out?.prompt.trim();
-    const rewrittenOptions =
+    // An option rewrite must preserve the COUNT (the two variants stay aligned) AND be a usable option set
+    // — a blank or duplicated rewrite is rejected, keeping the canonical options for that question.
+    const cleaned =
       q.options && out?.options && out.options.length === q.options.length
-        ? out.options.map((o) => o.trim())
-        : undefined;
+        ? normalizeOptions(out.options)
+        : null;
+    const rewrittenOptions = cleaned && cleaned.length === q.options?.length ? cleaned : undefined;
     return {
       ...q,
       canonicalId: q.canonicalId ?? q.id, // the alignment key (defaults to the canonical question id)

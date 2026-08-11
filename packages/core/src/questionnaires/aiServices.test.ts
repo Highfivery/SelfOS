@@ -17,7 +17,7 @@ import {
 } from './contextProviders';
 import { extractJsonArray } from '../ai/jsonSalvage';
 import { SUGGESTABLE_ANSWER_TYPES } from '../schemas';
-import { GAP_FINDER_SYSTEM } from './aiPrompts';
+import { GAP_FINDER_SYSTEM, GENERATION_SYSTEM } from './aiPrompts';
 import {
   generateQuestions,
   improveQuestion,
@@ -1314,5 +1314,43 @@ describe('improveQuestion + gap-finder', () => {
     expect(result.ok).toBe(false);
     expect((result as { message: string }).message).toMatch(/add more about the people/i);
     expect((result as { reason?: string }).reason).toBeUndefined();
+  });
+});
+
+describe('generated option quality (08 §32.8)', () => {
+  it('DROPS a choice question whose options can’t make a usable set', async () => {
+    // Both reproduce as "the answers don't match the question" for the person answering:
+    // a blank padding entry used to slip past the >= 2 count check and render ONE choice, and two
+    // identical options give no way to express a difference while recording the same value.
+    const reply = JSON.stringify({
+      title: 'T',
+      questions: [
+        { type: 'singleChoice', prompt: 'Padded with a blank?', options: ['Only real one', '  '] },
+        { type: 'singleChoice', prompt: 'Two of the same?', options: ['Same', 'same'] },
+        { type: 'singleChoice', prompt: 'A usable set?', options: ['One', 'Two', 'Neither'] },
+      ],
+    });
+    const res = await generateQuestions(deps(memFileSystem(), fakeClient(reply), 'p1'), {
+      type: 'general',
+      sensitivity: 'standard',
+      context: {
+        authorPersonId: 'p1',
+        includeAuthor: true,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+    });
+    // Only the answerable question survives — a question with no fair set of choices is worse than none.
+    expect(res.questions?.map((q) => q.prompt)).toEqual(['A usable set?']);
+    expect(res.questions?.[0]?.options).toEqual(['One', 'Two', 'Neither']);
+  });
+
+  it('tells the model the options must answer the prompt and leave an honest way out', () => {
+    // The reported failure was a nuanced question rendered as a forced binary with no true answer, so the
+    // only honest response was to skip it. This is prompt guidance — assert it actually reaches the model.
+    expect(GENERATION_SYSTEM).toContain('THE OPTIONS MUST ACTUALLY ANSWER THE PROMPT');
+    expect(GENERATION_SYSTEM).toMatch(/both, neither, it depends/);
+    expect(GENERATION_SYSTEM).toMatch(/genuine either\/or/);
   });
 });

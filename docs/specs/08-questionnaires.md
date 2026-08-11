@@ -4159,3 +4159,31 @@ than overwriting a working one.
   no picker for `answersDontFit`.
 - **E2E** — both objections end-to-end: prompt and options replaced, source quoted, no nav row, the insight
   flagged, the questionnaire itself corrected, and the submitted answer decrypting to the CORRECTED option.
+
+## 32.8 Generation — the options must answer the prompt (2026-08-11)
+
+> **Status: BUILT** (`fix/questionnaire-generation-options-quality`). The follow-on to §32: correcting a bad
+> question makes it fixable, it doesn't stop it being generated. Member-reported: _"the options it came back
+> with have nothing to do with the question"_.
+
+Two defects were reproducible in `toQuestion` (generation) and the compatibility-variant rewrite, both of which
+reach the person as "the answers don't match the question":
+
+1. **A choice question could ship with ONE option.** Blank entries were trimmed AFTER the `>= 2` count check,
+   so `['Real answer', '  ']` passed as a two-option question and rendered a single choice — unanswerable.
+2. **Duplicate options survived.** Two identical choices give no way to express a difference and record the
+   same value either way. (The §32 correction path rejects these; generation didn't.)
+
+Both now go through one shared `normalizeOptions` (exported from `questionnaireService` beside
+`questionShapeProblems`, so generation, the variant rewrite and corrections can't drift): trim → drop blanks →
+reject duplicates case-insensitively → reject anything left with fewer than two. A list that can't be salvaged
+**drops the question** — one fewer question beats a choice nobody can answer. The variant rewrite additionally
+still requires the count to match, so the two halves of a compatibility send stay aligned.
+
+The reported case — a nuanced question rendered as a forced binary with no true answer, so the only honest
+response was to skip — is a generation-QUALITY problem, not a structural one, and is addressed in
+`ANSWER_TYPE_GUIDE`: the options must be direct, plausible answers to the exact prompt, distinct, mutually
+exclusive for a single-answer type, and must **cover the honest range** — if someone's real answer could be
+both / neither / it depends / it varies, that has to be an option. A two-option forced choice is reserved for a
+genuine either/or; anything nuanced needs the middle and outside answers, or the question should be asked as
+free text instead. Asserted as reaching the model, since prompt guidance that isn't asserted silently rots.

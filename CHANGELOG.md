@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.5](https://github.com/Highfivery/SelfOS/compare/v0.51.4...v0.51.5) (2026-08-11)
+
+
+### Bug Fixes
+
+* **questionnaires:** generated options must answer the prompt (08 §32.8) ([#406](https://github.com/Highfivery/SelfOS/issues/406)) ([e915a5c](https://github.com/Highfivery/SelfOS/commit/e915a5c4e82e202baa9ee9fa62cf5ffbcaf3e7ae))
+
 ## [0.51.4](https://github.com/Highfivery/SelfOS/compare/v0.51.3...v0.51.4) (2026-08-11)
 
 

@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import {
   compatibilityDisclosure,
   externalSendDisclosure,
   formatAnswerForDisplay,
+  questionLabels,
+  rewriteTouchesAnswers,
+  UNCLEAR_SKIP_REASON,
   unansweredRequired,
   visibleAnswers,
   visibleQuestions,
 } from '@selfos/core/questionnaires';
+import type { CorrectableProfileField, QuestionLabels } from '@selfos/core/schemas';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
 import type {
   Answer,
@@ -90,7 +93,6 @@ export function InboxAnswer({
   // which flips this on and renders the (pre-filled) form. Reopening the assignment is deferred to the update
   // submit, so Cancel is a true no-op (the send stays submitted).
   const [editing, setEditing] = useState(false);
-  const navigate = useNavigate();
   // Wrong-fact correction (spec 08 wrong-fact amendment): the question the recipient is flagging + its
   // reworded prompts (applied to their LOCAL view) + the resolved outcome. Reworded prompts never change the
   // sender's stored question — the recipient just answers the corrected version. The panel renders INLINE
@@ -99,78 +101,236 @@ export function InboxAnswer({
   const [correctionText, setCorrectionText] = useState('');
   const [correctionBusy, setCorrectionBusy] = useState(false);
   const [correctionOutcome, setCorrectionOutcome] = useState<FactCorrectionOutcome | null>(null);
-  const [promptOverrides, setPromptOverrides] = useState<Record<string, string>>({});
+  // The rewritten LABELS per question (08 §32.3) — prompt, help, option labels, scale anchors, matrix rows.
+  // Display only: the shared form maps every answer back to the sender's own option string before storing.
+  const [labelOverrides, setLabelOverrides] = useState<Record<string, QuestionLabels>>({});
+  // The inline profile fix + candidate pick (§32.4) resolve in place — nothing navigates away, so a
+  // half-finished questionnaire survives correcting a fact.
+  const [fixBusy, setFixBusy] = useState(false);
+  const [fixDone, setFixDone] = useState<string | null>(null);
+  // The source step is settled — either acted on, or explicitly left alone ("Leave it" / "None of these").
+  // Distinct from `fixDone` (the message) so dismissing without a message still hides the controls.
+  const [fixSettled, setFixSettled] = useState(false);
 
   const runCorrection = async (): Promise<void> => {
     if (!wrongFactQ || !correctionText.trim()) return;
     setCorrectionBusy(true);
     try {
+      const applied = labelOverrides[wrongFactQ.id];
       const result = await window.selfos?.assignmentsCorrectFact({
         assignmentId,
         questionId: wrongFactQ.id,
-        questionPrompt: promptOverrides[wrongFactQ.id] ?? wrongFactQ.prompt,
         correction: correctionText.trim(),
+        // A second correction reasons about what they can actually SEE, not the original wording.
+        ...(applied ? { applied } : {}),
       });
-      if (result?.ok && result.rewrittenPrompt) {
-        // Apply the reworded prompt to the recipient's LOCAL view + show the success outcome in place (the
-        // question stays greyed until they close the panel). The sender's stored question is unchanged.
-        setPromptOverrides((m) => ({ ...m, [wrongFactQ.id]: result.rewrittenPrompt! }));
+      if (result?.ok && result.rewrite) {
+        // Apply the reworded labels to the recipient's LOCAL view + show the outcome in place (the question
+        // stays greyed until they close the panel). The sender's stored question is never changed.
+        const rewrite = result.rewrite;
+        // MERGE over any earlier rewrite: `sanitizeRewrite` omits a list the model didn't re-touch, so
+        // replacing would silently revert a previous answer rewording and leave the prompt corrected but
+        // the answers wrong — the exact split-brain §32.1 exists to fix.
+        setLabelOverrides((m) => ({ ...m, [wrongFactQ.id]: { ...m[wrongFactQ.id], ...rewrite } }));
         setCorrectionOutcome(result);
         setCorrectionText('');
+        setFixDone(null);
+        setFixSettled(false);
       } else {
         setCorrectionOutcome(
           result ?? { ok: false, message: 'Couldn’t process that correction — please try again.' },
         );
       }
+    } catch {
+      setCorrectionOutcome({
+        ok: false,
+        message: 'Couldn’t process that correction — please try again.',
+      });
     } finally {
       setCorrectionBusy(false);
     }
   };
 
-  // The inline wrong-fact panel body the wizard renders below the greyed question — the input (with an
-  // optional error), OR the resolved success outcome. `close` dismisses the panel + un-greys the question.
+  /** Apply the proposed correction to the recipient's own profile field — an explicit tap, never silent. */
+  const applyProfileFix = async (field: CorrectableProfileField, value: string): Promise<void> => {
+    setFixBusy(true);
+    try {
+      const res = await window.selfos?.assignmentsApplyProfileFix({ assignmentId, field, value });
+      setFixDone(res?.ok ? 'Updated in your profile.' : (res?.message ?? 'Couldn’t update that.'));
+      setFixSettled(true);
+    } catch {
+      setFixDone('Couldn’t update that — you can change it in your profile later.');
+      setFixSettled(true);
+    } finally {
+      setFixBusy(false);
+    }
+  };
+
+  /** The recipient points at the record that's wrong, when the classifier couldn't tell (§32.4). */
+  const chooseCandidate = async (candidateId: string): Promise<void> => {
+    setFixBusy(true);
+    try {
+      const res = await window.selfos?.assignmentsCorrectFactChoose({ assignmentId, candidateId });
+      if (res?.ok) {
+        setFixDone(
+          res.insightFlagged
+            ? 'Marked inaccurate — it won’t shape questions again.'
+            : `You can update ${res.sourceLabel ?? 'that'} when you’re done here.`,
+        );
+        // Keep the rewrite, drop the picker — the source question is answered now.
+        setCorrectionOutcome((o) =>
+          o ? { ...o, candidates: [], ...(res.source ? { source: res.source } : {}) } : o,
+        );
+      } else {
+        setFixDone(res?.message ?? 'Couldn’t record that.');
+      }
+      setFixSettled(true);
+    } catch {
+      setFixDone('Couldn’t record that — nothing was changed.');
+      setFixSettled(true);
+    } finally {
+      setFixBusy(false);
+    }
+  };
+
+  // The inline wrong-fact panel body the wizard renders below the greyed question (§30/§32): the input, OR
+  // the resolved outcome — what changed, quoted where it came from, fixed in place. `close` dismisses the
+  // panel + un-greys the question. Nothing here navigates away, so the in-progress questionnaire survives.
   const renderWrongFactPanel = (close: () => void): JSX.Element => {
     const dismiss = (): void => {
       setCorrectionOutcome(null);
+      setFixDone(null);
+      setFixSettled(false);
       close();
     };
     if (correctionOutcome?.ok) {
+      const o = correctionOutcome;
+      // The ORIGINAL labels, so the recipient can see exactly what was wrong and what replaced it.
+      const before = wrongFactQ ? questionLabels(wrongFactQ) : null;
+      const rewrite = o.rewrite;
+      const fix = o.profileFix;
+      const answersChanged = rewrite ? rewriteTouchesAnswers(rewrite) : false;
       return (
         <Banner tone="info">
           <Stack gap={2}>
-            <Text size="sm">
-              {correctionOutcome.insightFlagged
-                ? 'Fixed — I flagged that in your Memory so it won’t come back, and reworded this question.'
-                : 'Reworded this question so you can answer it.'}
+            <Text weight={600}>
+              {o.insightFlagged || fixDone
+                ? 'Fixed it — here’s what changed.'
+                : answersChanged
+                  ? 'Reworded this question and its answers.'
+                  : 'Reworded this question so you can answer it.'}
             </Text>
-            {correctionOutcome.source === 'profile' ? (
-              <Button variant="secondary" onClick={() => navigate('/people')}>
-                Update it in your profile
-              </Button>
-            ) : correctionOutcome.source === 'onboarding' ? (
-              <Button variant="secondary" onClick={() => navigate('/onboarding')}>
-                Update it in your onboarding
-              </Button>
-            ) : correctionOutcome.source === 'unknown' ? (
-              <div className={styles.correctionActions}>
+
+            {/* Where it came from — QUOTED in place, not a menu of sections to go hunting through (§32.4). */}
+            {o.sourceText ? (
+              <div className={styles.sourceQuote}>
                 <Text size="sm" tone="secondary">
-                  Where does this come from?
+                  Where it came from · {o.sourceLabel ?? 'your record'}
                 </Text>
-                <Button variant="secondary" onClick={() => navigate('/people')}>
-                  Profile
-                </Button>
-                <Button variant="secondary" onClick={() => navigate('/onboarding')}>
-                  Onboarding
-                </Button>
-                <Button variant="secondary" onClick={() => navigate('/memory')}>
-                  Memory
-                </Button>
+                <Text size="sm">“{o.sourceText}”</Text>
+                {o.insightFlagged ? (
+                  <Text size="sm" tone="secondary">
+                    Marked inaccurate — it won’t shape questions again.
+                  </Text>
+                ) : null}
               </div>
             ) : null}
-            <div>
+
+            {/* A profile fact is PROPOSED for an explicit tap — never edited silently (§29.2 / §32.4). */}
+            {fix && !fixSettled ? (
+              <div className={styles.sourceQuote}>
+                <Text size="sm" tone="secondary">
+                  {fix.label} is currently {fix.currentValue}
+                </Text>
+                <div className={styles.correctionActions}>
+                  <Button
+                    variant="primary"
+                    disabled={fixBusy}
+                    onClick={() => void applyProfileFix(fix.field, fix.proposedValue)}
+                  >
+                    {fixBusy ? 'Updating…' : `Change it to ${fix.proposedValue}`}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    disabled={fixBusy}
+                    onClick={() => setFixSettled(true)}
+                  >
+                    Leave it
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Couldn't tell → show the records we actually checked, instead of three blind buttons. */}
+            {o.candidates && o.candidates.length > 0 && !fixSettled ? (
+              <div className={styles.sourceQuote}>
+                <Text size="sm" tone="secondary">
+                  I’m not sure which record this came from. Which one is wrong?
+                </Text>
+                <Stack gap={1}>
+                  {o.candidates.map((c) => (
+                    <Button
+                      key={c.id}
+                      variant="secondary"
+                      disabled={fixBusy}
+                      onClick={() => void chooseCandidate(c.id)}
+                    >
+                      {c.label} — {c.text}
+                    </Button>
+                  ))}
+                  <Button variant="ghost" disabled={fixBusy} onClick={() => setFixSettled(true)}>
+                    None of these
+                  </Button>
+                </Stack>
+              </div>
+            ) : null}
+
+            {fixDone ? (
+              <Text size="sm" tone="secondary">
+                {fixDone}
+              </Text>
+            ) : null}
+
+            {/* What actually changed — the old wording struck through, prompt AND answers. */}
+            {before && rewrite ? (
+              <div className={styles.correctionDiff}>
+                <Text size="sm" tone="secondary">
+                  Was: <s>{before.prompt}</s>
+                </Text>
+                {rewrite.options && before.options ? (
+                  <Text size="sm" tone="secondary">
+                    Answers were: <s>{before.options.join(' · ')}</s>
+                  </Text>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* Rewording can't rescue an option set that's the wrong shape — say so, and offer the exit that
+                already flags the question to its sender as unclear (§25.2 / §32.3). */}
+            {rewrite?.answersStillWrong ? (
+              <Text size="sm">
+                These answers still don’t fit the question — skipping it tells whoever sent it.
+              </Text>
+            ) : null}
+
+            <div className={styles.correctionActions}>
               <Button variant="primary" onClick={dismiss}>
                 Answer the reworded question
               </Button>
+              {rewrite?.answersStillWrong && wrongFactQ ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    onChange(wrongFactQ.id, {
+                      declined: true,
+                      reason: UNCLEAR_SKIP_REASON,
+                    });
+                    dismiss();
+                  }}
+                >
+                  Still doesn’t fit — skip it
+                </Button>
+              ) : null}
             </div>
           </Stack>
         </Banner>
@@ -181,8 +341,8 @@ export function InboxAnswer({
         <Stack gap={2}>
           <Text weight={600}>What’s not right about this question?</Text>
           <Text size="sm" tone="secondary">
-            e.g. “I turned 41 last May, not 39.” I’ll correct where this came from and reword the
-            question so you can answer it.
+            e.g. “I turned 41 last May, not 39” — or “none of these answers fit”. I’ll correct where
+            it came from and reword the question and its answers so you can answer it.
           </Text>
           {/* Focus moves into the panel on open (the panel subtree mounts when the wizard opens it), so a
               keyboard/SR user lands on the correction input rather than back at the top of the page. */}
@@ -484,9 +644,8 @@ export function InboxAnswer({
               The "That's not right about me" correction panel renders INLINE below the greyed question (the
               wizard owns placement; `onOpen` resets our input/outcome, `renderPanel` supplies the body). */}
           <QuestionnaireForm
-            questions={detail.questionnaire.questions.map((q) =>
-              promptOverrides[q.id] ? { ...q, prompt: promptOverrides[q.id]! } : q,
-            )}
+            questions={detail.questionnaire.questions}
+            labelOverrides={labelOverrides}
             answers={answers}
             loadImage={loadImage}
             onChange={onChange}
@@ -496,6 +655,8 @@ export function InboxAnswer({
                 setWrongFactQ(q);
                 setCorrectionText('');
                 setCorrectionOutcome(null);
+                setFixDone(null);
+                setFixSettled(false);
               },
               renderPanel: renderWrongFactPanel,
             }}

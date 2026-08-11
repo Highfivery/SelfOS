@@ -332,15 +332,25 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
-      // Wrong-fact correction (spec 08 wrong-fact amendment): the system says a detail is wrong; return a
-      // match + a reworded prompt. Deterministic — match the FIRST fact on record + reword to age 41.
+      // Wrong-fact correction (spec 08 §29, extended by §32): the system says a detail is wrong; return a
+      // match + the reworded LABELS. Deterministic — match the FIRST fact on record + reword to age 41, and
+      // reword the OPTIONS too when the question has them, so the E2E exercises the full-question rewrite
+      // (a prompt-only fake would hide the very defect §32 fixes).
       if (
         (options.system ?? '').includes(
           'flagged that a detail this question states ABOUT THEM is wrong',
         )
       ) {
+        // The user message lists the question's options as a numbered block; count them so the rewrite is
+        // the SAME length (a different length is rejected by design).
+        const optionCount = Number(/Options \((\d+)\)/.exec(userText)?.[1] ?? '0');
+        const options39 = Array.from({ length: optionCount }, (_, i) => `Reworded answer ${i + 1}`);
         return Promise.resolve({
-          text: JSON.stringify({ matchedIndex: 1, rewrittenPrompt: 'How did turning 41 feel?' }),
+          text: JSON.stringify({
+            matchedIndex: 1,
+            prompt: 'How did turning 41 feel?',
+            ...(optionCount > 0 ? { options: options39 } : {}),
+          }),
           usage: { inputTokens: 40, outputTokens: 20, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }

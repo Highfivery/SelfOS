@@ -433,6 +433,10 @@ const bridge: SelfosBridge = {
   assignmentsDismiss: (assignmentId) =>
     ipcRenderer.invoke(IpcChannels.assignmentsDismiss, assignmentId),
   assignmentsCorrectFact: (input) => ipcRenderer.invoke(IpcChannels.assignmentsCorrectFact, input),
+  assignmentsCorrectFactChoose: (input) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsCorrectFactChoose, input),
+  assignmentsApplyProfileFix: (input) =>
+    ipcRenderer.invoke(IpcChannels.assignmentsApplyProfileFix, input),
   assignmentsResults: (questionnaireId) =>
     ipcRenderer.invoke(IpcChannels.assignmentsResults, questionnaireId),
   assignmentsTrends: (questionnaireId) =>

@@ -180,15 +180,21 @@ describe('Inbox', () => {
     expect(dismiss).toHaveBeenCalledWith('a1');
   });
 
-  it('“That’s not right about me” fixes the source + rewords the question in place (wrong-fact amendment)', async () => {
+  it('“That’s not right about me” rewords the question AND its answers, quoting the source (§32)', async () => {
     const correctFact = vi.fn(() =>
       Promise.resolve({
         ok: true as const,
-        rewrittenPrompt: 'How did turning 41 feel?',
+        rewrite: {
+          prompt: 'How did turning 41 feel?',
+          options: ['Good', 'Hard', 'Same as before'],
+        },
         source: 'insight' as const,
+        sourceLabel: 'your Memory',
+        sourceText: 'Turned 39 last May',
         insightFlagged: true,
       }),
     );
+    const submit = vi.fn(() => Promise.resolve());
     installMockBridge({
       assignmentsInbox: () => Promise.resolve([item()]),
       assignmentsGet: () =>
@@ -204,9 +210,10 @@ describe('Inbox', () => {
               questions: [
                 {
                   id: 'qq1',
-                  type: 'shortText',
+                  type: 'singleChoice',
                   prompt: 'How did turning 39 feel?',
                   required: false,
+                  options: ['Good at 39', 'Hard at 39', 'Same as 35'],
                 },
               ],
               createdAt: 'now',
@@ -215,6 +222,7 @@ describe('Inbox', () => {
           }),
         ),
       assignmentsCorrectFact: correctFact,
+      assignmentsSubmit: submit,
     });
     renderInbox();
 
@@ -225,20 +233,78 @@ describe('Inbox', () => {
     await userEvent.click(screen.getByRole('button', { name: /That’s not right about me/ }));
     await userEvent.type(
       screen.getByLabelText(/what’s wrong about this question/i),
-      'I turned 41, not 39.',
+      'I turned 41, not 39 — and none of these answers fit.',
     );
     await userEvent.click(screen.getByRole('button', { name: 'Fix it' }));
 
+    // The question no longer carries the prompt text, and the bridge is asked about the QUESTION (the host
+    // no longer sends a prompt string — the snapshot is the source of truth).
     expect(correctFact).toHaveBeenCalledWith({
       assignmentId: 'a1',
       questionId: 'qq1',
-      questionPrompt: 'How did turning 39 feel?',
-      correction: 'I turned 41, not 39.',
+      correction: 'I turned 41, not 39 — and none of these answers fit.',
     });
-    // The question is reworded in place, and the outcome says the wrong insight was flagged.
     expect(await screen.findByText('How did turning 41 feel?')).toBeInTheDocument();
-    expect(screen.getByText(/flagged that in your Memory/i)).toBeInTheDocument();
-    expect(screen.queryByText('How did turning 39 feel?')).not.toBeInTheDocument();
+    // The old wording survives ONLY as the struck-through "what changed" line, never as the live question.
+    expect(screen.getByText('How did turning 39 feel?').closest('s')).not.toBeNull();
+
+    // §32.4 — the source is QUOTED in place, not a row of section buttons.
+    expect(screen.getByText(/Turned 39 last May/)).toBeInTheDocument();
+    expect(screen.getByText(/Where it came from · your Memory/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Onboarding' })).not.toBeInTheDocument();
+
+    // §32.3 — the ANSWERS are reworded too (the reported defect).
+    await userEvent.click(screen.getByRole('button', { name: 'Answer the reworded question' }));
+    expect(await screen.findByRole('radio', { name: 'Good' })).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'Good at 39' })).not.toBeInTheDocument();
+
+    // …but the STORED value is still the sender's own option string, so their Results stay countable and
+    // any branch rule keyed on it keeps matching (the integrity guarantee, §32.3).
+    await userEvent.click(screen.getByRole('radio', { name: 'Good' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Review & send' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Send answers' }));
+    expect(submit).toHaveBeenCalledWith({
+      assignmentId: 'a1',
+      answers: [{ questionId: 'qq1', value: 'Good at 39' }],
+    });
+  });
+
+  it('a profile match offers an inline confirm, and “Leave it” actually dismisses it (§32.4)', async () => {
+    const applyFix = vi.fn(() => Promise.resolve({ ok: true }));
+    installMockBridge({
+      assignmentsInbox: () => Promise.resolve([item()]),
+      assignmentsGet: () => Promise.resolve(detail()),
+      assignmentsCorrectFact: () =>
+        Promise.resolve({
+          ok: true as const,
+          rewrite: { prompt: 'How did your last birthday feel?' },
+          source: 'profile' as const,
+          sourceLabel: 'your birthday',
+          sourceText: 'age: 39 (born 1987-05-14)',
+          profileFix: {
+            field: 'birthday' as const,
+            label: 'Your birthday',
+            currentValue: '1987-05-14',
+            proposedValue: '1985-05-14',
+          },
+        }),
+      assignmentsApplyProfileFix: applyFix,
+    });
+    renderInbox();
+
+    await userEvent.click(await screen.findByRole('button', { name: /Weekly check-in/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /That’s not right about me/ }));
+    await userEvent.type(screen.getByLabelText(/what’s wrong about this question/i), 'I’m 41.');
+    await userEvent.click(screen.getByRole('button', { name: 'Fix it' }));
+
+    // Proposed, never applied on its own — nothing is written until the explicit tap.
+    const confirm = await screen.findByRole('button', { name: /Change it to 1985-05-14/ });
+    expect(applyFix).not.toHaveBeenCalled();
+
+    // "Leave it" must actually dismiss the control (it used to be a no-op).
+    await userEvent.click(screen.getByRole('button', { name: 'Leave it' }));
+    expect(confirm).not.toBeInTheDocument();
+    expect(applyFix).not.toHaveBeenCalled();
   });
 
   it('required = answer or skip: Send is disabled on review until a required question is answered (§25.3)', async () => {

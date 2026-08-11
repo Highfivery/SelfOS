@@ -427,6 +427,51 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-11 — **Build (questionnaire wrong-fact correction: rewrite the WHOLE question, and quote the source;
+  member-reported; mockup approved FIRST; SPEC 08 §32; on `feat/questionnaire-full-question-correction`).** Two
+  reported defects in the §29/§30 "That's not right about me" flow: flagging a wrong fact _"just rewrote the
+  question with the answers still not making sense"_, and the follow-up _"Where does this come from?"_ row
+  _"isn't helpful at all because it doesn't show where it actually came from"_. **Diagnosed against the code,
+  not assumed:** (1) `resolveFactCorrection` was handed a bare `questionPrompt` STRING — it never saw
+  `options`/`help`/`scale`/`matrix` — and returned only `rewrittenPrompt`, which `promptOverrides` wrote back
+  as the single field; so a question whose ANSWERS carried the wrong fact was reworded above answers that still
+  stated it. (2) The core service already resolved the matched record and the bridge already assembled the full
+  candidate list — **both were discarded at the seam**, so with `source:'unknown'` the panel could only offer
+  three blind Profile/Onboarding/Memory buttons, each a `navigate()` that unmounted the answering session and
+  lost every draft answer. **Mockup approved before any code** (the durable redesign rule), then 3 owner
+  decisions taken as recommended: unsalvageable answers → an honest **skip-as-unclear** exit (not an AI-replaced
+  option set, which would break the sender's counts); a profile fact gets an **inline propose-then-confirm**;
+  the rewording stays **local + ephemeral**. Built: a pure crypto-free `questionLabels.ts` (`QuestionLabels` /
+  `sanitizeRewrite`) + a `labelOverrides` prop on `@selfos/answering`'s `QuestionnaireForm`. **The integrity
+  guarantee is STRUCTURAL, not a mapping:** a rewrite changes only what the recipient READS, so the stored
+  answer is still the sender's own option string, branch rules keyed on those strings keep matching, and matrix
+  row keys are untouched (relabelling converts a plain-string row to a `{key,label}` pair carrying the SAME
+  key). The seam stops discarding what it knows — `sourceText` (the record QUOTED in place), `candidates` (the
+  on-record list to pick from, replacing the blind buttons), `profileFix` — plus two new recipient-scoped ops
+  (`assignmentsCorrectFactChoose`, `assignmentsApplyProfileFix`, the latter allowlisted to
+  `CORRECTABLE_PROFILE_FIELDS` on the ACTIVE person). Nothing navigates away any more. code-reviewer
+  **fix-first** caught a **blocker the length guard missed**: `sanitizeRewrite` checked list LENGTH but not
+  UNIQUENESS, and the value mapping is `indexOf` — so a rewrite collapsing two options to one label ("sharper
+  at 39" + "sharper than at 35" → both "sharper than before", exactly what "drop the wrong detail" encourages)
+  silently recorded an answer the recipient never chose, and mis-fired branch rules. Now rejected, with `Other`
+  pinned (renaming it kills the write-in). Also applied: the Review/See-all screens use the rewrite (they were
+  restating the corrected-away fact on the last screen before Send), a second correction MERGES over the first
+  (a prompt-only follow-up was reverting an earlier answer rewording), a proposed birthday is format-validated
+  (it has no editor for a subject, so a malformed value would silently drop their age forever), the candidate
+  list is capped, and "Leave it"/"None of these" actually dismiss (they were dead controls). Gate green:
+  typecheck (4 pkgs), lint, format, **1975 core + 1557 desktop + 13 relay** unit (+`questionLabels` structural
+  guards incl. the duplicate-collapse + Other-pinning cases; +a two-persona coreBridge test [candidates →
+  pick → flag; the profile allowlist rejects a non-allowlisted field before any write; non-recipient →
+  `NO_PERMISSION`]; +RTL asserting the reworded label is DISPLAYED while the sender's original is SUBMITTED),
+  - an E2E driving the real defect end-to-end (prompt AND options reworded, source quoted, no nav row, the
+    insight flagged by decrypt, and the submitted value decrypts to the sender's original string) — **verified to
+    FAIL when the option rewrite is neutered**. Real-Electron visual QA + a 390px overflow guard. **Lesson: when
+    a label stands in for a VALUE, a length check is not enough — uniqueness is the other half of the invariant,
+    and the prompt that says "drop the wrong assumption" is precisely what drives two options into the same
+    words; `indexOf`-based mapping then silently records the wrong answer. Also: an E2E batch run while a full
+    Vitest suite is running in the background produces keystroke-race failures that look like real regressions —
+    compare against a baseline on an IDLE machine before believing them.**
+
 - 2026-08-10 — **Fix (AI-suggestion email had no way to respond — a dead-end with no relay; member-reported;
   SPEC 67 §3.3; on `fix/suggestion-email-fallback`).** A member got a coaching-suggestion email ("The quiet you
   go when you want to be seen") that posed a reflective question with no clickable answer. Diagnosed against the

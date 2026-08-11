@@ -15,6 +15,7 @@ import {
   matrixRowLabel,
   type DeclinedAnswer,
   type Question,
+  type QuestionLabels,
 } from '@selfos/core/schemas';
 import { CrisisFooter } from './CrisisFooter';
 import { QuestionImage, type LoadImage } from './QuestionImage';
@@ -116,6 +117,12 @@ interface QuestionnaireFormProps {
    * relay page, which has no access to the recipient's household data) ⇒ no such affordance. Wizard mode only.
    */
   wrongFact?: WizardWrongFact;
+  /**
+   * Per-question rewrites applied to what the recipient READS — prompt, help, option labels, scale anchors,
+   * matrix rows (08 §32.3). Display only: the stored answer is still the sender's own option string, and
+   * branch rules keyed on those strings keep matching. Omitted ⇒ questions render exactly as authored.
+   */
+  labelOverrides?: Record<string, QuestionLabels>;
 }
 
 const range = (min: number, max: number): number[] => {
@@ -649,6 +656,113 @@ function MultiChoiceControl({
 }
 
 /** Render the control for one question's answer type. */
+/**
+ * Apply a wrong-fact rewrite to a question for DISPLAY only (08 §32.3).
+ *
+ * The recipient reads the reworded labels; the question's identity is untouched. Option strings are the
+ * one subtlety — an option string IS the stored answer value and may be named by a branch rule — so the
+ * rewritten options are shown but every value is mapped back to the sender's original before it is stored
+ * (`storedOptionValue` below). Matrix rows need no mapping at all: relabelling converts a plain-string row
+ * to a `{ key, label }` pair carrying the SAME key, which is what the answer is keyed by.
+ */
+function displayQuestion(question: Question, labels: QuestionLabels | undefined): Question {
+  if (!labels) return question;
+  const scale =
+    question.scale && labels.scaleLabels
+      ? {
+          ...question.scale,
+          ...(labels.scaleLabels.min !== undefined ? { minLabel: labels.scaleLabels.min } : {}),
+          ...(labels.scaleLabels.mid !== undefined ? { midLabel: labels.scaleLabels.mid } : {}),
+          ...(labels.scaleLabels.max !== undefined ? { maxLabel: labels.scaleLabels.max } : {}),
+        }
+      : question.scale;
+  const matrix =
+    question.matrix && (labels.matrixRows ?? labels.matrixPointLabels)
+      ? {
+          ...question.matrix,
+          ...(labels.matrixRows
+            ? {
+                rows: question.matrix.rows.map((row, i) => ({
+                  key: matrixRowKey(row),
+                  label: labels.matrixRows?.[i] ?? matrixRowLabel(row),
+                })),
+              }
+            : {}),
+          ...(labels.matrixPointLabels ? { pointLabels: labels.matrixPointLabels } : {}),
+        }
+      : question.matrix;
+  return {
+    ...question,
+    prompt: labels.prompt,
+    ...(labels.help !== undefined ? { help: labels.help } : {}),
+    ...(labels.options ? { options: labels.options } : {}),
+    ...(scale ? { scale } : {}),
+    ...(matrix ? { matrix } : {}),
+  };
+}
+
+/** Translate one option string between the displayed labels and the sender's originals, by position. */
+function mapOption(option: string, from: string[], to: string[]): string {
+  const i = from.indexOf(option);
+  return i >= 0 ? (to[i] ?? option) : option;
+}
+
+/**
+ * Map an answer between the displayed labels and what's stored. `direction: 'store'` converts what the
+ * control emitted back to the sender's own option strings (so their Results stay countable and branch rules
+ * keyed on those strings keep matching); `'display'` converts a stored answer back for rendering.
+ */
+function mapAnswer(
+  value: AnswerValue | undefined,
+  question: Question,
+  labels: QuestionLabels | undefined,
+  direction: 'store' | 'display',
+): AnswerValue | undefined {
+  const original = question.options;
+  const shown = labels?.options;
+  if (!original || !shown || value === undefined || isDeclined(value)) return value;
+  const from = direction === 'store' ? shown : original;
+  const to = direction === 'store' ? original : shown;
+  if (typeof value === 'string') return mapOption(value, from, to);
+  if (Array.isArray(value) && value.every((v) => typeof v === 'string'))
+    return (value as string[]).map((v) => mapOption(v, from, to));
+  // An allocation answer is keyed by the option string, so its KEYS need the same translation. A matrix
+  // record is keyed by ROW KEY, which a rewrite never changes — so restrict this to allocation explicitly
+  // rather than relying on "matrix questions happen not to carry options".
+  if (
+    question.type === 'allocation' &&
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value)
+  ) {
+    const entries = Object.entries(value as Record<string, number>);
+    if (entries.every(([, n]) => typeof n === 'number'))
+      return Object.fromEntries(entries.map(([k, n]) => [mapOption(k, from, to), n]));
+  }
+  return value;
+}
+
+/** The question's control, rendered with any rewrite applied to its labels but never to its values. */
+function LabelledControl({
+  question,
+  labels,
+  value,
+  onChange,
+}: {
+  question: Question;
+  labels: QuestionLabels | undefined;
+  value: AnswerValue | undefined;
+  onChange: (id: string, value: AnswerValue) => void;
+}): JSX.Element {
+  return (
+    <Control
+      question={displayQuestion(question, labels)}
+      value={mapAnswer(value, question, labels, 'display')}
+      set={(v) => onChange(question.id, mapAnswer(v, question, labels, 'store') ?? v)}
+    />
+  );
+}
+
 function Control({
   question,
   value,
@@ -837,6 +951,7 @@ function Control({
 /** One question: prompt (with a required marker), optional help + image, and its answer control. */
 function QuestionField({
   question,
+  labels,
   value,
   onChange,
   loadImage,
@@ -845,6 +960,8 @@ function QuestionField({
   total,
 }: {
   question: Question;
+  /** A wrong-fact rewrite applied for DISPLAY only (08 §32.3); values are never affected. */
+  labels?: QuestionLabels | undefined;
   value: AnswerValue | undefined;
   onChange: (questionId: string, value: AnswerValue) => void;
   loadImage?: LoadImage;
@@ -858,9 +975,10 @@ function QuestionField({
   // top border and gets bisected when a long prompt wraps (the visible-overlap bug). Each control carries its
   // own aria-label (single inputs) or radiogroup/group label (choices, matrix), so the prompt still names the
   // control for screen readers without an aria-labelledby that would double-label and collide with it.
+  const shown = displayQuestion(question, labels);
   const prompt = (
     <p className={styles.prompt}>
-      {question.prompt}
+      {shown.prompt}
       {question.required ? (
         <>
           <span aria-hidden="true" className={styles.required}>
@@ -884,11 +1002,11 @@ function QuestionField({
           floating right of a short prompt with a big empty gap). The inline sensitive-share confirm renders
           here too, co-located with the question. `flex: none` so it never causes an inner scrollbar (§12). */}
       {sharingControl ? <div className={styles.sharingSlot}>{sharingControl}</div> : null}
-      {question.help ? <p className={styles.help}>{question.help}</p> : null}
+      {shown.help ? <p className={styles.help}>{shown.help}</p> : null}
       {question.media && loadImage ? (
         <QuestionImage media={question.media} loadImage={loadImage} />
       ) : null}
-      <Control question={question} value={value} set={(v) => onChange(question.id, v)} />
+      <LabelledControl question={question} labels={labels} value={value} onChange={onChange} />
     </div>
   );
 }
@@ -950,6 +1068,7 @@ function WizardForm({
   footer,
   actions,
   wrongFact,
+  labelOverrides,
 }: {
   visible: Question[];
   answers: AnswerMap;
@@ -958,6 +1077,7 @@ function WizardForm({
   footer?: ReactNode;
   actions: WizardActions;
   wrongFact?: WizardWrongFact;
+  labelOverrides?: Record<string, QuestionLabels> | undefined;
 }): JSX.Element {
   const total = visible.length;
   const [step, setStep] = useState(0);
@@ -993,6 +1113,10 @@ function WizardForm({
   // Required questions still needing an answer OR a decline — the review gate (§25.3).
   const outstanding = visible.filter((q) => q.required && stateOf(q) === 'open');
   const question = visible[current];
+  // The rewrite (if any) applied to what the recipient READS — values stay the sender's own (08 §32.3).
+  const shownQuestion = question
+    ? displayQuestion(question, labelOverrides?.[question.id])
+    : undefined;
   const isLast = current >= total - 1;
 
   const leave = (): void => {
@@ -1041,8 +1165,14 @@ function WizardForm({
     setSkipOpen(false);
     setAnswerInstead(null);
   };
+  /** The question as the recipient READS it — any wrong-fact rewrite applied (08 §32.3). */
+  const shownOf = (q: Question): Question => displayQuestion(q, labelOverrides?.[q.id]);
   const reviewAnswerText = (q: Question, v: AnswerValue | undefined): string => {
-    if (isAnswered(q, v)) return formatAnswerForDisplay(q, v) || '—';
+    if (isAnswered(q, v)) {
+      // Show the answer in the wording they PICKED, not the sender's original.
+      const labels = labelOverrides?.[q.id];
+      return formatAnswerForDisplay(shownOf(q), mapAnswer(v, q, labels, 'display')) || '—';
+    }
     if (isDeclined(v)) return v.reason ? `Skipped — ${v.reason}` : 'Skipped';
     return q.required ? 'Needs an answer or a reason to send' : 'Left blank (optional)';
   };
@@ -1150,7 +1280,7 @@ function WizardForm({
                         {mark}
                       </span>
                       <span className={styles.allText}>
-                        {q.prompt}
+                        {shownOf(q).prompt}
                         {st === 'answered' ? (
                           <span className={`${styles.allSub} ${styles.allDone}`}>Answered</span>
                         ) : st === 'skipped' ? (
@@ -1213,7 +1343,7 @@ function WizardForm({
                       {mark}
                     </span>
                     <div className={styles.rq}>
-                      <p className={styles.rPrompt}>{q.prompt}</p>
+                      <p className={styles.rPrompt}>{shownOf(q).prompt}</p>
                       <p className={styles.rAnswer} data-state={st}>
                         {reviewAnswerText(q, answers[q.id])}
                       </p>
@@ -1231,7 +1361,7 @@ function WizardForm({
             {/* The count lives next to the progress bar; the eyebrow just tags whether it's required. */}
             <span className={styles.qNumber}>{question?.required ? 'Required' : 'Optional'}</span>
             <h3 className={styles.wizardStepTitle} tabIndex={-1} ref={headingRef}>
-              {question?.prompt ?? ''}
+              {shownQuestion?.prompt ?? ''}
             </h3>
             {question ? (
               isDeclined(answers[question.id]) && answerInstead !== question.id ? (
@@ -1257,15 +1387,20 @@ function WizardForm({
                       reason OR wrong-fact — is open, so both affordances behave the SAME: the question steps
                       back and the panel takes over in place, directly below. */}
                   <fieldset className={styles.qBody} disabled={skipOpen || wrongFactOpen}>
-                    {question.help ? <p className={styles.help}>{question.help}</p> : null}
+                    {shownQuestion?.help ? (
+                      <p className={styles.help}>{shownQuestion.help}</p>
+                    ) : null}
                     {question.media && loadImage ? (
                       <QuestionImage media={question.media} loadImage={loadImage} />
                     ) : null}
-                    <Control
-                      question={question}
-                      value={answerInstead === question.id ? undefined : answers[question.id]}
-                      set={(v) => onChange(question.id, v)}
-                    />
+                    {question ? (
+                      <LabelledControl
+                        question={question}
+                        labels={labelOverrides?.[question.id]}
+                        value={answerInstead === question.id ? undefined : answers[question.id]}
+                        onChange={onChange}
+                      />
+                    ) : null}
                   </fieldset>
                   <div className={styles.skipRow}>
                     {skipOpen ? (
@@ -1426,6 +1561,7 @@ export function QuestionnaireForm({
   disabled,
   wizard,
   wrongFact,
+  labelOverrides,
 }: QuestionnaireFormProps): JSX.Element {
   const visible = visibleQuestions(questions, answers);
 
@@ -1441,6 +1577,7 @@ export function QuestionnaireForm({
         {...(loadImage ? { loadImage } : {})}
         {...(footer !== undefined ? { footer } : {})}
         {...(wrongFact ? { wrongFact } : {})}
+        {...(labelOverrides ? { labelOverrides } : {})}
         actions={wizard}
       />
     );
@@ -1469,6 +1606,7 @@ export function QuestionnaireForm({
       <QuestionField
         key={question.id}
         question={question}
+        {...(labelOverrides?.[question.id] ? { labels: labelOverrides[question.id] } : {})}
         value={answers[question.id]}
         onChange={onChange}
         {...(loadImage ? { loadImage } : {})}

@@ -130,6 +130,8 @@ import {
   type QuestionnaireAnalyzeResult,
   type QuestionnaireGenerateResult,
   type QuestionnaireImproveResult,
+  CORRECTABLE_PROFILE_FIELDS,
+  type FactCorrectionCandidate,
   type FactCorrectionOutcome,
   type QuestionnaireSuggestResult,
   type SavedSuggestion,
@@ -1187,9 +1189,142 @@ const RemovePartnerWishSchema = z.object({ wishId: z.string().min(1) });
 const CorrectFactSchema = z.object({
   assignmentId: z.string().min(1),
   questionId: z.string().min(1),
-  questionPrompt: z.string().min(1),
   correction: z.string().min(1).max(1000),
+  // A rewrite already showing on the recipient's screen, so a SECOND correction reasons about what they can
+  // actually see. Display labels only — never a stored value (08 §32.3).
+  applied: z
+    .object({
+      prompt: z.string().min(1),
+      help: z.string().optional(),
+      options: z.array(z.string()).optional(),
+      scaleLabels: z
+        .object({
+          min: z.string().optional(),
+          mid: z.string().optional(),
+          max: z.string().optional(),
+        })
+        .optional(),
+      matrixRows: z.array(z.string()).optional(),
+      matrixPointLabels: z.array(z.string()).optional(),
+    })
+    .optional(),
 });
+/** Pick the record the recipient says is wrong, when the classifier couldn't (08 §32.4). */
+const CorrectFactChooseSchema = z.object({
+  assignmentId: z.string().min(1),
+  candidateId: z.string().min(1),
+});
+/**
+ * Apply a proposed correction to the recipient's OWN profile field (08 §32.4).
+ *
+ * The field allowlist is the whole security story: it is exactly the set the correction flow reads to build
+ * its candidate facts, so this can never be used to write anything else on the person — and it targets the
+ * ACTIVE person only, so a member correcting their own birthday needs no `people.manage`.
+ */
+const ApplyProfileFixSchema = z
+  .object({
+    assignmentId: z.string().min(1),
+    field: z.enum(CORRECTABLE_PROFILE_FIELDS),
+    value: z.string().min(1).max(200),
+  })
+  // A birthday is parsed downstream (`ageFromBirthday`) and has NO editor for a subject (18 §14.6 moved it
+  // to onboarding), so a malformed value would silently drop their age from every context with no way to
+  // repair it. The model is asked for YYYY-MM-DD; enforce it at the boundary rather than trusting that.
+  .refine((v) => v.field !== 'birthday' || isCalendarDate(v.value), {
+    message: 'A birthday must be a real YYYY-MM-DD date.',
+    path: ['value'],
+  });
+
+/** A strict YYYY-MM-DD that is also a REAL date (rejects 2026-02-31, which `new Date` would roll over). */
+function isCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
+
+/** How many of the recipient's most recent insight facts the candidate picker offers (08 §32.4). */
+const MAX_CORRECTION_CANDIDATES = 8;
+
+/**
+ * A stable, self-describing id for one on-record fact, so the recipient can point at it in a later call
+ * without the host holding any per-correction state — the list is simply re-derived and matched by id.
+ */
+function candidateId(f: KnownFact): string {
+  if (f.source === 'insight') return `insight:${f.insightId ?? ''}:${f.factId ?? ''}`;
+  if (f.source === 'profile') return `profile:${f.field ?? ''}`;
+  return 'onboarding';
+}
+function toCandidate(f: KnownFact): FactCorrectionCandidate {
+  return { id: candidateId(f), source: f.source, label: f.label, text: f.text };
+}
+
+/**
+ * The recipient's OWN on-record facts — what a wrong fact in a question could have come from (08 §29.2).
+ *
+ * Shared by the correction call (numbered for the model to match against) and the candidate picker (shown to
+ * the recipient when the model couldn't match one), so the two can never drift out of sync.
+ */
+async function collectKnownFacts(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  now: Date,
+): Promise<KnownFact[]> {
+  const known: KnownFact[] = [];
+  const person = await getPerson(fs, key, personId);
+  if (person) {
+    if (person.birthday) {
+      const age = ageFromBirthday(person.birthday, now);
+      known.push({
+        source: 'profile',
+        label: 'your birthday',
+        text: age != null ? `age: ${age} (born ${person.birthday})` : `born ${person.birthday}`,
+        field: 'birthday',
+        currentValue: person.birthday,
+      });
+    }
+    for (const [field, label, value] of [
+      ['occupation', 'occupation', person.occupation],
+      ['relationshipStatus', 'relationship status', person.relationshipStatus],
+      ['parentalStatus', 'parental status', person.parentalStatus],
+      ['location', 'location', person.location],
+    ] as const) {
+      if (value)
+        known.push({
+          source: 'profile',
+          label: `your ${label}`,
+          text: `${label}: ${value}`,
+          field,
+          currentValue: value,
+        });
+    }
+  }
+  // Only NON-flagged insight facts (a fact already flagged inaccurate no longer feeds generation).
+  const insights = await listInsightsForPerson(fs, key, personId);
+  for (const ins of insights) {
+    for (const f of ins.facts) {
+      if (f.flaggedInaccurate) continue;
+      known.push({
+        source: 'insight',
+        label: 'your Memory',
+        text: f.text,
+        insightId: ins.id,
+        factId: f.id,
+      });
+    }
+  }
+  // Onboarding is a single generic entry (the granular answers aren't listed here) — enough to route "this
+  // came from my onboarding", which the panel turns into a prompt to fix it there.
+  const session = await getIntakeSession(fs, key, personId);
+  if (session) {
+    known.push({
+      source: 'onboarding',
+      label: 'your onboarding answers',
+      text: 'something you told SelfOS during onboarding',
+    });
+  }
+  return known;
+}
 // Per-person image prefs patch (image-settings amendment): one feature, a partial of style/notes/toggle.
 const ImagePrefsSetSchema = z.object({
   feature: z.enum(['dreams', 'story']),
@@ -4353,91 +4488,118 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!scoped) return { ok: false, reason: 'NO_PERMISSION', message: 'Not permitted.' };
       const deps = await aiDeps('questionnaires.answer');
       if (!deps) return { ok: false, reason: 'DENIED', message: 'AI is unavailable.' };
-      const { fs, key } = scoped;
+      const { fs, key, assignment } = scoped;
       const personId = deps.personId;
       const now = new Date();
 
-      // The recipient's own on-record facts, numbered for the model to match the correction against.
-      const known: KnownFact[] = [];
-      const person = await getPerson(fs, key, personId);
-      if (person) {
-        if (person.birthday) {
-          const age = ageFromBirthday(person.birthday, now);
-          known.push({
-            source: 'profile',
-            label: 'your birthday',
-            text: age != null ? `age: ${age} (born ${person.birthday})` : `born ${person.birthday}`,
-          });
-        }
-        for (const [label, value] of [
-          ['occupation', person.occupation],
-          ['relationship status', person.relationshipStatus],
-          ['parental status', person.parentalStatus],
-          ['location', person.location],
-        ] as const) {
-          if (value)
-            known.push({ source: 'profile', label: `your ${label}`, text: `${label}: ${value}` });
-        }
-      }
-      // Only NON-flagged insight facts (a fact already flagged inaccurate no longer feeds generation).
-      const insights = await listInsightsForPerson(fs, key, personId);
-      for (const ins of insights) {
-        for (const f of ins.facts) {
-          if (f.flaggedInaccurate) continue;
-          known.push({
-            source: 'insight',
-            label: 'your Memory',
-            text: f.text,
-            insightId: ins.id,
-            factId: f.id,
-          });
-        }
-      }
-      // Onboarding is a single generic entry (the granular answers aren't listed here) — enough for the model
-      // to route "this came from my onboarding", which the renderer turns into a deep-link to fix it.
-      const session = await getIntakeSession(fs, key, personId);
-      if (session) {
-        known.push({
-          source: 'onboarding',
-          label: 'your onboarding answers',
-          text: 'something you told SelfOS during onboarding',
-        });
-      }
+      // The question comes from the FROZEN send snapshot, not the renderer — so the rewrite is validated
+      // against the real structure (option count, matrix rows) the recipient is answering (08 §32.3).
+      const snapshot = await getAssignmentSnapshot(fs, key, assignment.id);
+      const question = snapshot?.questions.find((q) => q.id === p.questionId);
+      if (!question) return { ok: false, reason: 'NO_PERMISSION', message: 'Not permitted.' };
 
+      const known = await collectKnownFacts(fs, key, personId, now);
       const res = await resolveFactCorrection(deps, {
-        questionPrompt: p.questionPrompt,
+        question,
         correction: p.correction,
         knownFacts: known,
+        ...(p.applied ? { applied: p.applied } : {}),
       });
-      if (!res.ok || !res.rewrittenPrompt) {
+      if (!res.ok || !res.rewrite) {
         return {
           ok: false,
           ...(res.reason ? { reason: res.reason } : {}),
           ...(res.message ? { message: res.message } : {}),
         };
       }
-      // Auto-fix at source for an insight (safe + non-destructive); profile/onboarding are routed to the
-      // recipient to correct themselves (auto-editing structured data from free text is unreliable).
+      // Auto-fix at source for an insight (safe + non-destructive); a profile fact is PROPOSED for an
+      // explicit tap and onboarding is routed, since auto-editing structured data from free text is
+      // unreliable (§29.2 / §32.4).
+      const matched = res.matched;
       let insightFlagged = false;
-      if (res.matched?.source === 'insight' && res.matched.insightId && res.matched.factId) {
-        await flagInsightFact(
-          fs,
-          key,
-          personId,
-          res.matched.insightId,
-          res.matched.factId,
-          true,
-          now,
-        );
+      if (matched?.source === 'insight' && matched.insightId && matched.factId) {
+        await flagInsightFact(fs, key, personId, matched.insightId, matched.factId, true, now);
         insightFlagged = true;
       }
       return {
         ok: true,
-        rewrittenPrompt: res.rewrittenPrompt,
-        source: res.matched?.source ?? 'unknown',
-        ...(res.matched?.label ? { sourceLabel: res.matched.label } : {}),
+        rewrite: res.rewrite,
+        source: matched?.source ?? 'unknown',
+        ...(matched?.label ? { sourceLabel: matched.label } : {}),
+        ...(matched?.text ? { sourceText: matched.text } : {}),
+        insightFlagged,
+        // No confident match → the recipient picks the wrong record from what we actually checked, rather
+        // than guessing a section (§32.4). The list is theirs; it never crosses to the sender.
+        ...(matched
+          ? {}
+          : {
+              // Cap what we render: profile + onboarding are few and always useful, but insight facts can
+              // number in the hundreds — an unbounded picker is unusable and a §12 overflow hazard.
+              candidates: [
+                ...known.filter((f) => f.source !== 'insight'),
+                ...known.filter((f) => f.source === 'insight').slice(-MAX_CORRECTION_CANDIDATES),
+              ].map(toCandidate),
+            }),
+        ...(matched?.source === 'profile' &&
+        matched.field &&
+        matched.currentValue &&
+        res.proposedValue
+          ? {
+              profileFix: {
+                field: matched.field,
+                label: matched.label,
+                currentValue: matched.currentValue,
+                proposedValue: res.proposedValue,
+              },
+            }
+          : {}),
+      };
+    },
+
+    // The recipient points at the record the classifier couldn't match (08 §32.4). No AI, no spend — the
+    // candidate list is simply re-derived and matched by id. Recipient-scoped, and their own data only.
+    assignmentsCorrectFactChoose: async (input): Promise<FactCorrectionOutcome> => {
+      const p = CorrectFactChooseSchema.parse(input);
+      const scoped = await recipientAssignment(p.assignmentId);
+      if (!scoped) return { ok: false, reason: 'NO_PERMISSION', message: 'Not permitted.' };
+      const { fs, key } = scoped;
+      const personId = await activePersonId();
+      if (!personId) return { ok: false, reason: 'NO_PERMISSION', message: 'Not permitted.' };
+      const now = new Date();
+
+      const known = await collectKnownFacts(fs, key, personId, now);
+      const chosen = known.find((f) => candidateId(f) === p.candidateId);
+      if (!chosen) return { ok: false, message: 'That record is no longer there.' };
+
+      let insightFlagged = false;
+      if (chosen.source === 'insight' && chosen.insightId && chosen.factId) {
+        await flagInsightFact(fs, key, personId, chosen.insightId, chosen.factId, true, now);
+        insightFlagged = true;
+      }
+      return {
+        ok: true,
+        source: chosen.source,
+        sourceLabel: chosen.label,
+        sourceText: chosen.text,
         insightFlagged,
       };
+    },
+
+    // Apply a proposed correction to the recipient's OWN profile field (08 §32.4). Recipient-scoped and
+    // allowlisted to the same fields the correction flow reads, so it can't be used to write anything else.
+    assignmentsApplyProfileFix: async (input): Promise<{ ok: boolean; message?: string }> => {
+      const p = ApplyProfileFixSchema.parse(input);
+      const scoped = await recipientAssignment(p.assignmentId);
+      if (!scoped) return { ok: false, message: 'Not permitted.' };
+      const { fs, key } = scoped;
+      const personId = await activePersonId();
+      if (!personId) return { ok: false, message: 'Not permitted.' };
+      const person = await getPerson(fs, key, personId);
+      if (!person) return { ok: false, message: 'Not permitted.' };
+      // Rebuild from the person's own record with exactly one field replaced; PersonInputSchema strips every
+      // main-owned field, so this can only ever change the allowlisted value.
+      await upsertPerson(fs, key, PersonInputSchema.parse({ ...person, [p.field]: p.value }));
+      return { ok: true };
     },
     gapfinderSuggest: async (input): Promise<QuestionnaireSuggestResult> => {
       const deps = await aiDeps();

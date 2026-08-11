@@ -4064,3 +4064,113 @@ place. The existing skip + wrong-fact flows (unit + E2E) stay green.
   running"** — which reads as broken, not busy. It's now a muted **"Waiting for another analysis to finish…"**
   status (with a clock glyph), and the Results view's per-response Analyze buttons read a short **"Waiting…"**
   instead of "Analysis unavailable". Purely presentational — the one-at-a-time gating is unchanged.
+
+## 32. 2026-08-11 amendment — "That's not right about me": rewrite the whole question, and quote the source
+
+> **Status: BUILT** (`feat/questionnaire-full-question-correction`; mockup reviewed + approved 2026-08-11). Member-reported: flagging a wrong fact
+> _"just rewrote the question with the answers still not making sense"_, and the follow-up _"Where does this
+> come from?"_ row _"isn't helpful at all because it doesn't show where it actually came from"_. Amends §29
+> (the correction flow) and §30 (the inline panel). Inbox (household recipient) only, as §29.
+
+### 32.1 The two defects
+
+Both are scope limits of the §29 build, not regressions:
+
+1. **Only the prompt is rewritten.** `resolveFactCorrection` is handed a bare `questionPrompt` string — it
+   never sees `options`, `help`, `scale` labels or `matrix` rows — and returns only `rewrittenPrompt`. The
+   renderer's `promptOverrides` writes back exactly one field. So a question whose **answers** carry the wrong
+   fact ("It's sharper at 39", "About the same as at 35") is reworded above answers that still state it.
+2. **The source is never named.** The core service resolves the matched record and the bridge assembles the
+   full candidate list, but **both are discarded at the seam** — only `source`/`sourceLabel` cross. With
+   `source: 'unknown'` the panel can only offer three blind Profile / Onboarding / Memory buttons, and each
+   calls `navigate()`, which unmounts the answering session and loses every draft answer + the rewording.
+
+### 32.2 Owner decisions (asked before building)
+
+- **Unsalvageable answers → an honest exit** (not an AI-replaced option set). Rewording can fix wording; it
+  can't fix an option set that's structurally wrong, and replacing one would break the sender's counts.
+- **A profile fact gets an inline confirm** — SelfOS proposes the corrected value, the recipient taps to
+  apply. Never a silent write (§29.2 stands); the tap is the guided fix.
+- **The rewording stays local + ephemeral**, as today. Not persisted with the response.
+
+### 32.3 The rewrite covers every visible label — and never changes a value
+
+`resolveFactCorrection` now takes and returns a **`QuestionLabels`** bundle (the pure, crypto-free
+`questionLabels.ts`, importable by the renderer): `prompt`, `help`, `options`, `scaleLabels` (min/mid/max),
+`matrixRows`, `matrixPointLabels`. Only the fields the question actually has are sent and accepted back.
+
+**The integrity guarantee is structural, not a mapping.** A rewritten label is applied for **display only**,
+via a new optional `labelOverrides?: Record<questionId, QuestionLabels>` prop on `@selfos/answering`'s
+`QuestionnaireForm`. The underlying `Question` is untouched, so:
+
+- the stored answer is still the **sender's original option string** — their Results stay countable;
+- `BranchRuleSchema` triggers, which match on option strings, keep working;
+- `isAnswered` / `unansweredRequired` / matrix row keys are unaffected.
+
+Two structural guards in `sanitizeRewrite`, each rejecting the whole array and keeping the originals:
+
+- **Length** — the count and order of options, matrix rows and scale points are frozen, so only wording can
+  change.
+- **Uniqueness** — a label stands in for its option, so two options sharing a label would make the choice
+  ambiguous and silently record the wrong one. This is a live risk, not a theoretical one: dropping the wrong
+  detail is exactly what collapses "sharper at 39" and "sharper than at 35" into one phrase. The reserved
+  `Other` option is likewise **pinned** — renaming it would turn off the write-in, since `allowOther` is
+  derived from the option list.
+
+The old `promptOverrides` (prompt-only, applied by spreading over the question) is replaced by
+`labelOverrides`, which also drives the **navigator, the "See all questions" overview and the Review step** —
+otherwise the last screen before Send would restate the very fact the recipient just corrected. A second
+correction **merges** over the first rather than replacing it, so a prompt-only follow-up can't revert an
+earlier answer rewording.
+
+When the model judges the answer set can't be fixed by rewording it returns **`answersStillWrong: true`**; the
+panel says so plainly and offers one tap to **skip the question as "not clear"** — which already flags it to
+the sender as a question-quality signal (§25.2 `UNCLEAR_SKIP_REASON`). No dead end, no silent bad answer.
+
+### 32.4 The source is quoted where you are
+
+`FactCorrectionOutcome` stops discarding what the bridge already knows:
+
+- **`quote`** — the matched record's real `text` + human `label` + `source`, rendered in place ("Your Memory ·
+  _'Turned 39 last May'_"), with what already happened to it ("Marked inaccurate — it won't shape questions
+  again"). An insight fact is still auto-flagged, exactly as §29.2.
+- **`candidates`** — for the `unknown` case, the same on-record list the bridge assembled for the model, so
+  the recipient **picks the wrong record** instead of guessing a section. A new recipient-scoped
+  `assignments:correctFactChoose` flags the chosen insight fact (or routes a profile/onboarding pick).
+  "None of these" writes nothing.
+- **`profileFix`** — for a `profile` match, the field + current value + the model's proposed corrected value.
+  Applied only on an explicit tap, through a new recipient-scoped `assignments:applyProfileFix` restricted to
+  an **allowlist of the same fields the bridge reads** (`CORRECTABLE_PROFILE_FIELDS`: `birthday`,
+  `occupation`, `relationshipStatus`, `parentalStatus`, `location`) — a member correcting their OWN profile
+  needs no `people.manage`. A proposed **birthday is format-validated** (a real `YYYY-MM-DD`) before it is
+  written: it's parsed downstream by `ageFromBirthday` and has no editor for a subject (18 §14.6 moved it to
+  onboarding), so a malformed value would silently drop their age from every context with no way to repair it.
+
+The candidate list is **capped** (`MAX_CORRECTION_CANDIDATES`, most-recent insight facts + all profile fields
+
+- onboarding): a mature vault holds hundreds of insight facts, and an unbounded picker is both unusable and a
+  §12 overflow hazard.
+
+**Nothing navigates away.** Every fix happens in the panel, so the in-progress questionnaire survives it. The
+deep-links are gone.
+
+### 32.5 Scope + safety
+
+Unchanged from §29: recipient-scoped (the recipient IS the subject, so every read/write is their own data,
+re-checked via `recipientAssignment`); the sender's stored questionnaire is never mutated; the relay page
+omits `wrongFact` and shows none of this. The AI classification remains best-effort — a wrong or
+low-confidence match now degrades to the **candidate picker** rather than three blind buttons, and still
+never mis-edits data.
+
+### 32.6 Testing
+
+- **Core** — `questionLabels` extract/apply round-trip; a length-mismatched option array is rejected and the
+  originals kept; `answersStillWrong` surfaces; a rewrite reaches the model with the options included.
+- **coreBridge** — the outcome carries the quote + candidates; `correctFactChoose` flags the chosen fact;
+  `applyProfileFix` writes only an allowlisted field on the ACTIVE person and rejects anything else;
+  non-recipient → `NO_PERMISSION`.
+- **Renderer** — `labelOverrides` changes the displayed option text while the submitted VALUE stays the
+  sender's original (the integrity guarantee, asserted directly); the panel quotes the source; the candidate
+  picker renders for `unknown`; `answersStillWrong` offers the skip exit.
+- **E2E** — a recipient flags a wrong fact on a choice question → prompt AND options are reworded in place →
+  answering it decrypts to the **original** option string, and the wrong insight fact is flagged inaccurate.

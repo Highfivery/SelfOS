@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.4](https://github.com/Highfivery/SelfOS/compare/v0.51.3...v0.51.4) (2026-08-11)
+
+
+### Bug Fixes
+
+* **questionnaires:** rewrite a wrong question for real, at source (08 §32) ([#404](https://github.com/Highfivery/SelfOS/issues/404)) ([34d7e07](https://github.com/Highfivery/SelfOS/commit/34d7e0709b97b072bab023343707ba765b9f3f7c))
+
 ## [0.51.3](https://github.com/Highfivery/SelfOS/compare/v0.51.2...v0.51.3) (2026-08-11)
 
 

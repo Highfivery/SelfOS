@@ -200,6 +200,23 @@ describe('resolveFactCorrection', () => {
     expect(res.question?.options).toContain('Neither, it varies');
   });
 
+  it('an UNSURE classification never counts as disputing a record (§32.9)', async () => {
+    // The reported failure: someone said "the answers don't make sense", the live model classified it as a
+    // wrong FACT anyway, and source-tracing kicked in. An omitted or unrecognised classification must fall
+    // to "other" — only an affirmative wrongFact may resolve to a record.
+    const noProblem = JSON.stringify({
+      matchedIndex: 2,
+      question: { id: 'q1', type: 'shortText', prompt: 'Reworded?', required: false },
+    });
+    const res = await resolveFactCorrection(deps(memFileSystem(), fakeClient(noProblem)), {
+      question: choiceQ,
+      correction: 'these answers make no sense',
+      knownFacts: facts,
+    });
+    expect(res.problem).toBe('other');
+    expect(res.matched).toBeUndefined();
+  });
+
   it('proposes a corrected value only for a matched PROFILE field', async () => {
     const q = { id: 'q1', type: 'shortText', prompt: 'p', required: false };
     const withValue = JSON.stringify({

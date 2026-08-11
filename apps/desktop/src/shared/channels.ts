@@ -608,7 +608,6 @@ export const IpcChannels = {
   assignmentsDecline: 'assignments:decline',
   assignmentsDismiss: 'assignments:dismiss',
   assignmentsCorrectFact: 'assignments:correctFact',
-  assignmentsCorrectFactChoose: 'assignments:correctFactChoose',
   assignmentsApplyProfileFix: 'assignments:applyProfileFix',
   assignmentsResults: 'assignments:results',
   assignmentsTrends: 'assignments:trends',
@@ -1976,15 +1975,6 @@ export interface SelfosBridge {
     assignmentId: string;
     questionId: string;
     correction: string;
-  }): Promise<FactCorrectionOutcome>;
-  /**
-   * Point at the on-record record that's wrong, when the classifier couldn't match one (08 §32.4). No AI and
-   * no spend — a chosen insight fact is flagged inaccurate; a profile/onboarding pick is routed back to the
-   * panel. Recipient-only, and only ever the recipient's own data.
-   */
-  assignmentsCorrectFactChoose(input: {
-    assignmentId: string;
-    candidateId: string;
   }): Promise<FactCorrectionOutcome>;
   /**
    * Apply a proposed correction to the recipient's OWN profile field (08 §32.4) — the inline confirm, never a

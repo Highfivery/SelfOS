@@ -4187,3 +4187,27 @@ exclusive for a single-answer type, and must **cover the honest range** — if s
 both / neither / it depends / it varies, that has to be an option. A two-option forced choice is reserved for a
 genuine either/or; anything nuanced needs the middle and outside answers, or the question should be asked as
 free text instead. Asserted as reaching the model, since prompt guidance that isn't asserted silently rots.
+
+## 32.9 The record picker is removed (2026-08-11)
+
+> **Status: BUILT** (`fix/questionnaire-remove-record-picker`). Member-reported a third time, on the §32.7
+> build: saying _"the answers didn't make any sense"_ still produced _"I'm not sure which record this came
+> from. Which one is wrong?"_ over a wall of their own Memory facts.
+
+Two things were wrong, one mechanical and one of substance.
+
+**Mechanical.** §32.7 gated the picker on the model classifying the objection as `answersDontFit`. Classification
+is the model's judgment, and here it returned `wrongFact` — so the picker appeared anyway. Worse, the tolerant
+parse **defaulted to `wrongFact`** when the field was missing or unrecognised, biasing every uncertain reply
+toward source-hunting. The default is now `other`: only an **affirmative** `wrongFact` may resolve to a record.
+
+**Substance — the picker is gone.** Re-gating it a second time would have been another patch. It asked the
+person to audit their own records to do the system's job, at the moment they were trying to answer a question,
+and it was long enough to fill the panel. The rule now: **we mention a source only when we confidently
+identified one.** No confident match ⇒ we rewrite the question, say nothing about sources, and let them answer.
+Nothing is flagged on a guess.
+
+Removed end-to-end: `FactCorrectionCandidate`, `FactCorrectionOutcome.candidates`, the
+`assignments:correctFactChoose` channel + handler + preload + mock, `MAX_CORRECTION_CANDIDATES`/`toCandidate`/
+`candidateId`, and the picker UI + styles. A confidently-matched record is still quoted in place and still
+auto-flagged (§32.3), which is the part that ever worked.

@@ -1859,21 +1859,13 @@ export const CORRECTABLE_PROFILE_FIELDS = [
 ] as const;
 export type CorrectableProfileField = (typeof CORRECTABLE_PROFILE_FIELDS)[number];
 
-/** One on-record candidate the recipient can point at when the classifier couldn't match (08 §32.4). */
-export interface FactCorrectionCandidate {
-  /** Opaque id for this candidate within the outcome — what `assignmentsCorrectFactChoose` takes back. */
-  id: string;
-  source: 'profile' | 'onboarding' | 'insight';
-  /** Where it lives, in the recipient's words (e.g. "your Memory", "your birthday"). */
-  label: string;
-  /** The record's actual text, so the recipient recognises it instead of guessing a section. */
-  text: string;
-}
-
 /**
- * Result of a recipient correcting a WRONG fact in a question (spec 08 §29, extended by §32): the reworded
- * question labels (applied to their local view), a QUOTE of the record it came from, and — when the
- * classifier couldn't match one — the candidates to pick from.
+ * Result of a recipient correcting a question they say is wrong (spec 08 §29, rewritten by §32): the
+ * CORRECTED question, plus a quote of the record it came from when one was confidently identified.
+ *
+ * When no record is identified we say nothing about sources. An earlier build offered a list of the person's
+ * own Memory facts to pick from; it asked them to audit their own records to do the system's job, at the
+ * moment they were trying to answer a question, and was removed (§32.9).
  */
 export interface FactCorrectionOutcome {
   ok: boolean;
@@ -1892,8 +1884,6 @@ export interface FactCorrectionOutcome {
   sourceText?: string;
   /** True when a wrong AI insight fact was auto-flagged inaccurate (so it won't feed future questions). */
   insightFlagged?: boolean;
-  /** Present only for `unknown` — the on-record list the recipient picks the wrong record from. */
-  candidates?: FactCorrectionCandidate[];
   /** Present for a matched PROFILE field — an inline, tap-to-apply correction (§32.4). Never auto-applied. */
   profileFix?: {
     field: CorrectableProfileField;

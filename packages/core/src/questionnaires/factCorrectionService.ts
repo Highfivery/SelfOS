@@ -61,7 +61,9 @@ export interface FactCorrectionResult {
 
 const CorrectionSchema = z.object({
   // What the recipient is actually objecting to — only a `wrongFact` disputes an on-record claim (§32.7).
-  problem: z.enum(['wrongFact', 'answersDontFit', 'other']).catch('wrongFact'),
+  // Defaults to 'other': an unsure or missing classification must NOT be read as "they disputed a fact on
+  // file", because that is what drives source-tracing. Only an affirmative wrongFact does.
+  problem: z.enum(['wrongFact', 'answersDontFit', 'other']).catch('other'),
   // The 1-based index of the matched fact in the numbered list, or 0 for "none clearly matches".
   matchedIndex: z.number().int().catch(0),
   // The corrected question, parsed loosely here and validated properly by `sanitizeCorrectedQuestion`
@@ -121,7 +123,7 @@ export async function resolveFactCorrection(
   }
   // Only a wrong-FACT objection disputes a record. For "the answers don't fit" there is nothing on file to
   // trace, so a matched index is meaningless — ignore it rather than quoting an unrelated record at them.
-  const problem = parsed?.problem ?? 'wrongFact';
+  const problem = parsed?.problem ?? 'other';
   const idx = (parsed?.matchedIndex ?? 0) - 1;
   const matched =
     problem === 'wrongFact' && idx >= 0 && idx < facts.length ? facts[idx] : undefined;

@@ -2628,7 +2628,7 @@ describe('createCoreBridge', () => {
     ).toMatchObject({ ok: false, reason: 'NO_PERMISSION' });
   });
 
-  it('§32.4: no confident match → candidates to pick from; a pick flags it; a profile fix is allowlisted', async () => {
+  it('§32.9: no confident match → say nothing about sources; a profile fix stays allowlisted', async () => {
     const { bridge, host, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
     const ctx = (await host.host.vaultAndKey())!;
@@ -2683,20 +2683,15 @@ describe('createCoreBridge', () => {
       questionId: 'q1',
       correction: 'that is wrong somehow',
     });
+    // No record was confidently identified, so we say NOTHING about sources — an earlier build offered the
+    // person's own Memory facts to pick from, which asked them to audit their records to do the system's job
+    // while they were trying to answer a question (§32.9).
     expect(res.source).toBe('unknown');
-    // The records we actually checked come back with their real text, so the recipient points at one
-    // instead of guessing a section (§32.4).
-    const memory = res.candidates?.find((c) => c.source === 'insight');
-    expect(memory?.text).toBe('Turned 39 last May');
-
-    // Picking it flags that fact inaccurate — no AI, no spend.
-    const chose = await bridge.assignmentsCorrectFactChoose({
-      assignmentId: assignment.id,
-      candidateId: memory!.id,
-    });
-    expect(chose).toMatchObject({ ok: true, source: 'insight', insightFlagged: true });
+    expect(res).not.toHaveProperty('candidates');
+    expect(res.sourceText).toBeUndefined();
+    // And nothing was flagged on a guess.
     const insights = await listInsightsForPerson(ctx.fs, ctx.key, ownerId);
-    expect(insights[0]?.facts[0]?.flaggedInaccurate).toBe(true);
+    expect(insights[0]?.facts[0]?.flaggedInaccurate).toBeFalsy();
 
     // A profile fix writes ONLY the allowlisted field, on the ACTIVE person.
     expect(
@@ -2723,12 +2718,6 @@ describe('createCoreBridge', () => {
     const other = await bridge.peopleSave({ displayName: 'Sam', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: other.id, roleId: 'member', pin: null });
     await bridge.sessionSetActive({ personId: other.id });
-    expect(
-      await bridge.assignmentsCorrectFactChoose({
-        assignmentId: assignment.id,
-        candidateId: memory!.id,
-      }),
-    ).toMatchObject({ ok: false, reason: 'NO_PERMISSION' });
     expect(
       await bridge.assignmentsApplyProfileFix({
         assignmentId: assignment.id,

@@ -50,6 +50,12 @@ export function RelaySettingsPanel(): JSX.Element {
           External recipients answer through this household relay. It stores only encrypted data and
           can’t read questions or answers.
         </Text>
+        {status.updateAvailable ? (
+          <Banner tone="warning">
+            This relay is running an older version. Newer features — one-click replies in your
+            emails — won’t work until you update it. Updating reuses the same endpoint and storage.
+          </Banner>
+        ) : null}
         {error ? <Banner tone="warning">{error}</Banner> : null}
         <div className={styles.actions}>
           {status.updateAvailable ? (

@@ -131,7 +131,6 @@ import {
   type QuestionnaireGenerateResult,
   type QuestionnaireImproveResult,
   CORRECTABLE_PROFILE_FIELDS,
-  type FactCorrectionCandidate,
   type FactCorrectionOutcome,
   type QuestionnaireSuggestResult,
   type SavedSuggestion,
@@ -1195,11 +1194,6 @@ const CorrectFactSchema = z.object({
   correction: z.string().min(1).max(1000),
 });
 
-/** Pick the record the recipient says is wrong, when the classifier couldn't (08 §32.4). */
-const CorrectFactChooseSchema = z.object({
-  assignmentId: z.string().min(1),
-  candidateId: z.string().min(1),
-});
 /**
  * Apply a proposed correction to the recipient's OWN profile field (08 §32.4).
  *
@@ -1226,28 +1220,6 @@ function isCalendarDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const d = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
-}
-
-/** How many of the recipient's most recent insight facts the candidate picker offers (08 §32.4). */
-const MAX_CORRECTION_CANDIDATES = 5;
-
-/**
- * A stable, self-describing id for one on-record fact, so the recipient can point at it in a later call
- * without the host holding any per-correction state — the list is simply re-derived and matched by id.
- */
-function candidateId(f: KnownFact): string {
-  if (f.source === 'insight') return `insight:${f.insightId ?? ''}:${f.factId ?? ''}`;
-  if (f.source === 'profile') return `profile:${f.field ?? ''}`;
-  return 'onboarding';
-}
-/** A candidate is scanned, not read — clip a long insight fact so the picker stays a list, not an essay. */
-const CANDIDATE_TEXT_MAX = 120;
-function toCandidate(f: KnownFact): FactCorrectionCandidate {
-  const text =
-    f.text.length > CANDIDATE_TEXT_MAX
-      ? `${f.text.slice(0, CANDIDATE_TEXT_MAX - 1).trimEnd()}…`
-      : f.text;
-  return { id: candidateId(f), source: f.source, label: f.label, text };
 }
 
 /**
@@ -4548,17 +4520,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(matched?.label ? { sourceLabel: matched.label } : {}),
         ...(matched?.text ? { sourceText: matched.text } : {}),
         insightFlagged,
-        // The picker exists ONLY to resolve "which record is wrong?" — so it appears only when they actually
-        // disputed a FACT and we couldn't match it. Someone saying "these answers don't fit" is not disputing
-        // anything on file, and asking them to pick a record is nonsense (§32.7).
-        ...(res.problem === 'wrongFact' && !matched
-          ? {
-              candidates: [
-                ...known.filter((f) => f.source !== 'insight'),
-                ...known.filter((f) => f.source === 'insight').slice(-MAX_CORRECTION_CANDIDATES),
-              ].map(toCandidate),
-            }
-          : {}),
         ...(matched?.source === 'profile' &&
         matched.field &&
         matched.currentValue &&
@@ -4572,35 +4533,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
               },
             }
           : {}),
-      };
-    },
-
-    // The recipient points at the record the classifier couldn't match (08 §32.4). No AI, no spend — the
-    // candidate list is simply re-derived and matched by id. Recipient-scoped, and their own data only.
-    assignmentsCorrectFactChoose: async (input): Promise<FactCorrectionOutcome> => {
-      const p = CorrectFactChooseSchema.parse(input);
-      const scoped = await recipientAssignment(p.assignmentId);
-      if (!scoped) return { ok: false, reason: 'NO_PERMISSION', message: 'Not permitted.' };
-      const { fs, key } = scoped;
-      const personId = await activePersonId();
-      if (!personId) return { ok: false, reason: 'NO_PERMISSION', message: 'Not permitted.' };
-      const now = new Date();
-
-      const known = await collectKnownFacts(fs, key, personId, now);
-      const chosen = known.find((f) => candidateId(f) === p.candidateId);
-      if (!chosen) return { ok: false, message: 'That record is no longer there.' };
-
-      let insightFlagged = false;
-      if (chosen.source === 'insight' && chosen.insightId && chosen.factId) {
-        await flagInsightFact(fs, key, personId, chosen.insightId, chosen.factId, true, now);
-        insightFlagged = true;
-      }
-      return {
-        ok: true,
-        source: chosen.source,
-        sourceLabel: chosen.label,
-        sourceText: chosen.text,
-        insightFlagged,
       };
     },
 

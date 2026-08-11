@@ -7,6 +7,7 @@ import { saveGoal } from '../goals/goalService';
 import { updateEmailConfig } from './emailConfig';
 import { setEmailPrefs } from './emailPrefs';
 import { listEmailActivity, sendFamilyEmail } from './emailSend';
+import { mintEmailToken } from './emailResponse';
 import { buildDigestEmail, buildReEngagementEmail, buildWelcomeEmail } from './emailComposer';
 import {
   gatherDigestContent,
@@ -177,6 +178,33 @@ describe('reconcileEmailSchedule (67 §3.4 / Phase 3)', () => {
     const digest = log.find((e) => e.family === 'digest');
     expect(digest?.status).toBe('scheduled');
     expect(digest?.scheduledAt).toBeDefined();
+  });
+
+  it('keeps reconciling when the relay tap-drain fails (a stale relay 404s /api/admin/drainTaps)', async () => {
+    const fs = await configured();
+    await seedSynthesis(fs, 'A steady week of showing up.');
+    const prefs = await setEmailPrefs(fs, key, PERSON, {}, false, new Date());
+    // A pending token, so the drain is actually attempted (an empty token store short-circuits).
+    await mintEmailToken(fs, key, PERSON, {
+      token: 'T-pending',
+      schemaVersion: 1,
+      interactionId: 'ix-1',
+      family: 're-engagement',
+      kind: 'reaction',
+      answer: 'im-here',
+      mintedAt: new Date('2026-08-05T11:00:00.000Z').toISOString(),
+    });
+    const fake = schedulingFake();
+    const relay = {
+      drainTaps: () =>
+        Promise.reject(new Error('Relay request failed (404) for /api/admin/drainTaps')),
+    };
+    const res = await reconcileEmailSchedule(
+      baseReconcile(fs, { email: fake.client, prefs, relay }),
+    );
+    // The rest of the cadence still ran — the digest was scheduled despite the drain failure.
+    expect(res.ok).toBe(true);
+    expect(fake.sent.some((s) => s.scheduledAt && /week/i.test(s.subject))).toBe(true);
   });
 
   it('does NOT schedule the digest under crisis, and cancels an already-scheduled one', async () => {

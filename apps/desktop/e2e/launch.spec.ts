@@ -6098,11 +6098,13 @@ test('inbox: “the answers don’t fit” REPLACES the answers, and never asks 
       .fill('the answers dont match the question');
     await w.getByRole('button', { name: 'Fix it' }).click();
 
-    // NO record picker — they weren't disputing anything on file (the reported nonsense).
+    // NOTHING about sources — no picker, and no wall of their own Memory facts to audit (§32.9).
     await expect(w.getByText(/Rewrote this question/)).toBeVisible();
     await expect(w.getByText(/which one is wrong/i)).toHaveCount(0);
     await expect(w.getByText(/your onboarding answers/)).toHaveCount(0);
     await expect(w.getByText(/caring for others/)).toHaveCount(0);
+    await expect(w.getByText(/Where it came from/)).toHaveCount(0);
+    await w.screenshot({ path: '/tmp/no-picker.png' });
     await expectNoInnerOverflow(w);
 
     // The ANSWERS are actually replaced — including an honest "neither" that wasn't there before.

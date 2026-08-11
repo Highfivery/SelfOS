@@ -591,9 +591,19 @@ export async function reconcileEmailSchedule(deps: {
   // A drained embedded check-in answer (Phase 5) is then submitted + analyzed like an in-app answer.
   let prefs = deps.prefs;
   if (deps.relay) {
-    const drained = await drainEmailTaps(fs, key, personId, deps.relay, now);
-    if (drained.length > 0) prefs = await readEmailPrefs(fs, key, personId);
-    if (aiDeps) await applyEmailCheckinAnswers(aiDeps, personId);
+    // The drain reaches the household's deployed Worker, so it can fail for reasons that have nothing to
+    // do with the rest of the cadence — a relay that is offline, or (the common one) deployed at an older
+    // RELAY_VERSION whose routes predate `/api/admin/drainTaps` (404). That must NOT abort the whole
+    // reconcile: delivery-status polling, the digest, the re-engagement nudge and the reminder cancels are
+    // all independent of taps. Taps are never lost — they stay in the relay's KV until a later run drains
+    // them. The user-facing signal is Settings → Relay, which flags a stale relay + offers "Update relay".
+    try {
+      const drained = await drainEmailTaps(fs, key, personId, deps.relay, now);
+      if (drained.length > 0) prefs = await readEmailPrefs(fs, key, personId);
+      if (aiDeps) await applyEmailCheckinAnswers(aiDeps, personId);
+    } catch {
+      // fall through — the rest of the cadence still runs
+    }
   }
 
   const scoped = { fs, key, email, resendKey, personId };

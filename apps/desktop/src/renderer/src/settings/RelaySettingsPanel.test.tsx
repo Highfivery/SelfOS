@@ -53,5 +53,24 @@ describe('RelaySettingsPanel', () => {
     render(<RelaySettingsPanel />);
     expect(screen.getByText(/relay connected at/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /remove relay/i })).toBeInTheDocument();
+    // Up to date → no stale-version warning.
+    expect(screen.queryByText(/older version/i)).not.toBeInTheDocument();
+  });
+
+  it('explains what a stale relay breaks and offers the update', () => {
+    installMockBridge();
+    useRelayStore.setState({
+      status: {
+        configured: true,
+        endpointUrl: 'https://selfos-relay.acme.workers.dev',
+        relayVersion: '2',
+        updateAvailable: true,
+      },
+      loaded: true,
+    });
+    render(<RelaySettingsPanel />);
+    expect(screen.getByText(/older version/i)).toBeInTheDocument();
+    expect(screen.getByText(/one-click replies/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /update relay/i })).toBeInTheDocument();
   });
 });

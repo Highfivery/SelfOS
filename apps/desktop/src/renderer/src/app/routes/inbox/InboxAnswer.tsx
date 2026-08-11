@@ -158,33 +158,6 @@ export function InboxAnswer({
     }
   };
 
-  /** The recipient points at the record that's wrong, when the classifier couldn't tell (§32.4). */
-  const chooseCandidate = async (candidateId: string): Promise<void> => {
-    setFixBusy(true);
-    try {
-      const res = await window.selfos?.assignmentsCorrectFactChoose({ assignmentId, candidateId });
-      if (res?.ok) {
-        setFixDone(
-          res.insightFlagged
-            ? 'Marked inaccurate — it won’t shape questions again.'
-            : `You can update ${res.sourceLabel ?? 'that'} when you’re done here.`,
-        );
-        // Keep the rewrite, drop the picker — the source question is answered now.
-        setCorrectionOutcome((o) =>
-          o ? { ...o, candidates: [], ...(res.source ? { source: res.source } : {}) } : o,
-        );
-      } else {
-        setFixDone(res?.message ?? 'Couldn’t record that.');
-      }
-      setFixSettled(true);
-    } catch {
-      setFixDone('Couldn’t record that — nothing was changed.');
-      setFixSettled(true);
-    } finally {
-      setFixBusy(false);
-    }
-  };
-
   // The inline wrong-fact panel body the wizard renders below the greyed question (§30/§32): the input, OR
   // the resolved outcome — what changed, quoted where it came from, fixed in place. `close` dismisses the
   // panel + un-greys the question. Nothing here navigates away, so the in-progress questionnaire survives.
@@ -254,32 +227,6 @@ export function InboxAnswer({
                     Leave it
                   </Button>
                 </div>
-              </div>
-            ) : null}
-
-            {/* Couldn't tell → show the records we actually checked, instead of three blind buttons. */}
-            {o.candidates && o.candidates.length > 0 && !fixSettled ? (
-              <div className={styles.sourceQuote}>
-                <Text size="sm" tone="secondary">
-                  I’m not sure which record this came from. Which one is wrong?
-                </Text>
-                <Stack gap={1}>
-                  {o.candidates.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      className={styles.candidateRow}
-                      disabled={fixBusy}
-                      onClick={() => void chooseCandidate(c.id)}
-                    >
-                      <span className={styles.candidateLabel}>{c.label}</span>
-                      <span>{c.text}</span>
-                    </button>
-                  ))}
-                  <Button variant="ghost" disabled={fixBusy} onClick={() => setFixSettled(true)}>
-                    None of these
-                  </Button>
-                </Stack>
               </div>
             ) : null}
 

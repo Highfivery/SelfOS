@@ -740,7 +740,6 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         },
         source: 'unknown' as const,
       }),
-    assignmentsCorrectFactChoose: () => Promise.resolve({ ok: true, source: 'insight' as const }),
     assignmentsApplyProfileFix: () => Promise.resolve({ ok: true }),
     assignmentsResults: () => Promise.resolve([]),
     assignmentsTrends: () => Promise.resolve([]),

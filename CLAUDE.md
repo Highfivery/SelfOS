@@ -438,6 +438,27 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-11 — **Fix (questionnaire correction: the "which record is wrong?" picker is REMOVED; member-reported
+  a third time; SPEC 08 §32.9; on `fix/questionnaire-remove-record-picker`).** On the §32.7 build, saying "the
+  answers didn't make any sense" STILL produced "I'm not sure which record this came from. Which one is wrong?"
+  over a wall of the member's own Memory facts. Two causes: (1) **mechanical** — §32.7 gated the picker on the
+  MODEL classifying the objection as `answersDontFit`, but classification is the model's judgment and it
+  returned `wrongFact`; worse, the tolerant parse **defaulted to `wrongFact`** on a missing/unrecognised field,
+  biasing every uncertain reply toward source-hunting (now defaults to `other` — only an affirmative
+  `wrongFact` may resolve to a record). (2) **substance** — re-gating it again would have been another patch.
+  The picker asked the person to audit their own records to do the system's job, at the moment they were trying
+  to answer a question, and filled the panel. **Removed end-to-end** (`FactCorrectionCandidate`, the
+  `candidates` field, the `assignments:correctFactChoose` channel/handler/preload/mock, the cap + id helpers,
+  the UI + CSS). New rule: **a source is mentioned only when one was confidently identified** — otherwise
+  rewrite the question, say nothing about sources, flag nothing on a guess. A matched record is still quoted +
+  auto-flagged, which is the part that worked. Gate green: typecheck (4 pkgs), lint, format, **1977 core + 1559
+  desktop** unit (+a core test pinning the unsafe default; the bridge test now asserts NO candidates + nothing
+  flagged on a guess), 34 questionnaire/inbox/auto-checkin/relay E2E, real-Electron visual QA (the panel is now
+  what-changed + one button). **Lesson: when a surface has to be re-gated twice, the gate isn't the problem —
+  the surface is. And a tolerant-parse `.catch()` default is a silent policy decision: defaulting an unsure
+  classification to the branch that triggers side effects (source-tracing, flagging) is how "best-effort" turns
+  into "confidently wrong" — default to the inert branch.**
+
 - 2026-08-11 — **Fix (questionnaire GENERATION: the options must answer the prompt; member-reported; SPEC 08
   §32.8; on `fix/questionnaire-generation-options-quality`).** The follow-on to §32 — correcting a bad question
   makes it fixable, it doesn't stop it being generated. **Reproduced two real defects before fixing** (a probe

@@ -322,10 +322,11 @@ describe('Inbox', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Fix it' }));
 
-    // No record picker — they weren't disputing anything on file.
+    // Nothing about sources at all: no picker, and no asking them to audit their own records (§32.9).
     expect(await screen.findByText(/Rewrote this question/)).toBeInTheDocument();
     expect(screen.queryByText(/which one is wrong/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/your onboarding answers/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Where it came from/)).not.toBeInTheDocument();
 
     // The answers are genuinely replaced, including an honest "neither".
     await userEvent.click(screen.getByRole('button', { name: 'Answer the rewritten question' }));

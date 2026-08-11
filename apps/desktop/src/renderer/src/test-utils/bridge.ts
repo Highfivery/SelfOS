@@ -730,7 +730,9 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     assignmentsDecline: () => Promise.resolve(),
     assignmentsDismiss: () => Promise.resolve(),
     assignmentsCorrectFact: () =>
-      Promise.resolve({ ok: true, rewrittenPrompt: 'Corrected question?', source: 'unknown' }),
+      Promise.resolve({ ok: true, rewrite: { prompt: 'Corrected question?' }, source: 'unknown' }),
+    assignmentsCorrectFactChoose: () => Promise.resolve({ ok: true, source: 'insight' as const }),
+    assignmentsApplyProfileFix: () => Promise.resolve({ ok: true }),
     assignmentsResults: () => Promise.resolve([]),
     assignmentsTrends: () => Promise.resolve([]),
     assignmentsAggregate: () => Promise.resolve({ questions: [] }),

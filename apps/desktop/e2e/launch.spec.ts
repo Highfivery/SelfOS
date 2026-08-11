@@ -5899,7 +5899,7 @@ test('answer review/edit (56): recipient reviews + edits + resends → Results g
   }
 });
 
-test('inbox: “That’s not right about me” flags the wrong insight + rewords the question in place (wrong-fact amendment)', async () => {
+test('inbox: “That’s not right about me” rewords the question AND its answers, quoting the source (08 §32)', async () => {
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
   const fs = createNodeFileSystem(vault);
@@ -5931,12 +5931,18 @@ test('inbox: “That’s not right about me” flags the wrong insight + rewords
       sensitivity: 'standard',
       recipient: { kind: 'person', personId: 'owner-1' },
       questions: [
-        { id: 'qq1', type: 'shortText', prompt: 'How did turning 39 feel?', required: false },
+        {
+          id: 'qq1',
+          type: 'singleChoice',
+          prompt: 'How did turning 39 feel?',
+          required: false,
+          options: ['Good at 39', 'Hard at 39', 'Same as 35'],
+        },
       ],
     },
     'owner-1',
   );
-  await createAssignment(fs, key, {
+  const assignment = await createAssignment(fs, key, {
     questionnaireId: q.id,
     senderPersonId: 'owner-1',
     recipient: { kind: 'person', personId: 'owner-1' },
@@ -5953,15 +5959,32 @@ test('inbox: “That’s not right about me” flags the wrong insight + rewords
     await expect(w.getByText('How did turning 39 feel?')).toBeVisible();
 
     // Flag the wrong fact → the correction shows INLINE (below), greying/disabling the question — not a
-    // banner that pops above the questions and scrolls the page (spec 08 wrong-fact UX fix).
+    // banner that pops above the questions and scrolls the page (spec 08 §30).
     await w.getByRole('button', { name: /That’s not right about me/ }).click();
-    await expect(w.getByLabel('How did turning 39 feel?')).toBeDisabled();
-    await w.getByLabel(/what’s wrong about this question/i).fill('I turned 41 last May, not 39.');
+    await w
+      .getByLabel(/what’s wrong about this question/i)
+      .fill('I turned 41 last May, not 39 — and none of these answers fit.');
     await w.getByRole('button', { name: 'Fix it' }).click();
 
-    // The question is reworded in place, and the outcome confirms the wrong insight was flagged.
+    // §32.3 — the prompt is reworded…
     await expect(w.getByText('How did turning 41 feel?')).toBeVisible();
-    await expect(w.getByText(/flagged that in your Memory/i)).toBeVisible();
+    // §32.4 — …and the source is QUOTED where they are, already fixed, with no navigation away.
+    await expect(w.getByText(/Where it came from · your Memory/)).toBeVisible();
+    await expect(w.getByText(/They turned 39 last May/)).toBeVisible();
+    await expect(w.getByText(/Marked inaccurate/i)).toBeVisible();
+    // The old blind "go hunting" row is gone.
+    await expect(w.getByRole('button', { name: 'Onboarding' })).toHaveCount(0);
+
+    // §12 — a quoted fact + a struck-through diff are long, unbroken strings; neither may push a scrollbar.
+    await w.setViewportSize({ width: 390, height: 900 });
+    await expectNoInnerOverflow(w);
+    await w.setViewportSize({ width: 1280, height: 900 });
+
+    await w.getByRole('button', { name: 'Answer the reworded question' }).click();
+
+    // §32.3 — the ANSWERS are reworded too (the reported defect: they used to keep the wrong fact).
+    await expect(w.getByRole('radio', { name: 'Reworded answer 1' })).toBeVisible();
+    await expect(w.getByRole('radio', { name: 'Good at 39' })).toHaveCount(0);
 
     // Decrypt: the wrong insight fact is now flagged inaccurate → it stops feeding future questions/context.
     await expect
@@ -5970,6 +5993,18 @@ test('inbox: “That’s not right about me” flags the wrong insight + rewords
         return insights[0]?.facts[0]?.flaggedInaccurate;
       })
       .toBe(true);
+
+    // The integrity guarantee (§32.3): answering the REWORDED option stores the SENDER'S original string,
+    // so their Results stay countable and any branch rule keyed on it keeps matching.
+    await w.getByRole('radio', { name: 'Reworded answer 1' }).click();
+    await w.getByRole('button', { name: 'Review & send' }).click();
+    await w.getByRole('button', { name: 'Send answers' }).click();
+    await expect
+      .poll(async () => {
+        const set = await getResponse(fs, key, assignment.id);
+        return set?.answers?.[0]?.value;
+      })
+      .toBe('Good at 39');
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

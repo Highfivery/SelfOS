@@ -171,3 +171,27 @@
   align-items: center;
   gap: var(--space-2);
 }
+
+/* 08 §32.4 — the source of a wrong fact, QUOTED in place. A bordered card inside the outcome banner so the
+   record the recipient is being shown reads as a distinct thing they can recognise, not as more prose. */
+.sourceQuote {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  /* A quoted fact can be long and unbroken; never let it push an inner scrollbar (§12). */
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* 08 §32.3 — what the rewrite replaced, struck through: the prompt AND the answers. */
+.correctionDiff {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}

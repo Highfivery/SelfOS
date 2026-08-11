@@ -1847,18 +1847,79 @@ export interface QuestionnaireImproveResult {
   message?: string;
 }
 /**
- * Result of a recipient correcting a WRONG fact in a question (spec 08 wrong-fact amendment): the reworded
- * question (applied to their local view), where the wrong fact came from, and whether an insight was flagged.
- * `unknown` source → the renderer falls back to letting the recipient pick where to fix it.
+ * The VISIBLE text of a question, isolated from its structure (08 §32.3) — what a wrong-fact correction is
+ * allowed to reword. Applied for DISPLAY only, so option count/order, matrix row keys, branch triggers and
+ * the stored answer value are all untouched. See `@selfos/core/questionnaires` `questionLabels.ts`.
+ */
+export interface QuestionLabels {
+  prompt: string;
+  help?: string;
+  /** Option labels, positionally aligned with the question's own `options` — same length, always. */
+  options?: string[];
+  scaleLabels?: { min?: string; mid?: string; max?: string };
+  /** Matrix ROW labels (never the keys — a key is the answer's identity). */
+  matrixRows?: string[];
+  matrixPointLabels?: string[];
+}
+
+/** A model-proposed rewrite: the visible labels, plus an honest "these answers can't be saved" signal. */
+export interface QuestionRewrite extends QuestionLabels {
+  /** The option set is structurally wrong, not just badly worded — the panel offers the skip exit (§32.3). */
+  answersStillWrong?: boolean;
+}
+
+/**
+ * The profile fields a wrong-fact correction may propose a fix for (08 §32.4) — exactly the set the
+ * correction flow reads to build its candidate facts, so the inline fix can never write anything else.
+ */
+export const CORRECTABLE_PROFILE_FIELDS = [
+  'birthday',
+  'occupation',
+  'relationshipStatus',
+  'parentalStatus',
+  'location',
+] as const;
+export type CorrectableProfileField = (typeof CORRECTABLE_PROFILE_FIELDS)[number];
+
+/** One on-record candidate the recipient can point at when the classifier couldn't match (08 §32.4). */
+export interface FactCorrectionCandidate {
+  /** Opaque id for this candidate within the outcome — what `assignmentsCorrectFactChoose` takes back. */
+  id: string;
+  source: 'profile' | 'onboarding' | 'insight';
+  /** Where it lives, in the recipient's words (e.g. "your Memory", "your birthday"). */
+  label: string;
+  /** The record's actual text, so the recipient recognises it instead of guessing a section. */
+  text: string;
+}
+
+/**
+ * Result of a recipient correcting a WRONG fact in a question (spec 08 §29, extended by §32): the reworded
+ * question labels (applied to their local view), a QUOTE of the record it came from, and — when the
+ * classifier couldn't match one — the candidates to pick from.
  */
 export interface FactCorrectionOutcome {
   ok: boolean;
-  rewrittenPrompt?: string;
+  /**
+   * The question's reworded VISIBLE labels — prompt, help, option labels, scale anchors, matrix rows. Applied
+   * for display only; the underlying question (and so the stored answer value) is never changed (§32.3).
+   */
+  rewrite?: QuestionRewrite;
   source?: 'profile' | 'onboarding' | 'insight' | 'unknown';
   /** A short human label of where the fact lives, when matched (e.g. "your Memory", "your birthday"). */
   sourceLabel?: string;
+  /** The matched record's actual text, quoted in place so the recipient sees WHAT was wrong (§32.4). */
+  sourceText?: string;
   /** True when a wrong AI insight fact was auto-flagged inaccurate (so it won't feed future questions). */
   insightFlagged?: boolean;
+  /** Present only for `unknown` — the on-record list the recipient picks the wrong record from. */
+  candidates?: FactCorrectionCandidate[];
+  /** Present for a matched PROFILE field — an inline, tap-to-apply correction (§32.4). Never auto-applied. */
+  profileFix?: {
+    field: CorrectableProfileField;
+    label: string;
+    currentValue: string;
+    proposedValue: string;
+  };
   reason?: AiFailureReason | 'NO_PERMISSION';
   message?: string;
 }

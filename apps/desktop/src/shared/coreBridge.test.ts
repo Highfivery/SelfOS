@@ -2554,7 +2554,13 @@ describe('createCoreBridge', () => {
       sensitivity: 'standard',
       recipient: { kind: 'person', personId: ownerId },
       questions: [
-        { id: 'q1', type: 'shortText', prompt: 'How did turning 39 feel?', required: false },
+        {
+          id: 'q1',
+          type: 'singleChoice',
+          prompt: 'How did turning 39 feel?',
+          required: false,
+          options: ['Good at 39', 'Hard at 39', 'Same as 35'],
+        },
       ],
     });
     const { assignment } = await bridge.assignmentsCreate({ questionnaireId: q.id });
@@ -2565,7 +2571,8 @@ describe('createCoreBridge', () => {
       stream: (_o, onDelta) => {
         const text = JSON.stringify({
           matchedIndex: 1,
-          rewrittenPrompt: 'How did turning 41 feel?',
+          prompt: 'How did turning 41 feel?',
+          options: ['Good', 'Hard', 'Same as before'],
         });
         onDelta(text);
         return Promise.resolve({
@@ -2578,15 +2585,19 @@ describe('createCoreBridge', () => {
     const res = await bridge.assignmentsCorrectFact({
       assignmentId: assignment.id,
       questionId: 'q1',
-      questionPrompt: 'How did turning 39 feel?',
       correction: 'I turned 41, not 39.',
     });
     expect(res).toMatchObject({
       ok: true,
-      rewrittenPrompt: 'How did turning 41 feel?',
       source: 'insight',
       insightFlagged: true,
+      // §32.4 — the record is QUOTED back, not reduced to a section name.
+      sourceText: 'They turned 39 last May',
+      sourceLabel: 'your Memory',
     });
+    // §32.3 — the ANSWERS are reworded too, not just the prompt.
+    expect(res.rewrite?.prompt).toBe('How did turning 41 feel?');
+    expect(res.rewrite?.options).toEqual(['Good', 'Hard', 'Same as before']);
     // The wrong insight fact is now flagged inaccurate → it stops feeding future questions/context.
     const insights = await listInsightsForPerson(ctx.fs, ctx.key, ownerId);
     expect(insights[0]?.facts[0]?.flaggedInaccurate).toBe(true);
@@ -2599,10 +2610,113 @@ describe('createCoreBridge', () => {
       await bridge.assignmentsCorrectFact({
         assignmentId: assignment.id,
         questionId: 'q1',
-        questionPrompt: 'How did turning 39 feel?',
         correction: 'nope',
       }),
     ).toMatchObject({ ok: false, reason: 'NO_PERMISSION' });
+  });
+
+  it('§32.4: no confident match → candidates to pick from; a pick flags it; a profile fix is allowlisted', async () => {
+    const { bridge, host, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    const ctx = (await host.host.vaultAndKey())!;
+    await saveInsight(ctx.fs, ctx.key, {
+      id: 'i9',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: ownerId,
+      summary: 'about them',
+      facts: [{ id: 'f9', text: 'Turned 39 last May', shareable: false }],
+      confidence: 'medium',
+      categories: [],
+      approved: true,
+      provenance: { at: new Date().toISOString() },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    const q = await bridge.questionnairesSave({
+      title: 'Check-in',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: ownerId },
+      questions: [
+        { id: 'q1', type: 'shortText', prompt: 'How did turning 39 feel?', required: false },
+      ],
+    });
+    const { assignment } = await bridge.assignmentsCreate({ questionnaireId: q.id });
+
+    // matchedIndex 0 → the classifier couldn't tell which record is wrong.
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (_o, onDelta) => {
+        const text = JSON.stringify({
+          matchedIndex: 0,
+          prompt: 'How did your last birthday feel?',
+        });
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 10, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const res = await bridge.assignmentsCorrectFact({
+      assignmentId: assignment.id,
+      questionId: 'q1',
+      correction: 'that is wrong somehow',
+    });
+    expect(res.source).toBe('unknown');
+    // The records we actually checked come back with their real text, so the recipient points at one
+    // instead of guessing a section (§32.4).
+    const memory = res.candidates?.find((c) => c.source === 'insight');
+    expect(memory?.text).toBe('Turned 39 last May');
+
+    // Picking it flags that fact inaccurate — no AI, no spend.
+    const chose = await bridge.assignmentsCorrectFactChoose({
+      assignmentId: assignment.id,
+      candidateId: memory!.id,
+    });
+    expect(chose).toMatchObject({ ok: true, source: 'insight', insightFlagged: true });
+    const insights = await listInsightsForPerson(ctx.fs, ctx.key, ownerId);
+    expect(insights[0]?.facts[0]?.flaggedInaccurate).toBe(true);
+
+    // A profile fix writes ONLY the allowlisted field, on the ACTIVE person.
+    expect(
+      await bridge.assignmentsApplyProfileFix({
+        assignmentId: assignment.id,
+        field: 'occupation',
+        value: 'nurse',
+      }),
+    ).toMatchObject({ ok: true });
+    expect((await bridge.peopleList()).find((x) => x.id === ownerId)?.occupation).toBe('nurse');
+    // Anything off the allowlist is rejected outright, before any write.
+    await expect(
+      bridge.assignmentsApplyProfileFix({
+        assignmentId: assignment.id,
+        field: 'displayName' as unknown as 'location',
+        value: 'Hacked',
+      }),
+    ).rejects.toThrow();
+    expect((await bridge.peopleList()).find((x) => x.id === ownerId)?.displayName).not.toBe(
+      'Hacked',
+    );
+
+    // Recipient-scoped: a different active person can neither pick nor apply.
+    const other = await bridge.peopleSave({ displayName: 'Sam', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: other.id, roleId: 'member', pin: null });
+    await bridge.sessionSetActive({ personId: other.id });
+    expect(
+      await bridge.assignmentsCorrectFactChoose({
+        assignmentId: assignment.id,
+        candidateId: memory!.id,
+      }),
+    ).toMatchObject({ ok: false, reason: 'NO_PERMISSION' });
+    expect(
+      await bridge.assignmentsApplyProfileFix({
+        assignmentId: assignment.id,
+        field: 'location',
+        value: 'Elsewhere',
+      }),
+    ).toMatchObject({ ok: false });
   });
 
   it('feeds the bound recipient’s history into generation but never returns it to the renderer (§17.4)', async () => {

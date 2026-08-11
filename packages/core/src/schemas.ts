@@ -1847,28 +1847,6 @@ export interface QuestionnaireImproveResult {
   message?: string;
 }
 /**
- * The VISIBLE text of a question, isolated from its structure (08 §32.3) — what a wrong-fact correction is
- * allowed to reword. Applied for DISPLAY only, so option count/order, matrix row keys, branch triggers and
- * the stored answer value are all untouched. See `@selfos/core/questionnaires` `questionLabels.ts`.
- */
-export interface QuestionLabels {
-  prompt: string;
-  help?: string;
-  /** Option labels, positionally aligned with the question's own `options` — same length, always. */
-  options?: string[];
-  scaleLabels?: { min?: string; mid?: string; max?: string };
-  /** Matrix ROW labels (never the keys — a key is the answer's identity). */
-  matrixRows?: string[];
-  matrixPointLabels?: string[];
-}
-
-/** A model-proposed rewrite: the visible labels, plus an honest "these answers can't be saved" signal. */
-export interface QuestionRewrite extends QuestionLabels {
-  /** The option set is structurally wrong, not just badly worded — the panel offers the skip exit (§32.3). */
-  answersStillWrong?: boolean;
-}
-
-/**
  * The profile fields a wrong-fact correction may propose a fix for (08 §32.4) — exactly the set the
  * correction flow reads to build its candidate facts, so the inline fix can never write anything else.
  */
@@ -1900,10 +1878,13 @@ export interface FactCorrectionCandidate {
 export interface FactCorrectionOutcome {
   ok: boolean;
   /**
-   * The question's reworded VISIBLE labels — prompt, help, option labels, scale anchors, matrix rows. Applied
-   * for display only; the underlying question (and so the stored answer value) is never changed (§32.3).
+   * The CORRECTED question — prompt, help, answer type, options and how many there are. It replaces the
+   * original in the send being answered, and the answer is stored against it (§32.3). There is no display
+   * shim: what they read is what's asked, and what they pick is what's recorded.
    */
-  rewrite?: QuestionRewrite;
+  question?: Question;
+  /** What they objected to — only `wrongFact` disputes something on file (§32.7). */
+  problem?: 'wrongFact' | 'answersDontFit' | 'other';
   source?: 'profile' | 'onboarding' | 'insight' | 'unknown';
   /** A short human label of where the fact lives, when matched (e.g. "your Memory", "your birthday"). */
   sourceLabel?: string;

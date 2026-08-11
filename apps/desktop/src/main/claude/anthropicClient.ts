@@ -336,20 +336,25 @@ export function fakeClaudeClient(): ClaudeClient {
       // match + the reworded LABELS. Deterministic — match the FIRST fact on record + reword to age 41, and
       // reword the OPTIONS too when the question has them, so the E2E exercises the full-question rewrite
       // (a prompt-only fake would hide the very defect §32 fixes).
-      if (
-        (options.system ?? '').includes(
-          'flagged that a detail this question states ABOUT THEM is wrong',
-        )
-      ) {
-        // The user message lists the question's options as a numbered block; count them so the rewrite is
-        // the SAME length (a different length is rejected by design).
-        const optionCount = Number(/Options \((\d+)\)/.exec(userText)?.[1] ?? '0');
-        const options39 = Array.from({ length: optionCount }, (_, i) => `Reworded answer ${i + 1}`);
+      if ((options.system ?? '').includes('FIRST, classify what they are objecting to')) {
+        // The question arrives as JSON; echo it back CORRECTED so the E2E exercises a real rewrite.
+        const asked = /The question they're answering:\n(\{[\s\S]*?\n\})\n\n/.exec(userText)?.[1];
+        const original = asked ? (JSON.parse(asked) as Record<string, unknown>) : { id: 'q1' };
+        const answersDontFit = /none of these|answers?\b[^\n]*(fit|match|sense)/i.test(userText);
         return Promise.resolve({
           text: JSON.stringify({
-            matchedIndex: 1,
-            prompt: 'How did turning 41 feel?',
-            ...(optionCount > 0 ? { options: options39 } : {}),
+            problem: answersDontFit ? 'answersDontFit' : 'wrongFact',
+            matchedIndex: answersDontFit ? 0 : 1,
+            question: {
+              ...original,
+              prompt: 'How did turning 41 feel?',
+              // A real rewrite: a DIFFERENT number of options, including an honest "neither".
+              ...(Array.isArray(original['options'])
+                ? {
+                    options: ['Rewritten answer one', 'Rewritten answer two', 'Neither, it varies'],
+                  }
+                : {}),
+            },
           }),
           usage: { inputTokens: 40, outputTokens: 20, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });

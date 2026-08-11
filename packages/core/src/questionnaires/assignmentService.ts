@@ -7,11 +7,13 @@ import {
   type AssignmentStatus,
   type Channel,
   type PrivacyMode,
+  type Question,
   type Questionnaire,
   type Recipient,
 } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { SENDS_DIR, assignmentPath, sendDir, snapshotPath } from './paths';
+import { replaceQuestion } from './questionCorrection';
 import { getQuestionnaire, validateQuestionnaire } from './questionnaireService';
 
 /**
@@ -83,6 +85,31 @@ export async function getAssignment(
 }
 
 /** Read the immutable questionnaire snapshot for an assignment (what the recipient answers). */
+/**
+ * Replace ONE question in a send's frozen snapshot (08 §32.3).
+ *
+ * A snapshot is otherwise immutable — that's what stops a later edit to the definition changing what someone
+ * was asked. A correction is the one sanctioned exception, and it is narrow by construction: the recipient is
+ * disputing THIS question in THEIR OWN send, and every send holds its own snapshot, so nobody else's copy or
+ * recorded answers are touched. Branch rules that named an option which no longer exists are repaired here
+ * too, or a follow-up question would silently vanish from the form.
+ */
+export async function correctSnapshotQuestion(
+  fs: FileSystem,
+  key: Uint8Array,
+  assignmentId: string,
+  corrected: Question,
+): Promise<Questionnaire | null> {
+  const snapshot = await getAssignmentSnapshot(fs, key, assignmentId);
+  if (!snapshot?.questions.some((q) => q.id === corrected.id)) return null;
+  const next: Questionnaire = {
+    ...snapshot,
+    questions: replaceQuestion(snapshot.questions, corrected),
+  };
+  await writeEncryptedJson(fs, snapshotPath(assignmentId), next, key);
+  return next;
+}
+
 export async function getAssignmentSnapshot(
   fs: FileSystem,
   key: Uint8Array,

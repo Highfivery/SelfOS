@@ -1,17 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Lock } from 'lucide-react';
 import {
   compatibilityDisclosure,
   externalSendDisclosure,
   formatAnswerForDisplay,
-  questionLabels,
-  rewriteTouchesAnswers,
-  UNCLEAR_SKIP_REASON,
   unansweredRequired,
   visibleAnswers,
   visibleQuestions,
 } from '@selfos/core/questionnaires';
-import type { CorrectableProfileField, QuestionLabels } from '@selfos/core/schemas';
+import type { CorrectableProfileField } from '@selfos/core/schemas';
 import type { AnswerMap, AnswerValue } from '@selfos/core/questionnaires';
 import type {
   Answer,
@@ -101,9 +98,9 @@ export function InboxAnswer({
   const [correctionText, setCorrectionText] = useState('');
   const [correctionBusy, setCorrectionBusy] = useState(false);
   const [correctionOutcome, setCorrectionOutcome] = useState<FactCorrectionOutcome | null>(null);
-  // The rewritten LABELS per question (08 §32.3) — prompt, help, option labels, scale anchors, matrix rows.
-  // Display only: the shared form maps every answer back to the sender's own option string before storing.
-  const [labelOverrides, setLabelOverrides] = useState<Record<string, QuestionLabels>>({});
+  // What the question looked like BEFORE a correction — kept only to show what changed. The corrected
+  // question itself is re-read from the send, whose snapshot the host has already rewritten (§32.3).
+  const [correctedFrom, setCorrectedFrom] = useState<Question | null>(null);
   // The inline profile fix + candidate pick (§32.4) resolve in place — nothing navigates away, so a
   // half-finished questionnaire survives correcting a fact.
   const [fixBusy, setFixBusy] = useState(false);
@@ -116,22 +113,17 @@ export function InboxAnswer({
     if (!wrongFactQ || !correctionText.trim()) return;
     setCorrectionBusy(true);
     try {
-      const applied = labelOverrides[wrongFactQ.id];
       const result = await window.selfos?.assignmentsCorrectFact({
         assignmentId,
         questionId: wrongFactQ.id,
         correction: correctionText.trim(),
-        // A second correction reasons about what they can actually SEE, not the original wording.
-        ...(applied ? { applied } : {}),
       });
-      if (result?.ok && result.rewrite) {
-        // Apply the reworded labels to the recipient's LOCAL view + show the outcome in place (the question
-        // stays greyed until they close the panel). The sender's stored question is never changed.
-        const rewrite = result.rewrite;
-        // MERGE over any earlier rewrite: `sanitizeRewrite` omits a list the model didn't re-touch, so
-        // replacing would silently revert a previous answer rewording and leave the prompt corrected but
-        // the answers wrong — the exact split-brain §32.1 exists to fix.
-        setLabelOverrides((m) => ({ ...m, [wrongFactQ.id]: { ...m[wrongFactQ.id], ...rewrite } }));
+      if (result?.ok && result.question) {
+        // The question has been corrected AT SOURCE — in this send, and in the questionnaire when it's
+        // theirs. Reload so the form renders the real corrected question and the answer is recorded against
+        // it; there is no local overlay to keep in sync.
+        setCorrectedFrom(wrongFactQ);
+        await reload();
         setCorrectionOutcome(result);
         setCorrectionText('');
         setFixDone(null);
@@ -205,11 +197,15 @@ export function InboxAnswer({
     };
     if (correctionOutcome?.ok) {
       const o = correctionOutcome;
-      // The ORIGINAL labels, so the recipient can see exactly what was wrong and what replaced it.
-      const before = wrongFactQ ? questionLabels(wrongFactQ) : null;
-      const rewrite = o.rewrite;
+      // What the question WAS, so they can see exactly what changed.
+      const before = correctedFrom;
+      const after = o.question;
       const fix = o.profileFix;
-      const answersChanged = rewrite ? rewriteTouchesAnswers(rewrite) : false;
+      const answersChanged =
+        before != null && after != null
+          ? JSON.stringify(before.options ?? []) !== JSON.stringify(after.options ?? []) ||
+            before.type !== after.type
+          : false;
       return (
         <Banner tone="info">
           <Stack gap={2}>
@@ -217,8 +213,8 @@ export function InboxAnswer({
               {o.insightFlagged || fixDone
                 ? 'Fixed it — here’s what changed.'
                 : answersChanged
-                  ? 'Reworded this question and its answers.'
-                  : 'Reworded this question so you can answer it.'}
+                  ? 'Rewrote this question and its answers.'
+                  : 'Rewrote this question so you can answer it.'}
             </Text>
 
             {/* Where it came from — QUOTED in place, not a menu of sections to go hunting through (§32.4). */}
@@ -269,14 +265,16 @@ export function InboxAnswer({
                 </Text>
                 <Stack gap={1}>
                   {o.candidates.map((c) => (
-                    <Button
+                    <button
                       key={c.id}
-                      variant="secondary"
+                      type="button"
+                      className={styles.candidateRow}
                       disabled={fixBusy}
                       onClick={() => void chooseCandidate(c.id)}
                     >
-                      {c.label} — {c.text}
-                    </Button>
+                      <span className={styles.candidateLabel}>{c.label}</span>
+                      <span>{c.text}</span>
+                    </button>
                   ))}
                   <Button variant="ghost" disabled={fixBusy} onClick={() => setFixSettled(true)}>
                     None of these
@@ -292,12 +290,14 @@ export function InboxAnswer({
             ) : null}
 
             {/* What actually changed — the old wording struck through, prompt AND answers. */}
-            {before && rewrite ? (
+            {before && after ? (
               <div className={styles.correctionDiff}>
-                <Text size="sm" tone="secondary">
-                  Was: <s>{before.prompt}</s>
-                </Text>
-                {rewrite.options && before.options ? (
+                {before.prompt !== after.prompt ? (
+                  <Text size="sm" tone="secondary">
+                    Was: <s>{before.prompt}</s>
+                  </Text>
+                ) : null}
+                {answersChanged && before.options ? (
                   <Text size="sm" tone="secondary">
                     Answers were: <s>{before.options.join(' · ')}</s>
                   </Text>
@@ -305,32 +305,10 @@ export function InboxAnswer({
               </div>
             ) : null}
 
-            {/* Rewording can't rescue an option set that's the wrong shape — say so, and offer the exit that
-                already flags the question to its sender as unclear (§25.2 / §32.3). */}
-            {rewrite?.answersStillWrong ? (
-              <Text size="sm">
-                These answers still don’t fit the question — skipping it tells whoever sent it.
-              </Text>
-            ) : null}
-
             <div className={styles.correctionActions}>
               <Button variant="primary" onClick={dismiss}>
-                Answer the reworded question
+                Answer the rewritten question
               </Button>
-              {rewrite?.answersStillWrong && wrongFactQ ? (
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    onChange(wrongFactQ.id, {
-                      declined: true,
-                      reason: UNCLEAR_SKIP_REASON,
-                    });
-                    dismiss();
-                  }}
-                >
-                  Still doesn’t fit — skip it
-                </Button>
-              ) : null}
             </div>
           </Stack>
         </Banner>
@@ -375,6 +353,16 @@ export function InboxAnswer({
       </Banner>
     );
   };
+
+  // Re-read the send after its snapshot changed (a correction rewrites the question at source), so the form
+  // renders the real corrected question rather than an overlay. Answers already given are preserved; the
+  // corrected question's own answer was cleared host-side, since it answered a question that's now gone.
+  const reload = useCallback(async (): Promise<void> => {
+    const loaded = await getDetail(assignmentId);
+    if (!loaded) return;
+    setDetail(loaded);
+    setAnswers(toAnswerMap(loaded.answers));
+  }, [assignmentId, getDetail]);
 
   useEffect(() => {
     let active = true;
@@ -645,7 +633,6 @@ export function InboxAnswer({
               wizard owns placement; `onOpen` resets our input/outcome, `renderPanel` supplies the body). */}
           <QuestionnaireForm
             questions={detail.questionnaire.questions}
-            labelOverrides={labelOverrides}
             answers={answers}
             loadImage={loadImage}
             onChange={onChange}

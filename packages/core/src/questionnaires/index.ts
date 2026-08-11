@@ -25,7 +25,7 @@ export * from './changeDetection';
 export * from './profileFeedback';
 export * from './generationService';
 export * from './factCorrectionService';
-export * from './questionLabels';
+export * from './questionCorrection';
 export * from './selfContained';
 export * from './gapFinderService';
 export * from './suggestionStore';

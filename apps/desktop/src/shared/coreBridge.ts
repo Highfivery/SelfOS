@@ -724,6 +724,9 @@ import {
   getAssignmentSnapshot,
   getQuestionnaire,
   getQuestionnaireImage,
+  correctSnapshotQuestion,
+  replaceQuestion,
+  saveResponse,
   getResponse,
   improveQuestion,
   sharpenQuestion,
@@ -1190,25 +1193,8 @@ const CorrectFactSchema = z.object({
   assignmentId: z.string().min(1),
   questionId: z.string().min(1),
   correction: z.string().min(1).max(1000),
-  // A rewrite already showing on the recipient's screen, so a SECOND correction reasons about what they can
-  // actually see. Display labels only — never a stored value (08 §32.3).
-  applied: z
-    .object({
-      prompt: z.string().min(1),
-      help: z.string().optional(),
-      options: z.array(z.string()).optional(),
-      scaleLabels: z
-        .object({
-          min: z.string().optional(),
-          mid: z.string().optional(),
-          max: z.string().optional(),
-        })
-        .optional(),
-      matrixRows: z.array(z.string()).optional(),
-      matrixPointLabels: z.array(z.string()).optional(),
-    })
-    .optional(),
 });
+
 /** Pick the record the recipient says is wrong, when the classifier couldn't (08 §32.4). */
 const CorrectFactChooseSchema = z.object({
   assignmentId: z.string().min(1),
@@ -1243,7 +1229,7 @@ function isCalendarDate(value: string): boolean {
 }
 
 /** How many of the recipient's most recent insight facts the candidate picker offers (08 §32.4). */
-const MAX_CORRECTION_CANDIDATES = 8;
+const MAX_CORRECTION_CANDIDATES = 5;
 
 /**
  * A stable, self-describing id for one on-record fact, so the recipient can point at it in a later call
@@ -1254,8 +1240,14 @@ function candidateId(f: KnownFact): string {
   if (f.source === 'profile') return `profile:${f.field ?? ''}`;
   return 'onboarding';
 }
+/** A candidate is scanned, not read — clip a long insight fact so the picker stays a list, not an essay. */
+const CANDIDATE_TEXT_MAX = 120;
 function toCandidate(f: KnownFact): FactCorrectionCandidate {
-  return { id: candidateId(f), source: f.source, label: f.label, text: f.text };
+  const text =
+    f.text.length > CANDIDATE_TEXT_MAX
+      ? `${f.text.slice(0, CANDIDATE_TEXT_MAX - 1).trimEnd()}…`
+      : f.text;
+  return { id: candidateId(f), source: f.source, label: f.label, text };
 }
 
 /**
@@ -4503,15 +4495,42 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         question,
         correction: p.correction,
         knownFacts: known,
-        ...(p.applied ? { applied: p.applied } : {}),
       });
-      if (!res.ok || !res.rewrite) {
+      if (!res.ok || !res.question) {
         return {
           ok: false,
           ...(res.reason ? { reason: res.reason } : {}),
           ...(res.message ? { message: res.message } : {}),
         };
       }
+      const corrected = res.question;
+
+      // Write the correction for REAL (§32.3). The question was wrong, so it is replaced — in the send being
+      // answered, and in the questionnaire itself when the corrector authored it (an auto check-in is sent
+      // from you to you, which is exactly where a bad question would otherwise come back). The answer is then
+      // recorded against the corrected question; there is no mapping back to the original wording.
+      await correctSnapshotQuestion(fs, key, assignment.id, corrected);
+      // Every send freezes its OWN snapshot, so this touches nobody else's copy or recorded answers.
+      const def = await getQuestionnaire(fs, key, assignment.questionnaireId);
+      // Only the author's own questionnaire is rewritten — a recipient correcting a question someone ELSE
+      // wrote fixes their own send, but never silently edits that person's authored content.
+      const ownsDefinition = def != null && def.creatorPersonId === personId;
+      if (ownsDefinition && def.questions.some((q) => q.id === corrected.id)) {
+        await saveQuestionnaire(fs, key, {
+          ...def,
+          questions: replaceQuestion(def.questions, corrected),
+        });
+      }
+      // A draft answer to the OLD question answered a question that no longer exists — keeping it would
+      // record a choice they never made against the corrected wording.
+      const draft = await getResponse(fs, key, assignment.id);
+      if (draft?.answers.some((a) => a.questionId === corrected.id)) {
+        await saveResponse(fs, key, {
+          ...draft,
+          answers: draft.answers.filter((a) => a.questionId !== corrected.id),
+        });
+      }
+
       // Auto-fix at source for an insight (safe + non-destructive); a profile fact is PROPOSED for an
       // explicit tap and onboarding is routed, since auto-editing structured data from free text is
       // unreliable (§29.2 / §32.4).
@@ -4523,23 +4542,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       return {
         ok: true,
-        rewrite: res.rewrite,
+        question: corrected,
+        ...(res.problem ? { problem: res.problem } : {}),
         source: matched?.source ?? 'unknown',
         ...(matched?.label ? { sourceLabel: matched.label } : {}),
         ...(matched?.text ? { sourceText: matched.text } : {}),
         insightFlagged,
-        // No confident match → the recipient picks the wrong record from what we actually checked, rather
-        // than guessing a section (§32.4). The list is theirs; it never crosses to the sender.
-        ...(matched
-          ? {}
-          : {
-              // Cap what we render: profile + onboarding are few and always useful, but insight facts can
-              // number in the hundreds — an unbounded picker is unusable and a §12 overflow hazard.
+        // The picker exists ONLY to resolve "which record is wrong?" — so it appears only when they actually
+        // disputed a FACT and we couldn't match it. Someone saying "these answers don't fit" is not disputing
+        // anything on file, and asking them to pick a record is nonsense (§32.7).
+        ...(res.problem === 'wrongFact' && !matched
+          ? {
               candidates: [
                 ...known.filter((f) => f.source !== 'insight'),
                 ...known.filter((f) => f.source === 'insight').slice(-MAX_CORRECTION_CANDIDATES),
               ].map(toCandidate),
-            }),
+            }
+          : {}),
         ...(matched?.source === 'profile' &&
         matched.field &&
         matched.currentValue &&

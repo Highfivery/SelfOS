@@ -46,7 +46,9 @@ export async function loadRelayBundle(): Promise<RelayBundle> {
       const meta = JSON.parse(await readFile(resolve(dist, 'meta.json'), 'utf8')) as {
         relayVersion?: string;
       };
-      return { script, version: meta.relayVersion ?? RELAY_VERSION };
+      // A bundle that doesn't state its version is UNKNOWN, not current — defaulting to RELAY_VERSION
+      // would let the very stale `dist` the deploy guard exists for self-certify past it.
+      return { script, version: meta.relayVersion ?? 'unknown' };
     } catch {
       // Try the next candidate.
     }

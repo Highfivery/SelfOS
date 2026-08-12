@@ -5875,6 +5875,30 @@ describe('createCoreBridge', () => {
     expect(outcome.headline).toMatch(/compare/i);
   });
 
+  it('refuses to deploy a stale relay bundle instead of silently shipping old routes (§17.14c)', async () => {
+    const { host, bridge } = await freshOwner();
+    // A dev tree whose relay build predates a RELAY_VERSION bump: the built Worker is older than the app.
+    host.host.relay.loadBundle = () =>
+      Promise.resolve({ script: 'export default {}', version: '0' });
+    await expect(bridge.relayConnect({ apiToken: 'cf-token', accountId: 'acct' })).rejects.toThrow(
+      /pnpm --filter @selfos\/relay build/,
+    );
+    // Nothing was persisted — no half-connected relay pointing at a stale Worker.
+    expect((await bridge.relayStatus()).configured).toBe(false);
+
+    // Same guard on the update path: a matching bundle connects, then a stale one is refused, and the
+    // config keeps its real deployed version (never optimistically stamped).
+    host.host.relay.loadBundle = () =>
+      Promise.resolve({ script: 'export default {}', version: '1' });
+    expect(
+      (await bridge.relayConnect({ apiToken: 'cf-token', accountId: 'acct' })).configured,
+    ).toBe(true);
+    host.host.relay.loadBundle = () =>
+      Promise.resolve({ script: 'export default {}', version: '0' });
+    await expect(bridge.relayUpdate()).rejects.toThrow(/version 0.*expects 1/);
+    expect((await bridge.relayStatus()).relayVersion).toBe('1');
+  });
+
   it('connects a relay, mints an external link, drains a response, and revoke-on-delete', async () => {
     const { host, bridge, ownerId } = await freshOwner();
 

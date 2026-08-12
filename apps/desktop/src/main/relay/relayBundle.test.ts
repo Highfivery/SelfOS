@@ -1,8 +1,9 @@
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
-import { loadRelayBundle } from './relayBundle';
+import { loadRelayBundle, RELAY_VERSION } from './relayBundle';
 
 /**
  * The packaged app has no monorepo layout, so loadRelayBundle must find the relay Worker bundle in the
@@ -32,5 +33,34 @@ describe('loadRelayBundle', () => {
     const bundle = await loadRelayBundle();
     expect(bundle.script).toContain('export default');
     expect(bundle.version).toBe('99');
+  });
+
+  it('a bundle whose meta.json omits relayVersion is NOT assumed current', async () => {
+    // The deploy refuses a bundle that doesn't match RELAY_VERSION; defaulting a missing field to the
+    // app's own version would let exactly the stale `dist` that guard exists for self-certify past it.
+    dir = await mkdtemp(join(tmpdir(), 'selfos-resources-'));
+    const relay = join(dir, 'relay');
+    await mkdir(relay, { recursive: true });
+    await writeFile(join(relay, 'worker.js'), 'export default { fetch() {} }', 'utf8');
+    await writeFile(join(relay, 'meta.json'), JSON.stringify({}), 'utf8');
+    proc.resourcesPath = dir;
+
+    expect((await loadRelayBundle()).version).not.toBe(RELAY_VERSION);
+  });
+});
+
+/**
+ * The app's RELAY_VERSION and the relay build script's are two hand-maintained copies of one number
+ * (the build stamps `dist/meta.json`; the app compares against it). Since a deploy now REFUSES a
+ * mismatched bundle, drifting them doesn't just weaken the update prompt — it would ship a `.dmg` where
+ * Connect and Update throw for every user. This is the spec-19 `__APP_VERSION__` drift-guard pattern.
+ */
+describe('RELAY_VERSION', () => {
+  it('matches the version stamped by the relay build script', async () => {
+    const script = await readFile(
+      resolve(dirname(fileURLToPath(import.meta.url)), '../../../../relay/scripts/build.mjs'),
+      'utf8',
+    );
+    expect(script).toMatch(new RegExp(`RELAY_VERSION = '${RELAY_VERSION}'`));
   });
 });

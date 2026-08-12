@@ -71,7 +71,12 @@ export function fakeRelayFetch(): typeof fetch {
   }) as typeof fetch;
 }
 
-/** A stub Worker bundle so the fake connect path doesn't need a real `apps/relay` build. */
-export function fakeRelayBundle(): Promise<RelayBundle> {
-  return Promise.resolve({ script: 'export default {}', version: '1' });
+/**
+ * A stub Worker bundle so the fake connect path doesn't need a real `apps/relay` build. The caller passes
+ * the version its host reports as current — a frozen literal here would trip the deploy's stale-bundle
+ * guard (`loadDeployableRelayBundle`) the next time RELAY_VERSION is bumped, taking out every offline
+ * relay flow for a reason that has nothing to do with the code under test.
+ */
+export function fakeRelayBundle(version: string): Promise<RelayBundle> {
+  return Promise.resolve({ script: 'export default {}', version });
 }

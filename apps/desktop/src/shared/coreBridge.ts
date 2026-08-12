@@ -5334,10 +5334,24 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // failure never fails the memory refresh. Then refresh the forward-first candidate feed (spec 70 §3.2/§5.4)
       // on the SAME cadence, right after — it reads the freshly-placed coverage map to propose "what's next".
       try {
-        // spec 71 §5.6 — seed the ask ledger from this person's existing sends BEFORE the coverage/candidate
-        // passes, so both read a correct history on the very first run. Idempotent (a completed backfill is an
-        // immediate no-op) and fail-safe (a degraded run leaves the flag unset and simply retries tomorrow).
-        await backfillAskLedger(deps, deps.personId);
+        // spec 71 §5.6 — seed the ask ledger from existing sends BEFORE the coverage/candidate passes, so both
+        // read a correct history on the very first run. Idempotent (a completed backfill is an immediate no-op)
+        // and fail-safe (a degraded run leaves the flag unset and simply retries tomorrow).
+        //
+        // Backfilled for EVERY household person, not just the active one: the ledger is owned by the RECIPIENT
+        // (generation reads `recipientPersonId`), so seeding only the person at the keyboard would leave the
+        // fix inert for exactly the case it was built for — one member drafting for their partner — until that
+        // partner happened to open the app themselves. The active person leads so their own surfaces are
+        // correct first; everyone with no send history is flagged done immediately, at the cost of one scan.
+        const backfillIds = [
+          deps.personId,
+          ...(await listPeople(deps.fs, deps.key))
+            .map((p) => p.id)
+            .filter((id) => id !== deps.personId),
+        ];
+        for (const id of backfillIds) {
+          await backfillAskLedger(deps, id);
+        }
         await refreshCoverage(deps, deps.personId);
         await refreshNextCandidates(deps, deps.personId);
       } catch {

@@ -3236,6 +3236,32 @@ describe('createCoreBridge', () => {
     expect(planUserText).not.toContain('Money');
   });
 
+  it('spec 71 §5.6 — the backfill seeds EVERY household person, not just the one at the keyboard', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (_o, onDelta) => {
+        const text = '[]';
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const partner = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    const ctx = (await host.host.vaultAndKey())!;
+
+    await bridge.memoryRefresh({ auto: false });
+
+    // The ledger is owned by the RECIPIENT — generation reads `recipientPersonId`, never the active person.
+    // Seeding only the person at the keyboard would leave the whole engine inert for one member drafting for
+    // their partner, which is the case it was built for.
+    expect((await readLedger(ctx.fs, ctx.key, ownerId)).backfilledAt).toBeTruthy();
+    expect((await readLedger(ctx.fs, ctx.key, partner.id)).backfilledAt).toBeTruthy();
+  });
+
   it('the cadence refreshes the candidate feed; candidates steer generation + drop off once asked (spec 70 §3.2/§5.5)', async () => {
     const { host, bridge, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });

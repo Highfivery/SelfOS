@@ -60,6 +60,10 @@ export const TopicSchema = z.object({
   seeded: z.boolean().catch(false).default(false),
   /** Labels that fold into this topic, so a near-synonym can't fork the count. */
   aliases: z.array(z.string()).catch([]).default([]),
+  /** The built-in family this specific ground belongs to (§5.3). Set when the topic was minted alongside a
+   *  roll-up tag; absent on the seeded families themselves. A child INHERITS its family's closure, so a
+   *  worked-through family can't be re-opened through one of its own narrower names. */
+  parentTopicId: z.string().optional(),
 });
 export type Topic = z.infer<typeof TopicSchema>;
 
@@ -102,10 +106,56 @@ export function ensureTopics(topics: readonly Topic[] | undefined): Topic[] {
 }
 
 /**
+ * The built-in category labels a question must ALSO be filed under (spec 71 §5.3, the roll-up tag).
+ *
+ * Why this exists: the emergent vocabulary is far more accurate per question, but left alone it FRAGMENTS a
+ * family across names that no text comparison can relate. Measured on a real vault after the first backfill:
+ * threesome ground had been worked **13 times** across five topics — "Threesomes", "Threesome dynamics",
+ * "FFM threesome", "Finding a third / apps" — while the built-in `Group & swinging` showed **0 asks and read
+ * as OPEN**. Bondage was 13 asks across two names; `Edge play` read as untouched after five.
+ *
+ * So every question carries two tags: its SPECIFIC ground (precision, and the thing worth showing a person)
+ * and its closest built-in category (the roll-up that makes the family saturate). `deriveTopicStats` credits
+ * both, so neither goal is traded for the other.
+ */
+export function rollUpCategoryLabels(lifeAreas?: readonly string[]): string[] {
+  const wanted = lifeAreas ? new Set(lifeAreas) : null;
+  return seedTopics()
+    .filter((t) => !wanted || wanted.has(t.lifeArea))
+    .map((t) => t.label);
+}
+
+/**
+ * Singularize a token so a plural can't fork a topic (`threesomes` → `threesome`).
+ *
+ * Measured on a real vault: "Threesomes", "Threesome dynamics" and "FFM threesome" all failed to resolve to
+ * each other purely on the trailing `s`, contributing to 13 asks spread across five names. Deliberately naive
+ * — this compares short hand-written topic labels, not prose, so the classic over-stemming failures don't
+ * arise, and an occasional miss only leaves a topic un-merged (recoverable), never merges two unrelated ones.
+ */
+function singular(token: string): string {
+  if (token.length > 4 && token.endsWith('ies')) return `${token.slice(0, -3)}y`;
+  if (token.length > 3 && token.endsWith('ses')) return token.slice(0, -2);
+  if (token.length > 3 && token.endsWith('s') && !token.endsWith('ss')) return token.slice(0, -1);
+  return token;
+}
+
+/** A label's comparison tokens — content words, singularized. Local to topic labels (never prompt text). */
+function labelTokens(label: string): Set<string> {
+  return new Set([...tokenSet(label)].map(singular));
+}
+
+/**
  * Resolve a model-proposed topic to an EXISTING topic id, or `null` when it is genuinely new.
  *
- * Matching order: exact id → alias → normalised-label equality → label token similarity. The similarity step
- * is what stops "dirty talk" and "talking dirty / verbal" becoming two topics that each look under-explored.
+ * Matching order: exact id → alias → normalised-label equality → singularized token similarity. The
+ * similarity step is what stops "dirty talk" and "talking dirty / verbal" becoming two topics that each look
+ * under-explored.
+ *
+ * NOTE this is only half the anti-fragmentation story, and cannot be the whole of it: "Threesomes" and
+ * "Group & swinging" name the same ground while sharing no words at all, so no text comparison will ever
+ * relate them. That is why every question is ALSO tagged with its closest built-in category (§5.3) — the
+ * roll-up tag is what makes a family saturate; this only stops near-identical labels forking.
  */
 export function resolveTopicId(proposed: string, topics: readonly Topic[]): string | null {
   const raw = proposed.trim();
@@ -117,9 +167,9 @@ export function resolveTopicId(proposed: string, topics: readonly Topic[]): stri
     if (t.label.toLowerCase() === lower) return t.topicId;
     if (t.aliases.some((a) => a.toLowerCase() === lower || slugTopic(a) === slug)) return t.topicId;
   }
-  const proposedTokens = tokenSet(raw);
+  const proposedTokens = labelTokens(raw);
   for (const t of topics) {
-    if (jaccard(proposedTokens, tokenSet(t.label)) >= ALIAS_MATCH_THRESHOLD) return t.topicId;
+    if (jaccard(proposedTokens, labelTokens(t.label)) >= ALIAS_MATCH_THRESHOLD) return t.topicId;
   }
   return null;
 }
@@ -129,6 +179,8 @@ export interface TopicProposal {
   label: string;
   /** The parent bucket. Anything outside `LIFE_AREAS` falls back to `Other`. */
   lifeArea?: string;
+  /** The built-in family this belongs to, when known (§5.3) — recorded so closure can be inherited. */
+  parentTopicId?: string;
 }
 
 /**
@@ -152,9 +204,24 @@ export function mintTopics(
       resolved.push(hit);
       const idx = out.findIndex((t) => t.topicId === hit);
       const t = out[idx];
-      // Remember the wording that resolved here, so the next identical proposal is an O(1) alias hit.
-      if (t && t.label.toLowerCase() !== label.toLowerCase() && !t.aliases.includes(label)) {
-        out[idx] = { ...t, aliases: [...t.aliases, label] };
+      if (t) {
+        // Remember the wording that resolved here, so the next identical proposal is an O(1) alias hit.
+        const aliases =
+          t.label.toLowerCase() !== label.toLowerCase() && !t.aliases.includes(label)
+            ? [...t.aliases, label]
+            : t.aliases;
+        // Adopt the family on an EXISTING topic that has none. Without this, closure inheritance only ever
+        // reaches topics minted in the same run — so a map built before the roll-up existed keeps its orphans
+        // open forever, which is exactly what a re-tag is supposed to repair. Never overwrites a known parent,
+        // and never makes a topic its own parent.
+        const parentTopicId =
+          t.parentTopicId ??
+          (p.parentTopicId && p.parentTopicId !== hit ? p.parentTopicId : undefined);
+        out[idx] = {
+          ...t,
+          aliases,
+          ...(parentTopicId ? { parentTopicId } : {}),
+        };
       }
       continue;
     }
@@ -162,7 +229,14 @@ export function mintTopics(
       p.lifeArea && (LIFE_AREAS as readonly string[]).includes(p.lifeArea) ? p.lifeArea : 'Other';
     const topicId = slugTopic(`${lifeArea}-${label}`) || slugTopic(label);
     if (topicId === '') continue;
-    out.push({ topicId, label, lifeArea, seeded: false, aliases: [] });
+    out.push({
+      topicId,
+      label,
+      lifeArea,
+      seeded: false,
+      aliases: [],
+      ...(p.parentTopicId ? { parentTopicId: p.parentTopicId } : {}),
+    });
     resolved.push(topicId);
   }
   return { topics: out, resolved };
@@ -207,7 +281,15 @@ export function topicStatuses(input: TopicStatusInput): TopicStatus[] {
   const stats = deriveTopicStats(input.ledger);
   const fresh = new Set(input.newMaterialTopicIds ?? []);
   const requested = new Set(input.requestedTopicIds ?? []);
-  return ensureTopics(input.topics).map((topic) => {
+  const all = ensureTopics(input.topics);
+  // A family's closure is computed first, so a child can inherit it below.
+  const familyClosed = new Set<string>();
+  for (const t of all) {
+    const s = stats.get(t.topicId);
+    if (!s) continue;
+    if (s.askedCount >= SATURATION_ASKS) familyClosed.add(t.topicId);
+  }
+  return all.map((topic) => {
     const s = stats.get(topic.topicId) ?? { askedCount: 0, richCount: 0, deadCount: 0 };
     const saturatedByCount = s.askedCount >= SATURATION_ASKS;
     const saturatedByQuality =
@@ -233,7 +315,17 @@ export function topicStatuses(input: TopicStatusInput): TopicStatus[] {
       const t = Date.parse(s.lastAskedAt);
       inCooldown = !Number.isNaN(t) && input.now.getTime() - t < COOLDOWN_DAYS * DAY_MS;
     }
-    const saturated = (saturatedByCount && reopenedBy === undefined) || saturatedByQuality;
+    // Inherit the family's closure (§5.3). Without this the roll-up only half works: measured on a real
+    // vault, `Group & swinging` correctly closed at 8 asks while its own narrower name "Threesomes" still
+    // read as OPEN at 2 — so the planner could re-open, through a child, exactly the ground the roll-up had
+    // just shut. A child is never MORE open than the family it belongs to.
+    const parentClosed =
+      topic.parentTopicId !== undefined &&
+      topic.parentTopicId !== topic.topicId &&
+      familyClosed.has(topic.parentTopicId) &&
+      !requested.has(topic.topicId);
+    const saturated =
+      (saturatedByCount && reopenedBy === undefined) || saturatedByQuality || parentClosed;
     // The cooldown floor gates RE-OPENING worked ground — it must NOT close ground that still has headroom.
     // Verified against a real vault: applying it to every recently-touched topic left 1 of 14 areas open and
     // shut the two LEAST-worked ones (asked once and twice), which would push the planner to invent new ground

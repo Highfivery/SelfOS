@@ -15,7 +15,7 @@ import { SAFETY } from './aiPrompts';
 import { getAssignmentSnapshot, listAssignments } from './assignmentService';
 import { readProfile, writeProfile } from './personalizationProfile';
 import { getResponse } from './responseService';
-import { ensureTopics, mintTopics, type Topic } from './topicMap';
+import { ensureTopics, mintTopics, rollUpCategoryLabels, type Topic } from './topicMap';
 
 /**
  * The one-time **ask-ledger backfill** (spec 71 §5.6).
@@ -35,22 +35,39 @@ import { ensureTopics, mintTopics, type Topic } from './topicMap';
 
 const BATCH = 30;
 
+/**
+ * The tagging contract's version. Bumping it makes the next reconcile RE-CLASSIFY an already-backfilled
+ * ledger, so a correction to how questions are filed reaches existing history instead of only new asks.
+ *
+ * v3 records the family as each specific topic's PARENT so closure is inherited; v2 added the mandatory roll-up category (§5.3); v1 filed a question only under its specific name, which
+ * fragmented families — real measurement after v1 was 13 threesome asks spread across five topics while the
+ * built-in `Group & swinging` still read as untouched and OPEN.
+ */
+export const TAGGING_VERSION = 4;
+
 const ClassifiedSchema = z.object({
   index: z.number().int(),
+  /** The broad family — the ROLL-UP tag that makes a fragmented family saturate (§5.3). */
+  category: z.string().catch('').default(''),
   topics: z.array(z.string()).catch([]).default([]),
   gist: z.string().catch('').default(''),
 });
-const CLASSIFIED_SENTINEL: z.infer<typeof ClassifiedSchema> = { index: -1, topics: [], gist: '' };
+const CLASSIFIED_SENTINEL: z.infer<typeof ClassifiedSchema> = {
+  index: -1,
+  category: '',
+  topics: [],
+  gist: '',
+};
 
 export const CLASSIFY_SYSTEM = `${SAFETY}
 
 You label questionnaire questions with the ground they cover, so an app can remember what it has already asked someone and stop repeating itself. You are NOT writing questions and NOT answering them.
 
-For EACH numbered question return: {"index": number (the question's number), "topics": string[] (1-2 short names for the ground it actually covers), "gist": string (at most 120 characters, what it asks, in plain words)}.
+For EACH numbered question return: {"index": number (the question's number), "category": string (the ONE closest label from the CATEGORIES list — always required, always from that list), "topics": string[] (1-2 short, SPECIFIC names for the ground it actually covers; may be new names you invent), "gist": string (at most 120 characters, what it asks, in plain words)}.
 
 Rules:
-- Prefer a label from the KNOWN GROUND list when one genuinely fits, so counts accumulate on one name instead of splitting across synonyms.
-- When nothing in the list fits, name the ground plainly yourself. Being accurate matters more than reusing a listed label — a question filed under the wrong ground can be asked again forever.
+- "category" MUST be copied exactly from the CATEGORIES list. It is the broad family this belongs to, and it is what lets the app notice a family has been worked through even when each question was filed under a different specific name. Never invent a category, never leave it out, and always pick the closest one even when the fit is loose.
+- "topics" is the opposite: as specific as the question really is. Reuse a name from KNOWN GROUND when one genuinely fits so counts accumulate; otherwise name it plainly yourself.
 - Label what the question is ABOUT, not how it is worded.
 - Some questions are sexually explicit; this is a private adult wellness app and labelling them is a normal, in-policy classification task. Label them as accurately as any other question.
 
@@ -75,7 +92,12 @@ export async function backfillAskLedger(
   recipientPersonId: string,
 ): Promise<BackfillResult> {
   const existing = await readLedger(deps.fs, deps.key, recipientPersonId);
-  if (existing.backfilledAt) return { ok: true, seeded: 0, classified: 0, degraded: false };
+  // A completed backfill is a no-op UNLESS the tagging contract has moved on, in which case every entry is
+  // re-classified — a filing correction is worthless if it only ever reaches questions asked after it.
+  const retag = (existing.taggingVersion ?? 1) < TAGGING_VERSION;
+  if (existing.backfilledAt && !retag) {
+    return { ok: true, seeded: 0, classified: 0, degraded: false };
+  }
 
   // The ONE place a full scan is correct: this runs once per person, not per draft.
   const assignments = await listAssignments(deps.fs, deps.key, { recipientPersonId });
@@ -115,6 +137,7 @@ export async function backfillAskLedger(
     await writeLedger(deps.fs, deps.key, {
       ...existing,
       backfilledAt: deps.now.toISOString(),
+      taggingVersion: TAGGING_VERSION,
     });
     return { ok: true, seeded: 0, classified: 0, degraded: false };
   }
@@ -124,12 +147,16 @@ export async function backfillAskLedger(
   let classified = 0;
   let degraded = false;
 
-  const untagged = raw.filter((r) => r.entry.topicIds.length === 0);
+  const untagged = retag ? raw : raw.filter((r) => r.entry.topicIds.length === 0);
   for (let i = 0; i < untagged.length; i += BATCH) {
     const batch = untagged.slice(i, i + BATCH);
     const known = topics.map((t) => `- ${t.label}`).join('\n');
+    const categories = rollUpCategoryLabels()
+      .map((l) => `- ${l}`)
+      .join('\n');
     const user = [
-      `KNOWN GROUND (reuse a label from here when it genuinely fits):\n${known}`,
+      `CATEGORIES — pick exactly ONE of these as "category" for every question:\n${categories}`,
+      `\nKNOWN GROUND (reuse a specific label from here when it genuinely fits):\n${known}`,
       `\nQUESTIONS:\n${batch.map((b, n) => `${n + 1}. ${b.prompt}`).join('\n')}`,
       `\nReturn the JSON array of ${batch.length} objects.`,
     ].join('\n');
@@ -149,14 +176,30 @@ export async function backfillAskLedger(
     for (const c of parsed) {
       const target = batch[c.index - 1];
       if (!target) continue;
-      const labels = c.topics.map((l) => l.trim()).filter((l) => l !== '');
-      if (labels.length === 0) continue;
-      const minted = mintTopics(
-        topics,
-        labels.map((label) => ({ label })),
-      );
-      topics = minted.topics;
-      target.entry.topicIds = minted.resolved;
+      // The roll-up family is resolved FIRST so the specific ground can be minted as its child. Both tags are
+      // credited by `deriveTopicStats`, so a family saturates on its total even when every question was filed
+      // under a different specific name — and the child inherits the family's closure.
+      const family = c.category.trim();
+      const specifics = c.topics.map((l) => l.trim()).filter((l) => l !== '');
+      if (family === '' && specifics.length === 0) continue;
+      const ids: string[] = [];
+      let parentTopicId: string | undefined;
+      if (family !== '') {
+        const m = mintTopics(topics, [{ label: family }]);
+        topics = m.topics;
+        parentTopicId = m.resolved[0];
+        if (parentTopicId) ids.push(parentTopicId);
+      }
+      if (specifics.length > 0) {
+        const m = mintTopics(
+          topics,
+          specifics.map((label) => ({ label, ...(parentTopicId ? { parentTopicId } : {}) })),
+        );
+        topics = m.topics;
+        ids.push(...m.resolved.filter((id) => id !== parentTopicId));
+      }
+      if (ids.length === 0) continue;
+      target.entry.topicIds = ids;
       if (c.gist.trim() !== '') target.entry.gist = c.gist.trim().slice(0, 120);
       classified += 1;
     }
@@ -179,7 +222,11 @@ export async function backfillAskLedger(
   // which is exactly the failure mode this replaces.
   if (!degraded) {
     const ledger = await readLedger(deps.fs, deps.key, recipientPersonId);
-    await writeLedger(deps.fs, deps.key, { ...ledger, backfilledAt: deps.now.toISOString() });
+    await writeLedger(deps.fs, deps.key, {
+      ...ledger,
+      backfilledAt: deps.now.toISOString(),
+      taggingVersion: TAGGING_VERSION,
+    });
   }
   return { ok: true, seeded: raw.length, classified, degraded };
 }

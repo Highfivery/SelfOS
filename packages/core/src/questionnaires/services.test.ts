@@ -285,3 +285,25 @@ describe('responseService', () => {
     expect(await getResponse(fs, key, 'never-answered')).toBeNull();
   });
 });
+
+describe('validateQuestionnaire — option distinctness (08 §32.10)', () => {
+  it('flags duplicate options so the AUTHOR is told, not the recipient left confused', () => {
+    // An option string IS the stored answer, so two identical options record the same value either way.
+    // Generated and corrected options are deduped at their source; this is the hand-authored case.
+    const problems = validateQuestionnaire({
+      title: 'T',
+      type: 'general',
+      sensitivity: 'standard',
+      questions: [
+        {
+          id: 'q1',
+          type: 'singleChoice',
+          prompt: 'Pick one',
+          required: true,
+          options: ['Same', 'same '],
+        },
+      ],
+    });
+    expect(problems.join(' ')).toMatch(/repeats the option/);
+  });
+});

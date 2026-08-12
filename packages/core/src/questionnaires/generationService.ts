@@ -90,6 +90,23 @@ const SCALE_TYPES = new Set(['rating', 'slider']);
  *  (spec 69 §5.5) — more aggressive than the standard 0.6 so degraded generation still catches obvious re-asks. */
 const STRICT_DEDUP_THRESHOLD = 0.45;
 
+/**
+ * Whether a model-returned rewrite of a KNOWN-GOOD question is usable as that question.
+ *
+ * A personalized variant (§17.14e) is answered by the recipient and never reviewed by the sender, so a
+ * refusal sentence or a paragraph of prose coming back would silently become the question they're asked.
+ * The canonical prompt is already the designed fallback for a missing element — this widens "missing" to
+ * "not plausibly a rewrite of this question", using length rather than refusal-phrase matching, since a
+ * legitimate question can easily contain "I won't" (CLAUDE.md §6: never assume a refusal).
+ */
+export function isUsableRewrite(canonical: string, candidate: string): boolean {
+  const text = candidate.trim();
+  if (text === '') return false;
+  // Prose, an apology or an explanation rather than a reworded question. A personalization stays in the
+  // same ballpark as what it personalizes; a hard floor keeps short questions from tripping the ratio.
+  return text.length <= Math.max(400, canonical.trim().length * 3);
+}
+
 /** Map a validated generated object to a well-formed Question, dropping ones missing required fields. */
 function toQuestion(raw: z.infer<typeof GeneratedQuestionSchema>): Question | null {
   // Clean the options FIRST: counting before trimming let a blank entry pad the list, so a question could
@@ -357,7 +374,10 @@ export async function generateVariant(
   // aligned + the answer structure is intact); otherwise keep the canonical options for that question.
   const questions: Question[] = input.questions.map((q, i) => {
     const out = variants[i];
-    const personalized = out?.prompt.trim();
+    // Fall back to the canonical prompt when the rewrite isn't usable — the recipient answering a variant
+    // nobody reviewed must never be handed a refusal or a wall of prose as their question.
+    const rewritten = out?.prompt.trim() ?? '';
+    const personalized = isUsableRewrite(q.prompt, rewritten) ? rewritten : '';
     // An option rewrite must preserve the COUNT (the two variants stay aligned) AND be a usable option set
     // — a blank or duplicated rewrite is rejected, keeping the canonical options for that question.
     const cleaned =

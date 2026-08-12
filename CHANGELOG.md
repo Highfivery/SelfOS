@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.6](https://github.com/Highfivery/SelfOS/compare/v0.51.5...v0.51.6) (2026-08-11)
+
+
+### Bug Fixes
+
+* **questionnaires:** remove the "which record is wrong?" picker (08 §32.9) ([#408](https://github.com/Highfivery/SelfOS/issues/408)) ([4096c64](https://github.com/Highfivery/SelfOS/commit/4096c6480d2848bfa650df978f15ab55f9ef5571))
+
 ## [0.51.5](https://github.com/Highfivery/SelfOS/compare/v0.51.4...v0.51.5) (2026-08-11)
 
 

@@ -1177,6 +1177,14 @@ compatibilityGroupId`, each with its own frozen variant snapshot); blocked when 
 
 ## 14. Changelog
 
+- 2026-08-12 — **§27 (intimacy topic coverage) is SUPERSEDED by [`71`](71-question-intelligence-rebuild.md).**
+  Verified against a real vault, §27's engine was **completely inert in production**: its `new-material`
+  re-open signal was the newest own-subject Insight of ANY kind, so any session/dream/test re-opened EVERY
+  intimacy category — nine categories at or past the threshold (penetration 9, dirty-talk 8, impact 8,
+  exhibition 8, …) reported `saturated: []`, and `deepenableActs` carried all 101 rated acts (29% of the
+  prompt). Its keyword classifier also credited **34.3%** of that recipient's intimacy questions to ZERO
+  categories. `71` replaces it with a per-recipient **ask ledger** + an **emergent topic map** tagged at write
+  time. §27's steering is kept as the pre-backfill fallback only.
 - 2026-07-08 — **Sent-questionnaire insights are "about the recipient," grouped in Memory (issue #129, on
   `fix/memory-questionnaire-responses-section`).** An analysis Insight from a questionnaire the viewer **sent
   to someone else** keeps `subjectPersonId` = the sender (it informs their coaching, §1/§13.4) but its facts

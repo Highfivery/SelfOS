@@ -32,11 +32,22 @@ import {
 } from './aiPrompts';
 import { normalizeOptions } from './questionnaireService';
 import { runClaude, type AiDeps } from './aiCall';
+import { emptyLedger, readLedger } from './askLedger';
 import { gatherGenerationContext, type GenerationContextRequest } from './contextProviders';
 import { readCustomIntimacyTopics } from './customTypeService';
 import { isNearDuplicate } from './dedup';
-import { hasDanglingReference } from './selfContained';
+import { readProfile, writeProfile } from './personalizationProfile';
+import { planQuestions, steeringLifeAreas } from './planService';
+import { hasDanglingReference, hasRecitation } from './selfContained';
 import { semanticDedupFilter } from './semanticDedup';
+import {
+  buildLedgerReference,
+  ensureTopics,
+  mintTopics,
+  topicStatuses,
+  type Topic,
+  type TopicStatus,
+} from './topicMap';
 
 /**
  * AI question generation + per-question improve (08-questionnaires §3.1/§13.3). Mirrors `chatService`'s
@@ -62,6 +73,10 @@ const GeneratedQuestionSchema = z.object({
   help: z.string().optional(),
   options: z.array(z.string()).optional(),
   scale: z.object({ min: z.number(), max: z.number() }).optional(),
+  // Write-time topic tagging (spec 71 §5.3). Tolerant + optional: a missing tag must never drop an otherwise
+  // good question — it just lands untagged and the backfill can classify it later.
+  topics: z.array(z.string()).catch([]).optional(),
+  gist: z.string().catch('').optional(),
 });
 
 /** A bad generated question catches to this sentinel (empty prompt → dropped by the keep filter). */
@@ -124,6 +139,10 @@ function toQuestion(raw: z.infer<typeof GeneratedQuestionSchema>): Question | nu
     ...(raw.help?.trim() ? { help: raw.help.trim() } : {}),
     ...(options ? { options } : {}),
     ...(SCALE_TYPES.has(raw.type) && raw.scale ? { scale: raw.scale } : {}),
+    // The gist rides the question so the ask ledger can be appended from the frozen snapshot at send time,
+    // with no second classification call (spec 71 §5.3). `topicIds` are resolved/minted after generation,
+    // once the raw labels can be reconciled against this person's topic map.
+    ...(raw.gist?.trim() ? { gist: raw.gist.trim().slice(0, 120) } : {}),
   };
 }
 
@@ -169,6 +188,19 @@ export interface GenerateRequest {
   // so a self/auto check-in can personalize + reciprocate a partner's desire. Restricted facts never cross (the
   // `scopeGrants` gate). Author-blind: only ever set when author == recipient.
   partnerContext?: string;
+  // The HOUSEHOLD recipient (spec 71). Enables the ask ledger + emergent topic map: the planner picks ground
+  // from what has actually been asked, and generated questions are tagged so the ledger can be appended at
+  // send time. Absent (an external recipient, who has no household history) ⇒ generation runs unsteered,
+  // which is the pre-71 behaviour minus the two blocks that pulled a typed draft off-register.
+  recipientPersonId?: string;
+  // Topics touched by genuinely NEW material, for the topic-SCOPED re-open signal (spec 71 §5.2). Callers that
+  // cannot resolve this pass nothing, which is deliberately the SAFE direction: worked ground then re-opens
+  // only on an explicit request or 90-day dormancy, instead of on any insight from any life area — the bug
+  // that left nine saturated categories reporting `saturated: []` on a real vault.
+  newMaterialTopicIds?: readonly string[];
+  // Ground the person explicitly pinned ("Ask me this") — leads the plan.
+  requestedLabels?: readonly string[];
+  now?: Date;
 }
 
 /** Generate questions from a brief and/or the configured structured context. */
@@ -183,7 +215,66 @@ export async function generateQuestions(
   // no recipient history). Either way the pass also drops candidates that duplicate EACH OTHER. When it will
   // run, OVER-ASK a small buffer so the questions it drops don't leave us short of the requested count; we trim
   // back after filtering. Prefer the DEDICATED, onboarding-first reference (§23.5b) — falls back to the history.
-  const dedupReference = (request.dedupReference ?? request.recipientHistory)?.trim() ?? '';
+  const now = request.now ?? new Date();
+
+  // ── Ground selection (spec 71 §5.5) ──────────────────────────────────────────────────────────────────
+  // Load this recipient's ask ledger + topic map, scope the topics to what this TYPE and TIER may draw on,
+  // and let the planner choose the ground BEFORE any question is written. `steeringLifeAreas` is the
+  // tier-aware scope: an unfiltered intimacy set draws from Intimacy alone, which is precisely what stops a
+  // Relationships topic ("Friendships") leading an explicit questionnaire.
+  let topicMap: Topic[] = [];
+  let ledger = emptyLedger(request.recipientPersonId ?? '');
+  let statuses: TopicStatus[] = [];
+  // The ledger only becomes AUTHORITATIVE once the one-time backfill has seeded this person's existing sends
+  // (spec 71 §5.6). Until then it is empty or partial, so planning from it would tell the model almost nothing
+  // has been asked — worse than the engine it replaces. Until the flag is set we keep the legacy intimacy
+  // coverage steering; after it, the planner owns ground. That makes the migration a clean switch rather than
+  // a window where neither signal is real.
+  let ledgerAuthoritative = false;
+  if (request.recipientPersonId) {
+    const [profile, loaded] = await Promise.all([
+      readProfile(deps.fs, deps.key, request.recipientPersonId),
+      readLedger(deps.fs, deps.key, request.recipientPersonId),
+    ]);
+    ledger = loaded;
+    ledgerAuthoritative = ledger.backfilledAt !== undefined;
+    topicMap = ensureTopics(profile.topics);
+    const areas = new Set(steeringLifeAreas(request.type, request.sensitivity));
+    statuses = topicStatuses({
+      topics: topicMap,
+      ledger,
+      ...(request.newMaterialTopicIds ? { newMaterialTopicIds: request.newMaterialTopicIds } : {}),
+      ...(request.requestedLabels ? { requestedTopicIds: [...request.requestedLabels] } : {}),
+      now,
+    }).filter((s) => areas.has(s.topic.lifeArea));
+  }
+  // Plan only when there is ground to reason about. An EXTERNAL recipient has no household record, so there
+  // are no statuses, no repetition risk to steer around, and nothing for a planning call to decide — spending
+  // one would be pure cost. Generation's own guidance covers that case, exactly as it did before spec 71.
+  const plan =
+    statuses.length > 0 && ledgerAuthoritative
+      ? await planQuestions(deps, {
+          type: request.type,
+          sensitivity: request.sensitivity,
+          count: requestedCount,
+          ...(request.brief !== undefined ? { brief: request.brief } : {}),
+          ...(request.recipient !== undefined ? { recipient: request.recipient } : {}),
+          statuses,
+          ...(request.requestedLabels ? { requestedLabels: request.requestedLabels } : {}),
+          ...(request.feedbackGuidance !== undefined
+            ? { feedbackGuidance: request.feedbackGuidance }
+            : {}),
+        })
+      : { threads: [], degraded: false };
+
+  // The de-dup reference now leads with the ledger's compact ground summary (gists + per-topic counts). The
+  // caller's raw-text reference still follows, but it is no longer the only defence — a person with hundreds
+  // of asks previously had ~2.7% of their history survive the char cap (spec 71 §1 D5).
+  const ledgerReference = ledgerAuthoritative ? buildLedgerReference(statuses, ledger) : '';
+  const callerReference = (request.dedupReference ?? request.recipientHistory)?.trim() ?? '';
+  const dedupReference = [ledgerReference, callerReference]
+    .filter((s) => s.trim() !== '')
+    .join('\n\n');
   const isSensitiveType = request.type === INTIMACY_TYPE || request.type === SCENARIO_TYPE;
   const willSemanticDedup = dedupReference !== '' || isSensitiveType;
   const askCount = willSemanticDedup ? Math.min(requestedCount + 3, 23) : requestedCount;
@@ -219,6 +310,7 @@ export async function generateQuestions(
       ? { feedbackGuidance: request.feedbackGuidance }
       : {}),
     ...(request.partnerContext !== undefined ? { partnerContext: request.partnerContext } : {}),
+    ...(plan.threads.length > 0 ? { threads: plan.threads } : {}),
   });
 
   // A generous output budget (thinking is off) that SCALES with the (over-asked) count (08 §23.4) — a 20-question
@@ -256,9 +348,16 @@ export async function generateQuestions(
   const askedPrompts = request.recipientAskedPrompts ?? [];
   const questions: Question[] = [];
   const keptPrompts: string[] = [];
+  // Raw topic labels per kept question, resolved against the person's map after the de-dup pass (so we only
+  // mint vocabulary for questions that actually survive).
+  const rawTopics = new Map<string, string[]>();
   for (const raw of set.questions) {
     const q = toQuestion(raw);
     if (!q) continue;
+    // Recitation backstop (spec 71 §5.7): drop a question that quotes a known fact back at the person
+    // ("You've marked explicit dirty talk as…") rather than simply naming it. `GENERATION_SYSTEM` forbids
+    // this, but the rule had no enforcement and seven of one real recipient's questions opened that way.
+    if (hasRecitation(q.prompt)) continue;
     // Self-contained backstop (08 §25.4): drop a question that makes an unambiguous back-reference to
     // context the recipient can't see ("…you mentioned", "your earlier answer"). The prompt rule is the
     // primary fix; this is a conservative deterministic guard (no false positives on legit questions).
@@ -268,6 +367,7 @@ export async function generateQuestions(
     if (isNearDuplicate(q.prompt, keptPrompts)) continue;
     questions.push(q);
     keptPrompts.push(q.prompt);
+    if (raw.topics && raw.topics.length > 0) rawTopics.set(q.id, raw.topics);
   }
   if (questions.length === 0) {
     // A set parsed but yielded nothing new/usable (all duplicates or unbuildable) — a calm retry, not a
@@ -303,6 +403,61 @@ export async function generateQuestions(
     );
   }
   finalQuestions = finalQuestions.slice(0, requestedCount);
+
+  // ── Topic tagging (spec 71 §5.3) ─────────────────────────────────────────────────────────────────────
+  // Resolve the labels the model tagged each surviving question with against this person's map, minting any
+  // genuinely new ground (alias-merged so near-synonyms can't fork into two half-counted topics), and stamp
+  // the resolved ids onto the questions so they ride through draft → edit → send. This is what replaces the
+  // keyword regex that credited 34.3% of a real recipient's intimacy questions to ZERO categories.
+  if (request.recipientPersonId && finalQuestions.length > 0) {
+    const areas = steeringLifeAreas(request.type, request.sensitivity);
+    // Where does a NEWLY-INVENTED topic belong? Prefer the life area of the planner thread whose label the
+    // model reused; otherwise, if this questionnaire draws on exactly ONE area (any explicit intimacy set),
+    // that area is unambiguous. Only a genuinely multi-area questionnaire with no matching thread falls back
+    // to `Other` — filing it under whichever area happened to sort first would mis-scope it on every later
+    // draft, since the scope is what keeps a typed set on its own ground.
+    const threadArea = new Map(
+      plan.threads
+        .filter((t) => t.lifeArea)
+        .map((t) => [t.label.trim().toLowerCase(), t.lifeArea as string]),
+    );
+    const soleArea = areas.length === 1 ? areas[0] : undefined;
+    const areaFor = (label: string): string | undefined =>
+      threadArea.get(label.trim().toLowerCase()) ?? soleArea;
+    let map = topicMap;
+    const tagged: Question[] = [];
+    for (const q of finalQuestions) {
+      const labels = rawTopics.get(q.id) ?? [];
+      if (labels.length === 0) {
+        tagged.push(q); // untagged is acceptable — never drop a good question over a missing tag
+        continue;
+      }
+      const minted = mintTopics(
+        map,
+        labels.map((label) => {
+          const area = areaFor(label);
+          return area ? { label, lifeArea: area } : { label };
+        }),
+      );
+      map = minted.topics;
+      tagged.push(minted.resolved.length > 0 ? { ...q, topicIds: minted.resolved } : q);
+    }
+    finalQuestions = tagged;
+    // Persist the grown vocabulary. Best-effort: a write failure must not fail an otherwise-good draft (the
+    // questions still carry their ids; the map self-heals on the next generation).
+    if (map !== topicMap) {
+      try {
+        const profile = await readProfile(deps.fs, deps.key, request.recipientPersonId);
+        await writeProfile(deps.fs, deps.key, {
+          ...profile,
+          topics: map,
+          updatedAt: now.toISOString(),
+        });
+      } catch {
+        // vocabulary growth is a learning side-effect, not part of generation's contract
+      }
+    }
+  }
 
   const title = set.title?.trim();
   // We return the generation call's usage for the renderer's optimistic budget refresh; the semantic pass's

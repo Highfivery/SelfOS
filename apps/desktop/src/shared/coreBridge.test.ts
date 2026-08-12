@@ -41,6 +41,7 @@ import {
   applyDecline,
   buildCandidateGuidance,
   emptyProfile,
+  readLedger,
   NOT_APPLICABLE_SKIP_REASON,
   readProfile,
   writeProfile,
@@ -3110,8 +3111,11 @@ describe('createCoreBridge', () => {
             { lifeArea: 'Money', depth: 0 },
             { lifeArea: 'Health & body', depth: 0 },
           ]);
-        } else {
+        } else if (options.system?.includes('You PLAN a questionnaire')) {
+          // spec 71 §5.5 — choosing ground is the PLANNER's job now, so that is where the steering lands.
           sentUserText = user;
+          text = JSON.stringify({ threads: [{ label: 'Money', angle: 'what security means' }] });
+        } else {
           text = JSON.stringify({
             title: 'X',
             questions: [{ type: 'shortText', prompt: 'Somewhere new?', required: true }],
@@ -3142,8 +3146,94 @@ describe('createCoreBridge', () => {
       recipientPersonId: ownerId,
     });
     expect(result.ok).toBe(true);
-    expect(sentUserText).toContain('NEW / UNEXPLORED GROUND');
-    expect(sentUserText).toContain('- Money');
+    // The unexplored ground reaches the model as OPEN ground for the planner to build the set on. The old
+    // "NEW / UNEXPLORED GROUND" block is deliberately gone from the GENERATION prompt (spec 71 §1 D2): being
+    // type-agnostic and last, it outranked the sensitivity register and pulled typed drafts off-topic.
+    expect(sentUserText).toContain('GROUND STILL OPEN');
+    expect(sentUserText).toContain('Money');
+  });
+
+  it('spec 71 — sending appends the ask ledger, answering records how it landed, and worked ground goes off-limits', async () => {
+    const { host, bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
+    let planUserText = '';
+    host.host.claude = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        const user = options.messages.map((m) => m.content).join('\n');
+        let text: string;
+        if (options.system?.includes('You PLAN a questionnaire')) {
+          planUserText = user;
+          text = JSON.stringify({ threads: [{ label: 'Edge play', angle: 'x' }] });
+        } else if (options.system?.includes('You label questionnaire questions')) {
+          text = JSON.stringify([
+            { index: 1, topics: ['Dirty talk & verbal'], gist: 'what she wants to hear' },
+          ]);
+        } else {
+          text = JSON.stringify({
+            title: 'X',
+            questions: [{ type: 'shortText', prompt: 'q?', required: false }],
+          });
+        }
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const ctx = (await host.host.vaultAndKey())!;
+
+    // Send three questionnaires on the SAME ground — the shape that made a real recipient's dirty-talk
+    // questions repeat seven times.
+    for (let n = 0; n < 3; n += 1) {
+      const saved = await bridge.questionnairesSave({
+        title: `Set ${n}`,
+        type: 'intimacy',
+        sensitivity: 'unfiltered',
+        recipient: { kind: 'person', personId: ownerId },
+        questions: [
+          {
+            id: `q${n}`,
+            type: 'shortText',
+            prompt: `Question ${n}?`,
+            required: false,
+            topicIds: ['Intimacy:dirty-talk'],
+            gist: `asked about dirty talk ${n}`,
+          },
+        ],
+      });
+      const a = await bridge.assignmentsCreate({ questionnaireId: saved.id });
+      // Answer the first two; skip the third, so the ledger carries a real outcome mix.
+      if (n < 2) {
+        await bridge.assignmentsSubmit({
+          assignmentId: a.assignment.id,
+          answers: [{ questionId: `q${n}`, value: 'x'.repeat(200) }],
+        });
+      }
+    }
+
+    // The ledger recorded every ask, tagged, with how each landed — no scan of the sends required.
+    const ledger = await readLedger(ctx.fs, ctx.key, ownerId);
+    expect(ledger.entries).toHaveLength(3);
+    expect(ledger.entries.every((e) => e.topicIds.includes('Intimacy:dirty-talk'))).toBe(true);
+    expect(ledger.entries.filter((e) => e.outcome === 'rich')).toHaveLength(2);
+    expect(ledger.entries.filter((e) => e.outcome === 'pending')).toHaveLength(1);
+
+    // Make the ledger authoritative (the daily cadence does this), then draft again on the same recipient.
+    await bridge.memoryRefresh({ auto: false });
+    await bridge.questionnairesGenerate({
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      existingPrompts: [],
+      recipientPersonId: ownerId,
+    });
+    // The worked ground is now stated OFF-LIMITS to the planner rather than offered again.
+    const offLimits = planUserText.slice(planUserText.indexOf('OFF-LIMITS THIS TIME'));
+    expect(planUserText).toContain('OFF-LIMITS THIS TIME');
+    expect(offLimits).toContain('Dirty talk & verbal');
+    // …and nothing outside Intimacy may steer an unfiltered set.
+    expect(planUserText).not.toContain('Money');
   });
 
   it('the cadence refreshes the candidate feed; candidates steer generation + drop off once asked (spec 70 §3.2/§5.5)', async () => {
@@ -3152,6 +3242,7 @@ describe('createCoreBridge', () => {
 
     const candidatePrompt = 'What would a lighter week look like for you?';
     let generationUserText = '';
+    let planUserText = '';
     host.host.claude = {
       send: () => Promise.resolve(''),
       stream: (options, onDelta) => {
@@ -3168,6 +3259,11 @@ describe('createCoreBridge', () => {
             { lifeArea: 'Health & body', prompt: candidatePrompt, kind: 'new' },
             { lifeArea: 'Money', prompt: 'What does financial security mean to you?', kind: 'new' },
           ]);
+        } else if (options.system?.includes('You PLAN a questionnaire')) {
+          planUserText = user;
+          text = JSON.stringify({
+            threads: [{ label: 'Health & body', angle: 'what rest looks like' }],
+          });
         } else {
           generationUserText = user;
           text = JSON.stringify({
@@ -3197,10 +3293,12 @@ describe('createCoreBridge', () => {
       existingPrompts: [],
       recipientPersonId: ownerId,
     });
-    expect(generationUserText).toContain(
-      'QUESTIONS SELFOS IS CURIOUS ABOUT ASKING THIS PERSON NEXT',
-    );
-    expect(generationUserText).toContain(candidatePrompt);
+    // spec 71 §5.5 — a candidate still steers, but as GROUND for the planner, never as finished question text
+    // handed to generation. Feeding the model a polished stored question is what produced the reported
+    // near-verbatim repeat, so its wording must not reach the writer at all.
+    expect(planUserText).toContain('GROUND STILL OPEN');
+    expect(generationUserText).not.toContain(candidatePrompt);
+    expect(generationUserText).toContain('GROUND TO OPEN THIS TIME');
 
     // Asked-drops-off (spec 70 §5.5): actually ask the candidate's question → `markCandidateAsked` stamps it,
     // so it stops steering + drops off the feed. Own-scoped (the recipient's own def prompts).

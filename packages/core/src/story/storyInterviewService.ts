@@ -131,6 +131,8 @@ export async function mintStoryCheckInFromTodo(
     ...(dedupReference ? { dedupReference } : {}),
     ...(recipientAskedPrompts.length > 0 ? { recipientAskedPrompts } : {}),
     ...(feedbackGuidance ? { feedbackGuidance } : {}),
+    // spec 71 — a biographer check-in is a self-send, so the person is both author and recipient.
+    recipientPersonId: deps.personId,
     count: STORY_CHECKIN_COUNT,
   });
   if (!gen.ok) {

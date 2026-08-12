@@ -1404,6 +1404,12 @@ export const QuestionSchema = z.object({
   required: z.boolean(),
   placeholder: z.string().optional(), // example/hint text for free-text answers (additive)
   group: z.string().optional(), // optional accordion group heading for long forms (18 §14.3, additive)
+  // The ground this question covers, tagged at WRITE time by the pass that wrote it (71 §5.3), plus a compact
+  // restatement of it. Both additive-optional — a hand-authored or pre-71 question simply carries neither.
+  // They ride the question through draft → edit → send so the ask ledger can be appended from the frozen
+  // snapshot without a second classification call. Never shown to the recipient.
+  topicIds: z.array(z.string()).optional(),
+  gist: z.string().optional(),
   media: z
     .object({ imagePath: z.string().min(1), alt: z.string(), mime: z.string().min(1) })
     .optional(), // author-attached image (encrypted; ZK on relay). `mime` builds the display data URL.

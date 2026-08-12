@@ -182,6 +182,8 @@ export async function mintDreamQuestionnaires(
       ...(dedupReference ? { dedupReference } : {}),
       ...(recipientAskedPrompts.length ? { recipientAskedPrompts } : {}),
       ...(dFeedback ? { feedbackGuidance: dFeedback } : {}),
+      // spec 71 — plan against what this person has actually been asked, and tag what we ask them.
+      recipientPersonId: recipient.personId,
     });
     const questions = generated.ok ? (generated.questions ?? []) : [];
     if (questions.length === 0) continue;

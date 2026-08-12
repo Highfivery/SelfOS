@@ -251,6 +251,9 @@ export async function runAutoCheckins(input: RunAutoCheckinsInput): Promise<Auto
         ...(bundle.feedbackGuidance ? { feedbackGuidance: bundle.feedbackGuidance } : {}),
         // spec 69 §5.4 — a self check-in can reflect a partner's shared desire (restricted never crosses).
         ...(bundle.partnerContext ? { partnerContext: bundle.partnerContext } : {}),
+        // spec 71 — the ask ledger + planner. This is the path most of the reported repetition came through
+        // (13 of one recipient's 22 intimacy sends), so it must be steered the same way the manual draft is.
+        recipientPersonId: elig.recipientPersonId,
         recipient: elig.recipient,
       });
 

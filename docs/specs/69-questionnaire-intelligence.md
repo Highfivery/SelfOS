@@ -601,6 +601,12 @@ _These finer points were resolved with the owner (2026-08-07); the defaults belo
 
 ## 15. Changelog
 
+- 2026-08-12 — **§5.2's coverage guidance is SUPERSEDED by [`71`](71-question-intelligence-rebuild.md).** It
+  was type-agnostic: on a real unfiltered intimacy draft it emitted "put MOST questions on genuinely new
+  territory: **Friendships**" and listed all ten explicit categories under "leave these" — the inverse of what
+  the tier called for — and, placed last, it outranked the explicit register. Choosing ground moved to the
+  planner, scoped by type + tier. `gatherRecipientFeedbackGuidance` is now **boundaries only**; §5.9's
+  avoid/boundary/reword steering is unchanged and still feeds both passes.
 - 2026-08-09 — **Phase 5 — live-model prompt tuning DONE (§26.3).** Ran the real coverage-placement +
   generation-with-steering prompts against `claude-sonnet-4-6` on crafted inputs. The run **validated the
   steering** — generation led with the unexplored areas, avoided the declined topics, and stayed light after a

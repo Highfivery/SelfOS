@@ -1,7 +1,8 @@
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
 import type { Answer, Assignment, AssignmentStatus, ResponseSet } from '../schemas';
-import { getAssignment, updateAssignmentStatus } from './assignmentService';
+import { classifyOutcome, recordOutcomes } from './askLedger';
+import { getAssignment, getAssignmentSnapshot, updateAssignmentStatus } from './assignmentService';
 import { captureResponseFeedback } from './profileFeedback';
 import { getResponse, saveResponse } from './responseService';
 
@@ -145,7 +146,41 @@ export async function submitResponse(
   } catch {
     // profile capture is a learning side-effect, not part of the submit
   }
+  // Record how each question LANDED (spec 71 §5.4) — the signal that lets the app notice a vein it keeps
+  // mining is one the person keeps skipping, and stop, rather than counting asks alone. Best-effort.
+  try {
+    await recordSubmissionOutcomes(fs, key, input.assignmentId, input.answers);
+  } catch {
+    // outcome learning is a side-effect, not part of the submit
+  }
   return response;
+}
+
+/**
+ * Stamp each asked question's outcome onto the recipient's ask ledger. Deterministic (no AI): a decline is
+ * `declined`, an unanswered question is `skipped`, and a substantive free-text answer is `rich`. Every question
+ * in the frozen snapshot is covered — a question the person never touched is exactly the `skipped` signal.
+ */
+async function recordSubmissionOutcomes(
+  fs: FileSystem,
+  key: Uint8Array,
+  assignmentId: string,
+  answers: readonly Answer[],
+): Promise<void> {
+  const assignment = await getAssignment(fs, key, assignmentId);
+  if (!assignment || assignment.recipient.kind !== 'person') return;
+  const snapshot = await getAssignmentSnapshot(fs, key, assignmentId);
+  if (!snapshot) return;
+  const byId = new Map(answers.map((a) => [a.questionId, a.value]));
+  await recordOutcomes(
+    fs,
+    key,
+    assignment.recipient.personId,
+    snapshot.questions.map((q) => ({
+      questionId: q.id,
+      outcome: classifyOutcome(q, byId.get(q.id)),
+    })),
+  );
 }
 
 /** Decline an assignment, silently or with an optional short note. Locks it at `declined`. */

@@ -95,12 +95,13 @@ describe('refreshCoverage', () => {
     // Intimacy categories were folded in deterministically (a fresh person → all uncovered).
     expect(profile.coverage.topics.some((t) => t.topicId === 'Intimacy:oral')).toBe(true);
 
-    // …and the combined generation guidance now leads with the unexplored ground.
+    // …and the shared steering block is now BOUNDARIES ONLY (spec 71 §5.5). Choosing ground moved to the
+    // planner, scoped to the questionnaire's type + tier, because this block was type-agnostic: on a real
+    // unfiltered intimacy draft it told the model to lead with "Friendships" and to leave every explicit
+    // category alone. A fresh person has no skip/decline history, so there is nothing to say here at all.
     const guidance = await gatherRecipientFeedbackGuidance(fs, key, 'p1', new Date());
-    expect(guidance).toContain('NEW / UNEXPLORED GROUND');
-    expect(guidance).toContain('- Money');
-    expect(guidance).toContain('Already explored');
-    expect(guidance).toContain('- Work & purpose');
+    expect(guidance).not.toContain('NEW / UNEXPLORED GROUND');
+    expect(guidance).not.toContain('Already explored');
   });
 
   it('is fail-safe: a no-key pass leaves the last-good coverage untouched', async () => {

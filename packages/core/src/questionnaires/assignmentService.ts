@@ -12,6 +12,7 @@ import {
   type Recipient,
 } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
+import { appendAsks } from './askLedger';
 import { SENDS_DIR, assignmentPath, sendDir, snapshotPath } from './paths';
 import { replaceQuestion } from './questionCorrection';
 import { getQuestionnaire, validateQuestionnaire } from './questionnaireService';
@@ -71,6 +72,31 @@ export async function createAssignment(
     ...(input.expiresAt !== undefined ? { expiresAt: input.expiresAt } : {}),
   };
   await writeEncryptedJson(fs, assignmentPath(id), assignment, key);
+  // Append the ask ledger (spec 71 §5.1) — the recipient's durable record of what they were asked, so future
+  // generation never has to re-derive it by decrypting every past send. The tags were stamped on each question
+  // at write time, so this needs no extra AI call. Household recipients only (an external recipient has no
+  // household record). Best-effort: a ledger failure must never fail a send that has already been written.
+  if (input.recipient.kind === 'person') {
+    try {
+      await appendAsks(
+        fs,
+        key,
+        input.recipient.personId,
+        questionnaire.questions.map((q) => ({
+          questionId: q.id,
+          assignmentId: id,
+          at,
+          type: questionnaire.type,
+          tier: questionnaire.sensitivity,
+          topicIds: q.topicIds ?? [],
+          gist: q.gist ?? '',
+          outcome: 'pending' as const,
+        })),
+      );
+    } catch {
+      // the ledger is a learning side-effect, not part of the send contract
+    }
+  }
   return assignment;
 }
 

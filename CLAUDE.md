@@ -438,6 +438,32 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-11 — **Audit + fix (questionnaire flow swept for the §32.7–§32.9 defect classes; SPEC 08 §32.10; on
+  `fix/questionnaire-audit-option-integrity`).** Rather than wait for a fourth report, swept the flow for the
+  root class behind all three: **model output accepted without checking it's the right KIND of thing**, worst
+  where nobody reviews it. Two more found + fixed: (1) **the compatibility variant rewrite** applied ANY
+  non-empty prompt the model returned — a refusal or a paragraph of prose would silently become the question
+  that recipient answers, and the SENDER never sees the variant; it now falls back to the canonical prompt via
+  `isUsableRewrite`, judged on LENGTH not refusal-phrase matching (a real question can contain "I won't" — §6
+  never-assume-a-refusal). (2) **Hand-authored duplicate options** — §32.8 deduped generated options and §32
+  deduped corrected ones, but the builder had no rule, so an author could ship two identical choices;
+  distinctness moved into `questionShapeProblems` (the canonical validator) so it covers authored + generated +
+  corrected from ONE place. **Checked and found sound** (recorded so the next audit doesn't re-tread): crisis
+  flags are `.catch(undefined)` everywhere (never coerced); other tolerant-parse defaults are inert and
+  `intimacy` fails closed; auto check-ins pre-validate before saving so a bad slot skips without orphaning or
+  aborting the run; `isAnswered` is correct per type; the flow's `catch` blocks are documented side-effect
+  swallows, not hidden failures. **Documented drift, safe direction:** the Results aggregate computes numeric
+  averages from Standard sends only while §20.7 says Private folds in too — the code is MORE private than the
+  spec, left as-is and recorded. **Process note: a concurrent session had uncommitted `coreBridge.ts` work (a
+  relay bundle-version guard) in the shared tree; a `git stash`/`pop` cycle swept it into my working set and it
+  failed 3 relay E2E. Verified against baseline, isolated their two files with a path-scoped `git stash`, proved
+  MY changes pass, then restored their work untouched and committed only my four files.** Gate green: typecheck
+  (4 pkgs), lint, format, **1980 core + 1560 desktop** unit (+`isUsableRewrite` cases incl. the "I won't"
+  false-positive guard; +an authored-duplicate-options validator test). **Lesson: when the same root cause
+  produces three separate reports, sweep for the class instead of fixing the instance — and the highest-risk
+  instances are the paths with NO human in the loop (auto check-ins, per-recipient variants), where a bad
+  generation reaches someone with nobody having read it.**
+
 - 2026-08-11 — **Fix (questionnaire correction: the "which record is wrong?" picker is REMOVED; member-reported
   a third time; SPEC 08 §32.9; on `fix/questionnaire-remove-record-picker`).** On the §32.7 build, saying "the
   answers didn't make any sense" STILL produced "I'm not sure which record this came from. Which one is wrong?"

@@ -174,6 +174,23 @@ export function questionShapeProblems(q: Question): string[] {
   if (NEEDS_OPTIONS.has(q.type) && (q.options?.length ?? 0) < 2) {
     problems.push(`"${q.prompt}" (${q.type}) needs at least two options.`);
   }
+  // An option string IS the stored answer, so two identical options leave the person no way to express a
+  // difference and record the same value either way. Generated + corrected options are already deduped at
+  // their source; this catches the hand-authored case so the author is told rather than the recipient
+  // being confused.
+  if (q.options) {
+    const seen = new Set<string>();
+    for (const o of q.options) {
+      const k = o.trim().toLowerCase();
+      if (k !== '' && seen.has(k)) {
+        problems.push(
+          `"${q.prompt}" repeats the option "${o.trim()}" — each option must be distinct.`,
+        );
+        break;
+      }
+      seen.add(k);
+    }
+  }
   if ((q.type === 'rating' || q.type === 'slider') && !q.scale) {
     problems.push(`"${q.prompt}" (${q.type}) needs a scale.`);
   }

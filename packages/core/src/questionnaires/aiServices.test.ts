@@ -21,6 +21,7 @@ import { GAP_FINDER_SYSTEM, GENERATION_SYSTEM } from './aiPrompts';
 import {
   generateQuestions,
   improveQuestion,
+  isUsableRewrite,
   sharpenQuestion,
   type AiDeps,
 } from './generationService';
@@ -1352,5 +1353,20 @@ describe('generated option quality (08 §32.8)', () => {
     expect(GENERATION_SYSTEM).toContain('THE OPTIONS MUST ACTUALLY ANSWER THE PROMPT');
     expect(GENERATION_SYSTEM).toMatch(/both, neither, it depends/);
     expect(GENERATION_SYSTEM).toMatch(/genuine either\/or/);
+  });
+});
+
+describe('unreviewed variant rewrites (08 §32.10)', () => {
+  it('keeps the canonical question when the "personalization" isn’t plausibly a rewrite', () => {
+    const canonical = 'How did that land for you?';
+    // A refusal and a paragraph of prose both reach the recipient as their question, and the sender never
+    // sees the variant — so an implausible rewrite falls back to the canonical prompt.
+    expect(isUsableRewrite(canonical, '')).toBe(false);
+    expect(isUsableRewrite(canonical, '   ')).toBe(false);
+    expect(isUsableRewrite(canonical, 'x'.repeat(500))).toBe(false);
+    // A real personalization — and a legitimately long question — still pass. Length, not phrase-matching,
+    // because a genuine question can contain "I won't" (never assume a refusal).
+    expect(isUsableRewrite(canonical, 'How did that land for you, Angel?')).toBe(true);
+    expect(isUsableRewrite(canonical, 'When do you say “I won’t” to someone you love?')).toBe(true);
   });
 });

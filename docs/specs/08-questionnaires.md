@@ -4211,3 +4211,44 @@ Removed end-to-end: `FactCorrectionCandidate`, `FactCorrectionOutcome.candidates
 `assignments:correctFactChoose` channel + handler + preload + mock, `MAX_CORRECTION_CANDIDATES`/`toCandidate`/
 `candidateId`, and the picker UI + styles. A confidently-matched record is still quoted in place and still
 auto-flagged (§32.3), which is the part that ever worked.
+
+## 32.10 Flow audit — option integrity everywhere (2026-08-11)
+
+> **Status: BUILT** (`fix/questionnaire-audit-option-integrity`). A sweep of the questionnaire flow for more
+> of the defect classes §32.7–§32.9 exposed, rather than waiting for the next report.
+
+Two more instances of the same root class — **model output accepted without checking it's the right KIND of
+thing**, on paths where nobody reviews it:
+
+- **The compatibility variant rewrite** (`generateVariant`) applied any non-empty prompt the model returned.
+  A refusal sentence or a paragraph of prose would silently become the question that recipient answers, and
+  the SENDER never sees the variant. It now falls back to the canonical prompt unless the rewrite is
+  plausibly a rewrite (`isUsableRewrite`) — judged on **length, not refusal-phrase matching**, since a real
+  question can contain "I won't" (§6: never assume a refusal).
+- **Hand-authored duplicate options.** §32.8 deduped generated options and §32 deduped corrected ones, but the
+  builder had no such rule, so an author could ship two identical choices. Distinctness moved into
+  `questionShapeProblems` — the canonical validator — so it now covers **authored, generated and corrected**
+  questions from one place, and the author is told at Check/send rather than the recipient left confused.
+
+### Checked and found sound
+
+- **Crisis / distress flags** — every producer parses `crisisFlag` as `.catch(undefined)`, never coerced, so a
+  per-element salvage can't drop a safety signal.
+- **Tolerant-parse defaults** elsewhere in the flow (`coverage`, `gapFinder`, `personalizationProfile`) all
+  default to inert values; `intimacy` defaults **false** (fail-closed).
+- **Auto check-ins** pre-validate with `validateQuestionnaire` BEFORE saving, so a bad slot is skipped without
+  orphaning a def or aborting the run — and with §32.8 dropping unusable questions, an all-dropped set fails
+  closed as `generate:invalid` rather than sending something unanswerable.
+- **`isAnswered`** is correct per answer type; a required allocation must total 100.
+- **Swallowed `catch` blocks** in the flow are all documented, deliberate side-effect swallows (profile
+  capture, relay teardown), not hidden failures.
+- **`improveQuestion`** can return a refusal as the new prompt, but it is an author-facing assist with
+  immediate visual feedback and an undo — noted, not guarded, to avoid false-positive refusal detection on
+  legitimate question text.
+
+### Known drift (documented, safe direction)
+
+`buildQuestionnaireAggregate` computes **numeric** averages from Standard sends only; §20.7 documents numeric
+averages as folding in Private sends too (numbers already reach the sender's trends). The code is therefore
+MORE private than the spec claims. Left as-is — the conservative direction — and recorded here rather than
+silently reconciled either way.

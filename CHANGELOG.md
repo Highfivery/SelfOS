@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.8](https://github.com/Highfivery/SelfOS/compare/v0.51.7...v0.51.8) (2026-08-12)
+
+
+### Bug Fixes
+
+* **relay:** refuse to deploy a stale relay bundle (08 §17.14c-2) ([#413](https://github.com/Highfivery/SelfOS/issues/413)) ([9ee0ac4](https://github.com/Highfivery/SelfOS/commit/9ee0ac4aa7f704bf629c1113fa40e36295e97475))
+
 ## [0.51.7](https://github.com/Highfivery/SelfOS/compare/v0.51.6...v0.51.7) (2026-08-12)
 
 

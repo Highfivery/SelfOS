@@ -1610,7 +1610,7 @@ test('people: the merged Notes field persists with a share lock (15 §4.3)', asy
     await w.getByLabel('Notes', { exact: true }).fill('enjoys cycling');
     // Lock the notes to this person only via the per-field ShareToggle.
     await w.getByRole('button', { name: /Notes: shared/i }).click();
-    await w.getByRole('button', { name: 'Save response' }).click();
+    await w.getByRole('button', { name: 'Save' }).click();
 
     // Reopen and confirm the merged field + the lock round-tripped through encryption.
     await w.getByRole('button', { name: 'Tester Subject' }).click();
@@ -1676,7 +1676,7 @@ test('shareability: a locked field never reaches a related person’s assembled 
     await w.getByLabel('Ethnicity', { exact: true }).fill('SHARED-KOREAN');
     await w.getByLabel('Appearance', { exact: true }).fill('LOCKED-FEATURE');
     await w.getByRole('button', { name: /Appearance: shared/i }).click(); // lock it
-    await w.getByRole('button', { name: 'Save response' }).click();
+    await w.getByRole('button', { name: 'Save' }).click();
 
     // Relate Robin to the subject so Robin's SHARED data flows into the subject's context.
     await w.getByText('Robin').click();
@@ -2895,7 +2895,7 @@ test('usage: the dashboard shows recorded usage and accepts a budget, without ov
     await expect(w.getByText('Tester, this month')).toBeVisible();
 
     await w.getByLabel('Everyone (app) limit (USD)').fill('5');
-    await w.getByRole('button', { name: 'Save front and back matter' }).click();
+    await w.getByRole('button', { name: 'Save' }).click();
     await expect(w.getByText(/\$5\.00/)).toBeVisible(); // app-cap progress reflects the limit (admin sees $)
 
     const overflow = await w.evaluate(() => {
@@ -4469,8 +4469,11 @@ test('email (67 P0): the Settings panel connects + sets prefs; the welcome auto-
     // The Settings → Email panel: connect controls (admin) + the engagement address + toggles.
     await w.getByRole('link', { name: 'Settings' }).click();
     await w.getByRole('button', { name: 'Email' }).click();
-    await expect(w.getByText('Connect Resend')).toBeVisible();
-    await expect(w.getByText('Admin only')).toBeVisible();
+    // `exact` matters: the panel also carries a "Connect Resend (above) to turn on email." hint, so a
+    // substring match is strict-mode ambiguous.
+    await expect(w.getByText('Connect Resend', { exact: true })).toBeVisible();
+    // The panel now carries more than one admin-gated control, so scope to the first badge.
+    await expect(w.getByText('Admin only').first()).toBeVisible();
     await expect(w.getByLabel('Email me at')).toHaveValue('owner@inbox.example');
     await expect(w.getByRole('switch', { name: /Welcome & getting-started/ })).toBeEnabled();
 
@@ -7697,7 +7700,7 @@ test('dreams: visualize a dream — sensitive warning, generate, encrypted round
     // forward, or Save silently orphans the encrypted bytes and the image vanishes from the UI.
     await w.getByRole('button', { name: 'Edit dream' }).click();
     await w.getByLabel('What happened?').fill('A brighter surreal place of open doors.');
-    await w.getByRole('button', { name: 'Save response' }).click();
+    await w.getByRole('button', { name: 'Save' }).click();
     // Saving an edit returns to the read-first detail — the image must still be rendered there.
     await expect(w.getByText('A brighter surreal place of open doors.')).toBeVisible();
     await expect(w.getByRole('img')).toBeVisible();
@@ -12977,7 +12980,7 @@ test('memory redesign (62): sections collapsed (sensitive too), edit a fact inli
     await w.getByRole('button', { name: 'Edit this insight' }).click();
     const field = w.getByRole('textbox', { name: 'Edit fact: Likes early starts' });
     await field.fill('Likes slow mornings');
-    await w.getByRole('button', { name: 'Save response' }).click();
+    await w.getByRole('button', { name: 'Save' }).click();
 
     // Decrypt-level proof: the inline edit persisted to the vault (trim tolerates a `fill` whitespace quirk).
     await expect

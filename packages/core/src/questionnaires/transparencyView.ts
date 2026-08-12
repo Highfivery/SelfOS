@@ -2,8 +2,10 @@ import type { FileSystem } from '../host';
 import { getPerson } from '../people/peopleService';
 import { listRelationships, livePartnerIds } from '../people/relationshipService';
 
+import { deriveTopicStats, readLedger, type AskLedger } from './askLedger';
 import { deriveIntimacyCoverageFor } from './coverageService';
 import { deriveCoverageSkeleton } from './coverageModel';
+import { ensureTopics, SATURATION_ASKS, type Topic } from './topicMap';
 import {
   addPartnerWish,
   applyCandidateCuration,
@@ -208,6 +210,54 @@ export function mergeProfileCoverage(
 }
 
 /**
+ * Fold the spec-71 **emergent topic map** + **ask ledger** into the coverage rows the Explored tab renders.
+ *
+ * Two things change for the person looking at the panel: ground the model has NAMED for them (which the fixed
+ * 9-life-area + 14-category vocabulary had no room for) now appears, and every row's exploration reads from
+ * what was ACTUALLY asked rather than an AI-estimated depth — the estimate that reported nine worked-through
+ * intimacy categories as unexplored.
+ *
+ * Only applied once the ledger is authoritative (the one-time backfill has run), so the panel never regresses
+ * to "nothing explored" mid-migration. Pure.
+ */
+export function foldTopicMap(
+  merged: readonly CoverageTopic[],
+  topics: readonly Topic[],
+  ledger: AskLedger,
+): CoverageTopic[] {
+  if (ledger.backfilledAt === undefined) return [...merged];
+  const stats = deriveTopicStats(ledger);
+  const known = new Set(merged.map((t) => t.topicId));
+  const withReal = merged.map((t) => {
+    const s = stats.get(t.topicId);
+    if (!s) return t;
+    return {
+      ...t,
+      askedCount: s.askedCount,
+      depth: Math.min(1, s.askedCount / SATURATION_ASKS),
+      explored: s.askedCount > 0 || t.explored,
+      ...(s.lastAskedAt ? { lastAskedAt: s.lastAskedAt } : {}),
+    };
+  });
+  const appended: CoverageTopic[] = topics
+    .filter((t) => !known.has(t.topicId))
+    .map((t) => {
+      const s = stats.get(t.topicId) ?? { askedCount: 0, richCount: 0, deadCount: 0 };
+      return {
+        topicId: t.topicId,
+        lifeArea: t.lifeArea,
+        label: t.label,
+        explored: s.askedCount > 0,
+        depth: Math.min(1, s.askedCount / SATURATION_ASKS),
+        askedCount: s.askedCount,
+        saturated: s.askedCount >= SATURATION_ASKS,
+        ...(s.lastAskedAt ? { lastAskedAt: s.lastAskedAt } : {}),
+      };
+    });
+  return [...withReal, ...appended];
+}
+
+/**
  * Project resolved coverage topics + the profile's feedback ledger into the own-scoped panel view. One coarse
  * row per life area (max depth across its topics); Intimacy is aggregated into a single read-only row (no
  * per-category enumeration — sensitive). Pure.
@@ -300,12 +350,17 @@ export async function readCoverageView(
   now: Date,
   adultAcknowledged = false,
 ): Promise<QuestionnaireCoverageView> {
-  const [profile, intimacy] = await Promise.all([
+  const [profile, intimacy, ledger] = await Promise.all([
     readProfile(fs, key, personId),
     deriveIntimacyCoverageFor(fs, key, personId, now),
+    readLedger(fs, key, personId),
   ]);
   const skeleton = deriveCoverageSkeleton(intimacy);
-  const topics = mergeProfileCoverage(skeleton, profile.coverage.topics);
+  const topics = foldTopicMap(
+    mergeProfileCoverage(skeleton, profile.coverage.topics),
+    ensureTopics(profile.topics),
+    ledger,
+  );
   const projected = projectCoverageView(topics, profile, now, adultAcknowledged);
   const partners = await gatherPartnerWishGroups(fs, key, personId, profile);
   return { ...projected, partners };

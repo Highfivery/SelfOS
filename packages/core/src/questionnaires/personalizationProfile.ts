@@ -9,6 +9,7 @@ import {
   UNCLEAR_SKIP_REASON,
 } from './answering';
 import { isNearDuplicate } from './dedup';
+import { TopicSchema } from './topicMap';
 
 /**
  * The per-person **Personalization Profile** (spec 69 §4) — one encrypted doc at
@@ -184,6 +185,11 @@ export const PersonalizationProfileSchema = z.object({
   // (the spec 69 §4.1 precedent). Absent on a pre-spec-70 profile → an empty feed derived on the next refresh.
   candidates: z.array(NextCandidateSchema).catch([]).default([]),
   candidatesRefreshedAt: z.string().optional(),
+  // The emergent topic map (spec 71 §5.3) — this person's evolving vocabulary of explored ground. Additive-
+  // optional and tolerant-parsed (no `schemaVersion` bump, the spec 69 §4.1 precedent): absent ⇒ seeded from
+  // the built-in categories on first use. Counts are NOT stored here — they derive from the ask ledger, so
+  // they can never drift from what was actually asked.
+  topics: z.array(TopicSchema).catch([]).optional(),
   relational: z
     .object({
       reciprocity: z.array(ReciprocityCandidateSchema).catch([]).default([]),

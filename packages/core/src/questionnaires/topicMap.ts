@@ -1,0 +1,316 @@
+import { z } from 'zod';
+
+import { INTIMACY_CATEGORIES, INTIMACY_CATEGORY_LABELS } from '../intimacy/topics';
+import { LIFE_AREAS } from '../schemas';
+import type { AskLedger, TopicStats } from './askLedger';
+import { deriveTopicStats } from './askLedger';
+import { jaccard, tokenSet } from './dedup';
+
+/**
+ * The **emergent per-person topic map** (spec 71 §5.3) — the vocabulary of ground SelfOS has explored with
+ * one person, seeded from the built-in categories and then GROWN by the model as it names real ground.
+ *
+ * This replaces two hard-coded things at once:
+ *
+ * 1. `intimacy/coverage.ts`'s fixed 14 categories + hand-written `CATEGORY_KEYWORDS` regex. Measured on a
+ *    real vault, that classifier credited **34.3%** of a person's intimacy questions to ZERO categories —
+ *    including unambiguous content ("when Ben does take control during sex" → power exchange) — so a third of
+ *    what had been asked was invisible to saturation and could be re-asked forever (spec 71 §1 D4).
+ * 2. The fixed 9 general life areas, which could never name a strand the person's own material was actually
+ *    about.
+ *
+ * Questions are now tagged **at write time** by the pass that wrote them (which knows exactly what it asked),
+ * and any topic it names that doesn't exist yet is minted here — normalised and alias-merged so near-synonyms
+ * ("dirty talk" / "verbal") can't fork into two half-counted topics. The built-in categories survive only as
+ * SEED vocabulary, so day-one behaviour is no worse than before, never as a ceiling.
+ *
+ * PURE — no I/O, no AI, no crypto. Counts are DERIVED from the ask ledger rather than stored, so they can
+ * never drift from what was actually asked.
+ */
+
+/** How many asks work a topic through before it is off-limits (carried over from the intimacy engine). */
+export const SATURATION_ASKS = 3;
+
+/**
+ * The hard cooldown floor (spec 71 §5.2). A re-opened topic still cannot be asked again within this window,
+ * whatever signal re-opened it. This is the guard that stops the mechanism silently going inert the way the
+ * old `new-material` signal did — no signal can override it.
+ */
+export const COOLDOWN_DAYS = 14;
+
+/** A saturated topic may be revisited from a fresh angle after this long untouched. */
+export const DORMANT_DAYS = 90;
+
+/** Quality saturation (spec 71 §5.4): this many dead answers, at this rate, closes a topic on quality alone. */
+export const QUALITY_DEAD_ASKS = 3;
+const QUALITY_DEAD_RATE = 0.6;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Merge a proposed topic into an existing one when their labels are this similar. */
+const ALIAS_MATCH_THRESHOLD = 0.6;
+
+export const TopicSchema = z.object({
+  /** Stable slug — the ledger's `topicIds` reference this. */
+  topicId: z.string().min(1),
+  label: z.string().min(1),
+  /** The parent bucket, one of `LIFE_AREAS` — drives the type-scoping in §5.5. */
+  lifeArea: z.string(),
+  /** True for the built-in seed vocabulary; false for anything the model named. */
+  seeded: z.boolean().catch(false).default(false),
+  /** Labels that fold into this topic, so a near-synonym can't fork the count. */
+  aliases: z.array(z.string()).catch([]).default([]),
+});
+export type Topic = z.infer<typeof TopicSchema>;
+
+/** Normalize a free-text topic label into a stable slug. */
+export function slugTopic(label: string): string {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+}
+
+/**
+ * The seed vocabulary: one topic per general life area, plus one per built-in intimacy category. Topic ids
+ * match the shape the Explored tab already renders (`Work & purpose`, `Intimacy:oral`), so seeding is
+ * continuous with the existing surface rather than a visible reset.
+ */
+export function seedTopics(): Topic[] {
+  const general = LIFE_AREAS.filter((a) => a !== 'Intimacy').map((area) => ({
+    topicId: area,
+    label: area,
+    lifeArea: area,
+    seeded: true,
+    aliases: [],
+  }));
+  const intimacy = INTIMACY_CATEGORIES.map((c) => ({
+    topicId: `Intimacy:${c}`,
+    label: INTIMACY_CATEGORY_LABELS[c],
+    lifeArea: 'Intimacy',
+    seeded: true,
+    aliases: [],
+  }));
+  return [...general, ...intimacy];
+}
+
+/** The person's map, seeded when they have none yet. */
+export function ensureTopics(topics: readonly Topic[] | undefined): Topic[] {
+  return topics && topics.length > 0 ? [...topics] : seedTopics();
+}
+
+/**
+ * Resolve a model-proposed topic to an EXISTING topic id, or `null` when it is genuinely new.
+ *
+ * Matching order: exact id → alias → normalised-label equality → label token similarity. The similarity step
+ * is what stops "dirty talk" and "talking dirty / verbal" becoming two topics that each look under-explored.
+ */
+export function resolveTopicId(proposed: string, topics: readonly Topic[]): string | null {
+  const raw = proposed.trim();
+  if (raw === '') return null;
+  const slug = slugTopic(raw);
+  const lower = raw.toLowerCase();
+  for (const t of topics) {
+    if (t.topicId === raw || slugTopic(t.topicId) === slug) return t.topicId;
+    if (t.label.toLowerCase() === lower) return t.topicId;
+    if (t.aliases.some((a) => a.toLowerCase() === lower || slugTopic(a) === slug)) return t.topicId;
+  }
+  const proposedTokens = tokenSet(raw);
+  for (const t of topics) {
+    if (jaccard(proposedTokens, tokenSet(t.label)) >= ALIAS_MATCH_THRESHOLD) return t.topicId;
+  }
+  return null;
+}
+
+/** A topic the model named while writing or classifying a question. */
+export interface TopicProposal {
+  label: string;
+  /** The parent bucket. Anything outside `LIFE_AREAS` falls back to `Other`. */
+  lifeArea?: string;
+}
+
+/**
+ * Fold proposals into the map (pure): resolve each to an existing topic where possible, mint the rest, and
+ * record the proposed label as an alias so the same wording resolves directly next time.
+ *
+ * Returns the updated map plus the resolved id for each proposal, IN ORDER, so the caller can tag its ledger
+ * entries with real ids.
+ */
+export function mintTopics(
+  topics: readonly Topic[],
+  proposals: readonly TopicProposal[],
+): { topics: Topic[]; resolved: string[] } {
+  const out = ensureTopics(topics);
+  const resolved: string[] = [];
+  for (const p of proposals) {
+    const label = p.label.trim();
+    if (label === '') continue;
+    const hit = resolveTopicId(label, out);
+    if (hit) {
+      resolved.push(hit);
+      const idx = out.findIndex((t) => t.topicId === hit);
+      const t = out[idx];
+      // Remember the wording that resolved here, so the next identical proposal is an O(1) alias hit.
+      if (t && t.label.toLowerCase() !== label.toLowerCase() && !t.aliases.includes(label)) {
+        out[idx] = { ...t, aliases: [...t.aliases, label] };
+      }
+      continue;
+    }
+    const lifeArea =
+      p.lifeArea && (LIFE_AREAS as readonly string[]).includes(p.lifeArea) ? p.lifeArea : 'Other';
+    const topicId = slugTopic(`${lifeArea}-${label}`) || slugTopic(label);
+    if (topicId === '') continue;
+    out.push({ topicId, label, lifeArea, seeded: false, aliases: [] });
+    resolved.push(topicId);
+  }
+  return { topics: out, resolved };
+}
+
+/** Why a worked-through topic became askable again (spec 71 §5.2). */
+export type ReopenSignal = 'new-material' | 'explicit-request' | 'dormant';
+
+export interface TopicStatus {
+  topic: Topic;
+  stats: TopicStats;
+  /** Worked through and not re-opened — off-limits. */
+  saturated: boolean;
+  /** Closed because its recent answers were mostly skips/declines, regardless of count (§5.4). */
+  saturatedByQuality: boolean;
+  reopenedBy?: ReopenSignal;
+  /**
+   * True while inside the hard cooldown floor. Independent of `saturated`: even a re-opened topic is not
+   * askable until this clears, which is what makes the mechanism impossible to silently disable.
+   */
+  inCooldown: boolean;
+  /** Askable this round: not saturated, not cooling down. */
+  open: boolean;
+}
+
+export interface TopicStatusInput {
+  topics: readonly Topic[];
+  ledger: AskLedger;
+  /**
+   * Topic ids touched by genuinely NEW material (an insight/answer about this ground). Topic-SCOPED on
+   * purpose: the old engine re-opened every intimacy category on any insight from any life area, which is why
+   * nine saturated categories reported `saturated: []` on a real vault (spec 71 §1 D3).
+   */
+  newMaterialTopicIds?: readonly string[];
+  /** Topics the person or author explicitly asked to explore — always re-opens (but still respects cooldown). */
+  requestedTopicIds?: readonly string[];
+  now: Date;
+}
+
+/** Classify every topic in the map (pure + total). */
+export function topicStatuses(input: TopicStatusInput): TopicStatus[] {
+  const stats = deriveTopicStats(input.ledger);
+  const fresh = new Set(input.newMaterialTopicIds ?? []);
+  const requested = new Set(input.requestedTopicIds ?? []);
+  return ensureTopics(input.topics).map((topic) => {
+    const s = stats.get(topic.topicId) ?? { askedCount: 0, richCount: 0, deadCount: 0 };
+    const saturatedByCount = s.askedCount >= SATURATION_ASKS;
+    const saturatedByQuality =
+      s.deadCount >= QUALITY_DEAD_ASKS &&
+      s.deadCount / Math.max(1, s.askedCount) >= QUALITY_DEAD_RATE;
+
+    let reopenedBy: ReopenSignal | undefined;
+    if (saturatedByCount && !saturatedByQuality) {
+      // Quality saturation is NOT re-openable by new material: the person has repeatedly declined to engage
+      // here, so "there's fresh material" is not a reason to push again.
+      if (requested.has(topic.topicId)) reopenedBy = 'explicit-request';
+      else if (fresh.has(topic.topicId)) reopenedBy = 'new-material';
+      else if (s.lastAskedAt) {
+        const t = Date.parse(s.lastAskedAt);
+        if (!Number.isNaN(t) && input.now.getTime() - t >= DORMANT_DAYS * DAY_MS) {
+          reopenedBy = 'dormant';
+        }
+      }
+    }
+
+    let inCooldown = false;
+    if (s.lastAskedAt) {
+      const t = Date.parse(s.lastAskedAt);
+      inCooldown = !Number.isNaN(t) && input.now.getTime() - t < COOLDOWN_DAYS * DAY_MS;
+    }
+    const saturated = (saturatedByCount && reopenedBy === undefined) || saturatedByQuality;
+    // The cooldown floor gates RE-OPENING worked ground — it must NOT close ground that still has headroom.
+    // Verified against a real vault: applying it to every recently-touched topic left 1 of 14 areas open and
+    // shut the two LEAST-worked ones (asked once and twice), which would push the planner to invent new ground
+    // while obvious ground sat unused. Only a topic that has reached the ask threshold is held by the floor.
+    const heldByCooldown = saturatedByCount && inCooldown;
+    return {
+      topic,
+      stats: s,
+      saturated,
+      saturatedByQuality,
+      ...(reopenedBy !== undefined ? { reopenedBy } : {}),
+      inCooldown,
+      open: !saturated && !heldByCooldown,
+    };
+  });
+}
+
+/**
+ * The "where this person has and hasn't been explored" steering block, built from REAL ask counts.
+ *
+ * This replaces `coverageModel.buildCoverageGuidance` for the paths that still want broad novelty pressure
+ * without a planner (the self-directed email suggestion, spec 67). It is scoped by the CALLER — passing a
+ * type's life areas is what stops it doing what the old block did on a typed draft (spec 71 §1 D2).
+ */
+export function buildTopicSteering(statuses: readonly TopicStatus[]): string {
+  const fresh = statuses
+    .filter((s) => s.open && s.stats.askedCount === 0)
+    .map((s) => `- ${s.topic.label}`);
+  const worked = statuses.filter((s) => !s.open).map((s) => `- ${s.topic.label}`);
+  const sections: string[] = [];
+  if (fresh.length) {
+    sections.push(`NEW / UNEXPLORED GROUND — lead here:\n${fresh.slice(0, 12).join('\n')}`);
+  }
+  if (worked.length) {
+    sections.push(
+      `Already worked through or cooling down — leave these alone:\n${worked.slice(0, 12).join('\n')}`,
+    );
+  }
+  return sections.length
+    ? `WHERE THIS PERSON HAS AND HASN'T BEEN EXPLORED:\n${sections.join('\n\n')}`
+    : '';
+}
+
+/**
+ * The de-dup reference, built from gists + per-topic counts (spec 71 §5.1).
+ *
+ * The whole point: the same history at roughly a tenth the tokens. A person with 272 asks previously
+ * contributed 74,417 chars of raw prompts, of which a 2,000-char cap kept ~8; here each worked topic costs
+ * one line ("Dirty talk & verbal — asked 8×, last 2026-08-02") and each recent ask one short gist.
+ */
+export function buildLedgerReference(
+  statuses: readonly TopicStatus[],
+  ledger: AskLedger,
+  opts: { recentGists?: number } = {},
+): string {
+  const worked = statuses
+    .filter((s) => s.stats.askedCount > 0)
+    .sort((a, b) => b.stats.askedCount - a.stats.askedCount)
+    .map((s) => {
+      const last = s.stats.lastAskedAt ? `, last ${s.stats.lastAskedAt.slice(0, 10)}` : '';
+      const dead = s.stats.deadCount > 0 ? `, ${s.stats.deadCount} skipped/declined` : '';
+      return `- ${s.topic.label} — asked ${s.stats.askedCount}×${last}${dead}`;
+    });
+  const gists = ledger.entries
+    .filter((e) => e.gist.trim() !== '')
+    .slice(-(opts.recentGists ?? 60))
+    .map((e) => `- ${e.gist.trim()}`);
+  const sections: string[] = [];
+  if (worked.length) {
+    sections.push(
+      `GROUND ALREADY WORKED WITH THIS PERSON (never re-ask these):\n${worked.join('\n')}`,
+    );
+  }
+  if (gists.length) {
+    sections.push(
+      `SPECIFICALLY ALREADY ASKED (most recent first is not implied — do not repeat any):\n${gists.join('\n')}`,
+    );
+  }
+  return sections.join('\n\n');
+}

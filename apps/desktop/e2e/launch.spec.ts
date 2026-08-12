@@ -13584,7 +13584,7 @@ test('auto check-ins (63 §13 / 08 §27): a worked-through intimacy category is 
     //    (Scoped to that line: the rated oral act legitimately still appears in the avoid-only known-data
     //    reference, which is what stops it being re-asked as a fresh rating.)
     const deeperLine =
-      /^They have ALREADY RATED the acts below[^\n]*$/m.exec(intimacyPrompt)?.[0] ?? '';
+      /^They have ALREADY RATED acts like these[^\n]*$/m.exec(intimacyPrompt)?.[0] ?? '';
     expect(deeperLine).not.toBe('');
     expect(deeperLine).toContain('Sensual massage');
     expect(/\boral\b/i.test(deeperLine)).toBe(false);

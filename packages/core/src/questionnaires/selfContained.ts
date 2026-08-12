@@ -27,3 +27,29 @@ const DANGLING_PATTERNS: readonly RegExp[] = [
 export function hasDanglingReference(prompt: string): boolean {
   return DANGLING_PATTERNS.some((re) => re.test(prompt));
 }
+
+/**
+ * Recitation: quoting a known fact back at the person before asking about it (spec 71 §5.7).
+ *
+ * `GENERATION_SYSTEM` already forbids this — _"do not recite it back word-for-word or turn a known fact into
+ * 'you said X, tell me about X'"_ — but a prompt rule with no backstop silently rots. On a real vault, seven
+ * of one recipient's questions opened exactly this way ("You've marked explicit dirty talk as something
+ * you're curious about…"), which is both the tell of a re-ask and the thing that makes a questionnaire read
+ * like a transcript of itself.
+ *
+ * Deliberately narrower than "mentions something known": NAMING a fact plainly inside the question is
+ * required (§25.4 self-containment) and must not trip this. Only ATTRIBUTION to the person is a recitation,
+ * so this matches "you've said / you marked / you rated"-style openers, not "when a worry about your health
+ * shows up".
+ */
+const RECITATION_PATTERNS: readonly RegExp[] = [
+  // Contracted attribution anywhere — "you've said", "you have marked". Inherently a recitation.
+  /\byou(?:'ve|’ve| have)\s+(said|told|marked|mentioned|noted|described|rated|listed|shared)\b/i,
+  // Bare past-tense attribution, but only as an OPENER — so "if you said no, what happens?" is left alone.
+  /^\s*(?:so[,\s]+|and\s+|okay[,\s]+)?you\s+(said|marked|mentioned|noted|described|rated|listed)\b/i,
+];
+
+/** Whether a prompt recites a known fact back at the person rather than simply naming it (§5.7). */
+export function hasRecitation(prompt: string): boolean {
+  return RECITATION_PATTERNS.some((re) => re.test(prompt));
+}

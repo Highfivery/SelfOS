@@ -417,6 +417,13 @@ _Proposed defaults; flag any to change before build._
 
 ## 15. Changelog
 
+- 2026-08-12 — **§3.2's candidate feed no longer steers generation directly** (superseded by
+  [`71`](71-question-intelligence-rebuild.md)). `buildCandidateGuidance` emitted "draw generation PRIMARILY
+  from these" over a type-agnostic, tier-agnostic, soft-register pool placed LAST in the prompt — and the two
+  questions a member reported as off-register and repetitive were those stored candidates rewritten, one
+  near-verbatim. Candidates remain the Explored tab's curation surface; a **pinned** one now reaches the
+  planner as GROUND to open, never as question text handed to the writer. The tab's rows gain real ask counts
+  and emergent topics via `foldTopicMap`.
 - 2026-08-09 — **P4 (the silent "Explore with your partner" wishlist) BUILT — SPEC 70 IS NOW COMPLETE (all 4
   phases)** (§12). The final phase: a person steers what their connected partner is asked, silently. (1)
   `personalizationProfile.ts` — `PartnerWish` in `relational.partnerWishes` (additive, tolerant, no

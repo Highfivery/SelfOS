@@ -699,8 +699,10 @@ import {
   gatherRecipientMaterialSignals,
   gatherRecipientQuestionnaireTitles,
   gatherRecipientFeedbackGuidance,
+  gatherRecipientPinnedLabels,
   gatherRecipientPartnerContext,
   generateQuestions,
+  backfillAskLedger,
   refreshCoverage,
   refreshNextCandidates,
   markCandidateAsked,
@@ -1846,8 +1848,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
      *  shared TO them, so a self check-in can personalize + reciprocate (spec 69 §5.4). Restricted never
      *  crosses (the `scopeGrants` gate). Empty for an other-person send. */
     partnerContext: string;
+    /** Ground the person explicitly pinned ("Ask me this") — leads the spec-71 planner. */
+    pinnedLabels: string[];
   }> => {
     const history = await gatherRecipientHistory(fs, key, recipientPersonId);
+    const pinnedLabels = await gatherRecipientPinnedLabels(fs, key, recipientPersonId);
     // The recipient's skip/decline steering (spec 69) — read host-side, fed to the model to avoid what they
     // said doesn't apply / would rather not, and to reword what landed unclear.
     const recipientFeedback = await gatherRecipientFeedbackGuidance(fs, key, recipientPersonId);
@@ -1943,6 +1948,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       intimacyCoverage,
       feedbackGuidance,
       partnerContext,
+      pinnedLabels,
     };
   };
 
@@ -4239,6 +4245,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             intimacyCoverage: undefined,
             feedbackGuidance: '',
             partnerContext: '',
+            pinnedLabels: [] as string[],
           };
       // Who it's FOR (08 §24.4): the recipient's name/pronouns + the author↔recipient relationship (type +
       // closeness), so generation adopts the right register (partner vs coworker vs child) and personalizes.
@@ -4289,6 +4296,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           includeRelationship: recipientIsHousehold,
         },
         existingPrompts: p.existingPrompts,
+        // spec 71 — the ask ledger + emergent topic map: the planner picks ground from what has ACTUALLY been
+        // asked (scoped to this type + tier), and the questions come back tagged so the ledger can be
+        // appended at send time. Household recipients only; an external one has no household record.
+        ...(recipientIsHousehold ? { recipientPersonId: p.recipientPersonId as string } : {}),
+        ...(known.pinnedLabels.length ? { requestedLabels: known.pinnedLabels } : {}),
         ...(known.history ? { recipientHistory: known.history } : {}),
         ...(known.dedupReference ? { dedupReference: known.dedupReference } : {}),
         ...(known.askedPrompts.length ? { recipientAskedPrompts: known.askedPrompts } : {}),
@@ -4731,6 +4743,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         },
         existingPrompts: [],
         count: 6,
+        // spec 71 — same ledger/planner steering as the manual draft path.
+        recipientPersonId,
+        ...(known.pinnedLabels.length ? { requestedLabels: known.pinnedLabels } : {}),
         ...(known.history ? { recipientHistory: known.history } : {}),
         ...(known.dedupReference ? { dedupReference: known.dedupReference } : {}),
         ...(known.askedPrompts.length ? { recipientAskedPrompts: known.askedPrompts } : {}),
@@ -5319,6 +5334,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // failure never fails the memory refresh. Then refresh the forward-first candidate feed (spec 70 §3.2/§5.4)
       // on the SAME cadence, right after — it reads the freshly-placed coverage map to propose "what's next".
       try {
+        // spec 71 §5.6 — seed the ask ledger from this person's existing sends BEFORE the coverage/candidate
+        // passes, so both read a correct history on the very first run. Idempotent (a completed backfill is an
+        // immediate no-op) and fail-safe (a degraded run leaves the flag unset and simply retries tomorrow).
+        await backfillAskLedger(deps, deps.personId);
         await refreshCoverage(deps, deps.personId);
         await refreshNextCandidates(deps, deps.personId);
       } catch {

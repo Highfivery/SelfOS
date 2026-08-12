@@ -112,6 +112,8 @@ const ANSWER_TYPE_GUIDE = `Each question is an object with:
 
 THE OPTIONS MUST ACTUALLY ANSWER THE PROMPT. This is where generated questions most often fail the person: the prompt is good, and then the choices don't fit it, don't fit them, or leave no true answer. Every option must be a direct, plausible answer to the exact question asked — read the prompt back and check that each one is something a real person could mean. They must be DISTINCT (never two that mean the same thing) and mutually exclusive for a single-answer type. Together they must COVER the honest range: if someone's real answer could sit outside your list — both, neither, it depends, it varies, it's changed recently — include that as an option, worded plainly. Reserve a two-option forced choice for a genuine either/or; anything nuanced (feelings, desire, identity, "which pull is stronger") needs the honest middle and outside answers too, or the only way to answer truthfully is to skip. If a question can't be given a fair set of choices, ask it as shortText or longText instead.
 - "scale": {"min":number,"max":number} — REQUIRED for rating and slider (e.g. 1..5).
+- "topics": string[] — REQUIRED, 1–2 short names for the ground this question actually covers (e.g. ["Power exchange / D-s"], ["Who initiates"]). Use the exact label of a thread you were given when it fits; name new ground plainly when it doesn't. This is how the app remembers what it has asked, so be accurate rather than broad — a wrong or missing tag means this question can be asked again forever.
+- "gist": string — REQUIRED, at most 120 characters: what this question asks, in plain words, as a note to yourself (e.g. "how it feels when he takes control, and what she wants more of"). Never shown to the person.
 Do NOT use matrix or allocation. No prose, no markdown fences.
 MATCH the answer type to what the question is trying to learn: a story/feeling/nuance → shortText or longText; "how much" or something to track over time → rating or slider; a quick, playful, or rapport-building choice → thisOrThat or singleChoice/yesNo; ranking priorities → ranking. Vary DELIBERATELY — never stack many rating scales in a row; pick the type that earns the best answer for each question.`;
 
@@ -166,6 +168,9 @@ const SENSITIVITY_NOTE: Record<SensitivityTier, string> = {
  *  the model room to choose, few enough that the set stays coherent rather than a tour of the inventory. */
 const LEAD_CATEGORIES = 4;
 
+/** Cap the "already rated — go deeper" sample (spec 71 §5.7). See the block that uses it for why. */
+const MAX_DEEPEN_ACTS = 8;
+
 /** The two questionnaire types whose sensitivity tiers carry an explicit register (08 §15.2/§22.2). */
 export const INTIMACY_TYPE = 'intimacy';
 export const SCENARIO_TYPE = 'scenario';
@@ -208,10 +213,19 @@ export function explicitFraming(
   // NOT yet worked as this set's subject, states worked-through ground as off-limits, and bounds the
   // "go deeper" list to acts still worth deepening. Absent (a manual draft with no resolved recipient) the
   // pre-§27 behaviour is kept.
-  opts: { scenario?: boolean; focused?: boolean; coverage?: IntimacyCoverage } = {},
+  // `groundChosen` (spec 71 §5.5): the PLANNER has already picked this set's ground, so the ground-selection
+  // blocks below are suppressed — leaving them in would state the ground twice, from two different engines,
+  // and the older one is built on the send-history classifier this spec replaced.
+  opts: {
+    scenario?: boolean;
+    focused?: boolean;
+    coverage?: IntimacyCoverage;
+    groundChosen?: boolean;
+  } = {},
 ): string {
   const scenario = opts.scenario === true;
-  const coverage = opts.coverage;
+  const groundChosen = opts.groundChosen === true;
+  const coverage = groundChosen ? undefined : opts.coverage;
   // Establish the legitimate context FIRST so the model is confident this is appropriate — a private adult who
   // has opted into exploring their own sexuality, not a request to a public assistant.
   const context = scenario
@@ -298,10 +312,14 @@ export function explicitFraming(
   }
   // Already-rated acts → go DEEPER (never re-ask the rating or re-list them as plain options, §19.3). Bounded
   // to acts whose category is NOT worked through (§27.3) so deepening can no longer run forever.
-  const deepenable = coverage ? coverage.deepenableActs : coveredActs;
+  // BOUNDED (spec 71 §5.7). Unbounded, this was the single largest block in the prompt — on a real vault it
+  // listed all 101 rated acts (2,463 chars, 29% of the whole message) and was the direct engine of act-level
+  // re-mining: every check-in was told to go deeper on everything they had ever rated. It is vocabulary, not
+  // ground selection (the planner owns that), so a short sample is all it needs to be.
+  const deepenable = (coverage ? coverage.deepenableActs : coveredActs).slice(0, MAX_DEEPEN_ACTS);
   if (deepenable.length > 0) {
     parts.push(
-      `They have ALREADY RATED the acts below in onboarding — do NOT re-ask whether they like them and do NOT re-offer them as plain multiple-choice options. Instead go DEEPER on them: the how/when/with whom, what would make each better, the specific fantasies, feelings, and edges around them: ${deepenable
+      `They have ALREADY RATED acts like these in onboarding — do NOT re-ask whether they like them and do NOT re-offer them as plain multiple-choice options. Where one is relevant to the ground for this set, go DEEPER on it: the how/when/with whom, what would make it better, the specific fantasies and edges around it: ${deepenable
         .map((a) => `${a.label} (${a.rating})`)
         .join('; ')}.`,
     );
@@ -400,7 +418,11 @@ export function buildGenerationUserMessage(input: {
   };
   // Differentiated steering from the recipient's Personalization Profile (spec 69 §5.9): avoid / boundary /
   // reword blocks built from their prior skips/declines. This is how the app learns what NOT to ask over time.
+  // Since spec 71 §5.5 this is BOUNDARIES ONLY — choosing ground is the planner's job.
   feedbackGuidance?: string;
+  // The ground the planner chose for this set (spec 71 §5.5). Threads, never finished questions: handing the
+  // model polished question text is what produced the reported near-verbatim repeat.
+  threads?: readonly { label: string; angle?: string }[];
   // Partner-shared context for a SELF-send (spec 69 §5.4): facts people close to them shared TO them, so a
   // check-in can personalize + reciprocate a partner's desire. Restricted facts never reach here.
   partnerContext?: string;
@@ -442,6 +464,8 @@ export function buildGenerationUserMessage(input: {
         {
           scenario: input.type === SCENARIO_TYPE,
           focused: focus != null,
+          // The planner already chose (and stated) this set's ground — don't state it twice (spec 71 §5.5).
+          groundChosen: (input.threads?.length ?? 0) > 0,
           ...(input.intimacyCoverage ? { coverage: input.intimacyCoverage } : {}),
         },
       ),
@@ -458,6 +482,18 @@ export function buildGenerationUserMessage(input: {
   if (input.context?.trim()) {
     parts.push(
       `\nUse this context about the people involved to tailor the questions${focus ? ' (within the focus above)' : ''}:\n${input.context.trim()}`,
+    );
+  }
+  // The planner's chosen ground (spec 71 §5.5). Threads, not questions — write each one fresh, at this tier.
+  if (input.threads && input.threads.length > 0) {
+    parts.push(
+      [
+        `\nGROUND TO OPEN THIS TIME — the ground for this set has already been chosen. Build the questions on these threads:`,
+        ...input.threads.map((t) =>
+          t.angle?.trim() ? `- ${t.label} — ${t.angle.trim()}` : `- ${t.label}`,
+        ),
+        `Write each thread as a FRESH question in your own words, in the register above. A thread is ground to open, NOT wording to reuse — never echo these lines back as the question.`,
+      ].join('\n'),
     );
   }
   if (input.existingPrompts.length > 0) {
@@ -500,6 +536,15 @@ export function buildGenerationUserMessage(input: {
   // governs it: even if a topic is unexplored, an "it doesn't apply" / boundary signal keeps it off-limits.
   if (input.feedbackGuidance?.trim()) {
     parts.push(`\n${input.feedbackGuidance.trim()}`);
+  }
+  // The register is restated LAST, so the governing instruction is also the most recent one the model reads
+  // (spec 71 §5.5). The reported failure was structural, not stylistic: the steering blocks that used to sit
+  // here outranked an explicit register stated ~6,000 chars earlier, and the model followed the closer
+  // instruction. Nothing may sit between this and the return contract.
+  if (isSensitiveType && isExplicitTier) {
+    parts.push(
+      `\nREMINDER — this is a ${input.sensitivity.toUpperCase()} ${input.type} questionnaire, and that register GOVERNS: every question is frank, explicit and sexual, in the plain language described above. If a draft question could belong in a gentler tier, or drifts to a non-sexual part of their life, rewrite it before returning it.`,
+    );
   }
   parts.push(`\nReturn the JSON object with a short "title" and the "questions" array.`);
   return parts.filter((p) => p !== '').join('\n');

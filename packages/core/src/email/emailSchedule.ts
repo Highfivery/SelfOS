@@ -12,6 +12,9 @@ import { listGoals } from '../goals/goalService';
 import { listInsightsForPerson, ownSubjectInsights } from '../insights/insightStore';
 import { listAssignments } from '../questionnaires/assignmentService';
 import { gatherRecipientFeedbackGuidance } from '../questionnaires/recipientHistory';
+import { readLedger } from '../questionnaires/askLedger';
+import { readProfile } from '../questionnaires/personalizationProfile';
+import { buildTopicSteering, ensureTopics, topicStatuses } from '../questionnaires/topicMap';
 import { listCoveredTopics } from '../questionnaires/coveredTopicsStore';
 import { getSynthesis } from '../coaching/coachingSynthesisService';
 import { aggregateCrisisSignal } from '../coaching/crisisSignal';
@@ -393,8 +396,22 @@ async function trySuggestion(ctx: {
     // person — the topics they've marked "already covered" for themselves.
     listCoveredTopics(fs, key, personId, personId),
   ]);
+  // spec 71 §5.5 — `gatherRecipientFeedbackGuidance` is now BOUNDARIES ONLY (choosing ground moved to the
+  // questionnaire planner, which an email suggestion doesn't run). Email keeps its novelty pressure by
+  // building the same block from the ask ledger instead — now backed by REAL ask counts rather than an
+  // AI-estimated depth, and across every life area since a suggestion isn't type-scoped.
+  const [ledger, profile] = await Promise.all([
+    readLedger(fs, key, personId),
+    readProfile(fs, key, personId),
+  ]);
+  const topicSteering = buildTopicSteering(
+    topicStatuses({ topics: ensureTopics(profile.topics), ledger, now }),
+  );
+  const combinedGuidance = [feedbackGuidance, topicSteering]
+    .filter((s) => s.trim() !== '')
+    .join('\n\n');
   const steering = {
-    ...(feedbackGuidance.trim() ? { feedbackGuidance } : {}),
+    ...(combinedGuidance.trim() ? { feedbackGuidance: combinedGuidance } : {}),
     ...(covered.length ? { coveredTopics: covered.map((t) => t.note) } : {}),
   };
   const generated = await generateSuggestion(aiDeps, {

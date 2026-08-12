@@ -8,6 +8,8 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'session.analyze': 'Session summary',
   'guided.suggest': 'Session suggestions',
   'questionnaire.generate': 'Questionnaire — AI draft',
+  'questionnaire.plan': 'Questionnaire — planning pass',
+  'questionnaire.classify': 'Questionnaire — topic classification',
   'questionnaire.dedup': 'Questionnaire — de-dup pass',
   'questionnaire.suggest': 'Questionnaire — suggestions',
   'questionnaire.analyze': 'Questionnaire — analysis',

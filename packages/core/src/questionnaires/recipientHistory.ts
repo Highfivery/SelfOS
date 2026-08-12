@@ -3,12 +3,7 @@ import { getPerson } from '../people/peopleService';
 import { listInsightsForPerson, ownSubjectInsights } from '../insights';
 import { formatAnswerForDisplay, isDeclined, type AnswerValue } from './answering';
 import { getAssignmentSnapshot, listAssignments } from './assignmentService';
-import { buildCoverageGuidance } from './coverageModel';
-import {
-  buildCandidateGuidance,
-  buildFeedbackGuidance,
-  readProfile,
-} from './personalizationProfile';
+import { buildFeedbackGuidance, readProfile } from './personalizationProfile';
 import { getResponse } from './responseService';
 
 /**
@@ -364,18 +359,39 @@ export async function gatherRecipientFeedbackGuidance(
   recipientPersonId: string,
   now: Date = new Date(),
 ): Promise<string> {
-  // Profile-derived generation steering: the candidate feed (spec 70 §3.2 — the concrete "ask these next" pool
-  // the person sees + curates) LEADS so "what you see is what gets asked", then the coverage map (spec 69 §5.2 —
-  // lead with new ground), then the differentiated skip/decline feedback (spec 69 §5.9). Read once, combined
-  // into one block. Each is `''` until there's something to say (an empty/pre-placement profile yields nothing).
+  // BOUNDARIES ONLY (spec 71 §5.5). This deliberately no longer includes the candidate feed or the general
+  // life-area coverage block, which used to lead here.
+  //
+  // Those two were the reported bug. `buildCandidateGuidance` emitted "draw generation PRIMARILY from these"
+  // over a type-agnostic, tier-agnostic, soft-register pool, and `buildCoverageGuidance` emitted "put MOST
+  // questions on genuinely new territory" over general life areas — both placed AFTER, and so outranking, the
+  // sensitivity register. On a real unfiltered intimacy draft that told the model to lead with *Friendships*
+  // and to leave every explicit category alone (spec 71 §1 D1/D2).
+  //
+  // Choosing ground is now the PLANNER's job (`planService`), scoped to the questionnaire's type + tier, and
+  // pinned candidates reach it as `requestedLabels`. What remains here is what must constrain BOTH passes: the
+  // person's own don't-ask-me-this signals. `''` until there is something to say.
   const profile = await readProfile(fs, key, recipientPersonId);
-  return [
-    buildCandidateGuidance(profile),
-    buildCoverageGuidance(profile),
-    buildFeedbackGuidance(profile, now),
-  ]
-    .filter((s) => s.trim() !== '')
-    .join('\n\n');
+  return buildFeedbackGuidance(profile, now);
+}
+
+/**
+ * The topic labels the person explicitly pinned ("Ask me this", spec 70 §3.2) — fed to the planner as ground
+ * to lead with, so an explicit request is still honoured now that the candidate feed no longer steers
+ * generation directly. Their WORDING is deliberately not passed on: a pinned candidate is a request for that
+ * ground, and handing the model finished question text is what produced the near-verbatim repeat.
+ */
+export async function gatherRecipientPinnedLabels(
+  fs: FileSystem,
+  key: Uint8Array,
+  recipientPersonId: string,
+): Promise<string[]> {
+  const profile = await readProfile(fs, key, recipientPersonId);
+  const labels = new Set<string>();
+  for (const c of profile.candidates) {
+    if (c.curation === 'asked' || c.curation === 'go-deeper') labels.add(c.lifeArea);
+  }
+  return [...labels];
 }
 
 /** The whole answer history as ONE string (the de-dup reference). Byte-identical to the pre-§15.2 output. */

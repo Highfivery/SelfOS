@@ -651,6 +651,10 @@ No open questions remain — ready for review/approval.
 
 ## 12. Changelog
 
+- 2026-08-12 — Auto check-ins now generate through the [`71`](71-question-intelligence-rebuild.md) planner +
+  ask ledger like every other path. This is where most of the reported repetition came through (13 of one
+  recipient's 22 intimacy sends), so it could not be left on the old steering. **Cadence is unchanged** (owner
+  decision: fix quality, not scheduling).
 - 2026-07-15 — created (Draft). Decisions from two AskUserQuestion rounds folded into §11.
 - 2026-07-15 — §11 resolved (round 2): default **on after onboarding** (seeded + one-time notice), name
   **Auto check-ins**, **Run now** included, queued-peek cut, constants internal, intent-mix via the

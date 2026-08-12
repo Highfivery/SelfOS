@@ -469,6 +469,44 @@ A running log of durable decisions and feedback captured into the project config
   commit on the SHARED tree (and merged as #408) — the guard was extracted into a `git worktree` off
   origin/main, which is the only safe way to work while another session holds the checkout.**
 
+- 2026-08-12 — **Rebuild (question intelligence: the ask ledger, the planner & emergent topics; member-reported
+  twice; SPEC 71 written + approved + BUILT; on `feat/question-intelligence-rebuild`).** An intimacy/unfiltered
+  draft produced a question with nothing to do with the register, and questions already asked. **Diagnosed by
+  decrypting the real vault and reconstructing the exact prompt** (61 sends to the recipient, 272 questions, 99
+  intimacy questions, 101 rated acts) — five defects, all proven, not one: **(D1)** `buildCandidateGuidance`
+  emitted _"draw generation PRIMARILY from these"_ over the spec-70 Explored-tab pool — type-agnostic,
+  tier-agnostic, soft-register, days stale — placed LAST, outranking an explicit register stated ~6,000 chars
+  earlier; **both reported questions were stored candidates rewritten, one near-verbatim**. **(D2)**
+  `buildCoverageGuidance` told the unfiltered draft to _"put MOST questions on … **Friendships**"_ and listed
+  all ten explicit categories under _"leave these"_. **(D3)** saturation was **completely inert**: the
+  `new-material` re-open signal was the newest own-subject Insight of ANY kind, so any session/dream/test
+  re-opened EVERY intimacy category — nine at/past threshold reported `saturated: []`, and `deepenableActs`
+  carried all **101** rated acts (2,463 chars, 29% of the prompt). **(D4)** coverage was classified by
+  hand-written keyword REGEX that credited **34.3%** of her intimacy questions to ZERO categories (incl. "when
+  Ben does take control during sex" → power exchange), so a third of what was asked could be re-asked forever —
+  **both reported questions credited zero**. **(D5)** the de-dup reference capped asked-prompts at 2,000 chars,
+  so **2.7%** of her 74,417 chars of history survived — dirty talk had been asked **7+ times** in near-identical
+  words. Root shape: **the app had no durable memory of what it had asked**, re-deriving it from ciphertext
+  every draft (6 full scans, 1,148 decrypts) and classifying it with regex. **Built (owner picked the ambitious
+  path on every fork):** a per-recipient **ask ledger** (appended at send from write-time tags, outcomes stamped
+  on submit, one read replaces six scans, reference = gists + counts); an **emergent per-person topic map**
+  (built-ins are a SEED, not a ceiling — the model names new ground, alias-merged so synonyms can't fork);
+  **tagging at write time** instead of regex; a dedicated **planner pass** that picks ground BEFORE generation
+  writes, scoped **tier-aware** (an explicit set draws from Intimacy alone) and emitting **threads, not
+  questions** (the fix for the verbatim repeat); **topic-scoped saturation + a hard cooldown floor**;
+  **answer-quality learning** (a vein that keeps returning skips closes regardless of count); a one-time
+  **backfill**; and guards for recitation, repetition and the unbounded act list. Wired through **all six**
+  generation paths. **The real-data run caught a bug in my own fix**: the cooldown initially closed
+  barely-touched ground too (1 of 14 open, shutting the two LEAST-worked areas) — corrected so the floor gates
+  RE-OPENING only (3 of 14 open, all on-register), with a test pinning it. Gate green: typecheck (4 pkgs), lint,
+  format, **2003 core + 1563 desktop** unit, **202 E2E**; both prompt guards **verified to FAIL when reverted**.
+  Re-verified against the real vault: 11 of 14 areas now correctly saturated, zero off-type ground in the plan
+  prompt, reference 74,146 → 7,556 chars carrying ALL 272 asks. **Lesson: a green suite that asserts outcome
+  COUNTS can hide an engine that is 100% dead — spec 08 §27's saturation shipped inert and its tests passed
+  because they used controlled timestamps; assert the PROMPT. And when three separate steering systems each
+  append to one prompt, the LAST one wins regardless of which is authoritative — so the one that chooses ground
+  must be a separate pass, not another block.**
+
 - 2026-08-11 — **Audit + fix (questionnaire flow swept for the §32.7–§32.9 defect classes; SPEC 08 §32.10; on
   `fix/questionnaire-audit-option-integrity`).** Rather than wait for a fourth report, swept the flow for the
   root class behind all three: **model output accepted without checking it's the right KIND of thing**, worst

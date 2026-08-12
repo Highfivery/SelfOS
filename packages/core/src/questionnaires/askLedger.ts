@@ -70,6 +70,9 @@ export const AskLedgerSchema = z.object({
   entries: z.array(AskLedgerEntrySchema).catch([]).default([]),
   /** Set once the one-time backfill (spec 71 §5.6) has seeded this person's history. */
   backfilledAt: z.string().optional(),
+  /** Which tagging contract this ledger's entries were classified under. Behind the current version ⇒ the
+   *  next reconcile re-classifies, so a filing correction reaches existing history (§5.6). */
+  taggingVersion: z.number().optional(),
 });
 export type AskLedger = z.infer<typeof AskLedgerSchema>;
 

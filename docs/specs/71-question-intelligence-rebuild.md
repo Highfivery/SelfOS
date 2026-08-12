@@ -151,6 +151,19 @@ export const TopicSchema = z.object({
 });
 ```
 
+**As built — every question carries TWO tags (§5.3 roll-up).** Running the first backfill against the real
+vault exposed the emergent vocabulary's own failure mode: it FRAGMENTS a family across names no text
+comparison can relate. Threesome ground had been worked **13 times** across five topics ("Threesomes",
+"Threesome dynamics", "FFM threesome", "Finding a third / apps") while the built-in `Group & swinging` showed
+**0 asks and read as OPEN**; bondage was 13 across two names; `Edge play` read as untouched after five. So a
+question is now tagged with its closest **built-in family** (the roll-up that makes the family saturate) AND
+its **specific ground** (precision), and each specific topic records the family as its `parentTopicId` so it
+**inherits the family's closure** — the roll-up alone was only half a fix, since a closed family could still
+be re-opened through one of its own narrower names. `mintTopics` also ADOPTS a family onto a pre-existing
+orphan topic, so a re-tag repairs a map built under the older contract. `TAGGING_VERSION` on the ledger drives
+that re-tag: bumping it makes the next reconcile re-classify existing history, because a filing correction is
+worthless if it only reaches questions asked after it.
+
 **As built — counts are DERIVED, not stored.** The draft carried `askedCount` / `richCount` / `lastAskedAt` /
 `saturatedUntil` on the topic. They are instead derived from the ledger on read (`deriveTopicStats` →
 `topicStatuses`), because a stored count is a second source of truth that can drift from what was actually
@@ -349,6 +362,13 @@ _All resolved with the owner on 2026-08-12:_
 
 ## 12. Changelog
 
+- 2026-08-12 — **Follow-up: vocabulary fragmentation (§4/§5.3).** Found by running the shipped backfill against
+  the real vault and inspecting the result: the emergent taxonomy split one family across several names, so a
+  heavily-worked area read as untouched and OPEN (`Group & swinging` 0 asks after 13; `Edge play` 0 after 5).
+  Fixed with a mandatory roll-up tag + `parentTopicId` closure inheritance + singularized label matching +
+  `TAGGING_VERSION`-driven re-tagging of existing history. Verified on the real vault: `Group & swinging` 0 →
+  **9 asks, closed**, every fragmented child now closed with it, open intimacy ground down to the three
+  genuinely least-worked areas. Also removed `buildCandidateGuidance`, dead since §5.5.
 - 2026-08-12 — **BUILT.** Ask ledger + emergent topic map + planner + backfill + guards, wired through all six
   generation paths. Gate green: typecheck (4 pkgs), lint, format, **2003 core + 1563 desktop** unit, **202
   E2E**. Both prompt guards verified to FAIL when the fix is reverted (§10). Re-verified against the real

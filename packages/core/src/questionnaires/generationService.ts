@@ -44,6 +44,7 @@ import {
   buildLedgerReference,
   ensureTopics,
   mintTopics,
+  rollUpCategoryLabels,
   topicStatuses,
   type Topic,
   type TopicStatus,
@@ -311,6 +312,13 @@ export async function generateQuestions(
       : {}),
     ...(request.partnerContext !== undefined ? { partnerContext: request.partnerContext } : {}),
     ...(plan.threads.length > 0 ? { threads: plan.threads } : {}),
+    ...(request.recipientPersonId
+      ? {
+          rollUpCategories: rollUpCategoryLabels(
+            steeringLifeAreas(request.type, request.sensitivity),
+          ),
+        }
+      : {}),
   });
 
   // A generous output budget (thinking is off) that SCALES with the (over-asked) count (08 §23.4) — a 20-question
@@ -432,15 +440,38 @@ export async function generateQuestions(
         tagged.push(q); // untagged is acceptable — never drop a good question over a missing tag
         continue;
       }
-      const minted = mintTopics(
-        map,
-        labels.map((label) => {
-          const area = areaFor(label);
-          return area ? { label, lifeArea: area } : { label };
-        }),
-      );
-      map = minted.topics;
-      tagged.push(minted.resolved.length > 0 ? { ...q, topicIds: minted.resolved } : q);
+      // The model is told the FIRST tag is the built-in family (§5.3); resolve it first so the specific
+      // ground below is minted as its child and inherits its closure.
+      const [familyLabel, ...specifics] = labels;
+      const ids: string[] = [];
+      let parentTopicId: string | undefined;
+      if (familyLabel) {
+        const m = mintTopics(map, [
+          {
+            label: familyLabel,
+            ...(areaFor(familyLabel) ? { lifeArea: areaFor(familyLabel) as string } : {}),
+          },
+        ]);
+        map = m.topics;
+        parentTopicId = m.resolved[0];
+        if (parentTopicId) ids.push(parentTopicId);
+      }
+      if (specifics.length > 0) {
+        const m = mintTopics(
+          map,
+          specifics.map((label) => {
+            const area = areaFor(label);
+            return {
+              label,
+              ...(area ? { lifeArea: area } : {}),
+              ...(parentTopicId ? { parentTopicId } : {}),
+            };
+          }),
+        );
+        map = m.topics;
+        ids.push(...m.resolved.filter((id) => id !== parentTopicId));
+      }
+      tagged.push(ids.length > 0 ? { ...q, topicIds: ids } : q);
     }
     finalQuestions = tagged;
     // Persist the grown vocabulary. Best-effort: a write failure must not fail an otherwise-good draft (the

@@ -312,6 +312,90 @@ describe('topicMap', () => {
 
 // ── Type + tier scoping ───────────────────────────────────────────────────────────────────────────────
 
+describe('vocabulary fragmentation (spec 71 §5.3 — the roll-up tag)', () => {
+  it('singularizes so a plural cannot fork a topic', () => {
+    const { resolved } = mintTopics(seedTopics(), [
+      { label: 'Threesomes' },
+      { label: 'Threesome' },
+    ]);
+    expect(resolved[0]).toBe(resolved[1]);
+  });
+
+  it('ROLLS UP a fragmented family so it saturates on its total, not per name', () => {
+    // The real failure this exists to kill. After the first backfill, one recipient had threesome ground
+    // worked 13 times across five names — "Threesomes", "Threesome dynamics", "FFM threesome",
+    // "Finding a third / apps" — while the built-in `Group & swinging` still read as 0 asks and OPEN, so the
+    // planner would have re-opened exactly the ground that had been worked hardest.
+    let topics = seedTopics();
+    const entries: AskLedgerEntry[] = [];
+    ['Threesomes', 'Threesome dynamics', 'FFM threesome', 'Finding a third / apps'].forEach(
+      (label, i) => {
+        // Every question carries BOTH tags: the family (roll-up) and its specific ground (precision).
+        const fam = mintTopics(topics, [{ label: 'Group & swinging' }]);
+        const parentTopicId = fam.resolved[0] as string;
+        const minted = mintTopics(fam.topics, [{ label, parentTopicId }]);
+        topics = minted.topics;
+        minted.resolved.unshift(parentTopicId);
+        entries.push(
+          entry({ questionId: `q${i}`, topicIds: minted.resolved, at: '2026-08-01T00:00:00.000Z' }),
+        );
+      },
+    );
+    const statuses = topicStatuses({ topics, ledger: { ...emptyLedger('p'), entries }, now });
+    const family = statuses.find((s) => s.topic.topicId === 'Intimacy:group');
+    // The family now carries the WHOLE count and is closed…
+    expect(family?.stats.askedCount).toBe(4);
+    expect(family?.open).toBe(false);
+    // …while the specific names survive, so precision is not traded away for the roll-up.
+    expect(statuses.some((s) => s.topic.label === 'FFM threesome')).toBe(true);
+    // …and no CHILD of a closed family is left open. Measured on the real vault, the roll-up alone was only
+    // half a fix: `Group & swinging` correctly closed at 8 asks while its own narrower name "Threesomes"
+    // still read as OPEN at 2, so the planner could re-open the closed ground through a child.
+    const children = statuses.filter((s) => s.topic.parentTopicId === 'Intimacy:group');
+    expect(children.length).toBeGreaterThan(0);
+    expect(children.every((c) => !c.open)).toBe(true);
+  });
+
+  it('adopts the family onto a topic that already existed, so a re-tag repairs an older map', () => {
+    // A map built before the roll-up existed has orphan topics with no parent. A re-tag must ADOPT them,
+    // or closure inheritance would only ever reach topics minted in the same run and the orphans would stay
+    // open forever — which is precisely what the re-tag is for.
+    const orphan = mintTopics(seedTopics(), [{ label: 'Threesomes' }]);
+    expect(orphan.topics.find((t) => t.label === 'Threesomes')?.parentTopicId).toBeUndefined();
+    const adopted = mintTopics(orphan.topics, [
+      { label: 'Threesomes', parentTopicId: 'Intimacy:group' },
+    ]);
+    expect(adopted.topics.find((t) => t.label === 'Threesomes')?.parentTopicId).toBe(
+      'Intimacy:group',
+    );
+    // A seeded family is never made its own parent.
+    const family = mintTopics(adopted.topics, [
+      { label: 'Group & swinging', parentTopicId: 'Intimacy:group' },
+    ]);
+    expect(
+      family.topics.find((t) => t.topicId === 'Intimacy:group')?.parentTopicId,
+    ).toBeUndefined();
+  });
+
+  it('without the roll-up tag the family reads as untouched — the bug, pinned', () => {
+    // Specific-only tagging (the v1 contract): four asks on one family, and the family still looks OPEN.
+    let topics = seedTopics();
+    const entries: AskLedgerEntry[] = [];
+    ['Threesomes', 'Threesome dynamics', 'FFM threesome', 'Finding a third / apps'].forEach(
+      (label, i) => {
+        const minted = mintTopics(topics, [{ label }]);
+        topics = minted.topics;
+        entries.push(entry({ questionId: `q${i}`, topicIds: minted.resolved }));
+      },
+    );
+    const family = topicStatuses({ topics, ledger: { ...emptyLedger('p'), entries }, now }).find(
+      (s) => s.topic.topicId === 'Intimacy:group',
+    );
+    expect(family?.stats.askedCount).toBe(0);
+    expect(family?.open).toBe(true);
+  });
+});
+
 describe('inventing genuinely new ground', () => {
   it('tells the planner to NAME new ground, and to insist on it once everything is worked through', () => {
     const someOpen = buildPlanUserMessage({

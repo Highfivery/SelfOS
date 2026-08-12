@@ -39,7 +39,6 @@ import { listInsightsForPerson, saveInsight, summarizeForContext } from '@selfos
 import { getIntakeSession, submitSectionForm } from '@selfos/core/intake';
 import {
   applyDecline,
-  buildCandidateGuidance,
   emptyProfile,
   readLedger,
   NOT_APPLICABLE_SKIP_REASON,
@@ -3339,10 +3338,9 @@ describe('createCoreBridge', () => {
     const afterAsk = await readProfile(ctx.fs, ctx.key, ownerId);
     const stamped = afterAsk.candidates.find((c) => c.prompt === candidatePrompt);
     expect(stamped?.mintedAssignmentId).toBeTruthy();
-    // The stamped candidate no longer steers generation; a still-active candidate keeps the feed alive.
-    const guidance = buildCandidateGuidance(afterAsk);
-    expect(guidance).not.toContain(candidatePrompt);
-    expect(guidance).toContain('What does financial security mean to you?');
+    // A still-active candidate keeps the feed alive. (What a candidate steers is asserted on the PLAN prompt
+    // above — since spec 71 §5.5 candidates reach generation as ground, never as question text.)
+    expect(afterAsk.candidates.some((c) => !c.mintedAssignmentId)).toBe(true);
   });
 
   it('transparency read + steer are OWN-scoped, gated, and persist per-person (spec 69 §3.4/§6)', async () => {

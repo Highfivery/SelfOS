@@ -17,7 +17,6 @@ import {
   applyEngagement,
   applyReciprocity,
   applySteer,
-  buildCandidateGuidance,
   buildFeedbackGuidance,
   CANDIDATE_CAP,
   CANDIDATES_PER_AREA,
@@ -483,10 +482,6 @@ describe('markCandidateAsked', () => {
     );
     expect(stamped.candidates.find((c) => c.id === 'c1')?.mintedAssignmentId).toBe('a1');
     expect(stamped.candidates.find((c) => c.id === 'c2')?.mintedAssignmentId).toBeUndefined();
-    // The minted one is excluded from generation steering.
-    const guidance = buildCandidateGuidance(stamped);
-    expect(guidance).not.toContain('good day at work');
-    expect(guidance).toContain('unwind');
   });
 
   it('is idempotent + a no-op when nothing matches (identity)', () => {
@@ -603,10 +598,6 @@ describe('mergeCandidates', () => {
     expect(activeMoney.map((c) => c.prompt)).not.toContain('How do you feel about your savings?');
     // The declines are retained (bounded de-dup memory), still marked skipped.
     expect(merged.candidates.filter((c) => c.curation === 'skipped')).toHaveLength(3);
-    // buildCandidateGuidance shows the fresh candidates, not the declines.
-    const g = buildCandidateGuidance(merged);
-    expect(g).toContain('What did your family teach you about money?');
-    expect(g).not.toContain('How do you feel about your savings?');
   });
 
   it('bounds the stored set, keeping curated candidates', () => {
@@ -624,29 +615,6 @@ describe('mergeCandidates', () => {
     expect(merged.candidates).toHaveLength(CANDIDATE_CAP);
     // The pinned candidate is never dropped by the cap (curated candidates sort first).
     expect(merged.candidates.some((c) => c.id === 'e0' && c.curation === 'asked')).toBe(true);
-  });
-});
-
-describe('buildCandidateGuidance', () => {
-  it('leads with pinned (★), splits new vs go-deeper, and excludes skipped/minted; empty ⇒ ""', () => {
-    expect(buildCandidateGuidance(emptyProfile('p1'))).toBe('');
-    const p = withCandidates([
-      candidate({ id: 'c1', prompt: 'A plain new question', kind: 'new' }),
-      candidate({ id: 'c2', prompt: 'A pinned question', kind: 'new', curation: 'asked' }),
-      candidate({ id: 'c3', prompt: 'A deeper thread', kind: 'go-deeper' }),
-      candidate({ id: 'c4', prompt: 'A declined question', kind: 'new', curation: 'skipped' }),
-      candidate({ id: 'c5', prompt: 'An asked question', kind: 'new', mintedAssignmentId: 'a1' }),
-    ]);
-    const g = buildCandidateGuidance(p);
-    expect(g).toContain('QUESTIONS SELFOS IS CURIOUS ABOUT ASKING THIS PERSON NEXT');
-    expect(g).toContain('★ A pinned question');
-    expect(g).toContain('New ground');
-    expect(g).toContain('Threads worth going deeper on');
-    expect(g).toContain('A deeper thread');
-    expect(g).not.toContain('A declined question'); // skipped excluded
-    expect(g).not.toContain('An asked question'); // minted excluded
-    // pinned leads its section (before the plain new one).
-    expect(g.indexOf('A pinned question')).toBeLessThan(g.indexOf('A plain new question'));
   });
 });
 

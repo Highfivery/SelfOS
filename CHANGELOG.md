@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.9](https://github.com/Highfivery/SelfOS/compare/v0.51.8...v0.51.9) (2026-08-12)
+
+
+### Bug Fixes
+
+* **questionnaires:** rebuild question intelligence on an ask ledger (spec 71) ([#415](https://github.com/Highfivery/SelfOS/issues/415)) ([7262d59](https://github.com/Highfivery/SelfOS/commit/7262d59316f17b0060b1171c3d1479674d3c0226))
+
 ## [0.51.8](https://github.com/Highfivery/SelfOS/compare/v0.51.7...v0.51.8) (2026-08-12)
 
 

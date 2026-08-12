@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.10](https://github.com/Highfivery/SelfOS/compare/v0.51.9...v0.51.10) (2026-08-12)
+
+
+### Bug Fixes
+
+* **questionnaires:** backfill the ask ledger for every household person (71 §5.6) ([#417](https://github.com/Highfivery/SelfOS/issues/417)) ([259169f](https://github.com/Highfivery/SelfOS/commit/259169fb5905f0c64eb31fd2752d51f8938b8776))
+
 ## [0.51.9](https://github.com/Highfivery/SelfOS/compare/v0.51.8...v0.51.9) (2026-08-12)
 
 

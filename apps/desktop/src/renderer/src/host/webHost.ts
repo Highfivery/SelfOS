@@ -43,6 +43,9 @@ import {
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
 /** The single shared preview vault id (the IndexedDB store is shared across `?device=` namespaces). */
 const PREVIEW_VAULT_ID = 'SelfOS';
+/** The preview's fake relay never reaches Cloudflare, so its version only has to agree with itself —
+ *  bundle and host share this so the deploy's stale-bundle guard can't fire on a stub. */
+const PREVIEW_RELAY_VERSION = '1';
 const APP_VERSION = '0.0.0-web-preview';
 
 const encode = (value: unknown): Uint8Array =>
@@ -261,7 +264,11 @@ export function createWebHost(options: WebHostOptions = {}): BridgeHost {
     image: webFakeImageClient(),
     email: webFakeEmailClient(),
     // A deterministic in-memory relay so the preview can demo the external-send flow (no Cloudflare).
-    relay: { fetch: fakeRelayFetch(), loadBundle: fakeRelayBundle, currentVersion: '1' },
+    relay: {
+      fetch: fakeRelayFetch(),
+      loadBundle: () => fakeRelayBundle(PREVIEW_RELAY_VERSION),
+      currentVersion: PREVIEW_RELAY_VERSION,
+    },
     // The browser preview has no cross-tab/device change feed; reads are always fresh on navigation.
     onVaultChanged: () => () => {},
   });

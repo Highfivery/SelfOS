@@ -2431,6 +2431,33 @@ relayBundle.ts`, kept in sync) and the bundle rebuilt. `relayStatusOf` computes
   trap — the app thinks the old deploy is current, so its "update" prompt never fires and newer routes 404.
   Bump the version on every Worker change.**
 
+#### 17.14c-2 A stale BUNDLE is refused, not silently redeployed (2026-08-11) — BUILT
+
+The §17.14c mechanism has a second staleness axis it didn't cover: the **built bundle on disk**. Reported as
+"Update relay disables the button for a few seconds, then nothing changes and the banner stays" — plus
+`email:scheduleReconcile` throwing `404 for /api/admin/drainTaps` on every launch. The deployed Worker was
+stale, but so was `apps/relay/dist` (built at `relayVersion: 2` while `RELAY_VERSION` had moved to `3` for
+the Phase-4 tap route). So Update faithfully re-uploaded the SAME old Worker and re-stamped the config with
+the OLD version: `updateAvailable` stayed true, the 404 persisted, and nothing reported a problem — a button
+whose only observable effect was a spinner.
+
+- **`loadDeployableRelayBundle`** (`coreBridge.ts`) is now the single load path for both `relayConnect` and
+  `relayUpdate`: it refuses a bundle whose `version !== relay.currentVersion` with the fix in the message
+  ("Rebuild it first: `pnpm --filter @selfos/relay build`"), which `RelaySettingsPanel.run()` surfaces in its
+  warning Banner. The guard runs **before** any Cloudflare call, so a refusal leaves no half-state — Connect
+  provisions nothing and writes no `relay.enc`; Update leaves the deployed Worker and stored version intact.
+- **A bundle that doesn't state its version is `'unknown'`, never assumed current** (`loadRelayBundle` no
+  longer defaults a missing `meta.relayVersion` to `RELAY_VERSION`) — that default would have let exactly the
+  stale `dist` this guard exists for self-certify past it.
+- **The two `RELAY_VERSION` copies are now fenced by a drift test** (`relayBundle.test.ts`, the spec-19
+  `__APP_VERSION__` pattern). Before this guard, drifting them merely weakened the update prompt; now a
+  mismatch would ship a `.dmg` where Connect and Update throw for every user, so the comment isn't enough.
+- **The offline fake takes the version from its host** (`fakeRelayBundle(version)`) instead of a frozen `'1'`
+  — a literal would trip the guard on the next bump and take out every offline relay flow.
+- **Lesson: "stale relay" has TWO axes — the deployed Worker AND the built bundle — and a deploy that trusts
+  whatever `dist` happens to hold turns the second into a silent no-op that mimics a dead button. Compare the
+  bundle against the app's own version before deploying, and treat an unversioned bundle as unknown.**
+
 ### 17.14d "Share link" re-shows the existing link (manual Refresh to regenerate) (2026-06-17) — BUILT
 
 The §17.14c "Share link" re-MINTED a fresh link + PIN on every click (because the PIN was never stored). The

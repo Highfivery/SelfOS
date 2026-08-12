@@ -1526,6 +1526,25 @@ async function reshareLink(
   }
 }
 
+/**
+ * Load the relay Worker bundle to deploy, refusing one whose version doesn't match the app's own
+ * `RELAY_VERSION` (08 §17.14c). The bundle is a BUILT artifact (`apps/relay/dist`), so a dev tree whose
+ * `pnpm --filter @selfos/relay build` predates a version bump holds an older Worker than the app expects.
+ * Deploying it "succeeds" while shipping routes the app no longer speaks — the Relay panel then still
+ * reads "an older version" right after an Update that reported nothing wrong, and calls like
+ * `/api/admin/drainTaps` keep 404ing. Fail loudly with the fix instead of silently redeploying stale code.
+ */
+async function loadDeployableRelayBundle(relay: BridgeHost['relay']): Promise<RelayBundle> {
+  const bundle = await relay.loadBundle();
+  if (bundle.version !== relay.currentVersion) {
+    throw new Error(
+      `The built relay Worker is version ${bundle.version}, but this app expects ${relay.currentVersion}. ` +
+        'Rebuild it first: pnpm --filter @selfos/relay build',
+    );
+  }
+  return bundle;
+}
+
 /** Build the renderer-facing `SelfosBridge` from a platform `BridgeHost`. */
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
   const activePersonId = async (): Promise<string | null> =>
@@ -8603,7 +8622,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'settings.manage')))
         throw new Error('Not permitted');
       const { apiToken, accountId } = RelayConnectSchema.parse(input);
-      const bundle = await host.relay.loadBundle();
+      const bundle = await loadDeployableRelayBundle(host.relay);
       const result = await deployRelay(host.relay.fetch, bundle, { apiToken, accountId });
       const config: RelayConfig = {
         schemaVersion: 1,
@@ -8626,7 +8645,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         throw new Error('Not permitted');
       const config = await readRelayConfig(ctx.fs, ctx.key);
       if (!config) return { configured: false, updateAvailable: false };
-      const bundle = await host.relay.loadBundle();
+      const bundle = await loadDeployableRelayBundle(host.relay);
       const relayVersion = await updateRelay(host.relay.fetch, bundle, {
         apiToken: config.cloudflare.apiToken,
         accountId: config.cloudflare.accountId,

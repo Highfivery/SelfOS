@@ -438,6 +438,37 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-11 — **Fix (relay: "Update relay" appeared to do nothing + the email cadence died on its 404;
+  user-reported; SPEC 08 §17.14c-2 + 67 §3.5; on `fix/relay-stale-bundle-guard`).** Reported as an
+  `email:scheduleReconcile` crash on every launch — `Relay request failed (404) for /api/admin/drainTaps` —
+  and then, after the update prompt was followed, a button that spun for a few seconds and changed nothing.
+  **Diagnosed against the real artifacts, not assumed:** the deployed Worker WAS stale, but so was
+  `apps/relay/dist` — built 2026-07-10 at `relayVersion: 2`, while `RELAY_VERSION` had moved to `3` for the
+  Phase-4 tap route (`grep -c drainTaps dist/worker.js` → 0). So Update re-uploaded the SAME v2 Worker and
+  re-stamped the config with the OLD version: the banner stayed, the 404 persisted, nothing errored. Rebuilt
+  the bundle (the user's immediate unblock — the banner cleared), then fixed all three defects the one report
+  exposed. **(1)** The tap drain is **non-fatal** (`reconcileEmailSchedule`): a relay that's offline or stale
+  no longer aborts a cadence that is otherwise independent of taps (status polling, digest, re-engagement,
+  reminder cancels); taps aren't lost — they sit in the relay's KV until a later run. **(2)** The stale-relay
+  state **explains itself** — the Relay panel led with a bare "Update relay" button and no reason, so it now
+  says what an older relay breaks (one-click email replies) and that updating reuses the endpoint + storage.
+  **(3)** A stale bundle is **refused, never silently redeployed** — one `loadDeployableRelayBundle` feeds both
+  `relayConnect` and `relayUpdate`, throwing (surfaced in the panel's Banner) when the bundle's version ≠ the
+  app's, BEFORE any Cloudflare call so a refusal leaves no half-state; a bundle with no stated version is
+  `'unknown'`, never assumed current; and the two hand-maintained `RELAY_VERSION` copies are now fenced by a
+  drift test (the spec-19 `__APP_VERSION__` pattern) because post-guard a drift would ship a `.dmg` where
+  Connect and Update throw for everyone. code-reviewer **fix-first** caught the blocker I'd missed by not
+  running E2E: the offline fake's bundle version was a frozen `'1'` against a host reporting `RELAY_VERSION`,
+  so the new guard took out all six relay E2E flows — `fakeRelayBundle(version)` now takes it from its host.
+  Gate green: typecheck (4 pkgs), lint, format, **1978 core + 13 relay + 1562 desktop** unit (+the stale-bundle
+  refusal on both paths incl. no-half-state, +the unversioned-bundle case, +the RELAY_VERSION drift fence, +the
+  drain-failure-keeps-reconciling regression, verified to FAIL without its fix), full E2E. **Lesson: "stale
+  relay" has TWO axes — the deployed Worker AND the built bundle — and a deploy that trusts whatever `dist`
+  holds turns the second into a silent no-op that reads as a dead button; compare the bundle to the app's own
+  version before deploying. Process: four of these files were swept into a concurrent session's unrelated
+  commit on the SHARED tree (and merged as #408) — the guard was extracted into a `git worktree` off
+  origin/main, which is the only safe way to work while another session holds the checkout.**
+
 - 2026-08-11 — **Audit + fix (questionnaire flow swept for the §32.7–§32.9 defect classes; SPEC 08 §32.10; on
   `fix/questionnaire-audit-option-integrity`).** Rather than wait for a fourth report, swept the flow for the
   root class behind all three: **model output accepted without checking it's the right KIND of thing**, worst

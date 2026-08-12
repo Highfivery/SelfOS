@@ -124,7 +124,11 @@ export function registerIpcHandlers(): void {
         ? process.platform
         : 'unknown')(),
     relay: useFakeRelay
-      ? { fetch: fakeRelayFetch(), loadBundle: fakeRelayBundle, currentVersion: RELAY_VERSION }
+      ? {
+          fetch: fakeRelayFetch(),
+          loadBundle: () => fakeRelayBundle(RELAY_VERSION),
+          currentVersion: RELAY_VERSION,
+        }
       : {
           // Node ≥20's global fetch reaches the Cloudflare REST API + the deployed Worker; the API token +
           // drain secret used here stay host-side (read from config/relay.enc), never reaching the renderer.

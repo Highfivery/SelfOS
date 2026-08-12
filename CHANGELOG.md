@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.11](https://github.com/Highfivery/SelfOS/compare/v0.51.10...v0.51.11) (2026-08-12)
+
+
+### Bug Fixes
+
+* **questionnaires:** stop an emergent topic map fragmenting one family (71 §5.3) ([#419](https://github.com/Highfivery/SelfOS/issues/419)) ([7adb9ca](https://github.com/Highfivery/SelfOS/commit/7adb9cac33aa76cda8945b0f60d3ed72d73dcf1c))
+
 ## [0.51.10](https://github.com/Highfivery/SelfOS/compare/v0.51.9...v0.51.10) (2026-08-12)
 
 

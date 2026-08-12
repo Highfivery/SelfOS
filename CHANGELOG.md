@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.51.7](https://github.com/Highfivery/SelfOS/compare/v0.51.6...v0.51.7) (2026-08-12)
+
+
+### Bug Fixes
+
+* **questionnaires:** option integrity across the flow (08 §32.10) ([#410](https://github.com/Highfivery/SelfOS/issues/410)) ([7cda5af](https://github.com/Highfivery/SelfOS/commit/7cda5af1ebff34f2453b447e45f0fd1ef6bfb91f))
+
 ## [0.51.6](https://github.com/Highfivery/SelfOS/compare/v0.51.5...v0.51.6) (2026-08-11)
 
 

@@ -24,10 +24,19 @@ export function estimateTokens(text: string): number {
   return Math.max(1, Math.ceil(text.length / 4));
 }
 
-/** Source material a single chapter may draw on, before relevance slicing (§17.1). */
-export const CHAPTER_CORPUS_TOKEN_BUDGET = 8000;
-/** Whole-corpus cap for the foundations pass — generous (it needs the whole life) but bounded (§17.1). */
-export const FOUNDATIONS_CORPUS_TOKEN_BUDGET = 40000;
+/**
+ * Source material a single chapter may draw on, before relevance slicing (§17.1; raised in 72 §5.2).
+ *
+ * This was 8,000 — set defensively against a much smaller context window and never revisited. Measured on
+ * the real vault it meant a chapter was written from roughly a sixth of the available material, which is
+ * why the prose reads as intelligent abstraction rather than scene: the doctrine demands specific sensory
+ * detail and then forbids inventing it, so a starved writer can only generalize. 60,000 leaves generous
+ * room for the chapter's own output and the rest of the prompt.
+ */
+export const CHAPTER_CORPUS_TOKEN_BUDGET = 60000;
+/** Whole-corpus cap for the foundations pass — it needs the breadth of a whole life to find the shape, so it
+ *  runs wider than a chapter slice while staying bounded (§17.1; raised in 72 §5.2). */
+export const FOUNDATIONS_CORPUS_TOKEN_BUDGET = 150000;
 
 /** Relevance weights (§17.1) — a life-area match matters most, then the era, then keyword overlap. */
 const LIFE_AREA_WEIGHT = 3;
@@ -136,6 +145,10 @@ const FOUNDATIONS_PRIORITY: Record<StorySourceKind, number> = {
   response: 3,
   test: 3,
   photo: 2,
+  // Raw recorded speech is the richest source for WRITING a chapter (72 §5.2) but the weakest for SHAPING
+  // one: the outline is built from the distilled/dated spine above, so a long transcript history trims
+  // before an insight or a memory does. The per-chapter slice is where it earns its place.
+  transcript: 2,
   intakeAnswer: 1,
 };
 

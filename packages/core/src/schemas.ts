@@ -4292,6 +4292,12 @@ export const StorySourceKindSchema = z.enum([
   // citable in the prose. Only ever emitted for an approved quote; a pending/rejected candidate never reaches
   // the corpus.
   'quote',
+  // A stretch of the person's OWN recorded speech — their turns in a coaching session, or their own
+  // non-aside lines in a Together session (72 §5.2). This is where sensory, first-person voice actually
+  // lives: measured on the real vault, 48,283 characters of it existed while the biographer was writing
+  // from 156-character distilled facts. Own data only — a partner's words and every private aside are
+  // structurally absent (58 §3.8), and a Together PREP thread is confidential scratch, never read.
+  'transcript',
 ]);
 export type StorySourceKind = z.infer<typeof StorySourceKindSchema>;
 export const StorySourceRefSchema = z.object({

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.54.1](https://github.com/Highfivery/SelfOS/compare/v0.54.0...v0.54.1) (2026-08-13)
+
+
+### Bug Fixes
+
+* **questionnaires:** adopted ground survives pruning (71 §5.9) ([#440](https://github.com/Highfivery/SelfOS/issues/440)) ([804f890](https://github.com/Highfivery/SelfOS/commit/804f890b46660946bfcf067f6a408e18993468c3))
+
 ## [0.54.0](https://github.com/Highfivery/SelfOS/compare/v0.53.0...v0.54.0) (2026-08-13)
 
 

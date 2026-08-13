@@ -319,6 +319,28 @@ export function foldTopicMap(
  *  area is ever finished — there is always more that could be asked, which is the whole premise of the
  *  emergent topic map. Activity says what actually happened instead of implying what is left.
  */
+/** One sentence per built-in life area, so every card explains itself even before the model has named any
+ *  ground inside it (spec 71 §5.9). Emergent topics carry their own blurb from the planner's angle. */
+const LIFE_AREA_BLURBS: Record<string, string> = {
+  Relationships:
+    'The people closest to you and how you show up in those bonds — trust, conflict, repair, and what you need from them.',
+  Family:
+    'Where you come from and who you are to the people you grew up with — including the parts that are still unresolved.',
+  'Work & purpose':
+    'What you do with your days and whether it means anything to you — ambition, drift, and what you would rather be doing.',
+  'Health & body':
+    'How you actually live in your body — energy, sleep, pain, habits, and the things you keep meaning to change.',
+  'Emotions & patterns':
+    'The feelings that keep circling back and the shapes they move in — what sets them off and how you ride them out.',
+  'Values & beliefs': 'The principles you actually run on, and where they came from.',
+  Intimacy:
+    'Desire, sex, and closeness — what you want, what you have tried, and where the edges still are.',
+  'Goals & growth': 'What you are working toward, and what keeps getting in the way of it.',
+  Money:
+    'How money actually feels to you — security, guilt, ambition, and the decisions you avoid.',
+  Faith: 'Belief, meaning, and what you hold sacred — including doubt, and what changed.',
+};
+
 function monthlyActivity(
   group: readonly CoverageTopic[],
   askDates: ReadonlyMap<string, readonly string[]>,
@@ -411,6 +433,7 @@ export function projectCoverageView(
       steered,
       topics,
       activity: monthlyActivity(group, askDates, now),
+      ...(LIFE_AREA_BLURBS[lifeArea] ? { blurb: LIFE_AREA_BLURBS[lifeArea] as string } : {}),
       ...(areaLastAsked(group) ? { lastAskedAt: areaLastAsked(group) as string } : {}),
       askedCount: topics.reduce((n, t) => n + t.askedCount, 0),
       ...(isIntimacy ? { adultGated: true } : {}),
@@ -496,7 +519,23 @@ export async function readCoverageView(
       .map((f) => ({ topicId: f.topicId as string, at: f.at })),
     now,
   });
-  const projected = projectCoverageView(topics, profile, now, adultAcknowledged, statuses);
+  // Raw ask dates per topic, for the activity sparkline. Cheap: the ledger is already in memory.
+  const askDates = new Map<string, string[]>();
+  for (const e of ledger.entries) {
+    for (const id of e.topicIds) {
+      const list = askDates.get(id);
+      if (list) list.push(e.at);
+      else askDates.set(id, [e.at]);
+    }
+  }
+  const projected = projectCoverageView(
+    topics,
+    profile,
+    now,
+    adultAcknowledged,
+    statuses,
+    askDates,
+  );
   const partners = await gatherPartnerWishGroups(fs, key, personId, profile);
   return { ...projected, partners };
 }

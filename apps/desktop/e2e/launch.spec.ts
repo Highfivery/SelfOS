@@ -3087,10 +3087,10 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
     await expect(intimacyRow.getByRole('button', { name: /18 or older/i })).toBeVisible();
     // Acknowledge 18+ → the row becomes steerable, and the intimacy candidate surfaces back on the feed.
     await intimacyRow.getByRole('button', { name: /18 or older/i }).click();
-    await expect(intimacyRow.getByRole('button', { name: 'Explore more' })).toBeVisible();
+    await expect(intimacyRow.getByRole('button', { name: 'Prioritize this area' })).toBeVisible();
     // A "Leave alone" area steer on Relationships (the coverage rows keep the area-level steers).
     const relationships = w.getByRole('listitem').filter({ hasText: 'Relationships' }).first();
-    await relationships.getByRole('button', { name: 'Leave alone' }).click();
+    await relationships.getByRole('button', { name: 'Pause asking' }).click();
     // Back on the feed, the intimacy candidate now shows (18+ acked).
     await w.getByRole('button', { name: /Curious next/ }).click();
     await expect(w.getByText('An explicit intimacy question')).toBeVisible();

@@ -120,12 +120,16 @@ describe('ExploredPanel (spec 70 §3)', () => {
     // The coverage section (its own sub-nav item) — honest overview, never "done"; status is text.
     await userEvent.click(screen.getByRole('button', { name: /How well it knows you/ }));
     expect(await screen.findByText('How well I know you')).toBeInTheDocument();
-    expect(screen.getByText('Knows you well')).toBeInTheDocument();
-    expect(screen.getByText('New')).toBeInTheDocument();
+    // No completeness label or meter anywhere: nothing here is ever finished (spec 71 §5.9).
+    expect(screen.queryByText('Knows you well')).not.toBeInTheDocument();
+    expect(screen.queryByText('Getting to know you')).not.toBeInTheDocument();
+    expect(screen.queryByText('New', { exact: true })).not.toBeInTheDocument();
+    // What replaced it: activity + counts, describing what happened rather than what is left.
+    expect(screen.getAllByText(/asked/).length).toBeGreaterThan(0);
     // Intimacy (18+) is gated until acked: it shows the 18+ badge + the inline unlock, NOT the steer buttons.
     expect(screen.getByText('18+')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /18 or older/i })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Explore more' })).toHaveLength(2); // Work + Money only
+    expect(screen.getAllByRole('button', { name: 'Prioritize this area' })).toHaveLength(2); // Work + Money only
 
     // The "left alone" section holds the marked-off decline.
     await userEvent.click(screen.getByRole('button', { name: /Left alone/ }));
@@ -156,7 +160,7 @@ describe('ExploredPanel (spec 70 §3)', () => {
     await userEvent.click(await screen.findByRole('button', { name: /18 or older/i }));
     await waitFor(() => expect(ack).toHaveBeenCalled());
     // After acking, the Intimacy row is steerable (3 Explore-more: Work + Money + Intimacy) and the unlock is gone.
-    expect(await screen.findAllByRole('button', { name: 'Explore more' })).toHaveLength(3);
+    expect(await screen.findAllByRole('button', { name: 'Prioritize this area' })).toHaveLength(3);
     expect(screen.queryByRole('button', { name: /18 or older/i })).toBeNull();
   });
 
@@ -368,7 +372,7 @@ describe('ExploredPanel (spec 70 §3)', () => {
     );
     await userEvent.click(await screen.findByRole('button', { name: /How well it knows you/ }));
     await screen.findByText('How well I know you');
-    await userEvent.click(screen.getAllByRole('button', { name: 'Explore more' })[1]!);
+    await userEvent.click(screen.getAllByRole('button', { name: 'Prioritize this area' })[1]!);
     await waitFor(() =>
       expect(steer).toHaveBeenCalledWith({
         topicId: 'Money',
@@ -377,7 +381,7 @@ describe('ExploredPanel (spec 70 §3)', () => {
         action: 'explore-more',
       }),
     );
-    expect(await screen.findByText('Exploring more')).toBeInTheDocument();
+    expect(await screen.findByText('Prioritized')).toBeInTheDocument();
   });
 
   /** Open the coverage section, which is where the topic map lives. */
@@ -400,22 +404,22 @@ describe('ExploredPanel (spec 70 §3)', () => {
     await openCoverage();
     // Collapsed by default — the panel stays scannable with 30+ topics on the map.
     expect(screen.queryByText('Director of Ops ambition')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /Show 2 topics/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Work & purpose/ }));
     // Every topic is listed with its real ask count, worked-through ground included: seeing what it has
     // already covered is most of the point of this surface.
     expect(screen.getByText('Director of Ops ambition')).toBeInTheDocument();
     expect(screen.getByText('RevOps role & satisfaction')).toBeInTheDocument();
-    expect(screen.getByText('6 questions')).toBeInTheDocument();
+    expect(screen.getByText(/asked 6×/)).toBeInTheDocument();
     // Ground the model named itself is marked, so it reads as new rather than a built-in family.
-    expect(screen.getAllByText('new ground').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('AI named').length).toBeGreaterThan(0);
   });
 
   it('leaving a topic alone steers that TOPIC, not the whole area', async () => {
     const steer = vi.fn<SelfosBridge['questionnairesSteerTopic']>().mockResolvedValue(view());
     await openCoverage(steer);
-    await userEvent.click(screen.getByRole('button', { name: /Show 2 topics/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Work & purpose/ }));
     await userEvent.click(
-      screen.getByRole('button', { name: 'Leave RevOps role & satisfaction alone' }),
+      screen.getByRole('button', { name: 'Pause asking about RevOps role & satisfaction' }),
     );
     await waitFor(() =>
       expect(steer).toHaveBeenCalledWith(
@@ -431,7 +435,9 @@ describe('ExploredPanel (spec 70 §3)', () => {
     await openCoverage();
     // The fixture's Intimacy row is un-acknowledged, so there is nothing to expand and no explicit label
     // reaches the screen (spec 70 §3.4 — the gate is unchanged by this surface).
-    expect(screen.queryByRole('button', { name: /Show 1 topic/ })).not.toBeInTheDocument();
+    // The row itself still renders (it always did) — what the gate withholds is the ground inside it, so the
+    // header must not be expandable and no intimacy topic may reach the screen.
+    expect(screen.getByRole('button', { name: /^Intimacy/ })).toBeDisabled();
     expect(screen.queryByText('Oral')).not.toBeInTheDocument();
   });
 });

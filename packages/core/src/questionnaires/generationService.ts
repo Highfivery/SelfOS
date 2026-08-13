@@ -496,9 +496,18 @@ export async function generateQuestions(
         .filter((t) => t.lifeArea)
         .map((t) => [t.label.trim().toLowerCase(), t.lifeArea as string]),
     );
+    const threadAngle = new Map(
+      plan.threads
+        .filter((t) => t.angle?.trim())
+        .map((t) => [t.label.trim().toLowerCase(), t.angle.trim()]),
+    );
     const soleArea = areas.length === 1 ? areas[0] : undefined;
     const areaFor = (label: string): string | undefined =>
       threadArea.get(label.trim().toLowerCase()) ?? soleArea;
+    // The planner already wrote one sentence per thread — its ANGLE. That IS the explanation of the ground, so
+    // a topic minted from it is born self-describing with no extra model call (spec 71 §5.9).
+    const blurbFor = (label: string): string | undefined =>
+      threadAngle.get(label.trim().toLowerCase());
     let map = topicMap;
     const tagged: Question[] = [];
     for (const q of finalQuestions) {
@@ -532,6 +541,7 @@ export async function generateQuestions(
               label,
               ...(area ? { lifeArea: area } : {}),
               ...(parentTopicId ? { parentTopicId } : {}),
+              ...(blurbFor(label) ? { blurb: blurbFor(label) as string } : {}),
             };
           }),
         );

@@ -432,6 +432,34 @@ _All resolved with the owner on 2026-08-12:_
   `pruneTopicMap` (drop unreferenced, fold cross-run duplicates), tightened both tagging prompts toward durable
   ground, and made support the deciding rule: a name must recur to become a topic. **341 → 75 topics, zero
   singletons**, on the real map.
+- 2026-08-13 — **Redesign: the Explored panel (§5.9), owner-approved from a mockup.** The tab was reported as
+  looking awful, and the problems were structural rather than cosmetic: topics rendered in a detached panel
+  beside their area, every topic read **"0 questions"** (with roll-up tagging the FAMILY holds the asks, so a
+  child legitimately reads 0 — meaningless AND looks broken), every area said "Knows you well" against a
+  near-identical bar, and two permanent buttons per row made chrome the loudest thing on screen. Rebuilt:
+  topics nest under their area; each area and topic carries a **one-sentence blurb** (`Topic.blurb`, written at
+  mint time from the planner's own ANGLE for the thread — free, no extra model call — plus static blurbs for the
+  built-in life areas); state reads as _AI named_ / _asked 4× · last 28 Jul_ / _Paused until 9 Nov_.
+  **The completeness meter is DELETED, on the owner's durable call: nothing here is ever complete, because there
+  is always another question that could be asked.** A 12-month **activity sparkline** replaces it — describing
+  what happened rather than implying what is left. Action labels rewritten to say what the control DOES after
+  three wrong passes ("explore again" read as finished; "leave alone" named a mood; "ask about this next"
+  implied the topic would not be asked otherwise, which is false — everything stays in the pool and the steer
+  only changes ORDER): now **Prioritize this** on open ground, **Revisit this** on worked ground (where the
+  steer additionally re-opens what saturation closed — a materially different act that had been sharing a
+  label), **Pause asking** / **Start asking again**, with the 90-day cooldown's lapse date finally surfaced
+  (`TopicStatus.leftAloneUntil`) so a paused topic never reads as permanently dropped. **Real-app visual QA
+  caught two defects no test could:** an area with no activity drew its sparkline as a row of flat empty bars
+  that read as a broken dashed line (now drawn as nothing), and the meta row's gap split "0" from "asked".
+- 2026-08-13 — **Fix: emergent ground is born OPEN, not closed (§5.3).** The same real draft that exposed the
+  recitation gap also minted three genuinely new areas — and two were born **`saturated` at 0 asks**, because
+  closure inheritance fired on any child of a worked-through family. For a person who has exhausted the
+  built-in areas and now depends entirely on emergent vocabulary, that mints the replacement dead on arrival.
+  Inheritance now requires the child to have asks of its OWN: a narrower NAME for worked ground (the
+  "Threesomes at 2 asks under a closed Group & swinging" case the rule was built for) still inherits, while
+  ground the planner has just named stays askable. Guard pins BOTH halves and is verified to fail when
+  reverted; re-checked on the real vault — Aftercare / The ask itself / Fantasy vs enactment all open, their
+  parents still correctly closed.
 - 2026-08-13 — **Fix: the recitation guard now catches asserted past BEHAVIOUR (§5.7).** Found by drafting a
   real unfiltered questionnaire for a real recipient — not by a test. The ground was right (the planner opened
   her only two remaining topics and NAMED THREE NEW ONES the taxonomy has no word for — "Aftercare & coming

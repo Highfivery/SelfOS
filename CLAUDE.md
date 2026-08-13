@@ -412,6 +412,17 @@ placing anything. Specifically:
   section, so a person never sees or answers them (the onboarding "Your circle" group hid four questions; the
   shared `@selfos/answering` form now opens all groups). Grouped-content forms get the §7 "full surface
   renders to the bottom" E2E guard.
+- **NEVER show a topic, category, or area as COMPLETE — there is always another question (durable owner rule,
+  2026-08-13).** No percentage, no meter filling toward a full width, no "done" state on anything the AI
+  explores. A bar toward 100% claims progress toward finished, and nothing in SelfOS's coverage model ever
+  finishes — the emergent topic map exists precisely because new ground keeps appearing. Show what HAPPENED
+  (activity over time, how many questions, when last asked) rather than what is "left". The honest never-"done"
+  scale (New → Getting to know you → Knows you well) is also gone from the Explored panel for the same reason:
+  paired with a meter it made the same claim in words.
+- **A control's label must say what it DOES, not how it feels.** Three passes on one button got this wrong —
+  "Explore again" read as _finished, revisit sometime_; "Leave alone" named a mood; "Ask about this next"
+  implied the topic would not be asked otherwise, which was false. And when ONE control does two different
+  things by state (prioritize open ground vs RE-OPEN ground saturation had closed), it needs two labels.
 - **Realtime progress for EVERY AI generation (non-negotiable, the user has demanded this repeatedly and
   angrily).** Any time AI generates ANYTHING the user waits on — images (cover/illustration/dream/vision),
   text, chapters, analysis, dream synthesis, questionnaires — the UI MUST show **realtime progress**: a live

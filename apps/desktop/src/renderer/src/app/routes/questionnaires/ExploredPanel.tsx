@@ -15,25 +15,11 @@ import type {
   CandidateFeedItem,
   CoverageAreaView,
   CoverageTopicView,
-  CoverageStatus,
   PartnerWishGroupView,
 } from '@shared/channels';
 import { useCoverageStore } from '../../../stores/coverageStore';
 import { Banner, Card, Heading, Stack, Text } from '../../../design-system/components';
 import styles from './ExploredPanel.module.css';
-
-/**
- * The "Explored" tab (spec 70 §3) — the forward-first, own-scoped read of what SelfOS is curious about asking
- * the active person NEXT (the candidate feed), over an honest "how well I know you" overview that never reads
- * "done", plus the steer controls. Transparency + agency; never a required step. Own-scoped: the bridge returns
- * only the viewer's own coverage/candidates/feedback (never partner/reciprocity data).
- */
-
-const STATUS: Record<CoverageStatus, { label: string; className: string }> = {
-  'knows-well': { label: 'Knows you well', className: styles.statusHigh ?? '' },
-  'getting-to-know': { label: 'Getting to know you', className: styles.statusMid ?? '' },
-  new: { label: 'New', className: styles.statusNew ?? '' },
-};
 
 function CandidateCard({ item }: { item: CandidateFeedItem }): JSX.Element {
   const curate = useCoverageStore((s) => s.curate);
@@ -112,6 +98,61 @@ function CandidateCard({ item }: { item: CandidateFeedItem }): JSX.Element {
  * previously invisible here, because the panel only ever showed one row per life area. Worked-through topics
  * are listed too — seeing what it already covered is most of why someone opens this.
  */
+/** 12-month activity, drawn as bars. Text equivalent in the aria-label (§9 — never colour/shape alone). */
+function Sparkline({ activity }: { activity: readonly number[] }): JSX.Element | null {
+  const total = activity.reduce((n, v) => n + v, 0);
+  // Nothing asked in a year renders as a row of flat empty bars, which reads as a broken dashed line rather
+  // than "quiet". Caught only by looking at it — draw nothing instead.
+  if (activity.length === 0 || total === 0) return null;
+  const max = Math.max(...activity, 1);
+  const w = 76;
+  const h = 20;
+  const bw = w / activity.length;
+  return (
+    <svg
+      className={styles.spark}
+      width={w}
+      height={h}
+      viewBox={`0 0 ${w} ${h}`}
+      role="img"
+      aria-label={`${total} ${total === 1 ? 'question' : 'questions'} over the last 12 months`}
+    >
+      {activity.map((v, i) => {
+        const bh = (v / max) * (h - 4) + 1;
+        return (
+          <rect
+            key={i}
+            x={i * bw}
+            y={h - 1 - bh}
+            width={Math.max(1, bw - 1.6)}
+            height={bh}
+            rx={1}
+            className={v > 0 ? styles.sparkBar : styles.sparkBarEmpty}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
+const shortDate = (iso: string | undefined): string | null => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? null
+    : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+};
+
+/**
+ * One piece of ground inside an area.
+ *
+ * Labels say what the control DOES, which took three passes to get right. "Explore again" read as *finished,
+ * revisit sometime*; "leave alone" described a mood; "ask about this next" implied the topic would not be
+ * asked about otherwise, which is false — everything stays in the pool and this only changes the order. And
+ * the same control does two different things: on open ground it moves the topic up; on WORKED ground it
+ * re-opens ground the system had closed (`requestedTopicIds` overrides saturation), which is a bigger deal
+ * and now says so.
+ */
 function TopicRow({
   topic,
   area,
@@ -122,47 +163,89 @@ function TopicRow({
   const steer = useCoverageStore((s) => s.steer);
   const steering = useCoverageStore((s) => s.steering);
   const busy = steering === topic.topicId;
+  const send = (action: 'explore-more' | 'leave-alone' | 'clear'): void => {
+    void steer({ topicId: topic.topicId, lifeArea: area.lifeArea, label: topic.label, action });
+  };
+  const last = shortDate(topic.lastAskedAt);
+  const until = shortDate(topic.pausedUntil);
   return (
     <li className={styles.topicRow}>
-      {/* Two lines, not one: the panel column is ~700px with the sub-nav beside it, and a label + badge +
-          count + state + action on a single row wraps the label a word per line (§12). The name owns its
-          line; the meta reads underneath. */}
-      <span className={styles.topicName}>
-        {topic.label}
-        {topic.emergent ? <span className={styles.topicNew}>new ground</span> : null}
-      </span>
-      <span className={styles.topicMeta}>
+      <div className={styles.topicMain}>
+        <span className={styles.topicName}>
+          {topic.label}
+          {topic.emergent ? <span className={styles.topicNew}>AI named</span> : null}
+          {topic.leftAlone ? (
+            <span className={styles.topicPaused}>{until ? `Paused until ${until}` : 'Paused'}</span>
+          ) : topic.prioritized ? (
+            <span className={styles.topicPinned}>Prioritized</span>
+          ) : null}
+        </span>
+        {topic.blurb ? <span className={styles.topicBlurb}>{topic.blurb}</span> : null}
+      </div>
+      <div className={styles.topicSide}>
         <span className={styles.topicCount}>
-          {topic.askedCount === 1 ? '1 question' : `${topic.askedCount} questions`}
+          {topic.askedCount === 0
+            ? 'not asked yet'
+            : `asked ${topic.askedCount}×${last ? ` · last ${last}` : ''}`}
         </span>
-        <span className={`${styles.topicState} ${topic.open ? styles.topicStateOpen : ''}`}>
-          {topic.leftAlone ? 'Left alone' : topic.open ? 'Still open' : 'Worked through'}
+        <span className={styles.topicActs}>
+          {topic.leftAlone ? (
+            <button
+              type="button"
+              className={styles.topicAct}
+              disabled={busy}
+              aria-label={`Start asking about ${topic.label} again`}
+              onClick={() => send('clear')}
+            >
+              Start asking again
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                className={styles.topicAct}
+                disabled={busy}
+                aria-pressed={topic.prioritized}
+                aria-label={
+                  topic.prioritized
+                    ? `Remove priority from ${topic.label}`
+                    : topic.open
+                      ? `Prioritize ${topic.label}`
+                      : `Revisit ${topic.label}`
+                }
+                onClick={() => send(topic.prioritized ? 'clear' : 'explore-more')}
+              >
+                {topic.prioritized
+                  ? 'Remove priority'
+                  : topic.open
+                    ? 'Prioritize this'
+                    : 'Revisit this'}
+              </button>
+              <button
+                type="button"
+                className={`${styles.topicAct} ${styles.topicActStop}`}
+                disabled={busy}
+                aria-label={`Pause asking about ${topic.label}`}
+                onClick={() => send('leave-alone')}
+              >
+                Pause asking
+              </button>
+            </>
+          )}
         </span>
-        <button
-          type="button"
-          className={styles.topicAct}
-          disabled={busy}
-          aria-pressed={topic.leftAlone}
-          // Named per topic: a list of 30 buttons all called "Leave alone" is unusable with a screen reader,
-          // and ambiguous against the area-level steer of the same name.
-          aria-label={topic.leftAlone ? `Bring back ${topic.label}` : `Leave ${topic.label} alone`}
-          onClick={() =>
-            steer({
-              topicId: topic.topicId,
-              lifeArea: area.lifeArea,
-              label: topic.label,
-              // Leaving a topic alone is a 90-day pause, not a ban — tapping again lifts it early.
-              action: topic.leftAlone ? 'clear' : 'leave-alone',
-            })
-          }
-        >
-          {topic.leftAlone ? 'Bring it back' : 'Leave alone'}
-        </button>
-      </span>
+      </div>
     </li>
   );
 }
 
+/**
+ * One life area, as a card.
+ *
+ * There is deliberately NO completeness meter here. A bar filling toward a full width claims progress toward
+ * finished, and no area is ever finished — there is always another question, which is the whole premise of the
+ * emergent topic map. The card reports what actually happened instead: activity over the last year, how many
+ * questions, when the ground was last worked, and how much of it is still open.
+ */
 function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
   const steer = useCoverageStore((s) => s.steer);
   const steering = useCoverageStore((s) => s.steering);
@@ -175,45 +258,44 @@ function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
   );
   const busy = steering === area.topicId;
   const [expanded, setExpanded] = useState(false);
-  const status = STATUS[area.status];
-  const pct = Math.round(Math.max(0, Math.min(1, area.depth)) * 100);
-  // The Intimacy row is an 18+ area: it needs the shared acknowledgement before it becomes steerable + before
-  // intimacy candidates surface (spec 70 §3.4). Until then, show an inline unlock instead of the steers.
   const needsUnlock = area.adultGated === true && !adultAcknowledged;
+  const openCount = area.topics.filter((t) => t.open && !t.leftAlone).length;
+  const last = shortDate(area.lastAskedAt);
+  const canExpand = area.topics.length > 0 && !needsUnlock;
 
   return (
-    <li className={styles.area}>
-      <div className={styles.areaMain}>
-        <span className={styles.areaLabel}>
-          {area.label}
-          {area.adultGated ? <span className={styles.adultBadge}>18+</span> : null}
-        </span>
-        <div className={styles.meterRow}>
-          <span className={styles.meter} aria-hidden="true">
-            <span
-              className={`${styles.meterFill} ${area.status === 'new' ? styles.meterFillNew : ''}`}
-              style={{ width: `${pct}%` }}
-            />
+    <li className={`${styles.area} ${expanded ? styles.areaOpen : ''}`}>
+      <button
+        type="button"
+        className={styles.areaHead}
+        aria-expanded={canExpand ? expanded : undefined}
+        disabled={!canExpand}
+        onClick={() => canExpand && setExpanded((v) => !v)}
+      >
+        <span className={styles.areaTop}>
+          <span className={styles.areaLabel}>
+            {area.label}
+            {area.adultGated ? <span className={styles.adultBadge}>18+</span> : null}
           </span>
-          <span className={`${styles.status} ${status.className}`}>{status.label}</span>
-          {area.askedCount > 0 ? (
-            <span className={styles.areaCount}>{area.askedCount} asked</span>
+          <Sparkline activity={area.activity} />
+        </span>
+        {area.blurb ? <span className={styles.areaBlurb}>{area.blurb}</span> : null}
+        <span className={styles.areaMeta}>
+          <span className={styles.metaCount}>
+            <b>{area.askedCount}</b> asked
+          </span>
+          {last ? <span className={styles.metaSep}>· last {last}</span> : null}
+          {area.topics.length > 0 && !needsUnlock ? (
+            <span className={styles.metaSep}>
+              · {area.topics.length} {area.topics.length === 1 ? 'topic' : 'topics'}
+            </span>
           ) : null}
-        </div>
-        {/* Intimacy's specific ground is gated by the SAME 18+ acknowledgement as the rest of its row
-            (spec 70 §3.4) — until it holds there is nothing to expand. */}
-        {area.topics.length > 0 && !needsUnlock ? (
-          <button
-            type="button"
-            className={styles.discloseBtn}
-            aria-expanded={expanded}
-            onClick={() => setExpanded((v) => !v)}
-          >
-            {expanded ? `Hide ${area.topics.length} topics` : `Show ${area.topics.length} topics`}
-          </button>
-        ) : null}
-      </div>
-      {expanded && area.topics.length > 0 && !needsUnlock ? (
+          {openCount > 0 && !needsUnlock ? (
+            <span className={styles.metaOpen}>· {openCount} open</span>
+          ) : null}
+        </span>
+      </button>
+      {expanded && canExpand ? (
         <ul className={styles.topicList}>
           {area.topics.map((t) => (
             <TopicRow key={t.topicId} topic={t} area={area} />
@@ -241,7 +323,7 @@ function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
             aria-pressed={area.steered}
             disabled={busy}
             onClick={() =>
-              steer({
+              void steer({
                 topicId: area.topicId,
                 lifeArea: area.lifeArea,
                 label: area.label,
@@ -250,7 +332,7 @@ function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
             }
           >
             <Compass size={14} aria-hidden="true" />
-            {area.steered ? 'Exploring more' : 'Explore more'}
+            {area.steered ? 'Prioritized' : 'Prioritize this area'}
           </button>
           <button
             type="button"
@@ -258,7 +340,7 @@ function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
             aria-pressed={isLeftAlone}
             disabled={busy}
             onClick={() =>
-              steer({
+              void steer({
                 topicId: area.topicId,
                 lifeArea: area.lifeArea,
                 label: area.label,
@@ -267,7 +349,7 @@ function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
             }
           >
             <Minus size={14} aria-hidden="true" />
-            Leave alone
+            {isLeftAlone ? 'Start asking again' : 'Pause asking'}
           </button>
         </div>
       ) : null}

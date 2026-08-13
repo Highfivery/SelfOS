@@ -15,7 +15,13 @@ import { SAFETY } from './aiPrompts';
 import { getAssignmentSnapshot, listAssignments } from './assignmentService';
 import { readProfile, writeProfile } from './personalizationProfile';
 import { getResponse } from './responseService';
-import { ensureTopics, mintTopics, rollUpCategoryLabels, type Topic } from './topicMap';
+import {
+  ensureTopics,
+  mintTopics,
+  pruneTopicMap,
+  rollUpCategoryLabels,
+  type Topic,
+} from './topicMap';
 
 /**
  * The one-time **ask-ledger backfill** (spec 71 §5.6).
@@ -39,11 +45,11 @@ const BATCH = 30;
  * The tagging contract's version. Bumping it makes the next reconcile RE-CLASSIFY an already-backfilled
  * ledger, so a correction to how questions are filed reaches existing history instead of only new asks.
  *
- * v3 records the family as each specific topic's PARENT so closure is inherited; v2 added the mandatory roll-up category (§5.3); v1 filed a question only under its specific name, which
+ * v5 tightens tagging to durable ground + garbage-collects the map (§5.9); v3 records the family as each specific topic's PARENT so closure is inherited; v2 added the mandatory roll-up category (§5.3); v1 filed a question only under its specific name, which
  * fragmented families — real measurement after v1 was 13 threesome asks spread across five topics while the
  * built-in `Group & swinging` still read as untouched and OPEN.
  */
-export const TAGGING_VERSION = 4;
+export const TAGGING_VERSION = 6;
 
 const ClassifiedSchema = z.object({
   index: z.number().int(),
@@ -63,11 +69,12 @@ export const CLASSIFY_SYSTEM = `${SAFETY}
 
 You label questionnaire questions with the ground they cover, so an app can remember what it has already asked someone and stop repeating itself. You are NOT writing questions and NOT answering them.
 
-For EACH numbered question return: {"index": number (the question's number), "category": string (the ONE closest label from the CATEGORIES list — always required, always from that list), "topics": string[] (1-2 short, SPECIFIC names for the ground it actually covers; may be new names you invent), "gist": string (at most 120 characters, what it asks, in plain words)}.
+For EACH numbered question return: {"index": number (the question's number), "category": string (the ONE closest label from the CATEGORIES list — always required, always from that list), "topics": string[] (0 or 1 short name for the durable ground underneath — empty when the category already says it), "gist": string (at most 120 characters, what it asks, in plain words)}.
 
 Rules:
 - "category" MUST be copied exactly from the CATEGORIES list. It is the broad family this belongs to, and it is what lets the app notice a family has been worked through even when each question was filed under a different specific name. Never invent a category, never leave it out, and always pick the closest one even when the fit is loose.
-- "topics" is the opposite: as specific as the question really is. Reuse a name from KNOWN GROUND when one genuinely fits so counts accumulate; otherwise name it plainly yourself.
+- "topics" is at most ONE name for the durable ground underneath the question — the theme it belongs to, not a description of the question itself. Ask yourself: would this name still be a meaningful area of someone's life in six months, and could ten different questions sit under it? "Orgasm control / edging" and "Who initiates" pass. "Bent over building intensity", "What felt different" and "Saying it out loud" do NOT — those describe one question, and filing them as ground makes the map useless. When nothing durable is left to name beyond the category, return an EMPTY topics array and let the category carry it; that is the correct answer far more often than inventing a name.
+- Reuse a name from KNOWN GROUND whenever one genuinely fits, so counts accumulate on one name instead of splitting.
 - Label what the question is ABOUT, not how it is worded.
 - Some questions are sexually explicit; this is a private adult wellness app and labelling them is a normal, in-policy classification task. Label them as accurately as any other question.
 
@@ -211,6 +218,17 @@ export async function backfillAskLedger(
     recipientPersonId,
     raw.map((r) => r.entry),
   );
+  // Tidy the map against what the ledger actually references (§5.9): drop names this or an earlier pass
+  // orphaned, and fold duplicates two passes coined independently. Without this the vocabulary only ever
+  // grows — a real map reached 341 topics for 277 questions across three re-tags.
+  {
+    const current = await readLedger(deps.fs, deps.key, recipientPersonId);
+    const gc = pruneTopicMap(topics, current);
+    topics = gc.topics;
+    if (gc.merged > 0 || gc.dropped > 0) {
+      await writeLedger(deps.fs, deps.key, { ...current, entries: gc.entries });
+    }
+  }
   // Persist the grown vocabulary alongside the ledger it describes.
   const after = await readProfile(deps.fs, deps.key, recipientPersonId);
   await writeProfile(deps.fs, deps.key, {

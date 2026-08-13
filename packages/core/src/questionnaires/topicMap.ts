@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { INTIMACY_CATEGORIES, INTIMACY_CATEGORY_LABELS } from '../intimacy/topics';
 import { LIFE_AREAS } from '../schemas';
-import type { AskLedger, TopicStats } from './askLedger';
+import type { AskLedger, AskLedgerEntry, TopicStats } from './askLedger';
 import { deriveTopicStats } from './askLedger';
 import { jaccard, tokenSet } from './dedup';
 
@@ -58,6 +58,20 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Merge a proposed topic into an existing one when their labels are this similar. */
 const ALIAS_MATCH_THRESHOLD = 0.6;
+
+/**
+ * How many questions must sit under an emergent name before it counts as real ground (spec 71 §5.9).
+ *
+ * The classifier sees one question at a time, so it cannot know what recurs — asked to name the ground under
+ * each question it will name each question. Tightening the prompt helped and did not solve it: a real map
+ * still had 165 emergent topics backing exactly one question ("Reflex response", "Inner blankness", "What she
+ * sought"). Those are descriptions, not areas of a life.
+ *
+ * So the DATA decides, not the prompt: a name has to be arrived at independently more than once to stick.
+ * Below the threshold the question keeps its family tag — nothing is lost for saturation or de-dup, the map
+ * just doesn't grow a row for it — and a name that genuinely recurs is promoted on the next pass.
+ */
+export const MIN_TOPIC_SUPPORT = 2;
 
 export const TopicSchema = z.object({
   /** Stable slug — the ledger's `topicIds` reference this. */
@@ -249,6 +263,76 @@ export function mintTopics(
     resolved.push(topicId);
   }
   return { topics: out, resolved };
+}
+
+/**
+ * Garbage-collect the topic map against the ledger (spec 71 §5.9).
+ *
+ * An emergent vocabulary only stays useful if something prunes it. Two things grow it without bound:
+ *
+ * - **Re-tagging orphans the old names.** Each pass mints labels for what it sees; names the previous pass
+ *   invented are simply left behind, referenced by nothing. Measured on a real map after three re-tags: 341
+ *   topics for 277 questions, 11 of them referenced by zero ledger entries.
+ * - **The same ground gets named twice across runs.** `mintTopics` resolves against the map as it stands, so
+ *   two passes can independently coin near-identical labels that never meet.
+ *
+ * Both are repaired here: drop every non-seeded topic with no ledger reference, then fold near-duplicate
+ * emergent topics into the one with the most asks (rewriting the ledger's `topicIds` so no count is lost).
+ * SEEDED families are never dropped — they are the roll-up vocabulary and must exist even at zero asks.
+ *
+ * Pure: returns the tidied map plus the rewritten entries; the caller persists both.
+ */
+export function pruneTopicMap(
+  topics: readonly Topic[],
+  ledger: AskLedger,
+): { topics: Topic[]; entries: AskLedgerEntry[]; dropped: number; merged: number } {
+  const all = ensureTopics(topics);
+  const counts = deriveTopicStats(ledger);
+  const askedOf = (id: string): number => counts.get(id)?.askedCount ?? 0;
+
+  // ── merge near-duplicates, richest first so the surviving name is the best-attested one ──
+  const emergent = all
+    .filter((t) => !t.seeded)
+    .sort((a, b) => askedOf(b.topicId) - askedOf(a.topicId));
+  const remap = new Map<string, string>();
+  const kept: Topic[] = all.filter((t) => t.seeded);
+  for (const t of emergent) {
+    // Resolve against what has survived so far — never against itself.
+    const hit = resolveTopicId(t.label, kept);
+    if (hit && hit !== t.topicId) {
+      remap.set(t.topicId, hit);
+      continue;
+    }
+    kept.push(t);
+  }
+
+  // ── rewrite the ledger through the merge map, then find what nothing references ──
+  const entries = ledger.entries.map((e) => {
+    const ids = [...new Set(e.topicIds.map((id) => remap.get(id) ?? id))];
+    return ids.length === e.topicIds.length && ids.every((id, i) => id === e.topicIds[i])
+      ? e
+      : { ...e, topicIds: ids };
+  });
+  // Support = how many questions ended up under each name once merges are applied.
+  const support = new Map<string, number>();
+  for (const e of entries) for (const id of e.topicIds) support.set(id, (support.get(id) ?? 0) + 1);
+  const survivors = kept.filter(
+    (t) => t.seeded || (support.get(t.topicId) ?? 0) >= MIN_TOPIC_SUPPORT,
+  );
+  const surviving = new Set(survivors.map((t) => t.topicId));
+  // Strip dropped names from the ledger. Their family tag remains, so the ask still counts toward
+  // saturation and de-dup — only the map row goes away.
+  const finalEntries = entries.map((e) => {
+    const ids = e.topicIds.filter((id) => surviving.has(id));
+    return ids.length === e.topicIds.length ? e : { ...e, topicIds: ids };
+  });
+
+  return {
+    topics: survivors,
+    entries: finalEntries,
+    dropped: kept.length - survivors.length,
+    merged: remap.size,
+  };
 }
 
 /** A piece of the person's own material — an insight, reflection or answer — with when it landed. */

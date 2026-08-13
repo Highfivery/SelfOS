@@ -417,6 +417,11 @@ _Proposed defaults; flag any to change before build._
 
 ## 15. Changelog
 
+- 2026-08-12 — **§3.4's Intimacy aggregation is superseded by [`71`](71-question-intelligence-rebuild.md) §5.8**
+  (owner decision). Intimacy was deliberately shown as ONE row with no per-category enumeration because the
+  labels are sensitive. With the emergent topic map, that also made the app's most specific knowledge about a
+  person invisible to them. Its topics are now listed like any other area's — still behind the same 18+
+  acknowledgement, which is unchanged.
 - 2026-08-12 — **§3.2's candidate feed no longer steers generation directly** (superseded by
   [`71`](71-question-intelligence-rebuild.md)). `buildCandidateGuidance` emitted "draw generation PRIMARILY
   from these" over a type-agnostic, tier-agnostic, soft-register pool placed LAST in the prompt — and the two

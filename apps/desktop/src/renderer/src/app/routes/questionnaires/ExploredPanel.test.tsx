@@ -29,6 +29,25 @@ const view = (over: Partial<QuestionnaireCoverageView> = {}): QuestionnaireCover
       depth: 0.8,
       steerable: true,
       steered: false,
+      askedCount: 9,
+      topics: [
+        {
+          topicId: 'Work & purpose:director-of-ops',
+          label: 'Director of Ops ambition',
+          askedCount: 6,
+          open: false,
+          leftAlone: false,
+          emergent: true,
+        },
+        {
+          topicId: 'Work & purpose:satisfaction',
+          label: 'RevOps role & satisfaction',
+          askedCount: 3,
+          open: true,
+          leftAlone: false,
+          emergent: true,
+        },
+      ],
     },
     {
       topicId: 'Money',
@@ -38,6 +57,8 @@ const view = (over: Partial<QuestionnaireCoverageView> = {}): QuestionnaireCover
       depth: 0,
       steerable: true,
       steered: false,
+      askedCount: 0,
+      topics: [],
     },
     {
       topicId: 'Intimacy',
@@ -47,6 +68,17 @@ const view = (over: Partial<QuestionnaireCoverageView> = {}): QuestionnaireCover
       depth: 0.2,
       steerable: false,
       steered: false,
+      askedCount: 4,
+      topics: [
+        {
+          topicId: 'Intimacy:oral',
+          label: 'Oral',
+          askedCount: 4,
+          open: false,
+          leftAlone: false,
+          emergent: false,
+        },
+      ],
       adultGated: true,
     },
   ],
@@ -340,5 +372,60 @@ describe('ExploredPanel (spec 70 §3)', () => {
       }),
     );
     expect(await screen.findByText('Exploring more')).toBeInTheDocument();
+  });
+
+  /** Open the coverage section, which is where the topic map lives. */
+  const openCoverage = async (steer?: ReturnType<typeof vi.fn>): Promise<void> => {
+    installMockBridge({
+      questionnairesPersonalizationProfile: () => Promise.resolve(view()),
+      ...(steer ? { questionnairesSteerTopic: steer } : {}),
+    });
+    useCoverageStore.setState({ view: view(), loaded: true });
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: /How well it knows you/ }));
+    await screen.findByText('How well I know you');
+  };
+
+  it('reveals the emergent topic map inside an area, worked-through ground included (spec 71 §5.8)', async () => {
+    await openCoverage();
+    // Collapsed by default — the panel stays scannable with 30+ topics on the map.
+    expect(screen.queryByText('Director of Ops ambition')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Show 2 topics/ }));
+    // Every topic is listed with its real ask count, worked-through ground included: seeing what it has
+    // already covered is most of the point of this surface.
+    expect(screen.getByText('Director of Ops ambition')).toBeInTheDocument();
+    expect(screen.getByText('RevOps role & satisfaction')).toBeInTheDocument();
+    expect(screen.getByText('6 questions')).toBeInTheDocument();
+    // Ground the model named itself is marked, so it reads as new rather than a built-in family.
+    expect(screen.getAllByText('new ground').length).toBeGreaterThan(0);
+  });
+
+  it('leaving a topic alone steers that TOPIC, not the whole area', async () => {
+    const steer = vi.fn<SelfosBridge['questionnairesSteerTopic']>().mockResolvedValue(view());
+    await openCoverage(steer);
+    await userEvent.click(screen.getByRole('button', { name: /Show 2 topics/ }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Leave RevOps role & satisfaction alone' }),
+    );
+    await waitFor(() =>
+      expect(steer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          topicId: 'Work & purpose:satisfaction',
+          action: 'leave-alone',
+        }),
+      ),
+    );
+  });
+
+  it('keeps intimacy topics behind the 18+ acknowledgement', async () => {
+    await openCoverage();
+    // The fixture's Intimacy row is un-acknowledged, so there is nothing to expand and no explicit label
+    // reaches the screen (spec 70 §3.4 — the gate is unchanged by this surface).
+    expect(screen.queryByRole('button', { name: /Show 1 topic/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Oral')).not.toBeInTheDocument();
   });
 });

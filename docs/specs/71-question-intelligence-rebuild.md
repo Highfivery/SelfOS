@@ -249,9 +249,29 @@ legacy intimacy-coverage steering and skips the planner entirely. Without this t
 which the ledger is empty or partial, so planning from it would tell the model almost nothing had been asked —
 worse than the engine being replaced. The switch is therefore clean rather than gradual.
 
-**As built — the Explored tab folds the map in rather than replacing its rows.** `foldTopicMap` overlays real
-ask counts onto the existing life-area rows and appends emergent topics, so the panel gains accurate
-exploration and newly-named ground with no UI change and no regression to its curation controls.
+### 5.8 The Explored tab shows the map (owner decision 2026-08-12)
+
+`foldTopicMap` first overlays real ask counts onto the existing life-area rows. On top of that, **each area row
+expands to reveal the specific ground inside it** — every topic, worked-through ones included, with its real
+ask count, an open / worked-through / left-alone state, and a `new ground` marker on anything the model named
+itself. Without this the rebuild's most interesting output was invisible: the app knew ten new things about a
+person and showed them none.
+
+Three decisions, all the owner's:
+
+- **Intimacy is included**, behind the same 18+ acknowledgement as the rest of its row. This knowingly reverses
+  [`70`](70-adaptive-exploration.md) §3.4's aggregation (recorded there): explicit labels now appear on screen
+  once acknowledged, in exchange for a person being able to see and steer their own ground.
+- **"Leave alone" is a 90-day cooldown, never a ban.** It persists as a new `left-alone` feedback kind —
+  deliberately distinct from `not-applicable`, which is a per-question "this isn't about me" that stays true —
+  and lapses on its own, so the person can change their mind by doing nothing. Tapping again lifts it early.
+- **Every topic is listed**, not only open ones: seeing what it has already covered is most of the point.
+
+The row is **two lines** (name, then count · state · action). A single line was built first and visual QA
+against the real app showed the §12 failure it warns about — with the sub-nav beside it the column is ~700px,
+so a label fought the badge and wrapped a word at a time while the action dropped to its own line. Topic
+actions carry a per-topic accessible name (`Leave <topic> alone`); a list of thirty buttons all named "Leave
+alone" is unusable with a screen reader and ambiguous against the area-level steer of the same name.
 
 ### 5.7 Deterministic guards
 
@@ -362,6 +382,12 @@ _All resolved with the owner on 2026-08-12:_
 
 ## 12. Changelog
 
+- 2026-08-12 — **Follow-up: the Explored tab shows the emergent map (§5.8).** Area rows expand to the specific
+  ground inside them — all topics, real counts, open/worked/left-alone state, a `new ground` marker. Owner
+  decisions: Intimacy included behind the existing 18+ ack (reverses [`70`](70-adaptive-exploration.md) §3.4),
+  "Leave alone" is a bounded 90-day `left-alone` steer rather than a ban, all topics listed. Mockup approved
+  first; visual QA against the real app caught a §12 row-wrap failure that a single-line design would have
+  shipped.
 - 2026-08-12 — **Follow-up: vocabulary fragmentation (§4/§5.3).** Found by running the shipped backfill against
   the real vault and inspecting the result: the emergent taxonomy split one family across several names, so a
   heavily-worked area read as untouched and OPEN (`Group & swinging` 0 asks after 13; `Edge play` 0 after 5).

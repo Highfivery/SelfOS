@@ -727,6 +727,7 @@ export type { DeviceView } from '@selfos/core/schemas';
 export type {
   QuestionnaireCoverageView,
   CoverageAreaView,
+  CoverageTopicView,
   CoverageStatus,
   MarkedOffView,
   CoverageSteerInput,

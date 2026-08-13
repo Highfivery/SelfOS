@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { LEAVE_ALONE_COOLDOWN_DAYS } from './topicMap';
+
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import {
@@ -350,16 +352,22 @@ describe('applyReciprocity', () => {
 });
 
 describe('applySteer (spec 69 §3.4 transparency steer)', () => {
-  it('leave-alone records a not-applicable feedback entry keyed by topic (→ the avoid list)', () => {
+  it('leave-alone is a BOUNDED steer that reaches the prompt, then lapses (spec 71 §5.8)', () => {
     const p = applySteer(
       emptyProfile('p1'),
       { topicId: 'Work & purpose', label: 'Work & purpose', action: 'leave-alone' },
       at(1),
     );
     const entry = p.feedback.find((f) => f.topicId === 'Work & purpose');
-    expect(entry?.kind).toBe('not-applicable');
-    // It reaches the generation avoid list.
-    expect(buildFeedbackGuidance(p, at(2))).toMatch(/DON'T APPLY[\s\S]*Work & purpose/);
+    // Deliberately NOT `not-applicable`: that is a per-question "this isn't about me", which stays true.
+    // Leaving a topic alone is a "not right now" the person can change their mind about (owner decision:
+    // a 90-day cooldown, never a ban).
+    expect(entry?.kind).toBe('left-alone');
+    // While it holds, it reaches the model as ground to leave alone…
+    expect(buildFeedbackGuidance(p, at(2))).toMatch(/leave them alone[\s\S]*Work & purpose/);
+    // …and once the cooldown passes it simply lapses, with no action needed from the person.
+    const lapsed = new Date(at(1).getTime() + (LEAVE_ALONE_COOLDOWN_DAYS + 1) * 86_400_000);
+    expect(buildFeedbackGuidance(p, lapsed)).not.toContain('Work & purpose');
   });
 
   it('explore-more sets the coverage topic reopenedBy: explicit-request (creating it if absent)', () => {
@@ -373,15 +381,13 @@ describe('applySteer (spec 69 §3.4 transparency steer)', () => {
     expect(topic?.saturated).toBe(false);
   });
 
-  it('explore-more overrides a prior leave-alone (removes the not-applicable entry)', () => {
+  it('explore-more overrides a prior leave-alone (removes the steer entry)', () => {
     let p = applySteer(
       emptyProfile('p1'),
       { topicId: 'Health', label: 'Health', action: 'leave-alone' },
       at(1),
     );
-    expect(p.feedback.some((f) => f.topicId === 'Health' && f.kind === 'not-applicable')).toBe(
-      true,
-    );
+    expect(p.feedback.some((f) => f.topicId === 'Health' && f.kind === 'left-alone')).toBe(true);
     p = applySteer(p, { topicId: 'Health', label: 'Health', action: 'explore-more' }, at(2));
     expect(p.feedback.some((f) => f.topicId === 'Health')).toBe(false);
     expect(p.coverage.topics.find((t) => t.topicId === 'Health')?.reopenedBy).toBe(

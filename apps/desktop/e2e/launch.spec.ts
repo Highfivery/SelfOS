@@ -3096,6 +3096,15 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
     await expect(w.getByText('ground still open')).toBeVisible();
     await expect(w.getByRole('button', { name: 'Named by AI' })).toBeVisible();
     await expect(w.getByRole('searchbox', { name: /Search areas/ })).toBeVisible();
+    // Interaction states are real product surface, so assert them rather than eyeballing a static shot.
+    const card = w.locator('li').filter({ hasText: 'The people closest to you' }).first();
+    const flat = await card.evaluate((el) => getComputedStyle(el).boxShadow);
+    await card.hover();
+    await expect
+      .poll(async () => card.evaluate((el) => getComputedStyle(el).boxShadow))
+      .not.toBe(flat);
+    const steer = w.getByRole('button', { name: 'Prioritize this area' }).first();
+    expect(await steer.evaluate((el) => getComputedStyle(el).transitionDuration)).not.toBe('0s');
     await relationships.getByRole('button', { name: 'Pause asking' }).click();
     // Back on the feed, the intimacy candidate now shows (18+ acked).
     await w.getByRole('button', { name: /Curious next/ }).click();

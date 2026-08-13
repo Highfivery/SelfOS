@@ -1099,3 +1099,106 @@
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
 }
+
+/* ── Detail pass: spacing rhythm + interaction states ────────────────────────── */
+
+.sparkWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex: none;
+}
+.sparkCaption {
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  color: var(--color-text-tertiary);
+}
+
+/* One rhythm down the card: head, chips, actions all share the same inline padding and a single
+   vertical step between blocks. */
+.areaHead {
+  padding: var(--space-4) var(--space-4) var(--space-3);
+}
+.chipRow {
+  padding: 0 var(--space-4) var(--space-3);
+}
+.areaActions {
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.area {
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+.area:hover {
+  box-shadow: var(--shadow-overlay, 0 6px 18px rgb(36 31 26 / 6%));
+  transform: translateY(-1px);
+}
+.areaOpen,
+.areaOpen:hover {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .area,
+  .area:hover {
+    transition: none;
+    transform: none;
+  }
+}
+
+.topicRow {
+  border-radius: var(--radius-sm);
+  transition: background-color 0.12s ease;
+  padding-inline: var(--space-2);
+  margin-inline: calc(var(--space-2) * -1);
+}
+.topicRow:hover {
+  background: var(--color-surface);
+}
+
+/* The old row layout pushed this with margin-left:auto; in the grid it belongs to its own cell. */
+.topicAct {
+  margin-left: 0;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease,
+    background-color 0.12s ease;
+}
+.topicAct:active:not(:disabled),
+.steerBtn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.topicAct:disabled,
+.steerBtn:disabled,
+.searchBox:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.topicAct:focus-visible,
+.steerBtn:focus-visible,
+.seg button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.steerBtn {
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease,
+    background-color 0.12s ease;
+}
+.steerBtn[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent-text);
+  background: var(--color-accent-subtle-bg);
+}
+.seg button {
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+.searchBox::placeholder {
+  color: var(--color-text-tertiary);
+}

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.52.4](https://github.com/Highfivery/SelfOS/compare/v0.52.3...v0.52.4) (2026-08-13)
+
+
+### Bug Fixes
+
+* **questionnaires:** filter the catch-all bucket out of ground steering (71 §5.2) ([#432](https://github.com/Highfivery/SelfOS/issues/432)) ([74ee98b](https://github.com/Highfivery/SelfOS/commit/74ee98b16f61e973adaa202461345ff0cd2d30d2))
+* **questionnaires:** the topic selector sees the ledger too (71 §5.2) ([#430](https://github.com/Highfivery/SelfOS/issues/430)) ([1be33e5](https://github.com/Highfivery/SelfOS/commit/1be33e5644617b196f3942b2815155bb20e58668))
+
 ## [0.52.3](https://github.com/Highfivery/SelfOS/compare/v0.52.2...v0.52.3) (2026-08-13)
 
 

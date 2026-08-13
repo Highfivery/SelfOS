@@ -24,6 +24,7 @@ import {
   resolveTopicId,
   seedTopics,
   topicStatuses,
+  topicsWithNewMaterial,
   type Topic,
 } from './topicMap';
 
@@ -311,6 +312,71 @@ describe('topicMap', () => {
 });
 
 // ── Type + tier scoping ───────────────────────────────────────────────────────────────────────────────
+
+describe('topic-scoped new material (spec 71 §5.2)', () => {
+  const worked = (topicId: string, at = '2026-06-01T00:00:00.000Z') => ({
+    ...emptyLedger('p'),
+    entries: [1, 2, 3].map((n) =>
+      entry({ questionId: `${topicId}-${n}`, topicIds: [topicId], at }),
+    ),
+  });
+
+  it('re-opens ground the person has since said something about', () => {
+    const ledger = worked('Intimacy:anal');
+    const material = [
+      { at: '2026-08-01T00:00:00.000Z', text: 'She has been thinking about anal again lately.' },
+    ];
+    const ids = topicsWithNewMaterial(material, seedTopics(), ledger);
+    expect(ids).toContain('Intimacy:anal');
+    const status = topicStatuses({
+      topics: seedTopics(),
+      ledger,
+      newMaterialTopicIds: ids,
+      now,
+    }).find((s) => s.topic.topicId === 'Intimacy:anal');
+    expect(status?.reopenedBy).toBe('new-material');
+  });
+
+  it('does NOT re-open unrelated ground — the exact shape of the bug it replaces', () => {
+    // The predecessor took the newest own-subject insight of ANY kind and re-opened EVERY intimacy category,
+    // which is why a real vault showed nine categories past the threshold reporting `saturated: []`.
+    const ledger = worked('Intimacy:anal');
+    const material = [
+      {
+        at: '2026-08-01T00:00:00.000Z',
+        text: 'A hard week at work; the Director of Ops role is stalling.',
+      },
+    ];
+    expect(topicsWithNewMaterial(material, seedTopics(), ledger)).not.toContain('Intimacy:anal');
+    const status = topicStatuses({
+      topics: seedTopics(),
+      ledger,
+      newMaterialTopicIds: topicsWithNewMaterial(material, seedTopics(), ledger),
+      now,
+    }).find((s) => s.topic.topicId === 'Intimacy:anal');
+    expect(status?.saturated).toBe(true);
+  });
+
+  it('ignores material OLDER than the last ask, so answers cannot re-open the ground that produced them', () => {
+    // Without this a topic could never saturate: the answers it generated would immediately re-open it.
+    const ledger = worked('Intimacy:anal', '2026-08-05T00:00:00.000Z');
+    const material = [{ at: '2026-06-01T00:00:00.000Z', text: 'Something about anal.' }];
+    expect(topicsWithNewMaterial(material, seedTopics(), ledger)).not.toContain('Intimacy:anal');
+  });
+
+  it('the cooldown floor still holds over a re-open', () => {
+    // Re-opened, but asked 3 days ago — the hard floor means it is still not askable.
+    const ledger = worked('Intimacy:anal', '2026-08-09T00:00:00.000Z');
+    const status = topicStatuses({
+      topics: seedTopics(),
+      ledger,
+      newMaterialTopicIds: ['Intimacy:anal'],
+      now,
+    }).find((s) => s.topic.topicId === 'Intimacy:anal');
+    expect(status?.reopenedBy).toBe('new-material');
+    expect(status?.open).toBe(false);
+  });
+});
 
 describe('vocabulary fragmentation (spec 71 §5.3 — the roll-up tag)', () => {
   it('singularizes so a plural cannot fork a topic', () => {

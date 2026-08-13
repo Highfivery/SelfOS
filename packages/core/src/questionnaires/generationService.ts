@@ -46,7 +46,9 @@ import {
   mintTopics,
   rollUpCategoryLabels,
   topicStatuses,
+  topicsWithNewMaterial,
   type Topic,
+  type TopicMaterial,
   type TopicStatus,
 } from './topicMap';
 
@@ -194,11 +196,11 @@ export interface GenerateRequest {
   // send time. Absent (an external recipient, who has no household history) ⇒ generation runs unsteered,
   // which is the pre-71 behaviour minus the two blocks that pulled a typed draft off-register.
   recipientPersonId?: string;
-  // Topics touched by genuinely NEW material, for the topic-SCOPED re-open signal (spec 71 §5.2). Callers that
-  // cannot resolve this pass nothing, which is deliberately the SAFE direction: worked ground then re-opens
-  // only on an explicit request or 90-day dormancy, instead of on any insight from any life area — the bug
-  // that left nine saturated categories reporting `saturated: []` on a real vault.
-  newMaterialTopicIds?: readonly string[];
+  // The recipient's own material (insights from sessions/dreams/tests/reflections), for the topic-SCOPED
+  // re-open signal (spec 71 §5.2). Ground re-opens only when the person has since revealed something about
+  // THAT ground — never because an unrelated insight landed, which is the bug that left nine saturated
+  // categories reporting `saturated: []` on a real vault. Absent ⇒ no re-open beyond request/dormancy.
+  newMaterial?: readonly TopicMaterial[];
   // Ground the person explicitly pinned ("Ask me this") — leads the plan.
   requestedLabels?: readonly string[];
   now?: Date;
@@ -244,7 +246,9 @@ export async function generateQuestions(
     statuses = topicStatuses({
       topics: topicMap,
       ledger,
-      ...(request.newMaterialTopicIds ? { newMaterialTopicIds: request.newMaterialTopicIds } : {}),
+      newMaterialTopicIds: request.newMaterial
+        ? topicsWithNewMaterial(request.newMaterial, topicMap, ledger)
+        : [],
       ...(request.requestedLabels ? { requestedTopicIds: [...request.requestedLabels] } : {}),
       now,
     }).filter((s) => areas.has(s.topic.lifeArea));

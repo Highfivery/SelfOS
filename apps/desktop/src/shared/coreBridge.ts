@@ -700,6 +700,7 @@ import {
   gatherRecipientQuestionnaireTitles,
   gatherRecipientFeedbackGuidance,
   gatherRecipientPinnedLabels,
+  gatherRecipientTopicMaterial,
   gatherRecipientPartnerContext,
   generateQuestions,
   backfillAskLedger,
@@ -1850,9 +1851,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     partnerContext: string;
     /** Ground the person explicitly pinned ("Ask me this") — leads the spec-71 planner. */
     pinnedLabels: string[];
+    /** The recipient's own material (spec 71 §5.2) — re-opens worked ground it actually speaks to. */
+    newMaterial: { at: string; text: string }[];
   }> => {
     const history = await gatherRecipientHistory(fs, key, recipientPersonId);
     const pinnedLabels = await gatherRecipientPinnedLabels(fs, key, recipientPersonId);
+    const newMaterial = await gatherRecipientTopicMaterial(fs, key, recipientPersonId);
     // The recipient's skip/decline steering (spec 69) — read host-side, fed to the model to avoid what they
     // said doesn't apply / would rather not, and to reword what landed unclear.
     const recipientFeedback = await gatherRecipientFeedbackGuidance(fs, key, recipientPersonId);
@@ -1949,6 +1953,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       feedbackGuidance,
       partnerContext,
       pinnedLabels,
+      newMaterial,
     };
   };
 
@@ -4246,6 +4251,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             feedbackGuidance: '',
             partnerContext: '',
             pinnedLabels: [] as string[],
+            newMaterial: [] as { at: string; text: string }[],
           };
       // Who it's FOR (08 §24.4): the recipient's name/pronouns + the author↔recipient relationship (type +
       // closeness), so generation adopts the right register (partner vs coworker vs child) and personalizes.
@@ -4301,6 +4307,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         // appended at send time. Household recipients only; an external one has no household record.
         ...(recipientIsHousehold ? { recipientPersonId: p.recipientPersonId as string } : {}),
         ...(known.pinnedLabels.length ? { requestedLabels: known.pinnedLabels } : {}),
+        ...(known.newMaterial.length ? { newMaterial: known.newMaterial } : {}),
         ...(known.history ? { recipientHistory: known.history } : {}),
         ...(known.dedupReference ? { dedupReference: known.dedupReference } : {}),
         ...(known.askedPrompts.length ? { recipientAskedPrompts: known.askedPrompts } : {}),
@@ -4746,6 +4753,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         // spec 71 — same ledger/planner steering as the manual draft path.
         recipientPersonId,
         ...(known.pinnedLabels.length ? { requestedLabels: known.pinnedLabels } : {}),
+        ...(known.newMaterial.length ? { newMaterial: known.newMaterial } : {}),
         ...(known.history ? { recipientHistory: known.history } : {}),
         ...(known.dedupReference ? { dedupReference: known.dedupReference } : {}),
         ...(known.askedPrompts.length ? { recipientAskedPrompts: known.askedPrompts } : {}),

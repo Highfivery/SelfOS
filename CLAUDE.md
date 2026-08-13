@@ -412,6 +412,15 @@ placing anything. Specifically:
   section, so a person never sees or answers them (the onboarding "Your circle" group hid four questions; the
   shared `@selfos/answering` form now opens all groups). Grouped-content forms get the §7 "full surface
   renders to the bottom" E2E guard.
+- **NEVER state a fact about the user's system you have not just verified — print it, don't infer it (durable,
+  forceful, 2026-08-13).** In one session I told the user their relay wasn't set up (it was — I printed
+  `cfg.endpoint` when the field is `endpointUrl`, so my own script said `null`), told them a redesign matched
+  their approved mockup twice when it plainly did not, and told them repeatedly that spacing was fixed without
+  ever measuring it. Every one was a guess delivered in the voice of a finding. The rule: before asserting
+  ANYTHING about their data, config, or UI — dump the whole object (`Object.keys`, the full JSON), measure the
+  actual computed value, or screenshot the actual surface. A field name you remember is a hypothesis. "The
+  tests pass" is not a statement about what the user sees. If you cannot verify it in the moment, say "I have
+  not checked this" — an unverified claim wastes their time AND destroys the credibility of the verified ones.
 - **Compare what you BUILT against what was APPROVED, side by side, before saying it is done.** A mockup is a
   contract. Passing tests and a screenshot of whatever region happened to be scrolled into view are not a
   comparison — twice a redesign shipped with its grid, stats strip, filter bar and search simply absent while

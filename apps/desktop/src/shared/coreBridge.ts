@@ -655,10 +655,8 @@ import {
   setAutoCheckinConfig,
 } from '@selfos/core/auto-checkins';
 import {
-  buildIntimacyCoverage,
   INTIMACY_ACTIVITIES,
   INTIMACY_FANTASIES,
-  type IntimacyCoverage,
   mergedIntimacyTopics,
   suggestIntimacyTopics,
 } from '@selfos/core/intimacy';
@@ -1842,7 +1840,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     coveredNotes: string[];
     /** Which intimacy ground has already been worked (08 §27.2) — bounds the "go deeper" framing so a manual
      *  intimacy draft can't re-mine the same rated acts either (#314). */
-    intimacyCoverage: IntimacyCoverage;
     /** Differentiated avoid/boundary/reword steering from the recipient's Personalization Profile — how the
      *  app learns from their prior skips/declines (spec 69 §5.9). */
     feedbackGuidance: string;
@@ -1932,25 +1929,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       .map((t) => t.sourcePrompt)
       .filter((p): p is string => Boolean(p));
     const askedPrompts = [...priorPrompts, ...intake.prompts, ...coveredPrompts];
-    // §27.2 — the intimacy coverage map, in lockstep with the auto engine's `buildDedupBundle`. The author's
-    // BRIEF is the `explicitFocus` (§27.4): an author who explicitly asks for ground must be able to get it
-    // even when that ground is otherwise worked through — otherwise this fix would silently refuse a direct
-    // request, which is the opposite of the intent.
-    const intimacyCoverage = buildIntimacyCoverage({
-      coveredActs: intake.coveredActs,
-      askedIntimacy: intimacyAsks,
-      ...(signals.newMaterialAt !== undefined ? { newMaterialAt: signals.newMaterialAt } : {}),
-      ...(session?.updatedAt ? { profileEditedAt: session.updatedAt } : {}),
-      ...(brief && brief.trim() ? { explicitFocus: brief } : {}),
-      now: new Date(),
-    });
     return {
       history: combined,
       coveredActs: intake.coveredActs,
       askedPrompts,
       dedupReference,
       coveredNotes,
-      intimacyCoverage,
       feedbackGuidance,
       partnerContext,
       pinnedLabels,

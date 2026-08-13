@@ -423,7 +423,9 @@ async function trySuggestion(ctx: {
     signals,
     avoid,
     ...(Object.keys(steering).length ? { steering } : {}),
-    ...(openIntimacy.length ? { openGround: openIntimacy } : {}),
+    // ALWAYS passed, empty included: empty means "everything worked through", which the prompt states
+    // plainly. Omitting it in that case is what let the seeded families back in.
+    openGround: openIntimacy,
     ...(ctx.recipientName ? { recipientName: ctx.recipientName } : {}),
     ...(intimacyTarget
       ? {

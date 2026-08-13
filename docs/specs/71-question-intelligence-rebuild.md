@@ -510,6 +510,18 @@ _All resolved with the owner on 2026-08-12:_
   (`groundSummary`, type/tier-scoped) on both call sites (auto engine + the Suggested panel), as prompt
   steering rather than a hard filter, since the planner and question-level de-dup already bound the damage
   downstream. Guarded on both paths, each verified to FAIL when the wiring is reverted.
+- 2026-08-13 — **Fix: an intimacy EMAIL could nudge toward ground the person had exhausted (§5.3).** Introduced
+  by the change below and caught going to write its E2E: the caller omitted `openGround` when nothing was open
+  (`...(openIntimacy.length ? {…} : {})`) and the consumer fell back to the seeded families
+  (`input.openGround ?? seededIntimacyGround()`), so the ALL-WORKED case — the one that matters — offered the
+  exact 14 areas the person had finished, inside an explicit email nobody reviews before it sends. Exactly the
+  invariant already guarded in questionnaire generation, violated one file over. Made UNREPRESENTABLE rather
+  than patched: `openGround` is now REQUIRED on the email `GenerateInput`, so an empty list is the only way to
+  express "nothing open" and no caller can omit it; the seed fallback is gone from that path entirely, since
+  every caller there has a topic map (`ensureTopics` seeds one for everyone). Guarded, verified to FAIL when
+  the fallback is restored. **Lesson: an optional field with a plausible default is a footgun when the EMPTY
+  case is the meaningful one — the same shape produced the same bug twice in one session; make the type carry
+  the meaning instead.**
 - 2026-08-13 — **Follow-up: the fixed intimacy inventory is gone too — the map IS the subject matter (§5.3).**
   Owner correction, and the right one: built-in families are a SEED, not a taxonomy the app reasons in, so
   filing the Owner's custom topics under one (the first fix attempted, reverted unbuilt) re-centralized on

@@ -20,7 +20,6 @@ import { isNearDuplicate } from '../questionnaires/dedup';
 import { runClaude, type AiDeps } from '../questionnaires/aiCall';
 import { extractJsonObject } from '../ai/jsonSalvage';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
-import { seededIntimacyGround } from '../questionnaires/topicMap';
 import { explicitFraming } from '../questionnaires/aiPrompts';
 import { listEmailResponses } from './emailResponse';
 
@@ -207,9 +206,17 @@ interface GenerateInput {
    * `avoid`-set on top (past suggestions + not-for-me/maybe-later subjects) — those stay email-only (§69 P4).
    */
   steering?: { feedbackGuidance?: string; coveredTopics?: string[] };
-  /** The intimacy ground still OPEN with this person, from their own topic map (spec 71 §5.3) — the subject
-   *  matter for an intimacy suggestion. Absent ⇒ the seeded ground, so the prompt is still concrete. */
-  openGround?: readonly { label: string; blurb?: string }[];
+  /**
+   * The intimacy ground still OPEN with this person, from their own topic map (spec 71 §5.3) — the subject
+   * matter for an intimacy suggestion.
+   *
+   * REQUIRED, and an EMPTY array is meaningful: it says this person has worked every area through, and the
+   * prompt must say so rather than degrade to the seeded families. Optional-with-a-seed-fallback is the shape
+   * that produced the bug this replaced — the caller omitted it in exactly the all-worked case, so an explicit
+   * email nobody reviews first would nudge toward the areas they had just exhausted. Every caller has a topic
+   * map (`ensureTopics` seeds one for everyone), so there is no honest case for a fallback here.
+   */
+  openGround: readonly { label: string; blurb?: string }[];
 }
 
 /**
@@ -239,13 +246,8 @@ export async function generateSuggestion(
     PERSONA,
     SAFETY,
     // Same rule as questionnaire generation: the subject matter is this person's OWN open ground, so an
-    // intimacy email can't nudge toward an area they have already worked through. The caller reads their map
-    // (it already does, for the novelty steering); the seed stands in only when it didn't.
-    intimacy
-      ? explicitFraming('explicit', [], {
-          openGround: input.openGround ?? seededIntimacyGround(),
-        })
-      : '',
+    // intimacy email can never nudge toward an area they have already worked through.
+    intimacy ? explicitFraming('explicit', [], { openGround: input.openGround }) : '',
     'You write ONE short, warm coaching suggestion to email a person, in their own SelfOS space. Return ' +
       'ONLY a JSON object {"headline": string, "body": string}. The headline is a short subject line (≤ 8 ' +
       'words). The body is 1–3 plain sentences — specific, kind, never clinical, never a re-phrasing of ' +

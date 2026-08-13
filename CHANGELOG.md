@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.53.0](https://github.com/Highfivery/SelfOS/compare/v0.52.5...v0.53.0) (2026-08-13)
+
+
+### Features
+
+* **questionnaires:** Explored panel rebuild + emergent ground born open (71 §5.3/§5.9) ([#435](https://github.com/Highfivery/SelfOS/issues/435)) ([19cb3e0](https://github.com/Highfivery/SelfOS/commit/19cb3e05e34198be2a8798d9009fbdacee44f485))
+
 ## [0.52.5](https://github.com/Highfivery/SelfOS/compare/v0.52.4...v0.52.5) (2026-08-13)
 
 

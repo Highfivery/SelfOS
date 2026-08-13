@@ -6,6 +6,10 @@ import { memFileSystem } from '../host/memFileSystem';
 import { upsertPerson } from '../people/peopleService';
 import { upsertRelationship } from '../people/relationshipService';
 import { createAssignment, listAssignments } from '../questionnaires/assignmentService';
+import { emptyLedger, writeLedger } from '../questionnaires/askLedger';
+import { TAGGING_VERSION } from '../questionnaires/askLedgerBackfill';
+import { readProfile, writeProfile } from '../questionnaires/personalizationProfile';
+import { SATURATION_ASKS, seedTopics } from '../questionnaires/topicMap';
 import {
   getQuestionnaire,
   listQuestionnaires,
@@ -407,6 +411,58 @@ describe('runAutoCheckins — no filler when there is no new ground (08 §27.5)'
       .split('\n')
       .find((l) => l.includes('ALREADY RATED'));
     expect(goDeeperLine ?? '').not.toMatch(/oral/i);
+  });
+
+  it("takes the intimacy slot's ground from the ask ledger, not the legacy coverage map (71 §5.2)", async () => {
+    // A structural differential. Every SEEDED intimacy topic is worked through in the ledger, leaving one
+    // EMERGENT topic — a label the built-in taxonomy has no word for, so the legacy coverage map cannot
+    // produce it under any inputs. Whichever engine picks the brief's focus is therefore readable directly
+    // off the output. This matters because the brief GOVERNS generation: picking ground from the legacy map
+    // (which spec 71 §1 measured as missing a third of what had been asked) sends the planner at ground the
+    // ledger has already closed, which is the repetition the rebuild exists to stop.
+    const fs = memFileSystem();
+    const author = await seedPerson(fs, { name: 'Ben', ack: true });
+
+    const seeded = seedTopics().filter((t) => t.lifeArea === 'Intimacy');
+    const emergent = {
+      topicId: 'Intimacy:aftercare-rituals',
+      label: 'Aftercare rituals',
+      lifeArea: 'Intimacy' as const,
+      seeded: false,
+      aliases: [] as string[],
+    };
+    await writeProfile(fs, key, {
+      ...(await readProfile(fs, key, author)),
+      topics: [...seeded, emergent],
+    });
+    await writeLedger(fs, key, {
+      ...emptyLedger(author),
+      backfilledAt: new Date('2026-01-01').toISOString(),
+      taggingVersion: TAGGING_VERSION,
+      entries: seeded.flatMap((t, ti) =>
+        Array.from({ length: SATURATION_ASKS }, (_, i) => ({
+          questionId: `q${ti}-${i}`,
+          assignmentId: `a${ti}-${i}`,
+          at: new Date(Date.UTC(2025, 0, 1 + ti)).toISOString(),
+          type: 'intimacy',
+          tier: 'unfiltered' as const,
+          topicIds: [t.topicId],
+          gist: t.label.toLowerCase(),
+          outcome: 'rich' as const,
+        })),
+      ),
+    });
+
+    await setAutoCheckinConfig(fs, key, author, { enabled: true, targets: [selfTarget()] });
+    const { client, prompts } = capturingClient();
+    const result = await runAutoCheckins(runInput(fs, author, { client }));
+    expect(result.ok).toBe(true);
+
+    const intimacyPrompt = prompts.find((p) => p.includes('GROUND TO OPEN THIS TIME'));
+    expect(intimacyPrompt).toBeDefined();
+    const focus = (intimacyPrompt ?? '').split('\n').find((l) => l.startsWith('FOCUS —')) ?? '';
+    // Only the ledger can name this ground.
+    expect(focus).toMatch(/focusing on Aftercare rituals/i);
   });
 
   it('records a gap-finder FAILURE distinctly, never as "no new ground" (§27.6)', async () => {

@@ -11,6 +11,7 @@ import {
   nextIntimacyCategory,
 } from '../intimacy/coverage';
 import { INTIMACY_CATEGORY_LABELS } from '../intimacy/topics';
+import { INTIMACY_TYPE } from '../questionnaires/aiPrompts';
 import { ageFromBirthday } from '../people/buildContext';
 import { getPerson, listPeople } from '../people/peopleService';
 import { listRelationships } from '../people/relationshipService';
@@ -19,7 +20,11 @@ import {
   createAssignment,
   listAssignments,
 } from '../questionnaires/assignmentService';
-import { type AiDeps, generateQuestions } from '../questionnaires/generationService';
+import {
+  type AiDeps,
+  generateQuestions,
+  nextOpenGround,
+} from '../questionnaires/generationService';
 import { suggestQuestionnaires } from '../questionnaires/gapFinderService';
 import { saveQuestionnaire, validateQuestionnaire } from '../questionnaires/questionnaireService';
 import {
@@ -214,7 +219,7 @@ export async function runAutoCheckins(input: RunAutoCheckinsInput): Promise<Auto
     for (const intent of intents) {
       const spec =
         intent === 'intimacy'
-          ? intimacySpec(target.explorationFocus, bundle.intimacyCoverage)
+          ? intimacySpec(target.explorationFocus, bundle.intimacyCoverage, bundle.intimacyGround)
           : topicalSpec(suggestions[sugIndex++], target.explorationFocus);
 
       // §27.5 — no filler. Silence is the correct output when there is no new ground to cover.
@@ -528,14 +533,23 @@ function topicalSpec(
  * coverage map (§27.3), instead of the old generic "prefer topics not yet covered" hint that the model was
  * free to ignore while the prompt simultaneously told it to go deeper on the same rated acts.
  */
-function intimacySpec(focus: string, coverage?: IntimacyCoverage): SlotSpec {
+function intimacySpec(focus: string, coverage?: IntimacyCoverage, ledgerGround?: string): SlotSpec {
   // The auto intimacy slot is always the  tier (below), so order the ground for that register.
   // The auto intimacy slot is always the `unfiltered` tier (below), so order the ground for THAT register —
   // otherwise the gentlest uncovered areas lead and contradict the tier's "go beyond vanilla" directive.
-  const next = coverage ? nextIntimacyCategory(coverage, 'unfiltered') : undefined;
+  // spec 71 §5.2 — the ask ledger decides the ground when it is authoritative. The legacy engine survives ONLY
+  // as the pre-backfill fallback: its keyword classifier missed a third of what had been asked and its
+  // saturation never fired, so letting it pick here meant the brief — which GOVERNS generation — could send the
+  // planner at ground the ledger had already closed. Two engines, one of them wrong, on the highest-volume path.
+  const next = ledgerGround
+    ? undefined
+    : coverage
+      ? nextIntimacyCategory(coverage, 'unfiltered')
+      : undefined;
+  const ground = ledgerGround ?? (next ? INTIMACY_CATEGORY_LABELS[next] : undefined);
   const briefParts = [
-    next
-      ? `Explore desire, intimacy, and sexuality openly, focusing on ${INTIMACY_CATEGORY_LABELS[next]} — ground they have not worked through yet. Do not revisit areas already covered in depth.`
+    ground
+      ? `Explore desire, intimacy, and sexuality openly, focusing on ${ground} — ground they have not worked through yet. Do not revisit areas already covered in depth.`
       : 'Explore desire, intimacy, and sexuality openly. Prefer topics not yet covered so this goes somewhere new.',
   ];
   if (focus.trim()) briefParts.push(`Focus especially on: ${focus.trim()}.`);
@@ -584,6 +598,9 @@ async function buildDedupBundle(
   partnerContext: string;
   /** The recipient's own material (spec 71 §5.2) — re-opens worked ground it actually speaks to. */
   newMaterial: { at: string; text: string }[];
+  /** The least-worked OPEN intimacy ground per the ask ledger (spec 71 §5.2), when the ledger is
+   *  authoritative. Undefined pre-backfill, where the legacy engine still picks. */
+  intimacyGround?: string;
 }> {
   const [
     history,
@@ -672,6 +689,16 @@ async function buildDedupBundle(
     now,
   });
 
+  // spec 71 §5.2 — one engine decides ground. `undefined` pre-backfill, where the legacy map still picks.
+  const intimacyGround = await nextOpenGround(
+    fs,
+    key,
+    recipientId,
+    INTIMACY_TYPE,
+    'unfiltered',
+    now,
+  );
+
   return {
     recipientHistory,
     dedupReference,
@@ -680,6 +707,7 @@ async function buildDedupBundle(
     priorTitles,
     coveredNotes,
     intimacyCoverage,
+    ...(intimacyGround !== undefined ? { intimacyGround } : {}),
     feedbackGuidance: combinedFeedbackGuidance,
     partnerContext,
     newMaterial,

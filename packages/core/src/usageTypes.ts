@@ -10,6 +10,9 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'questionnaire.generate': 'Questionnaire — AI draft',
   'questionnaire.plan': 'Questionnaire — planning pass',
   'questionnaire.classify': 'Questionnaire — topic classification',
+  // Retired 2026-08-13 with the intimacy topic suggester, but kept so HISTORICAL usage events in real vaults
+  // still render a label instead of the raw id.
+  'intimacy.suggestTopics': 'Intimacy topics — AI suggestions (retired)',
   'questionnaire.dedup': 'Questionnaire — de-dup pass',
   'questionnaire.suggest': 'Questionnaire — suggestions',
   'questionnaire.analyze': 'Questionnaire — analysis',
@@ -27,7 +30,6 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'relationship.synthesize': 'Memory — relationship insights',
   'test.narrate': 'Self-assessment — what it means',
   'challenge.suggest': 'Challenge suggestion',
-  'intimacy.suggestTopics': 'Intimacy topics — AI suggestions',
   'together.chat': 'Together — couples session',
   'together.analyze': 'Together — session summary',
   'story.outline': 'Your Story — outline',

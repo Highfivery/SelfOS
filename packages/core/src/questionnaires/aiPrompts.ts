@@ -1,10 +1,4 @@
-import {
-  categoryForActivityLabel,
-  categoryForFantasy,
-  categoryForKey,
-  type IntimacyCategory,
-  type IntimacyTopics,
-} from '../intimacy/topics';
+import { categoryForKey, type IntimacyCategory } from '../intimacy/topics';
 import {
   LIFE_AREAS,
   SUGGESTABLE_ANSWER_TYPES,
@@ -163,6 +157,10 @@ const SENSITIVITY_NOTE: Record<SensitivityTier, string> = {
 /** Cap the "already rated — go deeper" sample (spec 71 §5.7). See the block that uses it for why. */
 const MAX_DEEPEN_ACTS = 8;
 
+/** Cap the open-ground list. A long-explored person can have dozens of open topics; the planner has already
+ *  chosen this set's threads, so this is supporting vocabulary and a long tail adds tokens, not signal. */
+const MAX_GROUND = 14;
+
 /** The two questionnaire types whose sensitivity tiers carry an explicit register (08 §15.2/§22.2). */
 export const INTIMACY_TYPE = 'intimacy';
 export const SCENARIO_TYPE = 'scenario';
@@ -183,8 +181,8 @@ const EXPLICIT_TIER_DIRECTIVE: Record<'explicit' | 'unfiltered', string> = {
  * Tier-aware explicit framing for an **intimacy** OR **scenario** questionnaire at the `explicit`/`unfiltered`
  * tiers (08-questionnaires §16.5/§22.2). This **positively permits and requests** genuinely explicit, specific
  * questions (or, for a scenario, described situations to react to) for consenting adults — replacing the old
- * refusal-default that produced tasteful, emotional-closeness output — and seeds an in-policy topic inventory
- * so the model has concrete subject matter. `unfiltered` is the most graphic within the boundary; `explicit`
+ * refusal-default that produced tasteful, emotional-closeness output — and draws its concrete subject matter
+ * from the recipient's own topic map (spec 71 §5.3), never a fixed inventory. `unfiltered` is the most graphic within the boundary; `explicit`
  * a notch below (the `EXPLICIT_TIER_DIRECTIVE` ladder). The shared `SAFETY` prefix is NOT loosened — only this
  * one path gains the explicit direction. The 18+/DOB+consent gate stays recipient-side.
  *
@@ -194,33 +192,36 @@ const EXPLICIT_TIER_DIRECTIVE: Record<'explicit' | 'unfiltered', string> = {
  */
 export function explicitFraming(
   tier: 'explicit' | 'unfiltered',
-  topics: IntimacyTopics,
   // The acts the recipient ALREADY rated in onboarding (08 §19.3). Reframed as "go deeper, don't re-ask" so
-  // generation stops re-seeding the very inventory the onboarding matrix already covered. `key` is the stable,
-  // anatomy-independent matrix-row key (46 §4.2) — the only reliable way back to a category, since an
+  // generation doesn't re-ask what the onboarding matrix already covered. `key` is the stable,
+  // anatomy-independent matrix-row key (46 §4.2) — the only reliable way back to a topic, since an
   // anatomy-resolved label ("Receiving oral (blowjob)") can't be reverse-mapped.
   coveredActs: readonly { key: string; label: string; rating: string }[] = [],
   // A `scenario`-type questionnaire (08 §15.2) frames each item as a described intimate SITUATION to react to,
   // not a direct question — otherwise identical (same explicit register, same boundary). `focused` = a brief was
-  // given (08 §23.3), so the explicit REGISTER stays but the SUBJECT follows the focus, not the whole inventory.
-  // `closedTopicIds` (spec 71 §5.2/§5.7) is what stops this framing re-mining the same acts forever (#314):
-  // the ground the ask ledger says is worked through, cooling down, or paused. It bounds BOTH the "go deeper"
-  // act list and the fantasy material, so neither can hand the model ground the planner has just closed.
-  // Empty (an external recipient with no household record, or a person whose ledger is not yet authoritative)
-  // ⇒ the unbounded sample, which is the behaviour before there was any signal at all.
+  // given (08 §23.3), so the explicit REGISTER stays but the SUBJECT follows the focus.
+  //
+  // `openGround` is the SUBJECT MATTER, and it comes from this person's own topic map (spec 71 §5.3) — never a
+  // fixed inventory. Before, the prompt pasted a ~95-item catalogue of acts + fantasies identical for everyone,
+  // which was redundant with the planner's chosen threads, drowned the message, and re-offered ground the
+  // planner had just closed. The map is per-person, saturation-aware, and grows as the model names real
+  // ground, so the vocabulary improves with the person instead of being frozen at the taxonomy's guess.
+  //
+  // `closedTopicIds` (spec 71 §5.2/§5.7) bounds the "go deeper" act list so it can't re-mine worked-through
+  // ground forever (#314) — each re-ask is genuinely new WORDING about the same act, which de-dup cannot catch.
   //
   // Ground SELECTION is not this function's job — the planner owns it (§5.5) and states it once, above.
   opts: {
     scenario?: boolean;
     focused?: boolean;
+    openGround?: readonly { label: string; blurb?: string }[];
     closedTopicIds?: readonly string[];
   } = {},
 ): string {
   const scenario = opts.scenario === true;
   const closed = new Set(opts.closedTopicIds ?? []);
-  // Ground with no resolvable category is KEPT — unknowable, and withholding it would silently shrink the
-  // vocabulary. Owner-CUSTOM inventory entries land here too: they are free text on ground the built-in
-  // categories may not even name, so a blanket withhold would be worse than offering them.
+  // An act whose key resolves to no topic is KEPT — unknowable ground, and withholding it would silently
+  // shrink the vocabulary.
   const onOpenGround = (category: IntimacyCategory | undefined): boolean =>
     category === undefined || !closed.has(`Intimacy:${category}`);
   // Establish the legitimate context FIRST so the model is confident this is appropriate — a private adult who
@@ -247,7 +248,7 @@ export function explicitFraming(
   // that, not a tour of every act.
   if (opts.focused === true) {
     parts.push(
-      `Keep the explicit register above, but SHAPE every ${scenario ? 'scenario' : 'question'} around the FOCUS stated at the top of this message — the subject follows the focus, not the full inventory below.`,
+      `Keep the explicit register above, but SHAPE every ${scenario ? 'scenario' : 'question'} around the FOCUS stated at the top of this message — the subject follows the focus, not the wider ground below.`,
     );
   }
   parts.push(
@@ -271,23 +272,23 @@ export function explicitFraming(
         .join('; ')}.`,
     );
   }
-  // The offered material gets the SAME bound as the go-deeper acts, or the prompt contradicts itself: the
-  // planner names ground off-limits and this line hands the model the acts and fantasies that sit on exactly
-  // that ground two breaths later ("Threesomes", "Threesome / group" while Group & swinging is closed).
-  const activities = topics.activities.filter((a) => onOpenGround(categoryForActivityLabel(a)));
-  const fantasies = topics.fantasies.filter((f) => onOpenGround(categoryForFantasy(f)));
-  const material = [
-    activities.length > 0 ? `acts: ${activities.join(', ')}.` : '',
-    fantasies.length > 0 ? `Fantasies/roleplay: ${fantasies.join(', ')}.` : '',
-  ]
-    .filter((s) => s !== '')
-    .join(' ');
+  // The subject matter, from this person's OWN map. Each entry is a real area of their intimate life with the
+  // planner's one-line sense of what it covers — richer and more specific than a catalogue of act names, and
+  // already saturation-filtered, since only OPEN ground is passed in.
+  const ground = (opts.openGround ?? []).filter((g) => g.label.trim() !== '');
   parts.push(
-    // Every area closed at once is a real state for a long-explored person: say so plainly rather than
-    // printing an empty list, and let the tier directive above carry the direction.
-    material === ''
-      ? `Every built-in area has been worked through. Do NOT return to any of them, even in new words — go somewhere genuinely new: combinations, scenarios, and edges between areas they have not been asked about, always within the boundary below.`
-      : `Subject matter to draw on — ${material} FAVOR acts, fantasies, and scenarios they have NOT yet rated — always within the boundary below.`,
+    ground.length > 0
+      ? `Subject matter to draw on — ground still open with this person:\n${ground
+          .slice(0, MAX_GROUND)
+          .map((g) => `- ${g.label}${g.blurb ? ` — ${g.blurb}` : ''}`)
+          .join(
+            '\n',
+          )}\nDraw the specifics from these. Go for what has NOT been asked yet within them, and name acts, bodies and scenarios plainly.`
+      : // Everything open has been worked through: say so plainly rather than printing an empty list, and let
+        // the tier directive above carry the direction.
+        `Every area explored with this person so far has been worked through. Do NOT return to any of them, even in new words — go somewhere genuinely new: combinations, scenarios, and edges between areas they have not been asked about.`,
+  );
+  parts.push(
     `Boundary: consensual adults only; taboo content only as fantasy/roleplay; never minors, real (non-roleplay) non-consent, or illegal acts. Within those limits this content IS in policy, so generate the ${scenario ? 'scenarios' : 'questions'} normally — only return an empty array for genuinely prohibited requests, never merely because the topic is sexually explicit.`,
   );
   return parts.join('\n');
@@ -325,8 +326,10 @@ export function buildGenerationUserMessage(input: {
   context?: string;
   existingPrompts: string[];
   count: number;
-  // The merged intimacy topic inventory (built-in + owner custom) — seeds the explicit framing (§16.5a).
-  intimacyTopics?: IntimacyTopics;
+
+  // The ground still open with this recipient, from their own topic map (spec 71 §5.3) — the subject matter
+  // for an explicit-tier set. Seeded ground when they have no history yet; empty for a non-intimacy draft.
+  openGround?: readonly { label: string; blurb?: string }[];
   // What an intimacy draft should produce (08 §17.12-C): direct questions, described scenarios, or a mix.
   intimacyMode?: IntimacyGenerateMode;
   // The recipient's full answered content (08 §17.4/§19.1), assembled host-side. Used to AVOID overlap AND to
@@ -386,16 +389,16 @@ export function buildGenerationUserMessage(input: {
   // tier use a richer, non-graphic directive; every other type/tier keeps the conservative note.
   const isSensitiveType = input.type === INTIMACY_TYPE || input.type === SCENARIO_TYPE;
   const isExplicitTier = input.sensitivity === 'explicit' || input.sensitivity === 'unfiltered';
-  if (isSensitiveType && isExplicitTier && input.intimacyTopics) {
+  if (isSensitiveType && isExplicitTier) {
     parts.push(
       explicitFraming(
         input.sensitivity as 'explicit' | 'unfiltered',
-        input.intimacyTopics,
         input.coveredIntimacyActs ?? [],
         // With a focus, keep the explicit register but let the SUBJECT follow the focus (08 §23.3).
         {
           scenario: input.type === SCENARIO_TYPE,
           focused: focus != null,
+          ...(input.openGround ? { openGround: input.openGround } : {}),
           ...(input.closedTopicIds ? { closedTopicIds: input.closedTopicIds } : {}),
         },
       ),

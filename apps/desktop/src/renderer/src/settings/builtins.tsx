@@ -34,7 +34,6 @@ import {
 import { RelaySettingsPanel } from './RelaySettingsPanel';
 import { EmailSettingsPanel } from './EmailSettingsPanel';
 import { RelayMessagesControl } from './RelayMessagesControl';
-import { IntimacyTopicsControl } from './IntimacyTopicsControl';
 import { ProactivityControl } from './ProactivityControl';
 import {
   DEFAULT_RELAY_MESSAGES,
@@ -58,7 +57,6 @@ declare module './types' {
     'coaching.proactivity': null; // per-person (CoachingPrefs); the custom control owns its state via IPC
     'questionnaires.autoAnalyze': boolean;
     'questionnaires.defaultMessages': RelayMessages;
-    'questionnaires.intimacyTopics': null;
     'email.panel': null; // per-person + household connect; the custom panel owns its state via IPC (67)
     'dreams.memoryEnabled': boolean;
     // Per-person image style/direction/toggle live in `people/<id>/imagePrefs.enc` (a custom control owns
@@ -415,19 +413,6 @@ export function registerBuiltinSettings(): void {
       control: { type: 'custom', render: RelayMessagesControl },
       scope: 'vault',
       order: 3,
-    }),
-    defineSetting({
-      key: 'questionnaires.intimacyTopics',
-      section: 'questionnaires',
-      label: 'Intimacy topics (18+)',
-      description:
-        'Add or remove the consensual-adult topics that AI uses to draft intimacy questionnaires and the personal intake. Household-wide.',
-      schema: z.null(),
-      default: null,
-      control: { type: 'custom', render: IntimacyTopicsControl },
-      scope: 'vault',
-      adminOnly: true,
-      order: 4,
     }),
     defineSetting({
       key: 'dreams.memoryEnabled',

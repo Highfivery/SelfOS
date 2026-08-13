@@ -1,6 +1,6 @@
+import { seededIntimacyGround } from '../questionnaires/topicMap';
 import { describe, expect, it } from 'vitest';
 import {
-  INTIMACY_ACTIVITIES,
   INTIMACY_ACTIVITIES_FULL,
   INTIMACY_ACTIVITY_LABELS,
   INTIMACY_CATEGORIES,
@@ -8,7 +8,6 @@ import {
   INTIMACY_FANTASIES,
   categoryForKey,
   intimacyActivitiesByCategory,
-  mergedIntimacyTopics,
   orderedActivities,
 } from './topics';
 import {
@@ -60,8 +59,6 @@ describe('INTIMACY_ACTIVITIES_FULL — inventory integrity (49 §10)', () => {
   it('the flat label list equals the inventory labels and has no duplicates', () => {
     expect(INTIMACY_ACTIVITY_LABELS).toEqual(INTIMACY_ACTIVITIES_FULL.map((a) => a.label));
     expect(new Set(INTIMACY_ACTIVITY_LABELS).size).toBe(INTIMACY_ACTIVITY_LABELS.length);
-    // INTIMACY_ACTIVITIES (the name questionnaire generation reads) is the same flat label list.
-    expect(INTIMACY_ACTIVITIES).toEqual(INTIMACY_ACTIVITY_LABELS);
   });
 
   it('the inventory is in the agreed ~60–100 band and spans all 14 categories', () => {
@@ -139,30 +136,12 @@ describe('category lookup + grouping accessors (49 §5)', () => {
   });
 });
 
-describe('INTIMACY_TOPICS (08 §16.5a) — generation still reads a flat label list (49 §3.2/§4.2)', () => {
+describe('the flat rating vocabulary (49 §3.2/§4.2)', () => {
   it('the built-in inventory is non-empty and excludes the UI "Other" escape', () => {
-    expect(INTIMACY_ACTIVITIES.length).toBeGreaterThan(10);
+    expect(INTIMACY_ACTIVITY_LABELS.length).toBeGreaterThan(10);
     expect(INTIMACY_FANTASIES.length).toBeGreaterThan(5);
-    expect(INTIMACY_ACTIVITIES).not.toContain('Other');
+    expect(INTIMACY_ACTIVITY_LABELS).not.toContain('Other');
     expect(INTIMACY_FANTASIES).not.toContain('Other');
-  });
-
-  it('mergedIntimacyTopics appends the owner custom additions, deduped case-insensitively (built-ins win)', () => {
-    const merged = mergedIntimacyTopics({
-      activities: ['Sploshing', 'fingering', '  '], // one new, one dupe of a built-in, one blank
-      fantasies: ['Pirate roleplay'],
-    });
-    expect(merged.activities).toContain('Sploshing');
-    expect(merged.fantasies).toContain('Pirate roleplay');
-    // The case-insensitive duplicate of a built-in is dropped (no second "Fingering").
-    expect(merged.activities.filter((a) => a.toLowerCase() === 'fingering')).toHaveLength(1);
-    expect(merged.activities).not.toContain('  ');
-  });
-
-  it('with no custom additions, the merged inventory is exactly the built-ins', () => {
-    const merged = mergedIntimacyTopics();
-    expect(merged.activities).toEqual([...INTIMACY_ACTIVITIES]);
-    expect(merged.fantasies).toEqual([...INTIMACY_FANTASIES]);
   });
 });
 
@@ -172,7 +151,9 @@ describe('tier-distinct explicit generation framing (08 §16.5/§22.2)', () => {
     context: '',
     existingPrompts: [],
     count: 5,
-    intimacyTopics: mergedIntimacyTopics(),
+    // No recipient map in these fixtures, so the framing shows the SEEDED intimacy ground — the same rows a
+    // new person's map starts from (spec 71 §5.3), never a separate fixed inventory.
+    openGround: seededIntimacyGround(),
   };
 
   it('intimacy + unfiltered is the MOST graphic tier, seeds the inventory, states the boundary', () => {
@@ -190,8 +171,10 @@ describe('tier-distinct explicit generation framing (08 §16.5/§22.2)', () => {
     expect(msg).toMatch(/UNFILTERED tier — the most extreme/i);
     expect(msg).toMatch(/governs this questionnaire's tone/i); // overrides the §24 softeners
     expect(msg).toMatch(/no gentle warm-up/i);
-    expect(msg).toContain('Deepthroat'); // a seeded activity (current inventory label)
-    expect(msg).toContain('Consensual non-consent (CNC) roleplay'); // a seeded fantasy
+    // The subject matter is this person's ground, not a catalogue of act names.
+    expect(msg).toMatch(/ground still open with this person/i);
+    expect(msg).toContain('Roleplay & fantasy'); // a seeded topic label…
+    expect(msg).toContain('Group & swinging'); // …and another, with its blurb
     // The legitimate-context + consensual-adult boundary is stated in-prompt.
     expect(msg).toMatch(/appropriate and expected/i);
     expect(msg).toMatch(/consensual adults only/i);
@@ -207,7 +190,7 @@ describe('tier-distinct explicit generation framing (08 §16.5/§22.2)', () => {
     expect(explicit).toMatch(/frank, specific questions/i);
     expect(explicit).toMatch(/step back from the most graphic/i);
     expect(explicit).not.toMatch(/no-holds-barred/i); // that's the unfiltered tier
-    expect(explicit).toContain('Deepthroat'); // still seeds the inventory
+    expect(explicit).toMatch(/ground still open with this person/i); // ground, not a fixed act catalogue
   });
 
   it('explicit and unfiltered produce GENUINELY different directives (the intensity ladder)', () => {
@@ -248,7 +231,7 @@ describe('tier-distinct explicit generation framing (08 §16.5/§22.2)', () => {
     });
     expect(msg).toMatch(/no-holds-barred/i); // scenario now escalates too
     expect(msg).toMatch(/SITUATION or roleplay/); // shaped as scenarios, not direct questions
-    expect(msg).toContain('Deepthroat'); // seeds the inventory
+    expect(msg).toMatch(/ground still open with this person/i); // seeds the inventory
     expect(msg).toMatch(/never minors/i); // same boundary
   });
 
@@ -309,7 +292,9 @@ describe('brief-as-focus + non-escalating contract (08 §23.3/§23.5)', () => {
     context: '',
     existingPrompts: [],
     count: 5,
-    intimacyTopics: mergedIntimacyTopics(),
+    // No recipient map in these fixtures, so the framing shows the SEEDED intimacy ground — the same rows a
+    // new person's map starts from (spec 71 §5.3), never a separate fixed inventory.
+    openGround: seededIntimacyGround(),
   };
 
   it('a present brief becomes a leading, governing FOCUS block', () => {
@@ -374,7 +359,9 @@ describe('deep personalization + question intelligence (08 §24.4)', () => {
     context: '',
     existingPrompts: [],
     count: 5,
-    intimacyTopics: mergedIntimacyTopics(),
+    // No recipient map in these fixtures, so the framing shows the SEEDED intimacy ground — the same rows a
+    // new person's map starts from (spec 71 §5.3), never a separate fixed inventory.
+    openGround: seededIntimacyGround(),
   };
 
   it('relationshipFraming differs by type and modulates by closeness', () => {

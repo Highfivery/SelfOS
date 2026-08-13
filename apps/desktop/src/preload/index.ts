@@ -152,13 +152,6 @@ const bridge: SelfosBridge = {
     ipcRenderer.invoke(IpcChannels.questionnairesSetFavorite, input),
   questionnairesListTypes: () => ipcRenderer.invoke(IpcChannels.questionnairesListTypes),
   questionnairesAddType: (name) => ipcRenderer.invoke(IpcChannels.questionnairesAddType, name),
-  questionnairesIntimacyTopics: () => ipcRenderer.invoke(IpcChannels.questionnairesIntimacyTopics),
-  questionnairesAddIntimacyTopic: (input) =>
-    ipcRenderer.invoke(IpcChannels.questionnairesAddIntimacyTopic, input),
-  questionnairesRemoveIntimacyTopic: (input) =>
-    ipcRenderer.invoke(IpcChannels.questionnairesRemoveIntimacyTopic, input),
-  questionnairesSuggestIntimacyTopics: (input) =>
-    ipcRenderer.invoke(IpcChannels.questionnairesSuggestIntimacyTopics, input),
   questionnairesStoreImage: (input) =>
     ipcRenderer.invoke(IpcChannels.questionnairesStoreImage, input),
   questionnairesGetImage: (imagePath) =>

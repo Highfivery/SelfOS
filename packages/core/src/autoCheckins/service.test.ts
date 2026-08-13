@@ -404,13 +404,14 @@ describe('runAutoCheckins — no filler when there is no new ground (08 §27.5)'
     expect(goDeeperLine ?? '').toMatch(/Vaginal sex/i);
     // Word-boundary: "clitoral" contains "oral", so a loose regex would fail on unrelated material.
     expect(goDeeperLine ?? '').not.toMatch(/\boral\b/i);
-    // ...and the wider material doesn't hand the same ground straight back either.
-    const materialLine = (intimacyPrompt ?? '')
-      .split('\n')
-      .find((l) => l.includes('Subject matter to draw on'));
-    expect(materialLine ?? '').not.toMatch(/\boral\b/i);
-    // Non-vacuous: the line is present and still carries ground that IS open.
-    expect(materialLine ?? '').toMatch(/Vaginal sex/);
+    // ...and the SUBJECT MATTER — this person's open ground, from their own topic map — doesn't hand the
+    // worked-through area straight back either. Non-vacuous: open ground is still listed.
+    const material = (intimacyPrompt ?? '').slice(
+      (intimacyPrompt ?? '').indexOf('Subject matter to draw on'),
+    );
+    const ground = material.split('\n\n')[0] ?? '';
+    expect(ground).toMatch(/Penetration/);
+    expect(ground).not.toMatch(/\boral\b/i);
   });
 
   it("takes the intimacy slot's ground from the ask ledger, not the legacy coverage map (71 §5.2)", async () => {

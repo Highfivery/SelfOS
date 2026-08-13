@@ -9,7 +9,6 @@
  */
 export const ADMIN_ONLY_SETTING_KEYS: readonly string[] = [
   'ai.shareCredentials',
-  'questionnaires.intimacyTopics',
   // Dream memory + the image MODEL / OpenAI key / connection test are household/owner-managed even though
   // the Dreams section is now member-visible (for each person's per-person image style) — image-settings amendment.
   'dreams.memoryEnabled',

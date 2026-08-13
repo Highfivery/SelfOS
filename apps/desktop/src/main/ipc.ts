@@ -351,13 +351,6 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.questionnairesSetFavorite, bridge.questionnairesSetFavorite);
   handle(IpcChannels.questionnairesListTypes, bridge.questionnairesListTypes);
   handle(IpcChannels.questionnairesAddType, bridge.questionnairesAddType);
-  handle(IpcChannels.questionnairesIntimacyTopics, bridge.questionnairesIntimacyTopics);
-  handle(IpcChannels.questionnairesAddIntimacyTopic, bridge.questionnairesAddIntimacyTopic);
-  handle(IpcChannels.questionnairesRemoveIntimacyTopic, bridge.questionnairesRemoveIntimacyTopic);
-  handle(
-    IpcChannels.questionnairesSuggestIntimacyTopics,
-    bridge.questionnairesSuggestIntimacyTopics,
-  );
   handle(IpcChannels.questionnairesStoreImage, bridge.questionnairesStoreImage);
   handle(IpcChannels.questionnairesGetImage, bridge.questionnairesGetImage);
   handle(IpcChannels.questionnairesDeleteImage, bridge.questionnairesDeleteImage);

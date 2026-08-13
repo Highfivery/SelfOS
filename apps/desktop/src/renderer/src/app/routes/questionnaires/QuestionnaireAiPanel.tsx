@@ -21,7 +21,6 @@ import styles from './Questionnaires.module.css';
  * recipient is chosen at the start step — no second person-picker here, §17.12-A), plus the recipient's full
  * history for de-dup (§17.4/§23.5). The author picks how many questions (§23.4). Budget-gated + metered in
  * main; calm states when AI is off or over budget. Generated questions are appended to the draft (the caller
- * marks them AI-drafted). The household-wide intimacy-topic inventory is managed in Settings → Intimacy topics
  * (§16.5a) — it is deliberately NOT surfaced here (§23.6).
  */
 export function QuestionnaireAiPanel({

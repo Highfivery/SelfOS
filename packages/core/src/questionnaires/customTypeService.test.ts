@@ -1,14 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { memFileSystem } from '../host/memFileSystem';
 import { PREFS_PATH } from './paths';
-import {
-  addCustomIntimacyTopic,
-  addCustomType,
-  listCustomTypes,
-  readCustomIntimacyTopics,
-  removeCustomIntimacyTopic,
-} from './customTypeService';
-import { INTIMACY_ACTIVITIES } from '../intimacy/topics';
+import { addCustomType, listCustomTypes } from './customTypeService';
 
 describe('customTypeService', () => {
   it('starts empty on a fresh vault', async () => {
@@ -62,36 +55,25 @@ describe('customTypeService', () => {
     expect(await addCustomType(fs, 'Recovery')).toEqual(['Recovery']);
   });
 
-  describe('custom intimacy topics (§16.5a)', () => {
-    it('starts empty, adds activities + fantasies, and reads them back', async () => {
-      const fs = memFileSystem();
-      expect(await readCustomIntimacyTopics(fs)).toEqual({ activities: [], fantasies: [] });
-
-      await addCustomIntimacyTopic(fs, 'activities', '  Sploshing  ');
-      await addCustomIntimacyTopic(fs, 'fantasies', 'Pirate roleplay');
-      expect(await readCustomIntimacyTopics(fs)).toEqual({
-        activities: ['Sploshing'], // trimmed
-        fantasies: ['Pirate roleplay'],
-      });
-      // Custom types are unaffected (same prefs file, separate fields).
-      expect(await listCustomTypes(fs)).toEqual([]);
-    });
-
-    it('a case-insensitive duplicate of a built-in OR a custom topic is a no-op', async () => {
-      const fs = memFileSystem();
-      await addCustomIntimacyTopic(fs, 'activities', 'Sploshing');
-      await addCustomIntimacyTopic(fs, 'activities', 'sploshing'); // dupe custom → no-op
-      await addCustomIntimacyTopic(fs, 'activities', 'fingering', INTIMACY_ACTIVITIES); // dupe built-in → no-op
-      expect((await readCustomIntimacyTopics(fs)).activities).toEqual(['Sploshing']);
-    });
-
-    it('removes a custom topic case-insensitively (built-ins are not stored here, so unaffected)', async () => {
-      const fs = memFileSystem();
-      await addCustomIntimacyTopic(fs, 'fantasies', 'Pirate roleplay');
-      await addCustomIntimacyTopic(fs, 'fantasies', 'Spy roleplay');
-      expect(await removeCustomIntimacyTopic(fs, 'fantasies', 'pirate ROLEPLAY')).toEqual([
-        'Spy roleplay',
-      ]);
-    });
+  it('preserves keys the schema no longer knows, instead of erasing authored content (2026-08-13)', async () => {
+    // The retired custom intimacy topics live in this file. Zod strips unknown keys, so without the raw merge
+    // an unrelated `addCustomType` would silently delete a list the Owner curated by hand.
+    const fs = memFileSystem();
+    await fs.writeAtomic(
+      'config/questionnaires.json',
+      new TextEncoder().encode(
+        JSON.stringify({
+          schemaVersion: 1,
+          customTypes: [],
+          customIntimacyActivities: ['MFM threesome'],
+        }),
+      ),
+    );
+    await addCustomType(fs, 'Check-in');
+    const raw = JSON.parse(
+      new TextDecoder().decode((await fs.read('config/questionnaires.json')) as Uint8Array),
+    ) as Record<string, unknown>;
+    expect(raw['customTypes']).toEqual(['Check-in']);
+    expect(raw['customIntimacyActivities']).toEqual(['MFM threesome']);
   });
 });

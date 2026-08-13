@@ -1762,7 +1762,7 @@ export const INTAKE_CATALOG: ReadonlyArray<IntakeSectionDef> = [
           { restricted: true },
         ),
         f(
-          // Sourced from the SHARED `INTIMACY_TOPICS` inventory (08 §16.5a); `'Other'` is the form escape.
+          // Sourced from the shared `INTIMACY_FANTASIES` rating vocabulary; `'Other'` is the form escape.
           multi(
             'commonFantasies',
             'Which of these appeal to you?',

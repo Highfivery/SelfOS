@@ -178,6 +178,15 @@ export function seedTopics(): Topic[] {
 }
 
 /** The person's map, seeded when they have none yet. */
+/** The seeded intimacy ground — what a person's map starts as, used as subject matter when they have no map
+ *  yet (an external recipient, or a self-directed nudge with no recipient at all). Not a separate inventory:
+ *  these are the same rows `seedTopics` puts on every new map. */
+export function seededIntimacyGround(): { label: string; blurb?: string }[] {
+  return seedTopics()
+    .filter((t) => t.lifeArea === 'Intimacy')
+    .map((t) => ({ label: t.label, ...(t.blurb ? { blurb: t.blurb } : {}) }));
+}
+
 export function ensureTopics(topics: readonly Topic[] | undefined): Topic[] {
   // Read-time blurb backfill: every topic minted before blurbs existed is stored without one, so a stored map
   // would render bare labels forever. Seeded ids get their written blurb here; emergent ones fill in on their

@@ -3006,6 +3006,40 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
       { schemaVersion: 1, enabled: false, targets: [] },
       key0!,
     );
+    // An ask ledger, so counts, last-asked dates and the activity chart all render like a real vault.
+    await writeEncryptedJson(
+      fs0,
+      'people/owner-1/questionnaires/askLedger.enc',
+      {
+        schemaVersion: 1,
+        personId: 'owner-1',
+        taggingVersion: 6,
+        backfilledAt: '2026-08-01T00:00:00.000Z',
+        entries: [
+          ...Array.from({ length: 4 }, (_, i) => ({
+            questionId: `led-guilt-${i}`,
+            assignmentId: `led-a-${i}`,
+            at: new Date(Date.now() - (i + 1) * 9 * 86_400_000).toISOString(),
+            type: 'general',
+            tier: 'standard',
+            topicIds: ['Money', 'Money:spending-guilt'],
+            gist: 'spending and guilt',
+            outcome: 'rich',
+          })),
+          {
+            questionId: 'led-debt-0',
+            assignmentId: 'led-b-0',
+            at: new Date(Date.now() - 30 * 86_400_000).toISOString(),
+            type: 'general',
+            tier: 'standard',
+            topicIds: ['Money', 'Money:debt-shame'],
+            gist: 'debt',
+            outcome: 'skipped',
+          },
+        ],
+      },
+      key0!,
+    );
     // Seed the forward-first candidate feed (spec 70 §3.2) as the daily refresh would.
     await writeEncryptedJson(
       fs0,
@@ -3015,8 +3049,53 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
         personId: 'owner-1',
         updatedAt: '2026-08-09T00:00:00.000Z',
         coverage: { topics: [] },
-        feedback: [],
+        feedback: [
+          { kind: 'left-alone', topicId: 'Money:debt-shame', at: '2026-07-20T00:00:00.000Z' },
+        ],
         changes: [],
+        // A REALISTIC map (spec 71 §5.9). Every defect this surface shipped — empty rows, a topic panel
+        // bleeding into the card border, an unreadable activity chart, ground stranded in "Other" — was
+        // invisible against an empty fixture and obvious in a real vault. So the fixture now carries what a
+        // real one does: blurbs, ask history, emergent ground, and each steer state.
+        topics: [
+          {
+            topicId: 'Money',
+            label: 'Money',
+            lifeArea: 'Money',
+            seeded: true,
+            aliases: [],
+            blurb:
+              'How money actually feels to you — security, guilt, and the decisions you avoid.',
+          },
+          {
+            topicId: 'Money:spending-guilt',
+            label: 'Spending & guilt',
+            lifeArea: 'Money',
+            seeded: false,
+            aliases: [],
+            parentTopicId: 'Money',
+            blurb: 'What you spend freely on, what you cannot, and the guilt attached to each.',
+          },
+          {
+            topicId: 'Money:debt-shame',
+            label: 'Debt & shame',
+            lifeArea: 'Money',
+            seeded: false,
+            aliases: [],
+            parentTopicId: 'Money',
+            blurb: 'What you owe, who knows about it, and what it costs you to carry quietly.',
+          },
+          {
+            topicId: 'Money:enough',
+            label: 'What counts as enough',
+            lifeArea: 'Money',
+            seeded: false,
+            aliases: [],
+            parentTopicId: 'Money',
+            blurb:
+              'The number or feeling that would let you stop bracing, and whether it ever moves.',
+          },
+        ],
         candidatesRefreshedAt: '2026-08-09T00:00:00.000Z',
         candidates: [
           {
@@ -3096,6 +3175,30 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
     await expect(w.getByText('ground still open')).toBeVisible();
     await expect(w.getByRole('button', { name: 'Named by AI' })).toBeVisible();
     await expect(w.getByRole('searchbox', { name: /Search areas/ })).toBeVisible();
+    // Now that the fixture carries real ground, the spacing defects that shipped are MEASURABLE here:
+    // the topic panel bled edge-to-edge into the card border and sat directly on the actions below it.
+    const money = w.locator('li').filter({ hasText: 'How money actually feels' }).first();
+    await money.getByRole('button', { name: /^Money/ }).click();
+    await expect(money.getByText('Spending & guilt').first()).toBeVisible();
+    const box = await money.evaluate((el) => {
+      const card = el.getBoundingClientRect();
+      const list = el.querySelector('ul')!.getBoundingClientRect();
+      return { left: list.left - card.left, right: card.right - list.right };
+    });
+    expect(box.left).toBeGreaterThan(8);
+    expect(box.right).toBeGreaterThan(8);
+    // Real history reaches the row rather than "not asked yet" on everything.
+    await expect(money.getByText(/asked 4×/)).toBeVisible();
+    await expect(money.getByText('What you spend freely on, what you cannot')).toBeVisible();
+    // Interaction states are real product surface, so assert them rather than eyeballing a static shot.
+    const card = w.locator('li').filter({ hasText: 'The people closest to you' }).first();
+    const flat = await card.evaluate((el) => getComputedStyle(el).boxShadow);
+    await card.hover();
+    await expect
+      .poll(async () => card.evaluate((el) => getComputedStyle(el).boxShadow))
+      .not.toBe(flat);
+    const steer = w.getByRole('button', { name: 'Prioritize this area' }).first();
+    expect(await steer.evaluate((el) => getComputedStyle(el).transitionDuration)).not.toBe('0s');
     await relationships.getByRole('button', { name: 'Pause asking' }).click();
     // Back on the feed, the intimacy candidate now shows (18+ acked).
     await w.getByRole('button', { name: /Curious next/ }).click();

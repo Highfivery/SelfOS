@@ -410,8 +410,9 @@ describe('ExploredPanel (spec 70 §3)', () => {
     await userEvent.click(screen.getByRole('button', { name: /Work & purpose/ }));
     // Every topic is listed with its real ask count, worked-through ground included: seeing what it has
     // already covered is most of the point of this surface.
-    expect(screen.getByText('Director of Ops ambition')).toBeInTheDocument();
-    expect(screen.getByText('RevOps role & satisfaction')).toBeInTheDocument();
+    // Appears twice by design: as a chip preview on the card and as a full row in the detail.
+    expect(screen.getAllByText('Director of Ops ambition').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('RevOps role & satisfaction').length).toBeGreaterThan(0);
     expect(screen.getByText(/asked 6×/)).toBeInTheDocument();
     // Ground the model named itself is marked, so it reads as new rather than a built-in family.
     expect(screen.getAllByText('AI named').length).toBeGreaterThan(0);
@@ -442,5 +443,39 @@ describe('ExploredPanel (spec 70 §3)', () => {
     // header must not be expandable and no intimacy topic may reach the screen.
     expect(screen.getByRole('button', { name: /^Intimacy/ })).toBeDisabled();
     expect(screen.queryByText('Oral')).not.toBeInTheDocument();
+  });
+
+  it('labels the activity chart so it explains itself (71 §5.9)', async () => {
+    // A bare "12 mo" caption under a few faint bars told the reader nothing about what the chart was.
+    useCoverageStore.setState({
+      view: view({
+        areas: [
+          {
+            topicId: 'Money',
+            lifeArea: 'Money',
+            label: 'Money',
+            status: 'new' as const,
+            depth: 0.2,
+            steerable: true,
+            steered: false,
+            activity: [0, 0, 2, 0, 1, 0, 0, 3, 0, 0, 1, 0],
+            askedCount: 7,
+            topics: [],
+          },
+        ],
+      }),
+      loaded: true,
+    });
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: /How well it knows you/ }));
+    expect(screen.getByText('asked over 12 months')).toBeInTheDocument();
+    // The number itself is available to both sighted (tooltip) and screen-reader users.
+    expect(
+      screen.getByRole('img', { name: /7 questions over the last 12 months/ }),
+    ).toBeInTheDocument();
   });
 });

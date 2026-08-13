@@ -13,7 +13,7 @@ import {
 import { runClaude, type AiDeps } from './aiCall';
 import { SAFETY } from './aiPrompts';
 import { getAssignmentSnapshot, listAssignments } from './assignmentService';
-import { readProfile, writeProfile } from './personalizationProfile';
+import { readProfile, writeProfile, type PersonalizationProfile } from './personalizationProfile';
 import { getResponse } from './responseService';
 import {
   ensureTopics,
@@ -81,6 +81,8 @@ Rules:
 Return ONLY a JSON array, one object per question. No prose, no markdown fences.`;
 
 export interface BackfillResult {
+  /** Topics that gained a one-sentence blurb this run (§5.9). */
+  blurbed?: number;
   ok: boolean;
   /** Entries written to the ledger. */
   seeded: number;
@@ -94,6 +96,124 @@ export interface BackfillResult {
  * Seed one person's ask ledger from their existing sends. Safe to call repeatedly — a completed backfill
  * returns immediately, and `mergeEntries` makes a re-run of a partial one a no-op for what already landed.
  */
+
+/**
+ * One sentence per piece of ground, for topics minted before blurbs existed (spec 71 §5.9).
+ *
+ * Without this every pre-existing topic renders as a bare label in the Explored panel — measured on a real
+ * vault, 46 of 67. New topics are born with a blurb from the planner's angle, so this only ever has to catch
+ * up the backlog; it runs on the same cadence and stops once nothing is missing.
+ */
+export const BLURB_SYSTEM = `${SAFETY}
+
+You write ONE short sentence describing a topic that a personal-growth app asks someone about.
+
+For each topic you are given a LABEL and, when available, a few short gists of questions already asked on that
+ground. Write a sentence that says what the topic actually covers, in second person, plain and concrete.
+
+RULES
+- One sentence. Under 120 characters. No trailing period is required but is fine.
+- Address the person as "you". Never name them, never quote their answers back, never state a fact about them.
+- Describe the GROUND, not what they said about it. "What you like said to you and how filthy it goes", not
+  "You said you enjoy dirty talk".
+- Match the register of the label: an explicit sexual topic gets frank, plain language, not euphemism.
+- Never invent detail that is not implied by the label.
+
+Return ONLY a JSON array: [{"label":"<the label, verbatim>","blurb":"<one sentence>"}]`;
+
+const BlurbSchema = z.object({ label: z.string(), blurb: z.string() });
+const BLURB_SENTINEL = { label: '', blurb: '' };
+/** Bounded per run: the backlog drains over a few days rather than paying for it all at once. */
+const BLURB_BATCH = 24;
+
+/** Adopt legacy coverage rows into the topic map (spec 71 §5.9).
+ *
+ *  The spec-70 coverage placement named ground directly on the profile's coverage rows, which the topic map
+ *  never saw — a real vault held 31 such rows against 74 topics. Those rows can never carry a blurb or a
+ *  ledger stat, because both live on a Topic, so the panel rendered them as bare "not asked yet" labels no
+ *  matter how much history existed. Minting them makes one model. */
+function adoptCoverageRows(profile: PersonalizationProfile, topics: Topic[]): Topic[] {
+  const known = new Set(topics.map((t) => t.label.trim().toLowerCase()));
+  const orphans = profile.coverage.topics.filter(
+    (c) => c.label.trim() !== '' && !known.has(c.label.trim().toLowerCase()),
+  );
+  if (orphans.length === 0) return topics;
+  return mintTopics(
+    topics,
+    orphans.map((c) => ({ label: c.label.trim(), lifeArea: c.lifeArea })),
+  ).topics;
+}
+
+/** Write a one-sentence blurb for topics that have none. Pure best-effort: a failed or degraded pass leaves
+ *  the labels exactly as they were and the next run retries. Returns the map, blurbs applied. */
+async function writeBlurbs(
+  deps: AiDeps,
+  recipientPersonId: string,
+  topics: Topic[],
+): Promise<Topic[]> {
+  const missing = topics.filter((t) => t.blurb === undefined).slice(0, BLURB_BATCH);
+  if (missing.length === 0) return topics;
+  const current = await readLedger(deps.fs, deps.key, recipientPersonId);
+  const gistsFor = (topicId: string): string =>
+    current.entries
+      .filter((e) => e.topicIds.includes(topicId))
+      .slice(-3)
+      .map((e) => e.gist)
+      .filter((g) => g.trim() !== '')
+      .join('; ');
+  const lines = missing.map((t) => {
+    const g = gistsFor(t.topicId);
+    return `- ${t.label}${g ? ` (asked about: ${g})` : ''}`;
+  });
+  const call = await runClaude(
+    deps,
+    BLURB_SYSTEM,
+    `Write one sentence for each topic:\n${lines.join('\n')}`,
+    'questionnaire.classify',
+    1400,
+  );
+  if (!call.ok) return topics;
+  const raw = extractJsonArray(call.text) ?? salvageJsonArray(call.text);
+  const written = tolerantArray(
+    BlurbSchema,
+    BLURB_SENTINEL,
+    (b) => b.label.trim() !== '' && b.blurb.trim() !== '',
+  ).parse(raw);
+  const byLabel = new Map(written.map((b) => [b.label.trim().toLowerCase(), b.blurb.trim()]));
+  return topics.map((t) => {
+    const b = byLabel.get(t.label.trim().toLowerCase());
+    return t.blurb === undefined && b ? { ...t, blurb: b.slice(0, 160) } : t;
+  });
+}
+
+/** Catch-up path when the ledger itself needs no work: fill blurbs and persist. Returns how many landed. */
+async function fillMissingBlurbs(deps: AiDeps, recipientPersonId: string): Promise<number> {
+  const profile = await readProfile(deps.fs, deps.key, recipientPersonId);
+  const adopted = adoptCoverageRows(profile, ensureTopics(profile.topics));
+  const topics = adopted;
+  const before = topics.filter((t) => t.blurb === undefined).length;
+  if (before === 0) {
+    // Nothing to write, but adoption alone may have changed the map.
+    if (adopted.length !== ensureTopics(profile.topics).length) {
+      await writeProfile(deps.fs, deps.key, {
+        ...profile,
+        topics: adopted,
+        updatedAt: deps.now.toISOString(),
+      });
+    }
+    return 0;
+  }
+  const filled = await writeBlurbs(deps, recipientPersonId, topics);
+  const after = filled.filter((t) => t.blurb === undefined).length;
+  if (after === before) return 0;
+  await writeProfile(deps.fs, deps.key, {
+    ...profile,
+    topics: filled,
+    updatedAt: deps.now.toISOString(),
+  });
+  return before - after;
+}
+
 export async function backfillAskLedger(
   deps: AiDeps,
   recipientPersonId: string,
@@ -103,7 +223,10 @@ export async function backfillAskLedger(
   // re-classified — a filing correction is worthless if it only ever reaches questions asked after it.
   const retag = (existing.taggingVersion ?? 1) < TAGGING_VERSION;
   if (existing.backfilledAt && !retag) {
-    return { ok: true, seeded: 0, classified: 0, degraded: false };
+    // The ledger is current, but the topic map may still hold labels minted before blurbs existed — the
+    // backlog the panel renders as bare rows. Catch those up without redoing any tagging work.
+    const filled = await fillMissingBlurbs(deps, recipientPersonId);
+    return { ok: true, seeded: 0, classified: 0, degraded: false, blurbed: filled };
   }
 
   // The ONE place a full scan is correct: this runs once per person, not per draft.
@@ -229,6 +352,7 @@ export async function backfillAskLedger(
       await writeLedger(deps.fs, deps.key, { ...current, entries: gc.entries });
     }
   }
+  topics = await writeBlurbs(deps, recipientPersonId, topics);
   // Persist the grown vocabulary alongside the ledger it describes.
   const after = await readProfile(deps.fs, deps.key, recipientPersonId);
   await writeProfile(deps.fs, deps.key, {

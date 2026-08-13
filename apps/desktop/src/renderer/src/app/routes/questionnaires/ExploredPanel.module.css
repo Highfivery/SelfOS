@@ -1099,3 +1099,184 @@
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
 }
+
+/* ── Detail pass: spacing rhythm + interaction states ────────────────────────── */
+
+.sparkWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex: none;
+}
+.sparkCaption {
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  color: var(--color-text-tertiary);
+}
+
+/* One rhythm down the card: head, chips, actions all share the same inline padding and a single
+   vertical step between blocks. */
+.areaHead {
+  padding: var(--space-4) var(--space-4) var(--space-3);
+}
+.chipRow {
+  padding: 0 var(--space-4) var(--space-3);
+}
+.areaActions {
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.area {
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+.area:hover {
+  box-shadow: var(--shadow-overlay, 0 6px 18px rgb(36 31 26 / 6%));
+  transform: translateY(-1px);
+}
+.areaOpen,
+.areaOpen:hover {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .area,
+  .area:hover {
+    transition: none;
+    transform: none;
+  }
+}
+
+.topicRow {
+  border-radius: var(--radius-sm);
+  transition: background-color 0.12s ease;
+  padding-inline: var(--space-2);
+  margin-inline: calc(var(--space-2) * -1);
+}
+.topicRow:hover {
+  background: var(--color-surface);
+}
+
+/* The old row layout pushed this with margin-left:auto; in the grid it belongs to its own cell. */
+.topicAct {
+  margin-left: 0;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease,
+    background-color 0.12s ease;
+}
+.topicAct:active:not(:disabled),
+.steerBtn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.topicAct:disabled,
+.steerBtn:disabled,
+.searchBox:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.topicAct:focus-visible,
+.steerBtn:focus-visible,
+.seg button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.steerBtn {
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease,
+    background-color 0.12s ease;
+}
+.steerBtn[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent-text);
+  background: var(--color-accent-subtle-bg);
+}
+.seg button {
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+.searchBox::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+/* The sparkline pins to the card's right edge — it was shrink-wrapping beside the title. */
+.areaTop {
+  width: 100%;
+}
+.areaLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Solid hairlines between topics; the dashed rule read as unfinished next to the card borders. */
+.topicRow + .topicRow {
+  border-top: 1px solid var(--color-border);
+}
+
+/* ── Spacing, measured against the real app ───────────────────────────────────
+   A blurb-less row was ~78px tall for one line of text: the right column stacked
+   its stat over the buttons while the left side sat empty. With no blurb the row
+   collapses to a single line; with one, it stacks as designed and the blurb
+   fills the left. */
+.topicSideFlat {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+}
+.topicRow {
+  padding-block: var(--space-2);
+  gap: var(--space-1) var(--space-4);
+}
+.topicName {
+  line-height: 1.35;
+}
+/* Chips were butting into the divider below them. */
+.chipRow {
+  padding-bottom: var(--space-4);
+}
+/* The nested list reads as nested: a tint change plus its own inset. */
+.topicList {
+  padding-block: var(--space-2) var(--space-3);
+}
+
+/* ── Two spacing defects, both visible only in the app ────────────────────────
+   1. Hovering tinted ONLY the head, so the tint ended in a hard edge flush
+      against the chips below it. The whole card is the hover target, so the
+      whole card carries the tint and there is no internal seam.
+   2. The expanded topic list ran full-bleed into the card's left/right borders
+      and sat directly on top of the actions. It is now an inset panel with its
+      own breathing room on all four sides. */
+
+.areaHead:hover:not(:disabled) {
+  background: none;
+}
+.area:hover .areaHead:not(:disabled) {
+  background: none;
+}
+.area:hover {
+  background: var(--color-surface-alt);
+}
+
+.topicList {
+  margin: 0 var(--space-4) var(--space-4);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.areaOpen .chipRow {
+  padding-bottom: var(--space-4);
+}
+
+/* The caption is now a real sentence, so it is wider than the bars — let it size the block and keep the
+   title from being squeezed by it on a narrow card. */
+.sparkWrap {
+  max-width: 45%;
+}
+.sparkCaption {
+  white-space: nowrap;
+  font-size: 0.62rem;
+}

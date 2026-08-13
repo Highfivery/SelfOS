@@ -194,7 +194,7 @@ function TopicRow({
         </span>
         {topic.blurb ? <span className={styles.topicBlurb}>{topic.blurb}</span> : null}
       </div>
-      <div className={styles.topicSide}>
+      <div className={`${styles.topicSide} ${topic.blurb ? '' : styles.topicSideFlat}`}>
         <span className={styles.topicCount}>
           {topic.askedCount === 0
             ? 'not asked yet'

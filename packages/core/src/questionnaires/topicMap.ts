@@ -181,12 +181,21 @@ export function ensureTopics(topics: readonly Topic[] | undefined): Topic[] {
   // Read-time blurb backfill: every topic minted before blurbs existed is stored without one, so a stored map
   // would render bare labels forever. Seeded ids get their written blurb here; emergent ones fill in on their
   // next mint from the planner's angle.
+  const byId = new Map((topics ?? []).map((t) => [t.topicId, t] as const));
+  const rehome = (t: Topic): Topic => {
+    // Re-home ground already stranded in the catch-all: its family knows where it belongs.
+    if (t.lifeArea !== 'Other' || t.parentTopicId === undefined) return t;
+    const parent = byId.get(t.parentTopicId);
+    return parent && parent.lifeArea !== 'Other' ? { ...t, lifeArea: parent.lifeArea } : t;
+  };
   return topics && topics.length > 0
-    ? topics.map((t) =>
-        t.blurb === undefined && SEEDED_BLURBS[t.topicId]
-          ? { ...t, blurb: SEEDED_BLURBS[t.topicId] as string }
-          : { ...t },
-      )
+    ? topics
+        .map(rehome)
+        .map((t) =>
+          t.blurb === undefined && SEEDED_BLURBS[t.topicId]
+            ? { ...t, blurb: SEEDED_BLURBS[t.topicId] as string }
+            : { ...t },
+        )
     : seedTopics();
 }
 
@@ -315,8 +324,18 @@ export function mintTopics(
       }
       continue;
     }
-    const lifeArea =
-      p.lifeArea && (LIFE_AREAS as readonly string[]).includes(p.lifeArea) ? p.lifeArea : 'Other';
+    // Inherit the FAMILY's area before falling back to the catch-all. Without this a child minted under
+    // `Intimacy:group` with no stated area lands in "Other" — a real vault put 44 topics there, including
+    // "double penetration" and "threesome fantasy", while a better-suited area existed the whole time. The
+    // parent is the strongest signal available and is already resolved by the time we get here.
+    const parentArea = p.parentTopicId
+      ? out.find((t) => t.topicId === p.parentTopicId)?.lifeArea
+      : undefined;
+    const stated =
+      p.lifeArea && (LIFE_AREAS as readonly string[]).includes(p.lifeArea) ? p.lifeArea : undefined;
+    const inherited =
+      parentArea && (LIFE_AREAS as readonly string[]).includes(parentArea) ? parentArea : undefined;
+    const lifeArea = stated ?? inherited ?? 'Other';
     const topicId = slugTopic(`${lifeArea}-${label}`) || slugTopic(label);
     if (topicId === '') continue;
     out.push({

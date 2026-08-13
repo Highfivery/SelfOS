@@ -277,8 +277,17 @@ export function foldTopicMap(
 ): CoverageTopic[] {
   if (ledger.backfilledAt === undefined) return [...merged];
   const stats = deriveTopicStats(ledger);
-  const known = new Set(merged.map((t) => t.topicId));
-  const withReal = merged.map((t) => {
+  // The legacy coverage rows and the emergent topic map describe the SAME ground under different ids — a real
+  // vault held 31 coverage rows beside 74 topics. Rendering the coverage id meant the row could never resolve
+  // its blurb or its ledger stats, so every row read "not asked yet" while the ledger held hundreds of asks.
+  // Re-key each coverage row onto its topic-map twin by label, so one model reaches the surface.
+  const byLabel = new Map(topics.map((t) => [t.label.trim().toLowerCase(), t] as const));
+  const rekeyed = merged.map((t) => {
+    const twin = byLabel.get(t.label.trim().toLowerCase());
+    return twin && twin.topicId !== t.topicId ? { ...t, topicId: twin.topicId } : t;
+  });
+  const known = new Set(rekeyed.map((t) => t.topicId));
+  const withReal = rekeyed.map((t) => {
     const s = stats.get(t.topicId);
     if (!s) return t;
     return {
@@ -381,6 +390,10 @@ export function projectCoverageView(
   askDates: ReadonlyMap<string, readonly string[]> = new Map(),
 ): QuestionnaireCoverageView {
   const statusById = new Map(statuses.map((s) => [s.topic.topicId, s]));
+  // Same ground can carry a different id in the coverage map than in the topic map (the coverage rows predate
+  // the emergent map and were slugged differently), so an id-only lookup silently misses and the row renders
+  // without its blurb or live counts. Fall back to the label.
+  const statusByLabel = new Map(statuses.map((s) => [s.topic.label.trim().toLowerCase(), s]));
   // Group by life area, preserving first-seen order (general areas from the skeleton, then Intimacy).
   const order: string[] = [];
   const groups = new Map<string, CoverageTopic[]>();
@@ -408,7 +421,7 @@ export function projectCoverageView(
     const topics: CoverageTopicView[] = group
       .filter((t) => t.topicId !== lifeArea)
       .map((t) => {
-        const st = statusById.get(t.topicId);
+        const st = statusById.get(t.topicId) ?? statusByLabel.get(t.label.trim().toLowerCase());
         return {
           topicId: t.topicId,
           label: t.label,

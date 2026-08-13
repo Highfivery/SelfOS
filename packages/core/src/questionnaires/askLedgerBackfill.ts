@@ -13,7 +13,7 @@ import {
 import { runClaude, type AiDeps } from './aiCall';
 import { SAFETY } from './aiPrompts';
 import { getAssignmentSnapshot, listAssignments } from './assignmentService';
-import { readProfile, writeProfile } from './personalizationProfile';
+import { readProfile, writeProfile, type PersonalizationProfile } from './personalizationProfile';
 import { getResponse } from './responseService';
 import {
   ensureTopics,
@@ -126,6 +126,24 @@ const BLURB_SENTINEL = { label: '', blurb: '' };
 /** Bounded per run: the backlog drains over a few days rather than paying for it all at once. */
 const BLURB_BATCH = 24;
 
+/** Adopt legacy coverage rows into the topic map (spec 71 §5.9).
+ *
+ *  The spec-70 coverage placement named ground directly on the profile's coverage rows, which the topic map
+ *  never saw — a real vault held 31 such rows against 74 topics. Those rows can never carry a blurb or a
+ *  ledger stat, because both live on a Topic, so the panel rendered them as bare "not asked yet" labels no
+ *  matter how much history existed. Minting them makes one model. */
+function adoptCoverageRows(profile: PersonalizationProfile, topics: Topic[]): Topic[] {
+  const known = new Set(topics.map((t) => t.label.trim().toLowerCase()));
+  const orphans = profile.coverage.topics.filter(
+    (c) => c.label.trim() !== '' && !known.has(c.label.trim().toLowerCase()),
+  );
+  if (orphans.length === 0) return topics;
+  return mintTopics(
+    topics,
+    orphans.map((c) => ({ label: c.label.trim(), lifeArea: c.lifeArea })),
+  ).topics;
+}
+
 /** Write a one-sentence blurb for topics that have none. Pure best-effort: a failed or degraded pass leaves
  *  the labels exactly as they were and the next run retries. Returns the map, blurbs applied. */
 async function writeBlurbs(
@@ -171,9 +189,20 @@ async function writeBlurbs(
 /** Catch-up path when the ledger itself needs no work: fill blurbs and persist. Returns how many landed. */
 async function fillMissingBlurbs(deps: AiDeps, recipientPersonId: string): Promise<number> {
   const profile = await readProfile(deps.fs, deps.key, recipientPersonId);
-  const topics = ensureTopics(profile.topics);
+  const adopted = adoptCoverageRows(profile, ensureTopics(profile.topics));
+  const topics = adopted;
   const before = topics.filter((t) => t.blurb === undefined).length;
-  if (before === 0) return 0;
+  if (before === 0) {
+    // Nothing to write, but adoption alone may have changed the map.
+    if (adopted.length !== ensureTopics(profile.topics).length) {
+      await writeProfile(deps.fs, deps.key, {
+        ...profile,
+        topics: adopted,
+        updatedAt: deps.now.toISOString(),
+      });
+    }
+    return 0;
+  }
   const filled = await writeBlurbs(deps, recipientPersonId, topics);
   const after = filled.filter((t) => t.blurb === undefined).length;
   if (after === before) return 0;

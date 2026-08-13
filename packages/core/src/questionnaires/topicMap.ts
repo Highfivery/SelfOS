@@ -41,6 +41,15 @@ export const COOLDOWN_DAYS = 14;
 /** A saturated topic may be revisited from a fresh angle after this long untouched. */
 export const DORMANT_DAYS = 90;
 
+/**
+ * How long a topic-level "Leave alone" holds before it lapses (spec 71 §5.8, owner decision 2026-08-12).
+ *
+ * Lives here rather than beside the other feedback constants: `personalizationProfile` already imports this
+ * module for `TopicSchema`, so declaring it there and importing it back would form a cycle — the trap this
+ * package is careful about elsewhere.
+ */
+export const LEAVE_ALONE_COOLDOWN_DAYS = 90;
+
 /** Quality saturation (spec 71 §5.4): this many dead answers, at this rate, closes a topic on quality alone. */
 export const QUALITY_DEAD_ASKS = 3;
 const QUALITY_DEAD_RATE = 0.6;
@@ -248,6 +257,8 @@ export type ReopenSignal = 'new-material' | 'explicit-request' | 'dormant';
 export interface TopicStatus {
   topic: Topic;
   stats: TopicStats;
+  /** Closed because the person asked to leave it alone, and that steer hasn't lapsed yet (§5.8). */
+  leftAlone: boolean;
   /** Worked through and not re-opened — off-limits. */
   saturated: boolean;
   /** Closed because its recent answers were mostly skips/declines, regardless of count (§5.4). */
@@ -273,6 +284,9 @@ export interface TopicStatusInput {
   newMaterialTopicIds?: readonly string[];
   /** Topics the person or author explicitly asked to explore — always re-opens (but still respects cooldown). */
   requestedTopicIds?: readonly string[];
+  /** Topics the person has asked to leave alone, with when (spec 71 §5.8). A bounded steer, not a ban: it
+   *  closes the topic for `LEAVE_ALONE_COOLDOWN_DAYS` and then lapses on its own. */
+  leftAlone?: readonly { topicId: string; at: string }[];
   now: Date;
 }
 
@@ -281,6 +295,13 @@ export function topicStatuses(input: TopicStatusInput): TopicStatus[] {
   const stats = deriveTopicStats(input.ledger);
   const fresh = new Set(input.newMaterialTopicIds ?? []);
   const requested = new Set(input.requestedTopicIds ?? []);
+  // "Leave alone" holds for a bounded window, then lapses — the person said "not right now", not "never".
+  const leftAloneCutoff = new Date(
+    input.now.getTime() - LEAVE_ALONE_COOLDOWN_DAYS * DAY_MS,
+  ).toISOString();
+  const leftAlone = new Set(
+    (input.leftAlone ?? []).filter((l) => l.at >= leftAloneCutoff).map((l) => l.topicId),
+  );
   const all = ensureTopics(input.topics);
   // A family's closure is computed first, so a child can inherit it below.
   const familyClosed = new Set<string>();
@@ -324,8 +345,13 @@ export function topicStatuses(input: TopicStatusInput): TopicStatus[] {
       topic.parentTopicId !== topic.topicId &&
       familyClosed.has(topic.parentTopicId) &&
       !requested.has(topic.topicId);
+    // An explicit "explore more" overrides a standing "leave alone" — the person is changing their mind.
+    const steeredAway = leftAlone.has(topic.topicId) && !requested.has(topic.topicId);
     const saturated =
-      (saturatedByCount && reopenedBy === undefined) || saturatedByQuality || parentClosed;
+      (saturatedByCount && reopenedBy === undefined) ||
+      saturatedByQuality ||
+      parentClosed ||
+      steeredAway;
     // The cooldown floor gates RE-OPENING worked ground — it must NOT close ground that still has headroom.
     // Verified against a real vault: applying it to every recently-touched topic left 1 of 14 areas open and
     // shut the two LEAST-worked ones (asked once and twice), which would push the planner to invent new ground
@@ -336,6 +362,7 @@ export function topicStatuses(input: TopicStatusInput): TopicStatus[] {
       stats: s,
       saturated,
       saturatedByQuality,
+      leftAlone: steeredAway,
       ...(reopenedBy !== undefined ? { reopenedBy } : {}),
       inCooldown,
       open: !saturated && !heldByCooldown,

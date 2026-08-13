@@ -3149,7 +3149,9 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
   expect(profile?.candidates?.find((c) => c.id === 'cand-skip')?.curation).toBe('skipped');
   expect(profile?.candidates?.find((c) => c.id === 'cand-keep')?.curation).toBe('asked');
   expect(
-    profile?.feedback?.some((f) => f.topicId === 'Relationships' && f.kind === 'not-applicable'),
+    // spec 71 §5.8 — a topic/area "leave alone" now persists as a BOUNDED `left-alone` steer (a 90-day
+    // pause the person can lift), distinct from the permanent per-question "doesn't apply to me".
+    profile?.feedback?.some((f) => f.topicId === 'Relationships' && f.kind === 'left-alone'),
   ).toBe(true);
   // The inline 18+ unlock persisted the shared acknowledgement (spec 70 §3.4).
   const prefs = (await readEncryptedJson(fs, 'people/owner-1/guidance/prefs.enc', key!)) as {

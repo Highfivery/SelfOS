@@ -3362,12 +3362,11 @@ describe('createCoreBridge', () => {
       action: 'leave-alone',
     });
     expect(steered.markedOff.some((m) => m.topicId === 'Health & body')).toBe(true);
-    // Decrypt the owner's profile — the steer persisted as a not-applicable feedback entry.
+    // Decrypt the owner's profile — the steer persisted as a BOUNDED left-alone entry (spec 71 §5.8): a
+    // 90-day pause the person can change their mind about, not the permanent "doesn't apply to me".
     const ownerProfile = await readProfile(ctx.fs, ctx.key, ownerId);
     expect(
-      ownerProfile.feedback.some(
-        (f) => f.topicId === 'Health & body' && f.kind === 'not-applicable',
-      ),
+      ownerProfile.feedback.some((f) => f.topicId === 'Health & body' && f.kind === 'left-alone'),
     ).toBe(true);
 
     // Switch to Angel (a member): her read is HER OWN — the owner's mark is absent, and steering writes

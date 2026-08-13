@@ -5,7 +5,14 @@ import { listRelationships, livePartnerIds } from '../people/relationshipService
 import { deriveTopicStats, readLedger, type AskLedger } from './askLedger';
 import { deriveIntimacyCoverageFor } from './coverageService';
 import { deriveCoverageSkeleton } from './coverageModel';
-import { ensureTopics, SATURATION_ASKS, type Topic } from './topicMap';
+import {
+  ensureTopics,
+  LEAVE_ALONE_COOLDOWN_DAYS,
+  SATURATION_ASKS,
+  topicStatuses,
+  type Topic,
+  type TopicStatus,
+} from './topicMap';
 import {
   addPartnerWish,
   applyCandidateCuration,
@@ -62,6 +69,11 @@ export interface CoverageAreaView {
   /** Present + true for the Intimacy row — an 18+ area (the panel shows the 18+ badge + the unlock affordance
    *  when not yet acknowledged, spec 70 §3.4). */
   adultGated?: boolean;
+  /** The specific ground inside this area (spec 71 §5.8). Intimacy's topics are included and are gated by the
+   *  same 18+ acknowledgement as the rest of the row — the panel simply does not render them until it holds. */
+  topics: CoverageTopicView[];
+  /** Total questions asked across this area — the honest number behind the meter. */
+  askedCount: number;
 }
 
 /** One topic the person has marked off (a decline / a "leave alone" steer). */
@@ -102,6 +114,27 @@ export interface QuestionnaireCoverageView {
   /** Whether an AI coverage-placement pass has run (else the read is a fresh, all-uncovered skeleton). */
   hasPlacement: boolean;
   lastPlacementAt?: string;
+}
+
+/**
+ * One specific piece of ground inside an area (spec 71 §5.8) — what the emergent topic map actually holds.
+ *
+ * Before this the panel showed only one row per life area, so ground the model had NAMED from the person's own
+ * material ("Orgasm control / edging", "Who initiates") was invisible: the app knew it and showed none of it.
+ * Every topic is listed, worked-through ones included — seeing what it has already covered is most of the
+ * point of the surface.
+ */
+export interface CoverageTopicView {
+  topicId: string;
+  label: string;
+  /** How many questions have actually worked this ground. */
+  askedCount: number;
+  /** Still worth opening — not worked through, not cooling down, not left alone. */
+  open: boolean;
+  /** The person asked to leave this alone and that steer is still live (lapses after 90 days). */
+  leftAlone: boolean;
+  /** Named by the model rather than shipped as a built-in family — the "new ground" marker. */
+  emergent: boolean;
 }
 
 /** A steer action from the panel (spec 69 §3.4). Own-scoped in the bridge. */
@@ -267,7 +300,10 @@ export function projectCoverageView(
   profile: PersonalizationProfile,
   now: Date,
   adultAcknowledged = false,
+  /** Live topic statuses (spec 71) — the real ask counts + open/left-alone state behind each row. */
+  statuses: readonly TopicStatus[] = [],
 ): QuestionnaireCoverageView {
+  const statusById = new Map(statuses.map((s) => [s.topic.topicId, s]));
   // Group by life area, preserving first-seen order (general areas from the skeleton, then Intimacy).
   const order: string[] = [];
   const groups = new Map<string, CoverageTopic[]>();
@@ -289,6 +325,23 @@ export function projectCoverageView(
     // The steer target: a general area's stable topicId IS its life-area name; Intimacy aggregates per-category
     // topics, so it steers at the AREA level under a stable `'Intimacy'` id (never a single category).
     const areaTopic = group.find((t) => t.topicId === lifeArea) ?? group[0]!;
+    // The specific ground inside this area (spec 71 §5.8). The bare life-area row itself is not a topic the
+    // person recognises ("Relationships" inside Relationships), so it is dropped; everything else is listed,
+    // worked-through included, most-worked first — the map is meant to show what it already knows.
+    const topics: CoverageTopicView[] = group
+      .filter((t) => t.topicId !== lifeArea)
+      .map((t) => {
+        const st = statusById.get(t.topicId);
+        return {
+          topicId: t.topicId,
+          label: t.label,
+          askedCount: st?.stats.askedCount ?? t.askedCount,
+          open: st ? st.open : !t.saturated,
+          leftAlone: st?.leftAlone ?? false,
+          emergent: st ? !st.topic.seeded : false,
+        };
+      })
+      .sort((a, b) => b.askedCount - a.askedCount || a.label.localeCompare(b.label));
     return {
       topicId: isIntimacy ? 'Intimacy' : areaTopic.topicId,
       lifeArea,
@@ -297,6 +350,8 @@ export function projectCoverageView(
       depth,
       steerable,
       steered,
+      topics,
+      askedCount: topics.reduce((n, t) => n + t.askedCount, 0),
       ...(isIntimacy ? { adultGated: true } : {}),
     };
   });
@@ -304,9 +359,15 @@ export function projectCoverageView(
   const cutoff = new Date(now.getTime() - PREFER_NOT_COOLDOWN_DAYS * MS_PER_DAY).toISOString();
   const seen = new Set<string>();
   const markedOff: MarkedOffView[] = [];
+  const leftAloneCutoff = new Date(
+    now.getTime() - LEAVE_ALONE_COOLDOWN_DAYS * MS_PER_DAY,
+  ).toISOString();
   for (const f of profile.feedback) {
     let kind: 'not-applicable' | 'prefer-not-to-say';
     if (f.kind === 'not-applicable') kind = 'not-applicable';
+    // A topic-level "leave alone" (spec 71 §5.8) belongs in this list while it holds, and drops out of it
+    // when it lapses — it is a 90-day pause the person can change their mind about, not a standing "not me".
+    else if (f.kind === 'left-alone' && f.at >= leftAloneCutoff) kind = 'not-applicable';
     else if (f.kind === 'prefer-not-to-say' && f.at >= cutoff) kind = 'prefer-not-to-say';
     else continue;
     const label = (f.questionPrompt ?? f.topicId ?? '').trim();
@@ -361,7 +422,20 @@ export async function readCoverageView(
     ensureTopics(profile.topics),
     ledger,
   );
-  const projected = projectCoverageView(topics, profile, now, adultAcknowledged);
+  // The live per-topic state the rows render: real ask counts from the ledger, plus which ground is still
+  // open, which the person has asked to leave alone, and which the model named itself (spec 71 §5.8).
+  const statuses = topicStatuses({
+    topics: ensureTopics(profile.topics),
+    ledger,
+    requestedTopicIds: profile.coverage.topics
+      .filter((t) => t.reopenedBy === 'explicit-request')
+      .map((t) => t.topicId),
+    leftAlone: profile.feedback
+      .filter((f) => f.kind === 'left-alone' && f.topicId)
+      .map((f) => ({ topicId: f.topicId as string, at: f.at })),
+    now,
+  });
+  const projected = projectCoverageView(topics, profile, now, adultAcknowledged, statuses);
   const partners = await gatherPartnerWishGroups(fs, key, personId, profile);
   return { ...projected, partners };
 }

@@ -9,7 +9,7 @@ import {
   UNCLEAR_SKIP_REASON,
 } from './answering';
 import { isNearDuplicate } from './dedup';
-import { TopicSchema } from './topicMap';
+import { LEAVE_ALONE_COOLDOWN_DAYS, TopicSchema } from './topicMap';
 
 /**
  * The per-person **Personalization Profile** (spec 69 §4) — one encrypted doc at
@@ -87,6 +87,11 @@ export type CoverageTopic = z.infer<typeof CoverageTopicSchema>;
 export const FeedbackKindSchema = z.enum([
   'unclear',
   'not-applicable',
+  // A TOPIC-level "leave alone" from the Explored panel (spec 71 §5.8). Deliberately distinct from
+  // `not-applicable`: that is a per-question "this isn't about me", which stays true indefinitely, whereas
+  // leaving a topic alone is a "not right now" the person can change their mind about. Bounded to
+  // `LEAVE_ALONE_COOLDOWN_DAYS`, then it simply lapses.
+  'left-alone',
   'prefer-not-to-say',
   'skipped',
   'answered-richly',
@@ -698,7 +703,9 @@ export function applySteer(
     feedback.filter(
       (f) =>
         !(
-          (f.kind === 'not-applicable' || f.kind === 'prefer-not-to-say') &&
+          (f.kind === 'not-applicable' ||
+            f.kind === 'prefer-not-to-say' ||
+            f.kind === 'left-alone') &&
           norm(f.topicId) === norm(topicId)
         ),
     );
@@ -725,11 +732,11 @@ export function applySteer(
     const entry: FeedbackEntry = {
       topicId,
       questionPrompt: label,
-      kind: 'not-applicable',
+      kind: 'left-alone',
       at: nowIso,
     };
     const keptFeedback = profile.feedback.filter(
-      (f) => !(f.kind === 'not-applicable' && norm(f.topicId) === norm(topicId)),
+      (f) => !(f.kind === 'left-alone' && norm(f.topicId) === norm(topicId)),
     );
     return {
       ...profile,
@@ -808,6 +815,9 @@ function uniqLabels(labels: readonly string[]): string[] {
  */
 export function buildFeedbackGuidance(profile: PersonalizationProfile, now: Date): string {
   const cutoff = new Date(now.getTime() - PREFER_NOT_COOLDOWN_DAYS * MS_PER_DAY).toISOString();
+  const leftAloneCutoff = new Date(
+    now.getTime() - LEAVE_ALONE_COOLDOWN_DAYS * MS_PER_DAY,
+  ).toISOString();
   const avoid: string[] = [];
   const boundary: string[] = [];
   const reword: string[] = [];
@@ -816,7 +826,9 @@ export function buildFeedbackGuidance(profile: PersonalizationProfile, now: Date
     const label = f.questionPrompt ?? f.topicId;
     if (!label) continue;
     if (f.kind === 'not-applicable') avoid.push(label);
-    else if (f.kind === 'prefer-not-to-say') {
+    else if (f.kind === 'left-alone') {
+      if (f.at >= leftAloneCutoff) boundary.push(label);
+    } else if (f.kind === 'prefer-not-to-say') {
       if (f.at >= cutoff) boundary.push(label);
     } else if (f.kind === 'unclear') reword.push(label);
     else if (f.kind === 'answered-richly') productive.push(label);

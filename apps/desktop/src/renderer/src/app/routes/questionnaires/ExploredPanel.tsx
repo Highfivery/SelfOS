@@ -14,6 +14,7 @@ import {
 import type {
   CandidateFeedItem,
   CoverageAreaView,
+  CoverageTopicView,
   CoverageStatus,
   PartnerWishGroupView,
 } from '@shared/channels';
@@ -104,6 +105,64 @@ function CandidateCard({ item }: { item: CandidateFeedItem }): JSX.Element {
   );
 }
 
+/**
+ * One specific piece of ground inside an area (spec 71 §5.8).
+ *
+ * The emergent map is the point of the surface: ground the model NAMED from this person's own material was
+ * previously invisible here, because the panel only ever showed one row per life area. Worked-through topics
+ * are listed too — seeing what it already covered is most of why someone opens this.
+ */
+function TopicRow({
+  topic,
+  area,
+}: {
+  topic: CoverageTopicView;
+  area: CoverageAreaView;
+}): JSX.Element {
+  const steer = useCoverageStore((s) => s.steer);
+  const steering = useCoverageStore((s) => s.steering);
+  const busy = steering === topic.topicId;
+  return (
+    <li className={styles.topicRow}>
+      {/* Two lines, not one: the panel column is ~700px with the sub-nav beside it, and a label + badge +
+          count + state + action on a single row wraps the label a word per line (§12). The name owns its
+          line; the meta reads underneath. */}
+      <span className={styles.topicName}>
+        {topic.label}
+        {topic.emergent ? <span className={styles.topicNew}>new ground</span> : null}
+      </span>
+      <span className={styles.topicMeta}>
+        <span className={styles.topicCount}>
+          {topic.askedCount === 1 ? '1 question' : `${topic.askedCount} questions`}
+        </span>
+        <span className={`${styles.topicState} ${topic.open ? styles.topicStateOpen : ''}`}>
+          {topic.leftAlone ? 'Left alone' : topic.open ? 'Still open' : 'Worked through'}
+        </span>
+        <button
+          type="button"
+          className={styles.topicAct}
+          disabled={busy}
+          aria-pressed={topic.leftAlone}
+          // Named per topic: a list of 30 buttons all called "Leave alone" is unusable with a screen reader,
+          // and ambiguous against the area-level steer of the same name.
+          aria-label={topic.leftAlone ? `Bring back ${topic.label}` : `Leave ${topic.label} alone`}
+          onClick={() =>
+            steer({
+              topicId: topic.topicId,
+              lifeArea: area.lifeArea,
+              label: topic.label,
+              // Leaving a topic alone is a 90-day pause, not a ban — tapping again lifts it early.
+              action: topic.leftAlone ? 'clear' : 'leave-alone',
+            })
+          }
+        >
+          {topic.leftAlone ? 'Bring it back' : 'Leave alone'}
+        </button>
+      </span>
+    </li>
+  );
+}
+
 function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
   const steer = useCoverageStore((s) => s.steer);
   const steering = useCoverageStore((s) => s.steering);
@@ -115,6 +174,7 @@ function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
     (m) => m.topicId === area.topicId && m.kind === 'not-applicable',
   );
   const busy = steering === area.topicId;
+  const [expanded, setExpanded] = useState(false);
   const status = STATUS[area.status];
   const pct = Math.round(Math.max(0, Math.min(1, area.depth)) * 100);
   // The Intimacy row is an 18+ area: it needs the shared acknowledgement before it becomes steerable + before
@@ -136,8 +196,30 @@ function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
             />
           </span>
           <span className={`${styles.status} ${status.className}`}>{status.label}</span>
+          {area.askedCount > 0 ? (
+            <span className={styles.areaCount}>{area.askedCount} asked</span>
+          ) : null}
         </div>
+        {/* Intimacy's specific ground is gated by the SAME 18+ acknowledgement as the rest of its row
+            (spec 70 §3.4) — until it holds there is nothing to expand. */}
+        {area.topics.length > 0 && !needsUnlock ? (
+          <button
+            type="button"
+            className={styles.discloseBtn}
+            aria-expanded={expanded}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? `Hide ${area.topics.length} topics` : `Show ${area.topics.length} topics`}
+          </button>
+        ) : null}
       </div>
+      {expanded && area.topics.length > 0 && !needsUnlock ? (
+        <ul className={styles.topicList}>
+          {area.topics.map((t) => (
+            <TopicRow key={t.topicId} topic={t} area={area} />
+          ))}
+        </ul>
+      ) : null}
       {needsUnlock ? (
         <div className={styles.unlockRow}>
           <span className={styles.unlockNote}>For 18+. Confirm to explore this.</span>

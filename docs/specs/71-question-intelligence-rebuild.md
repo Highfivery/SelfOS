@@ -432,6 +432,14 @@ _All resolved with the owner on 2026-08-12:_
   `pruneTopicMap` (drop unreferenced, fold cross-run duplicates), tightened both tagging prompts toward durable
   ground, and made support the deciding rule: a name must recur to become a topic. **341 → 75 topics, zero
   singletons**, on the real map.
+- 2026-08-13 — **Polish: the catch-all bucket is filtered out of the ground summaries (§5.2).** Verifying the
+  selector change on the real vault showed `Other` — the catch-all seed topic — being offered to BOTH members
+  as ground to PREFER. It stays in the map and keeps collecting asks (it is real ground), but as steering it
+  says nothing: "prefer Other" and "don't build around Other" are equally useless to a model. `groundSummary`
+  now drops `CATCH_ALL_TOPIC_ID` from both lists, so `nextOpenGround` inherits the fix and can never make it a
+  FOCUS either. Emergent topics parented to it keep their own real labels and still surface — the guard pins
+  that, deliberately leaving the parent OPEN, since a child correctly INHERITS a closed family's closure and
+  would otherwise be hidden for the right reason. Verified after: Angel 7 → 6 open, Ben 9 → 8, nothing else moved.
 - 2026-08-13 — **Follow-up: the TOPIC SELECTOR sees the ledger too (§5.2).** A class sweep after the one-engine
   fix — the same shape, on the majority path. The gap-finder SELECTS the topic for every non-intimacy check-in
   and its rationale becomes the slot brief, i.e. the governing `FOCUS` line; but it steered only on prior

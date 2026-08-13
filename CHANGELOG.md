@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.52.1](https://github.com/Highfivery/SelfOS/compare/v0.52.0...v0.52.1) (2026-08-13)
+
+
+### Bug Fixes
+
+* **questionnaires:** make the topic-scoped re-open signal real (71 §5.2) ([#423](https://github.com/Highfivery/SelfOS/issues/423)) ([2658462](https://github.com/Highfivery/SelfOS/commit/2658462301e9278cf9f57a4ab7a0da6cb6a3fb93))
+
 ## [0.52.0](https://github.com/Highfivery/SelfOS/compare/v0.51.11...v0.52.0) (2026-08-13)
 
 

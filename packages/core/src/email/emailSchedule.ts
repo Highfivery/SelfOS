@@ -404,9 +404,13 @@ async function trySuggestion(ctx: {
     readLedger(fs, key, personId),
     readProfile(fs, key, personId),
   ]);
-  const topicSteering = buildTopicSteering(
-    topicStatuses({ topics: ensureTopics(profile.topics), ledger, now }),
-  );
+  const statuses = topicStatuses({ topics: ensureTopics(profile.topics), ledger, now });
+  const topicSteering = buildTopicSteering(statuses);
+  // The intimacy families still open with this person — the subject matter for an intimacy suggestion, so it
+  // can't nudge toward ground they have worked through (spec 71 §5.3). Same source as the steering above.
+  const openIntimacy = statuses
+    .filter((s) => s.open && s.topic.lifeArea === 'Intimacy')
+    .map((s) => ({ label: s.topic.label, ...(s.topic.blurb ? { blurb: s.topic.blurb } : {}) }));
   const combinedGuidance = [feedbackGuidance, topicSteering]
     .filter((s) => s.trim() !== '')
     .join('\n\n');
@@ -419,6 +423,7 @@ async function trySuggestion(ctx: {
     signals,
     avoid,
     ...(Object.keys(steering).length ? { steering } : {}),
+    ...(openIntimacy.length ? { openGround: openIntimacy } : {}),
     ...(ctx.recipientName ? { recipientName: ctx.recipientName } : {}),
     ...(intimacyTarget
       ? {

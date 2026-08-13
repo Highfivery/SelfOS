@@ -1,21 +1,19 @@
 /**
- * The shared consensual-adult **intimacy topic inventory** (08-questionnaires §16.5a) — ONE source of
- * truth imported by BOTH the personal-intake intimacy block ([`18`](18-personal-onboarding.md)) and
- * questionnaire generation ([`08`](08-questionnaires.md) §16.5). Keeping it in one place removes the drift
- * between the two lists.
+ * The shared consensual-adult **intimacy activity inventory** — ONE source of truth for every surface that
+ * needs a fixed set of acts to RATE: the personal-intake intimacy block ([`18`](18-personal-onboarding.md)),
+ * the kink test ([`50`](50-self-assessments.md)), and the Yes/No/Maybe overlap.
  *
  * **Categorized + tiered (49-intimacy-activities-inventory).** `INTIMACY_ACTIVITIES_FULL` is the source of
  * truth — a list of `IntimacyActivity` entries, each carrying a stable `key` (the 46 §4.2 anatomy-independent
  * matrix-row key), a display `label`, a `category` (one of ~14 families — the onboarding matrix's group
  * header AND the kink test's subscale, [`50`](50-self-assessments.md)), and an intensity `tier` (1 gentle →
- * 5 extreme, orders rows sensual→extreme). `INTIMACY_ACTIVITIES` stays the **flat label list** (derived from
- * the inventory) so questionnaire generation + `mergedIntimacyTopics` are unaffected (the category metadata
- * is exposed via the new symbols only, never through `INTIMACY_TOPICS.activities`).
+ * 5 extreme, orders rows sensual→extreme).
  *
- * The built-in lists are **owner-extensible**: the Owner can add custom activities + fantasies (stored
- * vault-side in `config/questionnaires.json`), and `mergedIntimacyTopics` combines the built-ins with those
- * custom additions. The merged inventory feeds both surfaces. Custom additions are uncategorized — the
- * readers place them in an "Other / custom" group (49 §7).
+ * **This is RATING vocabulary, not generation vocabulary** (spec 71, 2026-08-13). It supplies the onboarding
+ * activity matrix, the kink test's subscales, the Yes/No/Maybe overlap and the intimacy email — all places
+ * that need a fixed set of things to RATE. Questionnaire generation no longer reads it: its subject matter
+ * comes from each person's own emergent topic map, which is per-person and saturation-aware, so a fixed list
+ * pasted into every prompt was both redundant and unable to tell worked-through ground from open ground.
  *
  * **The inventory is render/synthesis-layer code, never per-person vault data, never mutated per-person**
  * (46 §5). All ratings live in the encrypted `IntakeSession`; this constant is the single shared source.
@@ -247,13 +245,6 @@ export const INTIMACY_ACTIVITY_LABELS: readonly string[] = INTIMACY_ACTIVITIES_F
   (x) => x.label,
 );
 
-/**
- * Built-in consensual-adult **activities** as a flat label list — the shape questionnaire generation reads
- * (08 §16.5). Derived from {@link INTIMACY_ACTIVITIES_FULL}; the category/tier metadata is exposed via the
- * new symbols, NOT here (49 §4.2). `'Other'` is a UI escape, added by the form, not a topic.
- */
-export const INTIMACY_ACTIVITIES: readonly string[] = INTIMACY_ACTIVITY_LABELS;
-
 /** The inventory grouped by category, in {@link INTIMACY_CATEGORIES} order; within a category, tier ascending
  * (stable — equal tiers keep inventory order). The kink test ([`50`](50-self-assessments.md)) consumes this
  * for subscales. */
@@ -292,95 +283,3 @@ export const INTIMACY_FANTASIES: readonly string[] = [
   'Cheating roleplay',
   'Gangbang',
 ];
-
-/**
- * Which category each built-in fantasy belongs to — hand-authored DATA, one entry per label above.
- *
- * Generation uses this to drop a fantasy that sits on ground already worked through, so the prompt can't name
- * an area off-limits and then hand the model a fantasy on exactly that ground two lines later. It replaces the
- * keyword regex the retired coverage engine used for the same job (spec 71 §1 D4 measured that classifier
- * crediting a third of real questions to zero categories); a fixed 13-entry table over a fixed 13-entry list
- * is inspectable and cannot mis-classify.
- *
- * A CUSTOM fantasy the Owner added has no entry and is therefore never filtered — it is their own free text on
- * ground the built-in categories may not even name, so silently withholding it would be worse than showing it.
- */
-export const INTIMACY_FANTASY_CATEGORY: Readonly<Record<string, IntimacyCategory>> = {
-  'Threesome / group': 'group',
-  Gangbang: 'group',
-  Voyeurism: 'exhibition',
-  Exhibitionism: 'exhibition',
-  'Being watched': 'exhibition',
-  Domination: 'power-exchange',
-  Submission: 'power-exchange',
-  Bondage: 'bondage',
-  'Consensual non-consent (CNC) roleplay': 'taboo-fantasy',
-  'Cheating roleplay': 'taboo-fantasy',
-  'Strangers / one-night roleplay': 'roleplay',
-  'Boss / employee roleplay': 'roleplay',
-  'Teacher / student roleplay': 'roleplay',
-};
-
-const FANTASY_LABEL_TO_CATEGORY = new Map(
-  Object.entries(INTIMACY_FANTASY_CATEGORY).map(([label, c]) => [label, c] as const),
-);
-
-/** The category a fantasy label sits in, or `undefined` for custom/unknown text (never filtered). A Map, not
- *  an object index, so a custom fantasy named `toString` can't resolve to an inherited function. */
-export function categoryForFantasy(label: string): IntimacyCategory | undefined {
-  return FANTASY_LABEL_TO_CATEGORY.get(label.trim());
-}
-
-const ACTIVITY_LABEL_TO_CATEGORY = new Map(
-  INTIMACY_ACTIVITIES_FULL.map((a) => [a.label.toLowerCase(), a.category] as const),
-);
-
-/**
- * The category a built-in ACTIVITY label sits in, or `undefined` for an Owner-custom addition.
- *
- * The generation prompt seeds from the flat label list, so this is how it maps back — a lookup over the same
- * inventory that produced the labels, never a guess. A custom activity has no entry and is never filtered.
- */
-export function categoryForActivityLabel(label: string): IntimacyCategory | undefined {
-  return ACTIVITY_LABEL_TO_CATEGORY.get(label.trim().toLowerCase());
-}
-
-/** The built-in inventory grouped (the shape both surfaces consume). `activities` is the flat label list so
- * questionnaire generation is unaffected by the categorization (49 §3.2/§4.2). */
-export const INTIMACY_TOPICS = {
-  activities: INTIMACY_ACTIVITIES,
-  fantasies: INTIMACY_FANTASIES,
-} as const;
-
-export interface IntimacyTopics {
-  activities: string[];
-  fantasies: string[];
-}
-
-/** Case-insensitive de-dupe that keeps the first spelling seen (built-ins win over custom dupes). */
-function dedupe(values: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const v of values) {
-    const key = v.trim().toLowerCase();
-    if (v.trim() === '' || seen.has(key)) continue;
-    seen.add(key);
-    out.push(v.trim());
-  }
-  return out;
-}
-
-/**
- * The **merged** inventory = built-in topics + the Owner's custom additions (deduped, case-insensitive,
- * built-ins first). Custom additions are owner-managed free text; the consensual-adult boundary is enforced
- * by the prompt + the model, not by filtering here (the Owner is the full-access role).
- */
-export function mergedIntimacyTopics(custom?: {
-  activities?: string[];
-  fantasies?: string[];
-}): IntimacyTopics {
-  return {
-    activities: dedupe([...INTIMACY_ACTIVITIES, ...(custom?.activities ?? [])]),
-    fantasies: dedupe([...INTIMACY_FANTASIES, ...(custom?.fantasies ?? [])]),
-  };
-}

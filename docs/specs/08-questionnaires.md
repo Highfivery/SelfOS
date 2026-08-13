@@ -4287,3 +4287,25 @@ thing**, on paths where nobody reviews it:
 averages as folding in Private sends too (numbers already reach the sender's trends). The code is therefore
 MORE private than the spec claims. Left as-is — the conservative direction — and recorded here rather than
 silently reconciled either way.
+
+### §16.5a — SUPERSEDED (2026-08-13)
+
+The Owner-extensible `INTIMACY_TOPICS` inventory is **gone**, along with the Settings surface that managed it
+and the AI topic suggester that populated it. Questionnaire generation no longer has a fixed list of acts and
+fantasies at all: its subject matter is the recipient's **own emergent topic map** ([`71`](71-question-intelligence-rebuild.md)
+§5.3) — per-person, saturation-aware, and grown by the model as it names real ground.
+
+Why: a household-wide hand-curated list cannot answer a per-person question. Saturation is per recipient, so
+one global mapping is wrong by construction — and because custom entries belonged to no family, generation kept
+offering them ("MFM threesome", "Live broadcasting sex") after the planner had called that ground off-limits.
+Measured on a real vault, replacing the list cut the subject-matter block from ~1,900 chars of identical
+catalogue to 1,044 chars of that person's own eight open areas, five of which the built-in taxonomy has no word
+for.
+
+**What the inventory still does:** `INTIMACY_ACTIVITIES_FULL` remains the shared **rating** vocabulary — the
+onboarding activity matrix ([`18`](18-personal-onboarding.md) §14.5), the kink test's subscales
+([`50`](50-self-assessments.md)), the Yes/No/Maybe overlap ([`58`](58-together.md) §3.10b) and the intimacy
+email. Those need a fixed set of things to RATE, which is a different job from generation vocabulary.
+
+**Owner steering now lives** where it is per-person: the Explored panel's pin / leave-alone steers, partner
+wishes ([`70`](70-adaptive-exploration.md) §12 P4), and the brief on a draft.

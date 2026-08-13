@@ -41,7 +41,6 @@ import {
   listCoveredTopics,
   listQuestionnaires,
   listSavedSuggestions,
-  readCustomIntimacyTopics,
   saveQuestionnaire,
   submitResponse,
 } from '@selfos/core/questionnaires';
@@ -7489,81 +7488,6 @@ test('mark repetitive/vague (§28.2/§28.3): "Too vague" sharpens in place; "Alr
   }
 });
 
-test('intimacy topics (§16.5a): the owner manages custom topics in Settings + AI suggest; the inline builder add is gone (§23.6)', async () => {
-  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
-  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
-  const fs = createNodeFileSystem(vault);
-  const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
-  if (!key) throw new Error('expected a master key');
-
-  const app = await launch(userData);
-  try {
-    const w = await app.firstWindow();
-
-    // Settings → Questionnaires → the admin-only "Intimacy topics (18+)" surface → add a custom activity.
-    await w.getByRole('link', { name: 'Settings' }).click();
-    await w.getByRole('button', { name: 'Questionnaires' }).click();
-    await expect(w.getByText('Intimacy topics (18+)')).toBeVisible();
-    await expect(w.getByText(/18\+ only/i)).toBeVisible();
-    await w.getByLabel('Add an activity').fill('Sploshing');
-    await w.getByRole('button', { name: 'Add' }).first().click();
-    await expect(w.getByText('Sploshing')).toBeVisible();
-
-    // It persisted to the plain prefs file (no master key needed to read it).
-    await expect
-      .poll(async () => (await readCustomIntimacyTopics(fs)).activities)
-      .toContain('Sploshing');
-
-    // Suggest with AI: the offline fake proposes a set that INCLUDES an existing built-in ('Sensual
-    // massage') — which is deduped out of the checklist. Uncheck one fresh suggestion, add the rest.
-    await w.getByRole('button', { name: 'Suggest with AI' }).click();
-    await expect(w.getByLabel('Include Mutual edging')).toBeVisible();
-    await expect(w.getByLabel('Include Temperature contrast play')).toBeVisible();
-    await expect(w.getByLabel('Include Sensual massage')).toHaveCount(0); // a built-in → deduped
-    await w.getByLabel('Include Temperature contrast play').uncheck();
-    await w.getByRole('button', { name: /Add selected/ }).click();
-    // The picked suggestions persist (across both kinds); the unchecked one does not.
-    await expect
-      .poll(async () => (await readCustomIntimacyTopics(fs)).activities)
-      .toContain('Mutual edging');
-    await expect
-      .poll(async () => (await readCustomIntimacyTopics(fs)).fantasies)
-      .toContain('Rivals-to-lovers roleplay');
-    expect((await readCustomIntimacyTopics(fs)).activities).not.toContain(
-      'Temperature contrast play',
-    );
-
-    // §23.6: the inline "add a topic" is GONE from the Draft-with-AI panel — the household inventory is
-    // managed only here in Settings. Confirm the builder panel no longer surfaces it (even at intimacy/unfiltered).
-    await w.getByRole('link', { name: 'Questionnaires' }).click();
-    await startNewQuestionnaire(w);
-    await w.getByLabel('Type', { exact: true }).selectOption('intimacy');
-    await w.getByLabel('Sensitivity').selectOption('unfiltered');
-    await w.getByRole('button', { name: /Draft with AI/ }).click();
-    await expect(w.getByText(/add a consensual-adult topic/i)).toHaveCount(0);
-    await expect(w.getByRole('button', { name: 'Add topic' })).toHaveCount(0);
-    // …and the count control it now carries fits with no inner horizontal scrollbar at phone width.
-    await expect(w.getByLabel('Number of questions')).toBeVisible();
-    await w.setViewportSize({ width: 390, height: 800 });
-    await w.waitForTimeout(150);
-    const offenders = await w.evaluate(
-      () =>
-        [...document.querySelectorAll('main *')].filter((el) => {
-          const s = getComputedStyle(el);
-          return (
-            (s.overflowX === 'auto' || s.overflowX === 'scroll') &&
-            el.scrollWidth - el.clientWidth > 1
-          );
-        }).length,
-    );
-    expect(offenders).toBe(0);
-  } finally {
-    await app.close();
-    await rm(userData, { recursive: true, force: true });
-    await rm(vault, { recursive: true, force: true });
-  }
-});
-
 test('design: a Switch never shrinks in a flex row and its thumb stays on-track', async () => {
   const { userData, vault } = await seedReadyVault();
   const app = await launch(userData);
@@ -13714,12 +13638,14 @@ test('auto check-ins (63 §13 / 71 §5.2): a rated act on worked-through ground 
     expect(deeperLine).toContain('Sensual massage');
     expect(/\boral\b/i.test(deeperLine)).toBe(false);
 
-    // 2. …and the wider material doesn't hand the same worked-through ground straight back, which would be
-    //    the same self-contradiction one line further down. Non-vacuous: open ground is still offered.
-    const materialLine = /^Subject matter to draw on[^\n]*$/m.exec(intimacyPrompt)?.[0] ?? '';
-    expect(materialLine).not.toBe('');
-    expect(materialLine).toContain('Sensual massage');
-    expect(/\boral\b/i.test(materialLine)).toBe(false);
+    // 2. …and the SUBJECT MATTER — this person's own open ground, from their topic map (71 §5.3) — doesn't
+    //    hand the worked-through area straight back, which would be the same self-contradiction one block
+    //    further down. Non-vacuous: open ground is still listed.
+    const ground = intimacyPrompt
+      .slice(intimacyPrompt.indexOf('Subject matter to draw on'))
+      .split('\n\n')[0] as string;
+    expect(ground).toContain('Sensual & sensory');
+    expect(/\boral\b/i.test(ground)).toBe(false);
 
     // ~360px: the Auto check-ins surface still has no horizontal scrollbar / inner overflow (§7/§12).
     await w.setViewportSize({ width: 360, height: 800 });

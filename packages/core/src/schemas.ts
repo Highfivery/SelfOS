@@ -1022,33 +1022,6 @@ export type ChallengeSuggestionResult =
     };
 
 /**
- * AI-suggested intimacy topics for the owner to review (08-questionnaires §16.5a, AI-assist follow-up).
- * Deduped activity + fantasy candidates the owner picks/edits before adding to the shared inventory — the
- * suggester PERSISTS NOTHING (the owner's "Add selected" reuses the existing add path). The only AI spend is
- * the `intimacy.suggestTopics` pass, owner-gated + metered before parse.
- */
-export interface IntimacyTopicSuggestions {
-  activities: string[];
-  fantasies: string[];
-}
-
-export type IntimacyTopicSuggestResult =
-  | { ok: true; suggestions: IntimacyTopicSuggestions }
-  | {
-      ok: false;
-      reason:
-        | 'NO_KEY'
-        | 'BUDGET'
-        | 'AI_OFF'
-        | 'EMPTY'
-        | 'REFUSED'
-        | 'TRUNCATED'
-        | 'MALFORMED'
-        | 'ERROR';
-      message: string;
-    };
-
-/**
  * The result of an inline check-in (52 §6). The status + outcome ALWAYS persist (free, no AI); the optional
  * reflection → Insight bridge (§5.4) is deterministic in v1, so a check-in never spends. `challenge` carries
  * the updated record (status moved to `done`/`active`/`abandoned`); `insightId` is the derived reflection
@@ -1698,29 +1671,18 @@ export type AutoCheckinRunResult =
 
 /**
  * Non-secret questionnaire prefs (`config/questionnaires.json` in the vault, plain JSON — §4.1).
- * Holds the user-defined **custom types** that reappear in the builder's type picker, plus the Owner's
- * **custom intimacy topics** (§16.5a) — household-wide additions to the shared `INTIMACY_TOPICS` inventory
- * that feed both the intake intimacy block and questionnaire generation. Stored plain, mirroring
- * `config/settings.json`. All fields beyond `customTypes` are additive-optional (no schemaVersion bump).
+ * Holds the user-defined **custom types** that reappear in the builder's type picker. Stored plain, mirroring
+ * `config/settings.json`.
+ *
+ * The Owner's custom intimacy topics lived here too until 2026-08-13. They were removed with the fixed
+ * generation inventory: generation now draws its subject matter from each person's emergent topic map, so a
+ * household-wide hand-curated list could not steer anything. A stale file simply carries ignored keys.
  */
 export const QuestionnairePrefsSchema = z.object({
   schemaVersion: z.number().int().positive(),
   customTypes: z.array(z.string().min(1)),
-  customIntimacyActivities: z.array(z.string().min(1)).optional(),
-  customIntimacyFantasies: z.array(z.string().min(1)).optional(),
 });
 export type QuestionnairePrefs = z.infer<typeof QuestionnairePrefsSchema>;
-
-/** The intimacy topic inventory split into read-only built-ins + the Owner's removable custom additions
- * (08-questionnaires §16.5a) — the shape the owner Settings surface + inline builder add render. */
-export interface IntimacyTopicGroups {
-  activities: string[];
-  fantasies: string[];
-}
-export interface IntimacyTopicsView {
-  builtIn: IntimacyTopicGroups;
-  custom: IntimacyTopicGroups;
-}
 
 /**
  * One sample question on a gap-finder proposal. `required` is tolerant (37 §3.3): the model routinely omits

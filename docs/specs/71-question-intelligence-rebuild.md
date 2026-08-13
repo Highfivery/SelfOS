@@ -510,6 +510,22 @@ _All resolved with the owner on 2026-08-12:_
   (`groundSummary`, type/tier-scoped) on both call sites (auto engine + the Suggested panel), as prompt
   steering rather than a hard filter, since the planner and question-level de-dup already bound the damage
   downstream. Guarded on both paths, each verified to FAIL when the wiring is reverted.
+- 2026-08-13 — **Follow-up: the fixed intimacy inventory is gone too — the map IS the subject matter (§5.3).**
+  Owner correction, and the right one: built-in families are a SEED, not a taxonomy the app reasons in, so
+  filing the Owner's custom topics under one (the first fix attempted, reverted unbuilt) re-centralized on
+  exactly what this spec replaced — and a household-wide mapping cannot answer a per-person question, since
+  saturation is per recipient. Generation no longer reads `INTIMACY_TOPICS` at all: `explicitFraming` takes
+  `openGround` — the recipient's OPEN intimacy topics with the planner's own blurb for each. Deleted with it:
+  the Owner-curated custom topic list, its Settings surface, the AI topic suggester, the `intimacy.suggestTopics`
+  usage type, 4 IPC channels, and `mergedIntimacyTopics`. `INTIMACY_ACTIVITIES_FULL` stays as RATING vocabulary
+  (onboarding matrix, kink test, Yes/No/Maybe, intimacy email) — a different job. **The subtle half, guarded:**
+  no map (external recipient) falls back to the SEEDED ground so a first draft is still concrete, but a map that
+  exists with NOTHING open must stay empty — falling back to the seed there would re-offer every worked-through
+  area, the exact bug being removed; verified to FAIL on the naive fallback. **Measured on the real vault:** the
+  subject-matter block went from ~1,900 chars of catalogue identical for everyone to 1,044 chars of Angel's own
+  eight open areas — five of them ground the built-in taxonomy has no word for (Charged context, Script vs
+  improvise, The ask itself, Semi-public risk fantasy, Aftercare) — with every closed area absent. The custom-
+  topic leak is not fixed so much as deleted: the entries that leaked no longer reach generation at all.
 - 2026-08-13 — **Follow-up: the legacy intimacy coverage engine is DELETED (§5.1/§5.2/§5.6).** `intimacy/
 coverage.ts` survived the rebuild only as the pre-backfill fallback; that justification is dead (every
   household member is backfilled, and a brand-new person has no history for a keyword classifier to act on), so

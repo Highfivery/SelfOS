@@ -498,6 +498,27 @@ A running log of durable decisions and feedback captured into the project config
   commit on the SHARED tree (and merged as #408) — the guard was extracted into a `git worktree` off
   origin/main, which is the only safe way to work while another session holds the checkout.**
 
+- 2026-08-13 — **Refactor (questionnaires: the fixed intimacy inventory is gone — the person's topic map IS the
+  subject matter; SPEC 71 §5.3, SPEC 08 §16.5a superseded; on `refactor/intimacy-ground-from-map`).** Follow-on
+  to the coverage-engine removal, and an OWNER CORRECTION I got wrong first. The measured gap was that the
+  Owner's custom intimacy topics belonged to no family, so generation kept offering "MFM threesome" after the
+  planner closed Group. I started building a family picker in Settings; the owner stopped me — "built-in
+  families shouldn't be a thing anymore, AI is supposed to dynamically create these per person" — and was
+  right: filing custom topics under one of 14 fixed families re-centralizes on the taxonomy spec 71 replaced,
+  and a household-wide mapping cannot answer a per-person question when saturation is per recipient. Reverted
+  unbuilt. **The real fix is deletion:** generation no longer reads a fixed inventory at all — `explicitFraming`
+  takes `openGround`, the recipient's OPEN intimacy topics with the planner's blurb for each. Gone with it: the
+  Owner-curated topic list, its Settings surface, the AI topic suggester, `intimacy.suggestTopics`, 4 IPC
+  channels, `mergedIntimacyTopics`. `INTIMACY_ACTIVITIES_FULL` STAYS as RATING vocabulary (onboarding matrix,
+  kink test, Yes/No/Maybe, intimacy email) — a different job from generation vocabulary. Gate green: typecheck
+  (4 pkgs), lint, format, **1994 core + 1560 desktop + 13 relay** unit, 35 E2E. **Verified on the real vault:**
+  the subject-matter block went from ~1,900 chars of catalogue identical for every person to 1,044 chars of
+  Angel's own eight open areas — five of them ground the built-in taxonomy has no word for — with every closed
+  area absent. **Lesson: when a fix requires the USER to classify their own content into a fixed taxonomy, that
+  is the signal the taxonomy is the problem — not their data. And "no map yet" is not the same state as "map
+  with nothing open": the first wants the seed so a first draft is concrete, the second must stay empty or the
+  fallback re-offers everything already worked through (guarded, verified to fail on the naive version).**
+
 - 2026-08-13 — **Refactor (questionnaires: the legacy intimacy coverage engine is DELETED; SPEC 71 §5.1/§5.2/
   §5.6; on `refactor/remove-legacy-coverage`).** `intimacy/coverage.ts` — the keyword classifier spec 71
   replaced — survived only as a "pre-backfill fallback". That justification was dead: every household member is

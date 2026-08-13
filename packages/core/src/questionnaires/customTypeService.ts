@@ -29,8 +29,30 @@ async function readPrefs(fs: FileSystem): Promise<QuestionnairePrefs> {
   }
 }
 
+/**
+ * Write the prefs, PRESERVING any keys the current schema doesn't know about.
+ *
+ * Zod strips unknown keys, so a plain `parse` → write round-trip would silently delete them on the next
+ * unrelated save. That matters for retired fields: the Owner's curated `customIntimacyActivities` /
+ * `customIntimacyFantasies` stopped being read on 2026-08-13, and quietly erasing content someone authored —
+ * as a side effect of adding a custom TYPE, with no prompt and no way back — is not ours to do. Merging over
+ * the raw file leaves them untouched and inert.
+ */
 async function writePrefs(fs: FileSystem, prefs: QuestionnairePrefs): Promise<void> {
-  await fs.writeAtomic(PREFS_PATH, encoder.encode(`${JSON.stringify(prefs, null, 2)}\n`));
+  let existing: Record<string, unknown> = {};
+  const bytes = await fs.read(PREFS_PATH);
+  if (bytes) {
+    try {
+      const raw: unknown = JSON.parse(decoder.decode(bytes));
+      if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+        existing = raw as Record<string, unknown>;
+      }
+    } catch {
+      // A corrupt file is replaced wholesale — there is nothing to preserve.
+    }
+  }
+  const merged = { ...existing, ...prefs };
+  await fs.writeAtomic(PREFS_PATH, encoder.encode(`${JSON.stringify(merged, null, 2)}\n`));
 }
 
 /** List the user-defined custom types, sorted case-insensitively for a stable picker order. */
@@ -57,60 +79,4 @@ export async function addCustomType(
     await writePrefs(fs, { ...prefs, customTypes: [...prefs.customTypes, trimmed] });
   }
   return listCustomTypes(fs);
-}
-
-/**
- * The Owner's **custom intimacy topics** (08-questionnaires §16.5a) — household-wide additions to the shared
- * `INTIMACY_TOPICS` inventory, stored in the same plain prefs file. `mergedIntimacyTopics` combines these
- * with the built-ins for both the intake intimacy block and questionnaire generation.
- */
-export async function readCustomIntimacyTopics(
-  fs: FileSystem,
-): Promise<{ activities: string[]; fantasies: string[] }> {
-  const prefs = await readPrefs(fs);
-  return {
-    activities: prefs.customIntimacyActivities ?? [],
-    fantasies: prefs.customIntimacyFantasies ?? [],
-  };
-}
-
-export type IntimacyTopicKind = 'activities' | 'fantasies';
-const PREFS_KEY: Record<IntimacyTopicKind, 'customIntimacyActivities' | 'customIntimacyFantasies'> =
-  {
-    activities: 'customIntimacyActivities',
-    fantasies: 'customIntimacyFantasies',
-  };
-
-/** Add a custom intimacy topic (trimmed; case-insensitive duplicate of a custom OR built-in is a no-op). */
-export async function addCustomIntimacyTopic(
-  fs: FileSystem,
-  kind: IntimacyTopicKind,
-  name: string,
-  builtIns: readonly string[] = [],
-): Promise<string[]> {
-  const trimmed = name.trim();
-  if (trimmed === '') throw new Error('A topic needs a name.');
-  const prefs = await readPrefs(fs);
-  const key = PREFS_KEY[kind];
-  const current = prefs[key] ?? [];
-  const taken = new Set([...current, ...builtIns].map((t) => t.toLocaleLowerCase()));
-  if (!taken.has(trimmed.toLocaleLowerCase())) {
-    await writePrefs(fs, { ...prefs, [key]: [...current, trimmed] });
-  }
-  return (await readPrefs(fs))[key] ?? [];
-}
-
-/** Remove a custom intimacy topic (case-insensitive). Built-in topics are not removable. */
-export async function removeCustomIntimacyTopic(
-  fs: FileSystem,
-  kind: IntimacyTopicKind,
-  name: string,
-): Promise<string[]> {
-  const prefs = await readPrefs(fs);
-  const key = PREFS_KEY[kind];
-  const next = (prefs[key] ?? []).filter(
-    (t) => t.toLocaleLowerCase() !== name.trim().toLocaleLowerCase(),
-  );
-  await writePrefs(fs, { ...prefs, [key]: next });
-  return next;
 }

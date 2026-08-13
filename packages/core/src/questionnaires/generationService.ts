@@ -17,7 +17,6 @@ import {
   type RelationshipType,
   type SensitivityTier,
 } from '../schemas';
-import { mergedIntimacyTopics } from '../intimacy/topics';
 import {
   buildGenerationUserMessage,
   buildImproveUserMessage,
@@ -34,7 +33,6 @@ import { normalizeOptions } from './questionnaireService';
 import { runClaude, type AiDeps } from './aiCall';
 import { emptyLedger, readLedger } from './askLedger';
 import { gatherGenerationContext, type GenerationContextRequest } from './contextProviders';
-import { readCustomIntimacyTopics } from './customTypeService';
 import { isNearDuplicate } from './dedup';
 import { readProfile, writeProfile } from './personalizationProfile';
 import { planQuestions, steeringLifeAreas } from './planService';
@@ -45,6 +43,7 @@ import {
   ensureTopics,
   mintTopics,
   rollUpCategoryLabels,
+  seededIntimacyGround,
   CATCH_ALL_TOPIC_ID,
   topicStatuses,
   topicsMentionedIn,
@@ -206,6 +205,38 @@ export interface GenerateRequest {
   // Ground the person explicitly pinned ("Ask me this") — leads the plan.
   requestedLabels?: readonly string[];
   now?: Date;
+}
+
+/**
+ * The intimacy ground still open with this person — generation's subject matter (spec 71 §5.3).
+ *
+ * Taken from their own topic map, so it is per-person, saturation-aware and grows as the model names real
+ * ground. When they have no map yet (an external recipient, or a first draft before any history) the SEEDED
+ * intimacy topics stand in — the same rows their map starts from, so a first draft is still concrete without
+ * reintroducing a fixed inventory the prompt would carry forever.
+ */
+function openIntimacyGround(
+  statuses: readonly TopicStatus[],
+  /** Ground explicitly ASKED for — a pin, or ground the author's brief names. Kept even when closed, for the
+   *  same reason the go-deeper list keeps it: a focus line demanding ground the material withholds is exactly
+   *  the self-contradiction this change exists to remove. */
+  asked: ReadonlySet<string> = new Set(),
+): { label: string; blurb?: string }[] {
+  const intimacy = statuses.filter((s) => s.topic.lifeArea === 'Intimacy');
+  // NO map at all (external recipient / pre-backfill) → the seeded ground, so a first draft is still concrete.
+  // A map that exists with NOTHING open is a different thing entirely and must stay EMPTY: falling back to the
+  // seed there would re-offer every area the person has already worked through, which is the bug this replaces.
+  if (intimacy.length === 0) return seededIntimacyGround();
+  return (
+    intimacy
+      .filter((s) => s.open || asked.has(s.topic.topicId))
+      // LEAST-worked first. The list is CAPPED, and the map is ordered seeded-then-emergent (`mintTopics`
+      // appends), so an unsorted cap would truncate emergent ground first — precisely the specific, per-person
+      // ground this spec exists to surface. Sorting by ask count also puts the freshest ground in front.
+      .slice()
+      .sort((a, b) => a.stats.askedCount - b.stats.askedCount)
+      .map((s) => ({ label: s.topic.label, ...(s.topic.blurb ? { blurb: s.topic.blurb } : {}) }))
+  );
 }
 
 /** Generate questions from a brief and/or the configured structured context. */
@@ -373,8 +404,7 @@ export async function generateQuestions(
     ...request.context,
     questionnaireType: request.type,
   });
-  // The intimacy topic inventory (08 §16.5a) seeds the explicit framing for an intimacy questionnaire at the
-  // explicit/unfiltered tiers — the built-in topics merged with the Owner's custom additions (vault prefs).
+  // An explicit-tier intimacy draft draws its subject matter from the recipient's own open ground (§5.3).
   const user = buildGenerationUserMessage({
     type: request.type,
     sensitivity: request.sensitivity,
@@ -382,7 +412,10 @@ export async function generateQuestions(
     context,
     existingPrompts: request.existingPrompts,
     count: askCount,
-    intimacyTopics: mergedIntimacyTopics(await readCustomIntimacyTopics(deps.fs)),
+    // The subject matter for an explicit set: the ground still OPEN with this recipient, from their own
+    // topic map (spec 71 §5.3). Seeded ground for someone with no history yet, so a first intimacy draft is
+    // still concrete — the seed IS the start of their map, not a separate fixed inventory.
+    openGround: openIntimacyGround(statuses, asked),
     ...(request.intimacyMode !== undefined ? { intimacyMode: request.intimacyMode } : {}),
     ...(request.recipientHistory !== undefined
       ? { recipientHistory: request.recipientHistory }

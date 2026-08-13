@@ -8,7 +8,7 @@ import { upsertRelationship } from '../people/relationshipService';
 import { setAppBudget } from '../usage/budgetService';
 import { queryUsage, recordUsage } from '../usage/usageStore';
 import { emptyLedger, writeLedger } from './askLedger';
-import { addCustomIntimacyTopic } from './customTypeService';
+import { seedTopics } from './topicMap';
 import {
   gatherGenerationContext,
   listContextProviders,
@@ -636,11 +636,11 @@ describe('generateQuestions', () => {
     expect(result.questions).toHaveLength(2);
   });
 
-  it('sends the explicit framing + topic inventory to the model for an intimacy/unfiltered send (§16.5)', async () => {
+  it('sends the explicit framing + the seeded ground to the model for an intimacy/unfiltered send (§16.5)', async () => {
     const fs = memFileSystem();
     const { author } = await seedHousehold(fs);
-    // Add an owner custom topic so we can prove the MERGED inventory reaches the model.
-    await addCustomIntimacyTopic(fs, 'activities', 'Sploshing');
+    // No recipient map here, so the framing falls back to the SEEDED intimacy ground — the rows a new
+    // person's map starts from (spec 71 §5.3), never a fixed act inventory.
     let sentUserText = '';
     const capturing: ClaudeClient = {
       send: () => Promise.resolve(''),
@@ -671,8 +671,8 @@ describe('generateQuestions', () => {
     expect(result.ok).toBe(true);
     expect(sentUserText).toMatch(/no-holds-barred/i); // the §22.2 unfiltered explicit direction
     expect(sentUserText).toMatch(/appropriate and expected/i); // the legitimate-context framing
-    expect(sentUserText).toContain('Deepthroat'); // a built-in topic
-    expect(sentUserText).toContain('Sploshing'); // the owner's custom addition (merged inventory)
+    expect(sentUserText).toMatch(/ground still open with this person/i); // subject matter = the map
+    expect(sentUserText).toContain('Group & swinging'); // a seeded topic, with its blurb
     expect(sentUserText).toMatch(/never minors/i); // the boundary
   });
 
@@ -759,7 +759,7 @@ describe('generateQuestions', () => {
     expect(sentUserText).toMatch(/go DEEPER/i);
     expect(sentUserText).toContain('Receiving oral (blowjob) (Love it)'); // the rated act, labelled
     expect(sentUserText).toMatch(/do NOT re-ask whether they like them/i);
-    expect(sentUserText).toMatch(/FAVOR acts, fantasies, and scenarios they have NOT yet rated/i);
+    expect(sentUserText).toMatch(/ground still open with this person/i);
     expect(sentUserText).toMatch(/never minors/i); // the safety boundary is unchanged
   });
 
@@ -814,12 +814,12 @@ describe('generateQuestions', () => {
     expect(result.ok).toBe(true);
 
     const genPrompt = prompts[1]?.user ?? '';
-    // The ACTS material is bounded by the same closure — offering "Receiving oral" one line after the planner
-    // called that ground off-limits is the same contradiction the go-deeper filter exists to remove.
-    const materialLine =
-      genPrompt.split('\n').find((l) => l.includes('Subject matter to draw on')) ?? '';
-    expect(materialLine).toMatch(/Vaginal sex/);
-    expect(materialLine).not.toMatch(/\boral\b/i);
+    // The SUBJECT MATTER is this person's open ground, so the worked-through area isn't offered at all —
+    // naming it off-limits and then listing it as material is the contradiction this replaces.
+    const ground =
+      genPrompt.slice(genPrompt.indexOf('Subject matter to draw on')).split('\n\n')[0] ?? '';
+    expect(ground).toMatch(/Penetration/);
+    expect(ground).not.toMatch(/\boral\b/i);
     // The go-deeper block is still there — this is a bound, not an abolition.
     expect(genPrompt).toMatch(/ALREADY RATED/);
     // The worked-through act is GONE from it — the actual #314 regression guard.
@@ -830,8 +830,124 @@ describe('generateQuestions', () => {
     expect(genPrompt).toMatch(/never minors/i);
   });
 
-  it('does not offer a fantasy on ground the ledger has closed (spec 71 §5.7)', async () => {
-    // Self-contradiction guard: the planner naming a category off-limits and the framing listing a fantasy on
+  it('keeps ground the BRIEF names in the subject matter, even when the ledger has closed it', async () => {
+    // The focus line governs (§23.3). Withholding the very ground it demands is the self-contradiction the
+    // `asked` set exists to prevent — the go-deeper act list already honours it, and the subject matter must
+    // too, or a focused draft reads "go deeper on oral" above a list with oral conspicuously missing.
+    const fs = memFileSystem();
+    const { author, target } = await seedHousehold(fs);
+    await writeLedger(fs, key, {
+      ...emptyLedger(target),
+      backfilledAt: '2026-05-01T00:00:00.000Z',
+      entries: [0, 1, 2].map((n) => ({
+        assignmentId: `o${n}`,
+        questionId: `oq${n}`,
+        at: '2026-05-15T00:00:00.000Z',
+        type: 'intimacy' as const,
+        tier: 'unfiltered' as const,
+        topicIds: ['Intimacy:oral'],
+        gist: 'oral',
+        outcome: 'rich' as const,
+      })),
+    });
+    const responses = [
+      JSON.stringify({ threads: [{ topicId: 'Intimacy:edge', label: 'Edge play' }] }),
+      JSON.stringify({
+        title: 'X',
+        questions: [{ type: 'shortText', prompt: 'Q?', required: true }],
+      }),
+      '[1]',
+    ];
+    const req = (brief?: string): Parameters<typeof generateQuestions>[1] => ({
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      recipientPersonId: target,
+      context: {
+        authorPersonId: author,
+        includeAuthor: false,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+      ...(brief !== undefined ? { brief } : {}),
+      now,
+    });
+    const groundOf = (prompts: { user: string }[]): string =>
+      (prompts[1]?.user ?? '')
+        .slice((prompts[1]?.user ?? '').indexOf('Subject matter to draw on'))
+        .split('\n\n')[0] ?? '';
+
+    // Unfocused: the worked-through ground is absent, as it should be.
+    const plain = recordingClient(responses);
+    await generateQuestions(deps(fs, plain.client, author), req());
+    expect(groundOf(plain.prompts)).not.toMatch(/\boral\b/i);
+
+    // Asked for by name: it comes back, so the focus and the material agree.
+    const focused = recordingClient(responses);
+    await generateQuestions(
+      deps(fs, focused.client, author),
+      req('Go deeper on oral specifically.'),
+    );
+    expect(groundOf(focused.prompts)).toMatch(/\boral\b/i);
+  });
+
+  it('an all-worked map says so — it must NOT fall back to the seeded ground (spec 71 §5.3)', async () => {
+    // The subtle half of "the map is the subject matter": a person with NO map yet gets the seeded ground so a
+    // first draft is still concrete, but a person whose map exists with NOTHING open is the opposite case.
+    // Falling back to the seed there would re-offer every area they have already worked through — the exact
+    // bug replacing the fixed inventory is meant to end.
+    const fs = memFileSystem();
+    const { author, target } = await seedHousehold(fs);
+    const intimacyTopics = seedTopics().filter((t) => t.lifeArea === 'Intimacy');
+    await writeLedger(fs, key, {
+      ...emptyLedger(target),
+      backfilledAt: '2026-05-01T00:00:00.000Z',
+      entries: intimacyTopics.flatMap((t, ti) =>
+        [0, 1, 2].map((n) => ({
+          assignmentId: `a${ti}-${n}`,
+          questionId: `q${ti}-${n}`,
+          at: '2026-05-15T00:00:00.000Z',
+          type: 'intimacy' as const,
+          tier: 'unfiltered' as const,
+          topicIds: [t.topicId],
+          gist: t.label.toLowerCase(),
+          outcome: 'rich' as const,
+        })),
+      ),
+    });
+    const { client, prompts } = recordingClient([
+      JSON.stringify({ threads: [] }),
+      JSON.stringify({
+        title: 'X',
+        questions: [{ type: 'shortText', prompt: 'Somewhere new?', required: true }],
+      }),
+      '[1]',
+    ]);
+
+    await generateQuestions(deps(fs, client, author), {
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      recipientPersonId: target,
+      context: {
+        authorPersonId: author,
+        includeAuthor: false,
+        includeTarget: false,
+        includeRelationship: false,
+      },
+      existingPrompts: [],
+      now,
+    });
+
+    const genPrompt = prompts[1]?.user ?? '';
+    expect(genPrompt).toMatch(
+      /Every area explored with this person so far has been worked through/,
+    );
+    // Not one seeded label is offered as material — that is what "no fallback" has to mean.
+    for (const t of intimacyTopics) expect(genPrompt).not.toContain(`- ${t.label} —`);
+  });
+
+  it('does not offer subject matter on ground the ledger has closed (spec 71 §5.7)', async () => {
+    // Self-contradiction guard: the planner naming ground off-limits and the framing offering material on
     // exactly that ground in the next breath is precisely the mixed signal that let the model keep circling.
     const fs = memFileSystem();
     const { author, target } = await seedHousehold(fs);
@@ -873,12 +989,12 @@ describe('generateQuestions', () => {
     });
 
     const genPrompt = prompts[1]?.user ?? '';
-    const line = genPrompt.split('\n').find((l) => l.includes('Fantasies/roleplay:')) ?? '';
-    // The line still exists and still carries material — so the assertions below can't pass vacuously.
-    expect(line).toContain('Domination');
-    // …but nothing on the closed ground: both group fantasies are withheld.
-    expect(line).not.toContain('Threesome');
-    expect(line).not.toContain('Gangbang');
+    const ground =
+      genPrompt.slice(genPrompt.indexOf('Subject matter to draw on')).split('\n\n')[0] ?? '';
+    // The block still carries real ground — so the assertion below can't pass vacuously…
+    expect(ground).toContain('Oral');
+    // …but not the worked-through area, so no group material is offered under it.
+    expect(ground).not.toContain('Group & swinging');
   });
 });
 

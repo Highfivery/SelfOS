@@ -412,6 +412,15 @@ placing anything. Specifically:
   section, so a person never sees or answers them (the onboarding "Your circle" group hid four questions; the
   shared `@selfos/answering` form now opens all groups). Grouped-content forms get the §7 "full surface
   renders to the bottom" E2E guard.
+- **Compare what you BUILT against what was APPROVED, side by side, before saying it is done.** A mockup is a
+  contract. Passing tests and a screenshot of whatever region happened to be scrolled into view are not a
+  comparison — twice a redesign shipped with its grid, stats strip, filter bar and search simply absent while
+  every test passed, because the tests asserted the ROWS and nothing asserted the SHELL existed.
+- **A test fixture that holds no realistic data hides whole classes of UI defect.** Empty rows, a panel
+  bleeding into its card border, an unreadable chart, and 45 topics stranded in a catch-all were all invisible
+  against a near-empty seed and immediately obvious in a real vault. Seed fixtures with what real data looks
+  like — content, history, and each state — and assert GEOMETRY (insets, row height, computed hover styles),
+  because those are the defects screenshots-in-CI cannot catch and users see first.
 - **NEVER show a topic, category, or area as COMPLETE — there is always another question (durable owner rule,
   2026-08-13).** No percentage, no meter filling toward a full width, no "done" state on anything the AI
   explores. A bar toward 100% claims progress toward finished, and nothing in SelfOS's coverage model ever

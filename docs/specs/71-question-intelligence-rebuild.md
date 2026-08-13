@@ -432,6 +432,25 @@ _All resolved with the owner on 2026-08-12:_
   `pruneTopicMap` (drop unreferenced, fold cross-run duplicates), tightened both tagging prompts toward durable
   ground, and made support the deciding rule: a name must recur to become a topic. **341 → 75 topics, zero
   singletons**, on the real map.
+- 2026-08-13 — **The Explored rebuild, and what it cost to get right (§5.9).** Shipped in pieces because the
+  first two attempts did NOT match the approved mockup and the owner had to say so three times. Root causes,
+  each found by looking at the real app rather than by a test: (1) the row components were rewritten into the
+  OLD container, so the card grid, stats strip, filter bar, search and chips were simply absent while every
+  test passed — the tests asserted rows, and nothing asserted the shell existed; (2) **two models were being
+  rendered as one** — the panel showed legacy spec-70 coverage rows, not the ledger-backed topic map (a real
+  vault: 31 such rows against 74 topics), and a coverage row can carry neither a blurb nor a ledger stat, so
+  every row read "not asked yet" while the ledger held hundreds of asks; they are now adopted into the map;
+  (3) `mintTopics` fell straight to the `Other` catch-all whenever a proposal lacked a stated life area,
+  never consulting the PARENT which knew — 45 of one person's topics were stranded there, including
+  "double penetration" and "threesome fantasy"; the family's area is now inherited, with a read-time re-home
+  (verified: 45 → 1, the bucket itself); (4) blurbs only existed at mint time, so every pre-existing topic
+  rendered as a bare label — an AI backfill catches the backlog up (24/run, best-effort), and its failure for
+  one person turned out to be `reason=BUDGET`, not a bug; (5) spacing: hover tinted only the head so the tint
+  ended flush against the chips, and the expanded topic list bled into the card borders and sat on the
+  actions. **The standing fix is the FIXTURE.** Every one of these was invisible against an almost-empty E2E
+  seed and obvious in a real vault, so the adaptive-exploration fixture now carries what a real one does —
+  blurbs, ask history, emergent ground, a paused steer — and the E2E measures the panel's geometry (topic-list
+  insets > 8px, row height < 56px, hover changes the computed shadow) rather than trusting a screenshot.
 - 2026-08-13 — **Redesign: the Explored panel (§5.9), owner-approved from a mockup.** The tab was reported as
   looking awful, and the problems were structural rather than cosmetic: topics rendered in a detached panel
   beside their area, every topic read **"0 questions"** (with roll-up tagging the FAMILY holds the asks, so a

@@ -373,6 +373,19 @@ either can publish. This is the largest new build in the spec and is its own pha
 `computeStoryCompleteness`'s 12-dimension arithmetic; `BookChapter.status: 'stale'`; the auto-rewrite
 branch of `refreshBook`.
 
+### 5.10 Build phases
+
+Each is its own PR-gated slice under the standard CLAUDE.md §6/§7 cadence.
+
+| Phase  | What                                                                                                                                                                                                                            | Why here                                                                                     |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| **P1** | **Prose quality + the blocking defects.** Doctrine fix; transcripts into the corpus; budgets raised; the four-pass craft loop; manuscript pass; Opus; unbudgeted gap pass; chapter token ceiling; empty shells; proposal dedup. | Independently valuable and **provable** — re-measure meta-narration on the regenerated book. |
+| **P2** | **Lifecycle.** Living/Finished, new-material proposals replacing staleness, editions, per-book cadence caps.                                                                                                                    | Regenerating is exactly when the lifecycle must be right.                                    |
+| **P3** | **The type model.** The four `BookType` slots, `MCADAMS_SCENES` behind the framework, spine-driven foundations, the eight types minus the two hard ones.                                                                        | Everything downstream keys off this.                                                         |
+| **P4** | **The interview onto 71.** Retire the boolean engine; topic seeding + depth; gap-closing from both channels; the informed conversation; the open "talk about anything" entry; conversation invitations.                         | Needs P3's per-type frameworks.                                                              |
+| **P5** | **The UI rebuild.** Split `Story.tsx`; bookshelf; type picker; the six tabs; person-level timeline; People without consent states; photos into the interview.                                                                   | Presents everything above.                                                                   |
+| **P6** | **The two hard types.** `childrens` (page spine, character sheet, per-type image framing, audience) and `ourStory` (shared pair storage).                                                                                       | Each is a genuine new build.                                                                 |
+
 ## 6. IPC / API contracts
 
 All channels stay gated `story.own` and active-person-scoped in the bridge (the trust boundary); keys
@@ -487,19 +500,6 @@ equivalent, never colour or length alone; the conversation thread is an `aria-li
 chapter cards are buttons named by their title; the reader's text-size control is keyboard-reachable
 and its scale persists device-locally. Every generative action has a visible focus state and an honest
 disabled reason.
-
-### 5.10 Build phases
-
-Each is its own PR-gated slice under the standard CLAUDE.md §6/§7 cadence.
-
-| Phase  | What                                                                                                                                                                                                                            | Why here                                                                                     |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| **P1** | **Prose quality + the blocking defects.** Doctrine fix; transcripts into the corpus; budgets raised; the four-pass craft loop; manuscript pass; Opus; unbudgeted gap pass; chapter token ceiling; empty shells; proposal dedup. | Independently valuable and **provable** — re-measure meta-narration on the regenerated book. |
-| **P2** | **Lifecycle.** Living/Finished, new-material proposals replacing staleness, editions, per-book cadence caps.                                                                                                                    | Regenerating is exactly when the lifecycle must be right.                                    |
-| **P3** | **The type model.** The four `BookType` slots, `MCADAMS_SCENES` behind the framework, spine-driven foundations, the eight types minus the two hard ones.                                                                        | Everything downstream keys off this.                                                         |
-| **P4** | **The interview onto 71.** Retire the boolean engine; topic seeding + depth; gap-closing from both channels; the informed conversation; the open "talk about anything" entry; conversation invitations.                         | Needs P3's per-type frameworks.                                                              |
-| **P5** | **The UI rebuild.** Split `Story.tsx`; bookshelf; type picker; the six tabs; person-level timeline; People without consent states; photos into the interview.                                                                   | Presents everything above.                                                                   |
-| **P6** | **The two hard types.** `childrens` (page spine, character sheet, per-type image framing, audience) and `ourStory` (shared pair storage).                                                                                       | Each is a genuine new build.                                                                 |
 
 ## 10. Testing strategy
 

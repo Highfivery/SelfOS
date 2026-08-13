@@ -3090,6 +3090,12 @@ test('adaptive exploration (70 §3): the Explored tab leads with the candidate f
     await expect(intimacyRow.getByRole('button', { name: 'Prioritize this area' })).toBeVisible();
     // A "Leave alone" area steer on Relationships (the coverage rows keep the area-level steers).
     const relationships = w.getByRole('listitem').filter({ hasText: 'Relationships' }).first();
+    // Guards the SHELL, not just the rows: the first build of this redesign shipped the new row components
+    // into the OLD container, so the grid, stats and filters were simply absent and no test noticed.
+    await w.getByText('ground still open').scrollIntoViewIfNeeded();
+    await expect(w.getByText('ground still open')).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Named by AI' })).toBeVisible();
+    await expect(w.getByRole('searchbox', { name: /Search areas/ })).toBeVisible();
     await relationships.getByRole('button', { name: 'Pause asking' }).click();
     // Back on the feed, the intimacy candidate now shows (18+ acked).
     await w.getByRole('button', { name: /Curious next/ }).click();

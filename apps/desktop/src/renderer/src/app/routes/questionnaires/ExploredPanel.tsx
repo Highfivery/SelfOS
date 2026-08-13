@@ -98,6 +98,15 @@ function CandidateCard({ item }: { item: CandidateFeedItem }): JSX.Element {
  * previously invisible here, because the panel only ever showed one row per life area. Worked-through topics
  * are listed too — seeing what it already covered is most of why someone opens this.
  */
+const AREA_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'open', label: 'Open ground' },
+  { id: 'worked', label: 'Well covered' },
+  { id: 'ai', label: 'Named by AI' },
+  { id: 'paused', label: 'Paused' },
+] as const;
+type AreaFilter = (typeof AREA_FILTERS)[number]['id'];
+
 /** 12-month activity, drawn as bars. Text equivalent in the aria-label (§9 — never colour/shape alone). */
 function Sparkline({ activity }: { activity: readonly number[] }): JSX.Element | null {
   const total = activity.reduce((n, v) => n + v, 0);
@@ -295,6 +304,29 @@ function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
           ) : null}
         </span>
       </button>
+      {!expanded && canExpand ? (
+        <div className={styles.chipRow}>
+          {area.topics.slice(0, 4).map((t) => (
+            <span
+              key={t.topicId}
+              className={`${styles.tchip} ${
+                t.leftAlone
+                  ? styles.tchipPaused
+                  : t.emergent
+                    ? styles.tchipNew
+                    : t.open
+                      ? styles.tchipOpen
+                      : styles.tchipWorked
+              }`}
+            >
+              {t.label}
+            </span>
+          ))}
+          {area.topics.length > 4 ? (
+            <span className={`${styles.tchip} ${styles.tchipMore}`}>+{area.topics.length - 4}</span>
+          ) : null}
+        </div>
+      ) : null}
       {expanded && canExpand ? (
         <ul className={styles.topicList}>
           {area.topics.map((t) => (
@@ -481,6 +513,22 @@ export function ExploredPanel(): JSX.Element {
   const markedOff = view?.markedOff ?? [];
   const partners = view?.partners ?? [];
   const areaTopicIds = new Set(areas.map((a) => a.topicId));
+  const [areaFilter, setAreaFilter] = useState<AreaFilter>('all');
+  const [areaTerm, setAreaTerm] = useState('');
+  const term = areaTerm.trim().toLowerCase();
+  const visibleAreas = areas.filter((a) => {
+    const hit = (s2: string | undefined): boolean => (s2 ?? '').toLowerCase().includes(term);
+    if (
+      term &&
+      !(hit(a.label) || hit(a.blurb) || a.topics.some((t) => hit(t.label) || hit(t.blurb)))
+    )
+      return false;
+    if (areaFilter === 'open') return a.topics.some((t) => t.open && !t.leftAlone);
+    if (areaFilter === 'worked') return a.topics.some((t) => !t.open && !t.leftAlone);
+    if (areaFilter === 'ai') return a.topics.some((t) => t.emergent);
+    if (areaFilter === 'paused') return a.topics.some((t) => t.leftAlone);
+    return true;
+  });
   // The "left alone" list shows the specific question-level declines not already reflected on an area row.
   const declines = markedOff.filter((m) => !m.topicId || !areaTopicIds.has(m.topicId));
   const hasEverRefreshed = Boolean(view?.candidatesRefreshedAt);
@@ -666,13 +714,63 @@ export function ExploredPanel(): JSX.Element {
                       </Text>
                     </div>
                     {areas.length > 0 ? (
-                      <Card>
-                        <ul className={styles.areaList}>
-                          {areas.map((area) => (
-                            <AreaRow key={area.topicId} area={area} />
-                          ))}
-                        </ul>
-                      </Card>
+                      <>
+                        <div className={styles.pulse}>
+                          <span className={styles.pu}>
+                            <b>{areas.reduce((n, a) => n + a.askedCount, 0)}</b>
+                            <span>questions asked</span>
+                          </span>
+                          <span className={styles.pu}>
+                            <b className={styles.puOn}>
+                              {areas.reduce(
+                                (n, a) => n + a.topics.filter((t) => t.open && !t.leftAlone).length,
+                                0,
+                              )}
+                            </b>
+                            <span>ground still open</span>
+                          </span>
+                          <span className={styles.pu}>
+                            <b>
+                              {areas.reduce(
+                                (n, a) => n + a.topics.filter((t) => t.emergent).length,
+                                0,
+                              )}
+                            </b>
+                            <span>topics AI named</span>
+                          </span>
+                        </div>
+                        <div className={styles.filterBar}>
+                          <div className={styles.seg} role="group" aria-label="Filter areas">
+                            {AREA_FILTERS.map((f) => (
+                              <button
+                                key={f.id}
+                                type="button"
+                                aria-pressed={areaFilter === f.id}
+                                onClick={() => setAreaFilter(f.id)}
+                              >
+                                {f.label}
+                              </button>
+                            ))}
+                          </div>
+                          <input
+                            className={styles.searchBox}
+                            type="search"
+                            value={areaTerm}
+                            placeholder="Search areas and topics…"
+                            aria-label="Search areas and topics"
+                            onChange={(e) => setAreaTerm(e.target.value)}
+                          />
+                        </div>
+                        {visibleAreas.length > 0 ? (
+                          <ul className={styles.areaList}>
+                            {visibleAreas.map((area) => (
+                              <AreaRow key={area.topicId} area={area} />
+                            ))}
+                          </ul>
+                        ) : (
+                          <Text tone="secondary">Nothing matches that.</Text>
+                        )}
+                      </>
                     ) : null}
                   </section>
                 ) : null}

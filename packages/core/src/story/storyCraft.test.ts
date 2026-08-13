@@ -246,6 +246,51 @@ describe('the craft loop (72 §5.3)', () => {
     expect(saved?.markdown).toContain('The record does not say');
   });
 
+  /**
+   * The loop's whole promise is that it can never LOSE a chapter, and "the reply wasn't empty" does not
+   * deliver that. A revision that returns only the corrected paragraphs ends with `end_turn` and plenty of
+   * text — and on a FIRST draft there is no archived version to restore it from.
+   */
+  it('a revision that comes back as a FRAGMENT is refused — the draft stands', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    const longDraft = `${'He worked the lathe until the light went. '.repeat(20)}[[SRC:s0]]`;
+    const critique = JSON.stringify({
+      verdict: 'revise',
+      findings: [{ kind: 'aiTell', quote: 'the light went', fix: 'Be concrete.' }],
+    });
+    const { client } = scriptedClient([PLAN, longDraft, critique, 'He worked. [[SRC:s0]]']);
+
+    await generateChapter(deps(fs, client), { bookId, chapterId: 'c1' });
+
+    const saved = await getChapter(fs, key, 'me', bookId, 'c1');
+    expect(saved?.markdown).toContain('until the light went');
+    expect(saved?.markdown.length).toBeGreaterThan(200); // the full draft, not the fragment
+  });
+
+  /**
+   * A revision that drops its [[SRC:…]] markers would leave the chapter with empty provenance — and a
+   * chapter citing nothing has an empty `sourceSignature`, which the freshness engine skips. It would
+   * silently stop noticing new material for the rest of its life.
+   */
+  it('a revision that drops every citation is refused — provenance is never emptied', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    const { client } = scriptedClient([
+      PLAN,
+      DRAFT,
+      CRITIQUE,
+      'He never explained why he started.', // no [[SRC:…]] anywhere
+    ]);
+
+    await generateChapter(deps(fs, client), { bookId, chapterId: 'c1' });
+
+    const saved = await getChapter(fs, key, 'me', bookId, 'c1');
+    expect(saved?.provenance.length).toBeGreaterThan(0);
+    expect(saved?.sourceSignature).not.toBe('');
+    expect(saved?.markdown).toContain('The record does not say'); // the draft stood
+  });
+
   it('an unparseable critique ships the draft rather than blocking the chapter', async () => {
     const fs = memFileSystem();
     const bookId = await seedBook(fs);

@@ -8981,13 +8981,15 @@ describe('createCoreBridge — Together (58) foundation', () => {
 
   it('story: corpusStats is a gated, person-scoped no-AI read (§13.6.10)', async () => {
     const { bridge } = await freshOwner();
-    // An owner with no material yet gets a valid zeroed shape. No `conversations` count: a raw transcript
-    // never feeds generation, so promising one would overstate what the book can draw on (§15.2).
+    // An owner with no material yet gets a valid zeroed shape. `sessions` counts the sessions they actually
+    // SPOKE in — since 72 §5.2 their own words feed the writer directly, so it is real material now, not the
+    // raw transcript count §15.2 removed for overstating.
     expect(await bridge.storyCorpusStats()).toEqual({
       reflections: 0,
       dreams: 0,
       memories: 0,
       answers: 0,
+      sessions: 0,
     });
     // Saving a dream is reflected in the counts.
     await bridge.dreamSave({
@@ -9009,6 +9011,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
       dreams: 0,
       memories: 0,
       answers: 0,
+      sessions: 0,
     });
   });
 

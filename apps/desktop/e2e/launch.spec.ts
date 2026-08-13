@@ -14978,7 +14978,7 @@ test('story (72): the manuscript read files whole-book findings into the review 
     await expect(w.getByText(/Pacing ·/)).toHaveCount(0);
 
     // Dismissing it clears it, and a re-read never raises it again.
-    await w.getByRole('button', { name: 'Dismiss' }).first().click();
+    await w.getByRole('button', { name: 'Dismiss', exact: true }).first().click();
     await expect(w.getByText(/opens more chapters than it can carry/)).toHaveCount(0);
     await w.getByRole('button', { name: 'Read the whole book' }).click();
     await expect(w.getByText(/opens more chapters than it can carry/)).toHaveCount(0);

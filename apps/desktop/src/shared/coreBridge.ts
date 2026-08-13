@@ -6635,7 +6635,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return computeStoryHomeSignal(ctx.fs, ctx.key, personId);
     },
     storyCorpusStats: async (): Promise<StoryCorpusStats> => {
-      const empty: StoryCorpusStats = { reflections: 0, dreams: 0, memories: 0, answers: 0 };
+      const empty: StoryCorpusStats = {
+        reflections: 0,
+        dreams: 0,
+        memories: 0,
+        answers: 0,
+        sessions: 0,
+      };
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return empty;
       const personId = await activePersonId();

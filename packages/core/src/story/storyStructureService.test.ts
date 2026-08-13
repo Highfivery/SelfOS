@@ -19,6 +19,7 @@ import {
   getChapter,
   getOutline,
   listChapters,
+  saveOutline,
 } from './storyService';
 
 const key = generateMasterKey();
@@ -213,6 +214,54 @@ describe('generateStructuralProposals (64 §3.4/§5.4)', () => {
 });
 
 describe('resolveProposal — approve applies the restructure (no prose written)', () => {
+  /**
+   * A proposal whose referenced part has since vanished can't apply. Recording it as `applied` would dedup it
+   * forever, so the change could never be proposed again even once the part exists — and the record would
+   * claim a restructure that never happened.
+   */
+  it('a proposal that FAILED to apply is dismissed, not recorded as applied', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    const gen = await generateStructuralProposals(
+      deps(
+        fs,
+        fakeClient(
+          proposalsJson([
+            { kind: 'newChapter', partId: 'p1', title: 'A Later Era', brief: 'x', rationale: 'y' },
+          ]),
+        ),
+      ),
+      { bookId },
+    );
+    const id = gen.ok ? gen.proposals[0]!.id : '';
+    // Drop the part out from under it, then approve.
+    await saveOutline(fs, key, 'me', bookId, { schemaVersion: 1, approved: true, parts: [] });
+    const res = await resolveProposal(fs, key, 'me', {
+      bookId,
+      proposalId: id,
+      action: 'approve',
+    });
+    expect(res.ok).toBe(false);
+    expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(0); // no longer pending
+
+    // It is RETAINED (as dismissed) rather than spliced away, so its signature still dedups — the same
+    // change can't be re-proposed on the next pass. `applied` would dedup identically, so the difference
+    // between the two is the honesty of the record, not behaviour: nothing was applied, so nothing claims
+    // it was.
+    const again = await generateStructuralProposals(
+      deps(
+        fs,
+        fakeClient(
+          proposalsJson([
+            { kind: 'newChapter', partId: 'p1', title: 'A Later Era', brief: 'x', rationale: 'y' },
+          ]),
+        ),
+      ),
+      { bookId },
+    );
+    expect(again.ok && again.added).toBe(0);
+  });
+
   it('newChapter: inserts an un-written stale shell in the right position', async () => {
     const fs = memFileSystem();
     const bookId = await seedBook(fs);

@@ -409,11 +409,15 @@ export async function resolveProposal(
   }
 
   const applied = await applyStructuralProposal(fs, key, personId, args.bookId, proposal);
-  // Whether it applied or its refs vanished, the proposal leaves the PENDING list — but it is KEPT as
-  // `applied` rather than spliced away (72 §7.6). Splicing destroyed its dedup signature, so the next
-  // structure pass was free to propose the identical chapter again; that is how "The Paper He Signed" got
-  // into Ben's outline twice, once written and once an empty shell.
-  list.proposals[idx] = { ...proposal, status: 'applied' };
+  // Whether it applied or its refs vanished, the proposal leaves the PENDING list — but it is KEPT rather
+  // than spliced away (72 §7.6). Splicing destroyed its dedup signature, so the next structure pass was free
+  // to propose the identical chapter again; that is how "The Paper He Signed" got into Ben's outline twice,
+  // once written and once an empty shell.
+  //
+  // A proposal that FAILED to apply (its part or chapter had since vanished) is `dismissed`, not `applied`.
+  // Both are kept for dedup, but the distinction is real: the change never happened, so if the material
+  // still warrants it later the honest record is "this was declined", not "this is in the book".
+  list.proposals[idx] = { ...proposal, status: applied.ok ? 'applied' : 'dismissed' };
   await saveProposals(fs, key, personId, args.bookId, list);
   return applied.ok
     ? { ok: true, proposals: pending() }

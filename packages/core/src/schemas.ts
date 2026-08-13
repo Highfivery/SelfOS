@@ -4198,8 +4198,13 @@ export interface CastEntry {
   personId?: string;
   /** A human relationship label ("partner", "mother", a custom label), when known. */
   relationship?: string;
-  /** How many corpus items name this person (the prominence signal). */
+  /** How many corpus items name this person (the prominence signal — what the material talks about). */
   mentions: number;
+  /** How many of the book's WRITTEN CHAPTERS name them. This, not `mentions`, gates publication: since 72
+   *  §5.2 the corpus includes whole session transcripts, so someone mentioned once in passing in a coaching
+   *  session has corpus mentions while the book never names them — and the published dramatis personae must
+   *  list who the BOOK names, not who the person has talked about. */
+  chapterMentions: number;
   /** Where the register learned of them (a person can come from more than one). */
   sources: ('graph' | 'memory' | 'mention')[];
 }
@@ -5550,6 +5555,10 @@ export interface StoryCorpusStats {
   memories: number;
   /** Questionnaires / check-ins they answered — the verbatim answers beneath the distilled insights. */
   answers: number;
+  /** Coaching sessions the person actually spoke in. Since 72 §5.2 their OWN words feed the book directly,
+   *  so this is now real material, not a promise the corpus can't keep — omitting it understated the single
+   *  largest source (#305's honesty argument, running the other way). */
+  sessions: number;
   /** The span of years the material touches, when derivable (earliest → latest dated item). */
   yearFrom?: number;
   yearTo?: number;

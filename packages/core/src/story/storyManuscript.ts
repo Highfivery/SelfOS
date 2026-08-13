@@ -11,6 +11,7 @@ import {
 import { getBookType } from './bookTypes';
 import { findingSignature } from './storyContinuity';
 import { manuscriptMetrics } from './manuscriptMetrics';
+import { countWords } from './storyText';
 import { buildBiographerSystem } from './storyPromptBuilder';
 import { getBook, getContinuity, listChapters, saveContinuity } from './storyService';
 
@@ -30,6 +31,9 @@ import { getBook, getContinuity, listChapters, saveContinuity } from './storySer
  */
 
 const MANUSCRIPT_MAX_TOKENS = 6000;
+/** How much of the book one read takes in. ~90k words is comfortably inside the window with the reply's
+ *  headroom; past that the read covers the most recent chapters and says so. */
+const MANUSCRIPT_WORD_BUDGET = 90_000;
 /** Below this there is no manuscript to read — repetition and pacing are relations BETWEEN chapters, so
  *  they need at least two. The same floor the continuity pass uses, for the same reason. */
 const MIN_CHAPTERS_FOR_MANUSCRIPT = 2;
@@ -76,17 +80,36 @@ export async function readManuscript(deps: AiDeps, bookId: string): Promise<Stor
   // against real word counts instead of guessing at them from the prose.
   const metrics = manuscriptMetrics(written);
   const byId = new Map(metrics.chapters.map((m) => [m.id, m]));
-  const chaptersBlock = written
-    .map((c) => {
-      const m = byId.get(c.id);
-      const words = m ? ` (${m.words.toLocaleString()} words)` : '';
-      return `### ${c.title}${words}\n\n${c.markdown.trim()}`;
-    })
-    .join('\n\n---\n\n');
+
+  // A finished book is the largest prompt this app ever builds — the two real books are ~50,000 words each,
+  // and they only grow. Bound it, oldest-first, so a long book degrades to "the most recent N chapters"
+  // instead of a generic transport failure at the context window. The reader is told what was left out.
+  const blocks: string[] = [];
+  let words = 0;
+  let readFrom = 0;
+  for (let i = written.length - 1; i >= 0; i -= 1) {
+    const c = written[i]!;
+    const m = byId.get(c.id);
+    const w = m?.words ?? countWords(c.markdown);
+    if (blocks.length > 0 && words + w > MANUSCRIPT_WORD_BUDGET) break;
+    words += w;
+    readFrom = i;
+    blocks.unshift(
+      `### ${c.title}${m ? ` (${m.words.toLocaleString()} words)` : ''}\n\n${c.markdown.trim()}`,
+    );
+  }
+  const chaptersBlock = blocks.join('\n\n---\n\n');
+  const skipped = readFrom;
 
   const system = buildBiographerSystem(bookType, book.config, book.title);
   const user = [
     `You are reading ${book.title} straight through, as a whole book, the way an editor reads a manuscript before it goes out. You are NOT rewriting it and NOT proofreading it — you are naming the few things that are wrong at the level of the WHOLE, which no one can see one chapter at a time.`,
+    ...(skipped > 0
+      ? [
+          '',
+          `(This is the last ${written.length - skipped} of ${written.length} chapters — the book is too long to read in one pass, so judge pacing and repetition within what you can see here.)`,
+        ]
+      : []),
     ...(book.essence ? ['', `What this book is about: ${book.essence}`] : []),
     '',
     chaptersBlock,

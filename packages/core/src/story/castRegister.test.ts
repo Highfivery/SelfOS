@@ -126,16 +126,34 @@ describe('cast register (64 §17.2)', () => {
     expect(cast2.find((c) => c.name === 'Ed')?.mentions).toBeGreaterThanOrEqual(1);
   });
 
-  it('castForPublication keeps graph/memory/mentioned people and drops a zero-signal name', async () => {
+  it('castForPublication keeps graph/memory people and anyone the CHAPTERS name', async () => {
     const entries = [
-      { name: 'Angel', relationship: 'partner', mentions: 3, sources: ['graph' as const] },
-      { name: 'A Stranger', mentions: 0, sources: ['mention' as const] }, // zero-signal → dropped
-      { name: 'Pat', mentions: 2, sources: ['mention' as const] },
+      {
+        name: 'Angel',
+        relationship: 'partner',
+        mentions: 3,
+        chapterMentions: 0,
+        sources: ['graph' as const],
+      },
+      { name: 'A Stranger', mentions: 0, chapterMentions: 0, sources: ['mention' as const] },
+      { name: 'Pat', mentions: 2, chapterMentions: 1, sources: ['mention' as const] },
     ];
     const published = castForPublication(entries);
     expect(published.map((m) => m.name)).toEqual(['Angel', 'Pat']);
     expect(published[0]).toEqual({ name: 'Angel', relationship: 'partner' });
     expect(published[1]).toEqual({ name: 'Pat' }); // no relationship → omitted
+  });
+
+  /**
+   * 72 §5.2 gave the corpus whole session transcripts, so a corpus mention no longer means the reader will
+   * meet this person. Someone the subject named once in passing in a coaching session must NOT walk into the
+   * published dramatis personae — nor into the "who this book names" list shown before you share it.
+   */
+  it('does NOT publish someone the transcripts mention but the book never names', async () => {
+    const published = castForPublication([
+      { name: 'A Colleague', mentions: 7, chapterMentions: 0, sources: ['mention' as const] },
+    ]);
+    expect(published).toEqual([]);
   });
 
   it('is total: a lone subject with no people yields an empty register', async () => {

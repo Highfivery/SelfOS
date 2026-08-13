@@ -31,7 +31,7 @@ import {
   buildRevisionUserMessage,
   tagCorpusItems,
 } from './storyPromptBuilder';
-import { chapterParagraphs, stripSourceMarkers } from './storyText';
+import { chapterParagraphs, countWords, stripSourceMarkers } from './storyText';
 import { generatedEventId } from './storyTimeline';
 // Re-exported so existing importers (tests, the bridge) keep their `./storyGenerationService` entry points.
 export { chapterParagraphs, stripSourceMarkers } from './storyText';
@@ -214,6 +214,10 @@ export async function generateFoundations(
  */
 const CHAPTER_MAX_TOKENS = 16000;
 
+/** How much of the draft a revision must keep to be accepted. Fixing named defects trims a chapter a little;
+ *  it does not halve it. Below this the reply is a fragment, not a revision, and the draft stands. */
+const COLLAPSE_FLOOR = 0.6;
+
 export type ChapterResult =
   | { ok: true; chapter: BookChapter }
   | { ok: false; reason: AiFailureReason; message: string };
@@ -355,7 +359,18 @@ export async function generateChapter(
     });
     if (revised.ok) {
       const stripped = stripSourceMarkers(revised.text, tagToRef);
-      if (stripped.markdown.trim().length > 0) {
+      // The loop's guarantee is that it can never LOSE a chapter, and "non-empty" is not enough to keep it.
+      // A revision that returns only the corrected paragraphs, or a chapter cut to a third, ends with
+      // `end_turn` and plenty of text — it would replace the whole draft, and on a FIRST draft there is no
+      // archived version to restore. So a collapse is refused like a truncation: keep the draft.
+      const collapsed =
+        countWords(stripped.markdown) < COLLAPSE_FLOOR * countWords(drafted.markdown);
+      // Likewise a revision that drops its [[SRC:…]] markers. Empty provenance is worse than an empty
+      // Sources panel: `computeSourceSignature` returns '' for a chapter citing nothing, and the freshness
+      // engine skips chapters with no signature — so the chapter would silently stop noticing new material
+      // for the rest of its life.
+      const lostCitations = drafted.provenance.length > 0 && stripped.provenance.length === 0;
+      if (stripped.markdown.trim().length > 0 && !collapsed && !lostCitations) {
         markdown = stripped.markdown;
         provenance = stripped.provenance;
       }

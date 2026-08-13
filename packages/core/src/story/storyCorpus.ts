@@ -503,7 +503,8 @@ export async function getStoryCorpusStats(
   personId: string,
 ): Promise<StoryCorpusStats> {
   // Counted the way `buildStoryCorpus` actually reads them, so the invitation can't promise material the
-  // book will never see (§15.2): feeding insights, unmuted dreams, SAVED memories, answered questionnaires.
+  // book will never see (§15.2): feeding insights, unmuted dreams, SAVED memories, answered questionnaires,
+  // and — since 72 §5.2 — the sessions the person spoke in, whose own words now feed the writer directly.
   const conversations = await safely(() => listConversations(fs, key, personId), []);
   const insights = (
     await safely(
@@ -529,11 +530,16 @@ export async function getStoryCorpusStats(
     (memory) => memory.status === 'saved' && memory.narrative.trim().length > 0,
   );
   const answers = await safely(() => countAnsweredQuestionnaires(fs, key, personId), 0);
+  // Sessions the person actually SPOKE in, counted the way the corpus reads them (72 §5.2): a prep thread is
+  // confidential and never feeds, and a session with no turns of their own emits nothing.
+  const sessions = conversations.filter(
+    (c) =>
+      !c.togetherSessionId &&
+      c.messages.some((m) => m.role === 'user' && m.content.trim().length > 0),
+  ).length;
 
   // The year span across everything dated — a conversation's createdAt, a dream's dreamDate/createdAt, an
-  // insight's provenance timestamp. Conversations still count HERE (unlike the material counts above): a
-  // session's date is real chronology for the life, even though its transcript is never source material.
-  // A malformed/absent date just doesn't widen the span.
+  // insight's provenance timestamp. A malformed/absent date just doesn't widen the span.
   const years: number[] = [];
   const addYear = (iso: string | undefined): void => {
     if (!iso) return;
@@ -551,6 +557,7 @@ export async function getStoryCorpusStats(
     dreams: dreams.length,
     memories: memories.length,
     answers,
+    sessions,
   };
   if (years.length > 0) {
     stats.yearFrom = Math.min(...years);

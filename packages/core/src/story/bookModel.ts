@@ -16,9 +16,13 @@
 export const BOOK_MODEL = 'claude-opus-4-8';
 
 /**
- * Every usage type that writes, judges, or shapes book prose. Deliberately NOT the image types
- * (`story.image` is OpenAI, `story.imagePrompt`/`story.vision` are short distillations where the cheaper
- * model is indistinguishable) — those keep the person's setting.
+ * Every book usage type that runs through `runClaude`, which is where the override is resolved.
+ *
+ * Deliberately NOT the image types (`story.image` is OpenAI; `story.imagePrompt`/`story.vision` are short
+ * distillations where the cheaper model is indistinguishable). Also NOT `story.memory`: the biographer's
+ * memory chat is a streaming conversation with its own deps and its own usage record, so listing it here
+ * would claim an override that never applies. Putting that chat on Opus means threading the model through
+ * `StoryMemoryTurnDeps` — a separate change, not a line in this list.
  */
 export const BOOK_TASK_TYPES = [
   'story.outline',
@@ -28,7 +32,6 @@ export const BOOK_TASK_TYPES = [
   'story.essence',
   'story.interview',
   'story.answer',
-  'story.memory',
   'story.continuity',
   'story.lineEdit',
   'book.plan',

@@ -639,7 +639,7 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
     const fs = fresh();
     await savePerson(fs, key, person('me', 'Ben'));
     const stats = await getStoryCorpusStats(fs, key, 'me');
-    expect(stats).toEqual({ reflections: 0, dreams: 0, memories: 0, answers: 0 });
+    expect(stats).toEqual({ reflections: 0, dreams: 0, memories: 0, answers: 0, sessions: 0 });
   });
 
   it("surfaces the subject's own profile and name", async () => {

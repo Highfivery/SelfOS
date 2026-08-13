@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.52.2](https://github.com/Highfivery/SelfOS/compare/v0.52.1...v0.52.2) (2026-08-13)
+
+
+### Bug Fixes
+
+* **questionnaires:** garbage-collect the emergent topic map (71 §5.9) ([#425](https://github.com/Highfivery/SelfOS/issues/425)) ([70a104c](https://github.com/Highfivery/SelfOS/commit/70a104c8f59759f5a6edaf03af57831bfb960b2e))
+
 ## [0.52.1](https://github.com/Highfivery/SelfOS/compare/v0.52.0...v0.52.1) (2026-08-13)
 
 

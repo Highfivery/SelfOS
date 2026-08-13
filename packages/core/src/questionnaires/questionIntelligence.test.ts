@@ -25,6 +25,7 @@ import {
   mintTopics,
   pruneTopicMap,
   resolveTopicId,
+  SATURATION_ASKS,
   seedTopics,
   topicStatuses,
   topicsWithNewMaterial,
@@ -959,5 +960,71 @@ describe('hasRecitation — asserted past behaviour (71 §5.7)', () => {
     ]) {
       expect(hasRecitation(fine)).toBe(false);
     }
+  });
+});
+
+describe('closure inheritance — emergent ground is born OPEN (71 §5.3)', () => {
+  it('does not close a just-named child under a worked family, but still closes a worked one', () => {
+    // Both halves matter. The rule exists so a narrower NAME for worked ground ("Threesomes" under a closed
+    // "Group & swinging", 2 asks) can't re-open it. But applied to a child with ZERO asks it mints the
+    // planner's freshly-named ground dead on arrival — measured on a real vault, a draft named "Aftercare" and
+    // "The ask itself" and both were born saturated at 0 asks, for a person who has exhausted the built-in
+    // areas and now depends entirely on emergent vocabulary.
+    const family = {
+      topicId: 'F',
+      label: 'Family ground',
+      lifeArea: 'Intimacy',
+      seeded: true,
+      aliases: [],
+    };
+    const named = {
+      topicId: 'C-new',
+      label: 'Just named',
+      lifeArea: 'Intimacy',
+      seeded: false,
+      aliases: [],
+      parentTopicId: 'F',
+    };
+    const worked = {
+      topicId: 'C-old',
+      label: 'Narrower name',
+      lifeArea: 'Intimacy',
+      seeded: false,
+      aliases: [],
+      parentTopicId: 'F',
+    };
+    const at = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
+    const entry = (id: string, topicId: string, d: number): AskLedgerEntry => ({
+      questionId: id,
+      assignmentId: `a-${id}`,
+      at: at(d),
+      type: 'intimacy',
+      tier: 'unfiltered',
+      topicIds: [topicId],
+      gist: 'g',
+      outcome: 'rich',
+    });
+    const ledger = {
+      ...emptyLedger('p1'),
+      backfilledAt: new Date().toISOString(),
+      entries: [
+        ...Array.from({ length: SATURATION_ASKS }, (_, i) => entry(`f${i}`, 'F', i + 1)),
+        entry('c1', 'C-old', 1),
+        entry('c2', 'C-old', 2),
+      ],
+    };
+    const st = topicStatuses({
+      topics: [family, named, worked],
+      ledger,
+      newMaterialTopicIds: [],
+      now: new Date(),
+    });
+    const by = (label: string) => st.find((x) => x.topic.label === label);
+
+    expect(by('Family ground')?.saturated).toBe(true);
+    // Has asks of its own → part of the worked family → still inherits (the Threesomes case).
+    expect(by('Narrower name')?.saturated).toBe(true);
+    // Zero asks → unexplored ground the planner just named → must stay askable.
+    expect(by('Just named')?.saturated).toBe(false);
   });
 });

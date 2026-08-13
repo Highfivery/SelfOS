@@ -432,6 +432,15 @@ _All resolved with the owner on 2026-08-12:_
   `pruneTopicMap` (drop unreferenced, fold cross-run duplicates), tightened both tagging prompts toward durable
   ground, and made support the deciding rule: a name must recur to become a topic. **341 → 75 topics, zero
   singletons**, on the real map.
+- 2026-08-13 — **Fix: emergent ground is born OPEN, not closed (§5.3).** The same real draft that exposed the
+  recitation gap also minted three genuinely new areas — and two were born **`saturated` at 0 asks**, because
+  closure inheritance fired on any child of a worked-through family. For a person who has exhausted the
+  built-in areas and now depends entirely on emergent vocabulary, that mints the replacement dead on arrival.
+  Inheritance now requires the child to have asks of its OWN: a narrower NAME for worked ground (the
+  "Threesomes at 2 asks under a closed Group & swinging" case the rule was built for) still inherits, while
+  ground the planner has just named stays askable. Guard pins BOTH halves and is verified to fail when
+  reverted; re-checked on the real vault — Aftercare / The ask itself / Fantasy vs enactment all open, their
+  parents still correctly closed.
 - 2026-08-13 — **Fix: the recitation guard now catches asserted past BEHAVIOUR (§5.7).** Found by drafting a
   real unfiltered questionnaire for a real recipient — not by a test. The ground was right (the planner opened
   her only two remaining topics and NAMED THREE NEW ONES the taxonomy has no word for — "Aftercare & coming

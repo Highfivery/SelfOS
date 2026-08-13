@@ -486,10 +486,17 @@ export function topicStatuses(input: TopicStatusInput): TopicStatus[] {
     // vault, `Group & swinging` correctly closed at 8 asks while its own narrower name "Threesomes" still
     // read as OPEN at 2 — so the planner could re-open, through a child, exactly the ground the roll-up had
     // just shut. A child is never MORE open than the family it belongs to.
+    // ...but ONLY once the child has asks of its OWN. A child with zero is ground the planner has just NAMED
+    // and nobody has been asked about yet — inheriting closure there mints emergent vocabulary dead on
+    // arrival, which is exactly backwards for a person who has exhausted the built-in areas and now depends on
+    // it. Measured on a real vault: a draft named "Aftercare" and "The ask itself", both landed under
+    // worked-through families, and both were born `saturated` at 0 asks. The Threesomes case this rule exists
+    // for is unaffected — it had 2 asks of its own, so it still inherits.
     const parentClosed =
       topic.parentTopicId !== undefined &&
       topic.parentTopicId !== topic.topicId &&
       familyClosed.has(topic.parentTopicId) &&
+      s.askedCount > 0 &&
       !requested.has(topic.topicId);
     // An explicit "explore more" overrides a standing "leave alone" — the person is changing their mind.
     const steeredAway = leftAlone.has(topic.topicId) && !requested.has(topic.topicId);

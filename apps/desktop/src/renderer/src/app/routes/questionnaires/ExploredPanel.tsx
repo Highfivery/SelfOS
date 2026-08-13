@@ -304,7 +304,7 @@ function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
           ) : null}
         </span>
       </button>
-      {!expanded && canExpand ? (
+      {canExpand ? (
         <div className={styles.chipRow}>
           {area.topics.slice(0, 4).map((t) => (
             <span

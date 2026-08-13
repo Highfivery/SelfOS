@@ -410,8 +410,9 @@ describe('ExploredPanel (spec 70 §3)', () => {
     await userEvent.click(screen.getByRole('button', { name: /Work & purpose/ }));
     // Every topic is listed with its real ask count, worked-through ground included: seeing what it has
     // already covered is most of the point of this surface.
-    expect(screen.getByText('Director of Ops ambition')).toBeInTheDocument();
-    expect(screen.getByText('RevOps role & satisfaction')).toBeInTheDocument();
+    // Appears twice by design: as a chip preview on the card and as a full row in the detail.
+    expect(screen.getAllByText('Director of Ops ambition').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('RevOps role & satisfaction').length).toBeGreaterThan(0);
     expect(screen.getByText(/asked 6×/)).toBeInTheDocument();
     // Ground the model named itself is marked, so it reads as new rather than a built-in family.
     expect(screen.getAllByText('AI named').length).toBeGreaterThan(0);

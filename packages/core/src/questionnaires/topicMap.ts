@@ -116,6 +116,46 @@ export function slugTopic(label: string): string {
  * match the shape the Explored tab already renders (`Work & purpose`, `Intimacy:oral`), so seeding is
  * continuous with the existing surface rather than a visible reset.
  */
+/** Written blurbs for the built-in vocabulary (spec 71 §5.9). Emergent topics carry the planner's angle, but a
+ *  SEEDED topic has never been through a mint, so without these every built-in row renders as a bare label —
+ *  which is exactly how the redesign shipped wrong the first time. */
+const SEEDED_BLURBS: Record<string, string> = {
+  'Intimacy:sensual':
+    'Touch, massage, and the slow build — what feels good before anything else does.',
+  'Intimacy:oral':
+    'Giving and receiving oral — what you like, how you like it, and what puts you off.',
+  'Intimacy:manual-toys':
+    'Hands and toys — what you use, alone and together, and what you would try.',
+  'Intimacy:penetration': 'Positions, pace, and depth — what actually works for your body.',
+  'Intimacy:anal': 'Anal play — curiosity, limits, what has been tried and what has not.',
+  'Intimacy:oral-anal': 'Rimming — where it sits for you between curiosity and hard limit.',
+  'Intimacy:bondage': 'Restraint — being held down or holding down, and how far that goes.',
+  'Intimacy:impact':
+    'Impact play — spanking through to harder, and the line between good and too much.',
+  'Intimacy:power-exchange':
+    'Dominance and submission — who leads, who yields, and what that gives you.',
+  'Intimacy:edge-play':
+    'The intense edges — breath, pain, fear play, and where your hard stops are.',
+  'Intimacy:group':
+    'More than two — threesomes, swinging, group scenes: fantasy, reality, or neither.',
+  'Intimacy:exhibitionism': 'Being watched or watching — risk, cameras, other people in the room.',
+  'Intimacy:dirty-talk':
+    'What you like said to you and what you like saying — tone, words, how filthy it goes.',
+  'Intimacy:taboo-fantasy':
+    'The forbidden scenarios you replay privately, and what makes them charged.',
+  Relationships:
+    'The people closest to you and how you show up in those bonds — trust, conflict, and repair.',
+  Family: 'Where you come from and who you are to the people you grew up with.',
+  'Work & purpose': 'What you do with your days and whether it means anything to you.',
+  'Health & body': 'How you actually live in your body — energy, sleep, pain, and habits.',
+  'Emotions & patterns': 'The feelings that keep circling back, and what sets them off.',
+  'Values & beliefs': 'The principles you actually run on, and where they came from.',
+  'Goals & growth': 'What you are working toward, and what keeps getting in the way.',
+  Money: 'How money actually feels to you — security, guilt, and the decisions you avoid.',
+  Faith: 'Belief, meaning, and what you hold sacred — including doubt.',
+  Other: 'Everything that does not fit a named area yet.',
+};
+
 export function seedTopics(): Topic[] {
   const general = LIFE_AREAS.filter((a) => a !== 'Intimacy').map((area) => ({
     topicId: area,
@@ -123,12 +163,14 @@ export function seedTopics(): Topic[] {
     lifeArea: area,
     seeded: true,
     aliases: [],
+    ...(SEEDED_BLURBS[area] ? { blurb: SEEDED_BLURBS[area] as string } : {}),
   }));
   const intimacy = INTIMACY_CATEGORIES.map((c) => ({
     topicId: `Intimacy:${c}`,
     label: INTIMACY_CATEGORY_LABELS[c],
     lifeArea: 'Intimacy',
     seeded: true,
+    ...(SEEDED_BLURBS[`Intimacy:${c}`] ? { blurb: SEEDED_BLURBS[`Intimacy:${c}`] as string } : {}),
     aliases: [],
   }));
   return [...general, ...intimacy];
@@ -136,7 +178,16 @@ export function seedTopics(): Topic[] {
 
 /** The person's map, seeded when they have none yet. */
 export function ensureTopics(topics: readonly Topic[] | undefined): Topic[] {
-  return topics && topics.length > 0 ? [...topics] : seedTopics();
+  // Read-time blurb backfill: every topic minted before blurbs existed is stored without one, so a stored map
+  // would render bare labels forever. Seeded ids get their written blurb here; emergent ones fill in on their
+  // next mint from the planner's angle.
+  return topics && topics.length > 0
+    ? topics.map((t) =>
+        t.blurb === undefined && SEEDED_BLURBS[t.topicId]
+          ? { ...t, blurb: SEEDED_BLURBS[t.topicId] as string }
+          : { ...t },
+      )
+    : seedTopics();
 }
 
 /**

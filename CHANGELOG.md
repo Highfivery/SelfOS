@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.52.0](https://github.com/Highfivery/SelfOS/compare/v0.51.11...v0.52.0) (2026-08-13)
+
+
+### Features
+
+* **questionnaires:** show the emergent topic map in the Explored tab (71 §5.8) ([#421](https://github.com/Highfivery/SelfOS/issues/421)) ([23ef7bf](https://github.com/Highfivery/SelfOS/commit/23ef7bf4c324ef525dd13f255a5aebc40f21a07f))
+
 ## [0.51.11](https://github.com/Highfivery/SelfOS/compare/v0.51.10...v0.51.11) (2026-08-12)
 
 

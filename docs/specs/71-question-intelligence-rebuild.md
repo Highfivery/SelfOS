@@ -432,6 +432,16 @@ _All resolved with the owner on 2026-08-12:_
   `pruneTopicMap` (drop unreferenced, fold cross-run duplicates), tightened both tagging prompts toward durable
   ground, and made support the deciding rule: a name must recur to become a topic. **341 → 75 topics, zero
   singletons**, on the real map.
+- 2026-08-13 — **Follow-up: the TOPIC SELECTOR sees the ledger too (§5.2).** A class sweep after the one-engine
+  fix — the same shape, on the majority path. The gap-finder SELECTS the topic for every non-intimacy check-in
+  and its rationale becomes the slot brief, i.e. the governing `FOCUS` line; but it steered only on prior
+  TITLES, which are opaque (`"The Art of You"` says nothing about what it covered). Measured on the real vault
+  before changing anything: **53 of Angel's 58 non-intimacy topics were saturated** (Relationships 59 asks,
+  Emotions & patterns 41) while the selector saw only 57 titles — so it could aim a check-in at ground worked
+  59 times while five topics sat open. It now receives the ledger's worked-through and barely-touched ground
+  (`groundSummary`, type/tier-scoped) on both call sites (auto engine + the Suggested panel), as prompt
+  steering rather than a hard filter, since the planner and question-level de-dup already bound the damage
+  downstream. Guarded on both paths, each verified to FAIL when the wiring is reverted.
 - 2026-08-13 — **Follow-up: one engine decides ground (§5.2).** The auto check-in engine's intimacy slot still
   chose its focus from the LEGACY keyword coverage map (`nextIntimacyCategory`) while the planner chose from the
   ledger — two engines disagreeing on the path that carried 13 of 22 real intimacy sends, and §1 had already

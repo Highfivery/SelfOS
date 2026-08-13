@@ -465,6 +465,64 @@ describe('runAutoCheckins — no filler when there is no new ground (08 §27.5)'
     expect(focus).toMatch(/focusing on Aftercare rituals/i);
   });
 
+  it('tells the TOPIC SELECTOR what the ledger says is worked through (71 §5.2)', async () => {
+    // The gap-finder picks the topic for every non-intimacy check-in, and its rationale becomes the governing
+    // brief — the same "wrong engine feeds the governing line" shape as the intimacy slot above. It steered
+    // only on prior TITLES, which are opaque: on the real vault 53 of 58 non-intimacy topics were worked
+    // through while the selector saw only names like "The Art of You". Reverting the wiring makes this fail.
+    const fs = memFileSystem();
+    const author = await seedPerson(fs, { name: 'Ben' });
+
+    const worked = {
+      topicId: 'Relationships:trust-repair',
+      label: 'Trust repair',
+      lifeArea: 'Relationships',
+      seeded: false,
+      aliases: [] as string[],
+    };
+    const open = {
+      topicId: 'Work & purpose:career-pivot',
+      label: 'Career pivot',
+      lifeArea: 'Work & purpose',
+      seeded: false,
+      aliases: [] as string[],
+    };
+    await writeProfile(fs, key, {
+      ...(await readProfile(fs, key, author)),
+      topics: [worked, open],
+    });
+    await writeLedger(fs, key, {
+      ...emptyLedger(author),
+      backfilledAt: new Date('2026-01-01').toISOString(),
+      taggingVersion: TAGGING_VERSION,
+      entries: Array.from({ length: SATURATION_ASKS }, (_, i) => ({
+        questionId: `w${i}`,
+        assignmentId: `aw${i}`,
+        // Recent on purpose: ground last asked >90d ago is DORMANT and the ledger correctly re-opens it,
+        // so a stale fixture would test the re-open path instead of saturation.
+        at: new Date(Date.now() - (i + 1) * 86_400_000).toISOString(),
+        type: 'general',
+        tier: 'standard' as const,
+        topicIds: [worked.topicId],
+        gist: 'trust repair',
+        outcome: 'rich' as const,
+      })),
+    });
+
+    await setAutoCheckinConfig(fs, key, author, {
+      enabled: true,
+      targets: [selfTarget({ includeIntimacy: false })],
+    });
+    const { client, prompts } = capturingClient();
+    const result = await runAutoCheckins(runInput(fs, author, { client }));
+    expect(result.ok).toBe(true);
+
+    const selectorPrompt = prompts.find((p) => p.includes('GROUND ALREADY WORKED THROUGH'));
+    expect(selectorPrompt).toBeDefined();
+    expect(selectorPrompt).toMatch(/GROUND ALREADY WORKED THROUGH[\s\S]*Trust repair/);
+    expect(selectorPrompt).toMatch(/GROUND BARELY TOUCHED[\s\S]*Career pivot/);
+  });
+
   it('records a gap-finder FAILURE distinctly, never as "no new ground" (§27.6)', async () => {
     // Honesty guard: with no intimacy slot, a failed gap-finder means `generateQuestions` is never called, so
     // nothing else can surface the failure. Reporting it as "nothing worth asking" would be a false statement

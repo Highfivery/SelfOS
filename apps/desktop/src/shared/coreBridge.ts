@@ -703,6 +703,7 @@ import {
   gatherRecipientTopicMaterial,
   gatherRecipientPartnerContext,
   generateQuestions,
+  groundSummary,
   backfillAskLedger,
   refreshCoverage,
   refreshNextCandidates,
@@ -4660,11 +4661,21 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...priorTitles,
         ...known.coveredNotes,
       ];
+      // spec 71 §5.2 — the topic SELECTOR gets the ledger's ground, not just opaque prior titles.
+      const ground = await groundSummary(
+        deps.fs,
+        deps.key,
+        recipientPersonId,
+        'general',
+        'standard',
+      );
       const result = await suggestQuestionnaires(deps, {
         targetPersonId: recipientPersonId,
         recipientName: recipient.displayName,
         ...(recipientHistory ? { recipientHistory } : {}),
         ...(avoidSuggestions.length ? { avoidSuggestions } : {}),
+        ...(ground.worked.length ? { workedThrough: ground.worked } : {}),
+        ...(ground.open.length ? { openGround: ground.open } : {}),
       });
       if (!result.ok || !result.suggestions) {
         // A failed generate preserves the prior saved set (§18.5) — the panel keeps what it had.

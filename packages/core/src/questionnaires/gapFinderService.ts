@@ -74,6 +74,10 @@ export async function suggestQuestionnaires(
     recipientName?: string;
     recipientHistory?: string;
     avoidSuggestions?: string[];
+    /** Topic-level ground from the ask ledger (spec 71 §5.2). Prior TITLES are opaque, so without this the
+     *  TOPIC SELECTOR is blind to saturation — and its rationale becomes the governing brief downstream. */
+    workedThrough?: string[];
+    openGround?: string[];
   } = {},
 ): Promise<SuggestResult> {
   const context = await gatherGenerationContext(deps.fs, deps.key, {
@@ -102,6 +106,8 @@ export async function suggestQuestionnaires(
       ...(input.recipientName !== undefined ? { recipientName: input.recipientName } : {}),
       ...(input.recipientHistory !== undefined ? { recipientHistory: input.recipientHistory } : {}),
       ...(input.avoidSuggestions !== undefined ? { avoidSuggestions: input.avoidSuggestions } : {}),
+      ...(input.workedThrough !== undefined ? { workedThrough: input.workedThrough } : {}),
+      ...(input.openGround !== undefined ? { openGround: input.openGround } : {}),
     }),
     'questionnaire.suggest',
     1200,

@@ -769,6 +769,12 @@ export function buildGapFinderUserMessage(input: {
   recipientName?: string;
   recipientHistory?: string;
   avoidSuggestions?: string[];
+  /** Ground the ask ledger says is worked through — the TOPIC-level signal (spec 71 §5.2). Prior TITLES alone
+   *  are opaque ("The Art of You" says nothing about what it covered), so without this the selector picks the
+   *  focus blind to saturation, and the focus GOVERNS generation downstream. */
+  workedThrough?: string[];
+  /** Ground barely touched — what to prefer instead. */
+  openGround?: string[];
 }): string {
   const parts: string[] = [
     `Here is the structured context about this person and their relationships:\n${input.context.trim()}`,
@@ -786,6 +792,20 @@ export function buildGapFinderUserMessage(input: {
         `CRITICAL: never quote, restate, reference, hint at, or reveal any of this material in a question — the questions must stand on their own. "Avoid overlap" means steer clear, NOT mention.`,
         input.recipientHistory.trim(),
       ].join('\n'),
+    );
+  }
+  if (input.workedThrough && input.workedThrough.length > 0) {
+    parts.push(
+      `\nGROUND ALREADY WORKED THROUGH — do NOT build a questionnaire around any of these; they have been asked about repeatedly and there is little left to learn:\n${input.workedThrough
+        .map((t) => `- ${t}`)
+        .join('\n')}`,
+    );
+  }
+  if (input.openGround && input.openGround.length > 0) {
+    parts.push(
+      `\nGROUND BARELY TOUCHED — strongly PREFER these, or name something genuinely new that is on neither list:\n${input.openGround
+        .map((t) => `- ${t}`)
+        .join('\n')}`,
     );
   }
   if (input.avoidSuggestions && input.avoidSuggestions.length > 0) {

@@ -23,6 +23,7 @@ import {
 import {
   type AiDeps,
   generateQuestions,
+  groundSummary,
   nextOpenGround,
 } from '../questionnaires/generationService';
 import { suggestQuestionnaires } from '../questionnaires/gapFinderService';
@@ -201,6 +202,13 @@ export async function runAutoCheckins(input: RunAutoCheckinsInput): Promise<Auto
         ...(bundle.priorTitles.length || bundle.coveredNotes.length
           ? { avoidSuggestions: [...bundle.priorTitles, ...bundle.coveredNotes] }
           : {}),
+        // spec 71 §5.2 — the TOPIC-level ground. Prior titles are opaque ("The Art of You" says nothing about
+        // what it covered), so on their own the selector picks blind to saturation; on real data 53 of 58
+        // non-intimacy topics were worked through while the selector saw only titles.
+        ...(bundle.topicalGround.worked.length
+          ? { workedThrough: bundle.topicalGround.worked }
+          : {}),
+        ...(bundle.topicalGround.open.length ? { openGround: bundle.topicalGround.open } : {}),
       });
       if (sug.ok) {
         suggestions = sug.suggestions ?? [];
@@ -601,6 +609,9 @@ async function buildDedupBundle(
   /** The least-worked OPEN intimacy ground per the ask ledger (spec 71 §5.2), when the ledger is
    *  authoritative. Undefined pre-backfill, where the legacy engine still picks. */
   intimacyGround?: string;
+  /** Non-intimacy ground worked-through vs open (spec 71 §5.2) — steers the gap-finder, which SELECTS the
+   *  topic for every non-intimacy check-in and whose rationale becomes the governing brief. */
+  topicalGround: { worked: string[]; open: string[] };
 }> {
   const [
     history,
@@ -698,6 +709,7 @@ async function buildDedupBundle(
     'unfiltered',
     now,
   );
+  const topicalGround = await groundSummary(fs, key, recipientId, 'general', 'standard', now);
 
   return {
     recipientHistory,
@@ -707,6 +719,7 @@ async function buildDedupBundle(
     priorTitles,
     coveredNotes,
     intimacyCoverage,
+    topicalGround,
     ...(intimacyGround !== undefined ? { intimacyGround } : {}),
     feedbackGuidance: combinedFeedbackGuidance,
     partnerContext,

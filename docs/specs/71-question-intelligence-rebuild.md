@@ -197,8 +197,16 @@ eight 271-char prompts. Section caps are rebalanced accordingly (§7).
 ### 5.2 Saturation (topic-scoped + cooldown)
 
 A topic saturates at `askedCount >= SATURATION_ASKS`. Re-opening requires **topic-relevant** new
-material (an insight/answer whose own topics intersect this topic), an explicit request, or dormancy
-— never an unrelated insight (**D3**). A re-opened topic additionally carries `saturatedUntil`, a
+material, an explicit request, or dormancy — never an unrelated insight (**D3**).
+
+**As built — how "topic-relevant" is resolved.** `topicsWithNewMaterial` matches the person's own material
+(their own-subject insight summaries + facts, `#129`-filtered) against topic labels, deterministically and for
+free — no classification pass. Two rules keep it honest: material must be **newer than that topic's last ask**
+(otherwise the answers a topic produced would immediately re-open it and it could never saturate), and every
+content word of the topic's name must appear (a conservative mention test that won't fire on one shared word
+like "play" or "body"). The cooldown floor still applies on top, so a re-open can never cause an immediate
+re-ask. Supplied by the manual bridge draft and the auto check-in path; a caller that omits it simply gets
+request/dormancy re-opening. A re-opened topic additionally carries `saturatedUntil`, a
 hard floor (default 14 days) that no signal overrides, so the mechanism cannot silently go inert
 again.
 
@@ -382,6 +390,12 @@ _All resolved with the owner on 2026-08-12:_
 
 ## 12. Changelog
 
+- 2026-08-13 — **Follow-up: the topic-scoped re-open is now live (§5.2).** The parameter shipped inert — no
+  caller supplied it — so worked ground only re-opened via an explicit request or 90-day dormancy, never
+  because the person had since said something about it. `topicsWithNewMaterial` resolves it deterministically
+  from their own insights (newer-than-last-ask + full-label mention), wired into the manual and auto paths.
+  The unscoped behaviour is pinned by a guard **verified to fail when reverted**. This closes the last item
+  carried on the spec.
 - 2026-08-12 — **Follow-up: the Explored tab shows the emergent map (§5.8).** Area rows expand to the specific
   ground inside them — all topics, real counts, open/worked/left-alone state, a `new ground` marker. Owner
   decisions: Intimacy included behind the existing 18+ ack (reverses [`70`](70-adaptive-exploration.md) §3.4),

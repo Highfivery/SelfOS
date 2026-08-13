@@ -271,6 +271,30 @@ export async function gatherRecipientMaterialSignals(
   return newest !== undefined ? { newMaterialAt: newest } : {};
 }
 
+/**
+ * The person's own material as topic-matchable items (spec 71 §5.2) — what drives the topic-SCOPED re-open.
+ *
+ * Own-subject only (#129): an insight a person's questionnaire produced ABOUT their partner is the partner's
+ * material, not theirs, and must never re-open the person's own ground. Host-side, author-blind.
+ */
+export async function gatherRecipientTopicMaterial(
+  fs: FileSystem,
+  key: Uint8Array,
+  recipientPersonId: string,
+): Promise<{ at: string; text: string }[]> {
+  const insights = ownSubjectInsights(await listInsightsForPerson(fs, key, recipientPersonId));
+  const out: { at: string; text: string }[] = [];
+  for (const insight of insights) {
+    const at = insight.updatedAt || insight.createdAt;
+    if (!at) continue;
+    const text = [insight.summary, ...insight.facts.map((f) => f.text)]
+      .filter((t) => t.trim() !== '')
+      .join(' ');
+    if (text.trim()) out.push({ at, text });
+  }
+  return out;
+}
+
 /** One answered questionnaire's Q→A block, with the provenance a corpus item needs (64 §15.2). */
 export interface RecipientAnswerBlock {
   /** The send this came from — the stable id a `StorySourceRef {kind:'response'}` cites. */

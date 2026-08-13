@@ -251,6 +251,60 @@ export function mintTopics(
   return { topics: out, resolved };
 }
 
+/** A piece of the person's own material — an insight, reflection or answer — with when it landed. */
+export interface TopicMaterial {
+  at: string;
+  /** The material's own words (an insight summary + its facts). Matched against topic labels. */
+  text: string;
+}
+
+/**
+ * Which topics have genuinely NEW material behind them (spec 71 §5.2) — the topic-SCOPED re-open signal.
+ *
+ * A topic re-opens when the person has since revealed something about THAT ground: a session, dream, test or
+ * reflection whose own words name it, dated after the last time it was asked about. Deterministic and free —
+ * it reuses the same label matching that resolves topics, so no classification pass is needed.
+ *
+ * This is deliberately narrow. Its predecessor took the newest own-subject Insight of ANY kind and re-opened
+ * EVERY intimacy category, which is why a real vault showed nine categories past the threshold reporting
+ * `saturated: []` (§1 D3). Material about work must not re-open questions about sex. The cooldown floor still
+ * applies on top, so re-opening can never cause an immediate re-ask.
+ */
+export function topicsWithNewMaterial(
+  material: readonly TopicMaterial[],
+  topics: readonly Topic[],
+  ledger: AskLedger,
+): string[] {
+  if (material.length === 0) return [];
+  const stats = deriveTopicStats(ledger);
+  const all = ensureTopics(topics);
+  const out = new Set<string>();
+  for (const item of material) {
+    const text = item.text.trim();
+    if (text === '' || !item.at) continue;
+    const tokens = new Set([...tokenSet(text)].map(singular));
+    for (const topic of all) {
+      if (out.has(topic.topicId)) continue;
+      // Only material NEWER than the last ask on this ground counts — otherwise the very answers a topic
+      // produced would re-open it, and it could never saturate at all.
+      const lastAskedAt = stats.get(topic.topicId)?.lastAskedAt;
+      if (lastAskedAt && item.at <= lastAskedAt) continue;
+      const label = labelTokens(topic.label);
+      if (label.size === 0) continue;
+      // Every content word of the topic's name appears in the material — a conservative mention test that
+      // won't fire on a single shared word ("play", "body") the way a similarity score would.
+      let mentioned = true;
+      for (const t of label)
+        if (!tokens.has(t)) {
+          mentioned = false;
+          break;
+        }
+      if (mentioned) out.add(topic.topicId);
+    }
+  }
+  return [...out];
+}
+
 /** Why a worked-through topic became askable again (spec 71 §5.2). */
 export type ReopenSignal = 'new-material' | 'explicit-request' | 'dormant';
 

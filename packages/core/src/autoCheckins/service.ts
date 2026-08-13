@@ -30,6 +30,7 @@ import {
   gatherRecipientInsightFacts,
   gatherRecipientIntimacyAsks,
   gatherRecipientMaterialSignals,
+  gatherRecipientTopicMaterial,
   gatherRecipientPriorAnswers,
   gatherRecipientQuestionnaireTitles,
 } from '../questionnaires/recipientHistory';
@@ -254,6 +255,8 @@ export async function runAutoCheckins(input: RunAutoCheckinsInput): Promise<Auto
         // spec 71 — the ask ledger + planner. This is the path most of the reported repetition came through
         // (13 of one recipient's 22 intimacy sends), so it must be steered the same way the manual draft is.
         recipientPersonId: elig.recipientPersonId,
+        // spec 71 §5.2 — worked ground re-opens only when THIS person's own material speaks to it.
+        ...(bundle.newMaterial.length ? { newMaterial: bundle.newMaterial } : {}),
         recipient: elig.recipient,
       });
 
@@ -579,6 +582,8 @@ async function buildDedupBundle(
   feedbackGuidance: string;
   /** Partner-shared context — ONLY for a self check-in (author == recipient); restricted never crosses (spec 69 §5.4). */
   partnerContext: string;
+  /** The recipient's own material (spec 71 §5.2) — re-opens worked ground it actually speaks to. */
+  newMaterial: { at: string; text: string }[];
 }> {
   const [
     history,
@@ -589,6 +594,7 @@ async function buildDedupBundle(
     session,
     intimacyAsks,
     signals,
+    newMaterial,
     feedbackGuidance,
     coveredTopics,
   ] = await Promise.all([
@@ -600,6 +606,7 @@ async function buildDedupBundle(
     getIntakeSession(fs, key, recipientId),
     gatherRecipientIntimacyAsks(fs, key, recipientId),
     gatherRecipientMaterialSignals(fs, key, recipientId),
+    gatherRecipientTopicMaterial(fs, key, recipientId),
     gatherRecipientFeedbackGuidance(fs, key, recipientId, now),
     // §28.3 covered-topics parity (spec 69 §5.2): the auto path used to ignore the author's marked-done notes.
     listCoveredTopics(fs, key, authorId, recipientId),
@@ -675,5 +682,6 @@ async function buildDedupBundle(
     intimacyCoverage,
     feedbackGuidance: combinedFeedbackGuidance,
     partnerContext,
+    newMaterial,
   };
 }

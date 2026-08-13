@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.54.0](https://github.com/Highfivery/SelfOS/compare/v0.53.0...v0.54.0) (2026-08-13)
+
+
+### Features
+
+* **questionnaires:** Explored panel rebuild — one topic model, blurbs, real fixture (71 §5.9) ([#439](https://github.com/Highfivery/SelfOS/issues/439)) ([f56b7b4](https://github.com/Highfivery/SelfOS/commit/f56b7b49481d0f4949867b1ba10a43e7c1795eff))
+
+
+### Bug Fixes
+
+* **questionnaires:** build the Explored shell that was approved (71 §5.9) ([#437](https://github.com/Highfivery/SelfOS/issues/437)) ([e9a4c85](https://github.com/Highfivery/SelfOS/commit/e9a4c85561fe5ae4e1aebc90431e25b3656fe619))
+
 ## [0.53.0](https://github.com/Highfivery/SelfOS/compare/v0.52.5...v0.53.0) (2026-08-13)
 
 

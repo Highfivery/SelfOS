@@ -1202,3 +1202,16 @@
 .searchBox::placeholder {
   color: var(--color-text-tertiary);
 }
+
+/* The sparkline pins to the card's right edge — it was shrink-wrapping beside the title. */
+.areaTop {
+  width: 100%;
+}
+.areaLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Solid hairlines between topics; the dashed rule read as unfinished next to the card borders. */
+.topicRow + .topicRow {
+  border-top: 1px solid var(--color-border);
+}

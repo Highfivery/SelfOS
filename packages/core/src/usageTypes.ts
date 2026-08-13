@@ -45,6 +45,11 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'story.vision': 'Your Story — photo caption',
   'story.continuity': 'Your Story — continuity check',
   'story.lineEdit': 'Your Story — line edit',
+  // The craft loop (72 §5.3) — a chapter is planned, drafted, critiqued, and revised as four bounded passes.
+  'book.plan': 'Your Story — chapter plan',
+  'book.critique': 'Your Story — chapter critique',
+  'book.revise': 'Your Story — chapter revision',
+  'book.manuscript': 'Your Story — manuscript read',
 };
 
 export function usageTypeLabel(type: string): string {

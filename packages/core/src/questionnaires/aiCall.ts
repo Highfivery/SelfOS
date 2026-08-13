@@ -20,6 +20,14 @@ export interface AiDeps {
   personId: string;
   now: Date;
   override?: boolean;
+  /**
+   * Per-task model overrides, keyed by usage type (72 §5.3). A task whose type appears here runs on that
+   * model instead of the app-wide `ai.model` setting — the book passes are held to Opus regardless of what
+   * the person picked for everything else, because a book is the one artifact where the model's judgment IS
+   * the product. Absent (or an unlisted type) → `model`. The recorded `UsageEvent` carries the model that
+   * actually ran, so cost stays correct.
+   */
+  models?: Record<string, string>;
 }
 
 export type ClaudeCallResult =
@@ -43,7 +51,9 @@ export async function runClaude(
   type: string,
   maxTokens: number,
 ): Promise<ClaudeCallResult> {
-  const { fs, key, apiKey, model, personId, now } = deps;
+  const { fs, key, apiKey, personId, now } = deps;
+  // A per-task override wins over the app-wide model (§5.3); everything else keeps the person's setting.
+  const model = deps.models?.[type] ?? deps.model;
   if (!apiKey) return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };
   const person = await checkBudget(fs, key, {
     scope: 'person',

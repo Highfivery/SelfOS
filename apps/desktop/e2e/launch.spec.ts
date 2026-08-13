@@ -13750,6 +13750,11 @@ test('story (64): setup names the book, outline rename, chapters + sources, mark
     // Open a drafted chapter and read its prose + provenance.
     await w.getByRole('button', { name: /The Garage/ }).click();
     await expect(w.getByText(/cut pine/)).toBeVisible();
+    // The craft loop closed (72 §5.3): the draft narrated its own sourcing ("the record does not say"),
+    // the critique pass quoted it, and the revision replaced it with a fact about a person. What the reader
+    // sees is the REVISED prose — a one-pass generator would have shipped the defect.
+    await expect(w.getByText(/He never explained why he kept going back/)).toBeVisible();
+    await expect(w.getByText(/The record does not say/)).toHaveCount(0);
     await w
       .getByRole('button', { name: /Sources/ })
       .first()

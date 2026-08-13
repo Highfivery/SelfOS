@@ -646,13 +646,72 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // The craft loop, pass 1 (72 §5.3): the chapter plan. Deliberately IMPERFECT (37 §10) — one scene is
+      // an empty object, so the tolerant salvage that drops it is actually exercised offline.
+      if (userText.includes('You are planning ONE chapter')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            thread: 'He learned that being useful was how he got to stay.',
+            opening: 'The garage before school, cold enough to see his breath.',
+            scenes: [
+              {
+                title: 'The lathe',
+                beat: 'He watches his father work and says nothing.',
+                sources: ['s0'],
+              },
+              {},
+              {
+                title: 'Going back',
+                beat: 'He returns the next morning without being asked.',
+                sources: [],
+              },
+            ],
+            avoid: ['The house after dark belongs to the next chapter.'],
+          }),
+          usage: STORY_USAGE,
+        });
+      }
+
+      // Pass 3: the critique. Flags the draft's meta-narration by quoting it, and includes one unusable
+      // finding (no `fix`) so the filter that drops it is exercised too.
+      if (userText.includes('You are the editor of')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            verdict: 'revise',
+            findings: [
+              {
+                kind: 'metaNarration',
+                quote: 'The record does not say why he kept going back.',
+                fix: 'Make it a fact about him, not about your sources.',
+              },
+              { kind: 'aiTell', quote: 'something', fix: '' },
+            ],
+          }),
+          usage: STORY_USAGE,
+        });
+      }
+
+      // Pass 4: the revision. Fixes exactly what the critique found and leaves the rest alone.
+      if (userText.includes('Your editor found the problems below')) {
+        return Promise.resolve({
+          text:
+            'The garage smelled of cut pine and warm oil. [[SRC:s0]]\n\n' +
+            'He watched his father work the lathe, and said nothing.\n\n' +
+            'He never explained why he kept going back. [[SRC:s0]]',
+          usage: STORY_USAGE,
+        });
+      }
+
       // A chapter (§5.3): prose with a per-paragraph [[SRC:s0]] citation (s0 resolves when the corpus has
-      // ≥1 item; otherwise the marker is harmlessly dropped host-side). SELFOS_FAKE_STORY_SLOW adds a small
-      // per-chapter delay so an E2E can catch a draft mid-flight (background-continuation test).
+      // ≥1 item; otherwise the marker is harmlessly dropped host-side). The last paragraph deliberately
+      // narrates its own sourcing — the defect the craft loop's critique pass exists to catch, so the
+      // offline flow drives a real plan → draft → critique → revise round-trip. SELFOS_FAKE_STORY_SLOW adds
+      // a small per-chapter delay so an E2E can catch a draft mid-flight (background-continuation test).
       if (userText.includes('WRITE THIS CHAPTER')) {
         const prose =
           'The garage smelled of cut pine and warm oil. [[SRC:s0]]\n\n' +
-          'He watched his father work the lathe, and said nothing.';
+          'He watched his father work the lathe, and said nothing.\n\n' +
+          'The record does not say why he kept going back. [[SRC:s0]]';
         for (const word of prose.split(' ')) onDelta(`${word} `);
         const result = { text: prose, usage: STORY_USAGE };
         return process.env['SELFOS_FAKE_STORY_SLOW']

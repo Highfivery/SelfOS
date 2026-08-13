@@ -540,6 +540,7 @@ import {
   removeImagePlacement,
   computeStoryHomeSignal,
   askGap,
+  BOOK_TASK_MODELS,
   deleteStoryImage,
   exportFileStem,
   generateStoryImage,
@@ -1951,6 +1952,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       client: host.claude,
       apiKey: (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
       model: await host.activeModel(),
+      // Every book pass runs on the most capable model regardless of the app-wide setting (72 §5.3) — a
+      // book is the one artifact where the model's literary judgment IS the product. Keyed by usage type,
+      // so a non-book call's type isn't in the map and keeps the person's own choice.
+      models: BOOK_TASK_MODELS,
       personId,
       now: new Date(),
     };
@@ -5762,6 +5767,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           chaptersDone: p.chaptersDone,
           chaptersTotal: p.chaptersTotal,
           currentTitle: p.title,
+          ...(p.craft ? { craft: p.craft } : {}),
         }),
       );
       const bundle = await readBookBundle(deps.fs, deps.key, deps.personId, bookId);
@@ -5850,6 +5856,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           chaptersDone: p.chaptersDone,
           chaptersTotal: p.chaptersTotal,
           currentTitle: p.title,
+          ...(p.craft ? { craft: p.craft } : {}),
         }),
       );
       if (!result.ok) {

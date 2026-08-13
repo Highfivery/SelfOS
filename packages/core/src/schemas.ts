@@ -5326,12 +5326,19 @@ export interface StoryRefreshViewResult {
  *  (`chaptersDone`/`chaptersTotal` + the current chapter's `title`); `done` when the book is fully drafted;
  *  `error` with a `message`. The draft runs in the main process, so it continues even if the renderer
  *  navigates away (the event stream keeps the store's progress current). */
+/** Which pass of the craft loop (72 §5.3) is running inside the current chapter. A chapter is now three or
+ *  four model calls, so without this the progress bar sits on "chapter 3 of 24" for minutes with nothing
+ *  moving — the §12 realtime-progress rule (a live phase, never a bare spinner). */
+export type StoryCraftPhase = 'planning' | 'drafting' | 'critiquing' | 'revising';
+
 export interface StoryDraftProgress {
   bookId: string;
   phase: 'reading' | 'writing' | 'done' | 'error';
   chaptersDone: number;
   chaptersTotal: number;
   currentTitle?: string;
+  /** The craft-loop pass running right now, while `phase` is `writing`. */
+  craft?: StoryCraftPhase;
   message?: string;
 }
 

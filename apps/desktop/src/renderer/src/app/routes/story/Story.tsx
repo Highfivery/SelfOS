@@ -692,9 +692,21 @@ function DraftProgress({
   const elapsed = now - p.startedAt;
   const pct = writing && total > 0 ? Math.min(99, 15 + (done / total) * 84) : 8;
   const eta = writing ? estimateRemaining(elapsed, done, total) : null;
+  // A chapter is four passes now (72 §5.3), each of them minutes long — so name the one that's running,
+  // or the bar sits on "chapter 3 of 24" with nothing moving and reads as hung (§12).
+  const craftLabel =
+    p.craft === 'planning'
+      ? 'finding the scenes'
+      : p.craft === 'drafting'
+        ? 'writing it'
+        : p.craft === 'critiquing'
+          ? 'reading it back'
+          : p.craft === 'revising'
+            ? 'working on it again'
+            : null;
   const phaseLabel = writing
     ? p.currentTitle
-      ? `Writing “${p.currentTitle}” — chapter ${Math.min(done + 1, total)} of ${total}`
+      ? `${craftLabel ? `${craftLabel[0]!.toUpperCase()}${craftLabel.slice(1)}` : 'Writing'} — “${p.currentTitle}”, chapter ${Math.min(done + 1, total)} of ${total}`
       : `Writing your chapters — ${done} of ${total}`
     : 'Reading everything you’ve shared, and shaping the outline…';
 

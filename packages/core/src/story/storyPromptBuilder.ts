@@ -132,9 +132,13 @@ export function buildChapterUserMessage(
      *  (`enforceProtected` after the call); this is the first line of defense so the model weaves the words
      *  in naturally instead of the splice landing them at a paragraph seam. Empty on a first draft. */
     preserve?: string[];
+    /** The chapter plan from the craft loop's first pass (72 §5.3) — the scenes, thread, and opening this
+     *  draft is meant to deliver. Absent when the plan pass failed or was skipped; the drafter then works
+     *  from the brief alone, exactly as it did before the loop existed. */
+    plan?: ChapterPlan;
   },
 ): string {
-  const { chapter, outline, essence, preserve } = opts;
+  const { chapter, outline, essence, preserve, plan } = opts;
   const toc = outline.parts
     .flatMap((part) => part.chapters.map((c) => ({ part: part.title, c })))
     .map(({ part, c }) => `  ${c.id === chapter.id ? '▶ ' : '  '}${part} — ${c.title}: ${c.brief}`)
@@ -150,6 +154,7 @@ export function buildChapterUserMessage(
     '',
     `WRITE THIS CHAPTER — "${chapter.title}"${era ? ` (${era})` : ''}: ${chapter.brief}`,
   ];
+  if (plan) parts.push('', renderChapterPlan(plan));
   if (preserve && preserve.length > 0) {
     parts.push(
       '',
@@ -164,6 +169,165 @@ export function buildChapterUserMessage(
     'Write the chapter as Markdown prose (short paragraphs; you may use *italics*; no headings, no lists, no tables). Open on a rendered scene, not a summary. Draw ONLY on the source material above — if a detail you need is missing, write around it rather than inventing it.',
     'At the END of each paragraph, cite the [sN] sources you drew on for it as `[[SRC:sN,sN]]` (use the exact tags above; omit the marker for a paragraph that draws on nothing specific). Do not cite sources you did not use.',
     'Return ONLY the chapter prose with its inline [[SRC:…]] markers — no title heading, no preamble.',
+  );
+  return parts.join('\n');
+}
+
+// --- The craft loop: plan → draft → critique → revise (72 §5.3) ------------------------------------------
+
+/** What the PLAN pass returns: the scenes this chapter turns on, its through-line, where it opens, and what
+ *  belongs to its neighbours. Ids are never trusted from the model — this carries no ids at all. */
+export interface ChapterPlan {
+  /** The one thing this chapter is about — the thread every scene serves. */
+  thread: string;
+  /** The concrete moment to open on (never a summary or a throat-clear). */
+  opening: string;
+  /** The scenes to render, in order, each with the material it draws on. */
+  scenes: { title: string; beat: string; sources: string[] }[];
+  /** What the neighbouring chapters carry, so this one doesn't re-tell it. */
+  avoid: string[];
+}
+
+/**
+ * The PLAN user message (§5.3, pass 1 of 4). Before writing a word, decide what this chapter IS: the scenes
+ * it turns on, the thread they serve, the moment it opens on, and what belongs to the chapters either side.
+ * This is what separates a chapter from a summary — a drafter given a brief and a pile of material writes
+ * *about* a life; a drafter given scenes writes the life. Structural JSON only, no prose.
+ */
+export function buildChapterPlanMessage(
+  corpus: StoryCorpus,
+  tagged: TaggedCorpusItem[],
+  opts: { chapter: OutlineChapter; outline: BookOutline; essence?: string },
+): string {
+  const { chapter, outline, essence } = opts;
+  const neighbours = outline.parts
+    .flatMap((part) => part.chapters.map((c) => ({ part: part.title, c })))
+    .filter(({ c }) => c.id !== chapter.id)
+    .map(({ part, c }) => `  - ${part} — "${c.title}": ${c.brief}`)
+    .join('\n');
+  const era = [chapter.eraFrom, chapter.eraTo].filter(Boolean).join('–');
+  return [
+    `You are planning ONE chapter of ${corpus.personName || 'this person'}'s book${
+      essence ? ` (the book is about: ${essence})` : ''
+    }. Do NOT write any prose — plan it.`,
+    '',
+    `THE CHAPTER — "${chapter.title}"${era ? ` (${era})` : ''}: ${chapter.brief}`,
+    '',
+    'THE OTHER CHAPTERS (what belongs to them, not to this one):',
+    neighbours || '  (none — this is the only chapter)',
+    '',
+    renderTaggedCorpus(corpus, tagged),
+    '',
+    'Return ONE JSON object with exactly these keys:',
+    '- "thread": one sentence naming the single thing this chapter is about — the through-line every scene serves. Not a topic ("his childhood"); a claim about a person ("he learned that being useful was how you got to stay").',
+    '- "opening": the concrete moment the chapter opens on — a place, a time of day, someone doing something. Never a summary, never a statement of theme, never a throat-clear.',
+    '- "scenes": 3–6 scenes in the order they should appear, each { "title": a few words, "beat": one sentence on what actually HAPPENS and what it turns on, "sources": ["sN", …] the exact source tags it draws on }. A scene is a moment with a place and people in it — if the material only supports a general fact, that is not a scene; find the moment inside it or leave it out.',
+    '- "avoid": short lines naming what the neighbouring chapters carry that this one must NOT re-tell.',
+    'Plan only what the source material can actually support — never invent a scene to fill the shape.',
+    'Return ONLY the JSON object — no prose, no markdown fences.',
+  ].join('\n');
+}
+
+/** Render a plan into the block the drafter reads. */
+export function renderChapterPlan(plan: ChapterPlan): string {
+  const lines = [
+    'THE PLAN FOR THIS CHAPTER (you made this — now write it):',
+    `  Thread: ${plan.thread}`,
+    `  Open on: ${plan.opening}`,
+    '  Scenes, in order:',
+    ...plan.scenes.map(
+      (s, i) =>
+        `    ${i + 1}. ${s.title} — ${s.beat}${s.sources.length > 0 ? ` [${s.sources.join(', ')}]` : ''}`,
+    ),
+  ];
+  if (plan.avoid.length > 0) {
+    lines.push('  Belongs to other chapters — do NOT re-tell here:');
+    for (const a of plan.avoid) lines.push(`    - ${a}`);
+  }
+  return lines.join('\n');
+}
+
+/** One defect the critique pass found in a drafted chapter. */
+export interface CritiqueFinding {
+  kind: string;
+  quote: string;
+  fix: string;
+}
+
+/**
+ * The CRITIQUE user message (§5.3, pass 3 of 4). An editor reads the draft against the doctrine and names
+ * what is wrong, quoting it. This is where meta-narration, summary-instead-of-scene, invented detail, and
+ * repetition get caught — not by hoping a single generation pass avoids them. It returns findings only; the
+ * revision is a separate pass, so a clean draft costs nothing extra.
+ */
+export function buildCritiqueMessage(
+  corpus: StoryCorpus,
+  tagged: TaggedCorpusItem[],
+  opts: { chapter: OutlineChapter; markdown: string; plan?: ChapterPlan },
+): string {
+  const { chapter, markdown, plan } = opts;
+  return [
+    `You are the editor of ${corpus.personName || 'this person'}'s book, reading a draft chapter with a hard, honest eye. Name what is WRONG with it. Do NOT rewrite it — findings only.`,
+    '',
+    ...(plan ? [renderChapterPlan(plan), ''] : []),
+    `THE DRAFT — "${chapter.title}":`,
+    markdown.trim(),
+    '',
+    renderTaggedCorpus(corpus, tagged),
+    '',
+    'Judge it against these, in this order of seriousness:',
+    '1. metaNarration — ANY sentence that refers to the record, the material, the sources, the biographer, "this chapter", "this book", or what is or is not known. This is the worst defect: the reader must never be able to tell that a corpus or a writer was involved. A gap must read as a fact about a PERSON ("he never explained why"), never about your sources ("the record doesn\'t say").',
+    '2. inventedDetail — a specific fact, quote, date, place, or sensory detail the source material does not support. Quote it.',
+    '3. summaryNotScene — a passage that TELLS a stretch of life instead of rendering a moment in it; or an opening that starts with theme, throat-clearing, or a birth-to-now sweep instead of a scene.',
+    '4. repetition — something the plan says belongs to another chapter, or a phrase/image/beat repeated inside this one.',
+    '5. aiTell — the flat, hedged, tri-colon, "it was not X, it was Y" register; a summarizing final paragraph that restates the chapter\'s meaning; any of the banned prose tells.',
+    '6. voice — prose that stops sounding like this person and starts sounding like a narrator of anyone.',
+    '',
+    'Return ONE JSON object: { "verdict": "ship" | "revise", "findings": [ { "kind": one of the six names above, "quote": the exact offending text (a short span, verbatim from the draft), "fix": one line on what to do instead }, … ] }.',
+    'Return "ship" with an empty findings array when the chapter genuinely has none of these — do NOT invent a finding to look thorough. Report every metaNarration and inventedDetail you find; for the rest, report only what actually damages the chapter.',
+    'Return ONLY the JSON object — no prose, no markdown fences.',
+  ].join('\n');
+}
+
+/**
+ * The REVISE user message (§5.3, pass 4 of 4). Fix exactly what the critique named, change nothing else, and
+ * return the full chapter. Deliberately narrow: a revision that re-writes the whole chapter would throw away
+ * good prose and re-roll the same dice, so the instruction is surgical.
+ */
+export function buildReviseMessage(
+  corpus: StoryCorpus,
+  tagged: TaggedCorpusItem[],
+  opts: {
+    chapter: OutlineChapter;
+    markdown: string;
+    findings: CritiqueFinding[];
+    preserve?: string[];
+  },
+): string {
+  const { chapter, markdown, findings, preserve } = opts;
+  const parts = [
+    `You are revising ONE chapter of ${corpus.personName || 'this person'}'s book. Your editor found the problems below. Fix EXACTLY those and nothing else — keep every other sentence as it is. Do not re-write passages that were not flagged, and do not shorten the chapter beyond the cuts the fixes require.`,
+    '',
+    `THE CHAPTER — "${chapter.title}":`,
+    markdown.trim(),
+    '',
+    'WHAT TO FIX:',
+    ...findings.map((f) => `- [${f.kind}] «${f.quote}» → ${f.fix}`),
+  ];
+  if (preserve && preserve.length > 0) {
+    parts.push(
+      '',
+      'PRESERVE these exact passages verbatim (the person’s own words — never paraphrase, move, or drop them):',
+      ...preserve.map((t) => `- «${t}»`),
+    );
+  }
+  parts.push(
+    '',
+    renderTaggedCorpus(corpus, tagged),
+    '',
+    'Return the FULL revised chapter as Markdown prose (short paragraphs; *italics* allowed; no headings, lists, or tables).',
+    'At the END of each paragraph, cite the [sN] sources you drew on as `[[SRC:sN,sN]]` (exact tags above; omit for a paragraph that draws on nothing specific).',
+    'Return ONLY the chapter prose with its inline [[SRC:…]] markers — no title heading, no preamble, no note about what you changed.',
   );
   return parts.join('\n');
 }

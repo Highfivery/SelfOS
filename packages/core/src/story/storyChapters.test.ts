@@ -344,10 +344,13 @@ describe('generateChapter — preserve, enforce & the draft vault (64 §5.3/§13
     expect(res.ok).toBe(true);
     if (!res.ok) return;
 
-    // The prompt carried a PRESERVE block with both texts (the first line of defense).
-    const user = calls[0]!.messages
-      .map((m) => (typeof m.content === 'string' ? m.content : ''))
-      .join('\n');
+    // The prompt carried a PRESERVE block with both texts (the first line of defense). The craft loop (72
+    // §5.3) plans before it drafts, so find the DRAFT call rather than assuming it is the first.
+    const user = calls
+      .map((c) =>
+        c.messages.map((m) => (typeof m.content === 'string' ? m.content : '')).join('\n'),
+      )
+      .find((text) => text.includes('WRITE THIS CHAPTER'))!;
     expect(user).toContain('PRESERVE these exact passages');
     expect(user).toContain('my exact words stay');
     expect(user).toContain('a pinned line of my own');
@@ -437,23 +440,42 @@ describe('generateBookChapters — the orchestrator (64 §5.3)', () => {
   it('reports per-chapter progress via onProgress (§3.2): each chapter about-to-write, with a running done count', async () => {
     const fs = memFileSystem();
     const bookId = await seedApprovedBook(fs);
-    const seen: { chaptersDone: number; chaptersTotal: number; title: string }[] = [];
+    const seen: {
+      chaptersDone: number;
+      chaptersTotal: number;
+      title: string;
+      craft?: string;
+    }[] = [];
     await generateBookChapters(deps(fs, fakeClient('A rendered scene. [[SRC:s0]]')), bookId, (p) =>
       seen.push(p),
     );
-    // One update per chapter, in order, total constant, done climbing (0 then 1) as each starts.
-    expect(seen).toHaveLength(2);
+    // One CHAPTER-level update per chapter, in order, total constant, done climbing (0 then 1) as each
+    // starts. (The craft loop also emits a per-pass update inside each chapter — asserted below.)
+    const chapterUpdates = seen.filter((p) => !p.craft);
+    expect(chapterUpdates).toHaveLength(2);
     expect(seen.every((p) => p.chaptersTotal === 2)).toBe(true);
-    expect(seen.map((p) => p.chaptersDone)).toEqual([0, 1]);
-    expect(seen.map((p) => p.title.length > 0)).toEqual([true, true]);
+    expect(chapterUpdates.map((p) => p.chaptersDone)).toEqual([0, 1]);
+    expect(chapterUpdates.map((p) => p.title.length > 0)).toEqual([true, true]);
+    // Each chapter names the pass it's on, so the UI shows movement within a chapter (72 §5.3, §12). This
+    // fake's replies are unparseable JSON, so the plan degrades and no revision runs.
+    expect(seen.filter((p) => p.craft).map((p) => p.craft)).toEqual([
+      'planning',
+      'drafting',
+      'critiquing',
+      'planning',
+      'drafting',
+      'critiquing',
+    ]);
   });
 
   it('stops cleanly on BUDGET, leaves the book unfinished, and resumes when the budget is raised', async () => {
     const fs = memFileSystem();
     const bookId = await seedApprovedBook(fs);
     // A budget that admits exactly ONE chapter's cost: after c1 records usage, c2's pre-call check trips over.
+    // A chapter is THREE calls now — plan, draft, critique (72 §5.3); this fake's replies are unparseable as
+    // JSON, so the plan degrades to none and the critique to no findings, and no revision pass runs.
     await setPersonBudget(fs, key, 'me', {
-      limitUsd: costOf('claude-sonnet-4-6', USAGE),
+      limitUsd: costOf('claude-sonnet-4-6', USAGE) * 3,
       period: 'week',
       warnRatio: 0.8,
     });
@@ -479,9 +501,10 @@ describe('generateBookChapters — the orchestrator (64 §5.3)', () => {
   it('writes what it can when one chapter fails, leaves the book unfinished, and stays quiet (partial)', async () => {
     const fs = memFileSystem();
     const bookId = await seedApprovedBook(fs);
-    // c1 gets an empty reply (an honest per-chapter failure); c2 gets real prose.
+    // c1's plan AND draft come back empty (an honest per-chapter failure); everything after is real prose,
+    // so c2 writes. Two empties because the craft loop plans before it drafts (72 §5.3).
     const res = await generateBookChapters(
-      deps(fs, sequenceClient(['   ', 'A written scene. [[SRC:s0]]'])),
+      deps(fs, sequenceClient(['   ', '   ', 'A written scene. [[SRC:s0]]'])),
       bookId,
     );
     expect(res.ok).toBe(true); // a partial pass is a success — progress is visible in the overview

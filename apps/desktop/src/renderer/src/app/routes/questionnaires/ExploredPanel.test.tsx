@@ -444,4 +444,38 @@ describe('ExploredPanel (spec 70 §3)', () => {
     expect(screen.getByRole('button', { name: /^Intimacy/ })).toBeDisabled();
     expect(screen.queryByText('Oral')).not.toBeInTheDocument();
   });
+
+  it('labels the activity chart so it explains itself (71 §5.9)', async () => {
+    // A bare "12 mo" caption under a few faint bars told the reader nothing about what the chart was.
+    useCoverageStore.setState({
+      view: view({
+        areas: [
+          {
+            topicId: 'Money',
+            lifeArea: 'Money',
+            label: 'Money',
+            status: 'new' as const,
+            depth: 0.2,
+            steerable: true,
+            steered: false,
+            activity: [0, 0, 2, 0, 1, 0, 0, 3, 0, 0, 1, 0],
+            askedCount: 7,
+            topics: [],
+          },
+        ],
+      }),
+      loaded: true,
+    });
+    render(
+      <MemoryRouter>
+        <ExploredPanel />
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: /How well it knows you/ }));
+    expect(screen.getByText('asked over 12 months')).toBeInTheDocument();
+    // The number itself is available to both sighted (tooltip) and screen-reader users.
+    expect(
+      screen.getByRole('img', { name: /7 questions over the last 12 months/ }),
+    ).toBeInTheDocument();
+  });
 });

@@ -1270,3 +1270,13 @@
 .areaOpen .chipRow {
   padding-bottom: var(--space-4);
 }
+
+/* The caption is now a real sentence, so it is wider than the bars — let it size the block and keep the
+   title from being squeezed by it on a narrow card. */
+.sparkWrap {
+  max-width: 45%;
+}
+.sparkCaption {
+  white-space: nowrap;
+  font-size: 0.62rem;
+}

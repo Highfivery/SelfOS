@@ -126,6 +126,7 @@ function Sparkline({ activity }: { activity: readonly number[] }): JSX.Element |
       role="img"
       aria-label={`${total} ${total === 1 ? 'question' : 'questions'} over the last 12 months`}
     >
+      <title>{`${total} ${total === 1 ? 'question' : 'questions'} over the last 12 months`}</title>
       {activity.map((v, i) => {
         // A zero month draws NOTHING. Rendering it as a faint 1px bar made a sparse year read as a dashed
         // line beside the title instead of a chart — visible immediately in the app, invisible to every test.
@@ -292,7 +293,7 @@ function AreaRow({ area }: { area: CoverageAreaView }): JSX.Element {
           {area.activity.some((v) => v > 0) ? (
             <span className={styles.sparkWrap}>
               <Sparkline activity={area.activity} />
-              <span className={styles.sparkCaption}>12 mo</span>
+              <span className={styles.sparkCaption}>asked over 12 months</span>
             </span>
           ) : null}
         </span>

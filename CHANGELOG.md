@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.54.2](https://github.com/Highfivery/SelfOS/compare/v0.54.1...v0.54.2) (2026-08-13)
+
+
+### Bug Fixes
+
+* **email:** an intimacy suggestion could nudge toward exhausted ground (71 §5.3) ([#444](https://github.com/Highfivery/SelfOS/issues/444)) ([af29da9](https://github.com/Highfivery/SelfOS/commit/af29da98e34b21f4990380bbd1153b60e70e7323))
+
 ## [0.54.1](https://github.com/Highfivery/SelfOS/compare/v0.54.0...v0.54.1) (2026-08-13)
 
 

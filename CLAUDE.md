@@ -498,6 +498,20 @@ A running log of durable decisions and feedback captured into the project config
   commit on the SHARED tree (and merged as #408) — the guard was extracted into a `git worktree` off
   origin/main, which is the only safe way to work while another session holds the checkout.**
 
+- 2026-08-13 — **Fix (an intimacy EMAIL could nudge toward ground already exhausted; SPEC 71 §5.3; on
+  `fix/email-open-ground-required`).** A defect I INTRODUCED in the change below, found while going to write
+  its E2E. The email caller omitted `openGround` when nothing was open and the consumer fell back to the seeded
+  families — so the all-worked case (the one that matters) offered the exact 14 areas the person had finished,
+  inside an explicit email nobody reviews before it sends. The same invariant I had just guarded in
+  questionnaire generation, violated one file over. Fixed by making it **unrepresentable**: `openGround` is
+  REQUIRED on the email `GenerateInput`, so an empty list is the only way to say "nothing open" and no caller
+  can omit it; the seed fallback is deleted from that path (every caller there has a topic map). Guard verified
+  to FAIL when the fallback is restored. Gate green: typecheck (4 pkgs), lint, format, **1998 core + 1560
+  desktop + 13 relay** unit, 33 E2E. **Lesson: an optional field with a plausible default is a footgun when
+  the EMPTY case is the meaningful one — that shape produced the same bug twice in one session. Make the type
+  carry the meaning (required + empty-is-meaningful) instead of leaving a fallback that silently fires in
+  exactly the case you were protecting. Also: going to write an owed test is how the bug surfaced — the E2E
+  was never written, but looking for it paid for itself.**
 - 2026-08-13 — **Refactor (questionnaires: the fixed intimacy inventory is gone — the person's topic map IS the
   subject matter; SPEC 71 §5.3, SPEC 08 §16.5a superseded; on `refactor/intimacy-ground-from-map`).** Follow-on
   to the coverage-engine removal, and an OWNER CORRECTION I got wrong first. The measured gap was that the

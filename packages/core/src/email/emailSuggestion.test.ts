@@ -96,6 +96,7 @@ describe('generateSuggestion (67 §3.3)', () => {
       '{"headline":"A small step","body":"Notice one good moment today."}',
     );
     const out = await generateSuggestion(deps(fs, client), {
+      openGround: [],
       family: 'ai-suggestion',
       signals: { ...emptySignals, observation: 'You have been reflecting on rest.' },
       avoid: { texts: [], subjects: new Set() },
@@ -122,6 +123,7 @@ describe('generateSuggestion (67 §3.3)', () => {
       '{"headline":"Notice one good moment","body":"Notice one good moment today and name it."}',
     );
     const out = await generateSuggestion(deps(fs, client), {
+      openGround: [],
       family: 'ai-suggestion',
       signals: { ...emptySignals, observation: 'rest' },
       avoid: {
@@ -136,6 +138,7 @@ describe('generateSuggestion (67 §3.3)', () => {
     const fs = memFileSystem();
     const client = clientReturning('{"headline":"x","body":"y"}');
     const out = await generateSuggestion(deps(fs, client), {
+      openGround: [],
       family: 'ai-suggestion-intimacy',
       signals: emptySignals,
       avoid: { texts: [], subjects: new Set(['act-1']) },
@@ -144,12 +147,53 @@ describe('generateSuggestion (67 §3.3)', () => {
     expect(out).toBeNull();
   });
 
+  it("an intimacy email draws on the person's OWN open ground — and says so when nothing is open", async () => {
+    // The invariant questionnaire generation guards (spec 71 §5.3), now enforced by the TYPE: `openGround` is
+    // required and an EMPTY list is meaningful. It means this person has worked every area through, and the
+    // prompt must say so rather than degrade to the seeded families — which would nudge them toward exactly
+    // the areas they exhausted, inside an explicit email nobody reviews first.
+    const fs = memFileSystem();
+    const systems: string[] = [];
+    const capture: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (o, onDelta) => {
+        systems.push(o.system ?? ''); // the explicit framing rides the SYSTEM prompt
+        const text = '{"headline":"x","body":"y"}';
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        } as ClaudeStreamResult);
+      },
+    };
+    const base = {
+      family: 'ai-suggestion-intimacy' as const,
+      signals: emptySignals,
+      avoid: { texts: [], subjects: new Set<string>() },
+      intimacyOverlap: [{ key: 'act-1', label: 'A' }],
+    };
+
+    await generateSuggestion(deps(fs, capture), {
+      ...base,
+      openGround: [{ label: 'Edge play', blurb: 'The intense edges.' }],
+    });
+    expect(systems[0] ?? '').toContain('Edge play');
+
+    systems.length = 0;
+    await generateSuggestion(deps(fs, capture), { ...base, openGround: [] });
+    const sent = systems[0] ?? '';
+    expect(sent).toMatch(/worked through/i);
+    expect(sent).not.toContain('Group & swinging');
+    expect(sent).not.toContain('Bondage & restraint');
+  });
+
   it('returns null when the model declines / returns no usable JSON', async () => {
     const fs = memFileSystem();
     const out = await generateSuggestion(deps(fs, clientReturning('I cannot help with that.')), {
       family: 'ai-suggestion',
       signals: { ...emptySignals, observation: 'rest' },
       avoid: { texts: [], subjects: new Set() },
+      openGround: [],
     });
     expect(out).toBeNull();
   });
@@ -279,6 +323,7 @@ describe('generateSuggestion — shared steering (spec 69 P4: email joins the on
       '{"headline":"A fresh angle","body":"Notice something new this week."}',
     );
     const out = await generateSuggestion(deps(fs, client), {
+      openGround: [],
       family: 'ai-suggestion',
       signals: { ...emptySignals, observation: 'You have been reflecting on rest.' },
       avoid: { texts: [], subjects: new Set() },
@@ -305,6 +350,7 @@ describe('generateSuggestion — shared steering (spec 69 P4: email joins the on
       '{"headline":"A small step","body":"One kind thing today."}',
     );
     await generateSuggestion(deps(fs, client), {
+      openGround: [],
       family: 'ai-suggestion',
       signals: { ...emptySignals, observation: 'A reflection.' },
       avoid: { texts: [], subjects: new Set() },

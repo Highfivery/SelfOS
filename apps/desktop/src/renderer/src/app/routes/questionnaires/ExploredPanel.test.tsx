@@ -402,8 +402,11 @@ describe('ExploredPanel (spec 70 §3)', () => {
 
   it('reveals the emergent topic map inside an area, worked-through ground included (spec 71 §5.8)', async () => {
     await openCoverage();
-    // Collapsed by default — the panel stays scannable with 30+ topics on the map.
-    expect(screen.queryByText('Director of Ops ambition')).not.toBeInTheDocument();
+    // Collapsed by default the card previews its ground as CHIPS (approved design) but withholds the detail —
+    // blurb, counts and per-topic steers — so the panel stays scannable with 30+ topics on the map.
+    expect(
+      screen.queryByRole('button', { name: /Prioritize Director of Ops ambition/ }),
+    ).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Work & purpose/ }));
     // Every topic is listed with its real ask count, worked-through ground included: seeing what it has
     // already covered is most of the point of this surface.

@@ -374,4 +374,58 @@ describe('resolveProposal — approve applies the restructure (no prose written)
     expect(res.ok && res.added).toBe(0);
     expect(streamed).toBe(false); // never called the model
   });
+
+  /**
+   * 72 §7.6 — the duplicate-chapter defect, measured on the real vault: Ben's outline carries "The Paper He
+   * Signed" TWICE, once written and once an empty shell. Dedup ran against pending + dismissed proposals, but
+   * APPROVING one spliced it out of the list entirely — destroying its signature — so the next pass was free
+   * to propose the identical chapter again.
+   */
+  it('never re-proposes a chapter that was already approved', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    const sameProposal = JSON.stringify({
+      proposals: [
+        {
+          kind: 'newChapter',
+          partId: 'p1',
+          title: 'The Paper He Signed',
+          brief: 'x',
+          rationale: 'y',
+        },
+      ],
+    });
+
+    const first = await generateStructuralProposals(deps(fs, fakeClient(sameProposal)), { bookId });
+    expect(first.ok && first.added).toBe(1);
+    const pending = await listStructuralProposals(fs, key, 'me', bookId);
+    await resolveProposal(fs, key, 'me', { bookId, proposalId: pending[0]!.id, action: 'approve' });
+    // Approved → gone from the pending view (but remembered, which is the point).
+    expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(0);
+
+    const second = await generateStructuralProposals(deps(fs, fakeClient(sameProposal)), {
+      bookId,
+    });
+    expect(second.ok && second.added).toBe(0); // NOT proposed a second time
+    expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(0);
+    // And the outline holds exactly one chapter by that title.
+    const titles = (await getOutline(fs, key, 'me', bookId))!.parts.flatMap((p) =>
+      p.chapters.map((c) => c.title),
+    );
+    expect(titles.filter((t) => t === 'The Paper He Signed')).toHaveLength(1);
+  });
+
+  it('never proposes a chapter the outline already holds', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    // "The Garage" is already chapter c1 of part p1 — a proposal to add it is a duplicate, whatever its casing.
+    const dupe = JSON.stringify({
+      proposals: [
+        { kind: 'newChapter', partId: 'p1', title: '  the garage  ', brief: 'x', rationale: 'y' },
+      ],
+    });
+    const res = await generateStructuralProposals(deps(fs, fakeClient(dupe)), { bookId });
+    expect(res.ok && res.added).toBe(0);
+    expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(0);
+  });
 });

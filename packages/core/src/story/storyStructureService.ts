@@ -226,12 +226,21 @@ export async function generateStructuralProposals(
   const drafts = StructureDraftSchema.parse(json).proposals;
 
   const existingSigs = new Set(existing.proposals.map(proposalSignature));
+  // A chapter the outline ALREADY holds must never be proposed again (72 §7.6). The signature set only ever
+  // knew about other PROPOSALS, so a title that already exists as a real chapter — because an earlier
+  // proposal was approved, or the foundations pass wrote it — sailed through. Compared per part, matching
+  // `proposalSignature`'s own `new:<partId>:<title>` scoping.
+  const existingTitles = new Set(
+    outline.parts.flatMap((part) =>
+      part.chapters.map((c) => `new:${part.id}:${c.title.trim().toLowerCase()}`),
+    ),
+  );
   const accepted: StructuralProposal[] = [];
   for (const d of drafts) {
     const p = draftToProposal(d, outline, deps.now);
     if (!p) continue;
     const sig = proposalSignature(p);
-    if (existingSigs.has(sig)) continue;
+    if (existingSigs.has(sig) || existingTitles.has(sig)) continue;
     existingSigs.add(sig);
     accepted.push(p);
   }
@@ -400,8 +409,11 @@ export async function resolveProposal(
   }
 
   const applied = await applyStructuralProposal(fs, key, personId, args.bookId, proposal);
-  // Whether it applied or its refs vanished, the proposal leaves the pending list (a stale-ref one is dead).
-  list.proposals.splice(idx, 1);
+  // Whether it applied or its refs vanished, the proposal leaves the PENDING list — but it is KEPT as
+  // `applied` rather than spliced away (72 §7.6). Splicing destroyed its dedup signature, so the next
+  // structure pass was free to propose the identical chapter again; that is how "The Paper He Signed" got
+  // into Ben's outline twice, once written and once an empty shell.
+  list.proposals[idx] = { ...proposal, status: 'applied' };
   await saveProposals(fs, key, personId, args.bookId, list);
   return applied.ok
     ? { ok: true, proposals: pending() }

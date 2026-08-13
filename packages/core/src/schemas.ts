@@ -4931,7 +4931,11 @@ export const StructuralProposalKindSchema = z.enum([
   'prologueRewrite',
 ]);
 export type StructuralProposalKind = z.infer<typeof StructuralProposalKindSchema>;
-export const StructuralProposalStatusSchema = z.enum(['pending', 'dismissed']);
+// `applied` (72 §7.6) is what an APPROVED proposal becomes. It used to be spliced out of the list entirely,
+// which silently destroyed its dedup signature — so the next structure pass could propose the very same
+// chapter again, and did: Ben's outline carries "The Paper He Signed" twice. Keeping it (hidden from every
+// pending view) is what makes the dedup durable.
+export const StructuralProposalStatusSchema = z.enum(['pending', 'dismissed', 'applied']);
 export type StructuralProposalStatus = z.infer<typeof StructuralProposalStatusSchema>;
 
 const proposalBase = {

@@ -1550,7 +1550,13 @@ function StudioLayout({
     .filter((c): c is (typeof chapters)[number] => Boolean(c));
   const pending = outlineChapters.filter((c) => !writtenById.has(c.id)).length;
   const metrics = manuscriptMetrics(chapters);
-  const staleCount = chapters.filter((c) => c.status === 'stale').length;
+  // Only chapters with PROSE can have "new material to fold in" (72 §5.4). A never-written shell is stamped
+  // `stale` by `chapterShell`, so this used to report unwritten chapters as needing a refresh — Ben's book
+  // said "34 chapters have new material" when 11 of them had never been written at all. Unwritten chapters
+  // are already surfaced honestly by `pending` + the "Not yet written" cards.
+  const staleCount = chapters.filter(
+    (c) => c.status === 'stale' && c.markdown.trim().length > 0,
+  ).length;
   const toReview = writtenInOrder.filter((c) => c.status === 'new' || c.status === 'updated');
   const openTodos = todos.filter((t) => t.status === 'open' || t.status === 'questionsSent');
   const firstWritten = writtenInOrder[0];

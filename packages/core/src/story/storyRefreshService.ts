@@ -80,8 +80,13 @@ export async function refreshBook(
     if (rewriteAllowance === 0) capped = true;
   }
 
+  // Only chapters that have PROSE are rewritten here (72 §5.4). `chapterShell` stamps a never-written chapter
+  // `stale`, so a book with unwritten shells was spending its weekly REWRITE allowance on first drafts —
+  // interleaved with real rewrites and capped at 10, which is how a 45-chapter book with 22 unwritten ones
+  // never converges. A first draft is `generateBookChapters`' job, reached by the explicit "Write the
+  // remaining N" action; refresh exists to fold NEW MATERIAL into prose that already exists.
   const stale = (await listChapters(deps.fs, deps.key, deps.personId, args.bookId)).filter(
-    (c) => c.status === 'stale',
+    (c) => c.status === 'stale' && c.markdown.trim().length > 0,
   );
   // The structural pass runs on every refresh (new material may warrant a new chapter even if nothing drifted),
   // bounded by its own weekly cap on BOTH cadences.

@@ -204,8 +204,13 @@ export async function generateFoundations(
 
 // --- Chapter generation (§5.3) ---------------------------------------------------------------------------
 
-/** A chapter is ~1,500–3,000 words (≈2–4k tokens); give headroom so a rich chapter doesn't truncate. */
-const CHAPTER_MAX_TOKENS = 8000;
+/**
+ * The output ceiling for one chapter (72 §5.3). This was 8,000 with a comment describing a `standard`-length
+ * chapter (~1,500–3,000 words) — but `full` is the DEFAULT length and asks for 2,500–5,000 words, which tops
+ * out above that ceiling once the per-paragraph `[[SRC:…]]` markers are counted. A truncated chapter is refused
+ * outright (never persisted half-finished), so the longest chapters were the most likely to fail entirely.
+ */
+const CHAPTER_MAX_TOKENS = 16000;
 
 export type ChapterResult =
   | { ok: true; chapter: BookChapter }

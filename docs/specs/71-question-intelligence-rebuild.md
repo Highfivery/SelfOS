@@ -299,6 +299,33 @@ suggestion-materialize path), `autoCheckins/service.ts`, `dreams/dreamQuestionna
 `gatherRecipientFeedbackGuidance`). `coverageService.ts` (the candidate refresh) is re-pointed at the
 topic map.
 
+### 5.9 Topic-map hygiene
+
+An emergent vocabulary only stays useful if something prunes it. Left alone it grew to **341 topics for 277
+questions** on a real map — roughly one name per question, and once §5.8 made the map visible, the Explored tab
+listed rows like _"Bottling one thing"_ and _"What felt different"_. Three causes, three fixes:
+
+- **Re-tagging orphaned old names.** Each pass mints labels for what it sees and leaves the previous pass's
+  behind, referenced by nothing (11 such on the real map). `pruneTopicMap` drops any emergent topic the ledger
+  doesn't reference; seeded families always survive, since they are the roll-up vocabulary.
+- **Separate passes coined the same ground twice.** `mintTopics` resolves only against the map as it stands, so
+  two runs can independently name one thing. The GC folds near-duplicates into the best-attested name,
+  rewriting the ledger's `topicIds` so no count is lost.
+- **The classifier named per QUESTION, not per topic** — it sees one question at a time and cannot know what
+  recurs. Tightening the prompt toward durable ground ("could ten questions sit under this?") helped and did
+  not solve it: 165 emergent topics still backed exactly one question. So the DATA decides: a name must be
+  arrived at independently **`MIN_TOPIC_SUPPORT`** times to become a topic. Below that the question keeps its
+  family tag — nothing is lost for saturation or de-dup, the map just doesn't grow a row — and a name that
+  genuinely recurs is promoted on the next pass.
+
+Result on the same real map: **341 → 75 topics (24 seeded, 51 emergent), zero backed by fewer than two
+questions**, and labels that read as areas of a life ("Being overpowered", "Estrangement", "Spontaneous
+initiation"). Residual near-duplicates survive where labels share too few words to merge ("Genuine rest" vs
+"Restorative rest"); they are real ground with real support, and the roll-up family carries saturation either
+way, so over-merging would cost more than it saves.
+
+The GC runs at the end of every backfill/re-tag and is idempotent.
+
 ## 6. IPC / API contracts
 
 **No new renderer-facing IPC channels.** The planner, tagging and backfill are host-side, inside the
@@ -390,6 +417,11 @@ _All resolved with the owner on 2026-08-12:_
 
 ## 12. Changelog
 
+- 2026-08-13 — **Follow-up: topic-map hygiene (§5.9).** Making the map visible (§5.8) exposed that it had grown
+  to 341 topics for 277 questions — one name per question, with orphans left by each re-tag. Added
+  `pruneTopicMap` (drop unreferenced, fold cross-run duplicates), tightened both tagging prompts toward durable
+  ground, and made support the deciding rule: a name must recur to become a topic. **341 → 75 topics, zero
+  singletons**, on the real map.
 - 2026-08-13 — **Follow-up: the topic-scoped re-open is now live (§5.2).** The parameter shipped inert — no
   caller supplied it — so worked ground only re-opened via an explicit request or 90-day dormancy, never
   because the person had since said something about it. `topicsWithNewMaterial` resolves it deterministically

@@ -21,6 +21,7 @@ import { hasRecitation } from './selfContained';
 import {
   buildLedgerReference,
   mintTopics,
+  pruneTopicMap,
   resolveTopicId,
   seedTopics,
   topicStatuses,
@@ -312,6 +313,82 @@ describe('topicMap', () => {
 });
 
 // ── Type + tier scoping ───────────────────────────────────────────────────────────────────────────────
+
+describe('topic-map hygiene (spec 71 §5.9)', () => {
+  it('drops emergent topics nothing references, and never drops a seeded family', () => {
+    // Re-tagging orphans the names an earlier pass invented: they stay in the map, referenced by nothing.
+    // A real map reached 341 topics for 277 questions this way, 11 of them with zero references.
+    const { topics } = mintTopics(seedTopics(), [
+      { label: 'What felt different' },
+      { label: 'Who initiates' },
+    ]);
+    const live = topics.find((t) => t.label === 'Who initiates')!;
+    const ledger = {
+      ...emptyLedger('p'),
+      entries: [entry({ questionId: 'q1', topicIds: [live.topicId] })],
+    };
+    const gc = pruneTopicMap(topics, ledger);
+    // One ask is not enough support for a name to be real ground — both go, and the family tag carries them.
+    expect(gc.topics.some((t) => t.label === 'What felt different')).toBe(false);
+    expect(gc.dropped).toBe(2);
+    // Seeded families survive at zero asks — they are the roll-up vocabulary.
+    expect(gc.topics.filter((t) => t.seeded)).toHaveLength(seedTopics().length);
+  });
+
+  it('folds duplicates two passes coined independently, keeping the counts', () => {
+    // `mintTopics` only resolves against the map as it stands, so separate runs can coin near-identical
+    // labels that never meet. The GC is where they do.
+    let topics = seedTopics();
+    topics = mintTopics(topics, [{ label: 'Orgasm control' }]).topics;
+    const a = topics.find((t) => t.label === 'Orgasm control')!;
+    // Force a twin past the mint-time resolver, as a separate pass effectively does.
+    const b: Topic = {
+      topicId: 'intimacy-orgasm-controls',
+      label: 'Orgasm controls',
+      lifeArea: 'Intimacy',
+      seeded: false,
+      aliases: [],
+    };
+    topics = [...topics, b];
+    const ledger = {
+      ...emptyLedger('p'),
+      entries: [
+        entry({ questionId: 'q1', topicIds: [a.topicId] }),
+        entry({ questionId: 'q2', topicIds: [a.topicId] }),
+        entry({ questionId: 'q3', topicIds: [b.topicId] }),
+      ],
+    };
+    const gc = pruneTopicMap(topics, ledger);
+    expect(gc.merged).toBe(1);
+    // One survivor, carrying ALL three asks — a merge must never lose a count.
+    const survivors = gc.topics.filter((t) => /orgasm control/i.test(t.label));
+    expect(survivors).toHaveLength(1);
+    const stats = deriveTopicStats({ ...ledger, entries: gc.entries });
+    expect(stats.get(survivors[0]!.topicId)?.askedCount).toBe(3);
+  });
+
+  it('is idempotent — a second pass over a tidy map changes nothing', () => {
+    const { topics } = mintTopics(seedTopics(), [{ label: 'Who initiates' }]);
+    const live = topics.find((t) => t.label === 'Who initiates')!;
+    const ledger = {
+      ...emptyLedger('p'),
+      entries: [entry({ questionId: 'q1', topicIds: [live.topicId] })],
+    };
+    const ledger2 = {
+      ...ledger,
+      entries: [
+        ...ledger.entries,
+        entry({ questionId: 'q2', topicIds: [live.topicId] }), // enough support to survive
+      ],
+    };
+    const once = pruneTopicMap(topics, ledger2);
+    expect(once.topics.some((t) => t.label === 'Who initiates')).toBe(true);
+    const twice = pruneTopicMap(once.topics, { ...ledger2, entries: once.entries });
+    expect(twice.dropped).toBe(0);
+    expect(twice.merged).toBe(0);
+    expect(twice.topics).toHaveLength(once.topics.length);
+  });
+});
 
 describe('topic-scoped new material (spec 71 §5.2)', () => {
   const worked = (topicId: string, at = '2026-06-01T00:00:00.000Z') => ({

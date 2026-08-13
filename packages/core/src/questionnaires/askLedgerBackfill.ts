@@ -346,7 +346,17 @@ export async function backfillAskLedger(
   // grows — a real map reached 341 topics for 277 questions across three re-tags.
   {
     const current = await readLedger(deps.fs, deps.key, recipientPersonId);
-    const gc = pruneTopicMap(topics, current);
+    // Adopted coverage rows carry no asks yet, so they must be protected or the prune deletes them.
+    const covered = new Set(
+      topics
+        .filter((t) =>
+          profile.coverage.topics.some(
+            (c) => c.label.trim().toLowerCase() === t.label.trim().toLowerCase(),
+          ),
+        )
+        .map((t) => t.topicId),
+    );
+    const gc = pruneTopicMap(topics, current, covered);
     topics = gc.topics;
     if (gc.merged > 0 || gc.dropped > 0) {
       await writeLedger(deps.fs, deps.key, { ...current, entries: gc.entries });

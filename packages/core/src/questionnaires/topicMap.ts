@@ -372,6 +372,10 @@ export function mintTopics(
 export function pruneTopicMap(
   topics: readonly Topic[],
   ledger: AskLedger,
+  /** Topics that must survive regardless of ledger support (spec 71 §5.9). Ground adopted from the legacy
+   *  coverage rows has NO asks of its own yet — it is real ground the person can see and steer, so pruning it
+   *  for lack of support would delete it on the next re-tag and silently restore the bare-row bug. */
+  protectedIds: ReadonlySet<string> = new Set(),
 ): { topics: Topic[]; entries: AskLedgerEntry[]; dropped: number; merged: number } {
   const all = ensureTopics(topics);
   const counts = deriveTopicStats(ledger);
@@ -404,7 +408,8 @@ export function pruneTopicMap(
   const support = new Map<string, number>();
   for (const e of entries) for (const id of e.topicIds) support.set(id, (support.get(id) ?? 0) + 1);
   const survivors = kept.filter(
-    (t) => t.seeded || (support.get(t.topicId) ?? 0) >= MIN_TOPIC_SUPPORT,
+    (t) =>
+      t.seeded || protectedIds.has(t.topicId) || (support.get(t.topicId) ?? 0) >= MIN_TOPIC_SUPPORT,
   );
   const surviving = new Set(survivors.map((t) => t.topicId));
   // Strip dropped names from the ledger. Their family tag remains, so the ask still counts toward

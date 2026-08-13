@@ -1028,3 +1028,25 @@ describe('closure inheritance — emergent ground is born OPEN (71 §5.3)', () =
     expect(by('Just named')?.saturated).toBe(false);
   });
 });
+
+describe('pruneTopicMap — adopted ground survives (71 §5.9)', () => {
+  it('keeps a protected zero-ask topic that pruning would otherwise delete', () => {
+    // Ground adopted from the legacy coverage rows has no asks of its own yet. Pruning drops a non-seeded
+    // topic below MIN_TOPIC_SUPPORT, so without protection the very next re-tag deletes it and the panel goes
+    // back to rendering a bare row -- the bug the adoption exists to fix, returning silently.
+    const adopted: Topic = {
+      topicId: 'Relationships:friendships',
+      label: 'Friendships & loneliness',
+      lifeArea: 'Relationships',
+      seeded: false,
+      aliases: [],
+    };
+    const ledger = { ...emptyLedger('p1'), backfilledAt: new Date().toISOString(), entries: [] };
+    expect(pruneTopicMap([adopted], ledger).topics.map((t) => t.topicId)).not.toContain(
+      adopted.topicId,
+    );
+    expect(
+      pruneTopicMap([adopted], ledger, new Set([adopted.topicId])).topics.map((t) => t.topicId),
+    ).toContain(adopted.topicId);
+  });
+});

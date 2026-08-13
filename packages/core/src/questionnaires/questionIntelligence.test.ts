@@ -14,12 +14,14 @@ import {
   writeLedger,
   type AskLedgerEntry,
 } from './askLedger';
-import { generateQuestions, type AiDeps } from './generationService';
+import { generateQuestions, groundSummary, type AiDeps } from './generationService';
 import { readProfile, writeProfile } from './personalizationProfile';
 import { buildPlanUserMessage, PLAN_SYSTEM, steeringLifeAreas } from './planService';
+import { TAGGING_VERSION } from './askLedgerBackfill';
 import { hasRecitation } from './selfContained';
 import {
   buildLedgerReference,
+  CATCH_ALL_TOPIC_ID,
   mintTopics,
   pruneTopicMap,
   resolveTopicId,
@@ -876,5 +878,60 @@ describe('ledger persistence across a real generate', () => {
       now,
     });
     expect(res.ok).toBe(false); // an honest parse failure, never a throw
+  });
+});
+
+describe('groundSummary — catch-all filtering (71 §5.2)', () => {
+  it('keeps the catch-all bucket out of the steering lists, but not its emergent children', async () => {
+    // "Other" is real ground and must keep collecting asks, but as STEERING it says nothing: "prefer Other"
+    // and "don't build around Other" are equally useless to the model. On the real vault it was showing up in
+    // the PREFER list for both members, which is why this exists. A topic parented to it has its own real
+    // label and must still surface — note the parent is left OPEN here on purpose, since a child correctly
+    // INHERITS a closed family's closure (the roll-up rule), which would otherwise hide it for the right reason.
+    const fs = memFileSystem();
+    const key = await generateMasterKey();
+    const person = await upsertPerson(fs, key, {
+      displayName: 'Ben',
+      isSubject: true,
+      tags: [],
+      pronouns: 'they/them',
+    });
+    const child = {
+      topicId: 'Other:commute-ritual',
+      label: 'Commute ritual',
+      lifeArea: 'Other',
+      seeded: false,
+      aliases: [] as string[],
+      parentTopicId: CATCH_ALL_TOPIC_ID,
+    };
+    await writeProfile(fs, key, {
+      ...(await readProfile(fs, key, person.id)),
+      topics: [...seedTopics(), child],
+    });
+    await writeLedger(fs, key, {
+      ...emptyLedger(person.id),
+      backfilledAt: new Date().toISOString(),
+      taggingVersion: TAGGING_VERSION,
+      // One ask — below saturation, so the catch-all sits in the OPEN list and would be offered as ground
+      // to PREFER were it not filtered.
+      entries: [
+        {
+          questionId: 'o1',
+          assignmentId: 'ao1',
+          at: new Date(Date.now() - 86_400_000).toISOString(),
+          type: 'general',
+          tier: 'standard' as const,
+          topicIds: [CATCH_ALL_TOPIC_ID],
+          gist: 'misc',
+          outcome: 'rich' as const,
+        },
+      ],
+    });
+
+    const ground = await groundSummary(fs, key, person.id, 'general', 'standard', new Date());
+    expect(ground.worked).not.toContain('Other');
+    expect(ground.open).not.toContain('Other');
+    // The emergent child keeps its own label and still steers.
+    expect(ground.open).toContain('Commute ritual');
   });
 });

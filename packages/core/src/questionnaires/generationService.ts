@@ -46,6 +46,7 @@ import {
   ensureTopics,
   mintTopics,
   rollUpCategoryLabels,
+  CATCH_ALL_TOPIC_ID,
   topicStatuses,
   topicsWithNewMaterial,
   type Topic,
@@ -234,8 +235,8 @@ export async function groundSummary(
   if (ledger.backfilledAt === undefined) return { worked: [], open: [] };
   const topics = ensureTopics(profile.topics);
   const areas = new Set(steeringLifeAreas(type, sensitivity));
-  const scoped = topicStatuses({ topics, ledger, newMaterialTopicIds: [], now }).filter((s) =>
-    areas.has(s.topic.lifeArea),
+  const scoped = topicStatuses({ topics, ledger, newMaterialTopicIds: [], now }).filter(
+    (s) => areas.has(s.topic.lifeArea) && s.topic.topicId !== CATCH_ALL_TOPIC_ID,
   );
   return {
     worked: scoped

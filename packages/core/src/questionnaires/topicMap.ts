@@ -73,6 +73,14 @@ const ALIAS_MATCH_THRESHOLD = 0.6;
  */
 export const MIN_TOPIC_SUPPORT = 2;
 
+/**
+ * The catch-all seed bucket. Real ground for everything that doesn't fit a named life area, so it must stay in
+ * the map and keep collecting asks — but it is useless as STEERING: "prefer Other" and "don't build around
+ * Other" both tell the model nothing. Filtered out of the ground summaries for that reason only; emergent
+ * topics parented to it keep their own real labels and still surface.
+ */
+export const CATCH_ALL_TOPIC_ID = 'Other';
+
 export const TopicSchema = z.object({
   /** Stable slug — the ledger's `topicIds` reference this. */
   topicId: z.string().min(1),

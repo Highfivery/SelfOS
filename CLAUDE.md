@@ -469,6 +469,30 @@ A running log of durable decisions and feedback captured into the project config
   commit on the SHARED tree (and merged as #408) — the guard was extracted into a `git worktree` off
   origin/main, which is the only safe way to work while another session holds the checkout.**
 
+- 2026-08-13 — **Fix + a measured NON-fix (questionnaires: one engine decides ground; SPEC 71 §5.2; released
+  v0.52.3).** After the spec-71 rebuild shipped, the auto check-in engine's intimacy slot was STILL choosing its
+  ground from the **legacy** keyword coverage map (`nextIntimacyCategory`) while the planner chose from the ask
+  ledger — two engines disagreeing on the path carrying **13 of 22** real intimacy sends, and §1 had already
+  measured the legacy one as missing a third of what had been asked with its saturation completely inert. This
+  mattered because the slot's brief becomes the `FOCUS —` line that GOVERNS generation, so the wrong engine's
+  ground silently overrode the planner downstream. Fixed with `nextOpenGround` (ledger + topic map, type/tier
+  scoped) whenever the ledger is authoritative; **the legacy map is deliberately NOT deleted** — it is the
+  pre-backfill fallback, and for a person whose `backfilledAt` is unset the ledger is empty, so planning from it
+  would tell the model almost nothing has been asked. **Verified against the real vault, not just tests:** Angel
+  (277 asks) now opens on Roleplay & fantasy (2 asks) with Exhibitionism 14 / Impact 12 / Dirty talk 10 correctly
+  closed — the exact over-asking she reported; Ben (212) opens on never-touched Taboo fantasy. **The
+  scan-removal follow-up was MEASURED AND DROPPED:** spec 71 §5.1 claimed the ledger replaced six full scans
+  with one read (it did not — they still run), so the claim was corrected, but timing them on the heaviest real
+  person showed **179ms of scans vs 2ms for the ledger read** against a 10–30 SECOND model call — under 1%. Not
+  worth the regression risk on the highest-volume path; do not "optimize" it. Gate green: typecheck, lint,
+  format, **2016 core + 1567 desktop + 13 relay** unit, 26 questionnaire/auto-check-in E2E. **Lessons: (1) a
+  guard that PASSES when you revert the fix is worse than no guard — two of three attempts here did exactly
+  that (one assumed a tie-break that didn't exist, one assumed the legacy engine's answer without checking it),
+  and both read as convincing; reverting the fix and watching the test fail is the only thing that proves a
+  guard means anything. (2) When one signal has two producers, the one feeding the GOVERNING prompt line wins
+  regardless of which is authoritative — retiring an engine means finding every place it still picks, not just
+  the obvious one. (3) Measure before optimizing: "1,148 decrypts per draft" sounded like debt and was noise.**
+
 - 2026-08-12 — **Rebuild (question intelligence: the ask ledger, the planner & emergent topics; member-reported
   twice; SPEC 71 written + approved + BUILT; on `feat/question-intelligence-rebuild`).** An intimacy/unfiltered
   draft produced a question with nothing to do with the register, and questions already asked. **Diagnosed by

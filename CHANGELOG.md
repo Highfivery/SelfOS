@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.52.3](https://github.com/Highfivery/SelfOS/compare/v0.52.2...v0.52.3) (2026-08-13)
+
+
+### Bug Fixes
+
+* **questionnaires:** one engine decides ground (71 §5.2) ([#427](https://github.com/Highfivery/SelfOS/issues/427)) ([c851a19](https://github.com/Highfivery/SelfOS/commit/c851a19ee52b9d0619e484a1c78eb04e34d2784b))
+
 ## [0.52.2](https://github.com/Highfivery/SelfOS/compare/v0.52.1...v0.52.2) (2026-08-13)
 
 

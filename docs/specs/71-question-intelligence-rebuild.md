@@ -185,10 +185,20 @@ vocabulary; `INTIMACY_ACTIVITIES_FULL` survives unchanged as the onboarding matr
 
 ### 5.1 The ask ledger (`questionnaires/askLedger.ts`)
 
-Replaces the six full scans (`gatherRecipientAskedPrompts`, `gatherRecipientIntimacyAsks`,
+The durable record of what a person has been asked: **one read**, appended in `createAssignment`, outcome
+updated on submit.
+
+**As built it SUPERSEDES the six full scans as the steering signal; it has not yet REPLACED them as code.**
+The scans (`gatherRecipientAskedPrompts`, `gatherRecipientIntimacyAsks`,
 `gatherRecipientQuestionnaireTitles`, `gatherRecipientPriorAnswersByAssignment`,
-`countAnsweredQuestionnaires`, plus the nested call inside `gatherRecipientHistory`) with **one
-read**. Appended in `createAssignment`; outcome updated on submit.
+`countAnsweredQuestionnaires`, plus the nested call inside `gatherRecipientHistory`) still run on every
+draft — ~1,148 decrypt ops — because two of them feed consumers the ledger cannot serve yet
+(`gatherRecipientQuestionnaireTitles` → the gap-finder's avoid-list; `gatherRecipientPriorAnswersByAssignment`
+→ Your Story's corpus, which needs whole answers, not gists), and the rest are the **pre-backfill fallback**:
+until a person's `backfilledAt` is set the ledger is empty, so planning from it would tell the model almost
+nothing has been asked. Removing them is a bounded follow-up gated on `ledgerAuthoritative`, not a rewrite —
+but it changes the de-dup inputs on the highest-volume path, so it wants the same real-vault verification pass
+that caught the defects in §1, and is deliberately not bundled with the steering fix.
 
 The de-dup reference is rebuilt from **gists + per-topic counts** rather than raw prompts — the same
 history at roughly a tenth the tokens, e.g. `dirty-talk — asked 8×, last 2 Aug` on one line instead of
@@ -422,6 +432,17 @@ _All resolved with the owner on 2026-08-12:_
   `pruneTopicMap` (drop unreferenced, fold cross-run duplicates), tightened both tagging prompts toward durable
   ground, and made support the deciding rule: a name must recur to become a topic. **341 → 75 topics, zero
   singletons**, on the real map.
+- 2026-08-13 — **Follow-up: one engine decides ground (§5.2).** The auto check-in engine's intimacy slot still
+  chose its focus from the LEGACY keyword coverage map (`nextIntimacyCategory`) while the planner chose from the
+  ledger — two engines disagreeing on the path that carried 13 of 22 real intimacy sends, and §1 had already
+  measured the legacy one as missing a third of what had been asked with its saturation never firing. Because
+  the slot's brief GOVERNS generation, the wrong engine's ground silently overrode the planner downstream. The
+  brief now takes its ground from `nextOpenGround` (ledger + topic map, type/tier-scoped) whenever the ledger is
+  authoritative; the legacy map survives ONLY as the pre-backfill fallback, which is why it is not deleted.
+  Guarded by a structural differential: every seeded intimacy topic is worked through in the ledger, leaving one
+  EMERGENT topic the built-in taxonomy has no word for, so only the ledger can name the focus — verified to FAIL
+  when the wiring is reverted. §5.1 corrected: the ledger supersedes the six scans as the SIGNAL, but they still
+  run as code; that removal is a separate, real-vault-verified follow-up.
 - 2026-08-13 — **Follow-up: the topic-scoped re-open is now live (§5.2).** The parameter shipped inert — no
   caller supplied it — so worked ground only re-opened via an explicit request or 90-day dormancy, never
   because the person had since said something about it. `topicsWithNewMaterial` resolves it deterministically

@@ -6,6 +6,7 @@ import {
   salvageJsonArray,
   tolerantArray,
 } from '../ai/jsonSalvage';
+import type { FileSystem } from '../host';
 import { uuid } from '../id';
 import {
   AnswerTypeSchema,
@@ -207,6 +208,36 @@ export interface GenerateRequest {
 }
 
 /** Generate questions from a brief and/or the configured structured context. */
+/**
+ * The least-worked OPEN ground for a recipient, per the ask ledger (spec 71 §5.2) — or `undefined` when the
+ * ledger is not yet authoritative for them.
+ *
+ * This exists so the auto check-in engine's slot brief and the planner agree on what "new ground" means. The
+ * brief GOVERNS generation, so when the engine picked ground from the legacy keyword coverage map while the
+ * planner picked it from the ledger, the highest-volume path had two engines disagreeing — and the legacy one
+ * had already been measured wrong (it missed a third of what had been asked, and its saturation never fired).
+ */
+export async function nextOpenGround(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  type: string,
+  sensitivity: SensitivityTier,
+  now: Date = new Date(),
+): Promise<string | undefined> {
+  const [profile, ledger] = await Promise.all([
+    readProfile(fs, key, personId),
+    readLedger(fs, key, personId),
+  ]);
+  if (ledger.backfilledAt === undefined) return undefined;
+  const topics = ensureTopics(profile.topics);
+  const areas = new Set(steeringLifeAreas(type, sensitivity));
+  const open = topicStatuses({ topics, ledger, newMaterialTopicIds: [], now })
+    .filter((s) => areas.has(s.topic.lifeArea) && !s.saturated)
+    .sort((a, b) => a.stats.askedCount - b.stats.askedCount);
+  return open[0]?.topic.label;
+}
+
 export async function generateQuestions(
   deps: AiDeps,
   request: GenerateRequest,

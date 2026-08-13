@@ -29,6 +29,7 @@ const view = (over: Partial<QuestionnaireCoverageView> = {}): QuestionnaireCover
       depth: 0.8,
       steerable: true,
       steered: false,
+      activity: [],
       askedCount: 9,
       topics: [
         {
@@ -38,6 +39,7 @@ const view = (over: Partial<QuestionnaireCoverageView> = {}): QuestionnaireCover
           open: false,
           leftAlone: false,
           emergent: true,
+          prioritized: false,
         },
         {
           topicId: 'Work & purpose:satisfaction',
@@ -46,6 +48,7 @@ const view = (over: Partial<QuestionnaireCoverageView> = {}): QuestionnaireCover
           open: true,
           leftAlone: false,
           emergent: true,
+          prioritized: false,
         },
       ],
     },
@@ -57,6 +60,7 @@ const view = (over: Partial<QuestionnaireCoverageView> = {}): QuestionnaireCover
       depth: 0,
       steerable: true,
       steered: false,
+      activity: [],
       askedCount: 0,
       topics: [],
     },
@@ -68,6 +72,7 @@ const view = (over: Partial<QuestionnaireCoverageView> = {}): QuestionnaireCover
       depth: 0.2,
       steerable: false,
       steered: false,
+      activity: [],
       askedCount: 4,
       topics: [
         {
@@ -77,6 +82,7 @@ const view = (over: Partial<QuestionnaireCoverageView> = {}): QuestionnaireCover
           open: false,
           leftAlone: false,
           emergent: false,
+          prioritized: false,
         },
       ],
       adultGated: true,

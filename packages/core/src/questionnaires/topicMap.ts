@@ -95,6 +95,9 @@ export const TopicSchema = z.object({
    *  roll-up tag; absent on the seeded families themselves. A child INHERITS its family's closure, so a
    *  worked-through family can't be re-opened through one of its own narrower names. */
   parentTopicId: z.string().optional(),
+  /** One sentence saying what this ground is, written when the topic is minted from the planner's own angle
+   *  for it (spec 71 §5.9). Optional: a pre-blurb topic simply shows none rather than a placeholder. */
+  blurb: z.string().optional(),
 });
 export type Topic = z.infer<typeof TopicSchema>;
 
@@ -212,6 +215,9 @@ export interface TopicProposal {
   lifeArea?: string;
   /** The built-in family this belongs to, when known (§5.3) — recorded so closure can be inherited. */
   parentTopicId?: string;
+  /** One sentence saying what this ground is (spec 71 §5.9). Comes free from the planner's own ANGLE for the
+   *  thread, so a topic is born explaining itself with no extra model call. */
+  blurb?: string;
 }
 
 /**
@@ -252,6 +258,8 @@ export function mintTopics(
           ...t,
           aliases,
           ...(parentTopicId ? { parentTopicId } : {}),
+          // Backfill a blurb onto a topic minted before they existed; never overwrite one already written.
+          ...(t.blurb === undefined && p.blurb?.trim() ? { blurb: p.blurb.trim() } : {}),
         };
       }
       continue;
@@ -267,6 +275,7 @@ export function mintTopics(
       seeded: false,
       aliases: [],
       ...(p.parentTopicId ? { parentTopicId: p.parentTopicId } : {}),
+      ...(p.blurb?.trim() ? { blurb: p.blurb.trim() } : {}),
     });
     resolved.push(topicId);
   }
@@ -410,6 +419,9 @@ export interface TopicStatus {
   /** Closed because its recent answers were mostly skips/declines, regardless of count (§5.4). */
   saturatedByQuality: boolean;
   reopenedBy?: ReopenSignal;
+  /** When a live "pause" steer lapses on its own (spec 71 §5.8). Surfaced so a paused topic never reads as
+   *  permanently dropped — the cooldown is bounded and the UI should say so. */
+  leftAloneUntil?: string;
   /**
    * True while inside the hard cooldown floor. Independent of `saturated`: even a re-opened topic is not
    * askable until this clears, which is what makes the mechanism impossible to silently disable.
@@ -445,8 +457,11 @@ export function topicStatuses(input: TopicStatusInput): TopicStatus[] {
   const leftAloneCutoff = new Date(
     input.now.getTime() - LEAVE_ALONE_COOLDOWN_DAYS * DAY_MS,
   ).toISOString();
-  const leftAlone = new Set(
-    (input.leftAlone ?? []).filter((l) => l.at >= leftAloneCutoff).map((l) => l.topicId),
+  // Keep the WHEN, not just the fact: the pause is a bounded cooldown, so the surface needs its lapse date.
+  const leftAlone = new Map(
+    (input.leftAlone ?? [])
+      .filter((l) => l.at >= leftAloneCutoff)
+      .map((l) => [l.topicId, l.at] as const),
   );
   const all = ensureTopics(input.topics);
   // A family's closure is computed first, so a child can inherit it below.
@@ -500,6 +515,13 @@ export function topicStatuses(input: TopicStatusInput): TopicStatus[] {
       !requested.has(topic.topicId);
     // An explicit "explore more" overrides a standing "leave alone" — the person is changing their mind.
     const steeredAway = leftAlone.has(topic.topicId) && !requested.has(topic.topicId);
+    const leftAloneAt = leftAlone.get(topic.topicId);
+    const leftAloneUntil =
+      steeredAway && leftAloneAt !== undefined
+        ? new Date(
+            new Date(leftAloneAt).getTime() + LEAVE_ALONE_COOLDOWN_DAYS * DAY_MS,
+          ).toISOString()
+        : undefined;
     const saturated =
       (saturatedByCount && reopenedBy === undefined) ||
       saturatedByQuality ||
@@ -516,6 +538,7 @@ export function topicStatuses(input: TopicStatusInput): TopicStatus[] {
       saturated,
       saturatedByQuality,
       leftAlone: steeredAway,
+      ...(leftAloneUntil !== undefined ? { leftAloneUntil } : {}),
       ...(reopenedBy !== undefined ? { reopenedBy } : {}),
       inCooldown,
       open: !saturated && !heldByCooldown,

@@ -72,8 +72,16 @@ export interface CoverageAreaView {
   /** The specific ground inside this area (spec 71 §5.8). Intimacy's topics are included and are gated by the
    *  same 18+ acknowledgement as the rest of the row — the panel simply does not render them until it holds. */
   topics: CoverageTopicView[];
-  /** Total questions asked across this area — the honest number behind the meter. */
+  /** Total questions asked across this area. */
   askedCount: number;
+  /** One sentence saying what this area covers (spec 71 §5.9). */
+  blurb?: string;
+  /** When this area was last worked. */
+  lastAskedAt?: string;
+  /** Questions asked per month over the last 12 months, oldest first — the activity sparkline (spec 71 §5.9).
+   *  Deliberately replaces the old `depth` meter: a bar toward a full width reads as progress toward DONE, and
+   *  no area is ever done — there is always more that could be asked. This describes what happened instead. */
+  activity: number[];
 }
 
 /** One topic the person has marked off (a decline / a "leave alone" steer). */
@@ -135,6 +143,15 @@ export interface CoverageTopicView {
   leftAlone: boolean;
   /** Named by the model rather than shipped as a built-in family — the "new ground" marker. */
   emergent: boolean;
+  /** One sentence saying what this ground actually is. Written when the topic is minted, from the planner's
+   *  own angle for it (spec 71 §5.9) — so a topic can never appear without an explanation of itself. */
+  blurb?: string;
+  /** When this ground was last worked, so the row can say "asked 4× · last 28 Jul" instead of a bare count. */
+  lastAskedAt?: string;
+  /** Live steer: the person asked for this ground next. On WORKED ground this also re-opens it (§5.8). */
+  prioritized: boolean;
+  /** When a "pause" steer lapses on its own — surfaced so a paused topic never looks permanently dropped. */
+  pausedUntil?: string;
 }
 
 /** A steer action from the panel (spec 69 §3.4). Own-scoped in the bridge. */
@@ -295,6 +312,42 @@ export function foldTopicMap(
  * row per life area (max depth across its topics); Intimacy is aggregated into a single read-only row (no
  * per-category enumeration — sensitive). Pure.
  */
+
+/** Questions asked per month over the last 12 months (oldest first) for one area's topics.
+ *
+ *  This is what replaced the depth meter. A bar filling toward 100% reads as progress toward finished, and no
+ *  area is ever finished — there is always more that could be asked, which is the whole premise of the
+ *  emergent topic map. Activity says what actually happened instead of implying what is left.
+ */
+function monthlyActivity(
+  group: readonly CoverageTopic[],
+  askDates: ReadonlyMap<string, readonly string[]>,
+  now: Date,
+): number[] {
+  const buckets = new Array<number>(12).fill(0);
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  for (const t of group) {
+    for (const iso of askDates.get(t.topicId) ?? []) {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) continue;
+      const months =
+        (end.getUTCFullYear() - d.getUTCFullYear()) * 12 + (end.getUTCMonth() - d.getUTCMonth());
+      if (months >= 0 && months < 12) buckets[11 - months] = (buckets[11 - months] ?? 0) + 1;
+    }
+  }
+  return buckets;
+}
+
+/** The most recent ask across an area's topics. */
+function areaLastAsked(group: readonly CoverageTopic[]): string | undefined {
+  let latest: string | undefined;
+  for (const t of group) {
+    const at = t.lastAskedAt;
+    if (at !== undefined && (latest === undefined || at > latest)) latest = at;
+  }
+  return latest;
+}
+
 export function projectCoverageView(
   topics: readonly CoverageTopic[],
   profile: PersonalizationProfile,
@@ -302,6 +355,8 @@ export function projectCoverageView(
   adultAcknowledged = false,
   /** Live topic statuses (spec 71) — the real ask counts + open/left-alone state behind each row. */
   statuses: readonly TopicStatus[] = [],
+  /** Raw ask dates per topic id, for the activity sparkline (spec 71 §5.9). */
+  askDates: ReadonlyMap<string, readonly string[]> = new Map(),
 ): QuestionnaireCoverageView {
   const statusById = new Map(statuses.map((s) => [s.topic.topicId, s]));
   // Group by life area, preserving first-seen order (general areas from the skeleton, then Intimacy).
@@ -339,6 +394,10 @@ export function projectCoverageView(
           open: st ? st.open : !t.saturated,
           leftAlone: st?.leftAlone ?? false,
           emergent: st ? !st.topic.seeded : false,
+          prioritized: st?.reopenedBy === 'explicit-request',
+          ...(st?.topic.blurb ? { blurb: st.topic.blurb } : {}),
+          ...(st?.stats.lastAskedAt ? { lastAskedAt: st.stats.lastAskedAt } : {}),
+          ...(st?.leftAloneUntil ? { pausedUntil: st.leftAloneUntil } : {}),
         };
       })
       .sort((a, b) => b.askedCount - a.askedCount || a.label.localeCompare(b.label));
@@ -351,6 +410,8 @@ export function projectCoverageView(
       steerable,
       steered,
       topics,
+      activity: monthlyActivity(group, askDates, now),
+      ...(areaLastAsked(group) ? { lastAskedAt: areaLastAsked(group) as string } : {}),
       askedCount: topics.reduce((n, t) => n + t.askedCount, 0),
       ...(isIntimacy ? { adultGated: true } : {}),
     };

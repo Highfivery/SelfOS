@@ -22,6 +22,7 @@ export * from './storyService';
 export * from './storyQuotes';
 export * from './castRegister';
 export * from './storyContinuity';
+export * from './storyManuscript';
 export * from './storyConsent';
 export * from './storyOutline';
 export * from './storyStructureService';

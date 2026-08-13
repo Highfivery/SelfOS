@@ -472,6 +472,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.storyProposals, bridge.storyProposals);
   handle(IpcChannels.storyResolveProposal, bridge.storyResolveProposal);
   handle(IpcChannels.storyContinuityCheck, bridge.storyContinuityCheck);
+  handle(IpcChannels.storyManuscriptRead, bridge.storyManuscriptRead);
   handle(IpcChannels.storyContinuity, bridge.storyContinuity);
   handle(IpcChannels.storyResolveContinuity, bridge.storyResolveContinuity);
   handle(IpcChannels.storyLineEdit, bridge.storyLineEdit);

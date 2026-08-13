@@ -4997,7 +4997,21 @@ export type StoryProposalList = z.infer<typeof StoryProposalListSchema>;
 // --- Cross-chapter continuity (64 §17.3) — inconsistencies surfaced as REVIEW ITEMS, never auto-fixed -----
 
 /** What kind of inconsistency a continuity finding flags. */
-export const ContinuityKindSchema = z.enum(['name', 'date', 'fact', 'other']);
+/** What a review finding is about. The first four are the CONTINUITY pass's fact-checking kinds (§17.3);
+ *  the rest come from the MANUSCRIPT pass (72 §5.3), which reads the finished book as a whole for the
+ *  things only visible across chapters — a motif worn out by repetition, an era that races or drags, an
+ *  arc that never lands, a voice that drifts. Both write into one review list, because to the author they
+ *  are the same job: things to go and fix. */
+export const ContinuityKindSchema = z.enum([
+  'name',
+  'date',
+  'fact',
+  'repetition',
+  'pacing',
+  'arc',
+  'voice',
+  'other',
+]);
 export type ContinuityKind = z.infer<typeof ContinuityKindSchema>;
 
 export const ContinuityStatusSchema = z.enum(['pending', 'resolved', 'dismissed']);

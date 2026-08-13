@@ -646,6 +646,24 @@ export function fakeClaudeClient(): ClaudeClient {
         });
       }
 
+      // The manuscript pass (72 §5.3): the whole-book read. One usable finding + one unusable (no summary),
+      // so the tolerant salvage that drops the second is exercised offline (37 §10).
+      if (userText.includes('as a whole book, the way an editor reads a manuscript')) {
+        return Promise.resolve({
+          text: JSON.stringify({
+            findings: [
+              {
+                kind: 'repetition',
+                summary: 'The smell of the garage opens more chapters than it can carry.',
+                chapters: ['The Garage'],
+              },
+              { kind: 'pacing', summary: '', chapters: [] },
+            ],
+          }),
+          usage: STORY_USAGE,
+        });
+      }
+
       // The craft loop, pass 1 (72 §5.3): the chapter plan. Deliberately IMPERFECT (37 §10) — one scene is
       // an empty object, so the tolerant salvage that drops it is actually exercised offline.
       if (userText.includes('You are planning ONE chapter')) {

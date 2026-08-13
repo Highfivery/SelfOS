@@ -53,6 +53,7 @@ import type {
   StoryCompleteness,
   StoryCompletenessStage,
   StoryPartCoverage,
+  ContinuityFinding,
   StoryDraftProgress,
   StoryPublishDiff,
   StoryReaderView,
@@ -1910,6 +1911,20 @@ function TabCount({ bookId, kind }: { bookId: string; kind: 'photos' }): JSX.Ele
   return null;
 }
 
+/** What each review finding is about, in the author's language. Two passes write into one list — the
+ *  continuity check (names/dates/facts) and the whole-book manuscript read (72 §5.3) — so the kind is what
+ *  tells them apart at a glance. */
+const FINDING_KIND_LABEL: Record<ContinuityFinding['kind'], string> = {
+  name: 'Name',
+  date: 'Date',
+  fact: 'Fact',
+  repetition: 'Repetition',
+  pacing: 'Pacing',
+  arc: 'Arc',
+  voice: 'Voice',
+  other: 'Note',
+};
+
 /** The Chapters tab: the cover-backed card grid grouped by part, the "write the remaining N" bar rendered
  *  inside the part that owns the unwritten shells, and the inline write-progress. */
 function ChaptersTab({
@@ -1935,6 +1950,7 @@ function ChaptersTab({
   const continuity = useStoryStore((s) => s.continuity);
   const loadContinuity = useStoryStore((s) => s.loadContinuity);
   const runContinuity = useStoryStore((s) => s.checkContinuity);
+  const runManuscript = useStoryStore((s) => s.readManuscript);
   const resolveContinuity = useStoryStore((s) => s.resolveContinuity);
   const busy = useStoryStore((s) => s.chaptersGenerating);
   const [continuityNote, setContinuityNote] = useState<string | null>(null);
@@ -1974,19 +1990,38 @@ function ChaptersTab({
             {busy ? 'Checking…' : 'Check continuity'}
           </Button>
         ) : null}
+        {/* The manuscript pass (72 §5.3) — the whole-book read for what no single chapter can show. */}
+        {writtenCount >= 2 ? (
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onClick={async () => {
+              setContinuityNote(null);
+              const res = await runManuscript(bookId);
+              if (!res.ok) setContinuityNote(res.message ?? 'The manuscript read couldn’t run.');
+              else if (res.findings.length === 0)
+                setContinuityNote('Nothing to flag — it holds together as a whole.');
+            }}
+          >
+            {busy ? 'Reading…' : 'Read the whole book'}
+          </Button>
+        ) : null}
       </div>
       {continuityNote ? <Banner tone="info">{continuityNote}</Banner> : null}
       {continuity.length > 0 ? (
         <Card>
           <Stack gap={2}>
-            <Heading level={2}>Continuity to review</Heading>
+            <Heading level={2}>Things to review</Heading>
             <Text tone="secondary" size="sm">
-              Places where names, dates, or facts don’t line up across chapters. Fix them in the
-              chapters, then mark each resolved — nothing is changed for you.
+              Names, dates and facts that don’t line up, and what a whole-book read turned up. Fix
+              them in the chapters, then mark each one done — nothing is changed for you.
             </Text>
             {continuity.map((f) => (
               <div key={f.id} className={styles.continuityRow}>
                 <Text size="sm">
+                  <Text as="span" tone="tertiary" size="sm">
+                    {FINDING_KIND_LABEL[f.kind]} ·{' '}
+                  </Text>
                   <strong>{f.summary}</strong>
                   {f.chapters.length > 0 ? (
                     <Text tone="tertiary" size="sm">

@@ -540,6 +540,7 @@ import {
   removeImagePlacement,
   computeStoryHomeSignal,
   askGap,
+  readManuscript,
   BOOK_TASK_MODELS,
   deleteStoryImage,
   exportFileStem,
@@ -6569,6 +6570,21 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         };
       }
       return checkContinuity(deps, bookId);
+    },
+    storyManuscriptRead: async (input): Promise<StoryContinuityResult> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps)
+        return { ok: false, findings: [], reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          findings: [],
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to read the whole book.',
+        };
+      }
+      return readManuscript(deps, bookId);
     },
     storyContinuity: async (input): Promise<ContinuityFinding[]> => {
       const { bookId } = StoryBookRefSchema.parse(input);

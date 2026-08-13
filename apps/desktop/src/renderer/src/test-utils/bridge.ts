@@ -535,6 +535,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     storyEditTimeline: () => Promise.resolve({ ok: true, timeline: null }),
     storyResolveProposal: () => Promise.resolve({ ok: true, proposals: [], bundle: null }),
     storyContinuityCheck: () => Promise.resolve({ ok: true, findings: [] }),
+    storyManuscriptRead: () => Promise.resolve({ ok: true, findings: [] }),
     storyContinuity: () => Promise.resolve([]),
     storyResolveContinuity: () => Promise.resolve([]),
     storyLineEdit: () =>

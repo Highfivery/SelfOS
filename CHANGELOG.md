@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.52.5](https://github.com/Highfivery/SelfOS/compare/v0.52.4...v0.52.5) (2026-08-13)
+
+
+### Bug Fixes
+
+* **questionnaires:** catch asserted past behaviour in the recitation guard (71 §5.7) ([#433](https://github.com/Highfivery/SelfOS/issues/433)) ([45d5a73](https://github.com/Highfivery/SelfOS/commit/45d5a73255ccee44faf19780cb4cc0201ac9c8b2))
+
 ## [0.52.4](https://github.com/Highfivery/SelfOS/compare/v0.52.3...v0.52.4) (2026-08-13)
 
 

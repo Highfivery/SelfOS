@@ -40,6 +40,20 @@ describe('buildBiographerSystem (64 §5.2)', () => {
     expect(doctrineAt).toBeGreaterThan(safetyAt); // doctrine comes AFTER safety
   });
 
+  /**
+   * 72 §5.1/§10 — assert the PROMPT, not just the constant. The doctrine is only worth fixing if the fix
+   * actually reaches the model: a doctrine edit that never lands in the assembled system prompt would pass a
+   * constant-only test while the live app keeps writing "the record doesn't say". (The spec-71 lesson: a green
+   * suite that asserts the outcome, not the prompt, hid a fix that had been neutered entirely.)
+   */
+  it('carries the no-meta-narration rule into the assembled system prompt', () => {
+    const sys = buildBiographerSystem(BIOGRAPHY_BOOK_TYPE, cfg(), 'Ben');
+    expect(sys).toMatch(/NEVER NARRATE THE BOOK'S OWN CONSTRUCTION/);
+    expect(sys).toMatch(/never assert what the material does not support/i);
+    // And the instruction that taught the tic is not in the prompt the model actually receives.
+    expect(sys.toLowerCase()).not.toContain('say so on the page');
+  });
+
   it('third-person voice is the default and names the biographer as not-"I"', () => {
     const sys = buildBiographerSystem(BIOGRAPHY_BOOK_TYPE, cfg(), 'Ben');
     expect(sys).toMatch(/THIRD person about Ben/);

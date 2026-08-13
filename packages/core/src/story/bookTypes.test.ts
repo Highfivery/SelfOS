@@ -85,4 +85,43 @@ describe('BookType registry (64)', () => {
     expect(d).toContain('not just x, but y');
     expect(d).toContain('i learned that');
   });
+
+  /**
+   * 72 §5.1 — the measured defect. The doctrine's honest-epistemics rule used to hand the model a literal
+   * script (`say so on the page ("the record doesn't say", …)`), and it adopted the example as house style:
+   * measured on the real vault, Ben's 50,006-word book breaks frame once every 168 words — "the record" ×188,
+   * "the biographer" ×34, "doesn't say" ×52. The rule (never assert what the material doesn't support) stays;
+   * the example that taught the tic is gone, and narrating the book's own construction is now forbidden
+   * outright. This test fails against the pre-72 doctrine.
+   */
+  it('never teaches the model to narrate its own sourcing (the meta-narration defect)', () => {
+    for (const type of BOOK_TYPES) {
+      const d = type.doctrine.toLowerCase();
+      // The old INSTRUCTION — "say so on the page" — is what taught the tic. It must be gone.
+      expect(d).not.toContain('say so on the page');
+      // The honest-epistemics CONSTRAINT survives — only its example changed.
+      expect(d).toContain('never assert what the material does not support');
+      // …and the doubt is now attributed to a person rather than to a researcher.
+      expect(d).toContain('in character');
+      // The offending phrase may still appear, but ONLY inside the forbidding clause.
+      expect(d).toContain('never as a fact about your sources');
+    }
+  });
+
+  it('forbids narrating the book’s own construction', () => {
+    for (const type of BOOK_TYPES) {
+      const d = type.doctrine.toLowerCase();
+      expect(d).toContain('never narrate the book');
+      // Every phrase the real books actually leaked is named explicitly.
+      for (const banned of [
+        '"the record"',
+        '"the material"',
+        '"the biographer"',
+        '"this chapter"',
+        '"this book"',
+      ]) {
+        expect(d).toContain(banned);
+      }
+    }
+  });
 });

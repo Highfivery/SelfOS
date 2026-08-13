@@ -47,6 +47,14 @@ const RECITATION_PATTERNS: readonly RegExp[] = [
   /\byou(?:'ve|’ve| have)\s+(said|told|marked|mentioned|noted|described|rated|listed|shared)\b/i,
   // Bare past-tense attribution, but only as an OPENER — so "if you said no, what happens?" is left alone.
   /^\s*(?:so[,\s]+|and\s+|okay[,\s]+)?you\s+(said|marked|mentioned|noted|described|rated|listed)\b/i,
+  // Asserting a past BEHAVIOUR as already-established — "you and Ben have already broadcast yourselves live".
+  // A real draft produced exactly this, which handed the recipient's history back to the AUTHOR in the builder
+  // (§17.4 is author-blind), and none of the attribution verbs above caught it. The `if` lookbehind keeps a
+  // legitimate conditional — "if you've already tried it, what changed?" — out of the net.
+  /(?<!\bif\s)\byou(?:\s+and\s+\S+)?\s+(?:have|'ve|’ve)\s+already\s+\w+/i,
+  // Attribution wrapped in a clause — "as you mentioned", "given that you rated this highly".
+  /\bas\s+you(?:'ve|’ve|\s+have)?\s+(said|mentioned|noted|described|put\s+it)\b/i,
+  /\bgiven\s+(?:that\s+)?you(?:'ve|’ve|\s+have)?\s+(said|marked|rated|mentioned|noted|described|listed)\b/i,
 ];
 
 /** Whether a prompt recites a known fact back at the person rather than simply naming it (§5.7). */

@@ -432,6 +432,18 @@ _All resolved with the owner on 2026-08-12:_
   `pruneTopicMap` (drop unreferenced, fold cross-run duplicates), tightened both tagging prompts toward durable
   ground, and made support the deciding rule: a name must recur to become a topic. **341 → 75 topics, zero
   singletons**, on the real map.
+- 2026-08-13 — **Fix: the recitation guard now catches asserted past BEHAVIOUR (§5.7).** Found by drafting a
+  real unfiltered questionnaire for a real recipient — not by a test. The ground was right (the planner opened
+  her only two remaining topics and NAMED THREE NEW ONES the taxonomy has no word for — "Aftercare & coming
+  down", "The ask itself", "Fantasy vs. want-to-do-it" — the emergent behaviour working), but one question read
+  _"You know your exhibitionism is real — you and Ben have already broadcast yourselves live."_ Generation is
+  **author-blind** (§17.4): the recipient's material feeds the model host-side and must never come back in
+  question text, which the AUTHOR reads in the builder. `hasRecitation` only matched attribution VERBS
+  ("you've said / you marked"), so an assertion of established behaviour sailed through. Added three patterns —
+  `you (and X) have already <verb>`, `as you mentioned`, `given that you rated` — each kept narrow, with an
+  `if` lookbehind so a legitimate conditional ("if you've already tried it, what changed?") is not dropped;
+  the guard drops a question outright, so a false positive costs a real one. Test pins BOTH directions and is
+  verified to FAIL when the patterns are reverted.
 - 2026-08-13 — **Polish: the catch-all bucket is filtered out of the ground summaries (§5.2).** Verifying the
   selector change on the real vault showed `Other` — the catch-all seed topic — being offered to BOTH members
   as ground to PREFER. It stays in the map and keeps collecting asks (it is real ground), but as steering it

@@ -935,3 +935,29 @@ describe('groundSummary — catch-all filtering (71 §5.2)', () => {
     expect(ground.open).toContain('Commute ritual');
   });
 });
+
+describe('hasRecitation — asserted past behaviour (71 §5.7)', () => {
+  it('catches a fact handed back as already-established, without eating conditionals', () => {
+    // Found by drafting a REAL questionnaire, not by a test: the model wrote "You know your exhibitionism is
+    // real — you and Ben have already broadcast yourselves live." Generation is author-blind (§17.4), so the
+    // recipient's history came back in text the AUTHOR reads in the builder, and none of the attribution verbs
+    // caught it. The conditional cases matter as much as the catches: dropping "if you've already tried it,
+    // what changed?" would cost a legitimate question every time.
+    for (const recited of [
+      'You and Ben have already broadcast yourselves live.',
+      'You have already tried this once — what changed?',
+      'As you mentioned before, you enjoy this.',
+      'Given that you rated this highly, what shifted?',
+    ]) {
+      expect(hasRecitation(recited)).toBe(true);
+    }
+    for (const fine of [
+      "If you've already tried it, what changed?",
+      'When a worry about your health shows up, what do you do?',
+      'If you said no, what happens?',
+      'You know that feeling when it hits — describe it.',
+    ]) {
+      expect(hasRecitation(fine)).toBe(false);
+    }
+  });
+});

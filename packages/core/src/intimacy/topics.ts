@@ -293,6 +293,58 @@ export const INTIMACY_FANTASIES: readonly string[] = [
   'Gangbang',
 ];
 
+/**
+ * Which category each built-in fantasy belongs to — hand-authored DATA, one entry per label above.
+ *
+ * Generation uses this to drop a fantasy that sits on ground already worked through, so the prompt can't name
+ * an area off-limits and then hand the model a fantasy on exactly that ground two lines later. It replaces the
+ * keyword regex the retired coverage engine used for the same job (spec 71 §1 D4 measured that classifier
+ * crediting a third of real questions to zero categories); a fixed 13-entry table over a fixed 13-entry list
+ * is inspectable and cannot mis-classify.
+ *
+ * A CUSTOM fantasy the Owner added has no entry and is therefore never filtered — it is their own free text on
+ * ground the built-in categories may not even name, so silently withholding it would be worse than showing it.
+ */
+export const INTIMACY_FANTASY_CATEGORY: Readonly<Record<string, IntimacyCategory>> = {
+  'Threesome / group': 'group',
+  Gangbang: 'group',
+  Voyeurism: 'exhibition',
+  Exhibitionism: 'exhibition',
+  'Being watched': 'exhibition',
+  Domination: 'power-exchange',
+  Submission: 'power-exchange',
+  Bondage: 'bondage',
+  'Consensual non-consent (CNC) roleplay': 'taboo-fantasy',
+  'Cheating roleplay': 'taboo-fantasy',
+  'Strangers / one-night roleplay': 'roleplay',
+  'Boss / employee roleplay': 'roleplay',
+  'Teacher / student roleplay': 'roleplay',
+};
+
+const FANTASY_LABEL_TO_CATEGORY = new Map(
+  Object.entries(INTIMACY_FANTASY_CATEGORY).map(([label, c]) => [label, c] as const),
+);
+
+/** The category a fantasy label sits in, or `undefined` for custom/unknown text (never filtered). A Map, not
+ *  an object index, so a custom fantasy named `toString` can't resolve to an inherited function. */
+export function categoryForFantasy(label: string): IntimacyCategory | undefined {
+  return FANTASY_LABEL_TO_CATEGORY.get(label.trim());
+}
+
+const ACTIVITY_LABEL_TO_CATEGORY = new Map(
+  INTIMACY_ACTIVITIES_FULL.map((a) => [a.label.toLowerCase(), a.category] as const),
+);
+
+/**
+ * The category a built-in ACTIVITY label sits in, or `undefined` for an Owner-custom addition.
+ *
+ * The generation prompt seeds from the flat label list, so this is how it maps back — a lookup over the same
+ * inventory that produced the labels, never a guess. A custom activity has no entry and is never filtered.
+ */
+export function categoryForActivityLabel(label: string): IntimacyCategory | undefined {
+  return ACTIVITY_LABEL_TO_CATEGORY.get(label.trim().toLowerCase());
+}
+
 /** The built-in inventory grouped (the shape both surfaces consume). `activities` is the flat label list so
  * questionnaire generation is unaffected by the categorization (49 §3.2/§4.2). */
 export const INTIMACY_TOPICS = {

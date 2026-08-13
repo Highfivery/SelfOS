@@ -13505,7 +13505,7 @@ async function readGenerationPrompts(dir: string): Promise<string[]> {
   return Promise.all(names.map((n) => readFile(join(dir, n), 'utf8')));
 }
 
-test('auto check-ins (63 §13 / 08 §27): a worked-through intimacy category is off-limits — the next check-in opens NEW ground (#314)', async () => {
+test('auto check-ins (63 §13 / 71 §5.2): a rated act on worked-through ground is not re-mined (#314)', async () => {
   test.setTimeout(60_000);
   const promptDir = await mkdtemp(join(tmpdir(), 'selfos-e2e-intimacy-prompt-'));
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
@@ -13611,8 +13611,32 @@ test('auto check-ins (63 §13 / 08 §27): a worked-through intimacy category is 
     });
   }
 
-  // One older approved insight: gap-finder context + the §27.4 `new-material` signal, deliberately dated
-  // BEFORE the intimacy asks so it cannot re-open the saturated category either.
+  // The ask ledger those sends produced: three asks tagged to Intimacy:oral → that ground is worked through
+  // (spec 71 §5.2). `backfilledAt` makes the ledger authoritative; the dates are recent on purpose, since
+  // ground last asked >90d ago is DORMANT and would correctly re-open.
+  await writeEncryptedJson(
+    fs,
+    'people/owner-1/questionnaires/askLedger.enc',
+    {
+      schemaVersion: 1,
+      personId: 'owner-1',
+      backfilledAt: at(30),
+      entries: [1, 2, 3].map((n) => ({
+        questionId: `q${n}a`,
+        assignmentId: `oral-${n}`,
+        at: at(n + 1),
+        type: 'intimacy',
+        tier: 'unfiltered',
+        topicIds: ['Intimacy:oral'],
+        gist: 'what makes receiving oral land best',
+        outcome: 'rich',
+      })),
+    },
+    key,
+  );
+
+  // One older approved insight: gap-finder context + the topic-scoped `new-material` signal, deliberately
+  // dated BEFORE the intimacy asks so it cannot re-open the worked-through ground either.
   await saveInsight(fs, key, {
     id: 'seed-portrait',
     schemaVersion: 1,
@@ -13671,27 +13695,17 @@ test('auto check-ins (63 §13 / 08 §27): a worked-through intimacy category is 
     await expect(w.getByText(/Added \d+ new check-in/)).toBeVisible({ timeout: 30_000 });
 
     // The intimacy generation prompt is the ONLY place the fix is observable end-to-end: #314 is a change to
-    // what generation is TOLD, and the offline model can't be asked to prove it obeyed. `GROUND TO OPEN THIS
-    // TIME` is emitted only when coverage reaches `explicitFraming`, so it identifies the intimacy pass.
+    // what generation is TOLD, and the offline model can't be asked to prove it obeyed. The go-deeper block
+    // is emitted only by `explicitFraming`, so it identifies the intimacy pass.
     const findIntimacyPrompt = async (): Promise<string> =>
       (await readGenerationPrompts(promptDir)).find((p) =>
-        p.includes('GROUND TO OPEN THIS TIME'),
+        p.includes('They have ALREADY RATED acts like these'),
       ) ?? '';
     await expect.poll(findIntimacyPrompt, { timeout: 30_000 }).not.toBe('');
     const intimacyPrompt = await findIntimacyPrompt();
 
-    // 1. The worked-through ground is named OFF-LIMITS — the direct fix for "it keeps asking about the same
-    //    thing in new words", which de-dup structurally cannot catch.
-    expect(intimacyPrompt).toContain('ALREADY EXPLORED THOROUGHLY — do NOT return to these:');
-    expect(/ALREADY EXPLORED THOROUGHLY[^\n]*\bOral\b/.test(intimacyPrompt)).toBe(true);
-
-    // 2. …and the set is steered at ground NOT yet worked. The lead list must not re-offer Oral.
-    const groundLine = /^GROUND TO OPEN THIS TIME[^\n]*$/m.exec(intimacyPrompt)?.[0] ?? '';
-    expect(groundLine).not.toBe('');
-    expect(/\boral\b/i.test(groundLine)).toBe(false);
-
-    // 3. The "go DEEPER on the acts they rated" list — the actual #314 mechanism — is now BOUNDED to acts
-    //    whose category isn't worked through: the rated sensual act survives, the rated oral one is gone.
+    // 1. The "go DEEPER on the acts they rated" list — the actual #314 mechanism — is BOUNDED to acts whose
+    //    ground the ask ledger still has open: the rated sensual act survives, the rated oral one is gone.
     //    (Scoped to that line: the rated oral act legitimately still appears in the avoid-only known-data
     //    reference, which is what stops it being re-asked as a fresh rating.)
     const deeperLine =
@@ -13699,6 +13713,13 @@ test('auto check-ins (63 §13 / 08 §27): a worked-through intimacy category is 
     expect(deeperLine).not.toBe('');
     expect(deeperLine).toContain('Sensual massage');
     expect(/\boral\b/i.test(deeperLine)).toBe(false);
+
+    // 2. …and the wider material doesn't hand the same worked-through ground straight back, which would be
+    //    the same self-contradiction one line further down. Non-vacuous: open ground is still offered.
+    const materialLine = /^Subject matter to draw on[^\n]*$/m.exec(intimacyPrompt)?.[0] ?? '';
+    expect(materialLine).not.toBe('');
+    expect(materialLine).toContain('Sensual massage');
+    expect(/\boral\b/i.test(materialLine)).toBe(false);
 
     // ~360px: the Auto check-ins surface still has no horizontal scrollbar / inner overflow (§7/§12).
     await w.setViewportSize({ width: 360, height: 800 });

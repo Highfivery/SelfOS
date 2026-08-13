@@ -39,8 +39,10 @@ import { listInsightsForPerson, saveInsight, summarizeForContext } from '@selfos
 import { getIntakeSession, submitSectionForm } from '@selfos/core/intake';
 import {
   applyDecline,
+  emptyLedger,
   emptyProfile,
   readLedger,
+  writeLedger,
   NOT_APPLICABLE_SKIP_REASON,
   readProfile,
   writeProfile,
@@ -2946,14 +2948,11 @@ describe('createCoreBridge', () => {
     expect(sentUserText).toMatch(/go DEEPER/i);
     // …but the raw rating text is NEVER returned to the author (author-blind §17.4/§19.1).
     expect(JSON.stringify(result)).not.toContain('Receiving oral (blowjob)');
-    // The coverage map reaches the prompt too, so a MANUAL intimacy draft is bounded by the same rule as an
-    // auto check-in (#314) — nothing worked-through yet here, so new ground simply leads.
-    expect(sentUserText).toMatch(/GROUND TO OPEN THIS TIME/);
     expect(ownerId).toBeTruthy();
   });
 
-  // #314 — the manual "Draft with AI" path shares `explicitFraming`, so it must be bounded too: once a
-  // category has been worked through it goes off-limits and its rated acts stop being re-mined.
+  // #314 — the manual "Draft with AI" path shares `explicitFraming`, so it must be bounded too: once ground
+  // has been worked through, its rated acts stop being offered for deepening.
   it('a manual intimacy draft drops worked-through ground — unless the author explicitly asks for it (§27)', async () => {
     const { host, bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-test' });
@@ -2968,35 +2967,35 @@ describe('createCoreBridge', () => {
         getSpecific: true,
         ownAnatomy: 'Cock (penis)',
         partnerAnatomy: ['Pussy (vulva)'],
-        activities: { 'oral-receiving': 5 },
+        // One act on ground about to be worked through, one that stays open — so the assertions below
+        // distinguish "filtered" from "the whole block vanished".
+        activities: { 'oral-receiving': 5, 'vaginal-sex': 4 },
       },
       new Date(),
     );
 
-    // Three prior INTIMACY questionnaires about oral → that category is worked through.
-    for (let i = 0; i < 3; i += 1) {
-      const q = await bridge.questionnairesSave({
-        title: `Oral check-in ${i + 1}`,
+    // Three prior asks tagged to oral → that ground is worked through, per the ask ledger.
+    await writeLedger(ctx.fs, ctx.key, {
+      ...emptyLedger(mara.id),
+      backfilledAt: new Date('2026-01-01').toISOString(),
+      entries: [0, 1, 2].map((n) => ({
+        questionId: `o${n}`,
+        assignmentId: `ao${n}`,
+        // Recent on purpose: ground last asked >90d ago is DORMANT and correctly re-opens.
+        at: new Date(Date.now() - (n + 1) * 86_400_000).toISOString(),
         type: 'intimacy',
-        sensitivity: 'unfiltered',
-        recipient: { kind: 'person', personId: mara.id },
-        questions: [
-          {
-            id: `q-${i}`,
-            type: 'shortText',
-            prompt: 'What do you like most about receiving oral?',
-            required: false,
-          },
-        ],
-      });
-      await bridge.assignmentsCreate({ questionnaireId: q.id, privacy: 'private' });
-    }
+        tier: 'unfiltered' as const,
+        topicIds: ['Intimacy:oral'],
+        gist: 'receiving oral',
+        outcome: 'rich' as const,
+      })),
+    });
 
-    let sentUserText = '';
+    const prompts: string[] = [];
     host.host.claude = {
       send: () => Promise.resolve(''),
       stream: (options, onDelta) => {
-        sentUserText = options.messages.map((m) => m.content).join('\n');
+        prompts.push(options.messages.map((m) => m.content).join('\n'));
         const json = JSON.stringify({
           title: 'X',
           questions: [{ type: 'shortText', prompt: 'Somewhere new?', required: true }],
@@ -3015,13 +3014,14 @@ describe('createCoreBridge', () => {
       existingPrompts: [],
       recipientPersonId: mara.id,
     });
-    // Worked-through ground is off-limits, and its rated act is no longer offered for "go deeper".
-    expect(sentUserText).toMatch(/ALREADY EXPLORED THOROUGHLY/);
-    expect(sentUserText).not.toContain('Receiving oral (blowjob) (Love it)');
+    const genPrompt = prompts.find((p) => p.includes('ALREADY RATED')) ?? '';
+    // The act on worked-through ground is no longer offered for "go deeper"; the open one still is.
+    expect(genPrompt).not.toContain('Receiving oral (blowjob) (Love it)');
+    expect(genPrompt).toContain('Vaginal sex (Like it)');
 
-    // ...but an EXPLICIT author brief naming that ground RE-OPENS it (§27.4) — the fix must never refuse a
-    // direct request, which would be the opposite of the intent.
-    sentUserText = '';
+    // ...but an EXPLICIT author brief naming that ground RE-OPENS it — the bound must never refuse a direct
+    // request, which would be the opposite of the intent (and would contradict the focus line right above it).
+    prompts.length = 0;
     await bridge.questionnairesGenerate({
       type: 'intimacy',
       sensitivity: 'unfiltered',
@@ -3029,17 +3029,8 @@ describe('createCoreBridge', () => {
       recipientPersonId: mara.id,
       brief: 'Go deeper on receiving oral specifically.',
     });
-    expect(sentUserText).not.toMatch(/ALREADY EXPLORED THOROUGHLY[^\n]*Oral/i);
-    // Positive proof the re-open really happened (not just that the off-limits block moved): the rated act is
-    // offered for deepening again.
-    expect(sentUserText).toContain('Receiving oral (blowjob) (Love it)');
-    // ...and the prompt must not then steer AWAY from what was just asked for. The requested ground LEADS the
-    // named ground, so "build this set around …" and the author's brief agree instead of conflicting (§27.3).
-    // (Suppressing the block on a brief would have been wrong: `intimacySpec` always sets one, so that would
-    // silently disable the steering on the auto path — the very path #314 was reported on.)
-    const groundLine = sentUserText.split('\n').find((l) => l.includes('GROUND TO OPEN THIS TIME'));
-    expect(groundLine).toBeDefined();
-    expect(groundLine ?? '').toMatch(/in this order: Oral/i);
+    const reopened = prompts.find((p) => p.includes('ALREADY RATED')) ?? '';
+    expect(reopened).toContain('Receiving oral (blowjob) (Love it)');
   });
 
   it('feeds a recipient’s prior skip/decline into the manual generation prompt (spec 69 §5.9)', async () => {

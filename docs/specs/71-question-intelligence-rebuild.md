@@ -189,14 +189,14 @@ The durable record of what a person has been asked: **one read**, appended in `c
 updated on submit.
 
 **As built it SUPERSEDES the six full scans as the steering signal; it has not yet REPLACED them as code.**
-The scans (`gatherRecipientAskedPrompts`, `gatherRecipientIntimacyAsks`,
-`gatherRecipientQuestionnaireTitles`, `gatherRecipientPriorAnswersByAssignment`,
-`countAnsweredQuestionnaires`, plus the nested call inside `gatherRecipientHistory`) still run on every
+The remaining scans (`gatherRecipientAskedPrompts`, `gatherRecipientQuestionnaireTitles`,
+`gatherRecipientPriorAnswersByAssignment`, `countAnsweredQuestionnaires`, plus the nested call inside
+`gatherRecipientHistory`) still run on every
 draft — ~1,148 decrypt ops — because two of them feed consumers the ledger cannot serve yet
 (`gatherRecipientQuestionnaireTitles` → the gap-finder's avoid-list; `gatherRecipientPriorAnswersByAssignment`
-→ Your Story's corpus, which needs whole answers, not gists), and the rest are the **pre-backfill fallback**:
-until a person's `backfilledAt` is set the ledger is empty, so planning from it would tell the model almost
-nothing has been asked. Removing them is a bounded follow-up gated on `ledgerAuthoritative`, not a rewrite —
+→ Your Story's corpus, which needs whole answers, not gists). The two that existed only to feed the legacy
+coverage map — `gatherRecipientIntimacyAsks` and `gatherRecipientMaterialSignals` — went with it (2026-08-13).
+Removing the rest is a bounded follow-up gated on `ledgerAuthoritative`, not a rewrite —
 but it changes the de-dup inputs on the highest-volume path, so it wants the same real-vault verification pass
 that caught the defects in §1, and is deliberately not bundled with the steering fix.
 
@@ -262,10 +262,11 @@ topic map, so saturation is correct immediately rather than blind for weeks. Ide
 `backfilledAt`, and fail-safe (a failed backfill leaves the ledger empty and the app behaves as today). It
 rides the existing daily reconcile cadence, ahead of the coverage/candidate passes.
 
-**As built — the ledger is authoritative only once `backfilledAt` is set.** Until then generation keeps the
-legacy intimacy-coverage steering and skips the planner entirely. Without this there is a migration window in
-which the ledger is empty or partial, so planning from it would tell the model almost nothing had been asked —
-worse than the engine being replaced. The switch is therefore clean rather than gradual.
+**As built — the ledger is authoritative only once `backfilledAt` is set.** Until then generation skips the
+PLANNER entirely: an empty or partial ledger would tell the model almost nothing had been asked, which is a
+worse steer than none. The closure it derives is trusted either way, since whatever the ledger holds is real
+asks. There is no longer a second engine behind that gate — the legacy intimacy coverage map was deleted on
+2026-08-13, once every household member was backfilled and a brand-new person had no history for it to act on.
 
 ### 5.8 The Explored tab shows the map (owner decision 2026-08-12)
 
@@ -509,6 +510,44 @@ _All resolved with the owner on 2026-08-12:_
   (`groundSummary`, type/tier-scoped) on both call sites (auto engine + the Suggested panel), as prompt
   steering rather than a hard filter, since the planner and question-level de-dup already bound the damage
   downstream. Guarded on both paths, each verified to FAIL when the wiring is reverted.
+- 2026-08-13 — **Follow-up: the legacy intimacy coverage engine is DELETED (§5.1/§5.2/§5.6).** `intimacy/
+coverage.ts` survived the rebuild only as the pre-backfill fallback; that justification is dead (every
+  household member is backfilled, and a brand-new person has no history for a keyword classifier to act on), so
+  it is gone along with its two feeder scans (`gatherRecipientIntimacyAsks`, `gatherRecipientMaterialSignals`),
+  `nextIntimacyCategory`, and the `IntimacyCoverage` plumbing through generation and the bridge. **The one
+  thing it still did had to be re-sourced, not dropped:** it bounded the "already rated → go deeper" act list to
+  acts whose category was NOT worked through. Without that bound the framing lists rated acts regardless of
+  saturation — act-level re-mining, the exact #314 complaint, which de-dup structurally cannot catch because
+  each re-ask is new WORDING about the same act. The bound now comes from the ledger (`topicStatuses` →
+  `Intimacy:<category>` closure) and was **widened to the material lines too**: offering "Threesomes" while the
+  planner has just named Group & swinging off-limits is the same self-contradiction one line further down.
+  Fantasy→category and activity-label→category are hand-authored lookups over the fixed inventory
+  (`INTIMACY_FANTASY_CATEGORY`, `categoryForActivityLabel`), never a classifier. An explicitly requested topic —
+  a pin, or ground the author's own brief NAMES (`topicsMentionedIn`, matched per `&`/`/` alternative so the
+  compound labels most categories carry are actually reachable) — is excluded from the bound, so a direct "go
+  deeper on receiving oral" is never contradicted by the vocabulary underneath it. A brief mention relaxes the
+  VOCABULARY only and never reaches the planner's `requestedTopicIds`: free text is not consent to re-open
+  ("nothing about money please" names Money), and ground selection stays the planner's, governed by the
+  cooldown floor per §5.2. The `unfiltered` tier directive, which enumerates group/exhibition/bondage by name,
+  now defers to the closed-ground statement rather than contradicting it. Display: `deriveCoverageSkeleton` is now structure-only (one row per built-in
+  category, ids/labels matching `seedTopics`), with every number layered on from the ledger + topic map.
+  Three `SEEDED_BLURBS` keys were wrong (`exhibitionism`/`edge-play`/`oral-anal` for `exhibition`/`edge`/none),
+  which only mattered once the topic map became the sole source of those rows; fixed + pinned by a guard.
+  **Code review caught a regression the vault check could not see:** `refreshCoverage` persists the skeleton,
+  and `applyCoverageAssessments` deliberately never scores Intimacy — so zeroed rows meant
+  `buildCoverageGuidance` (which reads the PERSISTED profile, not the folded view) listed all 14 categories
+  under "NEW / UNEXPLORED GROUND — lead here", sorted ahead of general areas with real depth, steering the
+  candidate feed at the most worked-through ground in the vault. `refreshCoverage` now folds the ledger in
+  before persisting; guarded, verified to fail without the fold.
+  **Verified against the real vault, not just tests:** the Explored panel's Intimacy rows are byte-identical
+  before/after for all 11 people (Angel 154 asks / 35 topics, Ben 77 / 25), and a real unfiltered draft for the
+  partner plans only open ground (The ask itself, Script vs improvise, Aftercare, Fantasy vs enactment) while
+  every built-in act and fantasy it offers sits in the only two open categories — 8 of 13 built-in fantasies
+  and every closed category's acts withheld. Three guards (manual, auto, bridge), each verified to FAIL when
+  the filter is reverted. **Known gap, unchanged by this work:** the Owner's 10 CUSTOM activities carry no
+  category, so they are never filtered — the legacy engine appended them unfiltered too. On the real vault that
+  still offers threesome/broadcast material while Group is closed; closing it needs a category on each custom
+  entry, which is a product decision, not a refactor.
 - 2026-08-13 — **Follow-up: one engine decides ground (§5.2).** The auto check-in engine's intimacy slot still
   chose its focus from the LEGACY keyword coverage map (`nextIntimacyCategory`) while the planner chose from the
   ledger — two engines disagreeing on the path that carried 13 of 22 real intimacy sends, and §1 had already

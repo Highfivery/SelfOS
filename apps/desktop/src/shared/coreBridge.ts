@@ -693,8 +693,6 @@ import {
   gatherRecipientAskedPrompts,
   gatherRecipientPriorAnswers,
   gatherRecipientInsightFacts,
-  gatherRecipientIntimacyAsks,
-  gatherRecipientMaterialSignals,
   gatherRecipientQuestionnaireTitles,
   gatherRecipientFeedbackGuidance,
   gatherRecipientPinnedLabels,
@@ -1828,8 +1826,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     recipientPersonId: string,
     /** The active person (author) — reads their per-recipient covered-topic notes (08 §28.3). */
     authorId: string,
-    /** The author's brief, when there is one — the §27.4 explicit-request signal (see below). */
-    brief?: string,
   ): Promise<{
     history: string;
     coveredActs: CoveredAct[];
@@ -1838,8 +1834,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     /** The author's "already covered" topic notes for this recipient (08 §28.3) — fed to the gap-finder's
      *  avoid-list by the caller, so the TOPIC selector won't re-pick a marked-done area under a new title. */
     coveredNotes: string[];
-    /** Which intimacy ground has already been worked (08 §27.2) — bounds the "go deeper" framing so a manual
-     *  intimacy draft can't re-mine the same rated acts either (#314). */
     /** Differentiated avoid/boundary/reword steering from the recipient's Personalization Profile — how the
      *  app learns from their prior skips/declines (spec 69 §5.9). */
     feedbackGuidance: string;
@@ -1895,13 +1889,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           coveredActs: [] as CoveredAct[],
           prompts: [] as string[],
         };
-    const [intimacyAsks, signals, coveredTopics] = await Promise.all([
-      gatherRecipientIntimacyAsks(fs, key, recipientPersonId),
-      gatherRecipientMaterialSignals(fs, key, recipientPersonId),
-      // The author's explicit "already covered" notes for this recipient (08 §28.3) — the strongest de-dup
-      // signal there is; fed into the reference below + returned for the gap-finder's avoid-list.
-      listCoveredTopics(fs, key, authorId, recipientPersonId),
-    ]);
+    // The author's explicit "already covered" notes for this recipient (08 §28.3) — the strongest de-dup
+    // signal there is; fed into the reference below + returned for the gap-finder's avoid-list.
+    const coveredTopics = await listCoveredTopics(fs, key, authorId, recipientPersonId);
     const coveredNotes = coveredTopics.map((t) => t.note);
     // The generation SOFT grounding (the whole blob) — onboarding appended, as before.
     const combined = [
@@ -4219,20 +4209,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Knowledge-aware de-dup (08 §19): the recipient's history + RAW onboarding answers, and the intimacy
       // acts already rated — so generation goes deeper instead of repeating what's known. Author-blind.
       const known = recipientIsHousehold
-        ? await recipientKnownData(
-            deps.fs,
-            deps.key,
-            p.recipientPersonId as string,
-            deps.personId,
-            p.brief,
-          )
+        ? await recipientKnownData(deps.fs, deps.key, p.recipientPersonId as string, deps.personId)
         : {
             history: '',
             coveredActs: [],
             askedPrompts: [],
             dedupReference: '',
             coveredNotes: [] as string[],
-            intimacyCoverage: undefined,
             feedbackGuidance: '',
             partnerContext: '',
             pinnedLabels: [] as string[],
@@ -4297,8 +4280,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ...(known.dedupReference ? { dedupReference: known.dedupReference } : {}),
         ...(known.askedPrompts.length ? { recipientAskedPrompts: known.askedPrompts } : {}),
         ...(known.coveredActs.length ? { coveredIntimacyActs: known.coveredActs } : {}),
-        // §27.3 — bounds the "go deeper" framing to ground not yet worked through (#314).
-        ...(known.intimacyCoverage ? { intimacyCoverage: known.intimacyCoverage } : {}),
         // spec 69 §5.9 — learn from their prior skips/declines (avoid / boundary / reword).
         ...(known.feedbackGuidance ? { feedbackGuidance: known.feedbackGuidance } : {}),
         // spec 69 §5.4 — a self check-in can reflect a partner's shared desire (restricted never crosses).
@@ -4756,8 +4737,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         // standard-tier, so this is inert here today. Passed for symmetry (de-dup still runs via `history`)
         // and so it works automatically if a future materialize carries the suggestion's sensitivity.
         ...(known.coveredActs.length ? { coveredIntimacyActs: known.coveredActs } : {}),
-        // §27.3 — bounds the "go deeper" framing to ground not yet worked through (#314).
-        ...(known.intimacyCoverage ? { intimacyCoverage: known.intimacyCoverage } : {}),
         // spec 69 §5.9 — learn from their prior skips/declines (avoid / boundary / reword).
         ...(known.feedbackGuidance ? { feedbackGuidance: known.feedbackGuidance } : {}),
         // spec 69 §5.4 — a self check-in can reflect a partner's shared desire (restricted never crosses).

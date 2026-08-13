@@ -47,6 +47,7 @@ import {
   rollUpCategoryLabels,
   CATCH_ALL_TOPIC_ID,
   topicStatuses,
+  topicsMentionedIn,
   topicsWithNewMaterial,
   type Topic,
   type TopicMaterial,
@@ -173,9 +174,10 @@ export interface GenerateRequest {
   dedupReference?: string;
   // The intimacy acts the recipient already rated in onboarding (08 §19.3) — reframes the intimacy seeding so
   // it goes deeper on rated acts instead of re-asking them.
-  coveredIntimacyActs?: readonly { label: string; rating: string }[];
-  // Which intimacy ground has already been worked (08 §27.2). This is what bounds the "go deeper" above so it
-  // stops re-mining the same acts forever (#314) and steers each set to genuinely new ground.
+  // `key` is the stable matrix-row key (46 §4.2): it resolves the act's category, which is how the "go deeper"
+  // list stays bounded to ground the ledger still has open (#314). REQUIRED — the producer (`CoveredAct`) always
+  // has it, and making it optional would let a future caller silently disable the bound by omission.
+  coveredIntimacyActs?: readonly { key: string; label: string; rating: string }[];
   // Who the questionnaire is FOR (08 §24.4): name + pronouns + the author↔recipient relationship, so questions
   // read as written for this specific person in the right register. Assembled host-side by the bridge.
   recipient?: {
@@ -290,10 +292,9 @@ export async function generateQuestions(
   let ledger = emptyLedger(request.recipientPersonId ?? '');
   let statuses: TopicStatus[] = [];
   // The ledger only becomes AUTHORITATIVE once the one-time backfill has seeded this person's existing sends
-  // (spec 71 §5.6). Until then it is empty or partial, so planning from it would tell the model almost nothing
-  // has been asked — worse than the engine it replaces. Until the flag is set we keep the legacy intimacy
-  // coverage steering; after it, the planner owns ground. That makes the migration a clean switch rather than
-  // a window where neither signal is real.
+  // (spec 71 §5.6). Until then it is empty or partial, so a PLANNING call would tell the model almost nothing
+  // has been asked — a worse steer than none, hence the gate below. The closure derived from it is still
+  // trustworthy either way: whatever the ledger does hold is real asks, so it can only ever close real ground.
   let ledgerAuthoritative = false;
   if (request.recipientPersonId) {
     const [profile, loaded] = await Promise.all([
@@ -310,10 +311,31 @@ export async function generateQuestions(
       newMaterialTopicIds: request.newMaterial
         ? topicsWithNewMaterial(request.newMaterial, topicMap, ledger)
         : [],
+      // An explicit request re-opens ground for the PLANNER (spec 71 §5.2) — the person's pinned
+      // "ask me this" labels ONLY. The author's brief deliberately does NOT feed this: a brief is free text,
+      // so a mention is not consent to re-open ("nothing about money please" names Money), and re-opening
+      // would override saturation for ground SELECTION. The brief's effect is confined to the vocabulary
+      // bound below, where a false positive costs nothing.
       ...(request.requestedLabels ? { requestedTopicIds: [...request.requestedLabels] } : {}),
       now,
     }).filter((s) => areas.has(s.topic.lifeArea));
   }
+  // Ground the ledger says is not askable right now: worked through, inside the cooldown floor, or paused.
+  // Deliberately `!open` rather than `saturated` alone — every one of those states means "not this ground now",
+  // and the acts/fantasies the explicit framing offers must respect the same closure the planner does.
+  //
+  // …minus anything ASKED FOR — a pin, or ground the author's brief names. Ground selection is unaffected
+  // (that stays the planner's, governed by the cooldown floor); this only stops the prompt contradicting
+  // itself, which withholding "receiving oral" under a focus line reading "go deeper on receiving oral"
+  // plainly does. It applies to quality-saturated ground too, which can never carry an `explicit-request`
+  // re-open (§5.4) yet is just as incoherent to demand and withhold at once.
+  const asked = new Set([
+    ...(request.requestedLabels ?? []),
+    ...(request.brief ? topicsMentionedIn(request.brief, topicMap) : []),
+  ]);
+  const closedTopicIds = statuses
+    .filter((s) => !s.open && !asked.has(s.topic.topicId))
+    .map((s) => s.topic.topicId);
   // Plan only when there is ground to reason about. An EXTERNAL recipient has no household record, so there
   // are no statuses, no repetition risk to steer around, and nothing for a planning call to decide — spending
   // one would be pure cost. Generation's own guidance covers that case, exactly as it did before spec 71.
@@ -368,6 +390,10 @@ export async function generateQuestions(
     ...(request.coveredIntimacyActs !== undefined
       ? { coveredIntimacyActs: request.coveredIntimacyActs }
       : {}),
+    // The ledger's closed ground bounds the explicit framing's act + fantasy material (spec 71 §5.2/§5.7).
+    // `statuses` is already scoped to this type/tier's life areas, so an intimacy set contributes exactly the
+    // Intimacy topics. Empty for an external recipient — nothing known, nothing to bound.
+    ...(closedTopicIds.length > 0 ? { closedTopicIds } : {}),
     ...(request.recipient !== undefined ? { recipient: request.recipient } : {}),
     ...(request.feedbackGuidance !== undefined
       ? { feedbackGuidance: request.feedbackGuidance }

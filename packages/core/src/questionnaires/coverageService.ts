@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 import { extractJsonArray, salvageJsonArray, tolerantArray } from '../ai/jsonSalvage';
-import { buildIntimacyCoverage } from '../intimacy/coverage';
 import { formatIntakeForGeneration, getIntakeSession } from '../intake/intakeService';
 
 import { runClaude, type AiDeps } from './aiCall';
@@ -12,6 +11,7 @@ import {
   GENERAL_LIFE_AREAS,
   type CoverageAssessment,
 } from './coverageModel';
+import { readLedger } from './askLedger';
 import { gatherRecipientPartnerContext } from './partnerContext';
 import {
   applyReciprocity,
@@ -23,10 +23,10 @@ import {
 import {
   gatherRecipientAskedPrompts,
   gatherRecipientInsightFacts,
-  gatherRecipientIntimacyAsks,
-  gatherRecipientMaterialSignals,
   gatherRecipientPriorAnswers,
 } from './recipientHistory';
+import { ensureTopics } from './topicMap';
+import { foldTopicMap } from './transparencyView';
 
 /**
  * The AI coverage-placement pass (spec 69 §5.6, Phase 2b) — reads a bounded digest of the person's own answers
@@ -90,34 +90,6 @@ function buildUser(digest: string): string {
   ].join('\n');
 }
 
-/**
- * Compute the deterministic (send-history driven, no AI) intimacy coverage for a person — the same assembly
- * `refreshCoverage` uses, exported so the transparency read (spec 69 §3.4) derives the coverage skeleton the
- * same way. Reads the person's OWN data only.
- */
-export async function deriveIntimacyCoverageFor(
-  fs: import('../host').FileSystem,
-  key: Uint8Array,
-  personId: string,
-  now: Date,
-): Promise<ReturnType<typeof buildIntimacyCoverage>> {
-  const [session, intimacyAsks, signals] = await Promise.all([
-    getIntakeSession(fs, key, personId),
-    gatherRecipientIntimacyAsks(fs, key, personId),
-    gatherRecipientMaterialSignals(fs, key, personId),
-  ]);
-  const intake = session
-    ? formatIntakeForGeneration(session)
-    : { text: '', coveredActs: [], prompts: [] };
-  return buildIntimacyCoverage({
-    coveredActs: intake.coveredActs,
-    askedIntimacy: intimacyAsks,
-    ...(signals.newMaterialAt !== undefined ? { newMaterialAt: signals.newMaterialAt } : {}),
-    ...(session?.updatedAt ? { profileEditedAt: session.updatedAt } : {}),
-    now,
-  });
-}
-
 export interface CoverageRefreshResult {
   ok: boolean;
   degraded?: boolean;
@@ -132,25 +104,14 @@ export async function refreshCoverage(
   deps: AiDeps,
   recipientPersonId: string,
 ): Promise<CoverageRefreshResult> {
-  const [priorAnswers, insightFacts, session, intimacyAsks, signals] = await Promise.all([
+  const [priorAnswers, insightFacts, session] = await Promise.all([
     gatherRecipientPriorAnswers(deps.fs, deps.key, recipientPersonId),
     gatherRecipientInsightFacts(deps.fs, deps.key, recipientPersonId),
     getIntakeSession(deps.fs, deps.key, recipientPersonId),
-    gatherRecipientIntimacyAsks(deps.fs, deps.key, recipientPersonId),
-    gatherRecipientMaterialSignals(deps.fs, deps.key, recipientPersonId),
   ]);
   const intake = session
     ? formatIntakeForGeneration(session)
     : { text: '', coveredActs: [], prompts: [] };
-
-  // The Intimacy branch is deterministic (send-history driven) — computed here, never asked of the model.
-  const intimacyCoverage = buildIntimacyCoverage({
-    coveredActs: intake.coveredActs,
-    askedIntimacy: intimacyAsks,
-    ...(signals.newMaterialAt !== undefined ? { newMaterialAt: signals.newMaterialAt } : {}),
-    ...(session?.updatedAt ? { profileEditedAt: session.updatedAt } : {}),
-    now: deps.now,
-  });
 
   const digest = [
     intake.text.trim() ? `Onboarding answers:\n${intake.text.trim()}` : '',
@@ -186,8 +147,22 @@ export async function refreshCoverage(
     ...(a.subTopics ? { subTopics: a.subTopics } : {}),
   }));
 
-  const skeleton = deriveCoverageSkeleton(intimacyCoverage);
-  const topics = applyCoverageAssessments(skeleton, assessments);
+  const skeleton = deriveCoverageSkeleton();
+  // Fold the ask ledger in BEFORE persisting. The skeleton's intimacy rows are structure only (all zeros), and
+  // `applyCoverageAssessments` deliberately never scores Intimacy — so persisting them raw would leave every
+  // category permanently `explored:false, depth:0`, and `buildCoverageGuidance` (which reads the persisted
+  // profile directly, NOT the folded view) would then put the most worked-through ground in the vault under
+  // "NEW / UNEXPLORED GROUND — lead here" for the candidate feed. Measured: all 14 categories, sorted ahead of
+  // general areas that carry real depth.
+  const [ledger, profileForTopics] = await Promise.all([
+    readLedger(deps.fs, deps.key, recipientPersonId),
+    readProfile(deps.fs, deps.key, recipientPersonId),
+  ]);
+  const topics = foldTopicMap(
+    applyCoverageAssessments(skeleton, assessments),
+    ensureTopics(profileForTopics.topics),
+    ledger,
+  );
   // Persist the reciprocity ledger (spec 69 §5.4 follow-on) on the same cadence: a partner's shared desire →
   // a candidate to reflect back (bounded by the fresh window so a stable desire stops being re-nudged).
   const partner = await gatherRecipientPartnerContext(deps.fs, deps.key, recipientPersonId);

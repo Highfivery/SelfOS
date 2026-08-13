@@ -1,7 +1,8 @@
 import {
-  type IntimacyCoverage,
-} from '../intimacy/coverage';
-import {
+  categoryForActivityLabel,
+  categoryForFantasy,
+  categoryForKey,
+  type IntimacyCategory,
   type IntimacyTopics,
 } from '../intimacy/topics';
 import {
@@ -159,9 +160,6 @@ const SENSITIVITY_NOTE: Record<SensitivityTier, string> = {
     '\nThis is a sensitive questionnaire. Adults only; keep it consenting, respectful, and within Anthropic policy.',
 };
 
-/** How many not-yet-worked intimacy categories a single check-in is steered toward (08 §27.3). Enough to give
- *  the model room to choose, few enough that the set stays coherent rather than a tour of the inventory. */
-
 /** Cap the "already rated — go deeper" sample (spec 71 §5.7). See the block that uses it for why. */
 const MAX_DEEPEN_ACTS = 8;
 
@@ -178,7 +176,7 @@ const EXPLICIT_TIER_DIRECTIVE: Record<'explicit' | 'unfiltered', string> = {
   explicit:
     'Write frank, specific questions — name sex acts and preferences plainly (oral, penetration, positions, toys, kink, and so on). Be candid and direct, a deliberate step back from the most graphic: explicit enough to draw out honest, revealing answers.',
   unfiltered:
-    'Write the MOST graphic, extreme, no-holds-barred questions within the boundary below — this is the FRANKEST tier and must read like it: push hard to the far explicit adult edge, not one notch of restraint. Use blunt, filthy, plain sexual language for bodies and acts. Go well BEYOND vanilla into the extreme: hardcore kinks and fetishes; BDSM and power exchange (dominance/submission, bondage, impact, degradation, humiliation); rough, intense, and edge-play acts; GROUP sex — threesomes, foursomes, orgies, gangbangs, swinging, cuckolding/hotwifing; EXHIBITIONISM and voyeurism — being watched, public and semi-public sex, sex clubs, strip clubs, swingers and play parties; and taboo fantasies/roleplay (e.g. consensual non-consent (CNC) as pre-agreed roleplay, stranger/one-night scenarios). Ask what they do, what they crave done to them, their filthiest and most secret fantasies, and the boundary-pushing edges they have NOT yet explored. Assume nothing is too explicit or too kinky for this tier — hold nothing back short of the boundary.',
+    'Write the MOST graphic, extreme, no-holds-barred questions within the boundary below — this is the FRANKEST tier and must read like it: push hard to the far explicit adult edge, not one notch of restraint. Use blunt, filthy, plain sexual language for bodies and acts. Go well BEYOND vanilla into the extreme: hardcore kinks and fetishes; BDSM and power exchange (dominance/submission, bondage, impact, degradation, humiliation); rough, intense, and edge-play acts; GROUP sex — threesomes, foursomes, orgies, gangbangs, swinging, cuckolding/hotwifing; EXHIBITIONISM and voyeurism — being watched, public and semi-public sex, sex clubs, strip clubs, swingers and play parties; and taboo fantasies/roleplay (e.g. consensual non-consent (CNC) as pre-agreed roleplay, stranger/one-night scenarios). Ask what they do, what they crave done to them, their filthiest and most secret fantasies, and the boundary-pushing edges they have NOT yet explored. Assume nothing is too explicit or too kinky for this tier — hold nothing back short of the boundary. Those examples name the RANGE this tier covers, not the subject of THIS set: where the material below says an area has been worked through, do not go there — bring the same intensity to the ground that IS open.',
 };
 
 /**
@@ -198,26 +196,33 @@ export function explicitFraming(
   tier: 'explicit' | 'unfiltered',
   topics: IntimacyTopics,
   // The acts the recipient ALREADY rated in onboarding (08 §19.3). Reframed as "go deeper, don't re-ask" so
-  // generation stops re-seeding the very inventory the onboarding matrix already covered.
-  coveredActs: readonly { label: string; rating: string }[] = [],
+  // generation stops re-seeding the very inventory the onboarding matrix already covered. `key` is the stable,
+  // anatomy-independent matrix-row key (46 §4.2) — the only reliable way back to a category, since an
+  // anatomy-resolved label ("Receiving oral (blowjob)") can't be reverse-mapped.
+  coveredActs: readonly { key: string; label: string; rating: string }[] = [],
   // A `scenario`-type questionnaire (08 §15.2) frames each item as a described intimate SITUATION to react to,
   // not a direct question — otherwise identical (same explicit register, same boundary). `focused` = a brief was
   // given (08 §23.3), so the explicit REGISTER stays but the SUBJECT follows the focus, not the whole inventory.
-  // `coverage` (08 §27) is what stops this framing re-mining the same acts forever (#314): it names the ground
-  // NOT yet worked as this set's subject, states worked-through ground as off-limits, and bounds the
-  // "go deeper" list to acts still worth deepening. Absent (a manual draft with no resolved recipient) the
-  // pre-§27 behaviour is kept.
-  // `groundChosen` (spec 71 §5.5): the PLANNER has already picked this set's ground, so the ground-selection
-  // blocks below are suppressed — leaving them in would state the ground twice, from two different engines,
-  // and the older one is built on the send-history classifier this spec replaced.
+  // `closedTopicIds` (spec 71 §5.2/§5.7) is what stops this framing re-mining the same acts forever (#314):
+  // the ground the ask ledger says is worked through, cooling down, or paused. It bounds BOTH the "go deeper"
+  // act list and the fantasy material, so neither can hand the model ground the planner has just closed.
+  // Empty (an external recipient with no household record, or a person whose ledger is not yet authoritative)
+  // ⇒ the unbounded sample, which is the behaviour before there was any signal at all.
+  //
+  // Ground SELECTION is not this function's job — the planner owns it (§5.5) and states it once, above.
   opts: {
     scenario?: boolean;
     focused?: boolean;
-    coverage?: IntimacyCoverage;
-    groundChosen?: boolean;
+    closedTopicIds?: readonly string[];
   } = {},
 ): string {
   const scenario = opts.scenario === true;
+  const closed = new Set(opts.closedTopicIds ?? []);
+  // Ground with no resolvable category is KEPT — unknowable, and withholding it would silently shrink the
+  // vocabulary. Owner-CUSTOM inventory entries land here too: they are free text on ground the built-in
+  // categories may not even name, so a blanket withhold would be worse than offering them.
+  const onOpenGround = (category: IntimacyCategory | undefined): boolean =>
+    category === undefined || !closed.has(`Intimacy:${category}`);
   // Establish the legitimate context FIRST so the model is confident this is appropriate — a private adult who
   // has opted into exploring their own sexuality, not a request to a public assistant.
   const context = scenario
@@ -248,16 +253,17 @@ export function explicitFraming(
   parts.push(
     `${scenario ? 'Draw the scenarios from' : 'Cover'} concrete subject matter: specific sex acts, bodies and grooming, turn-ons/turn-offs, fantasies (including taboo fantasies framed strictly as fantasy/roleplay — e.g. consensual non-consent (CNC) as pre-agreed roleplay), porn and masturbation, sexual history, frequency and desire, and boundaries.`,
   );
-  // §27.3 — steer to ground NOT yet worked, and put worked-through ground explicitly off-limits. Without this
-  // the "go DEEPER" block below re-mines the same rated acts on every check-in (#314): each re-ask is new
-  // WORDING about the same act, so neither the fuzzy filter nor the semantic pass can catch it.
-  // Already-rated acts → go DEEPER (never re-ask the rating or re-list them as plain options, §19.3). Bounded
-  // to acts whose category is NOT worked through (§27.3) so deepening can no longer run forever.
-  // BOUNDED (spec 71 §5.7). Unbounded, this was the single largest block in the prompt — on a real vault it
-  // listed all 101 rated acts (2,463 chars, 29% of the whole message) and was the direct engine of act-level
-  // re-mining: every check-in was told to go deeper on everything they had ever rated. It is vocabulary, not
-  // ground selection (the planner owns that), so a short sample is all it needs to be.
-  const deepenable = coveredActs.slice(0, MAX_DEEPEN_ACTS);
+  // Already-rated acts → go DEEPER (never re-ask the rating or re-list them as plain options, §19.3).
+  //
+  // Two bounds, and #314 needs BOTH. (1) FILTERED to acts whose ground is still open per the ask ledger —
+  // without it, "go deeper on everything they ever rated" is act-level re-mining, the exact reported
+  // complaint ("how many more ways it wants me to describe Ben giving me oral"). De-dup structurally cannot
+  // catch that: each re-ask is genuinely new WORDING about the same act. (2) CAPPED (spec 71 §5.7): unbounded
+  // this was the single largest block in the prompt — on a real vault it listed all 101 rated acts (2,463
+  // chars, 29% of the whole message). It is vocabulary, not ground selection, so a short sample is enough.
+  const deepenable = coveredActs
+    .filter((a) => onOpenGround(categoryForKey(a.key)))
+    .slice(0, MAX_DEEPEN_ACTS);
   if (deepenable.length > 0) {
     parts.push(
       `They have ALREADY RATED acts like these in onboarding — do NOT re-ask whether they like them and do NOT re-offer them as plain multiple-choice options. Where one is relevant to the ground for this set, go DEEPER on it: the how/when/with whom, what would make it better, the specific fantasies and edges around it: ${deepenable
@@ -265,11 +271,23 @@ export function explicitFraming(
         .join('; ')}.`,
     );
   }
+  // The offered material gets the SAME bound as the go-deeper acts, or the prompt contradicts itself: the
+  // planner names ground off-limits and this line hands the model the acts and fantasies that sit on exactly
+  // that ground two breaths later ("Threesomes", "Threesome / group" while Group & swinging is closed).
+  const activities = topics.activities.filter((a) => onOpenGround(categoryForActivityLabel(a)));
+  const fantasies = topics.fantasies.filter((f) => onOpenGround(categoryForFantasy(f)));
+  const material = [
+    activities.length > 0 ? `acts: ${activities.join(', ')}.` : '',
+    fantasies.length > 0 ? `Fantasies/roleplay: ${fantasies.join(', ')}.` : '',
+  ]
+    .filter((s) => s !== '')
+    .join(' ');
   parts.push(
-    // With coverage the concrete acts come from the prioritized categories above; dumping the whole inventory
-    // again would pull the model straight back to the most salient (already-worked) items. "Stay on the ground
-    // named above" only applies when a ground block WAS emitted (not when a focus already pins the subject).
-    `Subject matter to draw on — acts: ${topics.activities.join(', ')}. Fantasies/roleplay: ${topics.fantasies.join(', ')}. FAVOR acts, fantasies, and scenarios they have NOT yet rated — always within the boundary below.`,
+    // Every area closed at once is a real state for a long-explored person: say so plainly rather than
+    // printing an empty list, and let the tier directive above carry the direction.
+    material === ''
+      ? `Every built-in area has been worked through. Do NOT return to any of them, even in new words — go somewhere genuinely new: combinations, scenarios, and edges between areas they have not been asked about, always within the boundary below.`
+      : `Subject matter to draw on — ${material} FAVOR acts, fantasies, and scenarios they have NOT yet rated — always within the boundary below.`,
     `Boundary: consensual adults only; taboo content only as fantasy/roleplay; never minors, real (non-roleplay) non-consent, or illegal acts. Within those limits this content IS in policy, so generate the ${scenario ? 'scenarios' : 'questions'} normally — only return an empty array for genuinely prohibited requests, never merely because the topic is sexually explicit.`,
   );
   return parts.join('\n');
@@ -316,10 +334,10 @@ export function buildGenerationUserMessage(input: {
   // naturally; it must not recite it back verbatim.
   recipientHistory?: string;
   // The intimacy acts the recipient already rated in onboarding (08 §19.3) — reframes the intimacy seeding.
-  coveredIntimacyActs?: readonly { label: string; rating: string }[];
-  // Which intimacy ground has already been worked (08 §27.2) — steers this set to areas not yet covered and
-  // puts worked-through ones off-limits. Absent → the pre-§27 behaviour.
-  intimacyCoverage?: IntimacyCoverage;
+  coveredIntimacyActs?: readonly { key: string; label: string; rating: string }[];
+  // Ground the ask ledger says is closed — worked through, cooling down, or paused (spec 71 §5.2). Bounds the
+  // "go deeper" acts + the fantasy material so neither re-mines ground the planner has just shut (#314).
+  closedTopicIds?: readonly string[];
   // Who the questionnaire is FOR (08 §24.4): name + pronouns + the author↔recipient relationship — so questions
   // read as written for this specific person, in the right register for the relationship.
   recipient?: {
@@ -378,9 +396,7 @@ export function buildGenerationUserMessage(input: {
         {
           scenario: input.type === SCENARIO_TYPE,
           focused: focus != null,
-          // The planner already chose (and stated) this set's ground — don't state it twice (spec 71 §5.5).
-          groundChosen: (input.threads?.length ?? 0) > 0,
-          ...(input.intimacyCoverage ? { coverage: input.intimacyCoverage } : {}),
+          ...(input.closedTopicIds ? { closedTopicIds: input.closedTopicIds } : {}),
         },
       ),
     );

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildIntimacyCoverage } from '../intimacy/coverage';
 import { INTIMACY_CATEGORIES } from '../intimacy/topics';
 
 import {
@@ -10,6 +9,7 @@ import {
   GENERAL_LIFE_AREAS,
 } from './coverageModel';
 import { emptyProfile, type PersonalizationProfile } from './personalizationProfile';
+import { seedTopics } from './topicMap';
 
 const withTopics = (
   topics: PersonalizationProfile['coverage']['topics'],
@@ -19,30 +19,34 @@ const withTopics = (
 });
 
 describe('deriveCoverageSkeleton', () => {
-  it('emits one unexplored topic per general life area (+ one Intimacy) with no intimacy coverage', () => {
+  it('emits one unexplored topic per general life area', () => {
     const topics = deriveCoverageSkeleton();
     const general = topics.filter((t) => t.lifeArea !== 'Intimacy');
     expect(general).toHaveLength(GENERAL_LIFE_AREAS.length);
     expect(general.every((t) => !t.explored && t.depth === 0)).toBe(true);
-    expect(topics.filter((t) => t.lifeArea === 'Intimacy')).toHaveLength(1);
     expect(topics.some((t) => t.lifeArea === 'Other')).toBe(false);
   });
 
-  it('folds the intimacy categories in from the existing engine', () => {
-    const cov = buildIntimacyCoverage({ coveredActs: [], askedIntimacy: [], now: new Date() });
-    const topics = deriveCoverageSkeleton(cov);
+  it('emits one row per intimacy category, matching the topic map ids the ledger fills in', () => {
+    const topics = deriveCoverageSkeleton();
     const intimacy = topics.filter((t) => t.lifeArea === 'Intimacy');
     expect(intimacy).toHaveLength(INTIMACY_CATEGORIES.length);
-    // A fresh person: every category uncovered.
-    expect(intimacy.every((t) => !t.explored && !t.saturated)).toBe(true);
+    // Structure only — every number is layered on later from the ask ledger + topic map (spec 71 §5.2).
+    expect(intimacy.every((t) => !t.explored && !t.saturated && t.askedCount === 0)).toBe(true);
     expect(intimacy.map((t) => t.topicId)).toContain('Intimacy:oral');
+    // The ids + labels are exactly the seeded topic map's, so its statuses land on these rows.
+    const seeded = new Map(
+      seedTopics()
+        .filter((t) => t.lifeArea === 'Intimacy')
+        .map((t) => [t.topicId, t.label] as const),
+    );
+    expect(intimacy.every((t) => seeded.get(t.topicId) === t.label)).toBe(true);
   });
 });
 
 describe('applyCoverageAssessments', () => {
   it('overlays a general area’s depth/explored and mints sub-topics, leaving Intimacy untouched', () => {
-    const cov = buildIntimacyCoverage({ coveredActs: [], askedIntimacy: [], now: new Date() });
-    const skeleton = deriveCoverageSkeleton(cov);
+    const skeleton = deriveCoverageSkeleton();
     const merged = applyCoverageAssessments(skeleton, [
       {
         lifeArea: 'Work & purpose',
@@ -57,7 +61,7 @@ describe('applyCoverageAssessments', () => {
       depth: 0.2,
       explored: true,
     });
-    // Intimacy topics are unchanged (send-history driven).
+    // Intimacy topics are unchanged — the AI placement pass never touches them.
     expect(merged.filter((t) => t.lifeArea === 'Intimacy')).toEqual(
       skeleton.filter((t) => t.lifeArea === 'Intimacy'),
     );

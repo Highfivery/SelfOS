@@ -5,16 +5,12 @@ import type { ClaudeClient, FileSystem } from '../host';
 import { memFileSystem } from '../host/memFileSystem';
 import { upsertPerson } from '../people/peopleService';
 import { upsertRelationship } from '../people/relationshipService';
-import { createAssignment, listAssignments } from '../questionnaires/assignmentService';
+import { listAssignments } from '../questionnaires/assignmentService';
 import { emptyLedger, writeLedger } from '../questionnaires/askLedger';
 import { TAGGING_VERSION } from '../questionnaires/askLedgerBackfill';
 import { readProfile, writeProfile } from '../questionnaires/personalizationProfile';
 import { SATURATION_ASKS, seedTopics } from '../questionnaires/topicMap';
-import {
-  getQuestionnaire,
-  listQuestionnaires,
-  saveQuestionnaire,
-} from '../questionnaires/questionnaireService';
+import { getQuestionnaire, listQuestionnaires } from '../questionnaires/questionnaireService';
 import type { AutoCheckinTarget, RelationshipType } from '../schemas';
 import { setAppBudget } from '../usage/budgetService';
 import { recordUsage } from '../usage/usageStore';
@@ -339,12 +335,12 @@ describe('runAutoCheckins — no filler when there is no new ground (08 §27.5)'
   });
 
   // THE regression guard for #314 on the path the reporter is actually on. Every other test here asserts
-  // only how many check-ins were created, so dropping the `intimacyCoverage` argument to `generateQuestions`
-  // left the entire suite green while the bug survived. Assert what reaches the MODEL, not just the counts.
-  it('sends the coverage map to the model, so worked-through ground is off-limits (08 §27.3)', async () => {
+  // only how many check-ins were created, so dropping the ground argument to `generateQuestions` left the
+  // entire suite green while the bug survived. Assert what reaches the MODEL, not just the counts.
+  it('never offers a rated act on ground the ledger has closed (#314)', async () => {
     const fs = memFileSystem();
     const author = await seedPerson(fs, { name: 'Ben', ack: true });
-    // Rate an oral act in onboarding, then work that ground through with SATURATION_ASKS intimacy sends.
+    // Rate an oral act in onboarding...
     await writeEncryptedJson(
       fs,
       `people/${author}/intake/session.enc`,
@@ -363,7 +359,9 @@ describe('runAutoCheckins — no filler when there is no new ground (08 §27.5)'
               getSpecific: true,
               ownAnatomy: 'Cock (penis)',
               partnerAnatomy: ['Pussy (vulva)'],
-              activities: { 'oral-receiving': 5 },
+              // One act on ground that gets worked through, one on ground that stays open — so the
+              // assertions below distinguish "filtered" from "the block vanished".
+              activities: { 'oral-receiving': 5, 'vaginal-sex': 4 },
             },
           },
         ],
@@ -372,30 +370,23 @@ describe('runAutoCheckins — no filler when there is no new ground (08 §27.5)'
       },
       key,
     );
-    for (let i = 0; i < 3; i += 1) {
-      const q = await saveQuestionnaire(fs, key, {
-        title: `Oral check-in ${i + 1}`,
+    // ...then work the ORAL ground through in the ledger. Recent on purpose: ground last asked >90d ago is
+    // DORMANT and correctly re-opens, so a stale fixture would test the re-open path instead of saturation.
+    await writeLedger(fs, key, {
+      ...emptyLedger(author),
+      backfilledAt: new Date('2026-01-01').toISOString(),
+      taggingVersion: TAGGING_VERSION,
+      entries: Array.from({ length: SATURATION_ASKS }, (_, i) => ({
+        questionId: `o${i}`,
+        assignmentId: `ao${i}`,
+        at: new Date(Date.now() - (i + 1) * 86_400_000).toISOString(),
         type: 'intimacy',
-        sensitivity: 'unfiltered',
-        recipient: { kind: 'person', personId: author },
-        questions: [
-          {
-            id: `q-${i}`,
-            type: 'shortText',
-            prompt: 'What do you like most about receiving oral?',
-            required: false,
-          },
-        ],
-      });
-      await createAssignment(fs, key, {
-        questionnaireId: q.id,
-        senderPersonId: author,
-        recipient: { kind: 'person', personId: author },
-        channel: 'inApp',
-        privacy: 'private',
-        senderVisibleToRecipient: true,
-      });
-    }
+        tier: 'unfiltered' as const,
+        topicIds: ['Intimacy:oral'],
+        gist: 'receiving oral, going deeper',
+        outcome: 'rich' as const,
+      })),
+    });
 
     await setAutoCheckinConfig(fs, key, author, { enabled: true, targets: [selfTarget()] });
     const { client, prompts } = capturingClient();
@@ -403,14 +394,23 @@ describe('runAutoCheckins — no filler when there is no new ground (08 §27.5)'
     expect(result.ok).toBe(true);
 
     // The intimacy generation call is the one carrying the explicit framing.
-    const intimacyPrompt = prompts.find((p) => p.includes('GROUND TO OPEN THIS TIME'));
+    const intimacyPrompt = prompts.find((p) => p.includes('ALREADY RATED'));
     expect(intimacyPrompt).toBeDefined();
-    // Oral is worked through → stated off-limits, and its rated act is NOT offered for deepening.
-    expect(intimacyPrompt).toMatch(/ALREADY EXPLORED THOROUGHLY[^\n]*Oral/i);
+    // The rated act on worked-through ground is NOT offered for deepening, while the one on open ground is —
+    // so this cannot pass just because the whole block disappeared.
     const goDeeperLine = (intimacyPrompt ?? '')
       .split('\n')
       .find((l) => l.includes('ALREADY RATED'));
-    expect(goDeeperLine ?? '').not.toMatch(/oral/i);
+    expect(goDeeperLine ?? '').toMatch(/Vaginal sex/i);
+    // Word-boundary: "clitoral" contains "oral", so a loose regex would fail on unrelated material.
+    expect(goDeeperLine ?? '').not.toMatch(/\boral\b/i);
+    // ...and the wider material doesn't hand the same ground straight back either.
+    const materialLine = (intimacyPrompt ?? '')
+      .split('\n')
+      .find((l) => l.includes('Subject matter to draw on'));
+    expect(materialLine ?? '').not.toMatch(/\boral\b/i);
+    // Non-vacuous: the line is present and still carries ground that IS open.
+    expect(materialLine ?? '').toMatch(/Vaginal sex/);
   });
 
   it("takes the intimacy slot's ground from the ask ledger, not the legacy coverage map (71 §5.2)", async () => {

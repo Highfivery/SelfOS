@@ -3,7 +3,6 @@ import { getPerson } from '../people/peopleService';
 import { listRelationships, livePartnerIds } from '../people/relationshipService';
 
 import { deriveTopicStats, readLedger, type AskLedger } from './askLedger';
-import { deriveIntimacyCoverageFor } from './coverageService';
 import { deriveCoverageSkeleton } from './coverageModel';
 import {
   ensureTopics,
@@ -250,7 +249,8 @@ export function mergeProfileCoverage(
     const isIntimacy = s.lifeArea === 'Intimacy';
     return {
       ...s,
-      // General areas take the AI-placement depth; Intimacy stays deterministic (send-history) from the skeleton.
+      // General areas take the AI-placement depth; an intimacy row's numbers come from the ledger, never a
+      // persisted placement — so the skeleton's zero stands here and `foldTopicMap` fills it in below.
       ...(isIntimacy ? {} : { depth: p.depth, explored: p.explored }),
       ...(p.reopenedBy ? { reopenedBy: p.reopenedBy } : {}),
     };
@@ -508,12 +508,11 @@ export async function readCoverageView(
   now: Date,
   adultAcknowledged = false,
 ): Promise<QuestionnaireCoverageView> {
-  const [profile, intimacy, ledger] = await Promise.all([
+  const [profile, ledger] = await Promise.all([
     readProfile(fs, key, personId),
-    deriveIntimacyCoverageFor(fs, key, personId, now),
     readLedger(fs, key, personId),
   ]);
-  const skeleton = deriveCoverageSkeleton(intimacy);
+  const skeleton = deriveCoverageSkeleton();
   const topics = foldTopicMap(
     mergeProfileCoverage(skeleton, profile.coverage.topics),
     ensureTopics(profile.topics),

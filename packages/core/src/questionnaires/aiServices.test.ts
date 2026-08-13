@@ -3,11 +3,11 @@ import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import type { ClaudeClient, FileSystem } from '../host';
 import { saveInsight } from '../insights';
-import { buildIntimacyCoverage } from '../intimacy/coverage';
 import { upsertPerson } from '../people/peopleService';
 import { upsertRelationship } from '../people/relationshipService';
 import { setAppBudget } from '../usage/budgetService';
 import { queryUsage, recordUsage } from '../usage/usageStore';
+import { emptyLedger, writeLedger } from './askLedger';
 import { addCustomIntimacyTopic } from './customTypeService';
 import {
   gatherGenerationContext,
@@ -40,6 +40,35 @@ function fakeClient(text: string): ClaudeClient {
         text,
         usage: { inputTokens: 10, outputTokens: 20, cacheWriteTokens: 0, cacheReadTokens: 0 },
       });
+    },
+  };
+}
+
+/** A client that records every system+user prompt it is given, and replies in sequence (spec 71 §10: the
+ *  ledger-steered paths make more than one call, so the prompt that matters is not always the last). */
+function recordingClient(responses: string[]): {
+  client: ClaudeClient;
+  prompts: { system: string; user: string }[];
+} {
+  const prompts: { system: string; user: string }[] = [];
+  let i = 0;
+  return {
+    prompts,
+    client: {
+      send: () => Promise.resolve(''),
+      stream: (o, onDelta) => {
+        const user = o.messages
+          .map((m) => (typeof m.content === 'string' ? m.content : ''))
+          .join('\n');
+        prompts.push({ system: o.system ?? '', user });
+        const text = responses[Math.min(i, responses.length - 1)] ?? '';
+        i += 1;
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
     },
   };
 }
@@ -721,7 +750,9 @@ describe('generateQuestions', () => {
         includeRelationship: false,
       },
       existingPrompts: [],
-      coveredIntimacyActs: [{ label: 'Receiving oral (blowjob)', rating: 'Love it' }],
+      coveredIntimacyActs: [
+        { key: 'oral-receiving', label: 'Receiving oral (blowjob)', rating: 'Love it' },
+      ],
     });
     expect(result.ok).toBe(true);
     expect(sentUserText).toMatch(/ALREADY RATED/); // the reframe header
@@ -733,42 +764,40 @@ describe('generateQuestions', () => {
   });
 
   // #314 — the reported bug: the framing above told the model to "go DEEPER" on every rated act on EVERY
-  // intimacy check-in, forever. With a coverage map, worked-through ground drops out and new ground leads.
-  it('steers to UNCOVERED ground and puts worked-through ground off-limits (08 §27.3)', async () => {
+  // intimacy check-in, forever. The ledger's closed ground is what bounds it now (spec 71 §5.2/§5.7): an act
+  // whose ground is worked through drops out of the list, so deepening can no longer run indefinitely.
+  it('drops a rated act whose ground the ledger has closed, and keeps the open one (#314)', async () => {
     const fs = memFileSystem();
-    const { author } = await seedHousehold(fs);
-    let sentUserText = '';
-    const capturing: ClaudeClient = {
-      send: () => Promise.resolve(''),
-      stream: (options, onDelta) => {
-        sentUserText = options.messages.map((m) => m.content).join('\n');
-        const text = JSON.stringify({
-          title: 'X',
-          questions: [{ type: 'shortText', prompt: 'A question on new ground?', required: true }],
-        });
-        onDelta(text);
-        return Promise.resolve({
-          text,
-          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
-        });
-      },
-    };
-    // Oral has been worked through (3 prior intimacy check-ins); anal has been rated but not worked.
-    const coverage = buildIntimacyCoverage({
-      coveredActs: [
-        { key: 'oral-receiving', label: 'Receiving oral (blowjob)', rating: 'Love it' },
-        { key: 'anal-receiving', label: 'Anal (receiving)', rating: 'Like it' },
-      ],
-      askedIntimacy: Array.from({ length: 3 }, () => ({
-        text: 'More about receiving oral',
-        at: '2026-07-01T00:00:00.000Z',
+    const { author, target } = await seedHousehold(fs);
+    // Oral is worked through — three asks, recent enough that neither the dormancy signal nor anything else
+    // re-opens it. Anal has been rated in onboarding but never asked about, so it stays open.
+    await writeLedger(fs, key, {
+      ...emptyLedger(target),
+      backfilledAt: '2026-05-01T00:00:00.000Z',
+      entries: [0, 1, 2].map((n) => ({
+        assignmentId: `a${n}`,
+        questionId: `q${n}`,
+        at: '2026-05-15T00:00:00.000Z',
+        type: 'intimacy' as const,
+        tier: 'unfiltered' as const,
+        topicIds: ['Intimacy:oral'],
+        gist: 'oral, going deeper',
+        outcome: 'rich' as const,
       })),
-      now: new Date('2026-07-22T00:00:00.000Z'),
     });
+    const { client, prompts } = recordingClient([
+      JSON.stringify({ threads: [{ topicId: 'Intimacy:edge', label: 'Edge play' }] }),
+      JSON.stringify({
+        title: 'X',
+        questions: [{ type: 'shortText', prompt: 'A question on new ground?', required: true }],
+      }),
+      '[1]',
+    ]);
 
-    const result = await generateQuestions(deps(fs, capturing, author), {
+    const result = await generateQuestions(deps(fs, client, author), {
       type: 'intimacy',
       sensitivity: 'unfiltered',
+      recipientPersonId: target,
       context: {
         authorPersonId: author,
         includeAuthor: false,
@@ -777,60 +806,62 @@ describe('generateQuestions', () => {
       },
       existingPrompts: [],
       coveredIntimacyActs: [
-        { label: 'Receiving oral (blowjob)', rating: 'Love it' },
-        { label: 'Anal (receiving)', rating: 'Like it' },
+        { key: 'oral-receiving', label: 'Receiving oral (blowjob)', rating: 'Love it' },
+        { key: 'anal-receiving', label: 'Anal (receiving)', rating: 'Like it' },
       ],
-      intimacyCoverage: coverage,
+      now,
     });
     expect(result.ok).toBe(true);
 
-    // The worked-through category is named off-limits...
-    expect(sentUserText).toMatch(/ALREADY EXPLORED THOROUGHLY/);
-    expect(sentUserText).toMatch(/do NOT return to these:[^\n]*Oral/i);
-    // ...and its rated act is GONE from the "go deeper" list — the actual #314 regression guard.
-    expect(sentUserText).not.toContain('Receiving oral (blowjob) (Love it)');
-    // The still-open one survives, so deepening is bounded, not abolished.
-    expect(sentUserText).toContain('Anal (receiving) (Like it)');
-    // New ground leads the set.
-    expect(sentUserText).toMatch(/GROUND TO OPEN THIS TIME/);
+    const genPrompt = prompts[1]?.user ?? '';
+    // The ACTS material is bounded by the same closure — offering "Receiving oral" one line after the planner
+    // called that ground off-limits is the same contradiction the go-deeper filter exists to remove.
+    const materialLine =
+      genPrompt.split('\n').find((l) => l.includes('Subject matter to draw on')) ?? '';
+    expect(materialLine).toMatch(/Vaginal sex/);
+    expect(materialLine).not.toMatch(/\boral\b/i);
+    // The go-deeper block is still there — this is a bound, not an abolition.
+    expect(genPrompt).toMatch(/ALREADY RATED/);
+    // The worked-through act is GONE from it — the actual #314 regression guard.
+    expect(genPrompt).not.toContain('Receiving oral (blowjob) (Love it)');
+    // …while the act on still-open ground survives.
+    expect(genPrompt).toContain('Anal (receiving) (Like it)');
     // The safety boundary is untouched by any of this.
-    expect(sentUserText).toMatch(/never minors/i);
+    expect(genPrompt).toMatch(/never minors/i);
   });
 
-  it('does not hand back a fantasy on ground it just called off-limits (08 §27.3)', async () => {
-    // Self-contradiction guard: naming a category off-limits and then listing a fantasy on exactly that
-    // ground in the next breath is precisely the mixed signal that let the model keep circling.
+  it('does not offer a fantasy on ground the ledger has closed (spec 71 §5.7)', async () => {
+    // Self-contradiction guard: the planner naming a category off-limits and the framing listing a fantasy on
+    // exactly that ground in the next breath is precisely the mixed signal that let the model keep circling.
     const fs = memFileSystem();
-    const { author } = await seedHousehold(fs);
-    let sentUserText = '';
-    const capturing: ClaudeClient = {
-      send: () => Promise.resolve(''),
-      stream: (options, onDelta) => {
-        sentUserText = options.messages.map((m) => m.content).join('\n');
-        const text = JSON.stringify({
-          title: 'X',
-          questions: [{ type: 'shortText', prompt: 'Elsewhere?', required: true }],
-        });
-        onDelta(text);
-        return Promise.resolve({
-          text,
-          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
-        });
-      },
-    };
-    const coverage = buildIntimacyCoverage({
-      coveredActs: [],
-      askedIntimacy: Array.from({ length: 3 }, () => ({
-        text: 'Tell me about a threesome',
-        at: '2026-07-01T00:00:00.000Z',
+    const { author, target } = await seedHousehold(fs);
+    await writeLedger(fs, key, {
+      ...emptyLedger(target),
+      backfilledAt: '2026-05-01T00:00:00.000Z',
+      entries: [0, 1, 2].map((n) => ({
+        assignmentId: `g${n}`,
+        questionId: `gq${n}`,
+        at: '2026-05-15T00:00:00.000Z',
+        type: 'intimacy' as const,
+        tier: 'unfiltered' as const,
+        topicIds: ['Intimacy:group'],
+        gist: 'threesomes',
+        outcome: 'rich' as const,
       })),
-      now: new Date('2026-07-22T00:00:00.000Z'),
     });
-    expect(coverage.saturated).toContain('group');
+    const { client, prompts } = recordingClient([
+      JSON.stringify({ threads: [{ topicId: 'Intimacy:edge', label: 'Edge play' }] }),
+      JSON.stringify({
+        title: 'X',
+        questions: [{ type: 'shortText', prompt: 'Elsewhere?', required: true }],
+      }),
+      '[1]',
+    ]);
 
-    await generateQuestions(deps(fs, capturing, author), {
+    await generateQuestions(deps(fs, client, author), {
       type: 'intimacy',
       sensitivity: 'unfiltered',
+      recipientPersonId: target,
       context: {
         authorPersonId: author,
         includeAuthor: false,
@@ -838,11 +869,16 @@ describe('generateQuestions', () => {
         includeRelationship: false,
       },
       existingPrompts: [],
-      intimacyCoverage: coverage,
+      now,
     });
-    // The group category is off-limits, so the group fantasy must not be offered as material either.
-    expect(sentUserText).toMatch(/ALREADY EXPLORED THOROUGHLY/);
-    expect(sentUserText).not.toMatch(/fantasies\/roleplay:[^\n]*Threesome/);
+
+    const genPrompt = prompts[1]?.user ?? '';
+    const line = genPrompt.split('\n').find((l) => l.includes('Fantasies/roleplay:')) ?? '';
+    // The line still exists and still carries material — so the assertions below can't pass vacuously.
+    expect(line).toContain('Domination');
+    // …but nothing on the closed ground: both group fantasies are withheld.
+    expect(line).not.toContain('Threesome');
+    expect(line).not.toContain('Gangbang');
   });
 });
 

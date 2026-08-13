@@ -1,5 +1,4 @@
-import type { IntimacyCoverage } from '../intimacy/coverage';
-import { INTIMACY_CATEGORY_LABELS } from '../intimacy/topics';
+import { INTIMACY_CATEGORIES, INTIMACY_CATEGORY_LABELS } from '../intimacy/topics';
 import { LIFE_AREAS } from '../schemas';
 
 import type { CoverageTopic, PersonalizationProfile } from './personalizationProfile';
@@ -10,13 +9,14 @@ import type { CoverageTopic, PersonalizationProfile } from './personalizationPro
  * Pure + deterministic here; the AI placement pass (`coverageService.ts`, Phase 2b) supplies the per-area
  * assessments this module overlays.
  *
- * The **Intimacy** branch is NOT AI-scored — it reuses the existing `intimacy/coverage.ts` engine (send-history
- * driven, one topic per category). The other life areas get one coarse topic each; the AI pass may mint
- * sub-topics only where an area has genuinely multi-strand coverage (spec 69 §13).
+ * The **Intimacy** branch is NOT AI-scored — it is one row per built-in category, and its real numbers come
+ * from the ask ledger + topic map downstream (spec 71 §5.2), never from this skeleton. The other life areas
+ * get one coarse topic each; the AI pass may mint sub-topics only where an area has genuinely multi-strand
+ * coverage (spec 69 §13).
  */
 
 /** Life areas the AI placement pass covers — everything except the catch-all `Other` and the deterministically
- *  handled `Intimacy` (which reuses the intimacy category engine). */
+ *  handled `Intimacy` (one row per built-in category, counted from the ask ledger). */
 export const GENERAL_LIFE_AREAS = LIFE_AREAS.filter(
   (a) => a !== 'Other' && a !== 'Intimacy',
 ) as readonly string[];
@@ -31,8 +31,6 @@ export const NEW_GROUND_DEPTH = 0.4;
 export const SUBTOPIC_MIN_PARENT_DEPTH = NEW_GROUND_DEPTH;
 /** Any measurable coverage counts as "explored". */
 const EXPLORED_DEPTH = 0.15;
-/** Approximate intimacy-category depth from its send count (mirrors the intimacy SATURATION of 3). */
-const INTIMACY_SATURATION = 3;
 /** Cap each guidance list so the prompt block stays bounded. */
 const GUIDANCE_CAP = 12;
 
@@ -55,11 +53,18 @@ export interface CoverageAssessment {
 }
 
 /**
- * The base coverage map: one unexplored topic per general life area + the Intimacy categories folded in from
- * the existing engine (explored/saturated from real send history). The correct starting state for a person
- * with no data is everything uncovered.
+ * The base coverage map: one unexplored topic per general life area + one per built-in intimacy category.
+ *
+ * Structure only — every row starts at zero. The real numbers (asked counts, depth, saturation, last-asked)
+ * are layered on downstream from the ask ledger and the emergent topic map, which are the single source of
+ * truth for what has actually been asked (spec 71 §5.1/§5.2). Its predecessor filled the intimacy rows here
+ * from the keyword-classified send history; that classifier is gone, and it was measured crediting a third of
+ * a real person's intimacy questions to no category at all.
+ *
+ * The ids and labels match `seedTopics()` exactly (`Intimacy:<category>` + `INTIMACY_CATEGORY_LABELS`), which
+ * is what lets the topic map's statuses land on these rows rather than duplicating them.
  */
-export function deriveCoverageSkeleton(intimacyCoverage?: IntimacyCoverage): CoverageTopic[] {
+export function deriveCoverageSkeleton(): CoverageTopic[] {
   const topics: CoverageTopic[] = GENERAL_LIFE_AREAS.map((area) => ({
     topicId: area,
     lifeArea: area,
@@ -69,26 +74,11 @@ export function deriveCoverageSkeleton(intimacyCoverage?: IntimacyCoverage): Cov
     askedCount: 0,
     saturated: false,
   }));
-  if (intimacyCoverage) {
-    for (const c of intimacyCoverage.byCategory) {
-      const explored = c.rated || c.askedCount > 0;
-      topics.push({
-        topicId: `Intimacy:${c.category}`,
-        lifeArea: 'Intimacy',
-        label: INTIMACY_CATEGORY_LABELS[c.category],
-        explored,
-        depth: clamp01((c.askedCount + (c.rated ? 1 : 0)) / INTIMACY_SATURATION),
-        askedCount: c.askedCount,
-        saturated: c.saturated,
-        ...(c.lastAskedAt ? { lastAskedAt: c.lastAskedAt } : {}),
-        ...(c.reopenedBy ? { reopenedBy: c.reopenedBy } : {}),
-      });
-    }
-  } else {
+  for (const category of INTIMACY_CATEGORIES) {
     topics.push({
-      topicId: 'Intimacy',
+      topicId: `Intimacy:${category}`,
       lifeArea: 'Intimacy',
-      label: 'Intimacy',
+      label: INTIMACY_CATEGORY_LABELS[category],
       explored: false,
       depth: 0,
       askedCount: 0,
@@ -110,7 +100,7 @@ export function applyCoverageAssessments(
   const out: CoverageTopic[] = [];
   for (const t of skeleton) {
     if (t.lifeArea === 'Intimacy') {
-      out.push(t); // send-history driven — never overwritten by the model
+      out.push(t); // ledger-driven — never overwritten by the model
       continue;
     }
     const a = byArea.get(t.lifeArea);

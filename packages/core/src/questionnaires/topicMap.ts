@@ -12,7 +12,8 @@ import { jaccard, tokenSet } from './dedup';
  *
  * This replaces two hard-coded things at once:
  *
- * 1. `intimacy/coverage.ts`'s fixed 14 categories + hand-written `CATEGORY_KEYWORDS` regex. Measured on a
+ * 1. The retired `intimacy/coverage.ts` engine (deleted 2026-08-13): fixed 14 categories + a hand-written
+ *    keyword regex. Measured on a
  *    real vault, that classifier credited **34.3%** of a person's intimacy questions to ZERO categories —
  *    including unambiguous content ("when Ben does take control during sex" → power exchange) — so a third of
  *    what had been asked was invisible to saturation and could be re-asked forever (spec 71 §1 D4).
@@ -128,17 +129,17 @@ const SEEDED_BLURBS: Record<string, string> = {
     'Hands and toys — what you use, alone and together, and what you would try.',
   'Intimacy:penetration': 'Positions, pace, and depth — what actually works for your body.',
   'Intimacy:anal': 'Anal play — curiosity, limits, what has been tried and what has not.',
-  'Intimacy:oral-anal': 'Rimming — where it sits for you between curiosity and hard limit.',
+  'Intimacy:roleplay':
+    'Roleplay and scenes — the characters, setups, and stories you want to play out.',
   'Intimacy:bondage': 'Restraint — being held down or holding down, and how far that goes.',
   'Intimacy:impact':
     'Impact play — spanking through to harder, and the line between good and too much.',
   'Intimacy:power-exchange':
     'Dominance and submission — who leads, who yields, and what that gives you.',
-  'Intimacy:edge-play':
-    'The intense edges — breath, pain, fear play, and where your hard stops are.',
+  'Intimacy:edge': 'The intense edges — breath, pain, fear play, and where your hard stops are.',
   'Intimacy:group':
     'More than two — threesomes, swinging, group scenes: fantasy, reality, or neither.',
-  'Intimacy:exhibitionism': 'Being watched or watching — risk, cameras, other people in the room.',
+  'Intimacy:exhibition': 'Being watched or watching — risk, cameras, other people in the room.',
   'Intimacy:dirty-talk':
     'What you like said to you and what you like saying — tone, words, how filthy it goes.',
   'Intimacy:taboo-fantasy':
@@ -446,6 +447,35 @@ export interface TopicMaterial {
  * `saturated: []` (§1 D3). Material about work must not re-open questions about sex. The cooldown floor still
  * applies on top, so re-opening can never cause an immediate re-ask.
  */
+/**
+ * The topics a piece of free text NAMES — used to tell whether an author's brief is asking for ground the
+ * ledger has closed, so the prompt never withholds the very vocabulary the brief just demanded.
+ *
+ * Matched per ALTERNATIVE, not per whole label. Most built-in labels are compounds ("Dirty talk & verbal",
+ * "Group & swinging", "Bondage & restraint"), and requiring every content word made 10 of the 14 intimacy
+ * categories effectively unmentionable — "go deeper on dirty talk" matched nothing because it lacked
+ * "verbal". Each `&`/`/`-separated side is tried on its own, along with the topic's recorded aliases, and a
+ * side matches only when ALL of its content words appear. That keeps it conservative (never a single shared
+ * word the way a similarity score would be) while making the common phrasings actually land.
+ */
+export function topicsMentionedIn(text: string, topics: readonly Topic[]): string[] {
+  const body = text.trim();
+  if (body === '') return [];
+  const tokens = new Set([...tokenSet(body)].map(singular));
+  const mentions = (phrase: string): boolean => {
+    const words = labelTokens(phrase);
+    if (words.size === 0) return false;
+    for (const w of words) if (!tokens.has(w)) return false;
+    return true;
+  };
+  const out: string[] = [];
+  for (const topic of ensureTopics(topics)) {
+    const phrases = [...topic.label.split(/[&/]/), ...topic.aliases];
+    if (phrases.some((phrase) => mentions(phrase))) out.push(topic.topicId);
+  }
+  return out;
+}
+
 export function topicsWithNewMaterial(
   material: readonly TopicMaterial[],
   topics: readonly Topic[],

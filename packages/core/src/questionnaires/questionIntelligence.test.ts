@@ -175,6 +175,17 @@ describe('topicMap', () => {
     expect(seeded.filter((t) => t.topicId === 'Intimacy')).toHaveLength(0);
   });
 
+  it('gives every seeded topic a blurb — a bare label is how the redesign shipped wrong the first time', () => {
+    // The blurb table is keyed by topic id by hand, so a typo silently renders a row with no description.
+    // Three intimacy keys were wrong (`exhibitionism`/`edge-play`/`oral-anal` for `exhibition`/`edge`/none),
+    // which mattered the moment the topic map became the ONLY source of the Explored panel's intimacy rows.
+    expect(
+      seedTopics()
+        .filter((t) => !t.blurb?.trim())
+        .map((t) => t.topicId),
+    ).toEqual([]);
+  });
+
   it('folds a near-synonym into the existing topic instead of forking a half-counted twin', () => {
     const topics = seedTopics();
     expect(resolveTopicId('Dirty talk & verbal', topics)).toBe('Intimacy:dirty-talk');

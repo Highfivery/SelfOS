@@ -412,6 +412,15 @@ placing anything. Specifically:
   section, so a person never sees or answers them (the onboarding "Your circle" group hid four questions; the
   shared `@selfos/answering` form now opens all groups). Grouped-content forms get the §7 "full surface
   renders to the bottom" E2E guard.
+- **NEVER state a fact about the user's system you have not just verified — print it, don't infer it (durable,
+  forceful, 2026-08-13).** In one session I told the user their relay wasn't set up (it was — I printed
+  `cfg.endpoint` when the field is `endpointUrl`, so my own script said `null`), told them a redesign matched
+  their approved mockup twice when it plainly did not, and told them repeatedly that spacing was fixed without
+  ever measuring it. Every one was a guess delivered in the voice of a finding. The rule: before asserting
+  ANYTHING about their data, config, or UI — dump the whole object (`Object.keys`, the full JSON), measure the
+  actual computed value, or screenshot the actual surface. A field name you remember is a hypothesis. "The
+  tests pass" is not a statement about what the user sees. If you cannot verify it in the moment, say "I have
+  not checked this" — an unverified claim wastes their time AND destroys the credibility of the verified ones.
 - **Compare what you BUILT against what was APPROVED, side by side, before saying it is done.** A mockup is a
   contract. Passing tests and a screenshot of whatever region happened to be scrolled into view are not a
   comparison — twice a redesign shipped with its grid, stats strip, filter bar and search simply absent while
@@ -489,6 +498,40 @@ A running log of durable decisions and feedback captured into the project config
   commit on the SHARED tree (and merged as #408) — the guard was extracted into a `git worktree` off
   origin/main, which is the only safe way to work while another session holds the checkout.**
 
+- 2026-08-13 — **Refactor (questionnaires: the legacy intimacy coverage engine is DELETED; SPEC 71 §5.1/§5.2/
+  §5.6; on `refactor/remove-legacy-coverage`).** `intimacy/coverage.ts` — the keyword classifier spec 71
+  replaced — survived only as a "pre-backfill fallback". That justification was dead: every household member is
+  backfilled, and a brand-new person has no history for a keyword classifier to act on. Deleted along with its
+  two feeder scans, `nextIntimacyCategory`, and all `IntimacyCoverage` plumbing through generation and the
+  bridge. **The blocker was the one thing it still did:** it bounded the "already rated → go deeper" act list to
+  acts whose category was NOT worked through. Removing it unbounded left the framing listing rated acts
+  regardless of saturation — act-level re-mining, the exact #314 complaint, which de-dup structurally cannot
+  catch because each re-ask is genuinely new WORDING about the same act. Re-sourced from the ledger
+  (`topicStatuses` → `Intimacy:<category>` closure) and **widened to the material lines too**, since offering
+  "Threesomes" one line after the planner names Group & swinging off-limits is the same self-contradiction;
+  fantasy/activity→category are hand-authored lookups over the fixed inventory, never a classifier. An
+  explicitly requested topic (a pin, or ground the author's brief NAMES via a new `topicsMentionedIn`) is
+  excluded from the bound, so a direct "go deeper on receiving oral" is never contradicted by the vocabulary
+  under it — but a brief mention relaxes the VOCABULARY only, never the planner's ground selection, since free
+  text is not consent to re-open ("nothing about money please" names Money). **Code review caught a regression
+  the vault check structurally could not see:** zeroing the persisted intimacy rows made
+  `buildCoverageGuidance` — which reads the persisted profile, not the folded view — list all 14 categories
+  under "lead here", steering the candidate feed at the most worked-through ground in the vault;
+  `refreshCoverage` now folds the ledger in before persisting, guarded + verified to fail without it. Display: `deriveCoverageSkeleton` is now structure-only, its ids +
+  labels matching `seedTopics`, with every number layered on from the ledger + topic map; three wrong
+  `SEEDED_BLURBS` keys fixed + pinned (they only mattered once the topic map became those rows' sole source).
+  Gate green: typecheck (4 pkgs), lint, format, **2002 core + 1568 desktop + 13 relay** unit, E2E. **Verified
+  against the REAL vault, not just tests:** the Explored panel's Intimacy rows are byte-identical before/after
+  for all 11 people (Angel 154 asks / 35 topics), and a real unfiltered draft for the partner plans only open
+  ground while every built-in act + fantasy it offers sits in the only two open categories (8 of 13 fantasies
+  and every closed category's acts withheld). Three guards — manual, auto, bridge — each verified to FAIL when
+  the filter is reverted. **Flagged, not guessed (a product fork):** the Owner's 10 CUSTOM intimacy activities
+  carry no category, so they are never filtered — unchanged from the legacy engine, which appended them
+  unfiltered too, but on the real vault it still offers threesome/broadcast material while Group is closed.
+  **Lesson: when you retire an engine, the thing to hunt for is not its main job (already replaced) but the
+  SMALL side job nobody wrote down — here a one-line filter that was the entire #314 fix. And a bound worth
+  applying to one list is usually worth applying to its siblings: the go-deeper acts and the "material to draw
+  on" lines contradict each other otherwise.**
 - 2026-08-13 — **Fix + a measured NON-fix (questionnaires: one engine decides ground; SPEC 71 §5.2; released
   v0.52.3).** After the spec-71 rebuild shipped, the auto check-in engine's intimacy slot was STILL choosing its
   ground from the **legacy** keyword coverage map (`nextIntimacyCategory`) while the planner chose from the ask

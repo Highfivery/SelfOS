@@ -15,6 +15,9 @@ import {
   writeProfile,
 } from './personalizationProfile';
 import { NOT_APPLICABLE_SKIP_REASON } from './answering';
+import { emptyLedger, writeLedger } from './askLedger';
+import { buildCoverageGuidance } from './coverageModel';
+import { SATURATION_ASKS } from './topicMap';
 import { gatherRecipientFeedbackGuidance } from './recipientHistory';
 
 const key = generateMasterKey();
@@ -102,6 +105,38 @@ describe('refreshCoverage', () => {
     const guidance = await gatherRecipientFeedbackGuidance(fs, key, 'p1', new Date());
     expect(guidance).not.toContain('NEW / UNEXPLORED GROUND');
     expect(guidance).not.toContain('Already explored');
+  });
+
+  it('persists LEDGER counts on the intimacy rows, so worked ground never reads as "lead here"', async () => {
+    // The skeleton's intimacy rows are structure only, and `applyCoverageAssessments` never scores Intimacy —
+    // so without folding the ledger in before persisting, every category stays `explored:false, depth:0` and
+    // `buildCoverageGuidance` (which reads the PERSISTED profile, not the folded view) puts the most
+    // worked-through ground in the vault under "NEW / UNEXPLORED GROUND — lead here" for the candidate feed.
+    const fs = memFileSystem();
+    await writeLedger(fs, key, {
+      ...emptyLedger('p1'),
+      backfilledAt: '2026-08-01T00:00:00.000Z',
+      entries: Array.from({ length: SATURATION_ASKS }, (_, i) => ({
+        questionId: `q${i}`,
+        assignmentId: `a${i}`,
+        at: '2026-08-05T00:00:00.000Z',
+        type: 'intimacy',
+        tier: 'unfiltered' as const,
+        topicIds: ['Intimacy:oral'],
+        gist: 'oral',
+        outcome: 'rich' as const,
+      })),
+    });
+    expect((await refreshCoverage(deps(fs, ASSESSMENTS), 'p1')).ok).toBe(true);
+
+    const profile = await readProfile(fs, key, 'p1');
+    const oral = profile.coverage.topics.find((t) => t.topicId === 'Intimacy:oral');
+    expect(oral).toMatchObject({ askedCount: SATURATION_ASKS, explored: true });
+    // …and the guidance built from that profile no longer leads there, while untouched ground still does.
+    const guidance = buildCoverageGuidance(profile);
+    const fresh = guidance.split('Already explored')[0] ?? '';
+    expect(fresh).not.toContain('- Oral');
+    expect(fresh).toContain('- Money');
   });
 
   it('is fail-safe: a no-key pass leaves the last-good coverage untouched', async () => {

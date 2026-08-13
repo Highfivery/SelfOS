@@ -105,10 +105,11 @@ describe('projectCoverageView', () => {
 
 describe('mergeProfileCoverage', () => {
   it('overlays AI depth on general areas, keeps Intimacy from the skeleton, and appends profile-only topics', () => {
-    const skeleton = deriveCoverageSkeleton(); // all uncovered; one Intimacy topic
+    const skeleton = deriveCoverageSkeleton(); // all uncovered; one row per intimacy category
     const merged = mergeProfileCoverage(skeleton, [
       topic({ topicId: 'Work & purpose', lifeArea: 'Work & purpose', depth: 0.7, explored: true }),
-      topic({ topicId: 'Intimacy', lifeArea: 'Intimacy', depth: 0.9, explored: true }), // must NOT override
+      // Must NOT override: an intimacy row's numbers come from the ask ledger, never a persisted placement.
+      topic({ topicId: 'Intimacy:oral', lifeArea: 'Intimacy', depth: 0.9, explored: true }),
       topic({
         topicId: 'Work & purpose:career',
         lifeArea: 'Work & purpose',
@@ -117,8 +118,8 @@ describe('mergeProfileCoverage', () => {
       }),
     ]);
     expect(merged.find((t) => t.topicId === 'Work & purpose')?.depth).toBe(0.7);
-    // Intimacy stays send-history-fresh (skeleton), not the persisted 0.9.
-    expect(merged.find((t) => t.topicId === 'Intimacy')?.depth).toBe(0);
+    // The intimacy row stays at the skeleton's zero, not the persisted 0.9.
+    expect(merged.find((t) => t.topicId === 'Intimacy:oral')?.depth).toBe(0);
     // The emergent sub-topic is appended.
     expect(merged.some((t) => t.topicId === 'Work & purpose:career')).toBe(true);
   });

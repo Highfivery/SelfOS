@@ -19,6 +19,7 @@ import {
   getChapter,
   getOutline,
   listChapters,
+  saveOutline,
 } from './storyService';
 
 const key = generateMasterKey();
@@ -213,6 +214,54 @@ describe('generateStructuralProposals (64 §3.4/§5.4)', () => {
 });
 
 describe('resolveProposal — approve applies the restructure (no prose written)', () => {
+  /**
+   * A proposal whose referenced part has since vanished can't apply. Recording it as `applied` would dedup it
+   * forever, so the change could never be proposed again even once the part exists — and the record would
+   * claim a restructure that never happened.
+   */
+  it('a proposal that FAILED to apply is dismissed, not recorded as applied', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    const gen = await generateStructuralProposals(
+      deps(
+        fs,
+        fakeClient(
+          proposalsJson([
+            { kind: 'newChapter', partId: 'p1', title: 'A Later Era', brief: 'x', rationale: 'y' },
+          ]),
+        ),
+      ),
+      { bookId },
+    );
+    const id = gen.ok ? gen.proposals[0]!.id : '';
+    // Drop the part out from under it, then approve.
+    await saveOutline(fs, key, 'me', bookId, { schemaVersion: 1, approved: true, parts: [] });
+    const res = await resolveProposal(fs, key, 'me', {
+      bookId,
+      proposalId: id,
+      action: 'approve',
+    });
+    expect(res.ok).toBe(false);
+    expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(0); // no longer pending
+
+    // It is RETAINED (as dismissed) rather than spliced away, so its signature still dedups — the same
+    // change can't be re-proposed on the next pass. `applied` would dedup identically, so the difference
+    // between the two is the honesty of the record, not behaviour: nothing was applied, so nothing claims
+    // it was.
+    const again = await generateStructuralProposals(
+      deps(
+        fs,
+        fakeClient(
+          proposalsJson([
+            { kind: 'newChapter', partId: 'p1', title: 'A Later Era', brief: 'x', rationale: 'y' },
+          ]),
+        ),
+      ),
+      { bookId },
+    );
+    expect(again.ok && again.added).toBe(0);
+  });
+
   it('newChapter: inserts an un-written stale shell in the right position', async () => {
     const fs = memFileSystem();
     const bookId = await seedBook(fs);
@@ -373,5 +422,59 @@ describe('resolveProposal — approve applies the restructure (no prose written)
     const res = await generateStructuralProposals(deps(fs, client), { bookId: book.id });
     expect(res.ok && res.added).toBe(0);
     expect(streamed).toBe(false); // never called the model
+  });
+
+  /**
+   * 72 §7.6 — the duplicate-chapter defect, measured on the real vault: Ben's outline carries "The Paper He
+   * Signed" TWICE, once written and once an empty shell. Dedup ran against pending + dismissed proposals, but
+   * APPROVING one spliced it out of the list entirely — destroying its signature — so the next pass was free
+   * to propose the identical chapter again.
+   */
+  it('never re-proposes a chapter that was already approved', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    const sameProposal = JSON.stringify({
+      proposals: [
+        {
+          kind: 'newChapter',
+          partId: 'p1',
+          title: 'The Paper He Signed',
+          brief: 'x',
+          rationale: 'y',
+        },
+      ],
+    });
+
+    const first = await generateStructuralProposals(deps(fs, fakeClient(sameProposal)), { bookId });
+    expect(first.ok && first.added).toBe(1);
+    const pending = await listStructuralProposals(fs, key, 'me', bookId);
+    await resolveProposal(fs, key, 'me', { bookId, proposalId: pending[0]!.id, action: 'approve' });
+    // Approved → gone from the pending view (but remembered, which is the point).
+    expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(0);
+
+    const second = await generateStructuralProposals(deps(fs, fakeClient(sameProposal)), {
+      bookId,
+    });
+    expect(second.ok && second.added).toBe(0); // NOT proposed a second time
+    expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(0);
+    // And the outline holds exactly one chapter by that title.
+    const titles = (await getOutline(fs, key, 'me', bookId))!.parts.flatMap((p) =>
+      p.chapters.map((c) => c.title),
+    );
+    expect(titles.filter((t) => t === 'The Paper He Signed')).toHaveLength(1);
+  });
+
+  it('never proposes a chapter the outline already holds', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    // "The Garage" is already chapter c1 of part p1 — a proposal to add it is a duplicate, whatever its casing.
+    const dupe = JSON.stringify({
+      proposals: [
+        { kind: 'newChapter', partId: 'p1', title: '  the garage  ', brief: 'x', rationale: 'y' },
+      ],
+    });
+    const res = await generateStructuralProposals(deps(fs, fakeClient(dupe)), { bookId });
+    expect(res.ok && res.added).toBe(0);
+    expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(0);
   });
 });

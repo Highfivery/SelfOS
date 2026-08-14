@@ -335,6 +335,7 @@ describe('Story (64)', () => {
           dreams: 2,
           memories: 1,
           answers: 3,
+          sessions: 2,
           yearFrom: 2019,
           yearTo: 2026,
         }),
@@ -343,16 +344,15 @@ describe('Story (64)', () => {
     expect(await screen.findByRole('button', { name: 'Begin your book' })).toBeInTheDocument();
     expect(screen.getByText('It reads')).toBeInTheDocument();
     expect(screen.getByText('It keeps writing')).toBeInTheDocument();
-    // The "Drawn from" chips reflect the deterministic corpus counts + the year span — and only material
-    // that actually feeds generation, never a raw session count (§15.2).
+    // The "Drawn from" chips reflect the deterministic corpus counts + the year span — only material that
+    // actually feeds generation (§15.2). Sessions now DO (72 §5.2: the person's own words in them reach the
+    // writer directly), so they lead the row — leaving them out would understate the largest single source.
     expect(await screen.findByText('5 reflections')).toBeInTheDocument();
     expect(screen.getByText('1 memory')).toBeInTheDocument();
     expect(screen.getByText('3 answered questionnaires')).toBeInTheDocument();
     expect(screen.getByText('2019–2026')).toBeInTheDocument();
-    // No session chip: the type no longer carries a conversation count, and a raw transcript never feeds
-    // generation. (Scoped to the chip row — the invitation copy is free to mention sessions in prose.)
     const chipRow = screen.getByText('5 reflections').parentElement;
-    expect(chipRow?.textContent ?? '').not.toMatch(/session/i);
+    expect(chipRow?.textContent ?? '').toMatch(/session/i);
   });
 
   it('commission: the live preview specimen changes with the chosen style (§13.3)', async () => {
@@ -1758,6 +1758,7 @@ describe('Story (64)', () => {
             personId: 'a',
             relationship: 'partner',
             mentions: 4,
+            chapterMentions: 4,
             sources: ['graph'],
           },
         ]),

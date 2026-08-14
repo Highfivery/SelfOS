@@ -4198,8 +4198,13 @@ export interface CastEntry {
   personId?: string;
   /** A human relationship label ("partner", "mother", a custom label), when known. */
   relationship?: string;
-  /** How many corpus items name this person (the prominence signal). */
+  /** How many corpus items name this person (the prominence signal — what the material talks about). */
   mentions: number;
+  /** How many of the book's WRITTEN CHAPTERS name them. This, not `mentions`, gates publication: since 72
+   *  §5.2 the corpus includes whole session transcripts, so someone mentioned once in passing in a coaching
+   *  session has corpus mentions while the book never names them — and the published dramatis personae must
+   *  list who the BOOK names, not who the person has talked about. */
+  chapterMentions: number;
   /** Where the register learned of them (a person can come from more than one). */
   sources: ('graph' | 'memory' | 'mention')[];
 }
@@ -4292,6 +4297,12 @@ export const StorySourceKindSchema = z.enum([
   // citable in the prose. Only ever emitted for an approved quote; a pending/rejected candidate never reaches
   // the corpus.
   'quote',
+  // A stretch of the person's OWN recorded speech — their turns in a coaching session, or their own
+  // non-aside lines in a Together session (72 §5.2). This is where sensory, first-person voice actually
+  // lives: measured on the real vault, 48,283 characters of it existed while the biographer was writing
+  // from 156-character distilled facts. Own data only — a partner's words and every private aside are
+  // structurally absent (58 §3.8), and a Together PREP thread is confidential scratch, never read.
+  'transcript',
 ]);
 export type StorySourceKind = z.infer<typeof StorySourceKindSchema>;
 export const StorySourceRefSchema = z.object({
@@ -4925,7 +4936,11 @@ export const StructuralProposalKindSchema = z.enum([
   'prologueRewrite',
 ]);
 export type StructuralProposalKind = z.infer<typeof StructuralProposalKindSchema>;
-export const StructuralProposalStatusSchema = z.enum(['pending', 'dismissed']);
+// `applied` (72 §7.6) is what an APPROVED proposal becomes. It used to be spliced out of the list entirely,
+// which silently destroyed its dedup signature — so the next structure pass could propose the very same
+// chapter again, and did: Ben's outline carries "The Paper He Signed" twice. Keeping it (hidden from every
+// pending view) is what makes the dedup durable.
+export const StructuralProposalStatusSchema = z.enum(['pending', 'dismissed', 'applied']);
 export type StructuralProposalStatus = z.infer<typeof StructuralProposalStatusSchema>;
 
 const proposalBase = {
@@ -4987,7 +5002,21 @@ export type StoryProposalList = z.infer<typeof StoryProposalListSchema>;
 // --- Cross-chapter continuity (64 §17.3) — inconsistencies surfaced as REVIEW ITEMS, never auto-fixed -----
 
 /** What kind of inconsistency a continuity finding flags. */
-export const ContinuityKindSchema = z.enum(['name', 'date', 'fact', 'other']);
+/** What a review finding is about. The first four are the CONTINUITY pass's fact-checking kinds (§17.3);
+ *  the rest come from the MANUSCRIPT pass (72 §5.3), which reads the finished book as a whole for the
+ *  things only visible across chapters — a motif worn out by repetition, an era that races or drags, an
+ *  arc that never lands, a voice that drifts. Both write into one review list, because to the author they
+ *  are the same job: things to go and fix. */
+export const ContinuityKindSchema = z.enum([
+  'name',
+  'date',
+  'fact',
+  'repetition',
+  'pacing',
+  'arc',
+  'voice',
+  'other',
+]);
 export type ContinuityKind = z.infer<typeof ContinuityKindSchema>;
 
 export const ContinuityStatusSchema = z.enum(['pending', 'resolved', 'dismissed']);
@@ -5316,12 +5345,19 @@ export interface StoryRefreshViewResult {
  *  (`chaptersDone`/`chaptersTotal` + the current chapter's `title`); `done` when the book is fully drafted;
  *  `error` with a `message`. The draft runs in the main process, so it continues even if the renderer
  *  navigates away (the event stream keeps the store's progress current). */
+/** Which pass of the craft loop (72 §5.3) is running inside the current chapter. A chapter is now three or
+ *  four model calls, so without this the progress bar sits on "chapter 3 of 24" for minutes with nothing
+ *  moving — the §12 realtime-progress rule (a live phase, never a bare spinner). */
+export type StoryCraftPhase = 'planning' | 'drafting' | 'critiquing' | 'revising';
+
 export interface StoryDraftProgress {
   bookId: string;
   phase: 'reading' | 'writing' | 'done' | 'error';
   chaptersDone: number;
   chaptersTotal: number;
   currentTitle?: string;
+  /** The craft-loop pass running right now, while `phase` is `writing`. */
+  craft?: StoryCraftPhase;
   message?: string;
 }
 
@@ -5519,6 +5555,10 @@ export interface StoryCorpusStats {
   memories: number;
   /** Questionnaires / check-ins they answered — the verbatim answers beneath the distilled insights. */
   answers: number;
+  /** Coaching sessions the person actually spoke in. Since 72 §5.2 their OWN words feed the book directly,
+   *  so this is now real material, not a promise the corpus can't keep — omitting it understated the single
+   *  largest source (#305's honesty argument, running the other way). */
+  sessions: number;
   /** The span of years the material touches, when derivable (earliest → latest dated item). */
   yearFrom?: number;
   yearTo?: number;

@@ -13,11 +13,13 @@ import {
   type LifeTimeline,
   type MarkupMark,
   type OutlineChapter,
+  type StoryCraftPhase,
   type UsageEvent,
 } from '../schemas';
 import { getBookType, type BookType } from './bookTypes';
 import { CHAPTER_CORPUS_TOKEN_BUDGET, budgetCorpus, sliceCorpusForChapter } from './corpusBudget';
 import { buildStoryCorpus, type CorpusItem, type StoryCorpus } from './storyCorpus';
+import { critiqueChapter, planChapter, reviseChapter } from './storyCraft';
 import { computeSourceSignature } from './storyFreshness';
 import { enforceProtected } from './storyMarkup';
 import { syncChapterTodos } from './storyMarkupService';
@@ -29,7 +31,7 @@ import {
   buildRevisionUserMessage,
   tagCorpusItems,
 } from './storyPromptBuilder';
-import { chapterParagraphs, stripSourceMarkers } from './storyText';
+import { chapterParagraphs, countWords, stripSourceMarkers } from './storyText';
 import { generatedEventId } from './storyTimeline';
 // Re-exported so existing importers (tests, the bridge) keep their `./storyGenerationService` entry points.
 export { chapterParagraphs, stripSourceMarkers } from './storyText';
@@ -204,17 +206,28 @@ export async function generateFoundations(
 
 // --- Chapter generation (§5.3) ---------------------------------------------------------------------------
 
-/** A chapter is ~1,500–3,000 words (≈2–4k tokens); give headroom so a rich chapter doesn't truncate. */
-const CHAPTER_MAX_TOKENS = 8000;
+/**
+ * The output ceiling for one chapter (72 §5.3). This was 8,000 with a comment describing a `standard`-length
+ * chapter (~1,500–3,000 words) — but `full` is the DEFAULT length and asks for 2,500–5,000 words, which tops
+ * out above that ceiling once the per-paragraph `[[SRC:…]]` markers are counted. A truncated chapter is refused
+ * outright (never persisted half-finished), so the longest chapters were the most likely to fail entirely.
+ */
+const CHAPTER_MAX_TOKENS = 16000;
+
+/** How much of the draft a revision must keep to be accepted. Fixing named defects trims a chapter a little;
+ *  it does not halve it. Below this the reply is a fragment, not a revision, and the draft stands. */
+const COLLAPSE_FLOOR = 0.6;
 
 export type ChapterResult =
   | { ok: true; chapter: BookChapter }
   | { ok: false; reason: AiFailureReason; message: string };
 
 /**
- * Generate (or regenerate) ONE chapter's prose from the corpus + its outline brief (§5.3). Reads the book +
- * outline, builds the corpus (or reuses a pre-built one — the orchestrator builds it once for the whole book),
- * runs the metered `story.chapter` pass, strips the citation markers into provenance, and PERSISTS the chapter.
+ * Generate (or regenerate) ONE chapter through the CRAFT LOOP (72 §5.3): plan → draft → critique → revise.
+ * Only the draft is load-bearing — the plan, the critique, and the revision each fail soft, so the loop can
+ * improve a chapter but never lose one. Reads the book + outline, builds the corpus (or reuses a pre-built
+ * one — the orchestrator builds it once for the whole book), strips the citation markers into provenance,
+ * and PERSISTS the chapter ONCE, from whichever text survived the loop.
  * Protected blocks + pinned quotes ride the prompt's PRESERVE list AND are code-enforced after the call
  * (`enforceProtected` — the person's own words survive every rewrite path, not just revisions); the replaced
  * text is archived to the chapter's version history first (§13.9). Status becomes `updated` on a regenerate,
@@ -223,7 +236,14 @@ export type ChapterResult =
  */
 export async function generateChapter(
   deps: AiDeps,
-  args: { bookId: string; chapterId: string; corpus?: StoryCorpus },
+  args: {
+    bookId: string;
+    chapterId: string;
+    corpus?: StoryCorpus;
+    /** Fired as each craft-loop pass begins, so the caller can stream a live phase to the UI (§12) — a
+     *  chapter is three or four calls now, and a progress bar that doesn't move for minutes reads as hung. */
+    onPhase?: (phase: StoryCraftPhase) => void;
+  },
 ): Promise<ChapterResult> {
   const book = await getBook(deps.fs, deps.key, deps.personId, args.bookId);
   if (!book) return { ok: false, reason: 'ERROR', message: 'That book is no longer here.' };
@@ -270,13 +290,29 @@ export async function generateChapter(
   const tagged = tagCorpusItems(slice);
   const tagToRef = new Map(tagged.map((t) => [t.tag, t.sourceRef]));
   const system = buildBiographerSystem(bookType, book.config, corpus.personName);
+
+  // Pass 1 of the craft loop (72 §5.3) — decide what this chapter IS before writing a word. Optional by
+  // design: a failed plan (or one the budget stopped) leaves the drafter working from the brief alone,
+  // exactly as it did before the loop existed.
+  args.onPhase?.('planning');
+  const plan = await planChapter(deps, slice, tagged, {
+    chapter: target,
+    outline,
+    ...(book.essence ? { essence: book.essence } : {}),
+    system,
+  });
+
   const user = buildChapterUserMessage(slice, tagged, {
     chapter: target,
     outline,
     ...(book.essence ? { essence: book.essence } : {}),
     ...(preserve.length > 0 ? { preserve } : {}),
+    ...(plan ? { plan } : {}),
   });
 
+  // Pass 2 — the draft. The only load-bearing pass: everything before and after it is an improvement that
+  // can fail without costing the chapter.
+  args.onPhase?.('drafting');
   const result = await runClaude(deps, system, user, 'story.chapter', CHAPTER_MAX_TOKENS);
   if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
   // Still cut off after the bounded continuations: NEVER persist a half-finished chapter as if complete —
@@ -290,11 +326,57 @@ export async function generateChapter(
     };
   }
 
-  const { markdown, provenance } = stripSourceMarkers(result.text, tagToRef);
-  if (markdown.trim().length === 0) {
+  const drafted = stripSourceMarkers(result.text, tagToRef);
+  if (drafted.markdown.trim().length === 0) {
     const { reason, message } = classifyParseOutcome(result.text, 'chapter');
     return { ok: false, reason, message };
   }
+
+  // Pass 3 — an editor reads the draft against the doctrine and names what's wrong. An empty result is the
+  // healthy answer (the chapter ships as drafted) AND the failure answer, so a critique that can't run
+  // simply costs the chapter nothing.
+  args.onPhase?.('critiquing');
+  const findings = await critiqueChapter(deps, slice, tagged, {
+    chapter: target,
+    markdown: drafted.markdown,
+    ...(plan ? { plan } : {}),
+    system,
+  });
+
+  // Pass 4 — fix exactly what the critique found. The DRAFT stands on any failure: a revision that was cut
+  // off, came back empty, or hit the budget must never replace a whole good chapter with part of one.
+  let markdown = drafted.markdown;
+  let provenance = drafted.provenance;
+  if (findings.length > 0) {
+    args.onPhase?.('revising');
+    const revised = await reviseChapter(deps, slice, tagged, {
+      chapter: target,
+      markdown: drafted.markdown,
+      findings,
+      ...(preserve.length > 0 ? { preserve } : {}),
+      system,
+      maxTokens: CHAPTER_MAX_TOKENS,
+    });
+    if (revised.ok) {
+      const stripped = stripSourceMarkers(revised.text, tagToRef);
+      // The loop's guarantee is that it can never LOSE a chapter, and "non-empty" is not enough to keep it.
+      // A revision that returns only the corrected paragraphs, or a chapter cut to a third, ends with
+      // `end_turn` and plenty of text — it would replace the whole draft, and on a FIRST draft there is no
+      // archived version to restore. So a collapse is refused like a truncation: keep the draft.
+      const collapsed =
+        countWords(stripped.markdown) < COLLAPSE_FLOOR * countWords(drafted.markdown);
+      // Likewise a revision that drops its [[SRC:…]] markers. Empty provenance is worse than an empty
+      // Sources panel: `computeSourceSignature` returns '' for a chapter citing nothing, and the freshness
+      // engine skips chapters with no signature — so the chapter would silently stop noticing new material
+      // for the rest of its life.
+      const lostCitations = drafted.provenance.length > 0 && stripped.provenance.length === 0;
+      if (stripped.markdown.trim().length > 0 && !collapsed && !lostCitations) {
+        markdown = stripped.markdown;
+        provenance = stripped.provenance;
+      }
+    }
+  }
+
   // Re-read the chapter LIVE after the slowest call in the app: a pin / markup / image placement made while
   // the generation was in flight must not be reverted by the pre-call snapshot (mirrors applyMarkup below —
   // `existing` above is the pre-call read, kept only to seed the prompt's PRESERVE list). Null on a first draft.
@@ -363,7 +445,12 @@ export interface BookChaptersResult {
 export async function generateBookChapters(
   deps: AiDeps,
   bookId: string,
-  onProgress?: (progress: { chaptersDone: number; chaptersTotal: number; title: string }) => void,
+  onProgress?: (progress: {
+    chaptersDone: number;
+    chaptersTotal: number;
+    title: string;
+    craft?: StoryCraftPhase;
+  }) => void,
 ): Promise<BookChaptersResult> {
   const outline = await getOutline(deps.fs, deps.key, deps.personId, bookId);
   if (!outline || outline.parts.length === 0) {
@@ -395,7 +482,19 @@ export async function generateBookChapters(
       continue;
     }
     onProgress?.({ chaptersDone: completed, chaptersTotal: total, title: chapter.title });
-    const res = await generateChapter(deps, { bookId, chapterId: chapter.id, corpus });
+    const res = await generateChapter(deps, {
+      bookId,
+      chapterId: chapter.id,
+      corpus,
+      // Re-emit the same counts with the live craft phase, so the UI shows movement WITHIN a chapter.
+      onPhase: (craft) =>
+        onProgress?.({
+          chaptersDone: completed,
+          chaptersTotal: total,
+          title: chapter.title,
+          craft,
+        }),
+    });
     if (res.ok) {
       generated += 1;
       completed += 1;

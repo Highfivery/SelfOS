@@ -17,6 +17,7 @@ import {
 } from '../schemas';
 import { writeEncryptedJson } from '../vault';
 import { saveConversation } from '../conversations/conversationService';
+import { appendMessage, createSession } from '../together/togetherService';
 import { createAssignment, saveQuestionnaire, saveResponse } from '../questionnaires';
 import { buildStoryCorpus, corpusText, getStoryCorpusStats } from './storyCorpus';
 import {
@@ -638,7 +639,7 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
     const fs = fresh();
     await savePerson(fs, key, person('me', 'Ben'));
     const stats = await getStoryCorpusStats(fs, key, 'me');
-    expect(stats).toEqual({ reflections: 0, dreams: 0, memories: 0, answers: 0 });
+    expect(stats).toEqual({ reflections: 0, dreams: 0, memories: 0, answers: 0, sessions: 0 });
   });
 
   it("surfaces the subject's own profile and name", async () => {
@@ -754,5 +755,123 @@ describe('buildStoryCorpus — the all-data read (64 §5.1)', () => {
     expect(corpusText(await buildStoryCorpus(fs, key, 'me', 'book-A'))).toContain(
       'memory that belongs to book A',
     );
+  });
+});
+
+/**
+ * 72 §5.2 — the person's OWN recorded speech reaches the writer. Measured on the real vault, 48,283 characters
+ * of it existed while the biographer wrote from 156-character distilled facts, which is why the prose reads as
+ * abstraction rather than scene. These tests pin BOTH halves: the material arrives, and the privacy boundary
+ * around it is exactly the one `storyQuotes` mines under.
+ */
+describe('own recorded speech in the corpus (72 §5.2)', () => {
+  it('feeds the subject’s own session turns — never the coach’s replies', async () => {
+    const fs = fresh();
+    await savePerson(fs, key, person('me', 'Ben'));
+    await saveConversation(fs, key, {
+      id: 'conv-speech',
+      schemaVersion: 1,
+      personId: 'me',
+      title: 'A session',
+      createdAt: '2024-02-01T00:00:00.000Z',
+      updatedAt: '2024-02-01T00:00:00.000Z',
+      messages: [
+        { role: 'user', content: 'The garage smelled of cut pine that whole summer.', ts: 'a' },
+        { role: 'assistant', content: 'COACH REPLY — never the subject’s voice.', ts: 'b' },
+        { role: 'user', content: 'I stopped waiting for the phone around twenty-five.', ts: 'c' },
+      ],
+    });
+
+    const text = corpusText(await buildStoryCorpus(fs, key, 'me', 'book-1'));
+    expect(text).toContain('The garage smelled of cut pine');
+    expect(text).toContain('stopped waiting for the phone');
+    expect(text).not.toContain('COACH REPLY');
+  });
+
+  it('never reads a Together PREP thread (confidential scratch space, 58 §3.7)', async () => {
+    const fs = fresh();
+    await savePerson(fs, key, person('me', 'Ben'));
+    await saveConversation(fs, key, {
+      id: 'conv-prep',
+      schemaVersion: 1,
+      personId: 'me',
+      title: 'Prep',
+      togetherSessionId: 'sess-1',
+      createdAt: '2024-02-01T00:00:00.000Z',
+      updatedAt: '2024-02-01T00:00:00.000Z',
+      messages: [{ role: 'user', content: 'PREP SECRET I only rehearsed alone.', ts: 'a' }],
+    });
+
+    expect(corpusText(await buildStoryCorpus(fs, key, 'me', 'book-1'))).not.toContain(
+      'PREP SECRET',
+    );
+  });
+
+  it('in Together, feeds only the subject’s own non-aside lines — never a partner’s, never an aside', async () => {
+    const fs = fresh();
+    await savePerson(fs, key, person('me', 'Ben'));
+    await savePerson(fs, key, person('them', 'Angel'));
+    const session = await createSession(
+      fs,
+      key,
+      { initiatorPersonId: 'me', participantIds: ['me', 'them'] },
+      new Date('2024-03-01T00:00:00.000Z'),
+    );
+    const base = {
+      schemaVersion: 1 as const,
+      role: 'user' as const,
+      ts: '2024-03-01T00:00:00.000Z',
+    };
+    await appendMessage(fs, key, session.id, {
+      ...base,
+      id: 'm1',
+      authorPersonId: 'me',
+      content: 'MINE — what I actually said in the room.',
+    });
+    await appendMessage(fs, key, session.id, {
+      ...base,
+      id: 'm2',
+      authorPersonId: 'them',
+      content: 'PARTNER WORDS — hers, not his.',
+    });
+    await appendMessage(fs, key, session.id, {
+      ...base,
+      id: 'm3',
+      authorPersonId: 'me',
+      content: 'MY ASIDE — said privately to the coach.',
+      privateAside: true,
+    });
+
+    const text = corpusText(await buildStoryCorpus(fs, key, 'me', 'book-1'));
+    expect(text).toContain('MINE — what I actually said');
+    expect(text).not.toContain('PARTNER WORDS');
+    expect(text).not.toContain('MY ASIDE');
+  });
+
+  it('a `source` exclusion drops one conversation, not the whole speaking history', async () => {
+    const fs = fresh();
+    await savePerson(fs, key, person('me', 'Ben'));
+    for (const [id, line] of [
+      ['conv-keep', 'KEPT line from a session.'],
+      ['conv-drop', 'DROPPED line from a session.'],
+    ] as const) {
+      await saveConversation(fs, key, {
+        id,
+        schemaVersion: 1,
+        personId: 'me',
+        title: id,
+        createdAt: '2024-02-01T00:00:00.000Z',
+        updatedAt: '2024-02-01T00:00:00.000Z',
+        messages: [{ role: 'user', content: line, ts: 'a' }],
+      });
+    }
+
+    const text = corpusText(
+      await buildStoryCorpus(fs, key, 'me', 'book-1', [
+        { id: 'x', kind: 'source', value: 'conv-drop', createdAt: 'n' },
+      ]),
+    );
+    expect(text).toContain('KEPT line');
+    expect(text).not.toContain('DROPPED line');
   });
 });

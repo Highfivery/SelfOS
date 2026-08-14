@@ -53,6 +53,7 @@ import type {
   StoryCompleteness,
   StoryCompletenessStage,
   StoryPartCoverage,
+  ContinuityFinding,
   StoryDraftProgress,
   StoryPublishDiff,
   StoryReaderView,
@@ -692,9 +693,21 @@ function DraftProgress({
   const elapsed = now - p.startedAt;
   const pct = writing && total > 0 ? Math.min(99, 15 + (done / total) * 84) : 8;
   const eta = writing ? estimateRemaining(elapsed, done, total) : null;
+  // A chapter is four passes now (72 §5.3), each of them minutes long — so name the one that's running,
+  // or the bar sits on "chapter 3 of 24" with nothing moving and reads as hung (§12).
+  const craftLabel =
+    p.craft === 'planning'
+      ? 'finding the scenes'
+      : p.craft === 'drafting'
+        ? 'writing it'
+        : p.craft === 'critiquing'
+          ? 'reading it back'
+          : p.craft === 'revising'
+            ? 'working on it again'
+            : null;
   const phaseLabel = writing
     ? p.currentTitle
-      ? `Writing “${p.currentTitle}” — chapter ${Math.min(done + 1, total)} of ${total}`
+      ? `${craftLabel ? `${craftLabel[0]!.toUpperCase()}${craftLabel.slice(1)}` : 'Writing'} — “${p.currentTitle}”, chapter ${Math.min(done + 1, total)} of ${total}`
       : `Writing your chapters — ${done} of ${total}`
     : 'Reading everything you’ve shared, and shaping the outline…';
 
@@ -1550,7 +1563,13 @@ function StudioLayout({
     .filter((c): c is (typeof chapters)[number] => Boolean(c));
   const pending = outlineChapters.filter((c) => !writtenById.has(c.id)).length;
   const metrics = manuscriptMetrics(chapters);
-  const staleCount = chapters.filter((c) => c.status === 'stale').length;
+  // Only chapters with PROSE can have "new material to fold in" (72 §5.4). A never-written shell is stamped
+  // `stale` by `chapterShell`, so this used to report unwritten chapters as needing a refresh — Ben's book
+  // said "34 chapters have new material" when 11 of them had never been written at all. Unwritten chapters
+  // are already surfaced honestly by `pending` + the "Not yet written" cards.
+  const staleCount = chapters.filter(
+    (c) => c.status === 'stale' && c.markdown.trim().length > 0,
+  ).length;
   const toReview = writtenInOrder.filter((c) => c.status === 'new' || c.status === 'updated');
   const openTodos = todos.filter((t) => t.status === 'open' || t.status === 'questionsSent');
   const firstWritten = writtenInOrder[0];
@@ -1892,6 +1911,20 @@ function TabCount({ bookId, kind }: { bookId: string; kind: 'photos' }): JSX.Ele
   return null;
 }
 
+/** What each review finding is about, in the author's language. Two passes write into one list — the
+ *  continuity check (names/dates/facts) and the whole-book manuscript read (72 §5.3) — so the kind is what
+ *  tells them apart at a glance. */
+const FINDING_KIND_LABEL: Record<ContinuityFinding['kind'], string> = {
+  name: 'Name',
+  date: 'Date',
+  fact: 'Fact',
+  repetition: 'Repetition',
+  pacing: 'Pacing',
+  arc: 'Arc',
+  voice: 'Voice',
+  other: 'Note',
+};
+
 /** The Chapters tab: the cover-backed card grid grouped by part, the "write the remaining N" bar rendered
  *  inside the part that owns the unwritten shells, and the inline write-progress. */
 function ChaptersTab({
@@ -1917,6 +1950,7 @@ function ChaptersTab({
   const continuity = useStoryStore((s) => s.continuity);
   const loadContinuity = useStoryStore((s) => s.loadContinuity);
   const runContinuity = useStoryStore((s) => s.checkContinuity);
+  const runManuscript = useStoryStore((s) => s.readManuscript);
   const resolveContinuity = useStoryStore((s) => s.resolveContinuity);
   const busy = useStoryStore((s) => s.chaptersGenerating);
   const [continuityNote, setContinuityNote] = useState<string | null>(null);
@@ -1956,19 +1990,38 @@ function ChaptersTab({
             {busy ? 'Checking…' : 'Check continuity'}
           </Button>
         ) : null}
+        {/* The manuscript pass (72 §5.3) — the whole-book read for what no single chapter can show. */}
+        {writtenCount >= 2 ? (
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onClick={async () => {
+              setContinuityNote(null);
+              const res = await runManuscript(bookId);
+              if (!res.ok) setContinuityNote(res.message ?? 'The manuscript read couldn’t run.');
+              else if (res.findings.length === 0)
+                setContinuityNote('Nothing to flag — it holds together as a whole.');
+            }}
+          >
+            {busy ? 'Reading…' : 'Read the whole book'}
+          </Button>
+        ) : null}
       </div>
       {continuityNote ? <Banner tone="info">{continuityNote}</Banner> : null}
       {continuity.length > 0 ? (
         <Card>
           <Stack gap={2}>
-            <Heading level={2}>Continuity to review</Heading>
+            <Heading level={2}>Things to review</Heading>
             <Text tone="secondary" size="sm">
-              Places where names, dates, or facts don’t line up across chapters. Fix them in the
-              chapters, then mark each resolved — nothing is changed for you.
+              Names, dates and facts that don’t line up, and what a whole-book read turned up. Fix
+              them in the chapters, then mark each one done — nothing is changed for you.
             </Text>
             {continuity.map((f) => (
               <div key={f.id} className={styles.continuityRow}>
                 <Text size="sm">
+                  <Text as="span" tone="tertiary" size="sm">
+                    {FINDING_KIND_LABEL[f.kind]} ·{' '}
+                  </Text>
                   <strong>{f.summary}</strong>
                   {f.chapters.length > 0 ? (
                     <Text tone="tertiary" size="sm">

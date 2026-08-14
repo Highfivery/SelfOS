@@ -13750,6 +13750,11 @@ test('story (64): setup names the book, outline rename, chapters + sources, mark
     // Open a drafted chapter and read its prose + provenance.
     await w.getByRole('button', { name: /The Garage/ }).click();
     await expect(w.getByText(/cut pine/)).toBeVisible();
+    // The craft loop closed (72 §5.3): the draft narrated its own sourcing ("the record does not say"),
+    // the critique pass quoted it, and the revision replaced it with a fact about a person. What the reader
+    // sees is the REVISED prose — a one-pass generator would have shipped the defect.
+    await expect(w.getByText(/He never explained why he kept going back/)).toBeVisible();
+    await expect(w.getByText(/The record does not say/)).toHaveCount(0);
     await w
       .getByRole('button', { name: /Sources/ })
       .first()
@@ -14941,6 +14946,42 @@ test('story (64): the consent center sets a pseudonym + warns before publishing 
       .toBe('A.');
     await w.getByRole('tab', { name: 'Sharing' }).click();
     await expect(w.getByText(/Angel appears/)).toBeHidden();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('story (72): the manuscript read files whole-book findings into the review list (§5.3)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Manuscript Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'Manuscript Book', level: 1 })).toBeVisible();
+
+    // The whole-book read — the defects no single chapter can show (repetition, pacing, arc, voice).
+    await w.getByRole('button', { name: 'Read the whole book' }).click();
+    await expect(w.getByText(/opens more chapters than it can carry/)).toBeVisible();
+    // Findings share ONE review list with the continuity check, each labelled by what it is about.
+    await expect(w.getByRole('heading', { name: 'Things to review' })).toBeVisible();
+    await expect(w.getByText(/Repetition ·/)).toBeVisible();
+    // The unusable finding (no summary) was dropped by the tolerant parse, not shown as a blank row.
+    await expect(w.getByText(/Pacing ·/)).toHaveCount(0);
+
+    // Dismissing it clears it, and a re-read never raises it again.
+    await w.getByRole('button', { name: 'Dismiss', exact: true }).first().click();
+    await expect(w.getByText(/opens more chapters than it can carry/)).toHaveCount(0);
+    await w.getByRole('button', { name: 'Read the whole book' }).click();
+    await expect(w.getByText(/opens more chapters than it can carry/)).toHaveCount(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

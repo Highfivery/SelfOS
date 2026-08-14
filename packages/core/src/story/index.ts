@@ -1,5 +1,7 @@
+export * from './bookModel';
 export * from './bookTypes';
 export * from './storyCorpus';
+export * from './storyCraft';
 export * from './storyDiff';
 export * from './storyExclusionService';
 export * from './storyExport';
@@ -20,6 +22,7 @@ export * from './storyService';
 export * from './storyQuotes';
 export * from './castRegister';
 export * from './storyContinuity';
+export * from './storyManuscript';
 export * from './storyConsent';
 export * from './storyOutline';
 export * from './storyStructureService';

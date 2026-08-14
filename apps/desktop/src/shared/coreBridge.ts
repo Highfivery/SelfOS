@@ -540,6 +540,8 @@ import {
   removeImagePlacement,
   computeStoryHomeSignal,
   askGap,
+  readManuscript,
+  BOOK_TASK_MODELS,
   deleteStoryImage,
   exportFileStem,
   generateStoryImage,
@@ -1951,6 +1953,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       client: host.claude,
       apiKey: (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
       model: await host.activeModel(),
+      // Every book pass runs on the most capable model regardless of the app-wide setting (72 §5.3) — a
+      // book is the one artifact where the model's literary judgment IS the product. Keyed by usage type,
+      // so a non-book call's type isn't in the map and keeps the person's own choice.
+      models: BOOK_TASK_MODELS,
       personId,
       now: new Date(),
     };
@@ -5762,6 +5768,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           chaptersDone: p.chaptersDone,
           chaptersTotal: p.chaptersTotal,
           currentTitle: p.title,
+          ...(p.craft ? { craft: p.craft } : {}),
         }),
       );
       const bundle = await readBookBundle(deps.fs, deps.key, deps.personId, bookId);
@@ -5850,6 +5857,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           chaptersDone: p.chaptersDone,
           chaptersTotal: p.chaptersTotal,
           currentTitle: p.title,
+          ...(p.craft ? { craft: p.craft } : {}),
         }),
       );
       if (!result.ok) {
@@ -6563,6 +6571,21 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       return checkContinuity(deps, bookId);
     },
+    storyManuscriptRead: async (input): Promise<StoryContinuityResult> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps)
+        return { ok: false, findings: [], reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return {
+          ok: false,
+          findings: [],
+          reason: 'AI_OFF',
+          message: 'Turn on AI in Settings to read the whole book.',
+        };
+      }
+      return readManuscript(deps, bookId);
+    },
     storyContinuity: async (input): Promise<ContinuityFinding[]> => {
       const { bookId } = StoryBookRefSchema.parse(input);
       const ctx = await host.vaultAndKey();
@@ -6612,7 +6635,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return computeStoryHomeSignal(ctx.fs, ctx.key, personId);
     },
     storyCorpusStats: async (): Promise<StoryCorpusStats> => {
-      const empty: StoryCorpusStats = { reflections: 0, dreams: 0, memories: 0, answers: 0 };
+      const empty: StoryCorpusStats = {
+        reflections: 0,
+        dreams: 0,
+        memories: 0,
+        answers: 0,
+        sessions: 0,
+      };
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return empty;
       const personId = await activePersonId();

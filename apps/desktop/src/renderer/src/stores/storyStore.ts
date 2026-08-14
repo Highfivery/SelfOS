@@ -160,6 +160,8 @@ interface StoryState {
   continuity: ContinuityFinding[];
   loadContinuity: (bookId: string) => Promise<void>;
   checkContinuity: (bookId: string) => Promise<StoryContinuityResult>;
+  /** Read the whole book for repetition / pacing / arc / voice (72 §5.3) — findings join the same list. */
+  readManuscript: (bookId: string) => Promise<StoryContinuityResult>;
   resolveContinuity: (
     bookId: string,
     findingId: string,
@@ -640,6 +642,21 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   },
   loadContinuity: async (bookId) => {
     set({ continuity: (await window.selfos?.storyContinuity({ bookId })) ?? [] });
+  },
+  readManuscript: async (bookId) => {
+    set({ chaptersGenerating: true });
+    try {
+      const res = (await window.selfos?.storyManuscriptRead({ bookId })) ?? {
+        ok: false as const,
+        findings: [],
+        reason: 'ERROR' as const,
+        message: 'SelfOS isn’t ready yet.',
+      };
+      if (res.ok) set({ continuity: res.findings });
+      return res;
+    } finally {
+      set({ chaptersGenerating: false });
+    }
   },
   checkContinuity: async (bookId) => {
     set({ chaptersGenerating: true });

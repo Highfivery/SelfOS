@@ -1,6 +1,7 @@
 import { listChallenges } from '../challenges';
 import { listConversations } from '../conversations/conversationService';
 import { listDreams } from '../dreams';
+import { listMessages, listSessionsForPerson } from '../together/togetherService';
 import { listGoals } from '../goals';
 import type { FileSystem } from '../host';
 import { GOAL_FACT_PREFIX, feedableInsights, listInsightsForPerson } from '../insights';
@@ -51,10 +52,12 @@ import { listMemories } from './storyMemoryService';
  *  - Other people appear only as characters the subject describes, plus the facts those people SHARE to this
  *    viewer through `factSharedWithViewer` (broadcast / per-person / relationship-type-scoped, never
  *    `restricted`, never flagged) — a related person's private data never enters the corpus.
- *  - Together partner material is covered by the subject's own Together wrap-up twin insight (subject = the
- *    subject; asides are excluded from the wrap-up analysis, 58 §3.8), so a partner's private aside is
- *    structurally absent. (Reading own Together asides/agreements/pulse directly for richer sourcing, §5.1, is
- *    a later slice; the twin insight is the v1 path.)
+ *  - The subject's OWN recorded speech feeds the writer (72 §5.2): their `role:'user'` turns in coaching
+ *    sessions and the lines they AUTHORED in Together. A partner's Together words never enter — only
+ *    `authorPersonId === personId`, never a `privateAside`, never a redacted message (58 §3.8) — and a
+ *    Together PREP thread (a solo Conversation carrying `togetherSessionId`, 58 §3.7) is confidential
+ *    scratch space that is never read at all. The partner's own side still reaches the book only through
+ *    the subject's Together wrap-up twin insight, exactly as before.
  *  - The exclusion list filters at THIS boundary, so an excluded topic/person/source can never be
  *    reintroduced by a later rewrite (§3.3). A `person` exclusion drops BOTH cross-shared facts about them AND
  *    the subject's own free-text mentions of their name.
@@ -278,6 +281,51 @@ export async function buildStoryCorpus(
     });
   }
 
+  // 5b) The person's OWN recorded speech (72 §5.2) — their turns in coaching sessions and their own
+  //     non-aside lines in Together. This is the material the craft doctrine actually needs: "sacred
+  //     carnality — specific, sensory, bodily detail" cannot be written from 156-character distilled
+  //     facts, and measured on the real vault this source held 48,283 characters that reached nothing.
+  //     ONE item per conversation, so a paragraph can cite the session it drew on and a `source`
+  //     exclusion drops one conversation rather than the whole speaking history.
+  //
+  //     The privacy boundary is the same one `storyQuotes` mines under (64 §17.4), and it is enforced
+  //     HERE rather than trusted downstream:
+  //       - own conversations only (`listConversations` is person-scoped) and only `role: 'user'` turns
+  //         — the coach's words are not the subject's voice;
+  //       - a Together PREP thread (a solo Conversation carrying `togetherSessionId`, 58 §3.7) is
+  //         confidential scratch space and is never read;
+  //       - in a Together session, only messages the subject AUTHORED, never a private aside, never a
+  //         redacted one — so a partner's words are structurally absent (58 §3.8).
+  for (const conversation of await safely(() => listConversations(fs, key, personId), [])) {
+    if (conversation.togetherSessionId) continue; // prep space — confidential
+    const spoken = conversation.messages
+      .filter((m) => m.role === 'user')
+      .map((m) => m.content.trim())
+      .filter((t) => t.length > 0);
+    if (spoken.length === 0) continue;
+    add({
+      sourceRef: { kind: 'transcript', id: conversation.id, at: conversation.createdAt },
+      label: 'In a coaching session, you said',
+      text: spoken.join('\n\n'),
+      date: conversation.createdAt,
+    });
+  }
+  for (const session of await safely(() => listSessionsForPerson(fs, key, personId), [])) {
+    const mine = (await safely(() => listMessages(fs, key, session.id), []))
+      .filter(
+        (m) => m.role === 'user' && m.authorPersonId === personId && !m.privateAside && !m.redacted,
+      )
+      .map((m) => m.content.trim())
+      .filter((t) => t.length > 0);
+    if (mine.length === 0) continue;
+    add({
+      sourceRef: { kind: 'transcript', id: session.id, at: session.createdAt },
+      label: 'With your partner, you said',
+      text: mine.join('\n\n'),
+      date: session.createdAt,
+    });
+  }
+
   // 6) Raw questionnaire / check-in answers the person gave (their own answers to anything sent to them,
   //    including their auto check-ins — the verbatim material beneath the distilled questionnaire insights).
   //    ONE item per answered questionnaire (§15.2): a paragraph can cite the specific check-in it wove in,
@@ -455,7 +503,8 @@ export async function getStoryCorpusStats(
   personId: string,
 ): Promise<StoryCorpusStats> {
   // Counted the way `buildStoryCorpus` actually reads them, so the invitation can't promise material the
-  // book will never see (§15.2): feeding insights, unmuted dreams, SAVED memories, answered questionnaires.
+  // book will never see (§15.2): feeding insights, unmuted dreams, SAVED memories, answered questionnaires,
+  // and — since 72 §5.2 — the sessions the person spoke in, whose own words now feed the writer directly.
   const conversations = await safely(() => listConversations(fs, key, personId), []);
   const insights = (
     await safely(
@@ -481,11 +530,16 @@ export async function getStoryCorpusStats(
     (memory) => memory.status === 'saved' && memory.narrative.trim().length > 0,
   );
   const answers = await safely(() => countAnsweredQuestionnaires(fs, key, personId), 0);
+  // Sessions the person actually SPOKE in, counted the way the corpus reads them (72 §5.2): a prep thread is
+  // confidential and never feeds, and a session with no turns of their own emits nothing.
+  const sessions = conversations.filter(
+    (c) =>
+      !c.togetherSessionId &&
+      c.messages.some((m) => m.role === 'user' && m.content.trim().length > 0),
+  ).length;
 
   // The year span across everything dated — a conversation's createdAt, a dream's dreamDate/createdAt, an
-  // insight's provenance timestamp. Conversations still count HERE (unlike the material counts above): a
-  // session's date is real chronology for the life, even though its transcript is never source material.
-  // A malformed/absent date just doesn't widen the span.
+  // insight's provenance timestamp. A malformed/absent date just doesn't widen the span.
   const years: number[] = [];
   const addYear = (iso: string | undefined): void => {
     if (!iso) return;
@@ -503,6 +557,7 @@ export async function getStoryCorpusStats(
     dreams: dreams.length,
     memories: memories.length,
     answers,
+    sessions,
   };
   if (years.length > 0) {
     stats.yearFrom = Math.min(...years);

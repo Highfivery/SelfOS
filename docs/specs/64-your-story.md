@@ -447,7 +447,8 @@ as a **queue of independent bounded calls** (each metered, each budget-gated, re
 
 - `generateFoundations` → essence + timeline + outline (`story.outline`, maxTokens ~8000, tolerant
   parse + salvage per spec 37).
-- `generateChapter(chapterId)` → chapter markdown (`story.chapter`, maxTokens ~8000,
+- `generateChapter(chapterId)` → chapter markdown (`story.chapter`, maxTokens 16000 since 72 §5.3, and
+  wrapped in the four-pass craft loop,
   `extendedThinking:false`). The model emits per-paragraph source markers
   (`[[SRC:ref,ref]]`) which are **stripped from the stored markdown** and captured into
   `chapter.provenance` (the stripCoachMarkers pattern — markers never render).
@@ -1492,6 +1493,15 @@ already does — `buildMemorySystem` falls back to the warm/third default config
 
 ### 15.2 Corpus honesty & granularity (#305)
 
+> **AMENDED 2026-08-13 by [72 §5.2](72-books.md).** The premise below — that a transcript never reaches the
+> biographer — is no longer true. `buildStoryCorpus` now feeds the person's OWN words from their coaching
+> sessions and their own non-aside Together messages, because writing a life from 156-character distilled
+> facts is what made the prose read like a summary. So the honesty argument runs the other way now: a
+> session count is real material, and `StoryCorpusStats.sessions` counts the sessions the person actually
+> spoke in (prep threads excluded, as the corpus excludes them). The chips lead with it. The rest of §15.2 —
+> counting only what genuinely feeds — stands unchanged, and is why the count is "sessions you spoke in"
+> rather than a raw `listConversations` total.
+
 **(a) "Drawn from N conversations" overstates.** The invitation chip row (`drawnFromChips`, §13.3) reports
 `stats.conversations` — a raw `listConversations` count — but `buildStoryCorpus` **never reads a transcript**.
 Sessions reach the biographer only through their derived, approved insights. A person with 40 chatty
@@ -1761,7 +1771,8 @@ window and diluted a chapter with material from unrelated eras/areas — "no cor
 
 - **`sliceCorpusForChapter(corpus, chapter, {tokenBudget})`** — score each source item's relevance to the
   chapter (a life-area match weighs most: +3; falling in the chapter's era: +2; keyword overlap with its
-  title + brief: up to +3), then keep the best within a token budget (`CHAPTER_CORPUS_TOKEN_BUDGET = 8000`),
+  title + brief: up to +3), then keep the best within a token budget (`CHAPTER_CORPUS_TOKEN_BUDGET`, raised
+  to 60000 by 72 §5.2),
   ordered by relevance then chronology. A large item never blocks the smaller ones after it (best-effort
   packing). A chapter with no strong matches still fills to budget in time order — relevance only reorders, so
   a thin corpus stays usable (§7). Wired into `generateChapter` AND the `applyMarkup` revision path (both write
@@ -1769,7 +1780,8 @@ window and diluted a chapter with material from unrelated eras/areas — "no cor
   every chapter.
 - **`budgetCorpus(corpus, {tokenBudget})`** — a whole-corpus cap for the foundations pass, which needs breadth
   not a single chapter's slice. Under budget it's returned unchanged; over budget
-  (`FOUNDATIONS_CORPUS_TOKEN_BUDGET = 40000`) it keeps the outline-critical distilled/dated spine first
+  (`FOUNDATIONS_CORPUS_TOKEN_BUDGET`, raised to 150000 by 72 §5.2) it keeps the outline-critical
+  distilled/dated spine first
   (timeline > memory > insight > goal > … , chronologically within a priority) and trims the bulk raw intake
   first (its distilled portrait rides in as an insight anyway).
 

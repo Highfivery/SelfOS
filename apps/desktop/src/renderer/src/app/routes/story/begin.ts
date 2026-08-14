@@ -11,8 +11,10 @@ export function drawnFromChips(stats: StoryCorpusStats): string[] {
   const n = (count: number, one: string, many: string): void => {
     if (count > 0) chips.push(`${count} ${count === 1 ? one : many}`);
   };
-  // Only material that actually FEEDS generation (§15.2) — a raw transcript never reaches the biographer,
-  // so a session count here would promise a book the corpus can't keep.
+  // Only material that actually FEEDS generation (§15.2). Sessions lead: since 72 §5.2 the person's own
+  // words in them reach the writer directly, which makes them the largest single source — leaving them out
+  // now understates the book rather than overstating it.
+  n(stats.sessions, 'session', 'sessions');
   n(stats.reflections, 'reflection', 'reflections');
   n(stats.dreams, 'dream', 'dreams');
   n(stats.memories, 'memory', 'memories');

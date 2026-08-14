@@ -492,6 +492,7 @@ export const IpcChannels = {
   storyProposals: 'story:proposals',
   storyResolveProposal: 'story:resolveProposal',
   storyContinuityCheck: 'story:continuityCheck',
+  storyManuscriptRead: 'story:manuscriptRead',
   storyContinuity: 'story:continuity',
   storyResolveContinuity: 'story:resolveContinuity',
   storyLineEdit: 'story:lineEdit',
@@ -1560,6 +1561,9 @@ export interface SelfosBridge {
   storyResolveProposal(input: StoryResolveProposalInput): Promise<StoryResolveProposalResult>;
   /** Run a cross-chapter continuity check (§17.3) — a metered AI pass returning name/date/fact findings. */
   storyContinuityCheck(input: { bookId: string }): Promise<StoryContinuityResult>;
+  /** Read the whole book for repetition / pacing / arc / voice (72 §5.3) — a metered AI pass whose
+   *  findings join the same review list the continuity check writes to. */
+  storyManuscriptRead(input: { bookId: string }): Promise<StoryContinuityResult>;
   /** The book's pending continuity findings (no AI). */
   storyContinuity(input: { bookId: string }): Promise<ContinuityFinding[]>;
   /** Resolve or dismiss a continuity finding (no AI). Returns the remaining pending findings. */

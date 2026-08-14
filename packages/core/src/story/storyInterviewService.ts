@@ -43,6 +43,7 @@ import {
 import { getResponse } from '../questionnaires/responseService';
 import { queryUsage } from '../usage';
 import { MCADAMS_SCENES, getBookType } from './bookTypes';
+import { budgetCorpus } from './corpusBudget';
 import { buildStoryCorpus, type StoryCorpus } from './storyCorpus';
 import { buildBiographerSystem, buildGapPassUserMessage } from './storyPromptBuilder';
 import {
@@ -283,15 +284,20 @@ export async function runGapPass(
   }
 
   const chapters = await listChapters(deps.fs, deps.key, deps.personId, args.bookId);
-  const corpus =
+  // Budgeted like every other pass (72 §5.2). This was the ONE generation path reading an UNBOUNDED corpus:
+  // foundations caps itself and a chapter slices to its own budget, but the gap pass laid the whole life into
+  // its prompt — so on a long history (or now that transcripts feed the corpus) the pass that decides what to
+  // ask next was the first to blow the window.
+  const corpus = budgetCorpus(
     args.corpus ??
-    (await buildStoryCorpus(
-      deps.fs,
-      deps.key,
-      deps.personId,
-      args.bookId,
-      await getExclusions(deps.fs, deps.key, deps.personId, args.bookId),
-    ));
+      (await buildStoryCorpus(
+        deps.fs,
+        deps.key,
+        deps.personId,
+        args.bookId,
+        await getExclusions(deps.fs, deps.key, deps.personId, args.bookId),
+      )),
+  );
   const system = buildBiographerSystem(bookType, book.config, corpus.personName);
   const user = buildGapPassUserMessage(corpus, {
     outline,

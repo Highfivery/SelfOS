@@ -9,10 +9,18 @@ describe('drawnFromChips (§13.3/§15.2)', () => {
         dreams: 0,
         memories: 2,
         answers: 3,
+        sessions: 4,
         yearFrom: 2019,
         yearTo: 2026,
       }),
-    ).toEqual(['1 reflection', '2 memories', '3 answered questionnaires', '2019–2026']);
+      // Sessions lead — since 72 §5.2 the person's own words in them are the largest single source.
+    ).toEqual([
+      '4 sessions',
+      '1 reflection',
+      '2 memories',
+      '3 answered questionnaires',
+      '2019–2026',
+    ]);
   });
 
   it('collapses a single-year span to one year and omits zero counts', () => {
@@ -22,20 +30,23 @@ describe('drawnFromChips (§13.3/§15.2)', () => {
         dreams: 2,
         memories: 0,
         answers: 1,
+        sessions: 1,
         yearFrom: 2026,
         yearTo: 2026,
       }),
-    ).toEqual(['2 dreams', '1 answered questionnaire', '2026']);
+    ).toEqual(['1 session', '2 dreams', '1 answered questionnaire', '2026']);
   });
 
   it('is empty when there is nothing on record', () => {
-    expect(drawnFromChips({ reflections: 0, dreams: 0, memories: 0, answers: 0 })).toEqual([]);
+    expect(
+      drawnFromChips({ reflections: 0, dreams: 0, memories: 0, answers: 0, sessions: 0 }),
+    ).toEqual([]);
   });
 
   it('omits the year chip when no span is known', () => {
-    expect(drawnFromChips({ reflections: 2, dreams: 0, memories: 0, answers: 0 })).toEqual([
-      '2 reflections',
-    ]);
+    expect(
+      drawnFromChips({ reflections: 2, dreams: 0, memories: 0, answers: 0, sessions: 0 }),
+    ).toEqual(['2 reflections']);
   });
 });
 

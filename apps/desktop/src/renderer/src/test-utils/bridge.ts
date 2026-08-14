@@ -535,6 +535,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     storyEditTimeline: () => Promise.resolve({ ok: true, timeline: null }),
     storyResolveProposal: () => Promise.resolve({ ok: true, proposals: [], bundle: null }),
     storyContinuityCheck: () => Promise.resolve({ ok: true, findings: [] }),
+    storyManuscriptRead: () => Promise.resolve({ ok: true, findings: [] }),
     storyContinuity: () => Promise.resolve([]),
     storyResolveContinuity: () => Promise.resolve([]),
     storyLineEdit: () =>
@@ -547,7 +548,8 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         unwrittenChapters: 0,
         signature: '',
       }),
-    storyCorpusStats: () => Promise.resolve({ reflections: 0, dreams: 0, memories: 0, answers: 0 }),
+    storyCorpusStats: () =>
+      Promise.resolve({ reflections: 0, dreams: 0, memories: 0, answers: 0, sessions: 0 }),
     storyCastRegister: () => Promise.resolve([]),
     storyConsent: () => Promise.resolve([]),
     storySetConsent: () => Promise.resolve([]),

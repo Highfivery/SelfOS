@@ -3,7 +3,7 @@ import { listPeople, listRelatedPeople, listRelationships } from '../people';
 import type { CastEntry, CastMember } from '../schemas';
 import { buildStoryCorpus } from './storyCorpus';
 import { listMemories } from './storyMemoryService';
-import { getExclusions } from './storyService';
+import { getExclusions, listChapters } from './storyService';
 
 /**
  * The cast register (64-your-story §17.2, #295) — the book's recurring people, built deterministically (no AI)
@@ -93,6 +93,7 @@ export async function getCastRegister(
       ...(patch.personId ? { personId: patch.personId } : {}),
       ...(patch.relationship ? { relationship: patch.relationship } : {}),
       mentions: 0,
+      chapterMentions: 0,
       sources: [patch.source],
     };
     byName.set(kNorm, entry);
@@ -157,18 +158,36 @@ export async function getCastRegister(
     }
   }
 
+  // Count separately what the BOOK names. Since the corpus gained whole session transcripts (72 §5.2), a
+  // corpus mention no longer implies the reader will ever meet this person — someone named once in passing
+  // in a coaching session would otherwise walk into the published dramatis personae, and into the
+  // "who this book names" list shown BEFORE you share it.
+  const chapters = await safe(() => listChapters(fs, key, personId, bookId), []);
+  for (const chapter of chapters) {
+    if (chapter.markdown.trim().length === 0) continue;
+    for (const cand of candidates.values()) {
+      if (!cand.re.test(chapter.markdown)) continue;
+      const entry = byName.get(normalize(cand.name));
+      if (entry) entry.chapterMentions += 1;
+    }
+  }
+
   return [...byName.values()].sort(
     (a, b) => b.mentions - a.mentions || a.name.localeCompare(b.name),
   );
 }
 
 /**
- * The published "dramatis personae" (§17.2) — the frozen, reader-facing shape (name + relationship). Includes a
- * person only when they're worth naming: a graph/memory person, or someone the book actually names (mentions >
- * 0). A bare zero-mention candidate never surfaces.
+ * The published "dramatis personae" (§17.2) — the frozen, reader-facing shape (name + relationship). Includes
+ * a person only when the reader will actually meet them: a graph/memory person, or someone the book's own
+ * CHAPTERS name. Corpus mentions deliberately don't qualify (72 §5.2) — the corpus now holds whole session
+ * transcripts, so someone the subject mentioned once in passing would otherwise be published as a character
+ * in their book.
  */
 export function castForPublication(entries: CastEntry[]): CastMember[] {
   return entries
-    .filter((e) => e.sources.includes('graph') || e.sources.includes('memory') || e.mentions > 0)
+    .filter(
+      (e) => e.sources.includes('graph') || e.sources.includes('memory') || e.chapterMentions > 0,
+    )
     .map((e) => ({ name: e.name, ...(e.relationship ? { relationship: e.relationship } : {}) }));
 }

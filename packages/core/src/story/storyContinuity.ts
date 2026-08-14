@@ -57,8 +57,9 @@ const ContinuityDraftSchema = z.object({
   ).catch([]),
 });
 
-/** De-dup key — a re-run must not re-add a finding the author already resolved/dismissed. */
-function findingSignature(kind: string, summary: string): string {
+/** De-dup key — a re-run must not re-add a finding the author already resolved/dismissed. Shared with the
+ *  manuscript pass (72 §5.3), which appends into the same review list. */
+export function findingSignature(kind: string, summary: string): string {
   return `${kind}:${summary.trim().toLowerCase()}`;
 }
 

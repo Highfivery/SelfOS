@@ -14,7 +14,15 @@ import {
   refreshBook,
 } from './storyRefreshService';
 import { listStructuralProposals } from './storyStructureService';
-import { applyFoundations, approveOutline, createBook, getChapter } from './storyService';
+import {
+  applyFoundations,
+  approveOutline,
+  createBook,
+  getChapter,
+  saveChapter,
+  saveOutline,
+} from './storyService';
+import { chapterShell } from './storyOutline';
 
 const proposalJson = JSON.stringify({
   proposals: [{ kind: 'newChapter', partId: 'p1', title: 'A New Era', brief: 'x', rationale: 'y' }],
@@ -226,5 +234,45 @@ describe('refreshBook (64 §3.4/§5.4)', () => {
     });
     expect(res.proposalsAdded ?? 0).toBe(0);
     expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(0);
+  });
+
+  /**
+   * 72 §5.4 — `chapterShell` stamps a NEVER-WRITTEN chapter `stale`, so the refresh cadence was spending its
+   * weekly REWRITE allowance on first drafts. On the real vault that is how a 45-chapter book with 22 unwritten
+   * chapters never converged: the shells competed with genuinely-stale prose for the same 10 rewrites a week.
+   * A first draft belongs to the explicit "Write the remaining N" action, not the background refresh.
+   */
+  it('never spends the rewrite allowance on a never-written shell', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedWrittenBook(fs);
+    // A second outline chapter that has never been written — persisted as a shell (status 'stale', no prose).
+    const withShell: BookOutline = {
+      ...outline,
+      parts: [
+        {
+          ...outline.parts[0]!,
+          chapters: [
+            ...outline.parts[0]!.chapters,
+            { id: 'c2', title: 'The Tank', brief: 'Never written.', lifeAreas: [], order: 1 },
+          ],
+        },
+      ],
+    };
+    await saveOutline(fs, key, 'me', bookId, withShell);
+    await saveChapter(fs, key, 'me', bookId, chapterShell('c2', 'p1', 1, 'The Tank'));
+    // Drift the cited source so the WRITTEN chapter is genuinely stale.
+    await saveInsight(fs, key, insight('the winter was bitter'));
+
+    const res = await refreshBook(deps(fs, fakeClient('Rewritten. [[SRC:s0]]')), {
+      bookId,
+      auto: true,
+    });
+
+    expect(res.rewritten).toBe(1); // the written chapter only
+    expect((await getChapter(fs, key, 'me', bookId, 'c1'))?.markdown).toContain('Rewritten.');
+    // The shell is untouched — still unwritten, still waiting for an explicit first draft.
+    const shell = await getChapter(fs, key, 'me', bookId, 'c2');
+    expect(shell?.markdown).toBe('');
+    expect(shell?.revision).toBe(0);
   });
 });

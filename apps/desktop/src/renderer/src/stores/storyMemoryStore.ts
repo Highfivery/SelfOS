@@ -47,7 +47,7 @@ interface StoryMemoryState {
   /** Open (resume) an existing memory chat — the biographer's transcript + any synthesized draft. */
   open: (memoryId: string) => Promise<void>;
   /** Start a NEW memory chat — the biographer speaks first, optionally seeded from a gap focus or a photo. */
-  openNew: (seedFocus?: string) => Promise<void>;
+  openNew: (opts?: { seedFocus?: string; bookId?: string; gapId?: string }) => Promise<void>;
   /** Send one chat turn (with optional image attachments); the streamed reply arrives via `appendChunk`.
    *  Resolves `false` only when a total attachment-store failure aborted before sending (so the composer keeps
    *  the pending thumbnails to retry); `true` otherwise. */
@@ -135,10 +135,15 @@ export const useStoryMemoryStore = create<StoryMemoryState>((set, get) => ({
       set({ opening: false, loaded: true, error: 'Couldn’t open that memory. Please try again.' });
     }
   },
-  openNew: async (seedFocus) => {
+  openNew: async (opts) => {
     const seq = ++openSeq;
     set({ ...CHAT_EMPTY, opening: true });
-    const detail = await window.selfos?.storyMemoryOpen(seedFocus ? { seedFocus } : {});
+    // `bookId` decides whose interviewer speaks; `gapId` is what saving this memory closes (72 §5.5).
+    const detail = await window.selfos?.storyMemoryOpen({
+      ...(opts?.seedFocus ? { seedFocus: opts.seedFocus } : {}),
+      ...(opts?.bookId ? { bookId: opts.bookId } : {}),
+      ...(opts?.gapId ? { gapId: opts.gapId } : {}),
+    });
     if (seq !== openSeq) return;
     if (detail) {
       set({

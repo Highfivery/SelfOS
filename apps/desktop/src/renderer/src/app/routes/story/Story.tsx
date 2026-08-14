@@ -2119,6 +2119,39 @@ const FINDING_KIND_LABEL: Record<ContinuityFinding['kind'], string> = {
   other: 'Note',
 };
 
+/**
+ * The open conversation starters (72 §3.7) — a person, a place, a year, a photograph, something hard.
+ * They seed the biographer with a direction and nothing more; there is no gap attached and nothing is
+ * being closed. The point is that you can tell it something it never thought to ask about.
+ */
+const OPEN_STARTERS: { label: string; focus: string }[] = [
+  {
+    label: 'Someone',
+    focus:
+      'They want to tell you about a particular person in their life. Ask who, and go to a scene.',
+  },
+  {
+    label: 'A place',
+    focus:
+      'They want to tell you about a place that matters to them. Ask which, and get the senses of it.',
+  },
+  {
+    label: 'A year',
+    focus:
+      'They want to tell you about a particular year or period. Ask which, and find the moment in it.',
+  },
+  {
+    label: 'Something hard',
+    focus:
+      'They want to tell you about something difficult. Go gently, let them set the pace, and do not push for more than they offer.',
+  },
+  {
+    label: 'Something good',
+    focus:
+      'They want to tell you about something that went well or made them happy. Get the scene of it.',
+  },
+];
+
 /** The Chapters tab: the cover-backed card grid grouped by part, the "write the remaining N" bar rendered
  *  inside the part that owns the unwritten shells, and the inline write-progress. */
 function ChaptersTab({
@@ -2442,7 +2475,11 @@ function InterviewTab({
   // "Share a memory" (§14) — an inline biographer chat that swaps the tab body. Driven by the invite card, a
   // gap's "Talk it through", the collection, and the `/story/interview?memory=<id>` deep-link. The collection
   // itself is the shared `MemoryCollection` (§15.1), which owns its own load + delete.
-  const [panel, setPanel] = useState<{ memoryId?: string; seedFocus?: string } | null>(null);
+  const [panel, setPanel] = useState<{
+    memoryId?: string;
+    seedFocus?: string;
+    gapId?: string;
+  } | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -2466,16 +2503,25 @@ function InterviewTab({
   }, [memoryParam, seedParam, setSearchParams]);
 
   // Closing the panel remounts the collection, which reloads itself — so a just-saved memory joins it.
-  const closePanel = (): void => setPanel(null);
+  // Coming back from a conversation, RELOAD (72 §5.5): saving a memory can have closed a gap, and the row
+  // would otherwise still read "Ask me about this" for something just answered — the same
+  // filed-but-invisible failure the drift proposals had.
+  const closePanel = (): void => {
+    setPanel(null);
+    void loadGaps(bookId);
+    void loadAnswered(bookId);
+  };
 
   const hasOpenCheckin = gaps?.hasOpenCheckin ?? false;
 
   if (panel) {
     return (
       <ShareMemoryPanel
-        key={panel.memoryId ?? panel.seedFocus ?? 'new'}
+        key={panel.memoryId ?? panel.gapId ?? panel.seedFocus ?? 'new'}
         {...(panel.memoryId ? { memoryId: panel.memoryId } : {})}
         {...(panel.seedFocus ? { seedFocus: panel.seedFocus } : {})}
+        {...(panel.gapId ? { gapId: panel.gapId } : {})}
+        bookId={bookId}
         onBack={closePanel}
       />
     );
@@ -2490,6 +2536,20 @@ function InterviewTab({
             Tell your biographer about a moment — a place, a person, a turning point — and it will
             ask, listen, and write it into your story in your own words.
           </Text>
+          {/* "Talk about anything" (72 §3.7) — the entry that didn't exist. Every way in was tied to a gap
+              the biographer had chosen, so there was no way to simply tell it something. */}
+          <div className={styles.openStarters} role="group" aria-label="Talk about anything">
+            {OPEN_STARTERS.map((starter) => (
+              <button
+                key={starter.label}
+                type="button"
+                className={styles.openStarter}
+                onClick={() => setPanel({ seedFocus: starter.focus })}
+              >
+                {starter.label}
+              </button>
+            ))}
+          </div>
           <div className={styles.memInvite}>
             <Button variant="primary" onClick={() => setPanel({})}>
               Share a memory
@@ -2559,7 +2619,12 @@ function InterviewTab({
                   <Inline gap={2}>
                     {/* Talk it through: open the biographer chat seeded with this gap — a live alternative to
                         (or a companion of) sending questions to the Inbox. */}
-                    <Button variant="ghost" onClick={() => setPanel({ seedFocus: gap.focus })}>
+                    {/* Talking it through closes the gap exactly as answering a check-in does (72 §5.5) —
+                        it used to leave it open and re-proposable. */}
+                    <Button
+                      variant="ghost"
+                      onClick={() => setPanel({ seedFocus: gap.focus, gapId: gap.id })}
+                    >
                       Talk it through
                     </Button>
                     {gap.status === 'answered' ? (

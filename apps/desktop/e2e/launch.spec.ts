@@ -13942,7 +13942,7 @@ test('story (64): living book — refresh proposes a structural change, approvin
     await expect(
       w.getByText(/Just beginning|Taking shape|Coming together|Richly told/),
     ).toBeVisible();
-    await w.getByRole('tab', { name: 'Interview' }).click();
+    await w.getByRole('tab', { name: 'The interview' }).click();
     await w.getByRole('button', { name: /Find what’s missing/ }).click();
     // The outcome notice: either the pass just minted a check-in or one is already waiting — both point at the
     // Inbox (scoped to the outcome phrasing so it doesn't collide with the tab's always-present Inbox footer).
@@ -13993,7 +13993,7 @@ test('story (64): share a memory — the biographer interviews, synthesizes, and
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
 
     // The Interview tab hosts "Share a memory" — an inline biographer chat.
-    await w.getByRole('tab', { name: 'Interview' }).click();
+    await w.getByRole('tab', { name: 'The interview' }).click();
     await w.getByRole('button', { name: 'Share a memory' }).click();
 
     // The biographer speaks first (streamed): its opener invites the memory.
@@ -14090,7 +14090,7 @@ test('story (64): a memory outlives its book — the insight deep-link still ope
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('heading', { name: 'The Doomed Book', level: 1 })).toBeVisible();
 
-    await w.getByRole('tab', { name: 'Interview' }).click();
+    await w.getByRole('tab', { name: 'The interview' }).click();
     await w.getByRole('button', { name: 'Share a memory' }).click();
     // `.first()`: mid-handoff the streaming bubble AND the persisted message both match (the standing rule).
     await expect(w.getByText(/Take me back/).first()).toBeVisible();
@@ -14406,7 +14406,7 @@ test('story (64): a photo answer feeds the biographer’s corpus — it reaches 
 
     // Photos live in the Photos tab (§13.4). Upload a personal photo (downscaled + EXIF-stripped in the
     // renderer). A photo is vision-only — never an image-generation input (§3.7).
-    await w.getByRole('tab', { name: 'Photos' }).click();
+    await w.getByRole('tab', { name: 'The interview' }).click();
     await w
       .locator('input[type="file"]')
       .setInputFiles({ name: 'dad-shop.png', mimeType: 'image/png', buffer: makePng() });
@@ -14441,7 +14441,7 @@ test('story (64): a photo answer feeds the biographer’s corpus — it reaches 
     // missing"), which rebuilds the corpus + sends it to the model — and assert the answer is verbatim in the
     // captured prompt. (Before the fix, `buildStoryCorpus` never read `interview.enc.photoAnswers`, so the
     // answer persisted but never fed generation despite §3.7's promise.)
-    await w.getByRole('tab', { name: 'Interview' }).click();
+    await w.getByRole('tab', { name: 'The interview' }).click();
     await w.getByRole('button', { name: /Find what’s missing/ }).click();
     // Wait until the gap pass actually ran (it writes the captured prompt) — deterministic, not a UI-text race.
     await expect
@@ -14486,6 +14486,7 @@ test('story (64): the timeline is editable, and a corrected date reaches the bio
 
     // The timeline is ON SCREEN at last — before §16.2 it was generated, stored, shipped to the renderer
     // and rendered nowhere.
+    await w.getByRole('tab', { name: 'Timeline' }).click();
     await expect(w.getByRole('heading', { name: 'Your timeline' })).toBeVisible();
     const when = w.getByLabel('When “Born in Ohio” happened');
     await expect(when).toHaveValue('1985');
@@ -14835,7 +14836,7 @@ test('story (64): quote mining — approve a line you said so the book can quote
     await w.getByRole('textbox', { name: 'Title' }).fill('Quoted Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('heading', { name: 'Quoted Book', level: 1 })).toBeVisible();
-    await w.getByRole('tab', { name: 'Interview' }).click();
+    await w.getByRole('tab', { name: 'The interview' }).click();
     await w.getByRole('button', { name: 'Find lines I said' }).click();
     await expect(w.getByText(/allowed to want things/).first()).toBeVisible();
     await w.getByRole('button', { name: 'Use it' }).click();
@@ -14916,7 +14917,7 @@ test('story (64): the cast register — a recurring person appears, opt-in publi
   }
 });
 
-test('story (64): the consent center sets a pseudonym + warns before publishing under a real name (§17.5)', async () => {
+test('books (72 §3.9): the People tab renames someone for the book, clearing the publish warning', async () => {
   test.setTimeout(60_000);
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
   const secrets = createNodeSecretStore(userData, passthrough);
@@ -14959,10 +14960,10 @@ test('story (64): the consent center sets a pseudonym + warns before publishing 
     await w.getByRole('tab', { name: 'Sharing' }).click();
     await expect(w.getByText(/Angel appears/)).toBeVisible();
 
-    // Settings → the consent center → give them a pseudonym (commits on blur).
-    await w.getByRole('tab', { name: 'Settings' }).click();
-    await w.getByLabel('Pseudonym for Angel').fill('A.');
-    await w.getByLabel('Pseudonym for Angel').blur();
+    // People → give them a different name for the book (commits on blur).
+    await w.getByRole('tab', { name: 'People' }).click();
+    await w.getByLabel('What Angel is called in the book').fill('A.');
+    await w.getByLabel('What Angel is called in the book').blur();
 
     // Decrypt: the pseudonym persisted; and the warning is gone back on Sharing.
     await expect
@@ -14997,7 +14998,7 @@ test('story (72): talking a gap through closes it, and you can talk about anythi
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('heading', { name: 'Gap Book', level: 1 })).toBeVisible();
 
-    await w.getByRole('tab', { name: 'Interview' }).click();
+    await w.getByRole('tab', { name: 'The interview' }).click();
 
     // "Talk about anything" (§3.7) — the entry that didn't exist: every way in used to be a gap the
     // biographer had chosen.
@@ -15299,6 +15300,49 @@ test('books (72 §3.1/§3.2): the shelf is the front door — two books, each wi
   }
 });
 
+test('books (72 §3.5): the workspace is six tabs — timeline and people are their own, photos live in the interview; 360px clean', async () => {
+  test.setTimeout(90_000);
+  const { userData } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Books' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Six Tabs');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'Six Tabs', level: 1 })).toBeVisible();
+
+    // Exactly six, in order, and Photos is no longer one of them.
+    await expect(w.getByRole('tab')).toHaveCount(6);
+    await expect(w.getByRole('tab', { name: 'Photos' })).toHaveCount(0);
+
+    // The timeline moved out of Chapters into its own tab, and deep-links.
+    await w.getByRole('tab', { name: 'Timeline' }).click();
+    await expect(w.getByRole('heading', { name: 'Your timeline' })).toBeVisible();
+    await expect(w).toHaveURL(/#\/books\/[^/]+\/timeline$/);
+
+    // People is its own tab, and asks only what someone is called in the book — no consent states.
+    await w.getByRole('tab', { name: 'People' }).click();
+    await expect(w.getByRole('heading', { name: 'People in your book' })).toBeVisible();
+    await expect(w.getByText('Not asked')).toHaveCount(0);
+    await expect(w.getByText('They’re OK with it')).toHaveCount(0);
+
+    // A photo prompts a memory, so it lives in the interview rather than beside chapters and sharing.
+    await w.getByRole('tab', { name: 'The interview' }).click();
+    await expect(w.getByRole('heading', { name: 'Photos' })).toBeVisible();
+
+    // 360px: six tabs must fit without a horizontal scroller (§12).
+    await w.setViewportSize({ width: 360, height: 900 });
+    await expectNoInnerOverflow(w);
+  } finally {
+    await app.close();
+  }
+});
+
 test('story (64): the owner reads their own book in the immersive reader — front matter → chapter → edit; text size; 360px clean (§13.5)', async () => {
   test.setTimeout(60_000);
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
@@ -15501,7 +15545,7 @@ test('story (64): resume an unfinished memory later — pick up where you left o
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
 
     // Start a memory: the biographer opens, the person tells it, and after one exchange it has enough.
-    await w.getByRole('tab', { name: 'Interview' }).click();
+    await w.getByRole('tab', { name: 'The interview' }).click();
     await w.getByRole('button', { name: 'Share a memory' }).click();
     await expect(w.getByText(/Take me back/).first()).toBeVisible();
     await w

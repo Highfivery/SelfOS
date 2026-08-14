@@ -2543,3 +2543,57 @@
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
+
+/* ── People in your book (72 §3.9) ───────────────────────────────────────────────────────── */
+.peopleTab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.peopleList {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.peopleHead,
+.peopleRow {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+}
+.peopleHead {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+}
+.peopleRow + .peopleRow {
+  border-top: 1px solid var(--color-border);
+}
+.peopleWho {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.peopleName {
+  font-weight: 500;
+  color: var(--color-text);
+}
+.peopleMeta {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+@media (max-width: 767px) {
+  .peopleHead {
+    display: none;
+  }
+  .peopleRow {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+}

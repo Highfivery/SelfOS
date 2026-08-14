@@ -1390,7 +1390,7 @@ describe('Story (64)', () => {
     });
     await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Refresh from what’s new' }));
-    expect(await screen.findByText('Your story is up to date.')).toBeInTheDocument();
+    expect(await screen.findByText('This book is up to date.')).toBeInTheDocument();
   });
 
   it('shows structural proposals and approves one (restructure, no prose written)', async () => {
@@ -1474,7 +1474,7 @@ describe('Story (64)', () => {
       storyInterviewCheck,
     });
     await renderStory();
-    await openTab('Interview');
+    await openTab('The interview');
     await userEvent.click(await screen.findByRole('button', { name: 'Find what’s missing' }));
     // Manual = the plain `{ bookId }` call (no `auto` flag).
     expect(storyInterviewCheck).toHaveBeenCalledWith({ bookId: 'b1' });
@@ -1524,7 +1524,7 @@ describe('Story (64)', () => {
         ]),
     });
     await renderStory();
-    await openTab('Interview');
+    await openTab('The interview');
     // Life map: the part title + its coverage word (the §9 text equivalent, never colour alone).
     expect(await screen.findByText('Roots')).toBeInTheDocument();
     expect(screen.getByText('taking shape')).toBeInTheDocument(); // 0.5 → "taking shape"
@@ -1579,7 +1579,7 @@ describe('Story (64)', () => {
       storyAnsweredCheckIns: () => Promise.resolve([]), // keep the "Answered" heading out of the way
     });
     await renderStory();
-    await openTab('Interview');
+    await openTab('The interview');
     // All three gaps render.
     expect(await screen.findByText('An open thread')).toBeInTheDocument();
     expect(screen.getByText('A waiting thread')).toBeInTheDocument();
@@ -1619,7 +1619,7 @@ describe('Story (64)', () => {
       },
     });
     await renderStory();
-    await openTab('Interview');
+    await openTab('The interview');
 
     // The pending candidate shows for review with Use it / Skip.
     expect(await screen.findByText(/allowed to want things/)).toBeInTheDocument();
@@ -1690,6 +1690,7 @@ describe('Story (64)', () => {
       },
     });
     await renderStory();
+    await openTab('Timeline');
 
     expect(await screen.findByRole('heading', { name: 'Your timeline' })).toBeInTheDocument();
     const when = screen.getByLabelText('When “Born in Ohio” happened');
@@ -1723,6 +1724,7 @@ describe('Story (64)', () => {
       },
     });
     await renderStory();
+    await openTab('Timeline');
 
     await userEvent.type(await screen.findByLabelText('What happened'), 'We moved west');
     await userEvent.type(screen.getByLabelText('When it happened'), 'sometime in the 90s');
@@ -1822,9 +1824,46 @@ describe('Story (64)', () => {
     await waitFor(() => expect(screen.queryByText("'Ana' vs 'Anna'")).not.toBeInTheDocument());
   });
 
-  it('the consent center sets a pseudonym, and the publish warning names un-consented people (§17.5)', async () => {
+  it('the hero names the book’s OWN type, not always Biography (72 §3.2)', async () => {
+    installStoryBridge({
+      storyBookTypes: () =>
+        Promise.resolve([
+          ...BOOK_TYPES,
+          {
+            id: 'memoir',
+            label: 'Memoir',
+            blurb: 'One era.',
+            truthMode: 'true' as const,
+            summary: { drawsOn: 'one era', shape: '8–12 chapters', asksAbout: 'that era' },
+            gates: { adult: false },
+            options: [],
+            structures: [],
+            stylePresets: [],
+          },
+        ]),
+      storyList: () => Promise.resolve([{ ...manifest({ status: 'ready' }), type: 'memoir' }]),
+      storyGet: () =>
+        Promise.resolve({
+          ...writtenBundle('reviewed'),
+          manifest: { ...writtenBundle('reviewed').manifest, type: 'memoir' },
+        }),
+    });
+    await renderStory();
+
+    expect(await screen.findByText('Memoir')).toBeInTheDocument();
+    expect(screen.queryByText(/Your story · Biography/)).not.toBeInTheDocument();
+  });
+
+  it('the People tab renames someone for the book, and the publish warning clears (72 §3.9)', async () => {
     let register: ConsentPerson[] = [
-      { name: 'Angel', personId: 'a', relationship: 'partner', mentions: 3, consent: 'unknown' },
+      {
+        name: 'Angel',
+        personId: 'a',
+        relationship: 'partner',
+        mentions: 3,
+        chapterMentions: 3,
+        consent: 'unknown',
+      },
     ];
     installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
@@ -1850,10 +1889,10 @@ describe('Story (64)', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'Sharing' }));
     expect(await screen.findByText(/Angel appears/)).toBeInTheDocument();
 
-    // Settings → the consent center → give them a pseudonym (commits on blur).
-    await userEvent.click(screen.getByRole('tab', { name: 'Settings' }));
-    const pseudo = await screen.findByLabelText('Pseudonym for Angel');
-    await userEvent.type(pseudo, 'A.');
+    // People → give them a different name for the book (commits on blur). The count is CHAPTER mentions.
+    await openTab('People');
+    expect(await screen.findByText(/named in 3 chapters/)).toBeInTheDocument();
+    await userEvent.type(await screen.findByLabelText('What Angel is called in the book'), 'A.');
     await userEvent.tab();
 
     // Back on Sharing, the warning is gone — they have a pseudonym now.
@@ -2321,7 +2360,7 @@ describe('Story (64)', () => {
       storyMemoryList: () => Promise.resolve(memories),
     });
     await renderStory();
-    await openTab('Interview');
+    await openTab('The interview');
     // The invite card leads with a primary "Share a memory" button.
     expect(await screen.findByRole('button', { name: 'Share a memory' })).toBeInTheDocument();
 
@@ -2374,7 +2413,7 @@ describe('Story (64)', () => {
       storyMemoryOpen,
     });
     await renderStory();
-    await openTab('Interview');
+    await openTab('The interview');
     await userEvent.click(await screen.findByRole('button', { name: 'Share a memory' }));
     // The panel replaces the tab body: a back affordance + the biographer's streamed opener.
     expect(
@@ -2429,7 +2468,7 @@ describe('Story (64)', () => {
       },
     });
     await renderStory();
-    await openTab('Interview');
+    await openTab('The interview');
     // Open the still-gathering memory from the "Pick up where you left off" list (its row is a "Continue …" button).
     await userEvent.click(
       await screen.findByRole('button', { name: /Continue the memory “A memory”/ }),
@@ -2490,7 +2529,7 @@ describe('Story (64)', () => {
       storyMemoryOpen,
     });
     await renderStory();
-    await openTab('Interview');
+    await openTab('The interview');
     await userEvent.click(await screen.findByRole('button', { name: 'Talk it through' }));
     // The chat opens seeded from the gap's focus — a NEW memory keyed to that thread.
     expect(
@@ -2521,7 +2560,7 @@ describe('Story (64)', () => {
     // The Studio still renders (an existing ready book), but AI is unavailable for the chat.
     useSettingsStore.setState((s) => ({ values: { ...s.values, 'ai.enabled': false } }));
     await renderStory();
-    await openTab('Interview');
+    await openTab('The interview');
     // The invite card is still present.
     await userEvent.click(await screen.findByRole('button', { name: 'Share a memory' }));
     // Opening it shows the AI-off branch — the biographer heading + notice, and NO composer.
@@ -2633,7 +2672,7 @@ describe('Story (64)', () => {
       storyMemoryOpen,
     });
     await renderStory();
-    await openTab('Interview');
+    await openTab('The interview');
     const section = (
       await screen.findByRole('heading', { name: 'Pick up where you left off' })
     ).closest('div')!;
@@ -3281,7 +3320,7 @@ describe('Story (64)', () => {
     });
     await renderStory();
     // The Photos panel shows the uploaded thumbnail; analyze → caption + a question to answer.
-    await openTab('Photos');
+    await openTab('The interview');
     await userEvent.click(await screen.findByRole('button', { name: /Caption & ask about this/ }));
     expect(storyAnalyzePhoto).toHaveBeenCalledWith({ bookId: 'b1', imageId: 'ph1' });
     expect(await screen.findByText('A garage in winter')).toBeInTheDocument();
@@ -3319,7 +3358,7 @@ describe('Story (64)', () => {
         ]),
     });
     await renderStory();
-    await openTab('Photos');
+    await openTab('The interview');
     // The gallery shows the caption, an accessible thumbnail, the captured-memories chip and the answer.
     expect(await screen.findByText('Us on the pier at Lake Michigan')).toBeInTheDocument();
     expect(
@@ -3700,7 +3739,7 @@ describe('Story (64)', () => {
       storyInterviewCheck: () => Promise.resolve({ outcome: 'aiOff' as const }),
     });
     await renderStory();
-    await openTab('Interview');
+    await openTab('The interview');
     await userEvent.click(await screen.findByRole('button', { name: 'Find what’s missing' }));
     // The baseline persona is NOT an owner (no settings.manage) → the member wording, never a key prompt.
     expect(
@@ -3719,7 +3758,7 @@ describe('Story (64)', () => {
         Promise.resolve({ outcome: 'throttled' as const, throttleReason: 'weeklyCap' as const }),
     });
     await renderStory();
-    await openTab('Interview');
+    await openTab('The interview');
     await userEvent.click(await screen.findByRole('button', { name: 'Find what’s missing' }));
     expect(await screen.findByText(/already taken stock twice this week/)).toBeInTheDocument();
   });

@@ -55,6 +55,7 @@ export async function getConsentRegister(
       ...(c.personId ? { personId: c.personId } : {}),
       ...(c.relationship ? { relationship: c.relationship } : {}),
       mentions: c.mentions,
+      chapterMentions: c.chapterMentions,
       consent: decision?.consent ?? 'unknown',
       ...(decision?.pseudonym ? { pseudonym: decision.pseudonym } : {}),
     });
@@ -66,6 +67,7 @@ export async function getConsentRegister(
       name: e.name,
       ...(e.personId ? { personId: e.personId } : {}),
       mentions: 0,
+      chapterMentions: 0,
       consent: e.consent,
       ...(e.pseudonym ? { pseudonym: e.pseudonym } : {}),
     });

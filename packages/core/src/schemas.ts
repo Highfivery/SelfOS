@@ -4257,6 +4257,9 @@ export interface ConsentPerson {
   personId?: string;
   relationship?: string;
   mentions: number;
+  /** How many WRITTEN CHAPTERS name them — what the People tab reports, because "named in the book" is the
+   *  thing a person cares about, not how often the underlying material happens to mention someone. */
+  chapterMentions: number;
   consent: ConsentState;
   pseudonym?: string;
 }

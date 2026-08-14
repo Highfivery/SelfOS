@@ -111,9 +111,14 @@ origin/main`) so history stays linear and the release manifest never carries a s
 3. **Implement** with tests (see Definition of Done).
 4. Run the **`ship-slice`** skill: `quality-gate` → `code-reviewer` agent → `sync-docs` → commit (on the
    branch).
-5. **Push the branch and open a PR** (`git push -u origin HEAD && gh pr create`). Let **CI go green**.
-6. **Squash-merge the PR on GitHub** with a Conventional Commit title (`gh pr merge --squash`); delete the
-   branch. One clean commit lands on `main` — never a direct push, never a local merge.
+5. **Push the branch and open a PR** (`git push -u origin HEAD && gh pr create`).
+6. **ALWAYS enable auto-merge immediately** — `gh pr merge <n> --squash --auto` — so the PR lands itself the
+   moment CI is green. **Never leave a green PR sitting** for the user to merge by hand (2026-08-14, after
+   PRs sat open and a stacked one picked up a conflict while it waited). One clean commit lands on `main` —
+   never a direct push, never a local merge, never a merge into a parent branch. Notes: the repo has
+   `allow_auto_merge` on, and **without it `--auto` silently merges IMMEDIATELY** rather than waiting (check
+   `gh pr view <n> --json autoMergeRequest`); **omit `--delete-branch` in a worktree** or `gh` tries to check
+   out `main` locally and fails.
 7. **Offer to release** (the **`release`** skill): once the slice is on `main`, ask the user
    _"Tag & publish vX.Y.Z now, or batch with the next change?"_ Releasing = **merging the open
    release-please PR** (which auto-bumps the version, writes `CHANGELOG.md`, tags `vX.Y.Z`, and builds +
@@ -466,6 +471,21 @@ placing anything. Specifically:
 ## Changelog
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
+
+- 2026-08-14 — **Feedback (ALWAYS auto-merge a PR once CI is green; durable).** The owner: _"make sure to
+  ALWAYS auto-merge after they go green."_ Captured into §6 step 6 — every PR now gets
+  `gh pr merge <n> --squash --auto` **immediately after it is opened**, so it lands itself the moment checks
+  pass. A green PR left open is pure latency, and on a stacked chain it actively rots: #468 conflicted
+  against #467 only because #467 sat unmerged while work continued on top of it. **Two traps found doing
+  it:** (1) the repo had `allow_auto_merge: false`, and with it off `--auto` does NOT wait — it silently
+  merges IMMEDIATELY (that is how #468 landed the second the flag was passed); enabled it via
+  `gh api -X PATCH repos/Highfivery/SelfOS -f allow_auto_merge=true`, and verify a PR actually queued with
+  `gh pr view <n> --json autoMergeRequest` (null = it didn't take). (2) `--delete-branch` makes `gh` try to
+  check out `main` locally, which fails in a worktree (`'main' is already used by worktree at …`) — omit it.
+  **Also learned resolving the conflict:** rebasing a stacked branch after its parent squash-merges replays
+  the parent's commits and conflicts against the squash — cherry-pick your own commit onto fresh `main`
+  instead; and `git checkout -B <branch> origin/main` sets the upstream to `origin/main`, so push explicitly
+  (`git push --force-with-lease origin <branch>:<branch>`) or the push targets main and is refused.
 
 - 2026-08-14 — **Build (Books P6b — "Our Story", the shared two-person book; SPEC 72 §5.8/§5.10 P6 —
   **SPEC 72 IS NOW COMPLETE**, all eight types; on `feat/books-our-story` + `-ui`, in a git WORKTREE).** The

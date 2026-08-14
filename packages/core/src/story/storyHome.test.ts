@@ -7,7 +7,7 @@ import { savePerson } from '../people';
 import type { AiDeps } from '../questionnaires';
 import type { BookOutline, Insight, LifeTimeline, Person } from '../schemas';
 import { computeStoryHomeSignal } from './storyHome';
-import { markStaleChapters } from './storyFreshness';
+import { detectNewMaterial } from './storyFreshness';
 import { generateChapter } from './storyGenerationService';
 import { applyFoundations, approveOutline, createBook, saveProposals } from './storyService';
 
@@ -124,12 +124,12 @@ describe('computeStoryHomeSignal (64 §5.6)', () => {
       ],
     });
     // Mark c1 stale (mark-stale is free) so the drift shows in the signal.
-    await markStaleChapters(fs, key, 'me', book.id);
+    await detectNewMaterial(fs, key, 'me', book.id, new Date('2026-08-13T00:00:00.000Z'));
 
     const sig = await computeStoryHomeSignal(fs, key, 'me');
     expect(sig).toMatchObject({
       hasBook: true,
-      staleChapters: 1, // c1 drifted (written + stale)
+      staleChapters: 1, // c1 has new material waiting
       unwrittenChapters: 1, // c2 still un-drafted
       pendingProposals: 1,
     });

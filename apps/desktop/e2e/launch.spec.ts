@@ -85,6 +85,7 @@ import {
   getQuotes,
   getTimeline,
   listBooks,
+  getNewMaterial,
   listChapters,
   listMemories,
 } from '@selfos/core/story';
@@ -14946,6 +14947,61 @@ test('story (64): the consent center sets a pseudonym + warns before publishing 
       .toBe('A.');
     await w.getByRole('tab', { name: 'Sharing' }).click();
     await expect(w.getByText(/Angel appears/)).toBeHidden();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('story (72): new material is a proposal you accept — the book never rewrites itself (§4.4)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Living Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'Living Book', level: 1 })).toBeVisible();
+
+    // Exclude something the prose draws on — an author-driven change. It must NOT rewrite anything on its
+    // own; it files a proposal.
+    const bookId = (await listBooks(fs, key, 'owner-1'))[0]!.id;
+    const before = (await listChapters(fs, key, 'owner-1', bookId)).map((c) => c.markdown);
+    await w.getByRole('button', { name: /The Garage/ }).click();
+    await w.getByRole('button', { name: 'Mark up' }).first().click();
+    await w.getByRole('button', { name: 'Exclude' }).click();
+    await w.getByRole('textbox', { name: 'What to never write about' }).fill('cut pine');
+    await w.getByRole('button', { name: 'Never write about this' }).click();
+    await expect(w.getByText(/written again/)).toBeVisible();
+    await w.getByRole('button', { name: 'Back to the book' }).click();
+
+    // It reads as a proposal in "Needs you", naming what changed — with a one-click rewrite.
+    await expect(w.getByText('Out of step').first()).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Rewrite it' }).first()).toBeVisible();
+    // Nothing was rewritten by the act of excluding.
+    expect((await listChapters(fs, key, 'owner-1', bookId)).map((c) => c.markdown)).toEqual(before);
+
+    // "Not now" declines it without spending, and it stays gone.
+    const proposals = await w.getByText('Out of step').count();
+    for (let i = 0; i < proposals; i += 1) {
+      await w
+        .getByRole('button', { name: /Not now for/ })
+        .first()
+        .click();
+    }
+    await expect(w.getByText('Out of step')).toHaveCount(0);
+    await expect
+      .poll(async () => (await getNewMaterial(fs, key, 'owner-1', bookId)).entries.length)
+      .toBe(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

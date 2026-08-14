@@ -17,6 +17,7 @@ import {
   approveOutline,
   createBook,
   getChapter,
+  getNewMaterial,
   getOutline,
   listChapters,
   saveOutline,
@@ -262,7 +263,7 @@ describe('resolveProposal — approve applies the restructure (no prose written)
     expect(again.ok && again.added).toBe(0);
   });
 
-  it('newChapter: inserts an un-written stale shell in the right position', async () => {
+  it('newChapter: inserts an un-written shell in the right position', async () => {
     const fs = memFileSystem();
     const bookId = await seedBook(fs);
     const gen = await generateStructuralProposals(
@@ -294,11 +295,11 @@ describe('resolveProposal — approve applies the restructure (no prose written)
     const chapters = await listChapters(fs, key, 'me', bookId);
     expect(chapters.map((c) => c.title)).toEqual(['The Garage', 'The Middle Years', 'The Road']);
     const shell = chapters.find((c) => c.title === 'The Middle Years')!;
-    expect(shell.status).toBe('stale'); // un-written → written on the next refresh
+    expect(shell.status).toBe('new'); // "not written yet" is empty markdown, not a status (72 §4.4)
     expect(shell.markdown).toBe('');
   });
 
-  it('splitChapter: narrows the original (stale) and adds a stale sibling after it', async () => {
+  it('splitChapter: narrows the original (proposing a rewrite) and adds an unwritten sibling', async () => {
     const fs = memFileSystem();
     const bookId = await seedBook(fs);
     const originalProse = (await getChapter(fs, key, 'me', bookId, 'c1'))!.markdown;
@@ -330,9 +331,14 @@ describe('resolveProposal — approve applies the restructure (no prose written)
       'The Road',
     ]);
     const original = chapters.find((c) => c.id === 'c1')!;
-    expect(original.status).toBe('stale'); // rewritten to the narrower brief next pass
     expect(original.markdown).toBe(originalProse); // no reviewed prose destroyed (owner's concern)
-    expect(chapters.find((c) => c.title === 'The Garage, part two')!.status).toBe('stale');
+    // The narrowing is filed as a proposal against the original — a one-click rewrite, never automatic.
+    expect(
+      (await getNewMaterial(fs, key, 'me', bookId)).entries.some(
+        (e) => e.chapterId === 'c1' && e.reason === 'briefChanged',
+      ),
+    ).toBe(true);
+    expect(chapters.find((c) => c.title === 'The Garage, part two')!.markdown).toBe('');
   });
 
   it('reorder: reorders the outline and syncs the chapter display order', async () => {
@@ -355,7 +361,7 @@ describe('resolveProposal — approve applies the restructure (no prose written)
     expect(chapters.map((c) => c.id)).toEqual(['c2', 'c1']); // display order follows
   });
 
-  it('prologueRewrite: marks the opening chapter stale without touching prose', async () => {
+  it('prologueRewrite: proposes rewriting the opening without touching prose', async () => {
     const fs = memFileSystem();
     const bookId = await seedBook(fs);
     const before = await getChapter(fs, key, 'me', bookId, 'c1');
@@ -369,8 +375,10 @@ describe('resolveProposal — approve applies the restructure (no prose written)
     const pid = gen.ok ? gen.proposals[0]!.id : '';
     await resolveProposal(fs, key, 'me', { bookId, proposalId: pid, action: 'approve' });
     const after = await getChapter(fs, key, 'me', bookId, 'c1');
-    expect(after!.status).toBe('stale');
     expect(after!.markdown).toBe(before!.markdown); // prose untouched
+    expect(
+      (await getNewMaterial(fs, key, 'me', bookId)).entries.some((e) => e.chapterId === 'c1'),
+    ).toBe(true);
   });
 
   it('dismiss removes it from pending but keeps it (not re-proposed); a gone proposal is a no-op', async () => {

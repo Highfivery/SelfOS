@@ -529,21 +529,22 @@ describe('generateBookChapters — the orchestrator (64 §5.3)', () => {
     const fs = memFileSystem();
     const bookId = await seedApprovedBook(fs);
     await generateBookChapters(deps(fs, fakeClient('Original prose. [[SRC:s0]]')), bookId);
-    // c1 is reviewed (locked); c2 is flagged stale (new material to fold in).
+    // Both chapters have prose; c1 is reviewed. The queue writes FIRST DRAFTS only (72 §4.4) — a rewrite is
+    // always an explicit act now, so neither is touched however they're flagged.
     const c1 = await getChapter(fs, key, 'me', bookId, 'c1');
     const c2 = await getChapter(fs, key, 'me', bookId, 'c2');
     if (!c1 || !c2) throw new Error('seed failed');
     await saveChapter(fs, key, 'me', bookId, { ...c1, status: 'reviewed' });
-    await saveChapter(fs, key, 'me', bookId, { ...c2, status: 'stale' });
+    await saveChapter(fs, key, 'me', bookId, { ...c2, status: 'updated' });
 
     const res = await generateBookChapters(
       deps(fs, fakeClient('Fresh rewrite. [[SRC:s0]]')),
       bookId,
     );
-    expect(res.generated).toBe(1); // only the stale c2
+    expect(res.generated).toBe(0); // nothing to first-draft
     expect((await getChapter(fs, key, 'me', bookId, 'c1'))?.markdown).toContain('Original prose'); // untouched
     expect((await getChapter(fs, key, 'me', bookId, 'c1'))?.status).toBe('reviewed');
-    expect((await getChapter(fs, key, 'me', bookId, 'c2'))?.markdown).toContain('Fresh rewrite');
+    expect((await getChapter(fs, key, 'me', bookId, 'c2'))?.markdown).toContain('Original prose');
   });
 });
 

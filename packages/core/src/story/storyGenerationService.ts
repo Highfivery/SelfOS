@@ -475,9 +475,9 @@ export async function generateBookChapters(
   let lastFailure: { reason: AiFailureReason; message: string } | null = null;
   for (const chapter of chapters) {
     const existing = await getChapter(deps.fs, deps.key, deps.personId, bookId, chapter.id);
-    // Skip a chapter that's already written and not flagged stale (idempotent/resumable). Never overwrite a
-    // reviewed chapter.
-    if (existing && existing.status !== 'stale') {
+    // Skip a chapter that already HAS PROSE (idempotent/resumable). Drift is a proposal now, not a status
+    // (72 §4.4), so this queue only ever writes first drafts — a rewrite is always an explicit act.
+    if (existing && existing.markdown.trim().length > 0) {
       completed += 1;
       continue;
     }

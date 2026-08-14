@@ -1,16 +1,17 @@
 import type { FileSystem } from '../host';
 import type { StoryHomeSignal } from '../schemas';
 import { getOutline, listBooks, listChapters } from './storyService';
+import { chaptersWithNewMaterial } from './storyMaterial';
 import { listStructuralProposals } from './storyStructureService';
 
 /**
  * The living-book Home signal (64 §5.6) — computed host-side, NO AI: what, if anything, the person's book wants
  * from them next. Reads the person's book (v1 is one book — the most-recently-updated wins if there's somehow
  * more) and derives three counts:
- *  - `staleChapters`: WRITTEN chapters that drifted (non-empty prose + status `stale`) — new material to weave in.
+ *  - `staleChapters`: WRITTEN chapters with new material waiting (72 §4.4) — things that could go in.
  *  - `pendingProposals`: structural suggestions waiting to be reviewed.
- *  - `unwrittenChapters`: approved outline chapters with no drafted prose yet (includes approved new/split shells,
- *    which are empty `stale` chapters — they count as "waiting to be written", not as drifted).
+ *  - `unwrittenChapters`: approved outline chapters with no drafted prose yet (including approved new/split
+ *    shells — they count as "waiting to be written", not as drifted).
  * A person with no book gets `hasBook: false` (starting a book is the nav's job, not a Home push). The signature
  * is `<bookId>:<stale>:<proposals>:<unwritten>` so a dismissed card re-surfaces only when a count changes.
  */
@@ -34,7 +35,8 @@ export async function computeStoryHomeSignal(
   const chapters = await listChapters(fs, key, personId, book.id);
   const written = chapters.filter((c) => c.markdown.trim().length > 0);
   const writtenIds = new Set(written.map((c) => c.id));
-  const staleChapters = written.filter((c) => c.status === 'stale').length;
+  const drifted = new Set(await chaptersWithNewMaterial(fs, key, personId, book.id));
+  const staleChapters = written.filter((c) => drifted.has(c.id)).length;
 
   const outline = await getOutline(fs, key, personId, book.id);
   const outlineChapters = outline?.approved ? outline.parts.flatMap((p) => p.chapters) : [];

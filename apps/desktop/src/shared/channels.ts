@@ -92,6 +92,8 @@ import type {
   StoryRevisionResult,
   StoryContinuityResult,
   ContinuityFinding,
+  NewMaterialEntry,
+  StoryAcceptMaterialResult,
   StoryResolveContinuityInput,
   StoryTodoList,
   StoryTodoToQuestionsInput,
@@ -493,6 +495,9 @@ export const IpcChannels = {
   storyResolveProposal: 'story:resolveProposal',
   storyContinuityCheck: 'story:continuityCheck',
   storyManuscriptRead: 'story:manuscriptRead',
+  storyNewMaterial: 'story:newMaterial',
+  storyAcceptMaterial: 'story:acceptMaterial',
+  storyDeclineMaterial: 'story:declineMaterial',
   storyContinuity: 'story:continuity',
   storyResolveContinuity: 'story:resolveContinuity',
   storyLineEdit: 'story:lineEdit',
@@ -1564,6 +1569,15 @@ export interface SelfosBridge {
   /** Read the whole book for repetition / pacing / arc / voice (72 §5.3) — a metered AI pass whose
    *  findings join the same review list the continuity check writes to. */
   storyManuscriptRead(input: { bookId: string }): Promise<StoryContinuityResult>;
+  /** What each chapter has drifted from, waiting on the author (72 §4.4). Free — no AI. */
+  storyNewMaterial(input: { bookId: string }): Promise<NewMaterialEntry[]>;
+  /** Weave a chapter's new material in — one metered rewrite through the craft loop, then the entries clear. */
+  storyAcceptMaterial(input: {
+    bookId: string;
+    chapterId: string;
+  }): Promise<StoryAcceptMaterialResult>;
+  /** "Not now" — decline a chapter's proposals without rewriting it. Free. */
+  storyDeclineMaterial(input: { bookId: string; chapterId: string }): Promise<NewMaterialEntry[]>;
   /** The book's pending continuity findings (no AI). */
   storyContinuity(input: { bookId: string }): Promise<ContinuityFinding[]>;
   /** Resolve or dismiss a continuity finding (no AI). Returns the remaining pending findings. */

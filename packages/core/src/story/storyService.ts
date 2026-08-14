@@ -13,6 +13,7 @@ import {
   QuoteListSchema,
   BookConsentListSchema,
   StoryContinuityListSchema,
+  StoryNewMaterialListSchema,
   StoryImageIndexSchema,
   StoryInterviewStateSchema,
   StoryProposalListSchema,
@@ -31,6 +32,7 @@ import {
   type QuoteCandidate,
   type BookConsentList,
   type StoryContinuityList,
+  type StoryNewMaterialList,
   type StoryBookBundle,
   type StoryImageEntry,
   type StoryImageIndex,
@@ -114,6 +116,9 @@ function proposalsPath(personId: string, bookId: string): string {
 }
 function continuityPath(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/continuity.enc`;
+}
+function materialPath(personId: string, bookId: string): string {
+  return `${bookDir(personId, bookId)}/material.enc`;
 }
 function consentPath(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/consent.enc`;
@@ -530,6 +535,27 @@ export async function getContinuity(
 ): Promise<StoryContinuityList> {
   const raw = await readEncryptedJson(fs, continuityPath(personId, bookId), key);
   return raw ? StoryContinuityListSchema.parse(raw) : { schemaVersion: 1, findings: [] };
+}
+
+/** What each chapter has drifted from, waiting on the author (72 §4.4). Absent → nothing pending. */
+export async function getNewMaterial(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<StoryNewMaterialList> {
+  const raw = await readEncryptedJson(fs, materialPath(personId, bookId), key);
+  return raw ? StoryNewMaterialListSchema.parse(raw) : { schemaVersion: 1, entries: [] };
+}
+
+export async function saveNewMaterial(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  list: StoryNewMaterialList,
+): Promise<void> {
+  await writeEncryptedJson(fs, materialPath(personId, bookId), list, key);
 }
 
 export async function saveContinuity(

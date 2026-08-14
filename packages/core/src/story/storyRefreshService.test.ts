@@ -8,17 +8,14 @@ import type { AiDeps } from '../questionnaires';
 import { recordUsage } from '../usage';
 import type { BookOutline, Insight, LifeTimeline, Person } from '../schemas';
 import { generateChapter } from './storyGenerationService';
-import {
-  STORY_STRUCTURE_WEEKLY_CAP,
-  STORY_WEEKLY_AUTO_CAP,
-  refreshBook,
-} from './storyRefreshService';
+import { STORY_STRUCTURE_WEEKLY_CAP, refreshBook } from './storyRefreshService';
 import { listStructuralProposals } from './storyStructureService';
 import {
   applyFoundations,
   approveOutline,
   createBook,
   getChapter,
+  getNewMaterial,
   saveChapter,
   saveOutline,
 } from './storyService';
@@ -117,86 +114,61 @@ async function seedWrittenBook(fs: ReturnType<typeof memFileSystem>): Promise<st
   return book.id;
 }
 
-describe('refreshBook (64 §3.4/§5.4)', () => {
-  it('marks a drifted chapter stale, then auto-rewrites it (manual refresh, uncapped)', async () => {
+describe('refreshBook (72 §5.4)', () => {
+  /**
+   * The behaviour change P2 exists for: the cadence used to mark chapters stale and then REWRITE them, ten a
+   * week, unattended. It only ever detects and records now — the rewrite is an explicit act.
+   */
+  it('records what drifted and rewrites NOTHING', async () => {
     const fs = memFileSystem();
     const bookId = await seedWrittenBook(fs);
-    // Edit the cited insight → the chapter has drifted.
+    const before = (await getChapter(fs, key, 'me', bookId, 'c1'))?.markdown;
     await saveInsight(fs, key, insight('the winter was brutal'));
-    const res = await refreshBook(deps(fs, fakeClient('The garage, rewritten. [[SRC:s0]]')), {
-      bookId,
-      auto: false,
-    });
+
+    const res = await refreshBook(
+      deps(fs, fakeClient('A REWRITE THAT MUST NOT HAPPEN. [[SRC:s0]]')),
+      {
+        bookId,
+        auto: false,
+      },
+    );
+
     expect(res.staled).toBe(1);
-    expect(res.rewritten).toBe(1);
+    expect(res.rewritten).toBe(0);
     const c1 = await getChapter(fs, key, 'me', bookId, 'c1');
-    expect(c1?.status).toBe('updated'); // rewritten → no longer stale
-    expect(c1?.markdown).toContain('rewritten');
+    expect(c1?.markdown).toBe(before); // untouched
+    // What changed is on record, waiting on the author.
+    const entries = (await getNewMaterial(fs, key, 'me', bookId)).entries;
+    expect(entries.map((e) => e.chapterId)).toEqual(['c1']);
+    expect(entries[0]?.items[0]?.excerpt).toContain('brutal');
   });
 
-  it('does nothing to rewrite when no chapter has drifted', async () => {
+  it('records nothing when no chapter has drifted', async () => {
     const fs = memFileSystem();
     const bookId = await seedWrittenBook(fs);
     const res = await refreshBook(deps(fs, fakeClient('unused')), { bookId, auto: false });
     expect(res.staled).toBe(0);
-    expect(res.rewritten).toBe(0);
+    expect((await getNewMaterial(fs, key, 'me', bookId)).entries).toEqual([]);
   });
 
-  it('the auto cadence respects the weekly cap; a manual refresh bypasses it', async () => {
-    const fs = memFileSystem();
-    const bookId = await seedWrittenBook(fs);
-    await saveInsight(fs, key, insight('the winter was brutal')); // drift it
-    // Seed the weekly cap's worth of story.chapter passes in the trailing week.
-    for (let i = 0; i < STORY_WEEKLY_AUTO_CAP; i += 1) {
-      await recordUsage(fs, key, {
-        id: `u${i}`,
-        schemaVersion: 1,
-        type: 'story.chapter',
-        personId: 'me',
-        model: 'claude-sonnet-4-6',
-        at: new Date(now.getTime() - 60_000).toISOString(),
-        inputTokens: 1,
-        outputTokens: 1,
-        cacheWriteTokens: 0,
-        cacheReadTokens: 0,
-        costUsd: 0,
-      });
-    }
-    // Auto: capped → marks stale but rewrites nothing.
-    const capped = await refreshBook(deps(fs, fakeClient('nope')), { bookId, auto: true });
-    expect(capped.capped).toBe(true);
-    expect(capped.rewritten).toBe(0);
-    expect((await getChapter(fs, key, 'me', bookId, 'c1'))?.status).toBe('stale'); // staled, not rewritten
-
-    // A manual "Refresh now" is the deliberate force-past-the-cap path → rewrites (still budget-gated).
-    const forced = await refreshBook(deps(fs, fakeClient('Forced rewrite. [[SRC:s0]]')), {
-      bookId,
-      auto: false,
-    });
-    expect(forced.rewritten).toBe(1);
-    expect((await getChapter(fs, key, 'me', bookId, 'c1'))?.markdown).toContain('Forced rewrite');
-  });
-
-  it('the auto cadence marks stale but never rewrites during a crisis', async () => {
+  it('detects during a crisis — knowing what could go in is free and pushes nothing', async () => {
     const fs = memFileSystem();
     const bookId = await seedWrittenBook(fs);
     await saveInsight(fs, key, insight('the winter was brutal'));
-    const res = await refreshBook(deps(fs, fakeClient('nope')), {
+    const res = await refreshBook(deps(fs, fakeClient(proposalJson)), {
       bookId,
       auto: true,
       crisis: true,
     });
-    expect(res.staled).toBe(1);
-    expect(res.rewritten).toBe(0);
-    expect((await getChapter(fs, key, 'me', bookId, 'c1'))?.status).toBe('stale');
+    expect(res.staled).toBe(1); // detection ran
+    expect(res.proposalsAdded ?? 0).toBe(0); // but nothing was spent
+    expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(0);
   });
 
   it('files structural proposals on a refresh (they ride the cadence)', async () => {
     const fs = memFileSystem();
     const bookId = await seedWrittenBook(fs);
-    // Nothing has drifted → no rewrite; the structural pass returns one proposal.
     const res = await refreshBook(deps(fs, fakeClient(proposalJson)), { bookId, auto: false });
-    expect(res.rewritten).toBe(0);
     expect(res.proposalsAdded).toBe(1);
     expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(1);
   });
@@ -220,32 +192,17 @@ describe('refreshBook (64 §3.4/§5.4)', () => {
       });
     }
     const res = await refreshBook(deps(fs, fakeClient(proposalJson)), { bookId, auto: false });
-    expect(res.proposalsAdded ?? 0).toBe(0); // capped — even a manual refresh doesn't force a structural pass
-    expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(0);
-  });
-
-  it('the auto cadence files no proposals during a crisis', async () => {
-    const fs = memFileSystem();
-    const bookId = await seedWrittenBook(fs);
-    const res = await refreshBook(deps(fs, fakeClient(proposalJson)), {
-      bookId,
-      auto: true,
-      crisis: true,
-    });
     expect(res.proposalsAdded ?? 0).toBe(0);
     expect(await listStructuralProposals(fs, key, 'me', bookId)).toHaveLength(0);
   });
 
   /**
-   * 72 §5.4 — `chapterShell` stamps a NEVER-WRITTEN chapter `stale`, so the refresh cadence was spending its
-   * weekly REWRITE allowance on first drafts. On the real vault that is how a 45-chapter book with 22 unwritten
-   * chapters never converged: the shells competed with genuinely-stale prose for the same 10 rewrites a week.
-   * A first draft belongs to the explicit "Write the remaining N" action, not the background refresh.
+   * 72 §5.4 — an unwritten shell is not drift. It carries no signature, so it can't be detected as changed,
+   * and it must never consume anything: a first draft belongs to the explicit "Write the remaining N".
    */
-  it('never spends the rewrite allowance on a never-written shell', async () => {
+  it('never files a proposal against a never-written shell', async () => {
     const fs = memFileSystem();
     const bookId = await seedWrittenBook(fs);
-    // A second outline chapter that has never been written — persisted as a shell (status 'stale', no prose).
     const withShell: BookOutline = {
       ...outline,
       parts: [
@@ -260,17 +217,12 @@ describe('refreshBook (64 §3.4/§5.4)', () => {
     };
     await saveOutline(fs, key, 'me', bookId, withShell);
     await saveChapter(fs, key, 'me', bookId, chapterShell('c2', 'p1', 1, 'The Tank'));
-    // Drift the cited source so the WRITTEN chapter is genuinely stale.
     await saveInsight(fs, key, insight('the winter was bitter'));
 
-    const res = await refreshBook(deps(fs, fakeClient('Rewritten. [[SRC:s0]]')), {
-      bookId,
-      auto: true,
-    });
+    await refreshBook(deps(fs, fakeClient('unused')), { bookId, auto: true });
 
-    expect(res.rewritten).toBe(1); // the written chapter only
-    expect((await getChapter(fs, key, 'me', bookId, 'c1'))?.markdown).toContain('Rewritten.');
-    // The shell is untouched — still unwritten, still waiting for an explicit first draft.
+    const entries = (await getNewMaterial(fs, key, 'me', bookId)).entries;
+    expect(entries.map((e) => e.chapterId)).toEqual(['c1']); // the written one only
     const shell = await getChapter(fs, key, 'me', bookId, 'c2');
     expect(shell?.markdown).toBe('');
     expect(shell?.revision).toBe(0);

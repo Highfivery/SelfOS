@@ -4326,11 +4326,64 @@ export type TextAnchor = z.infer<typeof TextAnchorSchema>;
 
 // --- Chapters (draft head + published snapshot share this shape) -----------------------------------------
 
-/** `new` = first draft, unreviewed; `updated` = re-generated/auto-rewritten, unreviewed; `stale` = flagged
- *  by the freshness engine; `reviewed` = the person marked it good (only Reviewed content publishes, §3.5);
- *  `generating` = queued/in-flight. */
-export const ChapterStatusSchema = z.enum(['generating', 'new', 'updated', 'stale', 'reviewed']);
+/** `new` = first draft, unreviewed; `updated` = re-generated, unreviewed; `reviewed` = the person marked it
+ *  good (only Reviewed content publishes, §3.5); `generating` = queued/in-flight.
+ *
+ *  There is deliberately no `stale` (72 §4.4). It used to mean three unrelated things at once — new material
+ *  arrived, the author changed the plan, the chapter was never written — and the engine acted on all three
+ *  the same way: rewrite it. That is how a 45-chapter book ended up with 34 of 34 chapters `stale` and no
+ *  path to converging. Drift is now a PROPOSAL against the chapter (`StoryNewMaterialList`), never a status,
+ *  and "not written yet" is simply empty `markdown`. */
+export const ChapterStatusSchema = z.enum(['generating', 'new', 'updated', 'reviewed']);
 export type ChapterStatus = z.infer<typeof ChapterStatusSchema>;
+
+/** The read-time migration (72 §7.9). Every pre-72 chapter on disk carries `'stale'`; coercing it here — at
+ *  the one point every read parses through — makes the migration idempotent and needs no file rewrite. The
+ *  value normalizes on the chapter's next save. */
+const StoredChapterStatusSchema = z.preprocess(
+  (v) => (v === 'stale' ? 'updated' : v),
+  ChapterStatusSchema,
+);
+
+// --- New material: what a chapter has drifted from (72 §4.4) ---------------------------------------------
+
+/** Why a chapter no longer matches what it should be. `newMaterial` is the passive case the free signature
+ *  diff finds; the other three are things the AUTHOR did. All four are proposals — the person accepts or
+ *  declines each one, and nothing is rewritten without that (owner decision, 2026-08-13). */
+export const NewMaterialReasonSchema = z.enum([
+  'newMaterial',
+  'sourceRemoved',
+  'briefChanged',
+  'merged',
+]);
+export type NewMaterialReason = z.infer<typeof NewMaterialReasonSchema>;
+
+/** One thing that could go into a chapter — enough to judge it by without opening anything. */
+export const NewMaterialItemSchema = z.object({
+  sourceRef: StorySourceRefSchema,
+  /** Where it came from, in the person's language ("In a coaching session, you said"). */
+  label: z.string(),
+  /** A short, readable piece of it — never the whole source. */
+  excerpt: z.string(),
+});
+export type NewMaterialItem = z.infer<typeof NewMaterialItemSchema>;
+
+export const NewMaterialEntrySchema = z.object({
+  chapterId: z.string().min(1),
+  reason: NewMaterialReasonSchema,
+  /** The material itself. Empty for an author-driven reason, which `note` explains instead. */
+  items: z.array(NewMaterialItemSchema).default([]),
+  note: z.string().optional(),
+  detectedAt: z.string(),
+});
+export type NewMaterialEntry = z.infer<typeof NewMaterialEntrySchema>;
+
+/** `books/<bookId>/material.enc` — what each chapter has drifted from, waiting on the author. */
+export const StoryNewMaterialListSchema = z.object({
+  schemaVersion: z.literal(1),
+  entries: z.array(NewMaterialEntrySchema).default([]),
+});
+export type StoryNewMaterialList = z.infer<typeof StoryNewMaterialListSchema>;
 
 /** One paragraph's provenance: `anchor` = the paragraph id, `refs` = every source it drew on (§5.3 strips
  *  the model's inline `[[SRC:…]]` markers into this — the markers never render). */
@@ -4373,7 +4426,7 @@ export const BookChapterSchema = z.object({
   title: z.string(),
   markdown: z.string().default(''),
   revision: z.number().int().nonnegative().default(0),
-  status: ChapterStatusSchema,
+  status: StoredChapterStatusSchema,
   sourceSignature: z.string().default(''),
   provenance: z.array(ChapterProvenanceEntrySchema).default([]),
   protectedBlocks: z.array(ProtectedBlockSchema).default([]),
@@ -5051,6 +5104,13 @@ export type StoryResolveContinuityInput = z.infer<typeof StoryResolveContinuityI
 export interface StoryContinuityResult {
   ok: boolean;
   findings: ContinuityFinding[];
+  reason?: AiFailureReason | 'AI_OFF';
+  message?: string;
+}
+
+/** The outcome of accepting a chapter's new material (72 §3.6) — one metered rewrite through the craft loop. */
+export interface StoryAcceptMaterialResult {
+  ok: boolean;
   reason?: AiFailureReason | 'AI_OFF';
   message?: string;
 }

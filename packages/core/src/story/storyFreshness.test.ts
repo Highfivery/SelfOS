@@ -5,10 +5,12 @@ import { saveInsight } from '../insights';
 import { savePerson } from '../people';
 import type { BookChapter, Insight, Person } from '../schemas';
 import { buildStoryCorpus, type StoryCorpus } from './storyCorpus';
-import { citedSourceIds, computeSourceSignature, markStaleChapters } from './storyFreshness';
-import { getChapter, saveChapter } from './storyService';
+import { citedSourceIds, computeSourceSignature, detectNewMaterial } from './storyFreshness';
+import { declineNewMaterial } from './storyMaterial';
+import { getChapter, getNewMaterial, saveChapter } from './storyService';
 
 const key = generateMasterKey();
+const now = new Date('2026-08-13T00:00:00.000Z');
 
 function chapter(over: Partial<BookChapter> & { id: string }): BookChapter {
   return {
@@ -98,7 +100,7 @@ function insight(factText: string): Insight {
   };
 }
 
-describe('markStaleChapters (64 §3.4)', () => {
+describe('detectNewMaterial (72 §5.4)', () => {
   async function seed(fs: ReturnType<typeof memFileSystem>, factText: string): Promise<void> {
     await savePerson(fs, key, person);
     await saveInsight(fs, key, insight(factText));
@@ -113,29 +115,47 @@ describe('markStaleChapters (64 §3.4)', () => {
     );
   }
 
-  it('stales a chapter whose cited insight changed, and leaves an unchanged one alone', async () => {
+  it('names what changed and quotes it, and leaves an unchanged chapter alone', async () => {
     const fs = memFileSystem();
     await seed(fs, 'the winter was cold');
-    // No change yet → nothing stales.
-    expect(await markStaleChapters(fs, key, 'me', 'b1')).toBe(0);
-    expect((await getChapter(fs, key, 'me', 'b1', 'c1'))?.status).toBe('reviewed');
-    // Edit the cited insight → the chapter goes stale.
+    // No change yet → nothing to propose.
+    expect(await detectNewMaterial(fs, key, 'me', 'b1', now)).toBe(0);
+    expect((await getNewMaterial(fs, key, 'me', 'b1')).entries).toEqual([]);
+
     await saveInsight(fs, key, insight('the winter was brutal'));
-    expect(await markStaleChapters(fs, key, 'me', 'b1')).toBe(1);
-    expect((await getChapter(fs, key, 'me', 'b1', 'c1'))?.status).toBe('stale');
+    expect(await detectNewMaterial(fs, key, 'me', 'b1', now)).toBe(1);
+
+    const entries = (await getNewMaterial(fs, key, 'me', 'b1')).entries;
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.chapterId).toBe('c1');
+    expect(entries[0]?.reason).toBe('newMaterial');
+    // It says WHAT changed, not just that something did — that is the whole point of a proposal.
+    expect(entries[0]?.items[0]?.excerpt).toContain('brutal');
+    expect(entries[0]?.items[0]?.label.length).toBeGreaterThan(0);
   });
 
-  it('never re-flags a stale/generating chapter or one with no stored signature', async () => {
+  it('never touches a chapter’s STATUS — drift is a proposal, not a state', async () => {
+    const fs = memFileSystem();
+    await seed(fs, 'the winter was cold');
+    await saveInsight(fs, key, insight('the winter was brutal'));
+    await detectNewMaterial(fs, key, 'me', 'b1', now);
+    // The reviewed chapter stays reviewed: nothing about it changed, only what could go in.
+    expect((await getChapter(fs, key, 'me', 'b1', 'c1'))?.status).toBe('reviewed');
+  });
+
+  it('re-detecting the same drift refreshes the one entry rather than piling up duplicates', async () => {
+    const fs = memFileSystem();
+    await seed(fs, 'the winter was cold');
+    await saveInsight(fs, key, insight('the winter was brutal'));
+    await detectNewMaterial(fs, key, 'me', 'b1', now);
+    await detectNewMaterial(fs, key, 'me', 'b1', now);
+    expect((await getNewMaterial(fs, key, 'me', 'b1')).entries).toHaveLength(1);
+  });
+
+  it('skips a generating chapter and one with no stored signature', async () => {
     const fs = memFileSystem();
     await savePerson(fs, key, person);
     await saveInsight(fs, key, insight('x'));
-    await saveChapter(
-      fs,
-      key,
-      'me',
-      'b1',
-      chapter({ id: 'c1', status: 'stale', sourceSignature: 'old' }),
-    );
     await saveChapter(
       fs,
       key,
@@ -150,8 +170,26 @@ describe('markStaleChapters (64 §3.4)', () => {
       'b1',
       chapter({ id: 'c3', status: 'reviewed', sourceSignature: '' }),
     );
-    expect(await markStaleChapters(fs, key, 'me', 'b1')).toBe(0);
+    expect(await detectNewMaterial(fs, key, 'me', 'b1', now)).toBe(0);
     expect((await getChapter(fs, key, 'me', 'b1', 'c2'))?.status).toBe('generating');
-    expect((await getChapter(fs, key, 'me', 'b1', 'c3'))?.status).toBe('reviewed');
+  });
+
+  /**
+   * "Not now" has to MEAN something. The signature diff is stateless, so without re-stamping, the very next
+   * free scan would raise the identical proposal again and the button would be decorative.
+   */
+  it('declining re-stamps the signature, so it stays quiet until something ELSE changes', async () => {
+    const fs = memFileSystem();
+    await seed(fs, 'the winter was cold');
+    await saveInsight(fs, key, insight('the winter was brutal'));
+    await detectNewMaterial(fs, key, 'me', 'b1', now);
+
+    await declineNewMaterial(fs, key, 'me', 'b1', { chapterId: 'c1' });
+    expect((await getNewMaterial(fs, key, 'me', 'b1')).entries).toEqual([]);
+    expect(await detectNewMaterial(fs, key, 'me', 'b1', now)).toBe(0); // does not come straight back
+
+    // But a LATER change does raise it again.
+    await saveInsight(fs, key, insight('the winter nearly finished him'));
+    expect(await detectNewMaterial(fs, key, 'me', 'b1', now)).toBe(1);
   });
 });

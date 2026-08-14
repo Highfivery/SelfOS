@@ -11,6 +11,8 @@ import type {
   QuoteCandidate,
   QuoteStatus,
   ContinuityFinding,
+  NewMaterialEntry,
+  StoryAcceptMaterialResult,
   StoryContinuityResult,
   ConsentPerson,
   ConsentState,
@@ -158,10 +160,16 @@ interface StoryState {
   proposals: StructuralProposal[];
   loadProposals: (bookId: string) => Promise<void>;
   continuity: ContinuityFinding[];
+  /** What each chapter has drifted from, waiting on the author (72 §4.4). */
+  newMaterial: NewMaterialEntry[];
   loadContinuity: (bookId: string) => Promise<void>;
   checkContinuity: (bookId: string) => Promise<StoryContinuityResult>;
   /** Read the whole book for repetition / pacing / arc / voice (72 §5.3) — findings join the same list. */
   readManuscript: (bookId: string) => Promise<StoryContinuityResult>;
+  loadNewMaterial: (bookId: string) => Promise<void>;
+  /** Weave a chapter's new material in — one metered rewrite through the craft loop. */
+  acceptMaterial: (bookId: string, chapterId: string) => Promise<StoryAcceptMaterialResult>;
+  declineMaterial: (bookId: string, chapterId: string) => Promise<void>;
   resolveContinuity: (
     bookId: string,
     findingId: string,
@@ -326,6 +334,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   exclusions: [],
   proposals: [],
   continuity: [],
+  newMaterial: [],
   corpusStats: null,
   castRegister: [],
   consent: [],
@@ -601,6 +610,12 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       ...(note ? { note } : {}),
     });
     if (res) set({ exclusions: res.exclusions, bundle: res.bundle });
+    // Excluding something files a rewrite PROPOSAL against every chapter that still contains it (72 §4.4).
+    // Refresh the list, or the proposal sits in the vault invisibly until the next mount and the exclusion
+    // reads as having done nothing.
+    if ((res?.staled ?? 0) > 0) {
+      set({ newMaterial: (await window.selfos?.storyNewMaterial({ bookId })) ?? [] });
+    }
     return res?.staled ?? 0;
   },
   unexclude: async (bookId, itemId) => {
@@ -618,6 +633,11 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     };
     // The outline AND the chapter records can both have moved, so adopt the whole fresh bundle.
     if (res.bundle) set({ bundle: res.bundle });
+    // A re-worded brief, a narrowing split or a merge files a rewrite PROPOSAL against the chapter (72
+    // §4.4). Refresh it here or the edit reads as having done nothing until the next mount.
+    if (res.ok) {
+      set({ newMaterial: (await window.selfos?.storyNewMaterial({ bookId })) ?? [] });
+    }
     return res;
   },
   editTimeline: async (bookId, edit) => {
@@ -639,6 +659,30 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     // Approve mutates the outline/chapters → adopt the fresh bundle; both actions update the pending list.
     set({ proposals: res.proposals, ...(res.bundle ? { bundle: res.bundle } : {}) });
     return res;
+  },
+  loadNewMaterial: async (bookId) => {
+    set({ newMaterial: (await window.selfos?.storyNewMaterial({ bookId })) ?? [] });
+  },
+  acceptMaterial: async (bookId, chapterId) => {
+    set({ chaptersGenerating: true });
+    try {
+      const res = (await window.selfos?.storyAcceptMaterial({ bookId, chapterId })) ?? {
+        ok: false as const,
+        reason: 'ERROR' as const,
+        message: 'SelfOS isn’t ready yet.',
+      };
+      // Only a successful rewrite clears the proposal, so a failed one can be tried again.
+      if (res.ok) {
+        await get().load();
+        set({ newMaterial: (await window.selfos?.storyNewMaterial({ bookId })) ?? [] });
+      }
+      return res;
+    } finally {
+      set({ chaptersGenerating: false });
+    }
+  },
+  declineMaterial: async (bookId, chapterId) => {
+    set({ newMaterial: (await window.selfos?.storyDeclineMaterial({ bookId, chapterId })) ?? [] });
   },
   loadContinuity: async (bookId) => {
     set({ continuity: (await window.selfos?.storyContinuity({ bookId })) ?? [] });

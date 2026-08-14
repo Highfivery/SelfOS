@@ -510,6 +510,28 @@ _All resolved with the owner on 2026-08-12:_
   (`groundSummary`, type/tier-scoped) on both call sites (auto engine + the Suggested panel), as prompt
   steering rather than a hard filter, since the planner and question-level de-dup already bound the damage
   downstream. Guarded on both paths, each verified to FAIL when the wiring is reverted.
+- 2026-08-14 — **Fix: pruning deleted the ground the planner had just named (§5.9).** Found by investigating
+  the steady state after everything is worked through. `MIN_TOPIC_SUPPORT` (2) gates a name on how many ASKS
+  sit under it — a premise that predates the planner, which names ground BEFORE anything is asked about it, so
+  planner-named ground is born at zero support and the next re-tag deletes it. Pruning only runs on a
+  `TAGGING_VERSION` bump, so nothing was broken live; it was a landmine on a routine developer action.
+  **Measured by replaying `pruneTopicMap` against the real vault:** a bump would have deleted **25 of one
+  person's 36 open emergent areas** — including the five generation was drawing on that day (Script vs
+  improvise, Fantasy vs enactment, Semi-public risk fantasy, The ask itself, Aftercare) — plus Grief over
+  estrangement, Autoimmune conditions, Financial anxiety & upbringing. Her seeded families are nearly all
+  closed, so she would have been left with almost nothing open: the exact state this spec exists to escape.
+  **The expected fix was wrong and measurement killed it:** "protect topics with a planner blurb" is useless
+  because 87/87 and 58/58 emergent topics have one. The real discriminator is inverted from the rule — the
+  noise §5.9 targets came from the per-question CLASSIFIER, so each carries exactly ONE ask, while live
+  planned ground carries ZERO. Zero asks is not evidence of noise, it is evidence of not-yet-used. Pruning now
+  keeps a zero-ask topic and still drops a one-ask one. Re-measured after: Angel 111 → 111 topics, **0 of 36**
+  open areas lost (was 25); Ben drops 6 instead of 11, losing only three one-ask names of the
+  "Where a value came from" shape — precisely what the rule is for. Honest trade recorded in the code: a name
+  orphaned by an EARLIER pass also has zero asks and now survives, since without a `createdAt` on `Topic`
+  nothing distinguishes it from ground planned minutes ago. Both guards verified to FAIL when reverted; the
+  #440 adoption guard was rewritten around a one-ask fixture, since its zero-ask half is now the fix.
+  **Lesson: a support threshold measures the PAST, so it silently deletes anything created ahead of use — when
+  a rule counts evidence, check what the system now creates before that evidence exists.**
 - 2026-08-13 — **Fix: an intimacy EMAIL could nudge toward ground the person had exhausted (§5.3).** Introduced
   by the change below and caught going to write its E2E: the caller omitted `openGround` when nothing was open
   (`...(openIntimacy.length ? {…} : {})`) and the consumer fell back to the seeded families

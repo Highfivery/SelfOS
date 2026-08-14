@@ -1098,13 +1098,17 @@ export async function applyFoundations(
   // Fold the generated chronology into the stored one, KEEPING every hand-edited moment (§16.2): a person
   // who corrected a date must never have that correction quietly reverted by a later pass. This is the
   // promise `TimelineEvent.userEdited` has always encoded — until now nothing honoured it.
-  await saveTimeline(
+  // The chronology the pass folds into is the LIFE one (72 §3.8): a generated moment is a fact about the
+  // person, so it belongs where every book can see it — and, just as importantly, so the life's tombstones
+  // apply. Merging against the book's own file would let a moment the person deleted be re-proposed by the
+  // next book they start.
+  const { savePersonTimeline, readBookTimeline } = await import('./personTimeline');
+  await savePersonTimeline(
     fs,
     key,
     personId,
-    bookId,
     mergeGeneratedTimeline(
-      await getTimeline(fs, key, personId, bookId),
+      await readBookTimeline(fs, key, personId, bookId),
       foundations.timeline.events,
     ),
   );
@@ -1140,7 +1144,14 @@ export async function readBookBundle(
   return {
     manifest,
     outline: await getOutline(fs, key, personId, bookId),
-    timeline: await getTimeline(fs, key, personId, bookId),
+    // The bundle carries the LIFE chronology plus this book's own moments (72 §3.8). Opening a book is
+    // also where the one-time migration runs — a single writer, unlike a read. Imported lazily because
+    // `personTimeline` imports this module.
+    timeline: await (async () => {
+      const m = await import('./personTimeline');
+      await m.migrateBookTimeline(fs, key, personId, bookId);
+      return m.readBookTimeline(fs, key, personId, bookId);
+    })(),
     chapters: await listChapters(fs, key, personId, bookId),
   };
 }

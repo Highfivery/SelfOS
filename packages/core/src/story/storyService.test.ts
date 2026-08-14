@@ -1,3 +1,4 @@
+import { readBookTimeline } from './personTimeline';
 import { describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
@@ -120,7 +121,8 @@ describe('storyService — persistence (64 §5.7)', () => {
     expect(manifest?.essence).toBe('A quiet man.');
     expect(manifest?.status).toBe('outlining'); // not yet drafting — awaits approval
     expect((await getOutline(fs, key, 'me', book.id))?.approved).toBe(false);
-    expect((await getTimeline(fs, key, 'me', book.id))?.events[0]?.label).toBe('Born');
+    // The chronology is the person's now (72 §3.8), read through the book's merged view.
+    expect((await readBookTimeline(fs, key, 'me', book.id)).events[0]?.label).toBe('Born');
   });
 
   it('createBook marks a blank title auto (placeholder) and a supplied title the person’s own (§3.2)', async () => {

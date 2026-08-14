@@ -90,10 +90,14 @@ export function ShareReadersPanel({
     await doPublish();
   };
 
-  // Warn-not-block (§17.5): people who'd appear under their REAL name (not OK-with-it, no pseudonym).
-  const unconsented = consent
-    .filter((p) => p.consent !== 'granted' && !p.pseudonym?.trim())
-    .map((p) => p.name);
+  // Who this book names, before you share it (72 §3.9). This used to be a warning about people not yet
+  // "marked OK with it" — a state the app tracked and never acted on, which made sharing feel like it
+  // needed permission it was never actually checking. Naming them plainly is the honest version: the
+  // reader will see these people, and two of them under a different name.
+  const named = consent.map((p) => p.name);
+  const renamed = consent
+    .filter((p) => p.pseudonym?.trim())
+    .map((p) => `${p.name} → ${p.pseudonym}`);
 
   const readerIds = new Set(readers.map((r) => r.personId));
   const candidates = people.filter((p) => p.id !== authorPersonId && !readerIds.has(p.id));
@@ -108,13 +112,12 @@ export function ShareReadersPanel({
           Sharing updates re-publishes those chapters.
         </Text>
         {notice ? <Banner tone="info">{notice}</Banner> : null}
-        {unconsented.length > 0 ? (
-          <Banner tone="warning">
-            {unconsented.length === 1
-              ? `${unconsented[0]} appears`
-              : `${unconsented.length} people appear`}{' '}
-            under their real name and you haven’t marked them OK with it. You can still share — or
-            set a pseudonym or their consent under “People in your book” in Settings.
+        {named.length > 0 ? (
+          <Banner tone="info">
+            Your readers will see {named.length === 1 ? 'this person' : 'these people'}:{' '}
+            {named.join(', ')}.
+            {renamed.length > 0 ? ` Appearing under a different name: ${renamed.join(', ')}.` : ''}{' '}
+            Change how someone appears under “People”.
           </Banner>
         ) : null}
         {/* Publish-diff preview (§18.2): what a re-publish would change for readers vs the current head. */}

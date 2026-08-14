@@ -80,9 +80,7 @@ export function PeopleTab({ bookId }: { bookId: string }): JSX.Element {
                   onBlur={() => {
                     const next = draft.trim();
                     if (next === (p.pseudonym ?? '')) return;
-                    // The consent value is passed through untouched: it is on its way out (§5.9) and this
-                    // surface no longer asks for it, but a write must not silently reset what is stored.
-                    void setConsent(bookId, p.name, p.consent, next);
+                    void setConsent(bookId, p.name, next);
                   }}
                 />
               </div>

@@ -9673,7 +9673,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(history.versions.some((v) => v.reason === 'lineEdit')).toBe(true);
   });
 
-  it('story: the consent center lists named people + sets a pseudonym, refused without story.own (§17.5)', async () => {
+  it('books: the People read lists named people + renames one, refused without story.own (72 §4.7)', async () => {
     const { bridge } = await freshOwner();
     const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
     const owner = await bridge.getActivePerson();
@@ -9696,25 +9696,23 @@ describe('createCoreBridge — Together (58) foundation', () => {
     });
     const bookId = book!.id;
     const register = await bridge.storyConsent({ bookId });
-    expect(register.find((p) => p.name === 'Angel')).toMatchObject({ consent: 'unknown' });
+    expect(register.find((p) => p.name === 'Angel')).toMatchObject({ name: 'Angel' });
 
     const after = await bridge.storySetConsent({
       bookId,
       name: 'Angel',
-      consent: 'declined',
       pseudonym: 'A.',
     });
     expect(after.find((p) => p.name === 'Angel')).toMatchObject({
-      consent: 'declined',
       pseudonym: 'A.',
     });
 
-    // A Guest (no story.own) gets nothing and can't set consent — the bridge is the trust boundary.
+    // A Guest (no story.own) gets nothing and can't rename anyone — the bridge is the trust boundary.
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
     expect(await bridge.storyConsent({ bookId })).toEqual([]);
-    expect(await bridge.storySetConsent({ bookId, name: 'Angel', consent: 'granted' })).toEqual([]);
+    expect(await bridge.storySetConsent({ bookId, name: 'Angel', pseudonym: 'A.' })).toEqual([]);
   });
 
   it('story: continuity + line-edit refused without story.own (§17.3)', async () => {

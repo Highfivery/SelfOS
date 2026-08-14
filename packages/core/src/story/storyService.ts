@@ -1,5 +1,8 @@
 import { decryptBytes, encryptBytes, isEncryptedEnvelope } from '../crypto';
-import { pathSegment } from '../pathSafety';
+import { isSafePairKey, pathSegment, UnsafePathSegmentError } from '../pathSafety';
+
+/** Pair-owned books live beside the pair's agreements ledger (spec 58 §4.1). */
+const PAIRS_ROOT = 'together/pairs';
 import { z } from 'zod';
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
@@ -60,8 +63,19 @@ import { mergeGeneratedTimeline } from './storyTimeline';
 // resolves to `/tmp/x` and the app happily `mkdir`s and writes an encrypted file there. The bridge is the
 // trust boundary for permission; this is the trust boundary for location (the `isMediaPath` habit, which
 // questionnaire media and dream images already had and books did not).
-function booksDir(personId: string): string {
-  return `people/${pathSegment(personId)}/story/books`;
+//
+// The first argument is an OWNER REF, not always a person: a pair-owned book ("Our Story", 72 §5.8) lives
+// under `together/pairs/<pairKey>/books/` — the spec-58 pair-storage precedent — and is addressed by passing
+// its `pairKey` here. Resolving the root from the ref's SHAPE (a pairKey is two ids joined by `~`, which is
+// not a legal id) is what let shared storage land without touching ~340 call sites: every function keeps
+// its `(fs, key, ownerRef, bookId)` signature and simply passes the ref through. The bridge decides which
+// ref a caller is allowed to use; nothing below here does.
+export function booksDir(ownerRef: string): string {
+  if (ownerRef.includes('~')) {
+    if (!isSafePairKey(ownerRef)) throw new UnsafePathSegmentError(ownerRef);
+    return `${PAIRS_ROOT}/${ownerRef}/books`;
+  }
+  return `people/${pathSegment(ownerRef)}/story/books`;
 }
 function bookDir(personId: string, bookId: string): string {
   return `${booksDir(personId)}/${pathSegment(bookId)}`;

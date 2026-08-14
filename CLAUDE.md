@@ -498,6 +498,19 @@ A running log of durable decisions and feedback captured into the project config
   commit on the SHARED tree (and merged as #408) — the guard was extracted into a `git worktree` off
   origin/main, which is the only safe way to work while another session holds the checkout.**
 
+- 2026-08-14 — **Follow-up (never-asked ground gets a shelf life; SPEC 71 §5.9; on `fix/topic-createdat`, in a
+  git WORKTREE).** Completes the trade the fix below made: keeping every zero-ask topic forever recreates the
+  map bloat §5.9 exists to prevent. `Topic` gains additive-optional **`createdAt`** (stamped at mint) and
+  pruning ages out never-asked ground after **90 days** (`UNASKED_TOPIC_TTL_DAYS`, deliberately the same
+  horizon as `DORMANT_DAYS` so the model has ONE answer for "when do we reconsider this area"). A one-ask name
+  still dies immediately — that is the classifier noise the rule targets. **Absence = GRANDFATHERED is the
+  load-bearing part**: every topic in every existing vault predates the field, so treating "no birthday" as
+  old would delete exactly the live ground the fix below protects. Verified on the real vault: 0 of 111 and 0
+  of 82 topics carry a birthday, so the change is a NO-OP for existing data. Guard verified to fail BOTH ways
+  (expiry removed; missing-birthday-treated-as-old). **Process: done in a `git worktree` off origin/main after
+  the owner (rightly, forcefully) called out that I had been branch-switching the SHARED checkout while a
+  concurrent session worked in it — a worktree is the only safe way to work alongside another session, and
+  "I'll use one going forward" is worth nothing if the next slice ignores it.**
 - 2026-08-14 — **Fix (topic-map pruning deleted the ground the planner had just named; SPEC 71 §5.9; on
   `fix/prune-keeps-unasked-ground`).** Found by investigating the post-saturation steady state, not from a
   report. `MIN_TOPIC_SUPPORT` gates an emergent name on how many ASKS sit under it — a premise older than the

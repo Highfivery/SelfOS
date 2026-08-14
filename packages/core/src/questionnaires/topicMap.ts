@@ -43,6 +43,17 @@ export const COOLDOWN_DAYS = 14;
 export const DORMANT_DAYS = 90;
 
 /**
+ * How long ground the planner NAMED but nothing has been asked about survives before pruning reclaims it.
+ *
+ * Zero asks means "not yet used", which is why pruning keeps such a topic at all (2026-08-13) — but kept
+ * forever it becomes the map bloat §5.9 exists to prevent, just with a nicer provenance. Ground planned and
+ * still untouched a season later is a backlog item nobody reached, so it goes and can be named again if it
+ * still matters. Matches `DORMANT_DAYS` on purpose: it is the same horizon at which worked ground becomes
+ * revisitable, so "how long before we reconsider this area" has ONE answer in the model.
+ */
+export const UNASKED_TOPIC_TTL_DAYS = 90;
+
+/**
  * How long a topic-level "Leave alone" holds before it lapses (spec 71 §5.8, owner decision 2026-08-12).
  *
  * Lives here rather than beside the other feedback constants: `personalizationProfile` already imports this
@@ -99,6 +110,10 @@ export const TopicSchema = z.object({
   /** One sentence saying what this ground is, written when the topic is minted from the planner's own angle
    *  for it (spec 71 §5.9). Optional: a pre-blurb topic simply shows none rather than a placeholder. */
   blurb: z.string().optional(),
+  /** When this name was first minted. Lets pruning tell ground planned minutes ago from ground planned
+   *  months ago and never asked about — the two are identical on ask count alone. Absent on every topic that
+   *  predates the field, and absence means GRANDFATHERED: never expired for age. */
+  createdAt: z.string().optional(),
 });
 export type Topic = z.infer<typeof TopicSchema>;
 
@@ -300,6 +315,8 @@ export interface TopicProposal {
 export function mintTopics(
   topics: readonly Topic[],
   proposals: readonly TopicProposal[],
+  /** Stamped onto NEWLY minted topics only — an existing one keeps whatever birthday it already had. */
+  now: Date = new Date(),
 ): { topics: Topic[]; resolved: string[] } {
   const out = ensureTopics(topics);
   const resolved: string[] = [];
@@ -354,6 +371,7 @@ export function mintTopics(
       lifeArea,
       seeded: false,
       aliases: [],
+      createdAt: now.toISOString(),
       ...(p.parentTopicId ? { parentTopicId: p.parentTopicId } : {}),
       ...(p.blurb?.trim() ? { blurb: p.blurb.trim() } : {}),
     });
@@ -386,6 +404,8 @@ export function pruneTopicMap(
    *  coverage rows has NO asks of its own yet — it is real ground the person can see and steer, so pruning it
    *  for lack of support would delete it on the next re-tag and silently restore the bare-row bug. */
   protectedIds: ReadonlySet<string> = new Set(),
+  /** Used only to age out never-asked ground (`UNASKED_TOPIC_TTL_DAYS`). */
+  now: Date = new Date(),
 ): { topics: Topic[]; entries: AskLedgerEntry[]; dropped: number; merged: number } {
   const all = ensureTopics(topics);
   const counts = deriveTopicStats(ledger);
@@ -427,13 +447,23 @@ export function pruneTopicMap(
   // open. The noise this rule exists to kill looks different: it came from the per-question classifier, so
   // each of those names carried exactly ONE ask. Gating on `askedCount >= 1` separates them cleanly.
   //
-  // Honest trade: a name orphaned by an EARLIER pass also has zero asks, so it survives too. Without a
-  // `createdAt` on `Topic` there is nothing to tell it apart from ground planned five minutes ago, and on real
-  // data the zero-ask population is deliberate ground ("Aftercare", "Grief over estrangement"), not debris.
+  // Never-asked ground is kept while it is still plausibly a backlog item, and aged out once it isn't
+  // (`UNASKED_TOPIC_TTL_DAYS`). `createdAt` is what makes that distinguishable at all — on ask count alone,
+  // ground planned five minutes ago and ground planned last spring look identical. A topic with NO birthday
+  // predates the field and is GRANDFATHERED: never expired for age, since assuming it is old would delete
+  // exactly the live ground the 2026-08-13 fix exists to protect (25 of one real person's 36 open areas).
+  const expired = (t: Topic): boolean => {
+    if (!t.createdAt) return false;
+    const born = Date.parse(t.createdAt);
+    if (Number.isNaN(born)) return false; // unreadable birthday → treat as grandfathered, never guess
+    return now.getTime() - born >= UNASKED_TOPIC_TTL_DAYS * DAY_MS;
+  };
   const survivors = kept.filter((t) => {
     if (t.seeded || protectedIds.has(t.topicId)) return true;
     const asked = support.get(t.topicId) ?? 0;
-    return asked === 0 || asked >= MIN_TOPIC_SUPPORT;
+    if (asked >= MIN_TOPIC_SUPPORT) return true;
+    // One ask and never repeated is the classifier noise this rule was written for — it goes regardless of age.
+    return asked === 0 && !expired(t);
   });
   const surviving = new Set(survivors.map((t) => t.topicId));
   // Strip dropped names from the ledger. Their family tag remains, so the ask still counts toward

@@ -1,4 +1,5 @@
 import type { FileSystem } from '../host';
+import { isSafeSegment } from '../pathSafety';
 import { uuid } from '../id';
 import { TogetherSuggestionSchema, type TogetherSuggestion } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
@@ -10,9 +11,6 @@ import { getTogetherGuide } from './togetherCatalog';
 // partners see it); ONE writer (the coach turn's device). It NEVER auto-acts — the renderer surfaces an
 // explicit action (start the exercise / open a check-in). Same-shape as the message store, so no second writer.
 
-function isSafeSegment(s: string): boolean {
-  return /^[A-Za-z0-9_-]+$/.test(s);
-}
 function suggestionsDir(sessionId: string): string {
   return `together/sessions/${sessionId}/suggestions`;
 }

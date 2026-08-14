@@ -1,4 +1,5 @@
 import type { FileSystem } from '../host';
+import { isSafeSegment, isSafePairKey } from '../pathSafety';
 import { uuid } from '../id';
 import {
   PULSE_METRICS,
@@ -22,13 +23,6 @@ import { pairKeyFor } from './togetherService';
 const clamp01 = (n: number): number => Math.max(0, Math.min(1, n));
 const clampUnitToUnitInterval = (n: number): number => clamp01((n + 1) / 2); // ±1 dyad metric → 0..1
 
-function isSafeSegment(s: string): boolean {
-  return /^[A-Za-z0-9_-]+$/.test(s);
-}
-function isSafePairKey(pairKey: string): boolean {
-  const parts = pairKey.split('~');
-  return parts.length === 2 && parts.every(isSafeSegment);
-}
 function pulseDir(personId: string, pairKey: string): string {
   return `people/${personId}/together/pulse/${pairKey}`;
 }

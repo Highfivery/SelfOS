@@ -547,3 +547,84 @@ describe('archiveDraftState via rewriteBookFromScratch (64 §13.9)', () => {
     expect(kept).toEqual(stampsRun.slice(1)); // the oldest archive dropped; the newest 3 kept
   });
 });
+
+/**
+ * The traversal guard. `join(vaultDir, path)` NORMALIZES `..` rather than refusing it, so an unguarded
+ * `bookId` from the renderer (a plain `z.string().min(1)` on every `story:*` input) escapes the vault:
+ * `people/me/story/books/../../../../../../tmp/x/book.enc` resolves to `/tmp/x/book.enc`, and a write
+ * there would `mkdir` the directory and put an encrypted file in it.
+ *
+ * Verified to FAIL without `pathSegment` in the path builders — the writes land under a `..`-normalized
+ * key instead of throwing.
+ */
+describe('book paths refuse an unsafe id (traversal defense)', () => {
+  const escapes = '../../../../../../tmp/x';
+
+  it('refuses to READ a book at a traversing id', async () => {
+    const fs = memFileSystem();
+    await expect(getBook(fs, key, 'me', escapes)).rejects.toThrow(/unsafe id/i);
+  });
+
+  it('refuses to WRITE anything at a traversing id — nothing is created', async () => {
+    const fs = memFileSystem();
+    await expect(
+      saveChapter(fs, key, 'me', escapes, {
+        id: 'c1',
+        schemaVersion: 1,
+        partId: 'p1',
+        order: 0,
+        title: 'T',
+        markdown: 'x',
+        revision: 1,
+        status: 'new',
+        sourceSignature: '',
+        provenance: [],
+        protectedBlocks: [],
+        pinnedQuotes: [],
+        imagePlacements: [],
+      }),
+    ).rejects.toThrow(/unsafe id/i);
+    // Nothing was written anywhere, under any key.
+    expect(await fs.list('')).toEqual([]);
+  });
+
+  it('refuses a traversing CHAPTER id, not just the book id', async () => {
+    const fs = memFileSystem();
+    const book = await createBook(fs, key, {
+      personId: 'me',
+      type: 'biography',
+      title: 'B',
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
+      now: new Date('2026-08-14T00:00:00.000Z'),
+    });
+    await expect(getChapter(fs, key, 'me', book.id, '../../../../../../tmp/y')).rejects.toThrow(
+      /unsafe id/i,
+    );
+  });
+
+  it('still reads and writes a normal book', async () => {
+    const fs = memFileSystem();
+    const book = await createBook(fs, key, {
+      personId: 'me',
+      type: 'biography',
+      title: 'Fine',
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
+      now: new Date('2026-08-14T00:00:00.000Z'),
+    });
+    expect((await getBook(fs, key, 'me', book.id))?.title).toBe('Fine');
+  });
+});

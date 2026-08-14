@@ -53,16 +53,16 @@ describe('provenanceTarget', () => {
 
   // §15.1/#288: memories are person-level and survive a book delete, so the link must never point inside the
   // book Studio — the old `/story/interview` target dead-ended on "Begin your book" once the last book was gone.
-  it('deep-links a memory to the book-independent /story/memories route', () => {
+  it('deep-links a memory to the book-independent /books/memories route', () => {
     const t = provenanceTarget(
       insight({ source: 'memory', provenance: { memoryId: 'm1', at: 'now' } }),
     );
-    expect(t).toMatchObject({ label: 'From a memory you shared', to: '/story/memories?memory=m1' });
-    expect(t.to.startsWith('/story/interview')).toBe(false);
+    expect(t).toMatchObject({ label: 'From a memory you shared', to: '/books/memories?memory=m1' });
+    expect(t.to.startsWith('/books/interview')).toBe(false);
   });
 
   it('falls back to the memories route when the insight carries no memory id', () => {
-    expect(provenanceTarget(insight({ source: 'memory' })).to).toBe('/story/memories');
+    expect(provenanceTarget(insight({ source: 'memory' })).to).toBe('/books/memories');
   });
 
   it('names how many moments a merged insight folds in', () => {

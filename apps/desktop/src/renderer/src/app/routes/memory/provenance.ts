@@ -90,8 +90,8 @@ export function provenanceTarget(insight: Insight): ProvenanceTarget {
     return {
       label,
       to: insight.provenance.memoryId
-        ? `/story/memories?memory=${encodeURIComponent(insight.provenance.memoryId)}`
-        : '/story/memories',
+        ? `/books/memories?memory=${encodeURIComponent(insight.provenance.memoryId)}`
+        : '/books/memories',
       source: { kind: 'other' },
     };
   }

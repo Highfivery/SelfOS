@@ -391,7 +391,7 @@ export function useNotificationSources(conflicts: string[]): void {
         signature: book.bookId, // stable per book — a dismissal without opening stays dismissed
         title: `${book.authorName} shared their story`,
         body: `“${book.title}” is ready for you to read.`,
-        action: { type: 'navigate', to: '/story' },
+        action: { type: 'navigate', to: '/books' },
       });
     }
 

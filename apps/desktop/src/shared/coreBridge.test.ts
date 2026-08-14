@@ -8724,6 +8724,51 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(await bridge.storyGet({ bookId })).toBeNull();
   });
 
+  it('books: the shelf counts each book, and a person without story.own gets nothing (72 §3.1)', async () => {
+    const { bridge } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+
+    expect(await bridge.storyShelf()).toEqual([]);
+
+    const book = await bridge.storyCreate({
+      type: 'biography',
+      title: 'Still Running',
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
+    });
+    const bookId = book!.id;
+    const gen = await bridge.storyGenerateFoundations({ bookId });
+    expect(gen.ok).toBe(true);
+    if (!gen.ok) return;
+    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+
+    const shelf = await bridge.storyShelf();
+    expect(shelf).toHaveLength(1);
+    // The outline says how many chapters the book means to have; nothing is written yet.
+    expect(shelf[0]).toMatchObject({
+      id: bookId,
+      title: 'Still Running',
+      written: 0,
+      lifecycle: 'living',
+    });
+    expect(shelf[0]!.total).toBeGreaterThan(0);
+    // Counted in the type's own unit, so the card never has to show a bare percentage.
+    expect(shelf[0]!.unit).toEqual({ one: 'chapter', many: 'chapters' });
+
+    // The trust boundary is the bridge, not the shelf UI — a Guest has no story.own.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.storyShelf()).toEqual([]);
+  });
+
   it('story: rewrite from scratch resets the book to a fresh pre-draft state, keeping the manifest (§13.6.6)', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });

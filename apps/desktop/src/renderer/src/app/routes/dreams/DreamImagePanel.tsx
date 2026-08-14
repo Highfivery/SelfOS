@@ -7,7 +7,7 @@ import { useDreamStore } from '../../../stores/dreamStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useImagePrefsStore } from '../../../stores/imagePrefsStore';
 import { useSetting } from '../../../settings/useSetting';
-import { ImageProgress } from '../story/ImageProgress';
+import { ImageProgress } from '../books/ImageProgress';
 import {
   AdminOnlyBadge,
   Banner,

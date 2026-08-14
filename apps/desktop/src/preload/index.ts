@@ -245,6 +245,7 @@ const bridge: SelfosBridge = {
   autoCheckinsSetBlock: (input) => ipcRenderer.invoke(IpcChannels.autoCheckinsSetBlock, input),
   storyBookTypes: () => ipcRenderer.invoke(IpcChannels.storyBookTypes),
   storyList: () => ipcRenderer.invoke(IpcChannels.storyList),
+  storyShelf: () => ipcRenderer.invoke(IpcChannels.storyShelf),
   storyCreate: (input) => ipcRenderer.invoke(IpcChannels.storyCreate, input),
   storyGet: (input) => ipcRenderer.invoke(IpcChannels.storyGet, input),
   storyGenerateFoundations: (input) =>

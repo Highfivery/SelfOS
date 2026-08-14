@@ -89,6 +89,19 @@ shelf beneath. A card opens the workspace; **+ New book** opens the type picker.
 A person with no books sees the invitation (64 §13.3, retained): the promise, the real "drawn from"
 counts, the privacy line.
 
+**The URL names the book** (as built, P5b). `/books` is the shelf, `/books/<bookId>` the workspace,
+`/books/<bookId>/<tab>` a tab, `/books/<bookId>/read[/<chapterId>]` the reader; `/books/memories` is
+reserved for the person-level memory collection, which belongs to no book (§15.1 of 64). Before the
+shelf, a single book was implied and `/books/read` meant "read the only one" — an assumption that
+stops being true at two books. `/story/*` redirects, so links minted before the rename still land.
+The store is what renders and the URL is what deep-links: both are mirrored, because a surface
+rendered without a Route (component tests) has no params to read.
+
+The counts come from a dedicated shelf read (`listShelf`, §5.x) rather than the manifest — a count
+maintained at write time is a count that can drift from the files, and a shelf that lies about a book
+is worse than one that takes a moment. `total` falls back to what is written when a book has no
+outline yet, so a book mid-commission reads as whole rather than "0 of 0".
+
 ### 3.2 Choosing a kind of book
 
 Eight types in two groups, split by `truthMode`:
@@ -100,8 +113,12 @@ Eight types in two groups, split by `truthMode`:
 **Reimagined** (`truthMode: 'fictionalized'` — real feelings, invented events)
 `childrens` · `dreamBook` · `erotica` (18+)
 
-Each card names what it draws on, its shape, and what its interview asks about. `erotica` requires the
-shared 18+ acknowledgement from **both** participants (§8.4). Picking a type that needs a subject —
+Each card names what it draws on, its shape, and what its interview asks about — all three declared by
+the type itself (`BookType.summary`), so a type added later describes itself without touching this
+screen. `erotica` requires the shared 18+ acknowledgement from **both** participants (§8.4); the card
+is **pickable** and the gate is applied at the commission, where the acknowledgement can actually be
+given — disabling the card would send someone to Settings mid-flow to unlock what they just chose, and
+the bridge re-enforces the gate regardless (as built, P5b). Picking a type that needs a subject —
 `portrait`, `ourStory` — asks who, from the People graph, before the commission step.
 
 ### 3.3 Commission

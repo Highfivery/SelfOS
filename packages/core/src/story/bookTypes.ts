@@ -165,6 +165,12 @@ export interface BookType {
   interview: BookInterviewFramework;
   /** Content gates — `adult` reuses the shared 18+ ack when a future type needs it. */
   gates: { adult: boolean };
+  /**
+   * The one-line answer to "what IS this kind of book?", shown on its picker card (§3.2). Declared per
+   * type rather than derived, because only the type knows what its own spine and framework mean in words a
+   * person choosing between eight of them can actually compare.
+   */
+  summary: { drawsOn: string; shape: string; asksAbout: string };
   /** Whether the prose may depart from the record (§4.1). Drives a governing clause in the system prompt. */
   truthMode: BookTruthMode;
   /** What shape this kind of book takes (§4.1) — read by the foundations pass. */
@@ -470,6 +476,11 @@ export const BIOGRAPHY_BOOK_TYPE: BookType = {
   gates: { adult: false },
   // A biography is the told-true case in every dimension: it never invents, it is shaped by the eras of a
   // life, and the people in it are themselves.
+  summary: {
+    drawsOn: 'everything on record',
+    shape: 'life eras',
+    asksAbout: 'scenes, turning points, the people in them',
+  },
   truthMode: 'true',
   spine: { kind: 'eras' },
   castPolicy: 'realNames',
@@ -512,6 +523,11 @@ export const MEMOIR_BOOK_TYPE: BookType = {
   stylePresets: BIOGRAPHY_BOOK_TYPE.stylePresets,
   interview: BIOGRAPHY_BOOK_TYPE.interview,
   gates: { adult: false },
+  summary: {
+    drawsOn: 'one bounded era',
+    shape: '8–12 chapters',
+    asksAbout: 'that era, and nothing outside it',
+  },
   truthMode: 'true',
   spine: { kind: 'span' },
   castPolicy: 'realNames',
@@ -567,6 +583,11 @@ export const YEAR_IN_REVIEW_BOOK_TYPE: BookType = {
   stylePresets: BIOGRAPHY_BOOK_TYPE.stylePresets,
   interview: BIOGRAPHY_BOOK_TYPE.interview,
   gates: { adult: false },
+  summary: {
+    drawsOn: 'one year',
+    shape: '5–8 chapters',
+    asksAbout: 'what turned, what closed',
+  },
   truthMode: 'true',
   spine: { kind: 'span' },
   castPolicy: 'realNames',
@@ -599,6 +620,11 @@ export const PORTRAIT_BOOK_TYPE: BookType = {
   stylePresets: BIOGRAPHY_BOOK_TYPE.stylePresets,
   interview: BIOGRAPHY_BOOK_TYPE.interview,
   gates: { adult: false },
+  summary: {
+    drawsOn: 'one person you love',
+    shape: 'themed chapters',
+    asksAbout: 'them, not you',
+  },
   truthMode: 'true',
   spine: { kind: 'vignettes' },
   castPolicy: 'realNames',
@@ -658,6 +684,11 @@ export const DREAM_BOOK_TYPE: BookType = {
   stylePresets: BIOGRAPHY_BOOK_TYPE.stylePresets,
   interview: BIOGRAPHY_BOOK_TYPE.interview,
   gates: { adult: false },
+  summary: {
+    drawsOn: 'your dream journal',
+    shape: 'vignettes',
+    asksAbout: 'recurring images and their weather',
+  },
   truthMode: 'fictionalized',
   spine: { kind: 'vignettes' },
   castPolicy: 'renamed',
@@ -716,6 +747,11 @@ export const EROTICA_BOOK_TYPE: BookType = {
   stylePresets: BIOGRAPHY_BOOK_TYPE.stylePresets,
   interview: BIOGRAPHY_BOOK_TYPE.interview,
   gates: { adult: true },
+  summary: {
+    drawsOn: 'what you’ve told it about desire',
+    shape: 'vignettes',
+    asksAbout: 'fantasy, boundaries, what you want',
+  },
   truthMode: 'fictionalized',
   spine: { kind: 'vignettes' },
   castPolicy: 'renamed',

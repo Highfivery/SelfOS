@@ -519,7 +519,7 @@ describe('useNotificationSources — story-shared (64 §3.6)', () => {
         .notifications.find((x) => x.coalesceKey === 'story-shared:auth1:b1');
       expect(n).toBeDefined();
       expect(n?.title).toBe('Angel shared their story');
-      expect(n?.action).toEqual({ type: 'navigate', to: '/story' });
+      expect(n?.action).toEqual({ type: 'navigate', to: '/books' });
     });
   });
 

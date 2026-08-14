@@ -1,4 +1,5 @@
 export * from './bookModel';
+export * from './bookShelf';
 export * from './bookTypes';
 export * from './storyCorpus';
 export * from './storyCraft';

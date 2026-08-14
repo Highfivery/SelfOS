@@ -23,6 +23,21 @@ describe('BookType registry (64)', () => {
     expect(listBookTypes()).toBe(BOOK_TYPES);
   });
 
+  it('every type says what it draws on, its shape, and what it asks about (72 §3.2)', () => {
+    // The picker card is built entirely from this, so a type that ships without it describes itself as
+    // three blanks — and the person choosing between six of them has nothing to compare.
+    for (const t of listBookTypes()) {
+      expect(t.summary.drawsOn.length, `${t.id} drawsOn`).toBeGreaterThan(0);
+      expect(t.summary.shape.length, `${t.id} shape`).toBeGreaterThan(0);
+      expect(t.summary.asksAbout.length, `${t.id} asksAbout`).toBeGreaterThan(0);
+    }
+  });
+
+  it('splits into both truth modes — the picker groups by it, so neither group may be empty', () => {
+    const modes = new Set(listBookTypes().map((t) => t.truthMode));
+    expect(modes).toEqual(new Set(['true', 'fictionalized']));
+  });
+
   it('returns undefined for an unknown type (never throws)', () => {
     expect(getBookType('notARealBookType')).toBeUndefined();
   });

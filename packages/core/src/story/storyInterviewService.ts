@@ -43,7 +43,7 @@ import {
 import { getResponse } from '../questionnaires/responseService';
 import { isLiving } from './storyEditions';
 import { queryUsage } from '../usage';
-import { MCADAMS_SCENES, getBookType } from './bookTypes';
+import { BIOGRAPHY_BOOK_TYPE, getBookType, type BookInterviewFramework } from './bookTypes';
 import { budgetCorpus } from './corpusBudget';
 import { buildStoryCorpus, type StoryCorpus } from './storyCorpus';
 import { buildBiographerSystem, buildGapPassUserMessage } from './storyPromptBuilder';
@@ -189,14 +189,24 @@ export async function mintStoryCheckInFromTodo(
 
 // --- The gap engine: completeness + the gap pass (§3.6/§3.7/§5.5) ----------------------------------------
 
-/** How far along a story is, derived deterministically from the framework coverage (no AI). The 12 dimensions:
- *  the eight McAdams scenes + life-chapters + challenges + ideology + future-script. Owner decision (2026-07-16):
- *  a QUALITATIVE stage + a subtle ratio, never a bare percentage. */
-export function computeStoryCompleteness(coverage: StoryFrameworkCoverage): StoryCompleteness {
-  const total = MCADAMS_SCENES.length + 4;
+/**
+ * How far along a story is, derived deterministically from the framework coverage (no AI). The dimensions are
+ * the BOOK TYPE's own scenes plus the four standing ones (life-chapters, challenges, ideology, future-script)
+ * — 12 for a biography, whose framework carries the eight McAdams scenes. Owner decision (2026-07-16): a
+ * QUALITATIVE stage + a subtle ratio, never a bare percentage.
+ *
+ * `scenes` is read from the framework rather than imported (72 §4.1): a book type is the only thing that knows
+ * what its own interview asks about, and a picture book or a year-in-review has nothing to do with McAdams.
+ */
+export function computeStoryCompleteness(
+  coverage: StoryFrameworkCoverage,
+  framework: BookInterviewFramework = BIOGRAPHY_BOOK_TYPE.interview,
+): StoryCompleteness {
+  const sceneKeys = framework.scenes.map((sc) => sc.key as string);
+  const total = sceneKeys.length + 4;
   let covered = 0;
   if (coverage.chapters) covered += 1;
-  for (const s of MCADAMS_SCENES) if (coverage.scenes[s.key]) covered += 1;
+  for (const k of sceneKeys) if (coverage.scenes[k]) covered += 1;
   if (coverage.challenges) covered += 1;
   if (coverage.ideology) covered += 1;
   if (coverage.futureScript) covered += 1;
@@ -220,7 +230,11 @@ export async function getStoryCompleteness(
   bookId: string,
 ): Promise<StoryCompleteness> {
   const interview = await getInterviewState(fs, key, personId, bookId);
-  return computeStoryCompleteness(interview.frameworkCoverage);
+  // Score against THIS book's own framework, so a type whose interview isn't the McAdams eight isn't
+  // measured against dimensions it never asks about.
+  const book = await getBook(fs, key, personId, bookId);
+  const framework = (book && getBookType(book.type))?.interview;
+  return computeStoryCompleteness(interview.frameworkCoverage, framework);
 }
 
 const GAP_MAX_TOKENS = 3000;
@@ -279,7 +293,7 @@ export async function runGapPass(
   if (!outline || chapterCount === 0) {
     return {
       ok: true,
-      completeness: computeStoryCompleteness(interview.frameworkCoverage),
+      completeness: computeStoryCompleteness(interview.frameworkCoverage, bookType.interview),
       gaps: [],
     };
   }
@@ -321,7 +335,8 @@ export async function runGapPass(
 
   // Build the coverage from the draft, normalizing the scene keys against the fixed framework (drop invented ones).
   const scenes: Record<string, boolean> = {};
-  for (const s of MCADAMS_SCENES) scenes[s.key] = Boolean(draft.coverage?.scenes?.[s.key]);
+  for (const sc of bookType.interview.scenes)
+    scenes[sc.key] = Boolean(draft.coverage?.scenes?.[sc.key]);
   const coverage: StoryFrameworkCoverage = {
     chapters: Boolean(draft.coverage?.chapters),
     scenes,
@@ -360,7 +375,7 @@ export async function runGapPass(
 
   return {
     ok: true,
-    completeness: computeStoryCompleteness(coverage),
+    completeness: computeStoryCompleteness(coverage, bookType.interview),
     gaps,
     ...(result.usage ? { usage: result.usage } : {}),
   };

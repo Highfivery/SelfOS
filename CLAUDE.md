@@ -467,6 +467,38 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-14 — **Build (Books P6b — "Our Story", the shared two-person book; SPEC 72 §5.8/§5.10 P6 —
+  **SPEC 72 IS NOW COMPLETE**, all eight types; on `feat/books-our-story` + `-ui`, in a git WORKTREE).** The
+  spec called this its largest new build, and the reason was authorization, not storage: **until now the book
+  PATH was the authorization** — every `story:*` handler resolved the active person and built every path
+  under `people/<activePersonId>/`, so another person's book was not addressable at all and Story never
+  needed the per-book gate Together has. A pair root names two people, so that property evaporates. The gate
+  is now Together's — membership + a **LIVE `partner` edge, re-derived on every call** — which makes
+  revocation free: deleting the edge re-gates the book on the next read, no revocation step, no `sharedWith`
+  list, the book left **unreachable rather than destroyed**. **Addressing is by ref SHAPE:** a pairKey is two
+  ids joined by `~`, which is not a legal id, so ONE function (`booksDir`) resolves the root and ~340 core
+  call sites never changed. In the bridge the seam was equally precise — **the argument immediately before a
+  `bookId` IS the owner ref**, so 81 storage call sites moved by substitution with no structural change (an
+  earlier attempt to INSERT a resolution statement per handler broke on calls spanning lines; reverted).
+  **A pair is nobody's spendable identity:** `AiDeps.meterPersonId` (+ the image/photo services) splits
+  "whose data this is for" from "who pays", or the budget check looks up a person who doesn't exist and usage
+  is filed under an id no Usage screen resolves. **Owner decisions taken first:** merge both partners' full
+  corpora — **except the break-glass tier**, withheld from BOTH sides (prose the other partner reads is
+  exactly what 58's `excludeRestricted` exists for; guarded, **verified to fail**); **only the commissioner
+  may delete** (it destroys the other's copy — `commissionedBy`, guarded, verified to fail); one shared gap
+  list either partner may answer. **Found + fixed on the way (its own PR, #466): a book id from the renderer
+  escaped the vault** — `join(vaultDir, path)` NORMALIZES `..` rather than refusing it, and `storyService`
+  had no guard, so a crafted `bookId` reached `/tmp/x/book.enc`; writes `mkdir`+wrote there. Single-sourced in
+  `pathSafety.ts`, which also de-duped a hand-copied guard living in four Together services. Gate green:
+  typecheck (4 pkgs), lint, format, **2123 core + 1583 desktop + 13 relay** unit, **210 E2E** (a two-persona
+  walk: commission → the partner opens the same book → her delete is refused → his succeeds, decrypt-level).
+  Visual QA caught the two honesty gaps: the commission promised it "reads everything it knows about **you**"
+  on a book that reads both lives, and nothing anywhere said the book was shared. **Lessons: (1) when a
+  refactor spans ~100 call sites, find the one INVARIANT seam (here: the arg before `bookId`) and substitute
+  — inserting statements per handler is where a scripted migration breaks. (2) "The path is the
+  authorization" is an invisible security property: it works perfectly until one feature changes the root,
+  and then there is no gate at all, so name it before you break it.**
+
 - 2026-08-14 — **Build (Books P6a — the children's picture book; SPEC 72 §5.10 P6; on `feat/books-childrens`,
   in a git WORKTREE).** The first of the two hard types. Most of §4.1's declarative model was already there
   from P3 — the work was that three declared slots **did nothing**. **The load-bearing finding: the image

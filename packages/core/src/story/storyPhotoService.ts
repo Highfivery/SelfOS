@@ -39,7 +39,10 @@ export interface AnalyzeStoryPhotoDeps {
   claude: ClaudeClient;
   anthropicApiKey: string | null;
   claudeModel: string;
+  /** The book's owner ref — a person, or a `pairKey` for a shared book (72 §5.8). */
   personId: string;
+  /** Who the spend is billed to, when the owner ref is a pair (which has no budget of its own). */
+  meterPersonId?: string;
   bookId: string;
   imageId: string;
   now: Date;
@@ -57,6 +60,8 @@ export async function analyzeStoryPhoto(
   deps: AnalyzeStoryPhotoDeps,
 ): Promise<StoryPhotoAnalyzeResult> {
   const { fs, key, claude, anthropicApiKey, claudeModel, personId, bookId, imageId, now } = deps;
+  // Storage is addressed by `personId` (possibly a pair ref); budget + usage are always a person's.
+  const meterId = deps.meterPersonId ?? personId;
   if (!anthropicApiKey) {
     return { ok: false, reason: 'NO_KEY', message: 'Add your Claude key in Settings first.' };
   }
@@ -66,7 +71,7 @@ export async function analyzeStoryPhoto(
 
   const person = await checkBudget(fs, key, {
     scope: 'person',
-    personId,
+    personId: meterId,
     now,
     override: deps.override,
   });
@@ -108,7 +113,7 @@ export async function analyzeStoryPhoto(
     id: uuid(),
     schemaVersion: 1,
     type: 'story.vision',
-    personId,
+    personId: meterId,
     sessionId: bookId,
     model: claudeModel,
     at: now.toISOString(),

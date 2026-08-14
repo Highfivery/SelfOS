@@ -15214,6 +15214,82 @@ test('books (72 P6): commission a picture book — a hero, pages not chapters, a
   }
 });
 
+/**
+ * 72 §5.8 — the shared book, driven through the real UI by BOTH partners. The point of the type is that the
+ * same book is reachable from two sides, so a one-persona test would prove almost nothing.
+ */
+test('books (72 P6): "Our Story" is commissioned by one partner and opens for the other; only its commissioner can delete it', async () => {
+  test.setTimeout(180_000);
+  const { userData, vault, ben, angel } = await seedTogetherReady();
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Books' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Our story/ }).click();
+
+    // The partner picker offers only a live partner edge — never yourself, never a non-partner.
+    await expect(w.getByRole('option', { name: 'Angel' })).toHaveCount(1);
+    await w.getByLabel('Who it’s with').selectOption({ label: 'Angel' });
+    await w.getByRole('textbox', { name: 'Title' }).fill('The Two of Us');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'The Two of Us', level: 1 })).toBeVisible();
+
+    // It landed at the PAIR root, not in either person's own books, and records who started it.
+    const pairKey = [ben, angel].sort().join('~');
+    await expect
+      .poll(async () => (await listBooks(fs, key, pairKey)).map((b) => b.title), {
+        timeout: 30_000,
+      })
+      .toEqual(['The Two of Us']);
+    expect(await listBooks(fs, key, ben)).toEqual([]);
+    expect((await listBooks(fs, key, pairKey))[0]!.commissionedBy).toBe(ben);
+
+    // Angel opens the SAME book from her own shelf.
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('link', { name: 'Books' }).click();
+    await expect(w.getByRole('button', { name: /Open The Two of Us/ })).toBeVisible();
+    await w.getByRole('button', { name: /Open The Two of Us/ }).click();
+    await expect(w.getByRole('heading', { name: 'The Two of Us', level: 1 })).toBeVisible();
+
+    // …but deleting is not hers to do: it would destroy Ben's copy too.
+    await w.getByRole('tab', { name: 'Settings' }).click();
+    await w.getByRole('button', { name: 'Delete this book…' }).click();
+    await w.getByLabel(/Type the book’s title/).fill('The Two of Us');
+    await w.getByRole('button', { name: 'Delete forever' }).click();
+    // The bridge refuses: the book is still there, and still open in front of her.
+    await expect
+      .poll(async () => (await listBooks(fs, key, pairKey)).length, { timeout: 10_000 })
+      .toBe(1);
+
+    // Ben commissioned it, so for him the same act works.
+    await switchTogetherPerson(w, 'Ben');
+    // Straight to the book by URL — Angel's side already proved the shelf lists a shared book, and this
+    // keeps the assertion on the delete RULE rather than on re-finding a card.
+    const sharedId = (await listBooks(fs, key, pairKey))[0]!.id;
+    await w.evaluate((id) => {
+      window.location.hash = `#/books/${id}/settings`;
+    }, sharedId);
+    await expect(w.getByRole('heading', { name: 'The Two of Us', level: 1 })).toBeVisible();
+    await w.getByRole('button', { name: 'Delete this book…' }).click();
+    await w.getByLabel(/Type the book’s title/).fill('The Two of Us');
+    await w.getByRole('button', { name: 'Delete forever' }).click();
+    await expect
+      .poll(async () => (await listBooks(fs, key, pairKey)).length, { timeout: 15_000 })
+      .toBe(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('story (72): new material is a proposal you accept — the book never rewrites itself (§4.4)', async () => {
   test.setTimeout(60_000);
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });

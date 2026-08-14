@@ -2074,6 +2074,54 @@ describe('Story (64)', () => {
     expect(screen.queryByText(/length$/)).not.toBeInTheDocument();
   });
 
+  /**
+   * 72 §5.8 — the one book with a second author. Saying who is not decoration: it is the difference between
+   * a private draft and something another person is reading and writing.
+   */
+  it('a shared book says who it is shared with; a solo book says nothing of the kind', async () => {
+    const sharedType = {
+      id: 'ourStory',
+      label: 'Our story',
+      blurb: 'The two of you.',
+      truthMode: 'true' as const,
+      summary: { drawsOn: 'both lives', shape: 'how you met', asksAbout: 'the two of you' },
+      gates: { adult: false },
+      castPolicy: 'realNames' as const,
+      unit: { one: 'chapter', many: 'chapters' },
+      sharedWithPartner: true,
+      options: [],
+      structures: [],
+      stylePresets: [],
+    };
+    const base = writtenBundle('reviewed');
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve([sharedType]),
+      storyList: () =>
+        Promise.resolve([
+          { ...manifest({ status: 'ready' }), type: 'ourStory', personId: 'angel~owner-1' },
+        ]),
+      storyGet: () =>
+        Promise.resolve({
+          ...base,
+          manifest: { ...base.manifest, type: 'ourStory', personId: 'angel~owner-1' },
+        }),
+      peopleList: () =>
+        Promise.resolve([
+          {
+            id: 'angel',
+            schemaVersion: 2,
+            displayName: 'Angel',
+            isSubject: true,
+            tags: [],
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+    });
+    await renderStory();
+    expect(await screen.findByText('Shared with Angel')).toBeInTheDocument();
+  });
+
   it('a chapter book is never offered a bulk illustrate', async () => {
     installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),

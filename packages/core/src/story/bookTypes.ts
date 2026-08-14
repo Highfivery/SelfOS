@@ -197,6 +197,12 @@ export interface BookType {
   imageFraming: string;
   /** Who the book is FOR, when that changes how it must be written. Children's books only. */
   audience?: { ageFrom: number; ageTo: number; readingLevel: string };
+  /**
+   * Whether this kind of book belongs to a PAIR rather than one person (72 §5.8). Its books live at
+   * `together/pairs/<pairKey>/books/`, both partners can write and read them, and the live partner edge is
+   * the standing grant. Declared here so nothing downstream has to special-case an id.
+   */
+  sharedWithPartner?: boolean;
   /** What this type asks at commission (§4.1). Absent ⇒ nothing beyond the shared voice/style/length. */
   options?: BookTypeOption[];
   /**
@@ -989,11 +995,133 @@ export const CHILDRENS_BOOK_TYPE: BookType = {
   }),
 };
 
+/**
+ * The one book that belongs to two people (72 §5.8). Stored at the pair root, written from both lives,
+ * readable and writable by both, and re-gated on the live partner edge at every read.
+ *
+ * `truthMode: 'true'` and `castPolicy: 'realNames'` for the obvious reason — a couple's own history is the
+ * last thing that should be fictionalized or pseudonymous. Its interview asks about the two of them rather
+ * than about one life, because the McAdams scenes ("a high point", "a turning point") are questions about an
+ * individual and this book's subject is a relationship.
+ */
+export const OUR_STORY_BOOK_TYPE: BookType = {
+  id: 'ourStory',
+  label: 'Our story',
+  blurb:
+    'The story of you and your partner, written from both your lives — and both of you can write it.',
+  doctrine: tellsTrue(
+    `You are writing the true story of a COUPLE, drawn from what both of them have recorded. Its subject is the relationship, not either person: the unit of this book is what happened BETWEEN them. Give both of them their own interiority and their own version of events — where they remember a thing differently, that difference IS the material, and you write both without adjudicating. Never take a side, and never flatten two people into one agreeing voice.`,
+  ),
+  structures: [
+    {
+      id: 'chronicle',
+      label: 'From the beginning',
+      description: 'How you met, and everything after, in order.',
+      isDefault: true,
+    },
+    {
+      id: 'chapters',
+      label: 'The chapters of us',
+      description: 'The distinct eras of the relationship — each one its own part.',
+    },
+    {
+      id: 'turns',
+      label: 'The moments that turned it',
+      description: 'Built around the handful of moments that changed things.',
+    },
+  ],
+  stylePresets: BIOGRAPHY_BOOK_TYPE.stylePresets,
+  interview: {
+    framing:
+      'You are gathering the story of a relationship from the two people in it. Ask about what happened between them, not about either life on its own. Either partner may answer any question.',
+    scenes: [
+      {
+        key: 'meeting',
+        label: 'How it began',
+        prompt: 'The first time you met — what actually happened, as you remember it?',
+      },
+      {
+        key: 'knew',
+        label: 'When you knew',
+        prompt: 'When did you know this was going to be something? What made you know it?',
+      },
+      {
+        key: 'hardest',
+        label: 'The hardest stretch',
+        prompt: 'A hard stretch you came through together. What was it, and what got you through?',
+      },
+      {
+        key: 'ordinary',
+        label: 'An ordinary day',
+        prompt:
+          'An ordinary day together that you would keep. What made it that day and not another?',
+      },
+      {
+        key: 'changed',
+        label: 'What changed you',
+        prompt: 'Something about you that is different because of them.',
+      },
+      {
+        key: 'ritual',
+        label: 'A thing you do',
+        prompt: 'Something the two of you always do — a habit, a joke, a way of ending the day.',
+      },
+    ],
+    categories: [
+      {
+        key: 'together',
+        label: 'The two of you',
+        examplePrompts: [
+          'What do you disagree about, and how does it usually go?',
+          'What does the other one do that nobody else would notice?',
+        ],
+      },
+      {
+        key: 'life',
+        label: 'The life you built',
+        examplePrompts: [
+          'Where have you lived, and which one felt like yours?',
+          'What have you made together that you are glad about?',
+        ],
+      },
+    ],
+    deepeningLadder: [
+      'Where were you both — what did the place look like?',
+      'What were you each doing with your hands, your body?',
+      'Was there an object in it? Describe it.',
+      'What did they say — as close to their words as you can get?',
+      'What did you feel then, and what do you think they felt?',
+    ],
+  },
+  gates: { adult: false },
+  summary: {
+    drawsOn: 'both of your lives',
+    shape: 'how you met, and after',
+    asksAbout: 'the two of you, not one of you',
+  },
+  truthMode: 'true',
+  spine: { kind: 'eras' },
+  castPolicy: 'realNames',
+  imageFraming: SYMBOLIC_IMAGE_FRAMING,
+  /** Marks the type whose books live at a pair root — the commission resolves the pairKey from this answer. */
+  sharedWithPartner: true,
+  options: [
+    {
+      id: 'partner',
+      label: 'Who it’s with',
+      kind: 'person',
+      help: 'Both of you can write this book, and both of you can read it.',
+      required: true,
+    },
+  ],
+};
+
 export const BOOK_TYPES: readonly BookType[] = [
   BIOGRAPHY_BOOK_TYPE,
   MEMOIR_BOOK_TYPE,
   YEAR_IN_REVIEW_BOOK_TYPE,
   PORTRAIT_BOOK_TYPE,
+  OUR_STORY_BOOK_TYPE,
   CHILDRENS_BOOK_TYPE,
   DREAM_BOOK_TYPE,
   EROTICA_BOOK_TYPE,

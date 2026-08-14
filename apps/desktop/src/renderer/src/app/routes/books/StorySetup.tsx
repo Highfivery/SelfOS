@@ -12,12 +12,13 @@ import {
 } from '../../../design-system/components';
 import { useDreamStore } from '../../../stores/dreamStore';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
+import { livePartnerEdge } from '@selfos/core/people';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryStore } from '../../../stores/storyStore';
 import styles from './Books.module.css';
 import { specimenFor } from './begin';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { BookConfig } from '@shared/schemas';
 import { Labeled } from './Labeled';
 import { LENGTH_CARDS, stylesForType, VOICE_OPTIONS } from './bookConfigOptions';
@@ -52,7 +53,22 @@ export function StorySetup({
   // A person option always names SOMEONE ELSE — the hero of your children's book, the subject of a
   // portrait ("a book about one person you love"). Offering the author themselves is never the answer,
   // and it read as a bug the moment the answer started reaching the prose.
-  const people = usePeopleStore((s) => s.people).filter((p) => p.id !== activePerson?.id);
+  const allPeople = usePeopleStore((s) => s.people).filter((p) => p.id !== activePerson?.id);
+  const relationships = usePeopleStore((s) => s.relationships);
+  const loadPeople = usePeopleStore((s) => s.load);
+  // The partner picker reads the relationship graph, so this screen loads it itself rather than relying on
+  // whichever route happened to populate the store first.
+  useEffect(() => {
+    void loadPeople();
+  }, [loadPeople]);
+  // A shared book is with a PARTNER, so its picker offers only live partner edges — the same edge the
+  // bridge re-checks at create and that keeps the book readable afterwards (72 §5.8). Offering anyone else
+  // would be a control whose only outcome is a refusal.
+  const people =
+    bookTypes.find((t) => t.id === typeId)?.sharedWithPartner && activePerson
+      ? allPeople.filter((p) => livePartnerEdge(relationships, activePerson.id, p.id))
+      : allPeople;
+
   const dreams = useDreamStore((s) => s.dreams);
   const adultAcknowledged = useGuidanceStore((s) => s.adultAcknowledged);
   const acknowledgeAdult = useGuidanceStore((s) => s.acknowledgeAdult);
@@ -67,6 +83,7 @@ export function StorySetup({
   const blockedByAge = Boolean(bookType?.gates.adult) && !adultAcknowledged;
   // Only the registers THIS kind of book has (72 §4.1). A style the type doesn't declare resolves to an
   // empty directive downstream, so offering one would silently strip the tone steering from the book.
+  const sharedWithPartner = Boolean(bookType?.sharedWithPartner);
   const styleChoices = stylesForType(bookType?.stylePresets);
   // Switching type can strip the chosen register out from under the picker — fall back to its first.
   const effectiveStyle = styleChoices.some((c) => c.value === style)
@@ -82,8 +99,11 @@ export function StorySetup({
         <Stack gap={2}>
           <Heading level={2}>Commission your book</Heading>
           <Text tone="secondary">
-            Your biographer reads everything it knows about you unless you exclude it later. Choose
-            how it should read — and see how it will sound.
+            {sharedWithPartner
+              ? // A shared book reads BOTH lives, so the line that promises what gets read has to say so —
+                // and has to be honest about the one thing it doesn't read (72 §5.8).
+                'Your biographer reads what it knows about both of you, apart from anything you marked private during onboarding. Choose how it should read — and see how it will sound.'
+              : 'Your biographer reads everything it knows about you unless you exclude it later. Choose how it should read — and see how it will sound.'}
           </Text>
         </Stack>
 

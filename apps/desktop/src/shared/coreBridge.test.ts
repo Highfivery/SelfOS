@@ -9759,6 +9759,122 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(await bridge.storySetConsent({ bookId, name: 'Mira', sheet: 'x' })).toEqual([]);
   });
 
+  /**
+   * 72 §5.8 — the shared book, end to end at the seam. Two personas, because the whole point is that the
+   * SAME book is reachable from both sides and from nobody else's.
+   */
+  it('books: "Our Story" belongs to the pair — both partners reach it, and the edge is the grant', async () => {
+    const { bridge } = await freshOwner();
+    const ben = (await bridge.getActivePerson())!.id;
+    const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    const cass = await bridge.peopleSave({ displayName: 'Cass', isSubject: true, tags: [] });
+    for (const p of [angel, cass]) {
+      await bridge.accessSetAccount({ personId: p.id, roleId: 'member', pin: null });
+    }
+    const edge = await bridge.relationshipsSave({
+      fromPersonId: ben,
+      toPersonId: angel.id,
+      type: 'partner',
+    });
+
+    const config = {
+      voice: 'third' as const,
+      style: 'warm' as const,
+      length: 'standard' as const,
+      autoRefresh: true,
+      typeOptions: { partner: angel.id },
+      sourceIds: [],
+    };
+    const book = await bridge.storyCreate({ type: 'ourStory', title: 'Us', config });
+    expect(book).not.toBeNull();
+    const bookId = book!.id;
+    // It belongs to the pair, and records who started it (only they may delete it).
+    expect(book!.personId).toContain('~');
+    expect(book!.commissionedBy).toBe(ben);
+
+    // Ben sees it…
+    expect((await bridge.storyList()).map((b) => b.id)).toContain(bookId);
+    expect(await bridge.storyGet({ bookId })).not.toBeNull();
+    // …and so does Angel, without it being on her own shelf root.
+    await bridge.sessionSetActive({ personId: angel.id });
+    expect((await bridge.storyList()).map((b) => b.id)).toContain(bookId);
+    expect((await bridge.storyGet({ bookId }))?.manifest.title).toBe('Us');
+    expect((await bridge.storyShelf()).map((e) => e.id)).toContain(bookId);
+    // …and it is on the commissioner's shelf too (the E2E drives both sides through the real UI).
+    await bridge.sessionSetActive({ personId: ben, pin: '1234' });
+    expect((await bridge.storyShelf()).map((e) => e.id)).toContain(bookId);
+    await bridge.sessionSetActive({ personId: angel.id });
+
+    // Cass is in the household and is nobody's partner — for them the book does not exist.
+    await bridge.sessionSetActive({ personId: cass.id });
+    expect(await bridge.storyGet({ bookId })).toBeNull();
+    expect((await bridge.storyList()).map((b) => b.id)).not.toContain(bookId);
+
+    // The edge IS the grant: remove it and the book re-gates for BOTH of them on the next read.
+    await bridge.relationshipsDelete(edge.id);
+    await bridge.sessionSetActive({ personId: angel.id });
+    expect(await bridge.storyGet({ bookId })).toBeNull();
+    await bridge.sessionSetActive({ personId: ben, pin: '1234' });
+    expect(await bridge.storyGet({ bookId })).toBeNull();
+  });
+
+  it('books: a shared book cannot be commissioned with someone who is not a partner', async () => {
+    const { bridge } = await freshOwner();
+    const cass = await bridge.peopleSave({ displayName: 'Cass', isSubject: true, tags: [] });
+    const config = {
+      voice: 'third' as const,
+      style: 'warm' as const,
+      length: 'standard' as const,
+      autoRefresh: true,
+      typeOptions: { partner: cass.id },
+      sourceIds: [],
+    };
+    // No partner edge — the bridge refuses whatever the picker showed.
+    expect(await bridge.storyCreate({ type: 'ourStory', title: 'Us', config })).toBeNull();
+    // …and refuses a missing answer, or yourself.
+    expect(
+      await bridge.storyCreate({
+        type: 'ourStory',
+        title: 'Us',
+        config: { ...config, typeOptions: {} },
+      }),
+    ).toBeNull();
+  });
+
+  /**
+   * Deleting a shared book destroys the other partner's copy, so it is not symmetric with writing it.
+   */
+  it('books: only the partner who commissioned a shared book may delete it', async () => {
+    const { bridge } = await freshOwner();
+    const ben = (await bridge.getActivePerson())!.id;
+    const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: angel.id, roleId: 'member', pin: null });
+    await bridge.relationshipsSave({ fromPersonId: ben, toPersonId: angel.id, type: 'partner' });
+    const book = await bridge.storyCreate({
+      type: 'ourStory',
+      title: 'Us',
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: { partner: angel.id },
+        sourceIds: [],
+      },
+    });
+    const bookId = book!.id;
+
+    // Angel writes it too, but deleting is not hers to do.
+    await bridge.sessionSetActive({ personId: angel.id });
+    await bridge.storyDelete({ bookId });
+    expect(await bridge.storyGet({ bookId })).not.toBeNull();
+
+    // Ben commissioned it, so he can.
+    await bridge.sessionSetActive({ personId: ben, pin: '1234' });
+    await bridge.storyDelete({ bookId });
+    expect(await bridge.storyGet({ bookId })).toBeNull();
+  });
+
   it('books: the type picker carries each type’s cast policy and counting unit (72 §3.1/§4.1)', async () => {
     const { bridge } = await freshOwner();
     const types = await bridge.storyBookTypes();

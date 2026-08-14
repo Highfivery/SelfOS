@@ -134,9 +134,9 @@ describe('consent center (64 §17.5)', () => {
 
   it('unconsentedNames excludes granted people and people with a pseudonym', () => {
     const register = [
-      { name: 'A', mentions: 1, consent: 'granted' as const },
-      { name: 'B', mentions: 1, consent: 'declined' as const, pseudonym: 'B.' },
-      { name: 'C', mentions: 1, consent: 'unknown' as const },
+      { name: 'A', mentions: 1, chapterMentions: 1, consent: 'granted' as const },
+      { name: 'B', mentions: 1, chapterMentions: 1, consent: 'declined' as const, pseudonym: 'B.' },
+      { name: 'C', mentions: 1, chapterMentions: 1, consent: 'unknown' as const },
     ];
     expect(unconsentedNames(register)).toEqual(['C']);
   });

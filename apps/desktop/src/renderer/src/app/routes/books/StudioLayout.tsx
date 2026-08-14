@@ -22,18 +22,17 @@ import type { BookManifest, StoryBookBundle } from '@shared/schemas';
 import { BookSwitcher } from './BookSwitcher';
 import { ChaptersTab } from './ChaptersTab';
 import { CompletenessMeter } from './CompletenessMeter';
-import { ConsentCenter } from './ConsentCenter';
 import { CoverPanel } from './CoverPanel';
 import { DangerZone } from './DangerZone';
 import { InterviewTab } from './InterviewTab';
 import { MatterEditor } from './MatterEditor';
 import { NeedsYou } from './NeedsYou';
-import { PhotosPanel } from './PhotosPanel';
 import { ShareReadersPanel } from './ShareReadersPanel';
 import { SharedWithYou } from './SharedWithYou';
 import { StorySettingsPanel } from './StorySettingsPanel';
+import { PeopleTab } from './PeopleTab';
+import { TimelinePanel } from './TimelinePanel';
 import { StudioKebab } from './StudioKebab';
-import { TabCount } from './TabCount';
 import { TitleWorkshop } from './TitleWorkshop';
 import { TodoSheet } from './TodoSheet';
 import { LENGTH_OPTIONS, STYLE_CHOICES } from './bookConfigOptions';
@@ -95,6 +94,9 @@ export function StudioLayout({
   // Tab routing: the URL is the deep-linkable source of truth, mirrored into state so it also works with no
   // Route context (RTL renders <Story/> directly). Clicking a tab updates both.
   // `/books/<bookId>/<tab>` — segment 0 is the book, segment 1 the tab.
+  const bookTypes = useStoryStore((s) => s.bookTypes);
+  const typeLabel =
+    bookTypes.find((bt) => bt.id === bundle.manifest.type)?.label ?? bundle.manifest.type;
   const segments = (useParams()['*'] ?? '').split('/').filter(Boolean);
   const routeTab = segments[1] ?? '';
   const navigate = useNavigate();
@@ -224,7 +226,7 @@ export function StudioLayout({
       bits.push(
         `${res.proposalsAdded} suggested change${res.proposalsAdded === 1 ? '' : 's'} to review below.`,
       );
-    setRefreshNotice(bits.length > 0 ? bits.join(' ') : 'Your story is up to date.');
+    setRefreshNotice(bits.length > 0 ? bits.join(' ') : 'This book is up to date.');
   };
 
   const chips = [
@@ -246,7 +248,9 @@ export function StudioLayout({
         </div>
         <div className={styles.heroBody}>
           <div className={styles.heroEyebrowRow}>
-            <span className={styles.partEyebrow}>Your story · Biography</span>
+            {/* The book's OWN type. This read "Your story · Biography" for every book — wrong for a
+                memoir, a dream book or an erotica the moment more than one type existed (72 §3.2). */}
+            <span className={styles.partEyebrow}>{typeLabel}</span>
             <button type="button" className={styles.backToShelf} onClick={onBackToShelf}>
               ← All books
             </button>
@@ -399,7 +403,7 @@ export function StudioLayout({
       />
 
       {/* ---- Tabs ---- */}
-      <div className={styles.tabs} role="tablist" aria-label="Your story">
+      <div className={styles.tabs} role="tablist" aria-label="This book">
         {STUDIO_TABS.map((t) => (
           <button
             key={t}
@@ -410,7 +414,6 @@ export function StudioLayout({
             onClick={() => goTab(t)}
           >
             {TAB_LABEL[t]}
-            {t === 'photos' ? <TabCount bookId={bookId} kind="photos" /> : null}
           </button>
         ))}
       </div>
@@ -430,7 +433,8 @@ export function StudioLayout({
         />
       ) : null}
 
-      {tab === 'photos' ? <PhotosPanel bookId={bookId} /> : null}
+      {tab === 'timeline' ? <TimelinePanel bundle={bundle} /> : null}
+      {tab === 'people' ? <PeopleTab bookId={bookId} /> : null}
 
       {tab === 'interview' ? (
         <InterviewTab
@@ -482,7 +486,6 @@ export function StudioLayout({
       {tab === 'settings' ? (
         <div className={styles.settingsTab}>
           <MatterEditor bookId={bookId} {...(manifest.matter ? { matter: manifest.matter } : {})} />
-          <ConsentCenter bookId={bookId} />
           <StorySettingsPanel bookId={bookId} config={manifest.config} />
           {exclusions.length > 0 ? (
             <Card>

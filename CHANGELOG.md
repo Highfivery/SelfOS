@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.54.3](https://github.com/Highfivery/SelfOS/compare/v0.54.2...v0.54.3) (2026-08-14)
+
+
+### Bug Fixes
+
+* **books:** the prose quality fixes and the blocking defects (72 §5.10 P1) ([#447](https://github.com/Highfivery/SelfOS/issues/447)) ([33437e5](https://github.com/Highfivery/SelfOS/commit/33437e5658edf3fdb50e638eb799e5fc8b7a093c))
+
 ## [0.54.2](https://github.com/Highfivery/SelfOS/compare/v0.54.1...v0.54.2) (2026-08-13)
 
 

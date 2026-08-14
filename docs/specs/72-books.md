@@ -435,8 +435,16 @@ reason turned out to be authorization rather than storage:
 - **Only the commissioner may delete** (owner decision) — `personId` names the pair on a shared book, so
   `commissionedBy` records who that was.
 
-**Remaining for P6b2:** the bridge resolving the owner ref across ~101 `story:*` handlers, the `ourStory`
-type itself, the commission partner picker, the shelf and workspace surfaces, and the delete gate.
+**As built (P6b2 — the type and its surfaces). P6 is complete; all eight types are registered.** The bridge
+migration turned out to have one precise seam: the argument immediately before a `bookId` IS the owner ref,
+so 81 storage call sites moved with a substitution and no structural change. The 17 AI handlers additionally
+re-point `AiDeps.personId` at the book while billing the person who ran it. Three product rules landed with
+it: the partner picker offers only **live partner edges** and the bridge **re-checks the edge at create** (a
+hand-crafted IPC call must not be able to make a shared book with a non-partner); **only the commissioner may
+delete**, since deleting destroys the other partner's copy; and the workspace says **"Shared with <name>"**,
+because the difference between a private draft and something another person is reading should be visible.
+The commission's "reads everything it knows about you" line is rewritten for this type — it reads both
+lives, minus what either marked private during onboarding.
 
 **As built (P6a — `childrens`).** Most of what §4.1 declared was already in place from P3, and the work was
 mostly making declared-but-inert slots actually do something:
@@ -672,6 +680,10 @@ Two items are **deliberately deferred** rather than open:
 
 ## 12. Changelog
 
+- 2026-08-14 — **P6b2 built — SPEC 72 IS COMPLETE.** The `ourStory` type, the commission partner picker
+  (live edges only, re-checked at create), the shelf and workspace on both partners' sides, the
+  commissioner-only delete, and the "Shared with <name>" signal. 81 bridge storage call sites moved to the
+  owner ref via one precise seam; the 17 AI handlers additionally split addressing from billing.
 - 2026-08-14 — **P6b1 built** — the storage and authorization spine for `ourStory`, backend only (no
   surface: the type, the commission and the interview are P6b2). A pair-owned book lives at
   `together/pairs/<pairKey>/books/`, addressed by passing the pairKey where every other book passes a person

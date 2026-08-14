@@ -10,6 +10,7 @@ import {
   TextInput,
 } from '../../../design-system/components';
 import { useInsightStore } from '../../../stores/insightStore';
+import { usePeopleStore } from '../../../stores/peopleStore';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryStore } from '../../../stores/storyStore';
 import { aiUnavailableMessage } from '../../AiUnavailableNotice';
@@ -233,6 +234,18 @@ export function StudioLayout({
   // shelf has said "11 of 32 pages" since P5; the workspace saying "2 chapters" about the same book was the
   // app disagreeing with itself about what the thing is made of.
   const unit = bookTypeView?.unit ?? { one: 'chapter', many: 'chapters' };
+  // A pair-owned book's `personId` is the pairKey (`a~b`); the other id is the partner.
+  const householdPeople = usePeopleStore((s) => s.people);
+  const loadHousehold = usePeopleStore((s) => s.load);
+  useEffect(() => {
+    // Only a shared book needs a name for its partner; every other book never reads this.
+    if (bookTypeView?.sharedWithPartner) void loadHousehold();
+  }, [bookTypeView?.sharedWithPartner, loadHousehold]);
+  const sharedPartnerName = (() => {
+    if (!bookTypeView?.sharedWithPartner) return null;
+    const other = manifest.personId.split('~').find((id) => id !== activePersonIdForCrisis);
+    return householdPeople.find((p) => p.id === other)?.displayName ?? null;
+  })();
   const countUnit = (n: number): string => `${n} ${n === 1 ? unit.one : unit.many}`;
   const chips = [
     manifest.config.voice === 'first' ? 'First person' : 'Third person',
@@ -246,6 +259,9 @@ export function StudioLayout({
           `${LENGTH_OPTIONS.find((l) => l.value === manifest.config.length)?.label ?? manifest.config.length} length`,
         ]),
     countUnit(chapters.length),
+    // The one book with a second author. Both partners write and read it, so saying who is not decoration —
+    // it is the difference between a private draft and something another person is reading (72 §5.8).
+    ...(sharedPartnerName ? [`Shared with ${sharedPartnerName}`] : []),
   ];
 
   return (

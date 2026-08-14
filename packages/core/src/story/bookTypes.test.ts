@@ -5,6 +5,7 @@ import {
   BIOGRAPHY_BOOK_TYPE,
   CHILDRENS_BOOK_TYPE,
   MCADAMS_SCENES,
+  OUR_STORY_BOOK_TYPE,
   getBookType,
   listBookTypes,
   resolveSpine,
@@ -12,12 +13,13 @@ import {
 } from './bookTypes';
 
 describe('BookType registry (64)', () => {
-  it('registers the seven built types (72 §3.2; ourStory is P6b)', () => {
+  it('registers all eight book types (72 §3.2 — P6 complete)', () => {
     expect(BOOK_TYPES.map((t) => t.id)).toEqual([
       'biography',
       'memoir',
       'yearInReview',
       'portrait',
+      'ourStory',
       'childrens',
       'dreamBook',
       'erotica',
@@ -246,6 +248,35 @@ describe('BookType registry (64)', () => {
       // Picture-book sentences are short by nature — a 30-word specimen is the wrong demonstration.
       expect(preset.specimen.third.split(/\s+/).length).toBeLessThan(30);
     }
+  });
+
+  /**
+   * 72 §5.8 — the one type whose books belong to two people. The flag is what routes a book to the pair
+   * root, so exactly one type may carry it until another shared kind is designed.
+   */
+  it('EXACTLY ONE type is shared with a partner, and it asks who', () => {
+    const shared = listBookTypes().filter((t) => t.sharedWithPartner);
+    expect(shared.map((t) => t.id)).toEqual(['ourStory']);
+    // It has to ask, or there is no pair to resolve.
+    expect(shared[0]?.options?.find((o) => o.id === 'partner')).toMatchObject({
+      kind: 'person',
+      required: true,
+    });
+    // A couple's own history is the last thing that should be invented or pseudonymous.
+    expect(shared[0]?.truthMode).toBe('true');
+    expect(shared[0]?.castPolicy).toBe('realNames');
+  });
+
+  it('asks about the RELATIONSHIP, not about one life', () => {
+    // The McAdams scenes are questions about an individual; this book's subject is the two of them.
+    expect(OUR_STORY_BOOK_TYPE.interview.scenes).not.toBe(MCADAMS_SCENES);
+    const keys = OUR_STORY_BOOK_TYPE.interview.scenes.map((s) => s.key);
+    expect(keys).toContain('meeting');
+    expect(keys).not.toContain('lowPoint');
+    // Either partner may answer any of them (owner decision, 2026-08-14).
+    expect(OUR_STORY_BOOK_TYPE.interview.framing).toMatch(/either partner/i);
+    // And the doctrine must not let two people be flattened into one agreeing voice.
+    expect(OUR_STORY_BOOK_TYPE.doctrine).toMatch(/never take a side/i);
   });
 
   it('the picture-book doctrine overrides the craft rules that do not apply to it', () => {

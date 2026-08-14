@@ -365,6 +365,7 @@ import {
   upsertRelationship,
   verifyAccountPin,
   ageFromBirthday,
+  livePartnerIds,
 } from '@selfos/core/people';
 import {
   checkBudget,
@@ -625,6 +626,8 @@ import {
   updateTimelineEvent,
   regenerateEssence,
   suggestTitles,
+  resolveBookOwnerRef,
+  livePairRefs,
 } from '@selfos/core/story';
 import {
   clearSuggestion,
@@ -1665,6 +1668,26 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       ready: eligible && youOptedIn && partnerOptedIn,
     };
   };
+
+  /**
+   * Which owner ref addresses this book for this person (72 §5.8): their own namespace, or a pair root they
+   * are currently in via a LIVE `partner` edge.
+   *
+   * Every `story:*` path has always been built under `people/<activePersonId>/`, which meant the PATH was
+   * the authorization — another person's book was not addressable at all. A pair-owned book breaks that, so
+   * the ref has to be resolved rather than assumed.
+   *
+   * It falls back to the active person when nothing resolves, which keeps the old behaviour EXACTLY: an
+   * unreachable book id addresses the caller's own namespace, finds nothing, and returns the same empty
+   * answer it always did. Denial and non-existence stay indistinguishable, and a caller can never be
+   * steered into someone else's namespace by passing an id they shouldn't have.
+   */
+  const ownerOf = async (
+    fs: FileSystem,
+    key: Uint8Array,
+    personId: string,
+    bookId: string,
+  ): Promise<string> => (await resolveBookOwnerRef(fs, key, personId, bookId)) ?? personId;
 
   /** ctx + active person, gated on `together.own`. Null if not ready or not allowed (surface is hidden). */
   const togetherCtx = async (): Promise<{
@@ -5653,6 +5676,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         gates: t.gates,
         castPolicy: t.castPolicy,
         unit: unitForType(t.id),
+        ...(t.sharedWithPartner ? { sharedWithPartner: true } : {}),
         options: (t.options ?? []).map((o) => ({
           id: o.id,
           label: o.label,
@@ -5677,7 +5701,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return listBooks(ctx.fs, ctx.key, personId);
+      const own = await listBooks(ctx.fs, ctx.key, personId);
+      const shared: BookManifest[] = [];
+      for (const ownerRef of await livePairRefs(ctx.fs, ctx.key, personId)) {
+        shared.push(...(await listBooks(ctx.fs, ctx.key, ownerRef)));
+      }
+      return [...own, ...shared];
     },
     /** The bookshelf (72 §3.1) — every book with enough counted to show it without opening it. */
     storyShelf: async (): Promise<BookShelfEntry[]> => {
@@ -5687,7 +5716,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return [];
       // The unit a book is counted in belongs to its TYPE, which lives in the code registry — resolved here
       // so the shelf read stays a pure count and a picture book's pages need no change to it (72 P6).
-      return listShelf(ctx.fs, ctx.key, personId, unitForType);
+      // Own books, then any book at a pair root this person is currently in — a shared "Our Story" belongs
+      // on both partners' shelves, and the live edge is what puts it there (72 §5.8).
+      const own = await listShelf(ctx.fs, ctx.key, personId, unitForType);
+      const shared: BookShelfEntry[] = [];
+      for (const ownerRef of await livePairRefs(ctx.fs, ctx.key, personId)) {
+        shared.push(...(await listShelf(ctx.fs, ctx.key, ownerRef, unitForType)));
+      }
+      return [...own, ...shared];
     },
     storyCreate: async (input): Promise<BookManifest | null> => {
       const ctx = await host.vaultAndKey();
@@ -5704,8 +5740,22 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
         if (!acked) return null;
       }
+      // A shared book belongs to the PAIR, not to the person who started it (72 §5.8). The partner is a
+      // commission answer, and the live `partner` edge is re-checked HERE — a hand-crafted IPC call must
+      // not be able to create a shared book with someone who isn't a partner, whatever the picker showed.
+      let ownerRef = personId;
+      let commissionedBy: string | undefined;
+      if (bookType.sharedWithPartner) {
+        const partnerId = (p.config.typeOptions?.['partner'] ?? '').trim();
+        if (!partnerId || partnerId === personId) return null;
+        const partners = await livePartnerIds(await listRelationships(ctx.fs, ctx.key), personId);
+        if (!partners.includes(partnerId)) return null;
+        ownerRef = pairKeyFor(personId, partnerId);
+        commissionedBy = personId;
+      }
       return createBook(ctx.fs, ctx.key, {
-        personId,
+        personId: ownerRef,
+        ...(commissionedBy ? { commissionedBy } : {}),
         type: p.type,
         title: p.title,
         config: p.config,
@@ -5718,11 +5768,25 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return null;
       const { bookId } = StoryBookRefSchema.parse(input);
-      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      return readBookBundle(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     storyGenerateFoundations: async (input): Promise<StoryFoundationsResult> => {
       const { bookId } = StoryBookRefSchema.parse(input);
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
       if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
         return {
@@ -5778,7 +5842,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         });
         return { ok: false, reason, message };
       };
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       if (!deps) return fail('NO_KEY', 'SelfOS isn’t ready yet.');
       if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
         return fail('AI_OFF', 'Turn on AI in Settings to write your story.');
@@ -5838,9 +5911,30 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return null;
       const p = StoryOutlineInputSchema.parse(input);
-      if (!(await getBook(ctx.fs, ctx.key, personId, p.bookId))) return null;
-      await saveOutline(ctx.fs, ctx.key, personId, p.bookId, p.outline);
-      return updateBook(ctx.fs, ctx.key, personId, p.bookId, {}, new Date()); // bump updatedAt
+      if (
+        !(await getBook(
+          ctx.fs,
+          ctx.key,
+          await ownerOf(ctx.fs, ctx.key, personId, p.bookId),
+          p.bookId,
+        ))
+      )
+        return null;
+      await saveOutline(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, p.bookId),
+        p.bookId,
+        p.outline,
+      );
+      return updateBook(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, p.bookId),
+        p.bookId,
+        {},
+        new Date(),
+      ); // bump updatedAt
     },
     storyApproveOutline: async (input): Promise<BookManifest | null> => {
       const ctx = await host.vaultAndKey();
@@ -5848,7 +5942,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return null;
       const p = StoryOutlineInputSchema.parse(input);
-      return approveOutline(ctx.fs, ctx.key, personId, p.bookId, p.outline, new Date());
+      return approveOutline(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, p.bookId),
+        p.bookId,
+        p.outline,
+        new Date(),
+      );
     },
     storyUpdate: async (input): Promise<BookManifest | null> => {
       const ctx = await host.vaultAndKey();
@@ -5859,7 +5960,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return updateBook(
         ctx.fs,
         ctx.key,
-        personId,
+        await ownerOf(ctx.fs, ctx.key, personId, p.bookId),
         p.bookId,
         {
           // A title the person sets here is their own — clear the `auto` flag so a later foundations pass
@@ -5878,8 +5979,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return;
       const { bookId } = StoryBookRefSchema.parse(input);
-      if (!(await getBook(ctx.fs, ctx.key, personId, bookId))) return; // only the active person's own book
-      await deleteBook(ctx.fs, personId, bookId);
+      const ownerRef = await ownerOf(ctx.fs, ctx.key, personId, bookId);
+      const book = await getBook(ctx.fs, ctx.key, ownerRef, bookId);
+      if (!book) return; // a book this person cannot reach doesn't exist for them
+      // Deleting a SHARED book destroys the other partner's copy too, so it is not the symmetric act that
+      // writing and publishing are: only the person who commissioned it may do it (owner decision,
+      // 2026-08-14). A pre-`commissionedBy` shared book has no recorded commissioner and so cannot be
+      // deleted by either of them — the safe direction, and it can be re-derived later if it ever matters.
+      if (ownerRef !== personId && book.commissionedBy !== personId) return;
+      await deleteBook(ctx.fs, ownerRef, bookId);
     },
     storyRewriteFromScratch: async (input): Promise<StoryBookBundle | null> => {
       const ctx = await host.vaultAndKey();
@@ -5887,15 +5995,38 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return null;
       const { bookId } = StoryBookRefSchema.parse(input);
-      if (!(await getBook(ctx.fs, ctx.key, personId, bookId))) return null; // only the active person's own book
+      if (
+        !(await getBook(ctx.fs, ctx.key, await ownerOf(ctx.fs, ctx.key, personId, bookId), bookId))
+      )
+        return null; // only the active person's own book
       // Reset to the pre-draft state (no AI here) — the renderer re-runs the streamed full-draft afterwards.
-      const reset = await rewriteBookFromScratch(ctx.fs, ctx.key, personId, bookId, new Date());
+      const reset = await rewriteBookFromScratch(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        new Date(),
+      );
       if (!reset) return null;
-      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      return readBookBundle(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     storyGenerateChapters: async (input): Promise<StoryChaptersResult> => {
       const { bookId } = StoryBookRefSchema.parse(input);
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
       if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
         return {
@@ -5949,7 +6080,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     storyRegenerateChapter: async (input): Promise<StoryChaptersResult> => {
       const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
       if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
         return {
@@ -5970,9 +6110,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return null;
       const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
-      const chapter = await getChapter(ctx.fs, ctx.key, personId, bookId, chapterId);
+      const chapter = await getChapter(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        chapterId,
+      );
       if (!chapter) return null;
-      await saveChapter(ctx.fs, ctx.key, personId, bookId, {
+      await saveChapter(ctx.fs, ctx.key, await ownerOf(ctx.fs, ctx.key, personId, bookId), bookId, {
         ...chapter,
         status: 'reviewed',
         lastReviewedAt: new Date().toISOString(),
@@ -5980,7 +6126,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         // Explicit `undefined` is omitted on write (JSON), so the persisted chapter no longer carries it.
         previousMarkdown: undefined,
       });
-      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      return readBookBundle(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     // --- Chapter version history (§13.9) — non-AI, gated `story.own` + active-person-scoped ---
     storyChapterHistory: async (input): Promise<StoryChapterHistoryView> => {
@@ -5991,7 +6142,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const personId = await activePersonId();
       if (!personId) return { chapterId, versions: [] };
-      const history = await getChapterHistory(ctx.fs, ctx.key, personId, bookId, chapterId);
+      const history = await getChapterHistory(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        chapterId,
+      );
       // Newest first, list entries only — a 20-deep history of 5,000-word chapters is a heavy payload, so
       // the prose crosses IPC one version at a time via storyChapterVersion.
       return {
@@ -6012,7 +6169,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
       const personId = await activePersonId();
       if (!personId) return null;
-      const history = await getChapterHistory(ctx.fs, ctx.key, personId, bookId, chapterId);
+      const history = await getChapterHistory(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        chapterId,
+      );
       return history.versions.find((v) => v.revision === revision) ?? null;
     },
     storyRestoreChapterVersion: async (input): Promise<StoryBookBundle | null> => {
@@ -6024,14 +6187,19 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const restored = await restoreChapterVersion(
         ctx.fs,
         ctx.key,
-        personId,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
         bookId,
         chapterId,
         revision,
         new Date(),
       );
       if (!restored) return null;
-      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      return readBookBundle(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     // --- Markup layer (§3.3) — non-AI ops gated `story.own` + active-person-scoped ---
     storyGetMarkup: async (input): Promise<ChapterMarkup> => {
@@ -6042,7 +6210,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const personId = await activePersonId();
       if (!personId) return { schemaVersion: 1, chapterId, marks: [] };
-      return getMarkup(ctx.fs, ctx.key, personId, bookId, chapterId);
+      return getMarkup(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        chapterId,
+      );
     },
     storyMark: async (input): Promise<ChapterMarkup> => {
       const { bookId, chapterId, mark } = StoryMarkInputSchema.parse(input);
@@ -6052,7 +6226,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const personId = await activePersonId();
       if (!personId) return { schemaVersion: 1, chapterId, marks: [] };
-      return addMark(ctx.fs, ctx.key, personId, bookId, chapterId, mark);
+      return addMark(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        chapterId,
+        mark,
+      );
     },
     storyUpdateMark: async (input): Promise<ChapterMarkup | null> => {
       const { bookId, chapterId, markId, patch } = StoryUpdateMarkInputSchema.parse(input);
@@ -6060,7 +6241,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
       const personId = await activePersonId();
       if (!personId) return null;
-      return updateMark(ctx.fs, ctx.key, personId, bookId, chapterId, markId, patch);
+      return updateMark(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        chapterId,
+        markId,
+        patch,
+      );
     },
     storyRemoveMark: async (input): Promise<ChapterMarkup> => {
       const { bookId, chapterId, markId } = StoryRemoveMarkInputSchema.parse(input);
@@ -6070,7 +6259,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const personId = await activePersonId();
       if (!personId) return { schemaVersion: 1, chapterId, marks: [] };
-      return removeMark(ctx.fs, ctx.key, personId, bookId, chapterId, markId);
+      return removeMark(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        chapterId,
+        markId,
+      );
     },
     storyEditPassage: async (input): Promise<StoryBookBundle | null> => {
       const { bookId, chapterId, anchor, newText } = StoryEditPassageInputSchema.parse(input);
@@ -6081,14 +6277,19 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const edited = await editPassage(
         ctx.fs,
         ctx.key,
-        personId,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
         bookId,
         chapterId,
         anchor,
         newText,
       );
       if (!edited) return null; // orphaned anchor / chapter gone
-      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      return readBookBundle(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     storyPinQuote: async (input): Promise<StoryBookBundle | null> => {
       const parsed = StoryPinInputSchema.parse(input);
@@ -6119,8 +6320,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return { schemaVersion: 1, todos: [] };
       // Self-heal any "Questions sent" to-do whose check-in has since been answered/closed (§3.7) — it used to
       // sit in the "Needs you" count forever. Free, no AI; the read reflects the fresh state.
-      await resolveSentQuestionTodos(ctx.fs, ctx.key, personId, bookId);
-      return getTodos(ctx.fs, ctx.key, personId, bookId);
+      await resolveSentQuestionTodos(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
+      return getTodos(ctx.fs, ctx.key, await ownerOf(ctx.fs, ctx.key, personId, bookId), bookId);
     },
     storyExclusions: async (input): Promise<ExclusionItem[]> => {
       const { bookId } = StoryBookRefSchema.parse(input);
@@ -6128,7 +6334,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return getExclusions(ctx.fs, ctx.key, personId, bookId);
+      return getExclusions(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     storyExclude: async (input): Promise<StoryExcludeResult> => {
       const { bookId, kind, value, note } = StoryExcludeInputSchema.parse(input);
@@ -6141,12 +6352,17 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const { exclusions, staled } = await addExclusion(
         ctx.fs,
         ctx.key,
-        personId,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
         bookId,
         { kind, value, ...(note ? { note } : {}) },
         new Date(),
       );
-      const bundle = await readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      const bundle = await readBookBundle(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
       if (!bundle) throw new Error('That book is no longer here.');
       return { exclusions, bundle, staled };
     },
@@ -6156,7 +6372,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return removeExclusion(ctx.fs, ctx.key, personId, bookId, itemId);
+      return removeExclusion(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        itemId,
+      );
     },
     storyQuoteCandidates: async (input): Promise<QuoteCandidate[]> => {
       const { bookId } = StoryBookRefSchema.parse(input);
@@ -6164,7 +6386,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return getQuotes(ctx.fs, ctx.key, personId, bookId);
+      return getQuotes(ctx.fs, ctx.key, await ownerOf(ctx.fs, ctx.key, personId, bookId), bookId);
     },
     storyMineQuotes: async (input): Promise<QuoteCandidate[]> => {
       const { bookId } = StoryBookRefSchema.parse(input);
@@ -6172,7 +6394,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return mineQuoteCandidates(ctx.fs, ctx.key, personId, bookId, new Date());
+      return mineQuoteCandidates(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        new Date(),
+      );
     },
     storySetQuoteStatus: async (input): Promise<QuoteCandidate[]> => {
       const { bookId, quoteId, status } = StorySetQuoteStatusInputSchema.parse(input);
@@ -6180,11 +6408,27 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return setQuoteStatus(ctx.fs, ctx.key, personId, bookId, quoteId, status);
+      return setQuoteStatus(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        quoteId,
+        status,
+      );
     },
     storyTodoToQuestions: async (input): Promise<StoryQuestionsResult> => {
       const { bookId, chapterId, focus, anchor } = StoryTodoToQuestionsInputSchema.parse(input);
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
       if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
         return {
@@ -6213,7 +6457,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     storyAnswerQuestion: async (input): Promise<StoryAnswerResult> => {
       const { bookId, chapterId, markId } = StoryAnswerQuestionInputSchema.parse(input);
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
       if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
         return {
@@ -6449,7 +6702,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           return {
             staled: 0,
             rewritten: 0,
-            bundle: await readBookBundle(ctx.fs, ctx.key, personId, bookId),
+            bundle: await readBookBundle(
+              ctx.fs,
+              ctx.key,
+              await ownerOf(ctx.fs, ctx.key, personId, bookId),
+              bookId,
+            ),
           };
         }
       }
@@ -6457,7 +6715,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Marking stale is free + always runs; the auto-rewrite needs a real key + AI on + budget (refreshBook).
       // With AI off OR no key, just mark stale so the badges still update — never run the rewrite loop (which
       // would build the corpus then fail NO_KEY per chapter).
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       const aiReady =
         deps && deps.apiKey && (await readVaultSettingsValues(deps.fs))['ai.enabled'] !== false;
       let staled = 0;
@@ -6485,7 +6752,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         budgetReached = res.budgetReached;
       } else {
         // AI off / no key: detection is free and still runs — knowing what could go in never spends.
-        staled = await detectNewMaterial(ctx.fs, ctx.key, personId, bookId, now);
+        staled = await detectNewMaterial(
+          ctx.fs,
+          ctx.key,
+          await ownerOf(ctx.fs, ctx.key, personId, bookId),
+          bookId,
+          now,
+        );
       }
 
       // Stamp the auto-cadence throttle after a run (a manual refresh never touches it).
@@ -6495,7 +6768,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           storyRefreshCheckedAt: { ...device.storyRefreshCheckedAt, [personId]: now.toISOString() },
         });
       }
-      const bundle = await readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      const bundle = await readBookBundle(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
       return {
         staled,
         rewritten,
@@ -6510,7 +6788,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return listStructuralProposals(ctx.fs, ctx.key, personId, bookId);
+      return listStructuralProposals(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     storyEditOutline: async (input): Promise<StoryOutlineEditResult> => {
       const { bookId, edit } = StoryOutlineEditInputSchema.parse(input);
@@ -6522,7 +6805,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return { ok: false, bundle: null };
       // Deterministic outline surgery — no AI, no metering. The op union is exhaustive, so a new member
       // is a compile error here rather than a silently ignored edit.
-      const at = [ctx.fs, ctx.key, personId, bookId] as const;
+      const at = [
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      ] as const;
       const res = await (async (): Promise<{ ok: boolean; message?: string }> => {
         switch (edit.op) {
           case 'addPart':
@@ -6545,7 +6833,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             return deleteChapter(...at, edit);
         }
       })();
-      const bundle = await readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      const bundle = await readBookBundle(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
       return { ok: res.ok, bundle, ...(res.message ? { message: res.message } : {}) };
     },
     storyEditTimeline: async (input): Promise<StoryTimelineEditResult> => {
@@ -6556,7 +6849,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const personId = await activePersonId();
       if (!personId) return { ok: false, timeline: null };
-      const at = [ctx.fs, ctx.key, personId, bookId] as const;
+      const at = [
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      ] as const;
       const res = await (async (): Promise<{ ok: boolean; message?: string }> => {
         switch (edit.op) {
           case 'add':
@@ -6568,7 +6866,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         }
       })();
       // The merged view: the person's life plus this book's own moments (72 §3.8).
-      const stored = await readBookTimeline(ctx.fs, ctx.key, personId, bookId);
+      const stored = await readBookTimeline(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
       // Hand back the chronologically sorted view, so a corrected date lands in the right place at once.
       const timeline = stored ? { ...stored, events: sortTimeline(stored.events) } : null;
       return { ok: res.ok, timeline, ...(res.message ? { message: res.message } : {}) };
@@ -6577,7 +6880,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const { bookId } = StoryBookRefSchema.parse(input);
       // `story.own`-gated + active-person-scoped; a metered read (the workshop returns candidates, the
       // person commits the pick through `storyUpdate`). AI-off / no key surface honestly.
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       if (!deps) return { ok: false, titles: [], message: 'Not permitted.' };
       if (!deps.apiKey) return { ok: false, titles: [], message: aiUnavailableTitleMessage };
       const res = await suggestTitles(deps, bookId);
@@ -6587,7 +6899,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     storyRegenerateEssence: async (input): Promise<StoryEssenceResult> => {
       const { bookId } = StoryBookRefSchema.parse(input);
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       if (!deps) return { ok: false, essence: null, message: 'Not permitted.' };
       if (!deps.apiKey) return { ok: false, essence: null, message: aiUnavailableTitleMessage };
       const res = await regenerateEssence(deps, bookId);
@@ -6605,7 +6926,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return { ok: false, proposals: [], bundle: null };
       // Approve applies the restructure (mutates the outline/chapters) — no AI spend; dismiss just files it away.
       const res = await resolveProposal(ctx.fs, ctx.key, personId, { bookId, proposalId, action });
-      const bundle = await readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      const bundle = await readBookBundle(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
       return {
         ok: res.ok,
         proposals: res.proposals,
@@ -6615,7 +6941,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     storyContinuityCheck: async (input): Promise<StoryContinuityResult> => {
       const { bookId } = StoryBookRefSchema.parse(input);
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       if (!deps)
         return { ok: false, findings: [], reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
       if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
@@ -6634,11 +6969,27 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return (await getNewMaterial(ctx.fs, ctx.key, personId, bookId)).entries;
+      return (
+        await getNewMaterial(
+          ctx.fs,
+          ctx.key,
+          await ownerOf(ctx.fs, ctx.key, personId, bookId),
+          bookId,
+        )
+      ).entries;
     },
     storyAcceptMaterial: async (input): Promise<StoryAcceptMaterialResult> => {
       const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
       if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
         return { ok: false, reason: 'AI_OFF', message: 'Turn on AI in Settings to weave this in.' };
@@ -6656,8 +7007,21 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      await declineNewMaterial(ctx.fs, ctx.key, personId, bookId, { chapterId });
-      return (await getNewMaterial(ctx.fs, ctx.key, personId, bookId)).entries;
+      await declineNewMaterial(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        { chapterId },
+      );
+      return (
+        await getNewMaterial(
+          ctx.fs,
+          ctx.key,
+          await ownerOf(ctx.fs, ctx.key, personId, bookId),
+          bookId,
+        )
+      ).entries;
     },
     storyFinishEdition: async (
       input,
@@ -6668,8 +7032,19 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         return { ok: false, message: 'Not permitted.', bundle: null };
       const personId = await activePersonId();
       if (!personId) return { ok: false, message: 'Not permitted.', bundle: null };
-      const res = await finishEdition(ctx.fs, ctx.key, personId, bookId, new Date());
-      const bundle = await readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      const res = await finishEdition(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        new Date(),
+      );
+      const bundle = await readBookBundle(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
       return res.ok ? { ok: true, bundle } : { ok: false, message: res.message, bundle };
     },
     storyReopenBook: async (input): Promise<StoryBookBundle | null> => {
@@ -6678,12 +7053,32 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
       const personId = await activePersonId();
       if (!personId) return null;
-      await reopenBook(ctx.fs, ctx.key, personId, bookId, new Date());
-      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      await reopenBook(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        new Date(),
+      );
+      return readBookBundle(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     storyManuscriptRead: async (input): Promise<StoryContinuityResult> => {
       const { bookId } = StoryBookRefSchema.parse(input);
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       if (!deps)
         return { ok: false, findings: [], reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
       if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
@@ -6702,7 +7097,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return listContinuityFindings(ctx.fs, ctx.key, personId, bookId);
+      return listContinuityFindings(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     storyResolveContinuity: async (input): Promise<ContinuityFinding[]> => {
       const { bookId, findingId, action } = StoryResolveContinuityInputSchema.parse(input);
@@ -6714,7 +7114,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     },
     storyLineEdit: async (input): Promise<StoryRevisionResult> => {
       const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
       if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
         return {
@@ -6764,7 +7173,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return getCastRegister(ctx.fs, ctx.key, personId, bookId);
+      return getCastRegister(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     storyConsent: async (input): Promise<ConsentPerson[]> => {
       const { bookId } = StoryBookRefSchema.parse(input);
@@ -6772,7 +7186,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return getConsentRegister(ctx.fs, ctx.key, personId, bookId);
+      return getConsentRegister(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     storySetConsent: async (input): Promise<ConsentPerson[]> => {
       const { bookId, name, pseudonym, sheet } = StorySetConsentInputSchema.parse(input);
@@ -6797,7 +7216,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return empty;
       const personId = await activePersonId();
       if (!personId) return empty;
-      return getStoryCompleteness(ctx.fs, ctx.key, personId, bookId);
+      return getStoryCompleteness(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     storyInterviewCheck: async (input): Promise<StoryInterviewCadenceResult> => {
       const { bookId, auto } = StoryInterviewCheckInputSchema.parse(input);
@@ -6816,7 +7240,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // The gap pass + mint need a real key + AI on; without them, the cadence is a no-op (never a NO_KEY
       // spend). The outcome is the HONEST `aiOff` — a fully-clickable "Find what's missing" rendering as
       // "check back later" with AI off is the prerequisite-absent-silence class the DoD forbids.
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       const aiReady =
         deps && deps.apiKey && (await readVaultSettingsValues(deps.fs))['ai.enabled'] !== false;
       if (!deps || !aiReady) return { outcome: 'aiOff' };
@@ -6846,7 +7279,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return empty;
       const personId = await activePersonId();
       if (!personId) return empty;
-      return getStoryGaps(ctx.fs, ctx.key, personId, bookId);
+      return getStoryGaps(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     storyAskGap: async (input): Promise<StoryCheckInResult> => {
       const { bookId, gapId } = StoryAskGapInputSchema.parse(input);
@@ -6855,7 +7293,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         return { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
       }
       // Minting a check-in needs a real key + AI on (the mint runs `generateQuestions`).
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       const aiReady =
         deps && deps.apiKey && (await readVaultSettingsValues(deps.fs))['ai.enabled'] !== false;
       if (!deps || !aiReady) {
@@ -6873,7 +7320,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return listAnsweredStoryCheckIns(ctx.fs, ctx.key, personId, bookId);
+      return listAnsweredStoryCheckIns(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     // --- Publishing & readers (§3.5) — the publish gate is the ONE way a book reaches another person. ---
     storyPublish: async (input): Promise<StoryPublishResult> => {
@@ -6884,7 +7336,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const personId = await activePersonId();
       if (!personId) return { ok: false, message: 'No active person.' };
-      return publishBook(ctx.fs, ctx.key, personId, bookId, new Date());
+      return publishBook(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        new Date(),
+      );
     },
     storyPublishDiff: async (input): Promise<StoryPublishDiff> => {
       const { bookId } = StoryBookRefSchema.parse(input);
@@ -6901,7 +7359,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return empty;
       const personId = await activePersonId();
       if (!personId) return empty;
-      return computePublishDiff(ctx.fs, ctx.key, personId, bookId);
+      return computePublishDiff(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     storyUnpublish: async (input): Promise<StoryUnpublishResult> => {
       const { bookId } = StoryBookRefSchema.parse(input);
@@ -6911,7 +7374,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       }
       const personId = await activePersonId();
       if (!personId) return { ok: false, message: 'No active person.' };
-      return unpublishBook(ctx.fs, ctx.key, personId, bookId, new Date());
+      return unpublishBook(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        new Date(),
+      );
     },
     storyReaders: async (input): Promise<BookReader[]> => {
       const { bookId } = StoryBookRefSchema.parse(input);
@@ -6919,7 +7388,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return listReaders(ctx.fs, ctx.key, personId, bookId);
+      return listReaders(ctx.fs, ctx.key, await ownerOf(ctx.fs, ctx.key, personId, bookId), bookId);
     },
     storyGrantReader: async (input): Promise<BookReader[]> => {
       const { bookId, readerPersonId } = StoryReaderGrantInputSchema.parse(input);
@@ -6927,7 +7396,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return grantReader(ctx.fs, ctx.key, personId, bookId, readerPersonId, new Date());
+      return grantReader(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        readerPersonId,
+        new Date(),
+      );
     },
     storyRevokeReader: async (input): Promise<BookReader[]> => {
       const { bookId, readerPersonId } = StoryReaderGrantInputSchema.parse(input);
@@ -6935,7 +7411,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return revokeReader(ctx.fs, ctx.key, personId, bookId, readerPersonId, new Date());
+      return revokeReader(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        readerPersonId,
+        new Date(),
+      );
     },
     storyReaderFeatured: async (input): Promise<boolean> => {
       const { bookId, readerPersonId } = StoryReaderGrantInputSchema.parse(input);
@@ -6945,7 +7428,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return false;
       const reader = await getPerson(ctx.fs, ctx.key, readerPersonId);
       if (!reader) return false;
-      const chapters = await listChapters(ctx.fs, ctx.key, personId, bookId);
+      const chapters = await listChapters(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
       return bookMentionsReader(chapters, reader.displayName);
     },
     storySharedBooks: async (): Promise<SharedBookSummary[]> => {
@@ -6972,7 +7460,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
       const personId = await activePersonId();
       if (!personId) return null;
-      const view = await readOwnBook(ctx.fs, ctx.key, personId, bookId);
+      const view = await readOwnBook(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
       if (!view) return null;
       const device = await host.readDeviceState();
       const saved = device.storyReadPosition?.[personId]?.[bookId];
@@ -6986,7 +7479,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return;
       const personId = await activePersonId();
       if (!personId) return;
-      if (!(await getBook(ctx.fs, ctx.key, personId, bookId))) return; // only the active person's own book
+      if (
+        !(await getBook(ctx.fs, ctx.key, await ownerOf(ctx.fs, ctx.key, personId, bookId), bookId))
+      )
+        return; // only the active person's own book
       const device = await host.readDeviceState();
       await host.updateDeviceState({
         storyReadPosition: {
@@ -7045,8 +7541,18 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Draft head (§13.6.1 — no publish needed) or the published head; null when there's nothing to export.
       const built =
         head === 'draft'
-          ? await buildDraftMarkdown(ctx.fs, ctx.key, personId, bookId)
-          : await buildPublishedMarkdown(ctx.fs, ctx.key, personId, bookId);
+          ? await buildDraftMarkdown(
+              ctx.fs,
+              ctx.key,
+              await ownerOf(ctx.fs, ctx.key, personId, bookId),
+              bookId,
+            )
+          : await buildPublishedMarkdown(
+              ctx.fs,
+              ctx.key,
+              await ownerOf(ctx.fs, ctx.key, personId, bookId),
+              bookId,
+            );
       if (!built) return null;
       const bytes = new TextEncoder().encode(built.markdown);
       // Reuses the generic file-save host op (the dream-image export precedent) — the bytes leave the vault.
@@ -7060,8 +7566,18 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return null;
       const built =
         head === 'draft'
-          ? await buildDraftHtml(ctx.fs, ctx.key, personId, bookId)
-          : await buildPublishedHtml(ctx.fs, ctx.key, personId, bookId);
+          ? await buildDraftHtml(
+              ctx.fs,
+              ctx.key,
+              await ownerOf(ctx.fs, ctx.key, personId, bookId),
+              bookId,
+            )
+          : await buildPublishedHtml(
+              ctx.fs,
+              ctx.key,
+              await ownerOf(ctx.fs, ctx.key, personId, bookId),
+              bookId,
+            );
       if (!built) return null; // nothing to export (draft: no outline; published: not published)
       const pdf = await host.printToPdf(built.html);
       if (!pdf) return null; // a host that can't render PDF (web/iOS), or a render failure
@@ -7075,8 +7591,18 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return null;
       const built =
         head === 'draft'
-          ? await buildDraftEpub(ctx.fs, ctx.key, personId, bookId)
-          : await buildPublishedEpub(ctx.fs, ctx.key, personId, bookId);
+          ? await buildDraftEpub(
+              ctx.fs,
+              ctx.key,
+              await ownerOf(ctx.fs, ctx.key, personId, bookId),
+              bookId,
+            )
+          : await buildPublishedEpub(
+              ctx.fs,
+              ctx.key,
+              await ownerOf(ctx.fs, ctx.key, personId, bookId),
+              bookId,
+            );
       if (!built) return null; // nothing to export (draft: no outline; published: not published)
       return host.saveImageFile(
         `${exportFileStem(built.title)}.epub`,
@@ -7092,8 +7618,18 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return null;
       const built =
         head === 'draft'
-          ? await buildDraftDocx(ctx.fs, ctx.key, personId, bookId)
-          : await buildPublishedDocx(ctx.fs, ctx.key, personId, bookId);
+          ? await buildDraftDocx(
+              ctx.fs,
+              ctx.key,
+              await ownerOf(ctx.fs, ctx.key, personId, bookId),
+              bookId,
+            )
+          : await buildPublishedDocx(
+              ctx.fs,
+              ctx.key,
+              await ownerOf(ctx.fs, ctx.key, personId, bookId),
+              bookId,
+            );
       if (!built) return null;
       return host.saveImageFile(
         `${exportFileStem(built.title)}.docx`,
@@ -7108,7 +7644,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
-      return (await getStoryImageIndex(ctx.fs, ctx.key, personId, bookId)).images;
+      return (
+        await getStoryImageIndex(
+          ctx.fs,
+          ctx.key,
+          await ownerOf(ctx.fs, ctx.key, personId, bookId),
+          bookId,
+        )
+      ).images;
     },
     storyGenerateImage: async (input): Promise<StoryImageResult> => {
       const { bookId, target } = StoryGenerateImageInputSchema.parse(input);
@@ -7145,7 +7688,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         imageModel,
         style,
         ...(styleNotes ? { styleNotes } : {}),
-        personId,
+        // Address the BOOK (a pair root for a shared book); bill the person who asked for the image.
+        personId: await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        meterPersonId: personId,
         bookId,
         target,
         now: new Date(),
@@ -7166,7 +7711,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
-      const image = await getStoryImage(ctx.fs, ctx.key, personId, bookId, imageId);
+      const image = await getStoryImage(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        imageId,
+      );
       return image ? { mime: image.mime, dataBase64: toBase64(image.bytes) } : null;
     },
     storyDeleteImage: async (input): Promise<void> => {
@@ -7174,7 +7725,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return;
-      await deleteStoryImage(ctx.fs, ctx.key, personId, bookId, imageId, new Date());
+      await deleteStoryImage(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        imageId,
+        new Date(),
+      );
     },
     // --- Photos (§3.7, Phase H2) — uploads + Claude vision Q&A; a photo is NEVER a generation input --------
     storyUploadPhoto: async (input): Promise<StoryImageEntry | null> => {
@@ -7191,7 +7749,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return addUploadedPhoto(
         ctx.fs,
         ctx.key,
-        personId,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
         bookId,
         { bytes, mime, ...(chapterId ? { chapterId } : {}) },
         new Date(),
@@ -7211,7 +7769,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         claude: host.claude,
         anthropicApiKey: (await resolveAiKey(host.secrets, ctx.fs, ctx.key)).key ?? null,
         claudeModel: await host.activeModel(),
-        personId,
+        // The photo belongs to the BOOK; the vision call is billed to whoever ran it.
+        personId: await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        meterPersonId: personId,
         bookId,
         imageId,
         now: new Date(),
@@ -7226,7 +7786,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       await addPhotoAnswer(
         ctx.fs,
         ctx.key,
-        personId,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
         bookId,
         { imageId, question, answer },
         new Date(),
@@ -7237,12 +7797,26 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
-      return getPhotoAnswers(ctx.fs, ctx.key, personId, bookId);
+      return getPhotoAnswers(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     // --- Image placement (§3.8, Phase H3) — AI-suggested anchor, instant set/move/remove -----------------
     storySuggestPlacement: async (input): Promise<StoryPlacementSuggestResult> => {
       const { bookId, chapterId, imageId } = StoryImagePlacementRefSchema.parse(input);
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
       if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
         return {
@@ -7259,25 +7833,55 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
-      const chapter = await setImagePlacement(ctx.fs, ctx.key, personId, bookId, chapterId, {
-        imageId,
-        afterAnchor,
-        ...(caption !== undefined ? { caption } : {}),
-      });
-      return chapter ? readBookBundle(ctx.fs, ctx.key, personId, bookId) : null;
+      const chapter = await setImagePlacement(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        chapterId,
+        {
+          imageId,
+          afterAnchor,
+          ...(caption !== undefined ? { caption } : {}),
+        },
+      );
+      return chapter
+        ? readBookBundle(ctx.fs, ctx.key, await ownerOf(ctx.fs, ctx.key, personId, bookId), bookId)
+        : null;
     },
     storyRemovePlacement: async (input): Promise<StoryBookBundle | null> => {
       const { bookId, chapterId, imageId } = StoryImagePlacementRefSchema.parse(input);
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
-      await removeImagePlacement(ctx.fs, ctx.key, personId, bookId, chapterId, imageId);
-      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      await removeImagePlacement(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+        chapterId,
+        imageId,
+      );
+      return readBookBundle(
+        ctx.fs,
+        ctx.key,
+        await ownerOf(ctx.fs, ctx.key, personId, bookId),
+        bookId,
+      );
     },
     // The batch markup revision — the one AI call in the markup layer (§3.3.1/§5.3).
     storyApplyMarkup: async (input): Promise<StoryRevisionResult> => {
       const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
-      const deps = await aiDeps('story.own');
+      // A book pass addresses the BOOK's owner ref (a pair root for a shared "Our Story", 72 §5.8) while
+      // the spend stays billed to the person who ran it — a pair has no budget and no usage history.
+      const personDeps = await aiDeps('story.own');
+      const deps =
+        personDeps &&
+        ({
+          ...personDeps,
+          personId: await ownerOf(personDeps.fs, personDeps.key, personDeps.personId, bookId),
+          meterPersonId: personDeps.personId,
+        } satisfies AiDeps);
       if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
       if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
         return {

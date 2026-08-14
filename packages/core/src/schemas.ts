@@ -5244,6 +5244,9 @@ export interface StoryBookTypeView {
    *  SAME derivation the bookshelf uses, so the workspace and the shelf can never disagree about what a
    *  book is made of. */
   unit: { one: string; many: string };
+  /** Whether this kind of book belongs to a PAIR (72 §5.8) — the commission asks for a partner and the
+   *  book lands at the pair root, readable and writable by both. */
+  sharedWithPartner?: boolean;
   /** What this type asks at commission (72 §4.1) — the picker renders whatever it declares. */
   options: {
     id: string;

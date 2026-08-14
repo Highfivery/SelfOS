@@ -1496,6 +1496,8 @@ function StudioLayout({
   const loadNewMaterial = useStoryStore((s) => s.loadNewMaterial);
   const acceptMaterial = useStoryStore((s) => s.acceptMaterial);
   const declineMaterial = useStoryStore((s) => s.declineMaterial);
+  const finishEdition = useStoryStore((s) => s.finishEdition);
+  const reopenBook = useStoryStore((s) => s.reopenBook);
   const progress = useStoryStore((s) => s.progress);
   const busy = useStoryStore((s) => s.chaptersGenerating);
   const imageUrls = useStoryStore((s) => s.imageUrls);
@@ -1766,6 +1768,13 @@ function StudioLayout({
                 onShare={() => goTab('sharing')}
                 onRename={() => setTitleDraft(manifest.title)}
                 onSettings={() => goTab('settings')}
+                finished={manifest.lifecycle === 'finished'}
+                onFinish={async () => {
+                  setError(null);
+                  const res = await finishEdition(bookId);
+                  if (!res.ok) setError(res.message ?? 'That didn’t go through.');
+                }}
+                onReopen={() => void reopenBook(bookId)}
               />
             </div>
           ) : null}
@@ -2827,10 +2836,8 @@ function BookSwitcher({
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const others = books.filter((b) => b.id !== currentId);
-  const label =
-    books.length > 1
-      ? `Book ${books.findIndex((b) => b.id === currentId) + 1} of ${books.length}`
-      : 'Your books';
+  // "Book 2 of 4" reads as "chapter 2 of 4" at a glance — say what the number counts, or nothing.
+  const label = books.length > 1 ? `Your books (${books.length})` : 'Your books';
   return (
     <div className={styles.kebabWrap}>
       <button
@@ -2884,11 +2891,17 @@ function StudioKebab({
   onShare,
   onRename,
   onSettings,
+  onFinish,
+  onReopen,
+  finished,
 }: {
   onExport: () => void;
   onShare: () => void;
   onRename: () => void;
   onSettings: () => void;
+  onFinish: () => void;
+  onReopen: () => void;
+  finished: boolean;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const pick = (fn: () => void) => () => {
@@ -2942,6 +2955,16 @@ function StudioKebab({
               onClick={pick(onSettings)}
             >
               Book settings…
+            </button>
+            {/* A book has no natural end, so it needs a way to say "this one is done" (72 §3.6). Reversible:
+                the frozen edition stays and the living book carries on from where it was. */}
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.kebabItem}
+              onClick={pick(finished ? onReopen : onFinish)}
+            >
+              {finished ? 'Reopen this book' : 'Finish this edition'}
             </button>
           </div>
         </>

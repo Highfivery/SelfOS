@@ -28,6 +28,10 @@ export interface AiDeps {
    * actually ran, so cost stays correct.
    */
   models?: Record<string, string>;
+  /** The thing this call belongs to, stamped onto the `UsageEvent` (72 §5.4). For book passes it is the
+   *  book's id, which is what makes the weekly cadence caps PER-BOOK — otherwise a second book eats the
+   *  first one's allowance and the first quietly stops being written. */
+  sessionId?: string;
 }
 
 export type ClaudeCallResult =
@@ -118,6 +122,7 @@ export async function runClaude(
     cacheWriteTokens: streamed.usage.cacheWriteTokens,
     cacheReadTokens: streamed.usage.cacheReadTokens,
     costUsd: costOf(model, streamed.usage),
+    ...(deps.sessionId ? { sessionId: deps.sessionId } : {}),
   };
   await recordUsage(fs, key, usage);
   return {

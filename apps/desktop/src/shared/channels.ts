@@ -496,6 +496,8 @@ export const IpcChannels = {
   storyContinuityCheck: 'story:continuityCheck',
   storyManuscriptRead: 'story:manuscriptRead',
   storyNewMaterial: 'story:newMaterial',
+  storyFinishEdition: 'story:finishEdition',
+  storyReopenBook: 'story:reopenBook',
   storyAcceptMaterial: 'story:acceptMaterial',
   storyDeclineMaterial: 'story:declineMaterial',
   storyContinuity: 'story:continuity',
@@ -1578,6 +1580,12 @@ export interface SelfosBridge {
   }): Promise<StoryAcceptMaterialResult>;
   /** "Not now" — decline a chapter's proposals without rewriting it. Free. */
   storyDeclineMaterial(input: { bookId: string; chapterId: string }): Promise<NewMaterialEntry[]>;
+  /** Freeze the book as the next edition and mark it finished (72 §3.6). No AI. */
+  storyFinishEdition(input: {
+    bookId: string;
+  }): Promise<{ ok: boolean; message?: string; bundle: StoryBookBundle | null }>;
+  /** Reopen a finished book — it goes back to living. The frozen editions are untouched. No AI. */
+  storyReopenBook(input: { bookId: string }): Promise<StoryBookBundle | null>;
   /** The book's pending continuity findings (no AI). */
   storyContinuity(input: { bookId: string }): Promise<ContinuityFinding[]>;
   /** Resolve or dismiss a continuity finding (no AI). Returns the remaining pending findings. */

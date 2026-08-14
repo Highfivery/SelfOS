@@ -53,7 +53,7 @@ async function readPersonEvents(
 export async function queryUsage(
   fs: FileSystem,
   key: Uint8Array,
-  filter: { from: string; to: string; personId?: string; type?: string },
+  filter: { from: string; to: string; personId?: string; type?: string; sessionId?: string },
 ): Promise<UsageEvent[]> {
   const ids = filter.personId
     ? [filter.personId]
@@ -63,6 +63,7 @@ export async function queryUsage(
     for (const event of await readPersonEvents(fs, key, id)) {
       if (event.at < filter.from || event.at > filter.to) continue;
       if (filter.type && event.type !== filter.type) continue;
+      if (filter.sessionId && event.sessionId !== filter.sessionId) continue;
       out.push(event);
     }
   }

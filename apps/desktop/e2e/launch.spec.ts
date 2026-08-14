@@ -13982,7 +13982,7 @@ test('story (64): share a memory — the biographer interviews, synthesizes, and
     await w.getByRole('button', { name: 'Share a memory' }).click();
 
     // The biographer speaks first (streamed): its opener invites the memory.
-    await expect(w.getByText(/Take me back/)).toBeVisible();
+    await expect(w.getByText(/Take me back/).first()).toBeVisible();
 
     // Tell the biographer the memory; after ONE exchange it has enough to write it.
     await w
@@ -14715,11 +14715,11 @@ test('story (64): the shelf switcher keeps two books and switches between them (
     // Decrypt-level: the owner now has two books.
     await expect.poll(async () => (await listBooks(fs, key, 'owner-1')).length).toBe(2);
 
-    // The switcher now shows "Book N of 2"; switching lands on the other book's Studio.
-    await w.getByRole('button', { name: /Book \d of 2/ }).click();
+    // The switcher now says what the number counts; switching lands on the other book's Studio.
+    await w.getByRole('button', { name: 'Your books (2) ▾' }).click();
     await w.getByRole('menuitem', { name: 'First Book' }).click();
     await expect(w.getByRole('heading', { name: 'First Book', level: 1 })).toBeVisible();
-    await w.getByRole('button', { name: /Book \d of 2/ }).click();
+    await w.getByRole('button', { name: 'Your books (2) ▾' }).click();
     await w.getByRole('menuitem', { name: 'Second Book' }).click();
     await expect(w.getByRole('heading', { name: 'Second Book', level: 1 })).toBeVisible();
   } finally {
@@ -15289,7 +15289,7 @@ test('story (64): resume an unfinished memory later — pick up where you left o
     // Start a memory: the biographer opens, the person tells it, and after one exchange it has enough.
     await w.getByRole('tab', { name: 'Interview' }).click();
     await w.getByRole('button', { name: 'Share a memory' }).click();
-    await expect(w.getByText(/Take me back/)).toBeVisible();
+    await expect(w.getByText(/Take me back/).first()).toBeVisible();
     await w
       .getByRole('textbox', { name: 'Message' })
       .fill('I got a blue bicycle the summer I was seven and rode it down our gravel drive.');

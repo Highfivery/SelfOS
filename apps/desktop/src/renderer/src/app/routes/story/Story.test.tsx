@@ -64,6 +64,7 @@ function manifest(over: Partial<BookManifest> = {}): BookManifest {
     essence: 'A quiet man learning to speak up.',
     status: 'outlining',
     sharedWith: [],
+    editions: [],
     createdAt: 'now',
     updatedAt: 'now',
     ...over,
@@ -442,16 +443,17 @@ describe('Story (64)', () => {
       },
     });
     renderStory();
-    // Lands on the first book; the switcher shows "Book 1 of 2".
+    // Lands on the first book; the switcher says what the number counts ("Your books (2)"), not "Book 1 of
+    // 2", which reads as a chapter position at a glance.
     await screen.findByRole('heading', { name: 'The Story of Ben', level: 1 });
-    await userEvent.click(await screen.findByRole('button', { name: /Book 1 of 2/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /Your books \(2\)/ }));
     // The menu lists the OTHER book; clicking it opens b2.
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Second Book' }));
     await waitFor(() => expect(opened).toContain('b2'));
     await screen.findByRole('heading', { name: 'Second Book', level: 1 });
 
     // "Start another book" enters the setup/commission flow even though books already exist.
-    await userEvent.click(await screen.findByRole('button', { name: /Book 2 of 2/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /Your books \(2\)/ }));
     await userEvent.click(await screen.findByRole('menuitem', { name: '+ Start another book' }));
     expect(await screen.findByRole('button', { name: 'Write my book' })).toBeInTheDocument();
   });

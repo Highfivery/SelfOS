@@ -182,6 +182,7 @@ describe('refreshBook (72 §5.4)', () => {
         schemaVersion: 1,
         type: 'story.structure',
         personId: 'me',
+        sessionId: bookId, // the caps are per-BOOK now (72 §5.4)
         model: 'claude-sonnet-4-6',
         at: new Date(now.getTime() - 60_000).toISOString(),
         inputTokens: 1,

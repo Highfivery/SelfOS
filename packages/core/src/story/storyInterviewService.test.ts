@@ -533,6 +533,7 @@ describe('runStoryInterviewCadence (64 §3.7 — the autonomous loop)', () => {
         schemaVersion: 1,
         type: 'story.interview',
         personId: 'me',
+        sessionId: bookId, // the caps are per-BOOK now (72 §5.4)
         model: 'claude-sonnet-4-6',
         at: new Date(now.getTime() - 60_000).toISOString(),
         inputTokens: 1,

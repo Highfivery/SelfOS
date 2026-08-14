@@ -3,6 +3,7 @@ export * from './bookTypes';
 export * from './storyCorpus';
 export * from './storyCraft';
 export * from './storyDiff';
+export * from './storyEditions';
 export * from './storyExclusionService';
 export * from './storyExport';
 export * from './storyFreshness';

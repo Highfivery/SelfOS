@@ -41,6 +41,7 @@ import {
   validateQuestionnaire,
 } from '../questionnaires/questionnaireService';
 import { getResponse } from '../questionnaires/responseService';
+import { isLiving } from './storyEditions';
 import { queryUsage } from '../usage';
 import { MCADAMS_SCENES, getBookType } from './bookTypes';
 import { budgetCorpus } from './corpusBudget';
@@ -693,6 +694,11 @@ export async function runStoryInterviewCadence(
   const chapterCount = outline?.parts.reduce((n, p) => n + p.chapters.length, 0) ?? 0;
   if (!book || !outline || chapterCount === 0) return { outcome: 'noBook' };
 
+  // A FINISHED book is not interviewed for (72 §3.6). Detection stays on — the material still accumulates
+  // quietly and offers the next edition — but the asking stops, because being asked questions for a book
+  // you have called done is what would make "finished" mean nothing.
+  if (!isLiving(book)) return { outcome: 'finished' };
+
   const interview = await getInterviewState(deps.fs, deps.key, deps.personId, args.bookId);
 
   // ≤1 open check-in. A still-unanswered one blocks a new mint (the back-off). An ANSWERED one lets the loop
@@ -729,6 +735,9 @@ export async function runStoryInterviewCadence(
     to: deps.now.toISOString(),
     personId: deps.personId,
     type: 'story.interview',
+    // Per-book (72 §5.4): two books each get their own allowance, so starting a second never quietly stops
+    // the first from being interviewed for.
+    sessionId: args.bookId,
   });
   if (passes.length >= STORY_INTERVIEW_WEEKLY_CAP) {
     // The reason matters: the MANUAL "Find what's missing" hits this too, and "check back later" with no
@@ -737,7 +746,7 @@ export async function runStoryInterviewCadence(
   }
 
   // Run the gap pass (persists coverage + lastGapPassAt).
-  const pass = await runGapPass(deps, { bookId: args.bookId });
+  const pass = await runGapPass({ ...deps, sessionId: args.bookId }, { bookId: args.bookId });
   if (!pass.ok) {
     return await clearOpenIfResolved(deps, args.bookId, interview, 'noGaps');
   }

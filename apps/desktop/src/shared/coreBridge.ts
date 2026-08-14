@@ -523,6 +523,8 @@ import {
   setQuoteStatus,
   listBooks,
   clearNewMaterial,
+  finishEdition,
+  reopenBook,
   declineNewMaterial,
   detectNewMaterial,
   getNewMaterial,
@@ -6604,6 +6606,28 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return [];
       await declineNewMaterial(ctx.fs, ctx.key, personId, bookId, { chapterId });
       return (await getNewMaterial(ctx.fs, ctx.key, personId, bookId)).entries;
+    },
+    storyFinishEdition: async (
+      input,
+    ): Promise<{ ok: boolean; message?: string; bundle: StoryBookBundle | null }> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own')))
+        return { ok: false, message: 'Not permitted.', bundle: null };
+      const personId = await activePersonId();
+      if (!personId) return { ok: false, message: 'Not permitted.', bundle: null };
+      const res = await finishEdition(ctx.fs, ctx.key, personId, bookId, new Date());
+      const bundle = await readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      return res.ok ? { ok: true, bundle } : { ok: false, message: res.message, bundle };
+    },
+    storyReopenBook: async (input): Promise<StoryBookBundle | null> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      await reopenBook(ctx.fs, ctx.key, personId, bookId, new Date());
+      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
     },
     storyManuscriptRead: async (input): Promise<StoryContinuityResult> => {
       const { bookId } = StoryBookRefSchema.parse(input);

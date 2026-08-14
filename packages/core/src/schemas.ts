@@ -4307,7 +4307,18 @@ export type BookEdition = z.infer<typeof BookEditionSchema>;
 export const BookManifestSchema = z.object({
   id: z.string().min(1),
   schemaVersion: z.literal(1),
+  /**
+   * The book's OWNER REF — a person id, or a `pairKey` for a shared "Our Story" (72 §5.8). It is the
+   * directory the book lives in, and for a solo book it is also its subject.
+   */
   personId: z.string().min(1),
+  /**
+   * Who commissioned a SHARED book. Both partners write it, either can publish it, but only the person who
+   * started it can delete it (owner decision, 2026-08-14) — deleting destroys the other person's copy too,
+   * and that is not a symmetric act the way editing is. Absent on a solo book, where `personId` already
+   * answers the question.
+   */
+  commissionedBy: z.string().optional(),
   type: BookTypeIdSchema,
   title: z.string().min(1),
   // `titleAuto` = the title was assigned by the app (a placeholder or the AI-proposed title), not chosen by

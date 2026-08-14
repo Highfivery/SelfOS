@@ -413,6 +413,31 @@ Each is its own PR-gated slice under the standard CLAUDE.md §6/§7 cadence.
 | **P5** | **The UI rebuild.** Split `Story.tsx`; bookshelf; type picker; the six tabs; person-level timeline; People without consent states; photos into the interview.                                                                   | Presents everything above.                                                                   |
 | **P6** | **The two hard types.** `childrens` (page spine, character sheet, per-type image framing, audience) and `ourStory` (shared pair storage).                                                                                       | Each is a genuine new build.                                                                 |
 
+**As built (P6b1 — the shared-book spine).** The spec called `ourStory` the largest new build, and the
+reason turned out to be authorization rather than storage:
+
+- **The book path WAS the authorization.** `story:*` handlers checked `story.own` and resolved the active
+  person, and every path was built under `people/<activePersonId>/` — so a caller could not reach another
+  person's book however they tried, and Story never needed a per-book gate the way Together does. A pair
+  root has no such property, so the gate has to become explicit; it is Together's (membership + a **live
+  partner edge, re-derived on every call**). That also makes revocation free: deleting the edge re-gates the
+  book on the next read, with no revocation step, no `sharedWith` list, and the book left unreachable rather
+  than destroyed.
+- **Addressing is by ref SHAPE.** A pairKey is two ids joined by `~`, which is not a legal id, so
+  `booksDir` can resolve `people/<id>/story/books` vs `together/pairs/<pairKey>/books` without any call site
+  changing. The first argument to every `storyService` function is now an _owner ref_, not always a person.
+- **A pair is not a spendable identity.** `AiDeps.meterPersonId` splits "whose data this is for" from "who
+  the spend is billed to" — without it the budget check looks up a person that doesn't exist and the usage
+  event is filed under an id no Usage screen can resolve.
+- **The corpus merges two lives, minus the break-glass tier.** The owner chose full corpora; `restricted`
+  onboarding material is withheld from BOTH sides, because the prose is read by the other partner and that
+  is the case 58's `excludeRestricted` exists for. A person's own book still reads their own (§8.3).
+- **Only the commissioner may delete** (owner decision) — `personId` names the pair on a shared book, so
+  `commissionedBy` records who that was.
+
+**Remaining for P6b2:** the bridge resolving the owner ref across ~101 `story:*` handlers, the `ourStory`
+type itself, the commission partner picker, the shelf and workspace surfaces, and the delete gate.
+
 **As built (P6a — `childrens`).** Most of what §4.1 declared was already in place from P3, and the work was
 mostly making declared-but-inert slots actually do something:
 
@@ -647,6 +672,14 @@ Two items are **deliberately deferred** rather than open:
 
 ## 12. Changelog
 
+- 2026-08-14 — **P6b1 built** — the storage and authorization spine for `ourStory`, backend only (no
+  surface: the type, the commission and the interview are P6b2). A pair-owned book lives at
+  `together/pairs/<pairKey>/books/`, addressed by passing the pairKey where every other book passes a person
+  id — `booksDir` resolves the root from the ref's SHAPE, which is what let shared storage land without
+  touching ~340 call sites. The gate became explicit (membership + a live partner edge, re-derived per call)
+  because **until now the book path WAS the authorization**. The corpus merges both partners' lives with the
+  break-glass tier withheld from both sides. `AiDeps.meterPersonId` separates the storage owner ref from the
+  spendable identity, since a pair has no budget. `BookManifest.commissionedBy` records who may delete.
 - 2026-08-14 — **P6a built** — the `childrens` picture book. Registered the type (page spine, own interview
   scenes, own registers, 3–7 audience); made `imageFraming` / `castPolicy` / `audience` actually consumed;
   added the character sheet on `BookConsentEntry` with independent-field merging; enforced `spine.count`;

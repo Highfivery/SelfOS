@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BookConfigSchema } from '../schemas';
-import { BIOGRAPHY_BOOK_TYPE } from './bookTypes';
+import { BIOGRAPHY_BOOK_TYPE, getBookType } from './bookTypes';
 import type { StoryCorpus } from './storyCorpus';
 import type { BookChapter, BookOutline, ExclusionItem, MarkupMark } from '../schemas';
 import {
@@ -172,6 +172,56 @@ describe('buildChapterUserMessage', () => {
     });
     expect(vignettes).toMatch(/standalone pieces/i);
     expect(vignettes).toMatch(/no through-line/i);
+  });
+
+  /**
+   * 72 §4.1 — the commission answers are per BOOK, so they have to reach the model per book. Stored and
+   * never read would mean the person picks "written to them" and gets a book about them.
+   */
+  it('carries this book’s own commission answers into the prompt', () => {
+    const portrait = getBookType('portrait')!;
+    const to = buildBiographerSystem(
+      portrait,
+      cfg({ typeOptions: { addressee: 'toThem' } }),
+      'Ben',
+    );
+    expect(to).toMatch(/written TO its subject/);
+    expect(to).toMatch(/second person/i);
+
+    const about = buildBiographerSystem(
+      portrait,
+      cfg({ typeOptions: { addressee: 'aboutThem' } }),
+      'Ben',
+    );
+    expect(about).toMatch(/written ABOUT its subject/);
+    expect(about).toMatch(/Never address them as "you"/);
+  });
+
+  /**
+   * The explicit register must GOVERN the style preset, not sit under it — a warm or literary directive
+   * otherwise dilutes it back into the tasteful version, which is exactly the failure 08 §24.9 documented.
+   */
+  it('states the erotica register AFTER the style directive, and says it governs it', () => {
+    const erotica = getBookType('erotica')!;
+    const sys = buildBiographerSystem(
+      erotica,
+      cfg({ style: 'warm', typeOptions: { tier: 'unfiltered' } }),
+      'Ben',
+    );
+    expect(sys).toMatch(/most explicit/i);
+    expect(sys).toMatch(/GOVERNS the style and tone directives above/);
+    expect(sys.indexOf('GOVERNS the style')).toBeGreaterThan(
+      sys.indexOf('Warm, intimate register'),
+    );
+    // The boundary is never softened by the register.
+    expect(sys).toMatch(/consenting adult/i);
+    expect(sys).toMatch(/Never a minor/i);
+  });
+
+  it('an unanswered choice falls back to its first option rather than going silent', () => {
+    const erotica = getBookType('erotica')!;
+    const sys = buildBiographerSystem(erotica, cfg(), 'Ben');
+    expect(sys).toMatch(/most explicit/i); // `unfiltered` is declared first
   });
 
   it('tags corpus items with stable index-based [sN] tags', () => {

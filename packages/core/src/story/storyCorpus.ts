@@ -26,7 +26,14 @@ import {
   type StoryPhotoAnswer,
   type StorySourceRef,
 } from '../schemas';
-import { getPhotoAnswers, getQuotes, getStoryImageIndex, getTimeline } from './storyService';
+import { getBookType } from './bookTypes';
+import {
+  getBook,
+  getPhotoAnswers,
+  getQuotes,
+  getStoryImageIndex,
+  getTimeline,
+} from './storyService';
 import { sortTimeline } from './storyTimeline';
 import { listMemories } from './storyMemoryService';
 
@@ -179,7 +186,17 @@ export async function buildStoryCorpus(
   const personNames = new Map(people.map((p) => [p.id, p.displayName]));
   const { keepItem, keepProfileLine } = makeExclusionFilter(exclusions, personNames);
   const items: CorpusItem[] = [];
+  // A book may be built from HAND-PICKED records rather than everything — a dream book made of five
+  // particular dreams (72 §4.2). It narrows only the KIND the type lets you pick, so choosing five dreams
+  // still leaves the person's profile and the rest of their life as context; it just stops the other 200
+  // dreams from being in the book.
+  const book = await safely(() => getBook(fs, key, personId, bookId), null);
+  const pickKind = book ? getBookType(book.type)?.sourceSelect : undefined;
+  const picked = new Set(book?.config.sourceIds ?? []);
+  const narrowed = pickKind !== undefined && picked.size > 0;
+
   const add = (item: CorpusItem): void => {
+    if (narrowed && item.sourceRef.kind === pickKind && !picked.has(item.sourceRef.id)) return;
     if (keepItem(item)) items.push(item);
   };
 

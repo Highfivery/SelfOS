@@ -1,4 +1,5 @@
 import { decryptBytes, encryptBytes, isEncryptedEnvelope } from '../crypto';
+import { z } from 'zod';
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
 import {
@@ -19,7 +20,7 @@ import {
   StoryProposalListSchema,
   StoryTodoListSchema,
   type BookChapter,
-  type BookConfig,
+  BookConfigSchema,
   type BookManifest,
   type BookOutline,
   type BookTypeId,
@@ -154,7 +155,8 @@ export async function createBook(
     personId: string;
     type: BookTypeId;
     title: string;
-    config: BookConfig;
+    /** The Zod INPUT shape: a caller supplies what it cares about and the defaults fill the rest. */
+    config: z.input<typeof BookConfigSchema>;
     now: Date;
   },
 ): Promise<BookManifest> {
@@ -170,7 +172,7 @@ export async function createBook(
     // foundations pass overwrites it with a title drawn from the content. A supplied title is the person's own.
     title: trimmedTitle || 'Your Story',
     ...(trimmedTitle ? {} : { titleAuto: true }),
-    config: input.config,
+    config: BookConfigSchema.parse(input.config),
     status: 'outlining',
     sharedWith: [],
     createdAt: at,

@@ -272,7 +272,14 @@ async function seedBook(fs: ReturnType<typeof memFileSystem>): Promise<string> {
     personId: 'me',
     type: 'biography',
     title: 'The Story of Ben',
-    config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    config: {
+      voice: 'third',
+      style: 'warm',
+      length: 'standard',
+      autoRefresh: true,
+      typeOptions: {},
+      sourceIds: [],
+    },
     now,
   });
   await applyFoundations(fs, key, 'me', book.id, { essence: 'x', outline, timeline }, now);
@@ -379,7 +386,14 @@ describe('runGapPass (64 §3.7)', () => {
       personId: 'me',
       type: 'biography',
       title: 'Empty',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
       now,
     });
     let streamed = false;
@@ -516,7 +530,14 @@ describe('runStoryInterviewCadence (64 §3.7 — the autonomous loop)', () => {
       personId: 'me',
       type: 'biography',
       title: 'Empty',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
       now,
     });
     const res = await runStoryInterviewCadence(deps(fs2, spy), { bookId: book.id, auto: true });

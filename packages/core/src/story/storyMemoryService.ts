@@ -305,6 +305,8 @@ async function buildMemorySystem(
     style: 'warm',
     length: 'full',
     autoRefresh: true,
+    typeOptions: {},
+    sourceIds: [],
   };
   const system = buildBiographerSystem(bookType, config, name);
   const guidance = MEMORY_INTERVIEW_GUIDANCE.replace('${name}', name || 'this person');

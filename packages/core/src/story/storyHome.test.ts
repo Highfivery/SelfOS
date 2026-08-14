@@ -86,7 +86,14 @@ describe('computeStoryHomeSignal (64 §5.6)', () => {
       personId: 'me',
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
       now,
     });
     await applyFoundations(fs, key, 'me', book.id, { essence: 'x', outline, timeline }, now);

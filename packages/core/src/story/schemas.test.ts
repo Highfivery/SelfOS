@@ -16,7 +16,14 @@ describe('Your Story schemas (64)', () => {
   it('BookConfig applies the owner-approved defaults', () => {
     const cfg = BookConfigSchema.parse({});
     // A biography defaults to Full length — published-book length (§3.2, owner decision 2026-07-16).
-    expect(cfg).toEqual({ voice: 'third', style: 'warm', length: 'full', autoRefresh: true });
+    expect(cfg).toEqual({
+      voice: 'third',
+      style: 'warm',
+      length: 'full',
+      autoRefresh: true,
+      typeOptions: {},
+      sourceIds: [],
+    });
   });
 
   it('BookManifest round-trips and defaults sharedWith to []', () => {

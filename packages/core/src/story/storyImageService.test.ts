@@ -22,7 +22,14 @@ import { createBook, getBook, getStoryImageIndex, saveChapter, updateBook } from
 
 const key = generateMasterKey();
 const now = new Date('2026-07-16T00:00:00.000Z');
-const config: BookConfig = { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true };
+const config: BookConfig = {
+  voice: 'third',
+  style: 'warm',
+  length: 'standard',
+  autoRefresh: true,
+  typeOptions: {},
+  sourceIds: [],
+};
 
 const captured: {
   claudeInput?: string | undefined;

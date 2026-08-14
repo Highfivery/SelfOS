@@ -110,7 +110,14 @@ async function seedBook(fs: ReturnType<typeof memFileSystem>, count: number): Pr
     personId: 'me',
     type: 'biography',
     title: 'The Story of Ben',
-    config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    config: {
+      voice: 'third',
+      style: 'warm',
+      length: 'standard',
+      autoRefresh: true,
+      typeOptions: {},
+      sourceIds: [],
+    },
     now,
   });
   await applyFoundations(fs, key, 'me', book.id, { essence: 'A life.', outline, timeline }, now);

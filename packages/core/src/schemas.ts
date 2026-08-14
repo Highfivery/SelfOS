@@ -4158,6 +4158,23 @@ export const BookConfigSchema = z.object({
   // the global `dreams.imageStyle`/`dreams.imageStyleNotes` so pre-existing books keep working.
   imageStyle: z.string().optional(),
   imageStyleNotes: z.string().max(300).optional(),
+  /**
+   * The answers to this book TYPE's own commission questions (72 §4.1/§4.2), keyed by option id — is this
+   * portrait written to them or about them, which years does this memoir cover, how explicit is this erotica.
+   *
+   * They live per BOOK, not per type, because a person writes several books of the same kind and each is a
+   * different act (owner decision, 2026-08-13). The options are DECLARED by the book type, so the commission
+   * screen and the prompt both derive from one declaration — the schema-driven-settings pattern.
+   *
+   * Free-form `Record<string, string>` on purpose: the valid keys and values belong to the type registry
+   * (code), not to this schema, so adding a type never touches the persisted shape. Unknown keys are inert.
+   */
+  typeOptions: z.record(z.string(), z.string()).default({}),
+  /**
+   * Which source records this book is built from, when the person chose specific ones rather than everything
+   * (a dream book made of five particular dreams). Empty ⇒ draw on everything, the default for every type.
+   */
+  sourceIds: z.array(z.string()).default([]),
 });
 export type BookConfig = z.infer<typeof BookConfigSchema>;
 
@@ -5161,6 +5178,20 @@ export interface StoryBookTypeView {
   blurb: string;
   structures: { id: string; label: string; description: string; isDefault?: boolean }[];
   stylePresets: { id: BookStyle; label: string }[];
+  /** Whether this kind of book is behind the shared 18+ acknowledgement (72 §8.4). */
+  gates: { adult: boolean };
+  /** What this type asks at commission (72 §4.1) — the picker renders whatever it declares. */
+  options: {
+    id: string;
+    label: string;
+    help?: string;
+    kind: 'choice' | 'text' | 'person';
+    choices?: { value: string; label: string; description?: string }[];
+    placeholder?: string;
+    required?: boolean;
+  }[];
+  /** Which kind of record this type lets the person hand-pick, filling `BookConfig.sourceIds`. */
+  sourceSelect?: 'dream';
 }
 
 /** `story:create` input — the setup screen's choices (§3.2). `title` may be blank: the person can leave it

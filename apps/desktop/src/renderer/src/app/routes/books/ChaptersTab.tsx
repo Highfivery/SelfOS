@@ -10,7 +10,6 @@ import {
 import { useStoryStore } from '../../../stores/storyStore';
 import { OutlineEditor } from './OutlineEditor';
 import styles from './Books.module.css';
-import { TimelinePanel } from './TimelinePanel';
 import { manuscriptMetrics } from '@selfos/core/story-metrics';
 import { useEffect, useState } from 'react';
 import type { ContinuityFinding, StoryBookBundle, StoryDraftProgress } from '@shared/schemas';
@@ -258,7 +257,6 @@ export function ChaptersTab({
 
       {/* The chronology sits with the structure it shapes (§16.2) — the outline says what the book holds,
           the timeline says when it happened. */}
-      <TimelinePanel bundle={bundle} />
     </Stack>
   );
 }

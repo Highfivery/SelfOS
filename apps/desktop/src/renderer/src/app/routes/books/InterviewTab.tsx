@@ -9,6 +9,7 @@ import {
 } from '../../../design-system/components';
 import { useStoryStore } from '../../../stores/storyStore';
 import { MemoryCollection } from './MemoryCollection';
+import { PhotosPanel } from './PhotosPanel';
 import { ShareMemoryPanel } from './ShareMemoryPanel';
 import styles from './Books.module.css';
 import { useEffect, useState } from 'react';
@@ -294,7 +295,12 @@ export function InterviewTab({
         </Card>
       ) : null}
 
-      {/* The two memory sections (§14.2), shared verbatim with the book-independent `/story/memories`
+      {/* Start from a photo (72 §3.7). Photos used to be their own tab, which put them beside chapters and
+          sharing as though they were a thing you manage. A photo's only job is to prompt a memory you then
+          answer — so it belongs in the interview, before the record of what you've already told it. */}
+      <PhotosPanel bookId={bookId} />
+
+      {/* The two memory sections (§14.2), shared verbatim with the book-independent `/books/memories`
           route (§15.1) so they can never drift. */}
       <MemoryCollection onOpen={(memoryId) => setPanel({ memoryId })} />
 

@@ -510,6 +510,20 @@ _All resolved with the owner on 2026-08-12:_
   (`groundSummary`, type/tier-scoped) on both call sites (auto engine + the Suggested panel), as prompt
   steering rather than a hard filter, since the planner and question-level de-dup already bound the damage
   downstream. Guarded on both paths, each verified to FAIL when the wiring is reverted.
+- 2026-08-14 — **Follow-up: never-asked ground now has a shelf life (§5.9).** Completes the trade the fix below
+  made. Keeping every zero-ask topic forever turns planner-named ground into the map bloat §5.9 exists to
+  prevent, just with a nicer provenance — but on ask count alone, ground planned five minutes ago and ground
+  planned last spring are identical. `Topic` gains an additive-optional **`createdAt`**, stamped at mint, and
+  pruning ages out a never-asked topic after **`UNASKED_TOPIC_TTL_DAYS` (90)** — deliberately the same horizon
+  as `DORMANT_DAYS`, so "how long before we reconsider this area" has ONE answer in the model. A one-ask name
+  still goes immediately, regardless of age: that is the classifier noise the rule was written for.
+  **Absence means GRANDFATHERED, and that is the load-bearing part**: every topic in every existing vault
+  predates the field, and treating "no birthday" as old would delete exactly the live ground the fix below
+  protects. Verified against the real vault: 0 of 111 and 0 of 82 topics carry a birthday today, so Angel
+  still loses 0 of 36 open areas and Ben the same 3 one-ask names — the change is a no-op for existing data
+  and governs only what is minted from here. Guarded, and the guard is verified to fail BOTH ways: with expiry
+  removed, and with a missing birthday treated as old. No `schemaVersion` bump (additive-optional, the
+  established precedent).
 - 2026-08-14 — **Fix: pruning deleted the ground the planner had just named (§5.9).** Found by investigating
   the steady state after everything is worked through. `MIN_TOPIC_SUPPORT` (2) gates a name on how many ASKS
   sit under it — a premise that predates the planner, which names ground BEFORE anything is asked about it, so

@@ -26,6 +26,7 @@ import {
   pruneTopicMap,
   resolveTopicId,
   SATURATION_ASKS,
+  UNASKED_TOPIC_TTL_DAYS,
   seedTopics,
   topicStatuses,
   topicsWithNewMaterial,
@@ -366,6 +367,35 @@ describe('topic-map hygiene (spec 71 §5.9)', () => {
     // …while the one-ask name still goes, so this is a narrowing, not an abolition.
     expect(gc.topics.some((t) => t.topicId === noise.topicId)).toBe(false);
     expect(gc.dropped).toBe(1);
+  });
+
+  it('ages out ground planned long ago and never asked, but GRANDFATHERS topics with no birthday', () => {
+    // The other half of "zero asks is not noise": kept forever it becomes the bloat §5.9 exists to prevent.
+    // `createdAt` is what tells a backlog item from debris — on ask count alone they are identical.
+    const nowD = new Date('2026-08-14T00:00:00.000Z');
+    const old = new Date(nowD.getTime() - (UNASKED_TOPIC_TTL_DAYS + 1) * 86_400_000);
+    const fresh = new Date(nowD.getTime() - 3 * 86_400_000);
+
+    const minted = mintTopics(seedTopics(), [{ label: 'Planned last spring' }], old).topics;
+    const withFresh = mintTopics(minted, [{ label: 'Planned this week' }], fresh).topics;
+    // A topic from before the field existed — exactly what every real vault holds today.
+    const grandfathered: Topic = {
+      topicId: 'Intimacy:aftercare-rituals',
+      label: 'Aftercare rituals',
+      lifeArea: 'Intimacy',
+      seeded: false,
+      aliases: [],
+    };
+    const topics = [...withFresh, grandfathered];
+    const ledger = emptyLedger('p'); // nothing has been asked about ANY of them
+
+    const gc = pruneTopicMap(topics, ledger, new Set(), nowD);
+    const labels = gc.topics.map((t) => t.label);
+    expect(labels).not.toContain('Planned last spring'); // aged out
+    expect(labels).toContain('Planned this week'); // still a live backlog item
+    // No birthday ⇒ never expired for age. Assuming "old" here would delete the live ground the
+    // 2026-08-13 fix exists to protect — 25 of one real person's 36 open areas.
+    expect(labels).toContain('Aftercare rituals');
   });
 
   it('folds duplicates two passes coined independently, keeping the counts', () => {

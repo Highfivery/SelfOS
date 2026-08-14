@@ -1,4 +1,5 @@
 import { decryptBytes, encryptBytes, isEncryptedEnvelope } from '../crypto';
+import { pathSegment } from '../pathSafety';
 import { z } from 'zod';
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
@@ -53,11 +54,17 @@ import { mergeGeneratedTimeline } from './storyTimeline';
  * pure vault I/O; generation is `storyGenerationService`.
  */
 
+// Every book path is built from these two, and both ids arrive from the renderer (`bookId` is a plain
+// `z.string().min(1)` on every `story:*` input). The host resolves a vault path with `join(vaultDir, path)`,
+// which NORMALIZES `..` rather than refusing it — so an unguarded `bookId` of `../../../../../../tmp/x`
+// resolves to `/tmp/x` and the app happily `mkdir`s and writes an encrypted file there. The bridge is the
+// trust boundary for permission; this is the trust boundary for location (the `isMediaPath` habit, which
+// questionnaire media and dream images already had and books did not).
 function booksDir(personId: string): string {
-  return `people/${personId}/story/books`;
+  return `people/${pathSegment(personId)}/story/books`;
 }
 function bookDir(personId: string, bookId: string): string {
-  return `${booksDir(personId)}/${bookId}`;
+  return `${booksDir(personId)}/${pathSegment(bookId)}`;
 }
 function manifestPath(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/book.enc`;
@@ -78,7 +85,7 @@ function chaptersDir(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/chapters`;
 }
 function chapterPath(personId: string, bookId: string, chapterId: string): string {
-  return `${chaptersDir(personId, bookId)}/${chapterId}.enc`;
+  return `${chaptersDir(personId, bookId)}/${pathSegment(chapterId)}.enc`;
 }
 function publishedDir(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/published`;
@@ -87,16 +94,16 @@ function publishedManifestPath(personId: string, bookId: string): string {
   return `${publishedDir(personId, bookId)}/manifest.enc`;
 }
 function publishedChapterPath(personId: string, bookId: string, chapterId: string): string {
-  return `${publishedDir(personId, bookId)}/${chapterId}.enc`;
+  return `${publishedDir(personId, bookId)}/${pathSegment(chapterId)}.enc`;
 }
 function publishedImagesDir(personId: string, bookId: string): string {
   return `${publishedDir(personId, bookId)}/images`;
 }
 function publishedImageBytesPath(personId: string, bookId: string, imageId: string): string {
-  return `${publishedImagesDir(personId, bookId)}/${imageId}.enc`;
+  return `${publishedImagesDir(personId, bookId)}/${pathSegment(imageId)}.enc`;
 }
 function markupPath(personId: string, bookId: string, chapterId: string): string {
-  return `${bookDir(personId, bookId)}/markup/${chapterId}.enc`;
+  return `${bookDir(personId, bookId)}/markup/${pathSegment(chapterId)}.enc`;
 }
 /** Chapter version history lives in its OWN dir (not `chapters/`) so `listChapters`' `.enc` scan never
  *  tries to parse a history file as a chapter (one stray file must never brick the whole book). */
@@ -104,7 +111,7 @@ function historyDir(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/history`;
 }
 function chapterHistoryPath(personId: string, bookId: string, chapterId: string): string {
-  return `${historyDir(personId, bookId)}/${chapterId}.enc`;
+  return `${historyDir(personId, bookId)}/${pathSegment(chapterId)}.enc`;
 }
 function archiveDir(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/archive`;
@@ -134,7 +141,7 @@ function imageIndexPath(personId: string, bookId: string): string {
   return `${imagesDir(personId, bookId)}/index.enc`;
 }
 function imageBytesPath(personId: string, bookId: string, imageId: string): string {
-  return `${imagesDir(personId, bookId)}/${imageId}.enc`;
+  return `${imagesDir(personId, bookId)}/${pathSegment(imageId)}.enc`;
 }
 
 // --- Manifest / book lifecycle ---------------------------------------------------------------------------

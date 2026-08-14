@@ -1,4 +1,5 @@
 import type { FileSystem } from '../host';
+import { isSafeSegment, isSafePairKey } from '../pathSafety';
 import {
   matrixRowKey,
   matrixRowLabel,
@@ -28,13 +29,6 @@ function ynmDir(personId: string): string {
 }
 function ynmPath(personId: string, pairKey: string): string {
   return `${ynmDir(personId)}/${pairKey}.enc`;
-}
-function isSafeSegment(s: string): boolean {
-  return /^[A-Za-z0-9_-]+$/.test(s);
-}
-function isSafePairKey(pairKey: string): boolean {
-  const parts = pairKey.split('~');
-  return parts.length === 2 && parts.every(isSafeSegment);
 }
 
 /** Whether `personId` has opted this pair in (§3.10b). */

@@ -1,4 +1,5 @@
 import type { FileSystem } from '../host';
+import { isSafeSegment, isSafePairKey } from '../pathSafety';
 import { uuid } from '../id';
 import { AgreementSchema, SharedReportSchema, type Agreement, type SharedReport } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
@@ -11,16 +12,6 @@ import { pairKeyFor } from './togetherService';
 // Staleness is DERIVED (§3.8), never stored.
 
 const PAIRS_ROOT = 'together/pairs';
-
-/** An id we minted is safe (traversal defense — the `isMediaPath` habit). */
-function isSafeSegment(segment: string): boolean {
-  return /^[A-Za-z0-9_-]+$/.test(segment);
-}
-/** A pairKey is two safe ids joined by `~` (`pairKeyFor`) — path-safe, no traversal. */
-function isSafePairKey(pairKey: string): boolean {
-  const parts = pairKey.split('~');
-  return parts.length === 2 && parts.every(isSafeSegment);
-}
 
 function agreementsDir(pairKey: string): string {
   return `${PAIRS_ROOT}/${pairKey}/agreements`;

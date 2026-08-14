@@ -55,18 +55,52 @@ describe('customTypeService', () => {
     expect(await addCustomType(fs, 'Recovery')).toEqual(['Recovery']);
   });
 
+  it('DELETES the retired intimacy-topic keys once, and leaves other unknown keys alone (owner, 2026-08-14)', async () => {
+    // Two rules that look contradictory and are not. Retiring a field is an EXPLICIT, named act
+    // (`RETIRED_PREFS_KEYS`) — the owner chose to drop the custom intimacy topics, so they go. Everything
+    // else unknown is preserved, because erasing authored content as a side effect of an unrelated save is
+    // not ours to do.
+    const fs = memFileSystem();
+    const write = async (o: unknown): Promise<void> => {
+      await fs.writeAtomic(
+        'config/questionnaires.json',
+        new TextEncoder().encode(JSON.stringify(o)),
+      );
+    };
+    const read = async (): Promise<Record<string, unknown>> =>
+      JSON.parse(
+        new TextDecoder().decode((await fs.read('config/questionnaires.json')) as Uint8Array),
+      ) as Record<string, unknown>;
+
+    await write({
+      schemaVersion: 1,
+      customTypes: ['Check-in'],
+      customIntimacyActivities: ['MFM threesome'],
+      customIntimacyFantasies: ['Watching partner with a third'],
+      somethingElseEntirely: ['keep me'],
+    });
+
+    // A plain READ performs the one-time cleanup.
+    expect(await listCustomTypes(fs)).toEqual(['Check-in']);
+    const after = await read();
+    expect(after['customIntimacyActivities']).toBeUndefined();
+    expect(after['customIntimacyFantasies']).toBeUndefined();
+    // …without touching what nobody retired, or what the schema does know.
+    expect(after['somethingElseEntirely']).toEqual(['keep me']);
+    expect(after['customTypes']).toEqual(['Check-in']);
+
+    // Idempotent: a second read rewrites nothing and loses nothing.
+    await listCustomTypes(fs);
+    expect(await read()).toEqual(after);
+  });
+
   it('preserves keys the schema no longer knows, instead of erasing authored content (2026-08-13)', async () => {
-    // The retired custom intimacy topics live in this file. Zod strips unknown keys, so without the raw merge
-    // an unrelated `addCustomType` would silently delete a list the Owner curated by hand.
+    // The general rule the deletion above is a deliberate exception to.
     const fs = memFileSystem();
     await fs.writeAtomic(
       'config/questionnaires.json',
       new TextEncoder().encode(
-        JSON.stringify({
-          schemaVersion: 1,
-          customTypes: [],
-          customIntimacyActivities: ['MFM threesome'],
-        }),
+        JSON.stringify({ schemaVersion: 1, customTypes: [], somethingElseEntirely: ['keep me'] }),
       ),
     );
     await addCustomType(fs, 'Check-in');
@@ -74,6 +108,6 @@ describe('customTypeService', () => {
       new TextDecoder().decode((await fs.read('config/questionnaires.json')) as Uint8Array),
     ) as Record<string, unknown>;
     expect(raw['customTypes']).toEqual(['Check-in']);
-    expect(raw['customIntimacyActivities']).toEqual(['MFM threesome']);
+    expect(raw['somethingElseEntirely']).toEqual(['keep me']);
   });
 });

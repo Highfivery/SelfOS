@@ -18,6 +18,7 @@ import { generateQuestions, groundSummary, type AiDeps } from './generationServi
 import { readProfile, writeProfile } from './personalizationProfile';
 import { buildPlanUserMessage, PLAN_SYSTEM, steeringLifeAreas } from './planService';
 import { TAGGING_VERSION } from './askLedgerBackfill';
+import { buildGenerationUserMessage } from './aiPrompts';
 import { hasRecitation } from './selfContained';
 import {
   buildLedgerReference,
@@ -1120,5 +1121,91 @@ describe('pruneTopicMap — adopted ground survives (71 §5.9)', () => {
     expect(pruneTopicMap([adopted], unasked).topics.map((t) => t.topicId)).toContain(
       adopted.topicId,
     );
+  });
+});
+
+// ── Prompt composition ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Nothing watches how big the generation prompt gets, or which block is eating it — and that is exactly how
+ * the "go deeper on everything they rated" list sat at 2,463 chars (29% of the whole message, all 101 rated
+ * acts) for months without anyone noticing (spec 71 §1). Every block that grows with a person's history is
+ * capped in code; these assert the caps actually hold on a MAXIMAL fixture, so the next unbounded block
+ * fails here instead of quietly crowding out the instruction that matters.
+ *
+ * The budgets are deliberately loose — roughly 2x the observed size. This is a bloat tripwire, not a
+ * golden-master: it must not fail because someone reworded a sentence.
+ */
+describe('prompt composition stays bounded (spec 71 §1/§5.7)', () => {
+  const hugeGround = Array.from({ length: 60 }, (_, i) => ({
+    label: `Emergent ground number ${i}`,
+    blurb:
+      'A one-line description of this ground, of roughly the length the planner actually writes.',
+  }));
+  const hugeActs = Array.from({ length: 101 }, (_, i) => ({
+    key: `act-${i}`,
+    label: `A rated activity with a fairly long descriptive label ${i}`,
+    rating: 'Love it',
+  }));
+
+  // The prompt's parts join with a SINGLE newline, so "everything up to a blank line" over-captures to the
+  // end of the message. Measure each block precisely: the go-deeper block is one line; the ground block runs
+  // until the Boundary line that always follows it.
+  const line = (msg: string, start: string): string => {
+    const i = msg.indexOf(start);
+    return i === -1 ? '' : (msg.slice(i).split('\n')[0] ?? '');
+  };
+  const section = (msg: string, start: string, end: string): string => {
+    const i = msg.indexOf(start);
+    if (i === -1) return '';
+    const rest = msg.slice(i);
+    const j = rest.indexOf(end);
+    return j === -1 ? rest : rest.slice(0, j);
+  };
+
+  it('caps the go-deeper act list and the open-ground list on a maximal history', () => {
+    const msg = buildGenerationUserMessage({
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      context: '',
+      existingPrompts: [],
+      count: 5,
+      coveredIntimacyActs: hugeActs,
+      openGround: hugeGround,
+    });
+
+    // The #314 block: 101 rated acts must never all reach the model again.
+    const deeper = line(msg, 'They have ALREADY RATED');
+    expect(deeper).not.toBe('');
+    expect(deeper.length).toBeLessThan(1200);
+    // …and it is the CAP doing that, not a short fixture.
+    expect(deeper).not.toContain('label 99');
+
+    // The subject matter grows with the person's map, so it is capped too.
+    const ground = section(msg, 'Subject matter to draw on', '\nBoundary:');
+    expect(ground).not.toBe('');
+    expect(ground.length).toBeLessThan(2600);
+    expect(ground).not.toContain('Emergent ground number 59');
+
+    // The whole message stays a message, not a document. A maximal fixture sits far under this.
+    expect(msg.length).toBeLessThan(14_000);
+  });
+
+  it('keeps the governing instructions when every block is at its cap', () => {
+    // Bloat does its damage by crowding out the instruction that governs — assert those survive the worst case.
+    const msg = buildGenerationUserMessage({
+      type: 'intimacy',
+      sensitivity: 'unfiltered',
+      context: '',
+      existingPrompts: [],
+      count: 5,
+      coveredIntimacyActs: hugeActs,
+      openGround: hugeGround,
+      threads: [{ label: 'Edge play', angle: 'what she wants tried' }],
+    });
+    expect(msg).toMatch(/no-holds-barred/i); // the tier register
+    expect(msg).toMatch(/governs this questionnaire's tone/i); // the override that must not be crowded out
+    expect(msg).toMatch(/never minors/i); // the safety boundary
+    expect(msg).toContain('GROUND TO OPEN THIS TIME'); // the planner's chosen ground
   });
 });

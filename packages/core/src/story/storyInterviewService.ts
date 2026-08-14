@@ -2,15 +2,6 @@ import { z } from 'zod';
 import { classifyParseOutcome, extractJsonObject, tolerantArray } from '../ai';
 import { uuid } from '../id';
 import { listInsightsForPerson } from '../insights';
-import { formatIntakeForGeneration, getIntakeSession } from '../intake/intakeService';
-import { listCoveredTopics } from '../questionnaires/coveredTopicsStore';
-import {
-  buildDedupReference,
-  gatherRecipientAskedPrompts,
-  gatherRecipientFeedbackGuidance,
-  gatherRecipientInsightFacts,
-  gatherRecipientPriorAnswers,
-} from '../questionnaires/recipientHistory';
 import type {
   AiFailureReason,
   BookChapter,
@@ -42,6 +33,8 @@ import {
 } from '../questionnaires/questionnaireService';
 import { getResponse } from '../questionnaires/responseService';
 import { isLiving } from './storyEditions';
+import { getMemory } from './storyMemoryService';
+import { gatherBiographerReference } from './storyReference';
 import { queryUsage } from '../usage';
 import { BIOGRAPHY_BOOK_TYPE, getBookType, type BookInterviewFramework } from './bookTypes';
 import { budgetCorpus } from './corpusBudget';
@@ -89,35 +82,11 @@ export async function mintStoryCheckInFromTodo(
 
   // De-dup parity with the manual + auto-checkin paths (64 §3.7, closing the §23.5 drift): a biographer
   // check-in is a SELF-send, so the "recipient" whose history we must never re-ask is the person themselves.
-  // Assemble the same budgeted reference (onboarding-first) + the exact asked-prompt list, so the biographer
-  // never re-asks what onboarding or a prior questionnaire already answered ("reads like it hasn't read your
-  // file"). Author-blind — fed only to the model.
-  const [priorAnswers, insightFacts, priorPrompts, intakeSession, feedbackGuidance, coveredTopics] =
-    await Promise.all([
-      gatherRecipientPriorAnswers(deps.fs, deps.key, deps.personId),
-      gatherRecipientInsightFacts(deps.fs, deps.key, deps.personId),
-      gatherRecipientAskedPrompts(deps.fs, deps.key, deps.personId),
-      getIntakeSession(deps.fs, deps.key, deps.personId),
-      // spec 69 §5.9 — the biographer learns from the person's own prior skips/declines too.
-      gatherRecipientFeedbackGuidance(deps.fs, deps.key, deps.personId),
-      // §28.3 covered-topics parity (spec 69 §5.2): a self-send, so author = recipient = the person.
-      listCoveredTopics(deps.fs, deps.key, deps.personId, deps.personId),
-    ]);
-  const intake = intakeSession
-    ? formatIntakeForGeneration(intakeSession)
-    : { text: '', prompts: [] as string[] };
-  const coveredNotes = coveredTopics.map((t) => t.note);
-  const coveredPrompts = coveredTopics
-    .map((t) => t.sourcePrompt)
-    .filter((p): p is string => Boolean(p));
-  const dedupReference = buildDedupReference({
-    intakeText: intake.text,
-    priorAnswers,
-    insightFacts,
-    priorPrompts,
-    ...(coveredNotes.length ? { coveredTopics: coveredNotes } : {}),
-  });
-  const recipientAskedPrompts = [...priorPrompts, ...intake.prompts, ...coveredPrompts];
+  const {
+    dedupReference,
+    askedPrompts: recipientAskedPrompts,
+    feedbackGuidance,
+  } = await gatherBiographerReference(deps.fs, deps.key, deps.personId);
 
   const gen = await generateQuestions(deps, {
     type: 'general',
@@ -453,7 +422,21 @@ export async function getStoryGaps(
       focus: gap.focus,
       priority: gap.priority,
       ...(gap.assignmentId ? { assignmentId: gap.assignmentId } : {}),
+      ...(gap.memoryId ? { memoryId: gap.memoryId } : {}),
     };
+    // A gap can be closed by EITHER channel (72 §5.5). A conversation closes it when the memory is SAVED —
+    // an abandoned draft leaves it askable, which is right: nothing was told.
+    if (gap.memoryId) {
+      const memory = await getMemory(fs, key, personId, gap.memoryId);
+      if (memory?.status === 'saved') {
+        gaps.push({ ...base, status: 'answered' });
+        continue;
+      }
+      if (memory) {
+        gaps.push({ ...base, status: 'asked' }); // a conversation is under way
+        continue;
+      }
+    }
     if (!gap.assignmentId) {
       gaps.push({ ...base, status: 'open' });
       continue;

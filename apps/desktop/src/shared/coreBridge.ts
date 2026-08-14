@@ -6214,7 +6214,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       };
     },
     storyMemoryOpen: async (input): Promise<StoryMemoryDetail | null> => {
-      const { memoryId, seedFocus } = StoryMemoryOpenInputSchema.parse(input);
+      const { memoryId, seedFocus, bookId, gapId } = StoryMemoryOpenInputSchema.parse(input);
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
@@ -6230,6 +6230,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personName: person?.displayName ?? '',
         ...(memoryId ? { memoryId } : {}),
         ...(seedFocus ? { seedFocus } : {}),
+        ...(bookId ? { bookId } : {}),
+        ...(gapId ? { gapId } : {}),
         onDelta: (text) => host.emitStreamChunk('memory', text),
         now: new Date(),
       });

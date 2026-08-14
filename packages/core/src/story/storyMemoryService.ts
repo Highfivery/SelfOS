@@ -24,6 +24,7 @@ import {
   type Insight,
   type InsightFact,
   type RewindResult,
+  type BookManifest,
   type StoryMemory,
   type StoryMemoryEdits,
   type StoryMemorySaveResult,
@@ -35,7 +36,8 @@ import { checkBudget, costOf, recordUsage } from '../usage';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { BIOGRAPHY_BOOK_TYPE, MCADAMS_SCENES, getBookType } from './bookTypes';
 import { buildBiographerSystem } from './storyPromptBuilder';
-import { listBooks, listChapters } from './storyService';
+import { gatherBiographerReference } from './storyReference';
+import { getInterviewState, listBooks, listChapters, saveInterviewState } from './storyService';
 
 /**
  * "Share a memory" (64-your-story §14) — the biographer interview chat + its synthesized memory. A person
@@ -296,9 +298,15 @@ async function buildMemorySystem(
   key: Uint8Array,
   personId: string,
   name: string,
+  /** Which book this conversation is FOR (72 §5.5). A memoir's interviewer and an erotica's are not the
+   *  same interviewer, so taking whichever book happened to be first was wrong the moment books went
+   *  plural. Falls back to the most recently updated book, then to the biography defaults. */
+  bookId?: string,
 ): Promise<string> {
   const books = await listBooks(fs, key, personId);
-  const book = books[0] ?? null;
+  const book =
+    (bookId ? books.find((b) => b.id === bookId) : undefined) ??
+    books.reduce<BookManifest | null>((a, b) => (a && a.updatedAt >= b.updatedAt ? a : b), null);
   const bookType = getBookType(book?.type ?? 'biography') ?? BIOGRAPHY_BOOK_TYPE;
   const config = book?.config ?? {
     voice: 'third',
@@ -310,7 +318,14 @@ async function buildMemorySystem(
   };
   const system = buildBiographerSystem(bookType, config, name);
   const guidance = MEMORY_INTERVIEW_GUIDANCE.replace('${name}', name || 'this person');
-  return [system, guidance, FORMATTING].filter(Boolean).join('\n\n');
+  // What it already knows (72 §5.5). Without this the conversation opens cold and asks about things the
+  // person answered in onboarding months ago — the questionnaire path has always had this reference and the
+  // chat never did, which is the whole reason talking to the biographer felt like starting over.
+  const { dedupReference, feedbackGuidance } = await gatherBiographerReference(fs, key, personId);
+  const known = dedupReference.trim()
+    ? `WHAT YOU ALREADY KNOW ABOUT THEM — do not ask them to tell you any of this again; build on it instead, and let it make your questions specific.\n\n${dedupReference}`
+    : '';
+  return [system, guidance, known, feedbackGuidance, FORMATTING].filter(Boolean).join('\n\n');
 }
 
 export interface StoryMemoryTurnDeps {
@@ -426,6 +441,10 @@ export async function openMemoryChat(deps: {
   personName: string;
   memoryId?: string;
   seedFocus?: string;
+  /** Which book this conversation is for (72 §5.5) — decides whose interviewer speaks. */
+  bookId?: string;
+  /** The gap it was opened to close; saving the memory marks that gap answered. */
+  gapId?: string;
   onDelta: (text: string) => void;
   now: Date;
   override?: boolean;
@@ -433,6 +452,17 @@ export async function openMemoryChat(deps: {
   const { fs, key, client, apiKey, model, personId, personName, now } = deps;
   const at = now.toISOString();
   const memoryId = deps.memoryId ?? uuid();
+
+  // Claim the gap the moment the conversation opens (72 §5.5), not at save — otherwise the gap still reads
+  // as askable while you are in the middle of answering it, and a second conversation could be opened on it.
+  if (deps.bookId && deps.gapId) {
+    const interview = await getInterviewState(fs, key, personId, deps.bookId);
+    const gaps = interview.lastGaps ?? [];
+    const next = gaps.map((g) => (g.id === deps.gapId ? { ...g, memoryId } : g));
+    if (next.some((g, i) => g !== gaps[i])) {
+      await saveInterviewState(fs, key, personId, deps.bookId, { ...interview, lastGaps: next });
+    }
+  }
 
   const existingMemory = await getMemory(fs, key, personId, memoryId);
   const memory: StoryMemory = existingMemory ?? {
@@ -446,6 +476,8 @@ export async function openMemoryChat(deps: {
     people: [],
     lifeAreas: [],
     pullQuotes: [],
+    ...(deps.bookId ? { bookId: deps.bookId } : {}),
+    ...(deps.gapId ? { gapId: deps.gapId } : {}),
     createdAt: at,
     updatedAt: at,
   };
@@ -486,7 +518,7 @@ export async function openMemoryChat(deps: {
       {
         apiKey,
         model,
-        system: await buildMemorySystem(fs, key, personId, personName),
+        system: await buildMemorySystem(fs, key, personId, personName, memory.bookId),
         messages: [{ role: 'user', content: openerInstruction(deps.seedFocus) }],
         maxTokens: MEMORY_OPENER_MAX_TOKENS,
       },
@@ -540,7 +572,9 @@ async function generateMemoryReply(
   const { fs, key, client, apiKey, model, personId, personName, memoryId, now } = deps;
   if (!apiKey) return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };
   const at = now.toISOString();
-  const system = `${await buildMemorySystem(fs, key, personId, personName)}\n\n${MEMORY_READY_INSTRUCTION}`;
+  // The memory's OWN book decides whose interviewer speaks (72 §5.5) — a memoir's and an erotica's differ.
+  const openMemory = await getMemory(fs, key, personId, memoryId);
+  const system = `${await buildMemorySystem(fs, key, personId, personName, openMemory?.bookId)}\n\n${MEMORY_READY_INSTRUCTION}`;
   let result;
   try {
     result = await streamWithContinuation(
@@ -802,7 +836,7 @@ export async function synthesizeMemory(
       {
         apiKey,
         model,
-        system: await buildMemorySystem(fs, key, personId, personName),
+        system: await buildMemorySystem(fs, key, personId, personName, memory.bookId),
         messages,
         maxTokens: 4000,
         extendedThinking: false,
@@ -930,6 +964,27 @@ export async function saveMemory(deps: {
   }
 
   await saveMemoryRecord(fs, key, saved);
+
+  // Closing the gap (72 §5.5). Talking something through used to leave the gap open and re-proposable, so
+  // the biographer asked again about the thing you had just spent twenty minutes telling it. Now the two
+  // channels are equal: a saved conversation answers a gap exactly as an answered check-in does.
+  //
+  // A memory that clearly IS one of the framework's key scenes (`scene`, written since 64 §14 and until now
+  // read by nothing) also answers a gap on that dimension — telling the story of your lowest point closes
+  // the low-point gap whether or not anyone routed you there.
+  if (saved.bookId && (saved.gapId || saved.scene)) {
+    const interview = await getInterviewState(fs, key, personId, saved.bookId);
+    const gaps = interview.lastGaps ?? [];
+    const next = gaps.map((gap) =>
+      gap.id === saved.gapId || (saved.scene !== undefined && gap.dimension === saved.scene)
+        ? { ...gap, memoryId: saved.id }
+        : gap,
+    );
+    if (next.some((gap, i) => gap !== gaps[i])) {
+      await saveInterviewState(fs, key, personId, saved.bookId, { ...interview, lastGaps: next });
+    }
+  }
+
   return { ok: true, memory: saved };
 }
 

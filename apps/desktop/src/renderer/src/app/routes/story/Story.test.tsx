@@ -2324,8 +2324,9 @@ describe('Story (64)', () => {
       await screen.findByRole('button', { name: 'Back to your memories' }),
     ).toBeInTheDocument();
     expect(await screen.findByText(/Take me back/)).toBeInTheDocument();
-    // A NEW memory opens with no id (an empty payload) — never a resume of some other memory.
-    expect(storyMemoryOpen).toHaveBeenCalledWith({});
+    // A NEW memory opens with no id — never a resume of some other memory. It does carry the BOOK, because
+    // the book decides whose interviewer speaks (72 §5.5).
+    expect(storyMemoryOpen).toHaveBeenCalledWith({ bookId: 'b1' });
   });
 
   it('the chat → save flow: synthesize → confirm card → "Add to my story" saves the edited memory (§14)', async () => {
@@ -2438,8 +2439,12 @@ describe('Story (64)', () => {
     expect(
       await screen.findByRole('button', { name: 'Back to your memories' }),
     ).toBeInTheDocument();
+    // It carries the GAP, so saving the memory closes it — talking something through and answering a
+    // check-in are equal ways to answer (72 §5.5). Without the gap it stayed open and re-proposable.
     expect(storyMemoryOpen).toHaveBeenCalledWith({
       seedFocus: 'Tell me about the hardest thing you have faced.',
+      bookId: 'b1',
+      gapId: 'g1',
     });
   });
 

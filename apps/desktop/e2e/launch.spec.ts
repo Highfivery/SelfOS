@@ -14954,6 +14954,55 @@ test('story (64): the consent center sets a pseudonym + warns before publishing 
   }
 });
 
+test('story (72): talking a gap through closes it, and you can talk about anything (§5.5/§3.7)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Gap Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'Gap Book', level: 1 })).toBeVisible();
+
+    await w.getByRole('tab', { name: 'Interview' }).click();
+
+    // "Talk about anything" (§3.7) — the entry that didn't exist: every way in used to be a gap the
+    // biographer had chosen.
+    await expect(w.getByRole('group', { name: 'Talk about anything' })).toBeVisible();
+    await w.getByRole('button', { name: 'Something hard' }).click();
+    await expect(w.getByText(/Take me back/).first()).toBeVisible();
+    await w.getByRole('button', { name: 'Back to your memories' }).click();
+
+    // Find what's missing, then TALK the top gap through rather than sending questions.
+    await w.getByRole('button', { name: /Find what.s missing/ }).click();
+    await expect(w.getByRole('button', { name: 'Talk it through' }).first()).toBeVisible();
+    await w.getByRole('button', { name: 'Talk it through' }).first().click();
+
+    // While the conversation is under way the gap is no longer askable — it's being answered.
+    await expect(w.getByText(/Take me back/).first()).toBeVisible();
+    await w
+      .getByRole('textbox', { name: 'Message' })
+      .fill('The winter my father closed the shop, and what the garage smelled like after.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: 'Save this memory' }).click();
+    await w.getByRole('button', { name: 'Add to my story' }).click();
+    await w.getByRole('button', { name: 'Back to your memories' }).click();
+
+    // The gap it was opened to close is answered — it used to stay open and be proposed again.
+    await expect(w.getByText(/Answered/).first()).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Ask me about this' })).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('story (72): choose a kind of book — its own questions, and the 18+ gate (§3.2/§4.1)', async () => {
   test.setTimeout(60_000);
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });

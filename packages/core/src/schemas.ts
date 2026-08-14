@@ -4777,6 +4777,10 @@ export const StoryGapSchema = z.object({
   // The check-in `askGap` minted from this gap (§3.7 lifecycle) — persisted so answered/open is derivable on
   // read. Additive-optional (no schemaVersion bump). `status` is DERIVED on read, never persisted.
   assignmentId: z.string().optional(),
+  /** The CONVERSATION opened to close this gap (72 §5.5). Talking something through used to leave the gap
+   *  open and re-proposable — so the biographer asked again about the thing you had just spent twenty
+   *  minutes telling it. Additive-optional; `status` stays derived on read, never persisted. */
+  memoryId: z.string().optional(),
   status: z.enum(['open', 'asked', 'answered']).optional(),
 });
 /** Persisted per-part coverage (§13.6.4) for the life map. */
@@ -4865,6 +4869,19 @@ export const StoryMemorySchema = z.object({
    *  precedent). */
   readyAt: z.string().optional(),
   savedAt: z.string().optional(),
+  /**
+   * Which BOOK this conversation belongs to (72 §5.5). Absent on memories recorded before books could be
+   * plural, and on an open "talk about anything" — the interviewer then falls back to the newest book. It
+   * matters because the book decides the doctrine, the voice and the truth mode the biographer speaks in: a
+   * memoir's interviewer and an erotica's are not the same interviewer.
+   */
+  bookId: z.string().optional(),
+  /**
+   * The gap this conversation was opened to close (72 §5.5). Saving the memory marks that gap answered — the
+   * 64 defect where talking something through left the gap open and re-proposable, so the biographer asked
+   * again about the thing you had just spent twenty minutes telling it.
+   */
+  gapId: z.string().optional(),
 });
 export type StoryMemory = z.infer<typeof StoryMemorySchema>;
 
@@ -4913,6 +4930,10 @@ export type StoryMemoryRef = z.infer<typeof StoryMemoryRefSchema>;
 export const StoryMemoryOpenInputSchema = z.object({
   memoryId: z.string().optional(),
   seedFocus: z.string().optional(),
+  /** Which book this conversation is for (72 §5.5). Absent ⇒ the most recently updated book. */
+  bookId: z.string().optional(),
+  /** The gap it was opened to close — saving the memory marks that gap answered. */
+  gapId: z.string().optional(),
 });
 export type StoryMemoryOpenInput = z.infer<typeof StoryMemoryOpenInputSchema>;
 
@@ -5639,8 +5660,11 @@ export interface StoryGap {
   /** The check-in `askGap` minted from this gap (§3.7 lifecycle) — persisted so its answered/open state can be
    *  derived on read. Absent until the gap has been asked. */
   assignmentId?: string;
-  /** DERIVED on read by `getStoryGaps` (never persisted): `open` = askable; `asked` = a check-in is waiting;
-   *  `answered` = it was answered (so "Ask me about this" is retired and the row shows "Answered ✓"). */
+  /** The CONVERSATION opened to close this gap (72 §5.5) — the other way it can be answered. */
+  memoryId?: string;
+  /** DERIVED on read by `getStoryGaps` (never persisted): `open` = askable; `asked` = a check-in is waiting
+   *  or a conversation is under way; `answered` = it was answered, by EITHER channel (so "Ask me about this"
+   *  is retired and the row shows "Answered ✓"). */
   status?: 'open' | 'asked' | 'answered';
 }
 

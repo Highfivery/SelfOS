@@ -19,6 +19,7 @@ export * from './storyMarkup';
 export * from './storyMaterial';
 export * from './storyMarkupService';
 export * from './storyMemoryService';
+export * from './storyReference';
 export * from './storyRefreshService';
 export * from './storyService';
 export * from './storyQuotes';

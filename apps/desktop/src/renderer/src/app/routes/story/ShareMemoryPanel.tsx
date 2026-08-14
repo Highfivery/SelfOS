@@ -163,6 +163,11 @@ interface ShareMemoryPanelProps {
   memoryId?: string;
   /** Seed a NEW memory from a gap focus or a photo caption — the biographer opens referencing it. */
   seedFocus?: string;
+  /** Which book this conversation is for — it decides whose interviewer speaks (72 §5.5). */
+  bookId?: string;
+  /** The gap it closes. Saving the memory marks that gap answered, so talking it through and answering a
+   *  check-in are equal ways to close it. */
+  gapId?: string;
   onBack: () => void;
 }
 
@@ -175,6 +180,8 @@ interface ShareMemoryPanelProps {
 export function ShareMemoryPanel({
   memoryId,
   seedFocus,
+  bookId,
+  gapId,
   onBack,
 }: ShareMemoryPanelProps): JSX.Element {
   const [aiEnabled] = useSetting('ai.enabled');
@@ -224,9 +231,13 @@ export function ShareMemoryPanel({
       void open(memoryId);
     } else if (configured) {
       openedRef.current = true;
-      void openNew(seedFocus);
+      void openNew({
+        ...(seedFocus ? { seedFocus } : {}),
+        ...(bookId ? { bookId } : {}),
+        ...(gapId ? { gapId } : {}),
+      });
     }
-  }, [memoryId, seedFocus, configured, open, openNew]);
+  }, [memoryId, seedFocus, bookId, gapId, configured, open, openNew]);
 
   // Clear the open-chat state when the panel unmounts (leaves the collection intact).
   useEffect(() => close, [close]);

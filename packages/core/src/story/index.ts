@@ -1,5 +1,6 @@
 export * from './bookModel';
 export * from './bookShelf';
+export * from './personTimeline';
 export * from './bookTypes';
 export * from './storyCorpus';
 export * from './storyCraft';

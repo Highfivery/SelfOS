@@ -619,7 +619,7 @@ import {
   renamePart,
   splitChapter,
   addTimelineEvent,
-  getTimeline,
+  readBookTimeline,
   removeTimelineEvent,
   sortTimeline,
   updateTimelineEvent,
@@ -6556,7 +6556,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             return removeTimelineEvent(...at, edit);
         }
       })();
-      const stored = await getTimeline(ctx.fs, ctx.key, personId, bookId);
+      // The merged view: the person's life plus this book's own moments (72 §3.8).
+      const stored = await readBookTimeline(ctx.fs, ctx.key, personId, bookId);
       // Hand back the chronologically sorted view, so a corrected date lands in the right place at once.
       const timeline = stored ? { ...stored, events: sortTimeline(stored.events) } : null;
       return { ok: res.ok, timeline, ...(res.message ? { message: res.message } : {}) };
@@ -6763,7 +6764,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return getConsentRegister(ctx.fs, ctx.key, personId, bookId);
     },
     storySetConsent: async (input): Promise<ConsentPerson[]> => {
-      const { bookId, name, consent, pseudonym } = StorySetConsentInputSchema.parse(input);
+      const { bookId, name, pseudonym } = StorySetConsentInputSchema.parse(input);
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
@@ -6771,7 +6772,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return setConsentEntry(ctx.fs, ctx.key, personId, {
         bookId,
         name,
-        consent,
         ...(pseudonym !== undefined ? { pseudonym } : {}),
         now: new Date(),
       });

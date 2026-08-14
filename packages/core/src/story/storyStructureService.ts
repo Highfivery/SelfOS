@@ -20,12 +20,12 @@ import {
   getExclusions,
   getOutline,
   getProposals,
-  getTimeline,
   saveChapter,
   saveOutline,
   saveProposals,
 } from './storyService';
 import { timelineLines } from './storyTimeline';
+import { readBookTimeline } from './personTimeline';
 
 /**
  * The Your Story STRUCTURE engine (64-your-story §3.4/§5.4) — the freshness engine's structural half. When new
@@ -201,7 +201,11 @@ export async function generateStructuralProposals(
   const system = buildBiographerSystem(bookType, book.config, corpus.personName);
   // The chronology is grounding for ORDERING (§16.2) — the pass still only ever PROPOSES; a corrected date
   // never silently rearranges a drafted outline.
-  const timeline = timelineLines(await getTimeline(deps.fs, deps.key, deps.personId, args.bookId));
+  // The chronology the biographer is handed is the LIFE one plus this book's own moments (72 §3.8) —
+  // reading the book file alone would hand it a chronology the person's corrections never reached.
+  const timeline = timelineLines(
+    await readBookTimeline(deps.fs, deps.key, deps.personId, args.bookId),
+  );
   // The chronology gets its own framed block below, so drop the corpus copies — otherwise every structure
   // pass carries the whole timeline TWICE, growing with an uncapped user-authored list.
   const corpusForStructure: StoryCorpus = {

@@ -1728,7 +1728,7 @@ describe('Story (64)', () => {
 
     await userEvent.type(await screen.findByLabelText('What happened'), 'We moved west');
     await userEvent.type(screen.getByLabelText('When it happened'), 'sometime in the 90s');
-    await userEvent.click(screen.getByRole('button', { name: 'Add a moment' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Add to your life' }));
 
     await waitFor(() => expect(edits).toHaveLength(1));
     expect(edits[0]!.edit).toMatchObject({
@@ -1854,7 +1854,7 @@ describe('Story (64)', () => {
     expect(screen.queryByText(/Your story · Biography/)).not.toBeInTheDocument();
   });
 
-  it('the People tab renames someone for the book, and the publish warning clears (72 §3.9)', async () => {
+  it('the People tab renames someone, and Sharing names them the new way (72 §3.9)', async () => {
     let register: ConsentPerson[] = [
       {
         name: 'Angel',
@@ -1862,7 +1862,6 @@ describe('Story (64)', () => {
         relationship: 'partner',
         mentions: 3,
         chapterMentions: 3,
-        consent: 'unknown',
       },
     ];
     installStoryBridge({
@@ -1871,23 +1870,19 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('reviewed')),
       storyConsent: () => Promise.resolve(register),
       storySetConsent: (input: unknown) => {
-        const { name, consent, pseudonym } = input as {
-          name: string;
-          consent: 'unknown' | 'granted' | 'declined';
-          pseudonym?: string;
-        };
+        const { name, pseudonym } = input as { name: string; pseudonym?: string };
         register = register.map((p) =>
           p.name === name
-            ? { ...p, consent, ...(pseudonym?.trim() ? { pseudonym: pseudonym.trim() } : {}) }
+            ? { ...p, ...(pseudonym?.trim() ? { pseudonym: pseudonym.trim() } : {}) }
             : p,
         );
         return Promise.resolve(register);
       },
     });
     await renderStory();
-    // The Share tab warns that a named person would appear under their real name (warn, not block).
+    // Sharing states who the reader will see — plainly, not as a warning about permission.
     await userEvent.click(await screen.findByRole('tab', { name: 'Sharing' }));
-    expect(await screen.findByText(/Angel appears/)).toBeInTheDocument();
+    expect(await screen.findByText(/Your readers will see/)).toBeInTheDocument();
 
     // People → give them a different name for the book (commits on blur). The count is CHAPTER mentions.
     await openTab('People');
@@ -1895,9 +1890,9 @@ describe('Story (64)', () => {
     await userEvent.type(await screen.findByLabelText('What Angel is called in the book'), 'A.');
     await userEvent.tab();
 
-    // Back on Sharing, the warning is gone — they have a pseudonym now.
+    // Back on Sharing, they're listed under the new name.
     await userEvent.click(screen.getByRole('tab', { name: 'Sharing' }));
-    await waitFor(() => expect(screen.queryByText(/Angel appears/)).not.toBeInTheDocument());
+    expect(await screen.findByText(/Angel → A\./)).toBeInTheDocument();
   });
 
   it('publishes the cast list only when toggled on, showing the register preview (§17.2)', async () => {

@@ -3,7 +3,6 @@ import type {
   BookConsentEntry,
   CastMember,
   ConsentPerson,
-  ConsentState,
   PublishedManifest,
   ReaderChapter,
 } from '../schemas';
@@ -56,7 +55,6 @@ export async function getConsentRegister(
       ...(c.relationship ? { relationship: c.relationship } : {}),
       mentions: c.mentions,
       chapterMentions: c.chapterMentions,
-      consent: decision?.consent ?? 'unknown',
       ...(decision?.pseudonym ? { pseudonym: decision.pseudonym } : {}),
     });
   }
@@ -68,7 +66,6 @@ export async function getConsentRegister(
       ...(e.personId ? { personId: e.personId } : {}),
       mentions: 0,
       chapterMentions: 0,
-      consent: e.consent,
       ...(e.pseudonym ? { pseudonym: e.pseudonym } : {}),
     });
   }
@@ -80,14 +77,13 @@ export async function setConsentEntry(
   fs: FileSystem,
   key: Uint8Array,
   personId: string,
-  args: { bookId: string; name: string; consent: ConsentState; pseudonym?: string; now: Date },
+  args: { bookId: string; name: string; pseudonym?: string; now: Date },
 ): Promise<ConsentPerson[]> {
   const list = await getConsent(fs, key, personId, args.bookId);
   const k = normalize(args.name);
   const pseudonym = args.pseudonym?.trim();
   const entry: BookConsentEntry = {
     name: args.name.trim(),
-    consent: args.consent,
     ...(pseudonym ? { pseudonym } : {}),
     updatedAt: args.now.toISOString(),
   };
@@ -185,10 +181,4 @@ export function pseudonymizeManifest(
       ...(img.visionNotes ? { visionNotes: sub(img.visionNotes) } : {}),
     })),
   };
-}
-
-/** The named people who would appear under their REAL name at publish — i.e. not granted and with no pseudonym.
- *  Drives the warn-not-block notice (§17.5). */
-export function unconsentedNames(register: ConsentPerson[]): string[] {
-  return register.filter((p) => p.consent !== 'granted' && !p.pseudonym?.trim()).map((p) => p.name);
 }

@@ -243,6 +243,16 @@ Gains `lifecycle: 'living' | 'finished'` (default `living`) and `edition: number
   moments (`TimelineEvent` gains `bookScoped: true`).
 - Migration in §7.9.
 
+**As built (P5d).** `readBookTimeline` is a **pure** read that merges the person's chronology with this
+book's own moments, deduped by normalized label with the person winning — so it is correct both before and
+after the migration has run. `migrateBookTimeline` runs **once on the book-open path**, not on read: making
+every reader a writer means two readers can truncate a file the other is mid-write on. Tombstones migrate
+too, even when a book has no events left to move — "I took that out" is a fact about the life, and leaving
+it behind lets a deleted moment be re-proposed by the next book. The foundations pass folds generated
+moments into the **life** timeline for the same reason. Every consumer that hands the chronology to the
+model (the corpus, the bundle, the structure pass) reads the merged view; reading the book file alone would
+give the biographer a chronology the person's corrections never reached.
+
 ### 4.4 New material (replacing the stale status)
 
 **New:** `books/<bookId>/material.enc` — `StoryNewMaterialList`:

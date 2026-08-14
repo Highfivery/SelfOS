@@ -126,6 +126,54 @@ describe('buildChapterUserMessage', () => {
     ],
   };
 
+  /**
+   * 72 §4.1 — a fictionalized book must be TOLD it may invent, or the doctrine's "never invent" silently
+   * governs and a children's story comes out as a diary entry. The told-true case must be told the opposite,
+   * just as explicitly.
+   */
+  it('states the truth contract, and states it differently for a fictionalized book', () => {
+    const told = buildBiographerSystem(BIOGRAPHY_BOOK_TYPE, cfg(), 'Ben');
+    expect(told).toMatch(/this book is TRUE/);
+    expect(told).toMatch(/Never invent an event/i);
+
+    const imagined = buildBiographerSystem(
+      { ...BIOGRAPHY_BOOK_TYPE, truthMode: 'fictionalized' },
+      cfg(),
+      'Ben',
+    );
+    expect(imagined).toMatch(/openly IMAGINED/);
+    expect(imagined).toMatch(/You may invent events/i);
+    // …but never the person. That is the line a fictionalized book must not cross.
+    expect(imagined).toMatch(/never misrepresent the human being/i);
+  });
+
+  it('shapes the outline by the book’s SPINE, not by assuming every book is a whole life', () => {
+    const eras = buildFoundationsUserMessage(corpus, BIOGRAPHY_BOOK_TYPE);
+    expect(eras).toMatch(/parts as life eras/i);
+
+    const span = buildFoundationsUserMessage(corpus, {
+      ...BIOGRAPHY_BOOK_TYPE,
+      spine: { kind: 'span', from: '2019', to: '2020' },
+    });
+    expect(span).toMatch(/ONE bounded stretch of time \(2019 to 2020\)/);
+    expect(span).toMatch(/Do not reach back across the whole life/i);
+    expect(span).not.toMatch(/parts as life eras/i);
+
+    const pages = buildFoundationsUserMessage(corpus, {
+      ...BIOGRAPHY_BOOK_TYPE,
+      spine: { kind: 'pages', count: 14, wordsPerPage: 40 },
+    });
+    expect(pages).toMatch(/exactly 14 short PAGES/);
+    expect(pages).toMatch(/roughly 40 words/);
+
+    const vignettes = buildFoundationsUserMessage(corpus, {
+      ...BIOGRAPHY_BOOK_TYPE,
+      spine: { kind: 'vignettes' },
+    });
+    expect(vignettes).toMatch(/standalone pieces/i);
+    expect(vignettes).toMatch(/no through-line/i);
+  });
+
   it('tags corpus items with stable index-based [sN] tags', () => {
     const tagged = tagCorpusItems(corpus);
     expect(tagged[0]?.tag).toBe('s0');

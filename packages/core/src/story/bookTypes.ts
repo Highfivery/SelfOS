@@ -100,6 +100,39 @@ export interface BookInterviewFramework {
   deepeningLadder: string[];
 }
 
+/**
+ * Whether the prose may depart from the record (72 §4.1).
+ *
+ * `true` — never invents. Where the material is silent the book writes around the gap or asks. This is the
+ * whole trust proposition of a biography: everything in it happened.
+ * `fictionalized` — the EVENTS may be invented; the person and the feelings may not. A children's book
+ * about a real child, or a dream retold as a story, is not a lie — but it stops being a record.
+ */
+export type BookTruthMode = 'true' | 'fictionalized';
+
+/**
+ * How a book is shaped (72 §4.1) — what "a chapter" even means here. Foundations reads this instead of
+ * assuming every book is parts-and-chapters over a whole life.
+ */
+export type BookSpine =
+  /** Life eras as parts, chapters inside them. A whole-life book. */
+  | { kind: 'eras' }
+  /** One bounded stretch of time — a year, a marriage, an illness. Chapters, no parts. */
+  | { kind: 'span'; from?: string; to?: string }
+  /** A fixed number of short pages, each about `wordsPerPage` long. A picture book. */
+  | { kind: 'pages'; count: number; wordsPerPage: number }
+  /** Standalone pieces with no through-line obligation. */
+  | { kind: 'vignettes' };
+
+/**
+ * How real people appear (72 §4.1), and what the People tab defaults to.
+ *
+ * `realNames` — as themselves. `renamed` — pseudonyms by default, because the book is fictionalized and
+ * naming a real person inside invented events is a different act. `childrenAsHeroes` — the child is the
+ * named hero; everyone else is a role ("Mum", "the neighbour").
+ */
+export type BookCastPolicy = 'realNames' | 'renamed' | 'childrenAsHeroes';
+
 /** A registered book type. */
 export interface BookType {
   id: BookTypeId;
@@ -112,7 +145,22 @@ export interface BookType {
   interview: BookInterviewFramework;
   /** Content gates — `adult` reuses the shared 18+ ack when a future type needs it. */
   gates: { adult: boolean };
+  /** Whether the prose may depart from the record (§4.1). Drives a governing clause in the system prompt. */
+  truthMode: BookTruthMode;
+  /** What shape this kind of book takes (§4.1) — read by the foundations pass. */
+  spine: BookSpine;
+  /** How real people appear, and what the People tab defaults to (§4.1). */
+  castPolicy: BookCastPolicy;
+  /** The per-type image contract (§8.5). The default is the symbolic, no-likeness framing; a picture book
+   *  needs the opposite (a consistent, recognisable character across every page), so it overrides this. */
+  imageFraming: string;
+  /** Who the book is FOR, when that changes how it must be written. Children's books only. */
+  audience?: { ageFrom: number; ageTo: number; readingLevel: string };
 }
+
+/** The default image contract (§8.5): evocative and symbolic, never a photoreal likeness of a real person. */
+export const SYMBOLIC_IMAGE_FRAMING =
+  'Evocative, non-photorealistic art that suggests the moment rather than depicting it. Never a likeness of a real person, never a recognisable face, never a photograph.';
 
 const BIOGRAPHY_DOCTRINE = `You are a professional biographer writing a true, book-length life story about the subject, drawn ONLY from what is known about them. Your bar is award-winning narrative nonfiction. Follow these principles:
 
@@ -336,6 +384,12 @@ export const BIOGRAPHY_BOOK_TYPE: BookType = {
     ],
   },
   gates: { adult: false },
+  // A biography is the told-true case in every dimension: it never invents, it is shaped by the eras of a
+  // life, and the people in it are themselves.
+  truthMode: 'true',
+  spine: { kind: 'eras' },
+  castPolicy: 'realNames',
+  imageFraming: SYMBOLIC_IMAGE_FRAMING,
 };
 
 /** Every registered book type, in display order. v1: the biography. */

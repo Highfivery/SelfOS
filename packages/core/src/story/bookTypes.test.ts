@@ -6,6 +6,7 @@ import {
   MCADAMS_SCENES,
   getBookType,
   listBookTypes,
+  SYMBOLIC_IMAGE_FRAMING,
 } from './bookTypes';
 
 describe('BookType registry (64)', () => {
@@ -122,6 +123,33 @@ describe('BookType registry (64)', () => {
       ]) {
         expect(d).toContain(banned);
       }
+    }
+  });
+
+  /**
+   * 72 §4.1 — the four declarative slots. They exist so nothing downstream has to ask "is this a biography?":
+   * the type says what it is, and the pipeline reads it.
+   */
+  it('every registered type declares how it is shaped, how true it is, and how people appear', () => {
+    for (const type of listBookTypes()) {
+      expect(['true', 'fictionalized']).toContain(type.truthMode);
+      expect(['eras', 'span', 'pages', 'vignettes']).toContain(type.spine.kind);
+      expect(['realNames', 'renamed', 'childrenAsHeroes']).toContain(type.castPolicy);
+      expect(type.imageFraming.trim().length).toBeGreaterThan(0);
+      // A fictionalized book must not default to naming real people inside invented events.
+      if (type.truthMode === 'fictionalized') expect(type.castPolicy).not.toBe('realNames');
+      // An audience is only meaningful when the book is FOR someone other than its subject.
+      if (type.audience) {
+        expect(type.audience.ageFrom).toBeLessThan(type.audience.ageTo);
+      }
+    }
+  });
+
+  it('the default image framing never permits a likeness of a real person (§8.5)', () => {
+    for (const type of listBookTypes()) {
+      if (type.imageFraming !== SYMBOLIC_IMAGE_FRAMING) continue;
+      expect(type.imageFraming).toMatch(/never a likeness/i);
+      expect(type.imageFraming).toMatch(/never a photograph/i);
     }
   });
 });

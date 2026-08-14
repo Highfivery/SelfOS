@@ -8,7 +8,7 @@ import type {
   OutlineChapter,
   StorySourceRef,
 } from '../schemas';
-import type { BookInterviewFramework, BookType } from './bookTypes';
+import type { BookInterviewFramework, BookSpine, BookType } from './bookTypes';
 import type { CorpusItem, StoryCorpus } from './storyCorpus';
 
 /**
@@ -30,6 +30,18 @@ function voiceDirective(voice: BookConfig['voice'], name: string): string {
 function styleDirective(style: BookConfig['style'], bookType: BookType): string {
   const preset = bookType.stylePresets.find((p) => p.id === style);
   return preset ? preset.directive : '';
+}
+
+/**
+ * The truth contract (72 §4.1), stated in the system prompt after the doctrine so it governs it. It is the
+ * one line that most changes what the model is allowed to do, so it is never left implicit — a fictionalized
+ * book must be told it may invent, or the doctrine's "never invent" silently applies and a children's story
+ * comes out as a diary entry.
+ */
+function truthDirective(mode: BookType['truthMode']): string {
+  return mode === 'fictionalized'
+    ? 'TRUTH: this book is openly IMAGINED. You may invent events, scenes, dialogue and detail — that is what it is for. What you may NOT invent is the person: their character, their voice, what they actually feel and care about, and the real relationships they are in must all stay true to the material. Invent the story; never misrepresent the human being.'
+    : 'TRUTH: this book is TRUE. Everything in it happened. Never invent an event, a line of dialogue, a date or a sensory detail to fill a gap — write around the silence, or leave it as a silence.';
 }
 
 function lengthDirective(length: BookConfig['length']): string {
@@ -68,6 +80,7 @@ export function buildBiographerSystem(
   return [
     SAFETY,
     bookType.doctrine,
+    truthDirective(bookType.truthMode),
     voiceDirective(config.voice, name),
     styleDirective(config.style, bookType),
     lengthDirective(config.length),
@@ -485,9 +498,31 @@ export function buildFoundationsUserMessage(corpus: StoryCorpus, bookType: BookT
     '- "timeline": an array of the key dated moments you can anchor, each { "label": string, "date"?: "YYYY" or "YYYY-MM-DD", "approx"?: a fuzzy label like "mid-90s" when no date is known }. Include only moments the material supports.',
     '- "outline": { "parts": [ { "title": string, "chapters": [ { "title": an evocative chapter title (not a bare number), "brief": 1–2 sentences on what this chapter is about and the one scene it turns on, "eraFrom"?: "YYYY", "eraTo"?: "YYYY", "lifeAreas"?: string[] } ] } ] }.',
     '',
-    `Shape the chapters the way a life is actually organized — you may draw on the person's own life chapters and the key scenes (${framework.scenes.map((s) => s.label.toLowerCase()).join(', ')}). Open the book in a character-revealing scene, not at birth. Propose only chapters the material can actually support; where a chapter would be thin, make it broader or leave it for later.`,
+    spineDirective(bookType.spine, framework),
+    'Propose only chapters the material can actually support; where one would be thin, make it broader or leave it for later.',
     'Return ONLY the JSON object — no prose, no markdown fences.',
   ].join('\n');
+}
+
+/**
+ * How to SHAPE this kind of book (72 §4.1/§5.1). Foundations used to assume every book was parts-and-chapters
+ * across a whole life — true of a biography, wrong for a book about one year, a set of standalone pieces, or a
+ * picture book with a fixed page count. The spine says which, and the outline JSON stays the same shape
+ * throughout (a single unnamed part carries a book that has no parts), so nothing downstream changes.
+ */
+function spineDirective(spine: BookSpine, framework: BookInterviewFramework): string {
+  switch (spine.kind) {
+    case 'span': {
+      const window = [spine.from, spine.to].filter(Boolean).join(' to ');
+      return `Shape this as ONE bounded stretch of time${window ? ` (${window})` : ''}: a single part containing chapters in sequence, each a moment within it. Do not reach back across the whole life — everything outside the window is context, not a chapter. Open inside a scene, not at the beginning of the period.`;
+    }
+    case 'pages':
+      return `Shape this as exactly ${spine.count} short PAGES, in sequence, inside a single part: each "chapter" is one page of roughly ${spine.wordsPerPage} words. Give every page one image-able moment. Title them plainly.`;
+    case 'vignettes':
+      return 'Shape this as a set of standalone pieces inside a single part — each complete on its own, in an order that reads well. They need no through-line and no chronology; do not force one.';
+    default:
+      return `Shape the chapters the way a life is actually organized — parts as life eras, and you may draw on the person's own life chapters and the key scenes (${framework.scenes.map((sc) => sc.label.toLowerCase()).join(', ')}). Open the book in a character-revealing scene, not at birth.`;
+  }
 }
 
 /**

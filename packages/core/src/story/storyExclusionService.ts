@@ -1,8 +1,9 @@
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
 import { getPerson } from '../people';
+import { recordAuthorDrift } from './storyMaterial';
 import type { ExclusionItem, ExclusionKind } from '../schemas';
-import { getExclusions, listChapters, saveChapter, saveExclusions } from './storyService';
+import { getExclusions, listChapters, saveExclusions } from './storyService';
 
 /**
  * Your Story exclusions (64-your-story §3.3/§5.1) — the durable "never write about this again" list. Adding an
@@ -15,13 +16,14 @@ import { getExclusions, listChapters, saveChapter, saveExclusions } from './stor
  * (resolved to their display name to scan existing prose); `source` = a `StorySourceRef` id.
  */
 
-/** Mark every not-already-stale chapter that still contains the excluded material stale. Returns how many. */
-async function staleAffectedChapters(
+/** File a proposal against every chapter that still contains the excluded material. Returns how many. */
+async function flagAffectedChapters(
   fs: FileSystem,
   key: Uint8Array,
   personId: string,
   bookId: string,
   item: ExclusionItem,
+  now?: Date,
 ): Promise<number> {
   // Resolve a text needle for text-scanned kinds; a `source` exclusion matches on provenance ids instead.
   let needle: string | null = null;
@@ -38,14 +40,23 @@ async function staleAffectedChapters(
 
   let count = 0;
   for (const chapter of await listChapters(fs, key, personId, bookId)) {
-    // Never re-flag an already-stale chapter, and never disturb one mid-generation.
-    if (chapter.status === 'stale' || chapter.status === 'generating') continue;
+    if (chapter.status === 'generating') continue; // never disturb one mid-generation
     const affected =
       item.kind === 'source'
         ? chapter.provenance.some((entry) => entry.refs.some((r) => r.id === item.value))
         : matcher !== null && matcher.test(chapter.markdown);
     if (affected) {
-      await saveChapter(fs, key, personId, bookId, { ...chapter, status: 'stale' });
+      // A proposal, not a rewrite (72 §4.4). Excluding something is an instruction about the FUTURE; the
+      // prose already written still contains it, and taking it out costs a metered pass — so the author is
+      // shown which chapters are affected and rewrites them when they choose.
+      await recordAuthorDrift(fs, key, personId, bookId, {
+        chapterId: chapter.id,
+        reason: 'sourceRemoved',
+        note: `This chapter draws on something you’ve since excluded${
+          needle ? ` (“${needle}”)` : ''
+        }.`,
+        now: now ?? new Date(),
+      });
       count += 1;
     }
   }
@@ -86,7 +97,7 @@ export async function addExclusion(
   };
   const exclusions = [...items, item];
   await saveExclusions(fs, key, personId, bookId, exclusions);
-  const staled = await staleAffectedChapters(fs, key, personId, bookId, item);
+  const staled = await flagAffectedChapters(fs, key, personId, bookId, item);
   return { exclusions, staled };
 }
 

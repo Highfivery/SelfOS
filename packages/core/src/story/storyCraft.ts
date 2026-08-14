@@ -8,7 +8,6 @@ import {
   buildReviseMessage,
   type ChapterPlan,
   type CritiqueFinding,
-  type TaggedCorpusItem,
 } from './storyPromptBuilder';
 import type { StoryCorpus } from './storyCorpus';
 
@@ -97,10 +96,9 @@ const MAX_CRITIQUE_FINDINGS = 12;
 export async function planChapter(
   deps: AiDeps,
   corpus: StoryCorpus,
-  tagged: TaggedCorpusItem[],
   opts: { chapter: OutlineChapter; outline: BookOutline; essence?: string; system: string },
 ): Promise<ChapterPlan | null> {
-  const user = buildChapterPlanMessage(corpus, tagged, {
+  const user = buildChapterPlanMessage(corpus, {
     chapter: opts.chapter,
     outline: opts.outline,
     ...(opts.essence ? { essence: opts.essence } : {}),
@@ -142,10 +140,9 @@ export async function planChapter(
 export async function critiqueChapter(
   deps: AiDeps,
   corpus: StoryCorpus,
-  tagged: TaggedCorpusItem[],
   opts: { chapter: OutlineChapter; markdown: string; plan?: ChapterPlan; system: string },
 ): Promise<CritiqueFinding[]> {
-  const user = buildCritiqueMessage(corpus, tagged, {
+  const user = buildCritiqueMessage(corpus, {
     chapter: opts.chapter,
     markdown: opts.markdown,
     ...(opts.plan ? { plan: opts.plan } : {}),
@@ -178,7 +175,6 @@ export type ReviseResult =
 export async function reviseChapter(
   deps: AiDeps,
   corpus: StoryCorpus,
-  tagged: TaggedCorpusItem[],
   opts: {
     chapter: OutlineChapter;
     markdown: string;
@@ -188,7 +184,7 @@ export async function reviseChapter(
     maxTokens: number;
   },
 ): Promise<ReviseResult> {
-  const user = buildReviseMessage(corpus, tagged, {
+  const user = buildReviseMessage(corpus, {
     chapter: opts.chapter,
     markdown: opts.markdown,
     findings: opts.findings,

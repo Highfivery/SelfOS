@@ -85,6 +85,7 @@ import {
   getQuotes,
   getTimeline,
   listBooks,
+  getNewMaterial,
   listChapters,
   listMemories,
 } from '@selfos/core/story';
@@ -13981,7 +13982,7 @@ test('story (64): share a memory — the biographer interviews, synthesizes, and
     await w.getByRole('button', { name: 'Share a memory' }).click();
 
     // The biographer speaks first (streamed): its opener invites the memory.
-    await expect(w.getByText(/Take me back/)).toBeVisible();
+    await expect(w.getByText(/Take me back/).first()).toBeVisible();
 
     // Tell the biographer the memory; after ONE exchange it has enough to write it.
     await w
@@ -14714,11 +14715,11 @@ test('story (64): the shelf switcher keeps two books and switches between them (
     // Decrypt-level: the owner now has two books.
     await expect.poll(async () => (await listBooks(fs, key, 'owner-1')).length).toBe(2);
 
-    // The switcher now shows "Book N of 2"; switching lands on the other book's Studio.
-    await w.getByRole('button', { name: /Book \d of 2/ }).click();
+    // The switcher now says what the number counts; switching lands on the other book's Studio.
+    await w.getByRole('button', { name: 'Your books (2) ▾' }).click();
     await w.getByRole('menuitem', { name: 'First Book' }).click();
     await expect(w.getByRole('heading', { name: 'First Book', level: 1 })).toBeVisible();
-    await w.getByRole('button', { name: /Book \d of 2/ }).click();
+    await w.getByRole('button', { name: 'Your books (2) ▾' }).click();
     await w.getByRole('menuitem', { name: 'Second Book' }).click();
     await expect(w.getByRole('heading', { name: 'Second Book', level: 1 })).toBeVisible();
   } finally {
@@ -14946,6 +14947,174 @@ test('story (64): the consent center sets a pseudonym + warns before publishing 
       .toBe('A.');
     await w.getByRole('tab', { name: 'Sharing' }).click();
     await expect(w.getByText(/Angel appears/)).toBeHidden();
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('story (72): talking a gap through closes it, and you can talk about anything (§5.5/§3.7)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Gap Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'Gap Book', level: 1 })).toBeVisible();
+
+    await w.getByRole('tab', { name: 'Interview' }).click();
+
+    // "Talk about anything" (§3.7) — the entry that didn't exist: every way in used to be a gap the
+    // biographer had chosen.
+    await expect(w.getByRole('group', { name: 'Talk about anything' })).toBeVisible();
+    await w.getByRole('button', { name: 'Something hard' }).click();
+    await expect(w.getByText(/Take me back/).first()).toBeVisible();
+    await w.getByRole('button', { name: 'Back to your memories' }).click();
+
+    // Find what's missing, then TALK the top gap through rather than sending questions.
+    await w.getByRole('button', { name: /Find what.s missing/ }).click();
+    await expect(w.getByRole('button', { name: 'Talk it through' }).first()).toBeVisible();
+    await w.getByRole('button', { name: 'Talk it through' }).first().click();
+
+    // While the conversation is under way the gap is no longer askable — it's being answered.
+    await expect(w.getByText(/Take me back/).first()).toBeVisible();
+    await w
+      .getByRole('textbox', { name: 'Message' })
+      .fill('The winter my father closed the shop, and what the garage smelled like after.');
+    await w.getByRole('button', { name: 'Send' }).click();
+    await w.getByRole('button', { name: 'Save this memory' }).click();
+    await w.getByRole('button', { name: 'Add to my story' }).click();
+    await w.getByRole('button', { name: 'Back to your memories' }).click();
+
+    // The gap it was opened to close is answered — it used to stay open and be proposed again.
+    await expect(w.getByText(/Answered/).first()).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Ask me about this' })).toHaveCount(0);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('story (72): choose a kind of book — its own questions, and the 18+ gate (§3.2/§4.1)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+
+    // Every kind of book is offered, and picking one shows ITS questions — nothing else's.
+    await expect(w.getByRole('radio', { name: 'Biography' })).toBeVisible();
+    await w.getByRole('radio', { name: /^Memoir/ }).click();
+    await expect(w.getByRole('radio', { name: 'A period of time' })).toBeVisible();
+    await expect(w.getByRole('radio', { name: 'How explicit' })).toHaveCount(0);
+
+    // An adult type is gated on the shared 18+ acknowledgement, and the CTA stays disabled until it's given.
+    await w.getByRole('radio', { name: /^Erotica/ }).click();
+    await expect(w.getByRole('button', { name: 'Write my book' })).toBeDisabled();
+    await w.getByRole('button', { name: 'I’m 18 or older' }).click();
+    await expect(w.getByRole('radio', { name: 'Unfiltered' })).toBeVisible();
+    // 360px: a six-card picker plus the type's own questions must still scroll vertically only (§12).
+    await w.setViewportSize({ width: 360, height: 780 });
+    expect(
+      await w.evaluate(() => {
+        const bad: string[] = [];
+        document.querySelectorAll('*').forEach((el) => {
+          const ox = getComputedStyle(el).overflowX;
+          if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+            bad.push(`${el.tagName}.${el.className}`);
+          }
+        });
+        return bad;
+      }),
+    ).toEqual([]);
+    await w.setViewportSize({ width: 1280, height: 900 });
+
+    // Commission a memoir with its own answers; they persist on the book, per book.
+    await w.getByRole('radio', { name: /^Memoir/ }).click();
+    await w.getByRole('radio', { name: 'A thread I followed' }).click();
+    await w.getByRole('textbox', { name: 'Which one' }).fill('my mother’s illness');
+    await w.getByRole('textbox', { name: 'Title' }).fill('The Long Year');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'The Long Year', level: 1 })).toBeVisible();
+
+    await expect
+      .poll(async () => {
+        const books = await listBooks(fs, key, 'owner-1');
+        const book = books.find((b) => b.title === 'The Long Year');
+        return book ? `${book.type}:${book.config.typeOptions['bound']}` : '';
+      })
+      .toBe('memoir:thread');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('story (72): new material is a proposal you accept — the book never rewrites itself (§4.4)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Living Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'Living Book', level: 1 })).toBeVisible();
+
+    // Exclude something the prose draws on — an author-driven change. It must NOT rewrite anything on its
+    // own; it files a proposal.
+    const bookId = (await listBooks(fs, key, 'owner-1'))[0]!.id;
+    const before = (await listChapters(fs, key, 'owner-1', bookId)).map((c) => c.markdown);
+    await w.getByRole('button', { name: /The Garage/ }).click();
+    await w.getByRole('button', { name: 'Mark up' }).first().click();
+    await w.getByRole('button', { name: 'Exclude' }).click();
+    await w.getByRole('textbox', { name: 'What to never write about' }).fill('cut pine');
+    await w.getByRole('button', { name: 'Never write about this' }).click();
+    await expect(w.getByText(/written again/)).toBeVisible();
+    await w.getByRole('button', { name: 'Back to the book' }).click();
+
+    // It reads as a proposal in "Needs you", naming what changed — with a one-click rewrite.
+    await expect(w.getByText('Out of step').first()).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Rewrite it' }).first()).toBeVisible();
+    // Nothing was rewritten by the act of excluding.
+    expect((await listChapters(fs, key, 'owner-1', bookId)).map((c) => c.markdown)).toEqual(before);
+
+    // "Not now" declines it without spending, and it stays gone.
+    const proposals = await w.getByText('Out of step').count();
+    for (let i = 0; i < proposals; i += 1) {
+      await w
+        .getByRole('button', { name: /Not now for/ })
+        .first()
+        .click();
+    }
+    await expect(w.getByText('Out of step')).toHaveCount(0);
+    await expect
+      .poll(async () => (await getNewMaterial(fs, key, 'owner-1', bookId)).entries.length)
+      .toBe(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -15233,7 +15402,7 @@ test('story (64): resume an unfinished memory later — pick up where you left o
     // Start a memory: the biographer opens, the person tells it, and after one exchange it has enough.
     await w.getByRole('tab', { name: 'Interview' }).click();
     await w.getByRole('button', { name: 'Share a memory' }).click();
-    await expect(w.getByText(/Take me back/)).toBeVisible();
+    await expect(w.getByText(/Take me back/).first()).toBeVisible();
     await w
       .getByRole('textbox', { name: 'Message' })
       .fill('I got a blue bicycle the summer I was seven and rode it down our gravel drive.');

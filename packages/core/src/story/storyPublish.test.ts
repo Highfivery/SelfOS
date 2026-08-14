@@ -124,7 +124,14 @@ async function seedBook(fs: ReturnType<typeof memFileSystem>): Promise<string> {
     personId: 'author',
     type: 'biography',
     title: 'The Story of Ben',
-    config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    config: {
+      voice: 'third',
+      style: 'warm',
+      length: 'standard',
+      autoRefresh: true,
+      typeOptions: {},
+      sourceIds: [],
+    },
     now,
   });
   await applyFoundations(
@@ -153,7 +160,14 @@ describe('publishBook (64 §3.5)', () => {
       personId: 'author',
       type: 'biography',
       title: 'x',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
       now,
     });
     await applyFoundations(fs, key, 'author', book.id, { essence: 'x', outline, timeline }, now);
@@ -272,7 +286,7 @@ describe('publishBook (64 §3.5)', () => {
     expect((await readSharedBook(fs, key, 'reader', 'author', bookId))?.chapters).toHaveLength(2);
     // Un-review c2 (e.g. it drifted) → re-publish → the head drops it.
     const c2b = await getChapter(fs, key, 'author', bookId, 'c2');
-    await saveChapter(fs, key, 'author', bookId, { ...c2b!, status: 'stale' });
+    await saveChapter(fs, key, 'author', bookId, { ...c2b!, status: 'updated' });
     await publishBook(fs, key, 'author', bookId, now);
     expect(
       (await readSharedBook(fs, key, 'reader', 'author', bookId))?.chapters.map((c) => c.id),
@@ -352,7 +366,7 @@ describe('publish lifecycle: diff + unpublish (64 §18.2, #300)', () => {
     await publishBook(fs, key, 'author', bookId, now); // head = [c1, c2]
     // Un-review c2 → a re-publish would remove it → willShrink.
     const c2b = await getChapter(fs, key, 'author', bookId, 'c2');
-    await saveChapter(fs, key, 'author', bookId, { ...c2b!, status: 'stale' });
+    await saveChapter(fs, key, 'author', bookId, { ...c2b!, status: 'updated' });
     const diff = await computePublishDiff(fs, key, 'author', bookId);
     expect(diff.removed.map((c) => c.id)).toEqual(['c2']);
     expect(diff.willShrink).toBe(true);
@@ -541,7 +555,14 @@ describe('readOwnBook — the owner reads their OWN book from the DRAFT head (§
       personId: 'author',
       type: 'biography',
       title: 'Half a Book',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
       now,
     });
     await applyFoundations(fs, key, 'author', book.id, { essence: 'x', outline, timeline }, now);

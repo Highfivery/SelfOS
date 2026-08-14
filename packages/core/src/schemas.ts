@@ -4158,6 +4158,23 @@ export const BookConfigSchema = z.object({
   // the global `dreams.imageStyle`/`dreams.imageStyleNotes` so pre-existing books keep working.
   imageStyle: z.string().optional(),
   imageStyleNotes: z.string().max(300).optional(),
+  /**
+   * The answers to this book TYPE's own commission questions (72 §4.1/§4.2), keyed by option id — is this
+   * portrait written to them or about them, which years does this memoir cover, how explicit is this erotica.
+   *
+   * They live per BOOK, not per type, because a person writes several books of the same kind and each is a
+   * different act (owner decision, 2026-08-13). The options are DECLARED by the book type, so the commission
+   * screen and the prompt both derive from one declaration — the schema-driven-settings pattern.
+   *
+   * Free-form `Record<string, string>` on purpose: the valid keys and values belong to the type registry
+   * (code), not to this schema, so adding a type never touches the persisted shape. Unknown keys are inert.
+   */
+  typeOptions: z.record(z.string(), z.string()).default({}),
+  /**
+   * Which source records this book is built from, when the person chose specific ones rather than everything
+   * (a dream book made of five particular dreams). Empty ⇒ draw on everything, the default for every type.
+   */
+  sourceIds: z.array(z.string()).default([]),
 });
 export type BookConfig = z.infer<typeof BookConfigSchema>;
 
@@ -4255,6 +4272,20 @@ export type StorySetConsentInput = z.infer<typeof StorySetConsentInputSchema>;
 
 /** `book.enc` — the book's top-level record (64 §4). `sharedWith` = the household person ids granted read
  *  access (re-checked at every read, §3.5); `publishedAt` present once the person has published a head. */
+/** A book is LIVING while it is still being written and interviewed for, and FINISHED once the author calls
+ *  an edition done. Finishing is reversible — reopening is a first-class act, not a workaround (§3.6). */
+export const BookLifecycleSchema = z.enum(['living', 'finished']);
+export type BookLifecycle = z.infer<typeof BookLifecycleSchema>;
+
+/** One finished edition — a frozen, readable copy of the book at the moment it was called done (§4.5). */
+export const BookEditionSchema = z.object({
+  n: z.number().int().min(1),
+  finishedAt: z.string(),
+  chapterCount: z.number().int().min(0),
+  wordCount: z.number().int().min(0),
+});
+export type BookEdition = z.infer<typeof BookEditionSchema>;
+
 export const BookManifestSchema = z.object({
   id: z.string().min(1),
   schemaVersion: z.literal(1),
@@ -4274,6 +4305,12 @@ export const BookManifestSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   publishedAt: z.string().optional(),
+  /** Living (the default) or finished (72 §3.6). A finished book still notices new material quietly — it
+   *  just stops interviewing for it and offers the next edition instead. Absent ⇒ living, so every existing
+   *  book carries on exactly as it did. */
+  lifecycle: BookLifecycleSchema.optional(),
+  /** Editions finished so far, oldest first. */
+  editions: z.array(BookEditionSchema).default([]),
 });
 export type BookManifest = z.infer<typeof BookManifestSchema>;
 
@@ -4326,11 +4363,64 @@ export type TextAnchor = z.infer<typeof TextAnchorSchema>;
 
 // --- Chapters (draft head + published snapshot share this shape) -----------------------------------------
 
-/** `new` = first draft, unreviewed; `updated` = re-generated/auto-rewritten, unreviewed; `stale` = flagged
- *  by the freshness engine; `reviewed` = the person marked it good (only Reviewed content publishes, §3.5);
- *  `generating` = queued/in-flight. */
-export const ChapterStatusSchema = z.enum(['generating', 'new', 'updated', 'stale', 'reviewed']);
+/** `new` = first draft, unreviewed; `updated` = re-generated, unreviewed; `reviewed` = the person marked it
+ *  good (only Reviewed content publishes, §3.5); `generating` = queued/in-flight.
+ *
+ *  There is deliberately no `stale` (72 §4.4). It used to mean three unrelated things at once — new material
+ *  arrived, the author changed the plan, the chapter was never written — and the engine acted on all three
+ *  the same way: rewrite it. That is how a 45-chapter book ended up with 34 of 34 chapters `stale` and no
+ *  path to converging. Drift is now a PROPOSAL against the chapter (`StoryNewMaterialList`), never a status,
+ *  and "not written yet" is simply empty `markdown`. */
+export const ChapterStatusSchema = z.enum(['generating', 'new', 'updated', 'reviewed']);
 export type ChapterStatus = z.infer<typeof ChapterStatusSchema>;
+
+/** The read-time migration (72 §7.9). Every pre-72 chapter on disk carries `'stale'`; coercing it here — at
+ *  the one point every read parses through — makes the migration idempotent and needs no file rewrite. The
+ *  value normalizes on the chapter's next save. */
+const StoredChapterStatusSchema = z.preprocess(
+  (v) => (v === 'stale' ? 'updated' : v),
+  ChapterStatusSchema,
+);
+
+// --- New material: what a chapter has drifted from (72 §4.4) ---------------------------------------------
+
+/** Why a chapter no longer matches what it should be. `newMaterial` is the passive case the free signature
+ *  diff finds; the other three are things the AUTHOR did. All four are proposals — the person accepts or
+ *  declines each one, and nothing is rewritten without that (owner decision, 2026-08-13). */
+export const NewMaterialReasonSchema = z.enum([
+  'newMaterial',
+  'sourceRemoved',
+  'briefChanged',
+  'merged',
+]);
+export type NewMaterialReason = z.infer<typeof NewMaterialReasonSchema>;
+
+/** One thing that could go into a chapter — enough to judge it by without opening anything. */
+export const NewMaterialItemSchema = z.object({
+  sourceRef: StorySourceRefSchema,
+  /** Where it came from, in the person's language ("In a coaching session, you said"). */
+  label: z.string(),
+  /** A short, readable piece of it — never the whole source. */
+  excerpt: z.string(),
+});
+export type NewMaterialItem = z.infer<typeof NewMaterialItemSchema>;
+
+export const NewMaterialEntrySchema = z.object({
+  chapterId: z.string().min(1),
+  reason: NewMaterialReasonSchema,
+  /** The material itself. Empty for an author-driven reason, which `note` explains instead. */
+  items: z.array(NewMaterialItemSchema).default([]),
+  note: z.string().optional(),
+  detectedAt: z.string(),
+});
+export type NewMaterialEntry = z.infer<typeof NewMaterialEntrySchema>;
+
+/** `books/<bookId>/material.enc` — what each chapter has drifted from, waiting on the author. */
+export const StoryNewMaterialListSchema = z.object({
+  schemaVersion: z.literal(1),
+  entries: z.array(NewMaterialEntrySchema).default([]),
+});
+export type StoryNewMaterialList = z.infer<typeof StoryNewMaterialListSchema>;
 
 /** One paragraph's provenance: `anchor` = the paragraph id, `refs` = every source it drew on (§5.3 strips
  *  the model's inline `[[SRC:…]]` markers into this — the markers never render). */
@@ -4373,7 +4463,7 @@ export const BookChapterSchema = z.object({
   title: z.string(),
   markdown: z.string().default(''),
   revision: z.number().int().nonnegative().default(0),
-  status: ChapterStatusSchema,
+  status: StoredChapterStatusSchema,
   sourceSignature: z.string().default(''),
   provenance: z.array(ChapterProvenanceEntrySchema).default([]),
   protectedBlocks: z.array(ProtectedBlockSchema).default([]),
@@ -4687,6 +4777,10 @@ export const StoryGapSchema = z.object({
   // The check-in `askGap` minted from this gap (§3.7 lifecycle) — persisted so answered/open is derivable on
   // read. Additive-optional (no schemaVersion bump). `status` is DERIVED on read, never persisted.
   assignmentId: z.string().optional(),
+  /** The CONVERSATION opened to close this gap (72 §5.5). Talking something through used to leave the gap
+   *  open and re-proposable — so the biographer asked again about the thing you had just spent twenty
+   *  minutes telling it. Additive-optional; `status` stays derived on read, never persisted. */
+  memoryId: z.string().optional(),
   status: z.enum(['open', 'asked', 'answered']).optional(),
 });
 /** Persisted per-part coverage (§13.6.4) for the life map. */
@@ -4775,6 +4869,19 @@ export const StoryMemorySchema = z.object({
    *  precedent). */
   readyAt: z.string().optional(),
   savedAt: z.string().optional(),
+  /**
+   * Which BOOK this conversation belongs to (72 §5.5). Absent on memories recorded before books could be
+   * plural, and on an open "talk about anything" — the interviewer then falls back to the newest book. It
+   * matters because the book decides the doctrine, the voice and the truth mode the biographer speaks in: a
+   * memoir's interviewer and an erotica's are not the same interviewer.
+   */
+  bookId: z.string().optional(),
+  /**
+   * The gap this conversation was opened to close (72 §5.5). Saving the memory marks that gap answered — the
+   * 64 defect where talking something through left the gap open and re-proposable, so the biographer asked
+   * again about the thing you had just spent twenty minutes telling it.
+   */
+  gapId: z.string().optional(),
 });
 export type StoryMemory = z.infer<typeof StoryMemorySchema>;
 
@@ -4823,6 +4930,10 @@ export type StoryMemoryRef = z.infer<typeof StoryMemoryRefSchema>;
 export const StoryMemoryOpenInputSchema = z.object({
   memoryId: z.string().optional(),
   seedFocus: z.string().optional(),
+  /** Which book this conversation is for (72 §5.5). Absent ⇒ the most recently updated book. */
+  bookId: z.string().optional(),
+  /** The gap it was opened to close — saving the memory marks that gap answered. */
+  gapId: z.string().optional(),
 });
 export type StoryMemoryOpenInput = z.infer<typeof StoryMemoryOpenInputSchema>;
 
@@ -5055,6 +5166,13 @@ export interface StoryContinuityResult {
   message?: string;
 }
 
+/** The outcome of accepting a chapter's new material (72 §3.6) — one metered rewrite through the craft loop. */
+export interface StoryAcceptMaterialResult {
+  ok: boolean;
+  reason?: AiFailureReason | 'AI_OFF';
+  message?: string;
+}
+
 // --- Your Story IPC view types + input schemas (§5.6) ----------------------------------------------------
 
 /** The composite a book detail view needs in one read (§5.7). Crypto-free (defined here in the schemas
@@ -5081,6 +5199,20 @@ export interface StoryBookTypeView {
   blurb: string;
   structures: { id: string; label: string; description: string; isDefault?: boolean }[];
   stylePresets: { id: BookStyle; label: string }[];
+  /** Whether this kind of book is behind the shared 18+ acknowledgement (72 §8.4). */
+  gates: { adult: boolean };
+  /** What this type asks at commission (72 §4.1) — the picker renders whatever it declares. */
+  options: {
+    id: string;
+    label: string;
+    help?: string;
+    kind: 'choice' | 'text' | 'person';
+    choices?: { value: string; label: string; description?: string }[];
+    placeholder?: string;
+    required?: boolean;
+  }[];
+  /** Which kind of record this type lets the person hand-pick, filling `BookConfig.sourceIds`. */
+  sourceSelect?: 'dream';
 }
 
 /** `story:create` input — the setup screen's choices (§3.2). `title` may be blank: the person can leave it
@@ -5528,8 +5660,11 @@ export interface StoryGap {
   /** The check-in `askGap` minted from this gap (§3.7 lifecycle) — persisted so its answered/open state can be
    *  derived on read. Absent until the gap has been asked. */
   assignmentId?: string;
-  /** DERIVED on read by `getStoryGaps` (never persisted): `open` = askable; `asked` = a check-in is waiting;
-   *  `answered` = it was answered (so "Ask me about this" is retired and the row shows "Answered ✓"). */
+  /** The CONVERSATION opened to close this gap (72 §5.5) — the other way it can be answered. */
+  memoryId?: string;
+  /** DERIVED on read by `getStoryGaps` (never persisted): `open` = askable; `asked` = a check-in is waiting
+   *  or a conversation is under way; `answered` = it was answered, by EITHER channel (so "Ask me about this"
+   *  is retired and the row shows "Answered ✓"). */
   status?: 'open' | 'asked' | 'answered';
 }
 
@@ -5606,6 +5741,10 @@ export type StoryInterviewOutcome =
   | 'crisis'
   | 'noGaps'
   | 'noBook'
+  // The book is FINISHED (72 §3.6) — it still notices new material quietly, but the biographer does not
+  // interview you for a book you have called done. Distinct from `throttled`, because nothing is waiting to
+  // expire: the way to be asked again is to start the next edition.
+  | 'finished'
   // AI is off / no key — distinct from `throttled` so the UI can say HOW to enable it (the honest-states
   // rule: a prerequisite-absent feature must never render as "check back later").
   | 'aiOff';

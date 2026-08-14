@@ -10,6 +10,7 @@ import {
   type UsageEvent,
 } from '../schemas';
 import { getBookType } from './bookTypes';
+import { recordAuthorDrift } from './storyMaterial';
 import { chapterShell, syncPartChapterOrder } from './storyOutline';
 import { buildStoryCorpus, type StoryCorpus } from './storyCorpus';
 import { buildBiographerSystem, buildStructureUserMessage } from './storyPromptBuilder';
@@ -273,13 +274,15 @@ export async function listStructuralProposals(
   return list.proposals.filter((p) => p.status === 'pending');
 }
 
-/** Apply an approved proposal — mutate the outline (+ create/mark chapter shells stale). Never writes prose. */
+/** Apply an approved proposal — mutate the outline (+ create shells, + file rewrite proposals for chapters
+ *  the change invalidates). Never writes prose, and never triggers a rewrite on its own (72 §4.4). */
 async function applyStructuralProposal(
   fs: AiDeps['fs'],
   key: Uint8Array,
   personId: string,
   bookId: string,
   proposal: StructuralProposal,
+  now: Date,
 ): Promise<{ ok: boolean; message?: string }> {
   const outline = await getOutline(fs, key, personId, bookId);
   if (!outline) return { ok: false, message: 'This book has no outline.' };
@@ -337,10 +340,13 @@ async function applyStructuralProposal(
     // The original is rewritten to its narrower brief on the next pass; the new sibling is written fresh.
     const origBook = await getChapter(fs, key, personId, bookId, proposal.chapterId);
     if (origBook) {
-      await saveChapter(fs, key, personId, bookId, {
-        ...origBook,
-        title: proposal.firstTitle,
-        status: 'stale',
+      await saveChapter(fs, key, personId, bookId, { ...origBook, title: proposal.firstTitle });
+      // The split narrowed what this chapter is meant to cover — a proposal, not a rewrite (72 §4.4).
+      await recordAuthorDrift(fs, key, personId, bookId, {
+        chapterId: proposal.chapterId,
+        reason: 'briefChanged',
+        note: 'This chapter was split — its prose still covers both halves.',
+        now,
       });
     }
     await saveChapter(
@@ -368,12 +374,17 @@ async function applyStructuralProposal(
     return { ok: true };
   }
 
-  // prologueRewrite — mark the opening chapter stale so the next pass rewrites it (no prose change here).
+  // prologueRewrite — offer the opening chapter for a rewrite (no prose change here, and no automatic one).
   const inOutline = outline.parts.some((p) => p.chapters.some((c) => c.id === proposal.chapterId));
   if (!inOutline) return { ok: false, message: 'That chapter is no longer in the outline.' };
   const bc = await getChapter(fs, key, personId, bookId, proposal.chapterId);
-  if (bc && bc.status !== 'stale') {
-    await saveChapter(fs, key, personId, bookId, { ...bc, status: 'stale' });
+  if (bc && bc.markdown.trim().length > 0) {
+    await recordAuthorDrift(fs, key, personId, bookId, {
+      chapterId: proposal.chapterId,
+      reason: 'briefChanged',
+      note: 'The opening no longer fits the book this became.',
+      now,
+    });
   }
   return { ok: true };
 }
@@ -393,7 +404,7 @@ export async function resolveProposal(
   fs: AiDeps['fs'],
   key: Uint8Array,
   personId: string,
-  args: { bookId: string; proposalId: string; action: 'approve' | 'dismiss' },
+  args: { bookId: string; proposalId: string; action: 'approve' | 'dismiss'; now?: Date },
 ): Promise<ResolveProposalResult> {
   const list = await getProposals(fs, key, personId, args.bookId);
   const idx = list.proposals.findIndex((p) => p.id === args.proposalId && p.status === 'pending');
@@ -408,7 +419,14 @@ export async function resolveProposal(
     return { ok: true, proposals: pending() };
   }
 
-  const applied = await applyStructuralProposal(fs, key, personId, args.bookId, proposal);
+  const applied = await applyStructuralProposal(
+    fs,
+    key,
+    personId,
+    args.bookId,
+    proposal,
+    args.now ?? new Date(),
+  );
   // Whether it applied or its refs vanished, the proposal leaves the PENDING list — but it is KEPT rather
   // than spliced away (72 §7.6). Splicing destroyed its dedup signature, so the next structure pass was free
   // to propose the identical chapter again; that is how "The Paper He Signed" got into Ben's outline twice,

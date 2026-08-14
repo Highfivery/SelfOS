@@ -6,17 +6,25 @@ import {
   MCADAMS_SCENES,
   getBookType,
   listBookTypes,
+  SYMBOLIC_IMAGE_FRAMING,
 } from './bookTypes';
 
 describe('BookType registry (64)', () => {
-  it('registers exactly the biography type in v1', () => {
-    expect(BOOK_TYPES.map((t) => t.id)).toEqual(['biography']);
+  it('registers the six built types (72 §3.2; childrens + ourStory are P6)', () => {
+    expect(BOOK_TYPES.map((t) => t.id)).toEqual([
+      'biography',
+      'memoir',
+      'yearInReview',
+      'portrait',
+      'dreamBook',
+      'erotica',
+    ]);
     expect(getBookType('biography')).toBe(BIOGRAPHY_BOOK_TYPE);
     expect(listBookTypes()).toBe(BOOK_TYPES);
   });
 
   it('returns undefined for an unknown type (never throws)', () => {
-    expect(getBookType('erotica')).toBeUndefined();
+    expect(getBookType('notARealBookType')).toBeUndefined();
   });
 
   it('the biography is not adult-gated (own private data)', () => {
@@ -97,14 +105,16 @@ describe('BookType registry (64)', () => {
   it('never teaches the model to narrate its own sourcing (the meta-narration defect)', () => {
     for (const type of BOOK_TYPES) {
       const d = type.doctrine.toLowerCase();
-      // The old INSTRUCTION — "say so on the page" — is what taught the tic. It must be gone.
+      // The old INSTRUCTION — "say so on the page" — is what taught the tic. It must be gone, everywhere.
       expect(d).not.toContain('say so on the page');
-      // The honest-epistemics CONSTRAINT survives — only its example changed.
-      expect(d).toContain('never assert what the material does not support');
-      // …and the doubt is now attributed to a person rather than to a researcher.
-      expect(d).toContain('in character');
       // The offending phrase may still appear, but ONLY inside the forbidding clause.
       expect(d).toContain('never as a fact about your sources');
+      if (type.truthMode !== 'true') continue;
+      // A told-true book keeps the honest-epistemics CONSTRAINT — only its example changed — and attributes
+      // the doubt to a person rather than to a researcher. A fictionalized book has a different contract:
+      // it MAY invent the events, so "never assert what the material does not support" would be wrong there.
+      expect(d).toContain('never assert what the material does not support');
+      expect(d).toContain('in character');
     }
   });
 
@@ -122,6 +132,33 @@ describe('BookType registry (64)', () => {
       ]) {
         expect(d).toContain(banned);
       }
+    }
+  });
+
+  /**
+   * 72 §4.1 — the four declarative slots. They exist so nothing downstream has to ask "is this a biography?":
+   * the type says what it is, and the pipeline reads it.
+   */
+  it('every registered type declares how it is shaped, how true it is, and how people appear', () => {
+    for (const type of listBookTypes()) {
+      expect(['true', 'fictionalized']).toContain(type.truthMode);
+      expect(['eras', 'span', 'pages', 'vignettes']).toContain(type.spine.kind);
+      expect(['realNames', 'renamed', 'childrenAsHeroes']).toContain(type.castPolicy);
+      expect(type.imageFraming.trim().length).toBeGreaterThan(0);
+      // A fictionalized book must not default to naming real people inside invented events.
+      if (type.truthMode === 'fictionalized') expect(type.castPolicy).not.toBe('realNames');
+      // An audience is only meaningful when the book is FOR someone other than its subject.
+      if (type.audience) {
+        expect(type.audience.ageFrom).toBeLessThan(type.audience.ageTo);
+      }
+    }
+  });
+
+  it('the default image framing never permits a likeness of a real person (§8.5)', () => {
+    for (const type of listBookTypes()) {
+      if (type.imageFraming !== SYMBOLIC_IMAGE_FRAMING) continue;
+      expect(type.imageFraming).toMatch(/never a likeness/i);
+      expect(type.imageFraming).toMatch(/never a photograph/i);
     }
   });
 });

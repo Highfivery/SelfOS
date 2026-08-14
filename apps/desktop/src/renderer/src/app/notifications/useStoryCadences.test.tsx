@@ -33,9 +33,17 @@ function book(id: string, autoRefresh: boolean): BookManifest {
     personId: 'owner-1',
     type: 'biography',
     title: `Book ${id}`,
-    config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh },
+    config: {
+      voice: 'third',
+      style: 'warm',
+      length: 'standard',
+      autoRefresh,
+      typeOptions: {},
+      sourceIds: [],
+    },
     status: 'ready',
     sharedWith: [],
+    editions: [],
     createdAt: 'now',
     updatedAt: 'now',
   };

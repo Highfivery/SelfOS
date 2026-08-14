@@ -8,7 +8,8 @@ import type {
   OutlineChapter,
   StorySourceRef,
 } from '../schemas';
-import type { BookInterviewFramework, BookType } from './bookTypes';
+import { resolveSpine, resolveTypeOptions } from './bookTypes';
+import type { BookInterviewFramework, BookSpine, BookType } from './bookTypes';
 import type { CorpusItem, StoryCorpus } from './storyCorpus';
 
 /**
@@ -32,6 +33,81 @@ function styleDirective(style: BookConfig['style'], bookType: BookType): string 
   return preset ? preset.directive : '';
 }
 
+/**
+ * The truth contract (72 §4.1), stated in the system prompt after the doctrine so it governs it. It is the
+ * one line that most changes what the model is allowed to do, so it is never left implicit — a fictionalized
+ * book must be told it may invent, or the doctrine's "never invent" silently applies and a children's story
+ * comes out as a diary entry.
+ */
+function truthDirective(mode: BookType['truthMode']): string {
+  return mode === 'fictionalized'
+    ? 'TRUTH: this book is openly IMAGINED. You may invent events, scenes, dialogue and detail — that is what it is for. What you may NOT invent is the person: their character, their voice, what they actually feel and care about, and the real relationships they are in must all stay true to the material. Invent the story; never misrepresent the human being.'
+    : 'TRUTH: this book is TRUE. Everything in it happened. Never invent an event, a line of dialogue, a date or a sensory detail to fill a gap — write around the silence, or leave it as a silence.';
+}
+
+/**
+ * What THIS book's commission answers mean for the prose (72 §4.1). Without this the answers would be stored
+ * and never read — the person picks "written to them" and gets a book about them.
+ *
+ * Each type interprets its own option ids; anything unrecognised is skipped rather than guessed at.
+ */
+function optionDirectives(bookType: BookType, options: Record<string, string>): string[] {
+  const out: string[] = [];
+  const opt = (id: string): string => options[id] ?? '';
+
+  if (opt('addressee') === 'toThem') {
+    out.push(
+      'ADDRESSEE: this book is written TO its subject, in the second person — "you". Address them throughout. They are the reader.',
+    );
+  } else if (opt('addressee') === 'aboutThem') {
+    out.push(
+      'ADDRESSEE: this book is written ABOUT its subject, not to them. Never address them as "you".',
+    );
+  }
+
+  if (opt('bound') === 'thread' && opt('boundValue')) {
+    out.push(
+      `THE THREAD: this book follows one thread — ${opt('boundValue')} — wherever in time it goes. Chapters are held together by that thread, not by chronology; do not pad it out into a whole life.`,
+    );
+  } else if (opt('boundValue')) {
+    out.push(
+      `THE PERIOD: this book covers ${opt('boundValue')}. Everything outside it is context, never a chapter.`,
+    );
+  }
+
+  if (opt('year')) {
+    out.push(
+      `THE YEAR: this book covers ${opt('year')} only. Do not sum the year up or draw a lesson from it — it is too close for that.`,
+    );
+  }
+
+  if (opt('shape') === 'woven') {
+    out.push(
+      'SHAPE: weave the dreams into one continuous story through their recurring figures and places — but never invent a plot that connects dreams which share nothing.',
+    );
+  } else if (opt('shape') === 'motifs') {
+    out.push(
+      'SHAPE: group the dreams by what actually recurs across them — a place, a figure, a fear — and name the parts for those things.',
+    );
+  }
+
+  // The explicit register, per book (owner decision, 2026-08-13). It mirrors the questionnaire tiers the
+  // person already set their expectations by, and it GOVERNS the style preset: a warm or literary register
+  // must not dilute it back into the tasteful version.
+  if (opt('tier') === 'unfiltered') {
+    out.push(
+      'REGISTER: write this at its most explicit. Frank, specific, graphic sexual writing from the first page — name acts and bodies plainly. This GOVERNS the style and tone directives above: never soften it into the tasteful, fade-to-black, or merely sensual version. The boundary in your doctrine still holds absolutely.',
+    );
+  } else if (opt('tier') === 'explicit') {
+    out.push(
+      'REGISTER: write this explicitly — real sexual detail, plainly named, a step back from the most graphic register. This GOVERNS the style and tone directives above: do not dilute it into the merely suggestive. The boundary in your doctrine still holds absolutely.',
+    );
+  }
+
+  void bookType;
+  return out;
+}
+
 function lengthDirective(length: BookConfig['length']): string {
   switch (length) {
     case 'concise':
@@ -51,14 +127,31 @@ export function buildBiographerSystem(
   bookType: BookType,
   config: BookConfig,
   subjectName: string,
+  /**
+   * The tagged source material, when the caller wants it in the SYSTEM prompt rather than the user message
+   * (72 §5.3). This is a cost decision, not a wording one: `cache_control` sits on the system prefix, so
+   * material placed here is written to the cache once and read at ~0.1× by every later pass of the same
+   * chapter. The craft loop makes three or four passes over an identical corpus slice, so the same ~40k
+   * tokens were being paid for in full three or four times over.
+   *
+   * Only the craft loop passes it. Every other caller (foundations, the markup revision, answer-the-author,
+   * continuity, line-edit, the manuscript read) is a single call with nothing to reuse, so their prompts are
+   * byte-unchanged.
+   */
+  corpusBlock?: string,
 ): string {
   const name = subjectName.trim() || 'the subject';
   return [
     SAFETY,
     bookType.doctrine,
+    truthDirective(bookType.truthMode),
     voiceDirective(config.voice, name),
     styleDirective(config.style, bookType),
     lengthDirective(config.length),
+    // AFTER the style directives, because a per-book answer (the explicit register especially) has to be
+    // able to govern them — the tier-swamped-by-warmth failure from 08 §24.9.
+    ...optionDirectives(bookType, resolveTypeOptions(bookType, config.typeOptions)),
+    ...(corpusBlock && corpusBlock.trim().length > 0 ? [corpusBlock] : []),
   ]
     .filter((part) => part.trim().length > 0)
     .join('\n\n');
@@ -98,7 +191,7 @@ export function tagCorpusItems(corpus: StoryCorpus): TaggedCorpusItem[] {
 
 /** Render the tagged corpus for a chapter prompt: profile first, then each source line prefixed with its
  *  `[sN]` tag so the model can cite it. */
-function renderTaggedCorpus(corpus: StoryCorpus, tagged: TaggedCorpusItem[]): string {
+export function renderTaggedCorpus(corpus: StoryCorpus, tagged: TaggedCorpusItem[]): string {
   const lines: string[] = [];
   if (corpus.profile.length > 0) {
     lines.push('WHO THEY ARE (profile):');
@@ -122,7 +215,6 @@ function renderTaggedCorpus(corpus: StoryCorpus, tagged: TaggedCorpusItem[]): st
  */
 export function buildChapterUserMessage(
   corpus: StoryCorpus,
-  tagged: TaggedCorpusItem[],
   opts: {
     chapter: OutlineChapter;
     outline: BookOutline;
@@ -164,7 +256,7 @@ export function buildChapterUserMessage(
   }
   parts.push(
     '',
-    renderTaggedCorpus(corpus, tagged),
+    POINTER_TO_SOURCES,
     '',
     'Write the chapter as Markdown prose (short paragraphs; you may use *italics*; no headings, no lists, no tables). Open on a rendered scene, not a summary. Draw ONLY on the source material above — if a detail you need is missing, write around it rather than inventing it.',
     'At the END of each paragraph, cite the [sN] sources you drew on for it as `[[SRC:sN,sN]]` (use the exact tags above; omit the marker for a paragraph that draws on nothing specific). Do not cite sources you did not use.',
@@ -172,6 +264,11 @@ export function buildChapterUserMessage(
   );
   return parts.join('\n');
 }
+
+/** The craft loop's four passes read their source material from the SYSTEM prompt, where it can be cached
+ *  across the passes (see `buildBiographerSystem`). The user message points at it rather than repeating it. */
+const POINTER_TO_SOURCES =
+  'The SOURCE MATERIAL you may draw on — each line tagged [sN] — is in your instructions above. Draw ONLY on it; if a detail you need is missing, write around it rather than inventing it.';
 
 // --- The craft loop: plan → draft → critique → revise (72 §5.3) ------------------------------------------
 
@@ -196,7 +293,6 @@ export interface ChapterPlan {
  */
 export function buildChapterPlanMessage(
   corpus: StoryCorpus,
-  tagged: TaggedCorpusItem[],
   opts: { chapter: OutlineChapter; outline: BookOutline; essence?: string },
 ): string {
   const { chapter, outline, essence } = opts;
@@ -216,7 +312,7 @@ export function buildChapterPlanMessage(
     'THE OTHER CHAPTERS (what belongs to them, not to this one):',
     neighbours || '  (none — this is the only chapter)',
     '',
-    renderTaggedCorpus(corpus, tagged),
+    POINTER_TO_SOURCES,
     '',
     'Return ONE JSON object with exactly these keys:',
     '- "thread": one sentence naming the single thing this chapter is about — the through-line every scene serves. Not a topic ("his childhood"); a claim about a person ("he learned that being useful was how you got to stay").',
@@ -262,7 +358,6 @@ export interface CritiqueFinding {
  */
 export function buildCritiqueMessage(
   corpus: StoryCorpus,
-  tagged: TaggedCorpusItem[],
   opts: { chapter: OutlineChapter; markdown: string; plan?: ChapterPlan },
 ): string {
   const { chapter, markdown, plan } = opts;
@@ -273,7 +368,7 @@ export function buildCritiqueMessage(
     `THE DRAFT — "${chapter.title}":`,
     markdown.trim(),
     '',
-    renderTaggedCorpus(corpus, tagged),
+    POINTER_TO_SOURCES,
     '',
     'Judge it against these, in this order of seriousness:',
     '1. metaNarration — ANY sentence that refers to the record, the material, the sources, the biographer, "this chapter", "this book", or what is or is not known. This is the worst defect: the reader must never be able to tell that a corpus or a writer was involved. A gap must read as a fact about a PERSON ("he never explained why"), never about your sources ("the record doesn\'t say").',
@@ -296,7 +391,6 @@ export function buildCritiqueMessage(
  */
 export function buildReviseMessage(
   corpus: StoryCorpus,
-  tagged: TaggedCorpusItem[],
   opts: {
     chapter: OutlineChapter;
     markdown: string;
@@ -323,10 +417,10 @@ export function buildReviseMessage(
   }
   parts.push(
     '',
-    renderTaggedCorpus(corpus, tagged),
+    POINTER_TO_SOURCES,
     '',
     'Return the FULL revised chapter as Markdown prose (short paragraphs; *italics* allowed; no headings, lists, or tables).',
-    'At the END of each paragraph, cite the [sN] sources you drew on as `[[SRC:sN,sN]]` (exact tags above; omit for a paragraph that draws on nothing specific).',
+    'At the END of each paragraph, cite the [sN] sources you drew on as `[[SRC:sN,sN]]` (exact tags; omit for a paragraph that draws on nothing specific).',
     'Return ONLY the chapter prose with its inline [[SRC:…]] markers — no title heading, no preamble, no note about what you changed.',
   );
   return parts.join('\n');
@@ -457,8 +551,13 @@ export function buildAnswerAuthorMessage(opts: {
  * OUTLINE (parts + chapters, each with a one–two sentence brief). Structural JSON only — no prose chapters
  * yet. Ids/order are minted server-side (never trusted from the model).
  */
-export function buildFoundationsUserMessage(corpus: StoryCorpus, bookType: BookType): string {
+export function buildFoundationsUserMessage(
+  corpus: StoryCorpus,
+  bookType: BookType,
+  config?: Pick<BookConfig, 'typeOptions'>,
+): string {
   const framework = bookType.interview;
+  const typeOptions = config?.typeOptions ?? {};
   return [
     `You are about to plan a ${bookType.label.toLowerCase()} of ${corpus.personName || 'this person'}.`,
     'First, READ everything below. Let the themes and the through-line emerge from the material before you shape anything (do not impose a template).',
@@ -471,9 +570,31 @@ export function buildFoundationsUserMessage(corpus: StoryCorpus, bookType: BookT
     '- "timeline": an array of the key dated moments you can anchor, each { "label": string, "date"?: "YYYY" or "YYYY-MM-DD", "approx"?: a fuzzy label like "mid-90s" when no date is known }. Include only moments the material supports.',
     '- "outline": { "parts": [ { "title": string, "chapters": [ { "title": an evocative chapter title (not a bare number), "brief": 1–2 sentences on what this chapter is about and the one scene it turns on, "eraFrom"?: "YYYY", "eraTo"?: "YYYY", "lifeAreas"?: string[] } ] } ] }.',
     '',
-    `Shape the chapters the way a life is actually organized — you may draw on the person's own life chapters and the key scenes (${framework.scenes.map((s) => s.label.toLowerCase()).join(', ')}). Open the book in a character-revealing scene, not at birth. Propose only chapters the material can actually support; where a chapter would be thin, make it broader or leave it for later.`,
+    spineDirective(resolveSpine(bookType, typeOptions), framework),
+    'Propose only chapters the material can actually support; where one would be thin, make it broader or leave it for later.',
     'Return ONLY the JSON object — no prose, no markdown fences.',
   ].join('\n');
+}
+
+/**
+ * How to SHAPE this kind of book (72 §4.1/§5.1). Foundations used to assume every book was parts-and-chapters
+ * across a whole life — true of a biography, wrong for a book about one year, a set of standalone pieces, or a
+ * picture book with a fixed page count. The spine says which, and the outline JSON stays the same shape
+ * throughout (a single unnamed part carries a book that has no parts), so nothing downstream changes.
+ */
+function spineDirective(spine: BookSpine, framework: BookInterviewFramework): string {
+  switch (spine.kind) {
+    case 'span': {
+      const window = [spine.from, spine.to].filter(Boolean).join(' to ');
+      return `Shape this as ONE bounded stretch of time${window ? ` (${window})` : ''}: a single part containing chapters in sequence, each a moment within it. Do not reach back across the whole life — everything outside the window is context, not a chapter. Open inside a scene, not at the beginning of the period.`;
+    }
+    case 'pages':
+      return `Shape this as exactly ${spine.count} short PAGES, in sequence, inside a single part: each "chapter" is one page of roughly ${spine.wordsPerPage} words. Give every page one image-able moment. Title them plainly.`;
+    case 'vignettes':
+      return 'Shape this as a set of standalone pieces inside a single part — each complete on its own, in an order that reads well. They need no through-line and no chronology; do not force one.';
+    default:
+      return `Shape the chapters the way a life is actually organized — parts as life eras, and you may draw on the person's own life chapters and the key scenes (${framework.scenes.map((sc) => sc.label.toLowerCase()).join(', ')}). Open the book in a character-revealing scene, not at birth.`;
+  }
 }
 
 /**

@@ -16,7 +16,14 @@ describe('Your Story schemas (64)', () => {
   it('BookConfig applies the owner-approved defaults', () => {
     const cfg = BookConfigSchema.parse({});
     // A biography defaults to Full length — published-book length (§3.2, owner decision 2026-07-16).
-    expect(cfg).toEqual({ voice: 'third', style: 'warm', length: 'full', autoRefresh: true });
+    expect(cfg).toEqual({
+      voice: 'third',
+      style: 'warm',
+      length: 'full',
+      autoRefresh: true,
+      typeOptions: {},
+      sourceIds: [],
+    });
   });
 
   it('BookManifest round-trips and defaults sharedWith to []', () => {
@@ -52,8 +59,8 @@ describe('Your Story schemas (64)', () => {
     expect(chapter.imagePlacements).toEqual([]);
   });
 
-  it('ChapterStatus accepts the full lifecycle incl. updated', () => {
-    for (const status of ['generating', 'new', 'updated', 'stale', 'reviewed'] as const) {
+  it('ChapterStatus accepts the full lifecycle, and migrates a pre-72 `stale` on read', () => {
+    for (const status of ['generating', 'new', 'updated', 'reviewed'] as const) {
       expect(
         BookChapterSchema.parse({
           id: 'c',
@@ -65,6 +72,19 @@ describe('Your Story schemas (64)', () => {
         }).status,
       ).toBe(status);
     }
+    // 72 §7.9 — every pre-72 chapter on disk carries `'stale'`; the read-time coercion is what makes the
+    // migration idempotent and needs no file rewrite. (Both real books are 100% stale, so this is the state
+    // every existing chapter is actually in.)
+    expect(
+      BookChapterSchema.parse({
+        id: 'c',
+        schemaVersion: 1,
+        partId: 'p',
+        order: 0,
+        title: 't',
+        status: 'stale',
+      }).status,
+    ).toBe('updated');
   });
 
   it('MarkupMark is discriminated on kind (comment / delete / todo)', () => {

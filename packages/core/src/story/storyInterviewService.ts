@@ -2,15 +2,6 @@ import { z } from 'zod';
 import { classifyParseOutcome, extractJsonObject, tolerantArray } from '../ai';
 import { uuid } from '../id';
 import { listInsightsForPerson } from '../insights';
-import { formatIntakeForGeneration, getIntakeSession } from '../intake/intakeService';
-import { listCoveredTopics } from '../questionnaires/coveredTopicsStore';
-import {
-  buildDedupReference,
-  gatherRecipientAskedPrompts,
-  gatherRecipientFeedbackGuidance,
-  gatherRecipientInsightFacts,
-  gatherRecipientPriorAnswers,
-} from '../questionnaires/recipientHistory';
 import type {
   AiFailureReason,
   BookChapter,
@@ -41,8 +32,11 @@ import {
   validateQuestionnaire,
 } from '../questionnaires/questionnaireService';
 import { getResponse } from '../questionnaires/responseService';
+import { isLiving } from './storyEditions';
+import { getMemory } from './storyMemoryService';
+import { gatherBiographerReference } from './storyReference';
 import { queryUsage } from '../usage';
-import { MCADAMS_SCENES, getBookType } from './bookTypes';
+import { BIOGRAPHY_BOOK_TYPE, getBookType, type BookInterviewFramework } from './bookTypes';
 import { budgetCorpus } from './corpusBudget';
 import { buildStoryCorpus, type StoryCorpus } from './storyCorpus';
 import { buildBiographerSystem, buildGapPassUserMessage } from './storyPromptBuilder';
@@ -88,35 +82,11 @@ export async function mintStoryCheckInFromTodo(
 
   // De-dup parity with the manual + auto-checkin paths (64 §3.7, closing the §23.5 drift): a biographer
   // check-in is a SELF-send, so the "recipient" whose history we must never re-ask is the person themselves.
-  // Assemble the same budgeted reference (onboarding-first) + the exact asked-prompt list, so the biographer
-  // never re-asks what onboarding or a prior questionnaire already answered ("reads like it hasn't read your
-  // file"). Author-blind — fed only to the model.
-  const [priorAnswers, insightFacts, priorPrompts, intakeSession, feedbackGuidance, coveredTopics] =
-    await Promise.all([
-      gatherRecipientPriorAnswers(deps.fs, deps.key, deps.personId),
-      gatherRecipientInsightFacts(deps.fs, deps.key, deps.personId),
-      gatherRecipientAskedPrompts(deps.fs, deps.key, deps.personId),
-      getIntakeSession(deps.fs, deps.key, deps.personId),
-      // spec 69 §5.9 — the biographer learns from the person's own prior skips/declines too.
-      gatherRecipientFeedbackGuidance(deps.fs, deps.key, deps.personId),
-      // §28.3 covered-topics parity (spec 69 §5.2): a self-send, so author = recipient = the person.
-      listCoveredTopics(deps.fs, deps.key, deps.personId, deps.personId),
-    ]);
-  const intake = intakeSession
-    ? formatIntakeForGeneration(intakeSession)
-    : { text: '', prompts: [] as string[] };
-  const coveredNotes = coveredTopics.map((t) => t.note);
-  const coveredPrompts = coveredTopics
-    .map((t) => t.sourcePrompt)
-    .filter((p): p is string => Boolean(p));
-  const dedupReference = buildDedupReference({
-    intakeText: intake.text,
-    priorAnswers,
-    insightFacts,
-    priorPrompts,
-    ...(coveredNotes.length ? { coveredTopics: coveredNotes } : {}),
-  });
-  const recipientAskedPrompts = [...priorPrompts, ...intake.prompts, ...coveredPrompts];
+  const {
+    dedupReference,
+    askedPrompts: recipientAskedPrompts,
+    feedbackGuidance,
+  } = await gatherBiographerReference(deps.fs, deps.key, deps.personId);
 
   const gen = await generateQuestions(deps, {
     type: 'general',
@@ -188,14 +158,24 @@ export async function mintStoryCheckInFromTodo(
 
 // --- The gap engine: completeness + the gap pass (§3.6/§3.7/§5.5) ----------------------------------------
 
-/** How far along a story is, derived deterministically from the framework coverage (no AI). The 12 dimensions:
- *  the eight McAdams scenes + life-chapters + challenges + ideology + future-script. Owner decision (2026-07-16):
- *  a QUALITATIVE stage + a subtle ratio, never a bare percentage. */
-export function computeStoryCompleteness(coverage: StoryFrameworkCoverage): StoryCompleteness {
-  const total = MCADAMS_SCENES.length + 4;
+/**
+ * How far along a story is, derived deterministically from the framework coverage (no AI). The dimensions are
+ * the BOOK TYPE's own scenes plus the four standing ones (life-chapters, challenges, ideology, future-script)
+ * — 12 for a biography, whose framework carries the eight McAdams scenes. Owner decision (2026-07-16): a
+ * QUALITATIVE stage + a subtle ratio, never a bare percentage.
+ *
+ * `scenes` is read from the framework rather than imported (72 §4.1): a book type is the only thing that knows
+ * what its own interview asks about, and a picture book or a year-in-review has nothing to do with McAdams.
+ */
+export function computeStoryCompleteness(
+  coverage: StoryFrameworkCoverage,
+  framework: BookInterviewFramework = BIOGRAPHY_BOOK_TYPE.interview,
+): StoryCompleteness {
+  const sceneKeys = framework.scenes.map((sc) => sc.key as string);
+  const total = sceneKeys.length + 4;
   let covered = 0;
   if (coverage.chapters) covered += 1;
-  for (const s of MCADAMS_SCENES) if (coverage.scenes[s.key]) covered += 1;
+  for (const k of sceneKeys) if (coverage.scenes[k]) covered += 1;
   if (coverage.challenges) covered += 1;
   if (coverage.ideology) covered += 1;
   if (coverage.futureScript) covered += 1;
@@ -219,7 +199,11 @@ export async function getStoryCompleteness(
   bookId: string,
 ): Promise<StoryCompleteness> {
   const interview = await getInterviewState(fs, key, personId, bookId);
-  return computeStoryCompleteness(interview.frameworkCoverage);
+  // Score against THIS book's own framework, so a type whose interview isn't the McAdams eight isn't
+  // measured against dimensions it never asks about.
+  const book = await getBook(fs, key, personId, bookId);
+  const framework = (book && getBookType(book.type))?.interview;
+  return computeStoryCompleteness(interview.frameworkCoverage, framework);
 }
 
 const GAP_MAX_TOKENS = 3000;
@@ -278,7 +262,7 @@ export async function runGapPass(
   if (!outline || chapterCount === 0) {
     return {
       ok: true,
-      completeness: computeStoryCompleteness(interview.frameworkCoverage),
+      completeness: computeStoryCompleteness(interview.frameworkCoverage, bookType.interview),
       gaps: [],
     };
   }
@@ -320,7 +304,8 @@ export async function runGapPass(
 
   // Build the coverage from the draft, normalizing the scene keys against the fixed framework (drop invented ones).
   const scenes: Record<string, boolean> = {};
-  for (const s of MCADAMS_SCENES) scenes[s.key] = Boolean(draft.coverage?.scenes?.[s.key]);
+  for (const sc of bookType.interview.scenes)
+    scenes[sc.key] = Boolean(draft.coverage?.scenes?.[sc.key]);
   const coverage: StoryFrameworkCoverage = {
     chapters: Boolean(draft.coverage?.chapters),
     scenes,
@@ -359,7 +344,7 @@ export async function runGapPass(
 
   return {
     ok: true,
-    completeness: computeStoryCompleteness(coverage),
+    completeness: computeStoryCompleteness(coverage, bookType.interview),
     gaps,
     ...(result.usage ? { usage: result.usage } : {}),
   };
@@ -437,7 +422,21 @@ export async function getStoryGaps(
       focus: gap.focus,
       priority: gap.priority,
       ...(gap.assignmentId ? { assignmentId: gap.assignmentId } : {}),
+      ...(gap.memoryId ? { memoryId: gap.memoryId } : {}),
     };
+    // A gap can be closed by EITHER channel (72 §5.5). A conversation closes it when the memory is SAVED —
+    // an abandoned draft leaves it askable, which is right: nothing was told.
+    if (gap.memoryId) {
+      const memory = await getMemory(fs, key, personId, gap.memoryId);
+      if (memory?.status === 'saved') {
+        gaps.push({ ...base, status: 'answered' });
+        continue;
+      }
+      if (memory) {
+        gaps.push({ ...base, status: 'asked' }); // a conversation is under way
+        continue;
+      }
+    }
     if (!gap.assignmentId) {
       gaps.push({ ...base, status: 'open' });
       continue;
@@ -693,6 +692,11 @@ export async function runStoryInterviewCadence(
   const chapterCount = outline?.parts.reduce((n, p) => n + p.chapters.length, 0) ?? 0;
   if (!book || !outline || chapterCount === 0) return { outcome: 'noBook' };
 
+  // A FINISHED book is not interviewed for (72 §3.6). Detection stays on — the material still accumulates
+  // quietly and offers the next edition — but the asking stops, because being asked questions for a book
+  // you have called done is what would make "finished" mean nothing.
+  if (!isLiving(book)) return { outcome: 'finished' };
+
   const interview = await getInterviewState(deps.fs, deps.key, deps.personId, args.bookId);
 
   // ≤1 open check-in. A still-unanswered one blocks a new mint (the back-off). An ANSWERED one lets the loop
@@ -729,6 +733,9 @@ export async function runStoryInterviewCadence(
     to: deps.now.toISOString(),
     personId: deps.personId,
     type: 'story.interview',
+    // Per-book (72 §5.4): two books each get their own allowance, so starting a second never quietly stops
+    // the first from being interviewed for.
+    sessionId: args.bookId,
   });
   if (passes.length >= STORY_INTERVIEW_WEEKLY_CAP) {
     // The reason matters: the MANUAL "Find what's missing" hits this too, and "check back later" with no
@@ -737,7 +744,7 @@ export async function runStoryInterviewCadence(
   }
 
   // Run the gap pass (persists coverage + lastGapPassAt).
-  const pass = await runGapPass(deps, { bookId: args.bookId });
+  const pass = await runGapPass({ ...deps, sessionId: args.bookId }, { bookId: args.bookId });
   if (!pass.ok) {
     return await clearOpenIfResolved(deps, args.bookId, interview, 'noGaps');
   }

@@ -29,6 +29,7 @@ import {
   buildChapterUserMessage,
   buildFoundationsUserMessage,
   buildRevisionUserMessage,
+  renderTaggedCorpus,
   tagCorpusItems,
 } from './storyPromptBuilder';
 import { chapterParagraphs, countWords, stripSourceMarkers } from './storyText';
@@ -134,7 +135,7 @@ export async function generateFoundations(
     await buildStoryCorpus(deps.fs, deps.key, deps.personId, opts.bookId, opts.exclusions ?? []),
   );
   const system = buildBiographerSystem(opts.bookType, opts.config, corpus.personName);
-  const user = buildFoundationsUserMessage(corpus, opts.bookType);
+  const user = buildFoundationsUserMessage(corpus, opts.bookType, opts.config);
 
   const result = await runClaude(deps, system, user, 'story.outline', FOUNDATIONS_MAX_TOKENS);
   if (!result.ok) return { ok: false, reason: result.reason, message: result.message };
@@ -289,20 +290,28 @@ export async function generateChapter(
   const slice = sliceCorpusForChapter(corpus, target);
   const tagged = tagCorpusItems(slice);
   const tagToRef = new Map(tagged.map((t) => [t.tag, t.sourceRef]));
-  const system = buildBiographerSystem(bookType, book.config, corpus.personName);
+  // The corpus goes in the SYSTEM prompt, where `cache_control` sits — so the ~40k tokens of source material
+  // are written to the cache once and read at ~0.1× by the three or four passes that follow, instead of being
+  // paid for in full each time (72 §5.3). The slice is per-chapter, so the cache hits within a chapter.
+  const system = buildBiographerSystem(
+    bookType,
+    book.config,
+    corpus.personName,
+    renderTaggedCorpus(slice, tagged),
+  );
 
   // Pass 1 of the craft loop (72 §5.3) — decide what this chapter IS before writing a word. Optional by
   // design: a failed plan (or one the budget stopped) leaves the drafter working from the brief alone,
   // exactly as it did before the loop existed.
   args.onPhase?.('planning');
-  const plan = await planChapter(deps, slice, tagged, {
+  const plan = await planChapter(deps, slice, {
     chapter: target,
     outline,
     ...(book.essence ? { essence: book.essence } : {}),
     system,
   });
 
-  const user = buildChapterUserMessage(slice, tagged, {
+  const user = buildChapterUserMessage(slice, {
     chapter: target,
     outline,
     ...(book.essence ? { essence: book.essence } : {}),
@@ -336,7 +345,7 @@ export async function generateChapter(
   // healthy answer (the chapter ships as drafted) AND the failure answer, so a critique that can't run
   // simply costs the chapter nothing.
   args.onPhase?.('critiquing');
-  const findings = await critiqueChapter(deps, slice, tagged, {
+  const findings = await critiqueChapter(deps, slice, {
     chapter: target,
     markdown: drafted.markdown,
     ...(plan ? { plan } : {}),
@@ -349,7 +358,7 @@ export async function generateChapter(
   let provenance = drafted.provenance;
   if (findings.length > 0) {
     args.onPhase?.('revising');
-    const revised = await reviseChapter(deps, slice, tagged, {
+    const revised = await reviseChapter(deps, slice, {
       chapter: target,
       markdown: drafted.markdown,
       findings,
@@ -475,9 +484,9 @@ export async function generateBookChapters(
   let lastFailure: { reason: AiFailureReason; message: string } | null = null;
   for (const chapter of chapters) {
     const existing = await getChapter(deps.fs, deps.key, deps.personId, bookId, chapter.id);
-    // Skip a chapter that's already written and not flagged stale (idempotent/resumable). Never overwrite a
-    // reviewed chapter.
-    if (existing && existing.status !== 'stale') {
+    // Skip a chapter that already HAS PROSE (idempotent/resumable). Drift is a proposal now, not a status
+    // (72 §4.4), so this queue only ever writes first drafts — a rewrite is always an explicit act.
+    if (existing && existing.markdown.trim().length > 0) {
       completed += 1;
       continue;
     }

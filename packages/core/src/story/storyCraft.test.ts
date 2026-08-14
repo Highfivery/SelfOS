@@ -140,7 +140,14 @@ async function seedBook(fs: ReturnType<typeof memFileSystem>): Promise<string> {
     personId: 'me',
     type: 'biography',
     title: 'The Story of Ben',
-    config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    config: {
+      voice: 'third',
+      style: 'warm',
+      length: 'standard',
+      autoRefresh: true,
+      typeOptions: {},
+      sourceIds: [],
+    },
     now,
   });
   await applyFoundations(
@@ -302,6 +309,31 @@ describe('the craft loop (72 §5.3)', () => {
     expect(calls).toHaveLength(3); // no revision attempted
     expect((await getChapter(fs, key, 'me', bookId, 'c1'))?.markdown).toContain(
       'The record does not say',
+    );
+  });
+
+  /**
+   * The corpus is the expensive part of a chapter — ~40k tokens, sent three or four times. It rides the
+   * SYSTEM prompt so `cache_control` covers it, and the cache only hits if every pass sends a BYTE-IDENTICAL
+   * system string. That identity is the whole optimization, so it is what this pins.
+   */
+  it('sends one identical system prompt carrying the corpus, so the cache can hit across passes', async () => {
+    const fs = memFileSystem();
+    const bookId = await seedBook(fs);
+    const { client, calls } = scriptedClient([PLAN, DRAFT, CRITIQUE, REVISED]);
+
+    await generateChapter(deps(fs, client), { bookId, chapterId: 'c1' });
+
+    expect(calls).toHaveLength(4);
+    const systems = new Set(calls.map((c) => c.system));
+    expect(systems.size).toBe(1); // one cached prefix, four reads
+
+    // It really is the source material that's being cached, not just the doctrine.
+    expect(calls[0]?.system).toContain('[s0]');
+    expect(calls[0]?.system).toContain('he rebuilt the carburettor at fourteen');
+    // And it is no longer repeated in every user message — that repetition was the cost.
+    expect(calls.every((c) => !c.user.includes('he rebuilt the carburettor at fourteen'))).toBe(
+      true,
     );
   });
 

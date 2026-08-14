@@ -100,6 +100,59 @@ export interface BookInterviewFramework {
   deepeningLadder: string[];
 }
 
+/**
+ * Whether the prose may depart from the record (72 §4.1).
+ *
+ * `true` — never invents. Where the material is silent the book writes around the gap or asks. This is the
+ * whole trust proposition of a biography: everything in it happened.
+ * `fictionalized` — the EVENTS may be invented; the person and the feelings may not. A children's book
+ * about a real child, or a dream retold as a story, is not a lie — but it stops being a record.
+ */
+export type BookTruthMode = 'true' | 'fictionalized';
+
+/**
+ * How a book is shaped (72 §4.1) — what "a chapter" even means here. Foundations reads this instead of
+ * assuming every book is parts-and-chapters over a whole life.
+ */
+export type BookSpine =
+  /** Life eras as parts, chapters inside them. A whole-life book. */
+  | { kind: 'eras' }
+  /** One bounded stretch of time — a year, a marriage, an illness. Chapters, no parts. */
+  | { kind: 'span'; from?: string; to?: string }
+  /** A fixed number of short pages, each about `wordsPerPage` long. A picture book. */
+  | { kind: 'pages'; count: number; wordsPerPage: number }
+  /** Standalone pieces with no through-line obligation. */
+  | { kind: 'vignettes' };
+
+/**
+ * How real people appear (72 §4.1), and what the People tab defaults to.
+ *
+ * `realNames` — as themselves. `renamed` — pseudonyms by default, because the book is fictionalized and
+ * naming a real person inside invented events is a different act. `childrenAsHeroes` — the child is the
+ * named hero; everyone else is a role ("Mum", "the neighbour").
+ */
+export type BookCastPolicy = 'realNames' | 'renamed' | 'childrenAsHeroes';
+
+/**
+ * One question a book type asks at commission (72 §4.1). Declared by the type; rendered by the commission
+ * screen; answered per BOOK into `BookConfig.typeOptions`. The same declaration drives the UI and the
+ * prompt, so adding a question is one entry here — the schema-driven-settings pattern.
+ *
+ * These are per-book, not per-type, because a person writes several books of the same kind and each is a
+ * different act: this portrait is addressed to her, that one is about him (owner decision, 2026-08-13).
+ */
+export interface BookTypeOption {
+  id: string;
+  label: string;
+  help?: string;
+  kind: 'choice' | 'text' | 'person';
+  /** For `choice` — the first entry is the default. */
+  choices?: { value: string; label: string; description?: string }[];
+  placeholder?: string;
+  /** The commission step won't proceed without an answer. */
+  required?: boolean;
+}
+
 /** A registered book type. */
 export interface BookType {
   id: BookTypeId;
@@ -112,11 +165,66 @@ export interface BookType {
   interview: BookInterviewFramework;
   /** Content gates — `adult` reuses the shared 18+ ack when a future type needs it. */
   gates: { adult: boolean };
+  /** Whether the prose may depart from the record (§4.1). Drives a governing clause in the system prompt. */
+  truthMode: BookTruthMode;
+  /** What shape this kind of book takes (§4.1) — read by the foundations pass. */
+  spine: BookSpine;
+  /** How real people appear, and what the People tab defaults to (§4.1). */
+  castPolicy: BookCastPolicy;
+  /** The per-type image contract (§8.5). The default is the symbolic, no-likeness framing; a picture book
+   *  needs the opposite (a consistent, recognisable character across every page), so it overrides this. */
+  imageFraming: string;
+  /** Who the book is FOR, when that changes how it must be written. Children's books only. */
+  audience?: { ageFrom: number; ageTo: number; readingLevel: string };
+  /** What this type asks at commission (§4.1). Absent ⇒ nothing beyond the shared voice/style/length. */
+  options?: BookTypeOption[];
+  /**
+   * Which kind of record this type lets the person hand-pick, filling `BookConfig.sourceIds`. A dream book
+   * can be made of five particular dreams rather than everything; a biography is about a whole life and has
+   * nothing to pick from.
+   */
+  sourceSelect?: 'dream';
+  /**
+   * The shape this book takes given its commission answers. Falls back to `spine` when a type's shape is
+   * fixed. Declared per type because only the type knows what its own options mean.
+   */
+  spineFor?: (options: Readonly<Record<string, string>>) => BookSpine;
 }
 
-const BIOGRAPHY_DOCTRINE = `You are a professional biographer writing a true, book-length life story about the subject, drawn ONLY from what is known about them. Your bar is award-winning narrative nonfiction. Follow these principles:
+/**
+ * The shape a specific BOOK takes — its type's `spineFor` when it has one, otherwise the type's fixed spine.
+ * Foundations reads this, never `bookType.spine` directly, so a per-book answer actually changes the outline.
+ */
+export function resolveSpine(bookType: BookType, options: Record<string, string>): BookSpine {
+  return bookType.spineFor?.(options) ?? bookType.spine;
+}
 
-CRAFT
+/** A book type's option answers, with every unanswered option filled from its first choice. */
+export function resolveTypeOptions(
+  bookType: BookType,
+  stored: Record<string, string> = {},
+): Record<string, string> {
+  const out: Record<string, string> = { ...stored };
+  for (const option of bookType.options ?? []) {
+    if (out[option.id]) continue;
+    const first = option.choices?.[0]?.value;
+    if (first) out[option.id] = first;
+  }
+  return out;
+}
+
+/** The default image contract (§8.5): evocative and symbolic, never a photoreal likeness of a real person. */
+export const SYMBOLIC_IMAGE_FRAMING =
+  'Evocative, non-photorealistic art that suggests the moment rather than depicting it. Never a likeness of a real person, never a recognisable face, never a photograph.';
+
+/**
+ * The doctrine is composed from shared blocks, not copied per type (72 §5.1). The craft principles, the
+ * prohibition on narrating the book's own construction, and the banned prose tells are the feature's core
+ * IP and are identical for every kind of book — only the OPENING (what kind of book this is) and the TRUTH
+ * block (whether it may invent) differ. Composing them means a craft improvement lands everywhere at once,
+ * and a new type cannot quietly ship without them.
+ */
+const CRAFT_PRINCIPLES = `CRAFT
 - Turn every page: write from the whole record, never a skim. The revealing detail is often the one nobody weighted.
 - Make the reader SEE the scene. Every chapter needs at least one moment rendered in scene — place, time, body — not summarized. A chapter of pure recap is a defect.
 - Honor sense of place: anchor scenes in named, physically rendered places; place explains behavior.
@@ -126,25 +234,49 @@ CRAFT
 - Give the story an inner thread — the subject's recurring internal struggle — and let it carry the book.
 - Sacred carnality: use specific, sensory, bodily detail. Where you lack it, that is a gap to interview for — NEVER invent it.
 - Portrait, not autopsy: warm, idiosyncratic detail over clinical dissection. Show contradictions side by side without adjudicating them. A subject with no flaws is unbelievable; a flattering portrait loses the reader's trust.
-- Deliberate rhythm: vary sentence length with the emotional register; write prose that survives being read aloud.
+- Deliberate rhythm: vary sentence length with the emotional register; write prose that survives being read aloud.`;
 
-TRUTH & ETHICS
+/** The truth contract for a book that never invents. */
+const TRUTH_TOLD_TRUE = `TRUTH & ETHICS
 - Never exaggerate, never fabricate. Do not invent scenes, dialogue, dates, or sensory detail. Reconstructed dialogue must read as reconstruction.
 - Honest epistemics: never assert what the material does not support. Where it is silent or self-contradictory, write around the gap or attribute the uncertainty IN CHARACTER — "he never explained why", "she remembers it two ways", "no one in the family agrees on the year" — so the doubt belongs to a person, not to a researcher.
 - Third parties are rounded characters with their own reasons — write them with fairness and motive-empathy, never as flat villains. Never narrate another person's inner thoughts as fact; attribute ("she seemed", "he later said") or leave it as a question.
 - Do not force a redemptive silver lining onto a painful memory. Handle hard material with reflective distance and room to breathe; never linger gratuitously.
-- This is a wellness reflection, not a clinical assessment. Test or wellbeing data may inform characterization ("she runs anxious before big decisions"), but NEVER name instruments, scores, bands, or diagnoses, and never write in diagnostic language.
+- This is a wellness reflection, not a clinical assessment. Test or wellbeing data may inform characterization ("she runs anxious before big decisions"), but NEVER name instruments, scores, bands, or diagnoses, and never write in diagnostic language.`;
 
-NEVER NARRATE THE BOOK'S OWN CONSTRUCTION (the single most important rule after truthfulness)
+/**
+ * The truth contract for a book that openly invents its events. The craft rules and the human-decency rules
+ * are unchanged — what changes is only that the STORY may be made up. The person may not.
+ */
+const TRUTH_REIMAGINED = `TRUTH & ETHICS
+- The EVENTS here are invented, and that is the point — you may write scenes, dialogue and detail that never happened. Do not pretend otherwise, and never present this book as a record of what occurred.
+- The PEOPLE are not invented. Their character, their voice, what they care about and the real relationships between them come from the material and must stay true. A person who would never say a thing must not say it here.
+- The FEELINGS are not invented either. The emotional truth is the thing you are being faithful to; the story exists to carry it.
+- Third parties are rounded characters with their own reasons — write them with fairness and motive-empathy, never as flat villains.
+- Do not force a redemptive silver lining onto painful material. Handle it with room to breathe; never linger gratuitously.
+- This is a wellness reflection, not a clinical assessment. Test or wellbeing data may inform characterization, but NEVER name instruments, scores, bands, or diagnoses, and never write in diagnostic language.`;
+
+const NO_META_NARRATION = `NEVER NARRATE THE BOOK'S OWN CONSTRUCTION (the single most important rule after truthfulness)
 - You are telling a life, not describing a research process. The prose must NEVER refer to "the record", "the material", "the source"/"the sources", "the biographer", "this chapter", "the chapter", "this book", "the book", "what we know", or what you as a writer do or do not know.
 - Never write a sentence about what the chapter is doing, holding, or existing to say. No "this chapter has to hold…", "the chapter exists to say so", "what the record does not settle". Write the scene instead.
 - A gap in the material is expressed as a fact about a PERSON ("he never explained why"), never as a fact about your sources ("the record doesn't say").
-- The reader must never be able to tell that a corpus, a source, or an AI was involved. If a sentence would only make sense to someone who knows how this book was assembled, cut it.
+- The reader must never be able to tell that a corpus, a source, or an AI was involved. If a sentence would only make sense to someone who knows how this book was assembled, cut it.`;
 
-FORBIDDEN AI-PROSE TELLS (do not use)
+const FORBIDDEN_TELLS = `FORBIDDEN AI-PROSE TELLS (do not use)
 - Vocabulary: tapestry, testament / "a testament to", delve, journey (as a life-metaphor crutch), pivotal, intricate, meticulous, showcase, underscore, vibrant, robust, landscape/realm, navigate (metaphorical), foster, boast, "rich cultural heritage", "nestled", "in the heart of", "indelible mark", or "turning point" used as a label instead of a dramatized scene.
 - Constructions: "not just X, but Y" / "it's not X — it's Y"; rule-of-three adjective stacks; self-posed rhetorical questions; copula-avoidance ("serves as", "stands as", "represents") where "is" is honest; "-ing" significance tails ("…highlighting her resilience", "…underscoring his growth").
 - Moves: "I learned that…" moralizing and lesson-stamped chapter endings ("Ultimately…", "Little did I know…", "It was in that moment that I realized…").`;
+
+/** Assemble a type's doctrine: its own opening, then the shared craft IP. */
+function composeDoctrine(opening: string, truth: string, extra: string[] = []): string {
+  return [opening, CRAFT_PRINCIPLES, truth, ...extra, NO_META_NARRATION, FORBIDDEN_TELLS].join(
+    '\n\n',
+  );
+}
+
+const BIOGRAPHY_OPENING = `You are a professional biographer writing a true, book-length life story about the subject, drawn ONLY from what is known about them. Your bar is award-winning narrative nonfiction. Follow these principles:`;
+
+const BIOGRAPHY_DOCTRINE = composeDoctrine(BIOGRAPHY_OPENING, TRUTH_TOLD_TRUE);
 
 /** The v1 biography type. */
 export const BIOGRAPHY_BOOK_TYPE: BookType = {
@@ -336,10 +468,289 @@ export const BIOGRAPHY_BOOK_TYPE: BookType = {
     ],
   },
   gates: { adult: false },
+  // A biography is the told-true case in every dimension: it never invents, it is shaped by the eras of a
+  // life, and the people in it are themselves.
+  truthMode: 'true',
+  spine: { kind: 'eras' },
+  castPolicy: 'realNames',
+  imageFraming: SYMBOLIC_IMAGE_FRAMING,
 };
 
 /** Every registered book type, in display order. v1: the biography. */
-export const BOOK_TYPES: readonly BookType[] = [BIOGRAPHY_BOOK_TYPE];
+
+// --- The told-true types (72 §3.2) ------------------------------------------------------------------------
+
+/** Everything except the opening + truth block is shared, so a craft fix lands on every type at once. */
+function tellsTrue(opening: string): string {
+  return composeDoctrine(opening, TRUTH_TOLD_TRUE);
+}
+function reimagines(opening: string, extra: string[] = []): string {
+  return composeDoctrine(opening, TRUTH_REIMAGINED, extra);
+}
+
+/** A book about ONE bounded stretch of a life — the years in a city, an illness, a marriage. */
+export const MEMOIR_BOOK_TYPE: BookType = {
+  id: 'memoir',
+  label: 'Memoir',
+  blurb: 'One stretch of your life, told in depth — a period, or a thread you followed through it.',
+  doctrine: tellsTrue(
+    `You are writing a memoir: one bounded stretch of ${'${subject}'}'s life, told in depth. A memoir is not a short biography — it goes NARROW and DEEP. Everything outside the boundary is context, never a chapter. Its authority comes from closeness: the smaller the window, the more the detail has to carry.`,
+  ),
+  structures: [
+    {
+      id: 'sequence',
+      label: 'Straight through',
+      description: 'Chapters in the order it happened, inside the period.',
+      isDefault: true,
+    },
+    {
+      id: 'circling',
+      label: 'Circling one moment',
+      description: 'The book returns to a single moment from different angles as it goes.',
+    },
+  ],
+  stylePresets: BIOGRAPHY_BOOK_TYPE.stylePresets,
+  interview: BIOGRAPHY_BOOK_TYPE.interview,
+  gates: { adult: false },
+  truthMode: 'true',
+  spine: { kind: 'span' },
+  castPolicy: 'realNames',
+  imageFraming: SYMBOLIC_IMAGE_FRAMING,
+  options: [
+    {
+      id: 'bound',
+      label: 'What holds this book together',
+      kind: 'choice',
+      choices: [
+        {
+          value: 'period',
+          label: 'A period of time',
+          description: 'e.g. 1998–2004, the Denver years',
+        },
+        { value: 'thread', label: 'A thread I followed', description: 'e.g. my mother’s illness' },
+      ],
+    },
+    {
+      id: 'boundValue',
+      label: 'Which one',
+      kind: 'text',
+      placeholder: '1998–2004, or “becoming a father”',
+      required: true,
+    },
+  ],
+  // A period is a time window; a thread wanders across time, so it can't be one — it reads as a sequence of
+  // pieces held together by the thread rather than by chronology.
+  spineFor: (o) => (o['bound'] === 'thread' ? { kind: 'vignettes' } : { kind: 'span' }),
+};
+
+/** One year, told as a book. */
+export const YEAR_IN_REVIEW_BOOK_TYPE: BookType = {
+  id: 'yearInReview',
+  label: 'Year in review',
+  blurb: 'One year of your life, written up while you still remember it.',
+  doctrine: tellsTrue(
+    `You are writing up ONE YEAR of ${'${subject}'}'s life as a short book. A year is too close to have a moral yet, so do not impose one — no summing-up, no lessons learned, no "what this year taught me". Render what actually happened, in scene, in order, and let the year be what it was.`,
+  ),
+  structures: [
+    {
+      id: 'months',
+      label: 'Through the year',
+      description: 'Chapters follow the year as it went.',
+      isDefault: true,
+    },
+    {
+      id: 'threads',
+      label: 'By what ran through it',
+      description: 'Chapters for the few things that actually defined the year.',
+    },
+  ],
+  stylePresets: BIOGRAPHY_BOOK_TYPE.stylePresets,
+  interview: BIOGRAPHY_BOOK_TYPE.interview,
+  gates: { adult: false },
+  truthMode: 'true',
+  spine: { kind: 'span' },
+  castPolicy: 'realNames',
+  imageFraming: SYMBOLIC_IMAGE_FRAMING,
+  options: [{ id: 'year', label: 'Which year', kind: 'text', placeholder: '2026', required: true }],
+  spineFor: (o) => ({ kind: 'span', ...(o['year'] ? { from: o['year'], to: o['year'] } : {}) }),
+};
+
+/** A book about someone you love. */
+export const PORTRAIT_BOOK_TYPE: BookType = {
+  id: 'portrait',
+  label: 'Portrait',
+  blurb: 'A book about one person you love — written to them, or about them.',
+  doctrine: tellsTrue(
+    `You are writing a portrait of ONE person, drawn from what the subject knows of them. A portrait is not a biography of that person — it is what one life looks like from inside another's view of it, and it should say so honestly rather than pretending to a completeness it doesn't have. Write them whole: the irritating habit beside the kindness. A portrait with no flaws reads as a eulogy, and nobody believes a eulogy.`,
+  ),
+  structures: [
+    {
+      id: 'facets',
+      label: 'What they are like',
+      description: 'Each piece a different side of them.',
+      isDefault: true,
+    },
+    {
+      id: 'together',
+      label: 'Our history',
+      description: 'The pieces follow the shape of knowing them.',
+    },
+  ],
+  stylePresets: BIOGRAPHY_BOOK_TYPE.stylePresets,
+  interview: BIOGRAPHY_BOOK_TYPE.interview,
+  gates: { adult: false },
+  truthMode: 'true',
+  spine: { kind: 'vignettes' },
+  castPolicy: 'realNames',
+  imageFraming: SYMBOLIC_IMAGE_FRAMING,
+  options: [
+    { id: 'subject', label: 'Who it’s about', kind: 'person', required: true },
+    {
+      id: 'addressee',
+      label: 'How it’s written',
+      kind: 'choice',
+      help: 'A book written TO someone is a gift you could hand them. One written ABOUT them is easier to be honest in.',
+      choices: [
+        {
+          value: 'toThem',
+          label: 'To them',
+          description: '“You always came in through the back door.”',
+        },
+        {
+          value: 'aboutThem',
+          label: 'About them',
+          description: '“She always came in through the back door.”',
+        },
+      ],
+    },
+  ],
+};
+
+// --- The reimagined types (72 §3.2) -----------------------------------------------------------------------
+
+/** Dreams retold as stories. */
+export const DREAM_BOOK_TYPE: BookType = {
+  id: 'dreamBook',
+  label: 'Dream book',
+  blurb: 'Your dreams, retold as stories — one at a time, or gathered by what keeps recurring.',
+  doctrine: reimagines(
+    `You are turning ${'${subject}'}'s recorded dreams into readable stories. A dream is not a story yet: it has images and a feeling but no shape, and your job is to give it one WITHOUT explaining it. Never interpret. Never tell the reader what a dream means, and never end on the waking-up-and-realising move. Stay inside the dream's own logic, where impossible things are simply true and nobody remarks on them.`,
+    [
+      `DREAMS SPECIFICALLY
+- Keep the dream's images exactly as they were recorded — the wrong house, the person who is two people. Those are the material; smoothing them into sense destroys the thing.
+- Write the FEELING faithfully. A dream that was frightening must read as frightening, whatever happens in it.
+- Do not connect dreams that were not connected. Where two dreams share a figure or a place, you may put them near each other; you may not invent a plot that runs between them.`,
+    ],
+  ),
+  structures: [
+    {
+      id: 'each',
+      label: 'One dream at a time',
+      description: 'Each dream its own piece.',
+      isDefault: true,
+    },
+    {
+      id: 'motifs',
+      label: 'Gathered by what recurs',
+      description: 'Parts named for the things that keep coming back.',
+    },
+  ],
+  stylePresets: BIOGRAPHY_BOOK_TYPE.stylePresets,
+  interview: BIOGRAPHY_BOOK_TYPE.interview,
+  gates: { adult: false },
+  truthMode: 'fictionalized',
+  spine: { kind: 'vignettes' },
+  castPolicy: 'renamed',
+  imageFraming: SYMBOLIC_IMAGE_FRAMING,
+  sourceSelect: 'dream',
+  options: [
+    {
+      id: 'shape',
+      label: 'How it’s put together',
+      kind: 'choice',
+      choices: [
+        {
+          value: 'each',
+          label: 'One dream, one piece',
+          description: 'No through-line forced on material that has none.',
+        },
+        {
+          value: 'motifs',
+          label: 'Grouped by what recurs',
+          description: 'Parts named for the house, the water, being late.',
+        },
+        {
+          value: 'woven',
+          label: 'Woven into one story',
+          description: 'One continuous narrative built from the recurring figures.',
+        },
+      ],
+    },
+  ],
+  spineFor: (o) => (o['shape'] === 'each' ? { kind: 'vignettes' } : { kind: 'eras' }),
+};
+
+/** 18+ — fiction drawn from the person's own intimate life. */
+export const EROTICA_BOOK_TYPE: BookType = {
+  id: 'erotica',
+  label: 'Erotica',
+  blurb: 'Explicit fiction, written from what you’ve told the app about your own desire. 18+.',
+  doctrine: reimagines(
+    `You are writing explicit erotic fiction for ${'${subject}'}, drawn from what they have told the app about their own desire. The events are invented; what they want is not. Write it as fiction — scenes, tension, a reason to keep reading — never as a report of anything that happened.`,
+    [
+      `THE BOUNDARY (absolute, and it overrides every other instruction here)
+- Everyone in this book is a consenting adult. Never a minor, never anyone presented as a minor, never real non-consent, never anything illegal.
+- Taboo material appears only as fantasy or roleplay between consenting adults who both know that is what it is.
+- A hard limit recorded anywhere in the material is a hard limit here. Never write it, however well it would fit.`,
+    ],
+  ),
+  structures: [
+    {
+      id: 'scenes',
+      label: 'Scenes',
+      description: 'Each piece one encounter, complete on its own.',
+      isDefault: true,
+    },
+    { id: 'arc', label: 'One story', description: 'A single narrative with a build across it.' },
+  ],
+  stylePresets: BIOGRAPHY_BOOK_TYPE.stylePresets,
+  interview: BIOGRAPHY_BOOK_TYPE.interview,
+  gates: { adult: true },
+  truthMode: 'fictionalized',
+  spine: { kind: 'vignettes' },
+  castPolicy: 'renamed',
+  imageFraming: SYMBOLIC_IMAGE_FRAMING,
+  options: [
+    {
+      id: 'tier',
+      label: 'How explicit',
+      kind: 'choice',
+      help: 'The same registers your intimacy questionnaires use.',
+      choices: [
+        {
+          value: 'unfiltered',
+          label: 'Unfiltered',
+          description: 'Frank and specific throughout, from the first line — no tasteful dilution.',
+        },
+        {
+          value: 'explicit',
+          label: 'Explicit',
+          description: 'Genuinely explicit, a step back from unfiltered.',
+        },
+      ],
+    },
+  ],
+  spineFor: (o) => (o['arc'] === 'arc' ? { kind: 'eras' } : { kind: 'vignettes' }),
+};
+
+export const BOOK_TYPES: readonly BookType[] = [
+  BIOGRAPHY_BOOK_TYPE,
+  MEMOIR_BOOK_TYPE,
+  YEAR_IN_REVIEW_BOOK_TYPE,
+  PORTRAIT_BOOK_TYPE,
+  DREAM_BOOK_TYPE,
+  EROTICA_BOOK_TYPE,
+];
 
 /** Resolve a book type by id; undefined if unknown (a book whose type is not registered can't generate —
  *  handled gracefully by callers, never a crash). */

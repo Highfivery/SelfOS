@@ -24,6 +24,8 @@ import { ImageStylePicker } from '../../../settings/ImageStyleControl';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryStore } from '../../../stores/storyStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
+import { useDreamStore } from '../../../stores/dreamStore';
+import { useGuidanceStore } from '../../../stores/guidanceStore';
 import { ShareMemoryPanel } from './ShareMemoryPanel';
 import { MemoryCollection } from './MemoryCollection';
 import { StoryMemories } from './StoryMemories';
@@ -54,6 +56,7 @@ import type {
   StoryCompletenessStage,
   StoryPartCoverage,
   ContinuityFinding,
+  NewMaterialEntry,
   StoryDraftProgress,
   StoryPublishDiff,
   StoryReaderView,
@@ -263,12 +266,12 @@ export function Story(): JSX.Element {
           personNameForPreview={personName}
           aiUnavailable={aiUnavailable}
           onCancel={() => setMode('idle')}
-          onCreate={async (title, config) => {
+          onCreate={async (typeId, title, config) => {
             setError(null);
             setMode('idle');
             // Create AND draft the whole book in one flow — no outline-review gate. The draft screen shows
             // immediately (progress is seeded), and the finished book lands ready to edit.
-            const res = await createAndDraft({ type: 'biography', title, config });
+            const res = await createAndDraft({ type: typeId, title, config });
             if (!res.ok && res.message) setError(res.message);
           }}
         />
@@ -467,16 +470,34 @@ function StorySetup({
   personNameForPreview: string;
   /** AI unavailable → the create-and-draft CTA is disabled (the notice above the card explains why). */
   aiUnavailable?: boolean;
-  onCreate: (title: string, config: BookConfig) => void | Promise<void>;
+  onCreate: (typeId: string, title: string, config: BookConfig) => void | Promise<void>;
   onCancel: () => void;
 }): JSX.Element {
   const [title, setTitle] = useState('');
   const [voice, setVoice] = useState<Voice>('third');
   const [style, setStyle] = useState<Style>('warm');
   const [length, setLength] = useState<Length>('full');
+  const [typeId, setTypeId] = useState<string>('biography');
+  const [typeOptions, setTypeOptions] = useState<Record<string, string>>({});
+  const [sourceIds, setSourceIds] = useState<string[]>([]);
+
+  const bookTypes = useStoryStore((s) => s.bookTypes);
+  const people = usePeopleStore((s) => s.people);
+  const dreams = useDreamStore((s) => s.dreams);
+  const adultAcknowledged = useGuidanceStore((s) => s.adultAcknowledged);
+  const acknowledgeAdult = useGuidanceStore((s) => s.acknowledgeAdult);
+  const bookType = bookTypes.find((t) => t.id === typeId);
+
+  // Everything a type asks at commission is DECLARED by the type (72 §4.1), so this renders whatever it
+  // declares — a new kind of book adds no code here.
+  const options = bookType?.options ?? [];
+  const answered = (id: string): string =>
+    typeOptions[id] ?? options.find((o) => o.id === id)?.choices?.[0]?.value ?? '';
+  const missing = options.filter((o) => o.required && !answered(o.id).trim());
+  const blockedByAge = Boolean(bookType?.gates.adult) && !adultAcknowledged;
 
   // "How your biographer will sound" — the specimen re-renders per style × voice (§13.3).
-  const specimen = specimenFor('biography', { style, voice });
+  const specimen = specimenFor(typeId, { style, voice });
 
   return (
     <Card>
@@ -489,9 +510,142 @@ function StorySetup({
           </Text>
         </Stack>
 
+        {/* What KIND of book (72 §3.2) — told-true kinds never invent; reimagined ones invent the events
+            but never the person. */}
+        <Labeled label="What kind of book">
+          <div className={styles.styleGallery} role="radiogroup" aria-label="Kind of book">
+            {bookTypes.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="radio"
+                aria-checked={typeId === t.id}
+                aria-label={t.label}
+                aria-describedby={`type-hint-${t.id}`}
+                className={`${styles.styleCard} ${typeId === t.id ? styles.styleCardOn : ''}`}
+                onClick={() => {
+                  setTypeId(t.id);
+                  setTypeOptions({});
+                  setSourceIds([]);
+                }}
+              >
+                <span className={styles.styleCardName}>
+                  {t.label}
+                  {t.gates.adult ? ' · 18+' : ''}
+                </span>
+                <span id={`type-hint-${t.id}`} className={styles.styleCardHint}>
+                  {t.blurb}
+                </span>
+              </button>
+            ))}
+          </div>
+        </Labeled>
+        {blockedByAge ? (
+          <Banner tone="warning">
+            <Stack gap={2}>
+              <Text size="sm">
+                This kind of book is explicit and for adults only. Confirming also unlocks the app’s
+                other adult content.
+              </Text>
+              <Inline>
+                <Button onClick={() => void acknowledgeAdult()}>I’m 18 or older</Button>
+              </Inline>
+            </Stack>
+          </Banner>
+        ) : null}
+
         <div className={styles.commission}>
           {/* The form. */}
           <div className={styles.commissionForm}>
+            {options.map((option) => (
+              <Labeled key={option.id} label={option.label}>
+                <Stack gap={1}>
+                  {option.kind === 'choice' ? (
+                    <div
+                      className={styles.styleGallery}
+                      role="radiogroup"
+                      aria-label={option.label}
+                    >
+                      {(option.choices ?? []).map((c) => (
+                        <button
+                          key={c.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={answered(option.id) === c.value}
+                          aria-label={c.label}
+                          className={`${styles.styleCard} ${
+                            answered(option.id) === c.value ? styles.styleCardOn : ''
+                          }`}
+                          onClick={() =>
+                            setTypeOptions((prev) => ({ ...prev, [option.id]: c.value }))
+                          }
+                        >
+                          <span className={styles.styleCardName}>{c.label}</span>
+                          {c.description ? (
+                            <span className={styles.styleCardHint}>{c.description}</span>
+                          ) : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : option.kind === 'person' ? (
+                    <Select
+                      value={answered(option.id)}
+                      aria-label={option.label}
+                      onChange={(e) =>
+                        setTypeOptions((prev) => ({ ...prev, [option.id]: e.target.value }))
+                      }
+                    >
+                      <option value="">Choose someone…</option>
+                      {people.map((person) => (
+                        <option key={person.id} value={person.id}>
+                          {person.displayName}
+                        </option>
+                      ))}
+                    </Select>
+                  ) : (
+                    <TextInput
+                      value={answered(option.id)}
+                      aria-label={option.label}
+                      {...(option.placeholder ? { placeholder: option.placeholder } : {})}
+                      onChange={(e) =>
+                        setTypeOptions((prev) => ({ ...prev, [option.id]: e.target.value }))
+                      }
+                    />
+                  )}
+                  {option.help ? (
+                    <Text size="sm" tone="secondary">
+                      {option.help}
+                    </Text>
+                  ) : null}
+                </Stack>
+              </Labeled>
+            ))}
+            {bookType?.sourceSelect === 'dream' ? (
+              <Labeled label="Which dreams">
+                <Stack gap={1}>
+                  <Text size="sm" tone="secondary">
+                    Pick the ones you want in this book, or leave them all unticked to draw on every
+                    dream you’ve recorded.
+                  </Text>
+                  <div className={styles.dreamPicker} role="group" aria-label="Which dreams">
+                    {dreams.map((d) => (
+                      <label key={d.id} className={styles.dreamPickerRow}>
+                        <input
+                          type="checkbox"
+                          checked={sourceIds.includes(d.id)}
+                          onChange={(e) =>
+                            setSourceIds((prev) =>
+                              e.target.checked ? [...prev, d.id] : prev.filter((id) => id !== d.id),
+                            )
+                          }
+                        />
+                        <Text size="sm">{d.title?.trim() || 'Untitled dream'}</Text>
+                      </label>
+                    ))}
+                  </div>
+                </Stack>
+              </Labeled>
+            ) : null}
             <Labeled label="Title (optional)">
               <Stack gap={1}>
                 <TextInput
@@ -561,7 +715,7 @@ function StorySetup({
           {/* The live preview rail. */}
           <aside className={styles.commissionPreview} aria-label="Preview">
             <div className={styles.previewCover} aria-hidden="true">
-              <span className={styles.previewCoverKicker}>A Biography</span>
+              <span className={styles.previewCoverKicker}>{bookType?.label ?? 'A Book'}</span>
               <span className={styles.previewCoverTitle}>{title.trim() || titleHint}</span>
               {personNameForPreview ? (
                 <span className={styles.previewCoverBy}>{personNameForPreview}</span>
@@ -585,8 +739,17 @@ function StorySetup({
               the app's largest single AI run — not just an outline. */}
           <Button
             variant="primary"
-            disabled={aiUnavailable}
-            onClick={() => onCreate(title.trim(), { voice, style, length, autoRefresh: true })}
+            disabled={aiUnavailable || blockedByAge || missing.length > 0}
+            onClick={() =>
+              onCreate(typeId, title.trim(), {
+                voice,
+                style,
+                length,
+                autoRefresh: true,
+                typeOptions: Object.fromEntries(options.map((o) => [o.id, answered(o.id)])),
+                sourceIds,
+              })
+            }
           >
             Write my book
           </Button>
@@ -1491,6 +1654,12 @@ function StudioLayout({
   const loadTodos = useStoryStore((s) => s.loadTodos);
   const exclusions = useStoryStore((s) => s.exclusions);
   const loadExclusions = useStoryStore((s) => s.loadExclusions);
+  const newMaterial = useStoryStore((s) => s.newMaterial);
+  const loadNewMaterial = useStoryStore((s) => s.loadNewMaterial);
+  const acceptMaterial = useStoryStore((s) => s.acceptMaterial);
+  const declineMaterial = useStoryStore((s) => s.declineMaterial);
+  const finishEdition = useStoryStore((s) => s.finishEdition);
+  const reopenBook = useStoryStore((s) => s.reopenBook);
   const progress = useStoryStore((s) => s.progress);
   const busy = useStoryStore((s) => s.chaptersGenerating);
   const imageUrls = useStoryStore((s) => s.imageUrls);
@@ -1526,7 +1695,16 @@ function StudioLayout({
     void loadTodos(bookId);
     void loadExclusions(bookId);
     void loadImages(bookId);
-  }, [bookId, loadProposals, loadCompleteness, loadTodos, loadExclusions, loadImages]);
+    void loadNewMaterial(bookId);
+  }, [
+    bookId,
+    loadProposals,
+    loadCompleteness,
+    loadTodos,
+    loadExclusions,
+    loadImages,
+    loadNewMaterial,
+  ]);
 
   // The crisis-quiet state (§8.2/§13.4): while the person's own signals show recurring distress, the
   // biographer's auto cadences pause host-side — SURFACE that instead of letting the pause read as broken.
@@ -1567,9 +1745,10 @@ function StudioLayout({
   // `stale` by `chapterShell`, so this used to report unwritten chapters as needing a refresh — Ben's book
   // said "34 chapters have new material" when 11 of them had never been written at all. Unwritten chapters
   // are already surfaced honestly by `pending` + the "Not yet written" cards.
-  const staleCount = chapters.filter(
-    (c) => c.status === 'stale' && c.markdown.trim().length > 0,
-  ).length;
+  // What the book has fallen out of step with (72 §4.4) — new material that could go in, and chapters the
+  // author's own edits left behind. Proposals, never a status: nothing is rewritten until they say so.
+  const drift = driftCards(newMaterial, chapters);
+  const staleCount = drift.length;
   const toReview = writtenInOrder.filter((c) => c.status === 'new' || c.status === 'updated');
   const openTodos = todos.filter((t) => t.status === 'open' || t.status === 'questionsSent');
   const firstWritten = writtenInOrder[0];
@@ -1751,6 +1930,13 @@ function StudioLayout({
                 onShare={() => goTab('sharing')}
                 onRename={() => setTitleDraft(manifest.title)}
                 onSettings={() => goTab('settings')}
+                finished={manifest.lifecycle === 'finished'}
+                onFinish={async () => {
+                  setError(null);
+                  const res = await finishEdition(bookId);
+                  if (!res.ok) setError(res.message ?? 'That didn’t go through.');
+                }}
+                onReopen={() => void reopenBook(bookId)}
               />
             </div>
           ) : null}
@@ -1760,6 +1946,8 @@ function StudioLayout({
       {/* ---- Needs you: pending decisions, gathered (hidden when caught up) ---- */}
       <NeedsYou
         proposals={proposals}
+        drift={drift}
+        busy={busy}
         toReviewCount={toReview.length}
         openTodoCount={openTodos.length}
         onReview={() => {
@@ -1772,6 +1960,12 @@ function StudioLayout({
           if (!r.ok && r.message) setError(r.message);
         }}
         onDismiss={(id) => void resolveProposal(bookId, id, 'dismiss')}
+        onWeaveIn={async (chapterId) => {
+          setError(null);
+          const r = await acceptMaterial(bookId, chapterId);
+          if (!r.ok && r.message) setError(r.message);
+        }}
+        onNotNow={(chapterId) => void declineMaterial(bookId, chapterId)}
       />
 
       {/* ---- Tabs ---- */}
@@ -1924,6 +2118,39 @@ const FINDING_KIND_LABEL: Record<ContinuityFinding['kind'], string> = {
   voice: 'Voice',
   other: 'Note',
 };
+
+/**
+ * The open conversation starters (72 §3.7) — a person, a place, a year, a photograph, something hard.
+ * They seed the biographer with a direction and nothing more; there is no gap attached and nothing is
+ * being closed. The point is that you can tell it something it never thought to ask about.
+ */
+const OPEN_STARTERS: { label: string; focus: string }[] = [
+  {
+    label: 'Someone',
+    focus:
+      'They want to tell you about a particular person in their life. Ask who, and go to a scene.',
+  },
+  {
+    label: 'A place',
+    focus:
+      'They want to tell you about a place that matters to them. Ask which, and get the senses of it.',
+  },
+  {
+    label: 'A year',
+    focus:
+      'They want to tell you about a particular year or period. Ask which, and find the moment in it.',
+  },
+  {
+    label: 'Something hard',
+    focus:
+      'They want to tell you about something difficult. Go gently, let them set the pace, and do not push for more than they offer.',
+  },
+  {
+    label: 'Something good',
+    focus:
+      'They want to tell you about something that went well or made them happy. Get the scene of it.',
+  },
+];
 
 /** The Chapters tab: the cover-backed card grid grouped by part, the "write the remaining N" bar rendered
  *  inside the part that owns the unwritten shells, and the inline write-progress. */
@@ -2248,7 +2475,11 @@ function InterviewTab({
   // "Share a memory" (§14) — an inline biographer chat that swaps the tab body. Driven by the invite card, a
   // gap's "Talk it through", the collection, and the `/story/interview?memory=<id>` deep-link. The collection
   // itself is the shared `MemoryCollection` (§15.1), which owns its own load + delete.
-  const [panel, setPanel] = useState<{ memoryId?: string; seedFocus?: string } | null>(null);
+  const [panel, setPanel] = useState<{
+    memoryId?: string;
+    seedFocus?: string;
+    gapId?: string;
+  } | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -2272,16 +2503,25 @@ function InterviewTab({
   }, [memoryParam, seedParam, setSearchParams]);
 
   // Closing the panel remounts the collection, which reloads itself — so a just-saved memory joins it.
-  const closePanel = (): void => setPanel(null);
+  // Coming back from a conversation, RELOAD (72 §5.5): saving a memory can have closed a gap, and the row
+  // would otherwise still read "Ask me about this" for something just answered — the same
+  // filed-but-invisible failure the drift proposals had.
+  const closePanel = (): void => {
+    setPanel(null);
+    void loadGaps(bookId);
+    void loadAnswered(bookId);
+  };
 
   const hasOpenCheckin = gaps?.hasOpenCheckin ?? false;
 
   if (panel) {
     return (
       <ShareMemoryPanel
-        key={panel.memoryId ?? panel.seedFocus ?? 'new'}
+        key={panel.memoryId ?? panel.gapId ?? panel.seedFocus ?? 'new'}
         {...(panel.memoryId ? { memoryId: panel.memoryId } : {})}
         {...(panel.seedFocus ? { seedFocus: panel.seedFocus } : {})}
+        {...(panel.gapId ? { gapId: panel.gapId } : {})}
+        bookId={bookId}
         onBack={closePanel}
       />
     );
@@ -2296,6 +2536,20 @@ function InterviewTab({
             Tell your biographer about a moment — a place, a person, a turning point — and it will
             ask, listen, and write it into your story in your own words.
           </Text>
+          {/* "Talk about anything" (72 §3.7) — the entry that didn't exist. Every way in was tied to a gap
+              the biographer had chosen, so there was no way to simply tell it something. */}
+          <div className={styles.openStarters} role="group" aria-label="Talk about anything">
+            {OPEN_STARTERS.map((starter) => (
+              <button
+                key={starter.label}
+                type="button"
+                className={styles.openStarter}
+                onClick={() => setPanel({ seedFocus: starter.focus })}
+              >
+                {starter.label}
+              </button>
+            ))}
+          </div>
           <div className={styles.memInvite}>
             <Button variant="primary" onClick={() => setPanel({})}>
               Share a memory
@@ -2365,7 +2619,12 @@ function InterviewTab({
                   <Inline gap={2}>
                     {/* Talk it through: open the biographer chat seeded with this gap — a live alternative to
                         (or a companion of) sending questions to the Inbox. */}
-                    <Button variant="ghost" onClick={() => setPanel({ seedFocus: gap.focus })}>
+                    {/* Talking it through closes the gap exactly as answering a check-in does (72 §5.5) —
+                        it used to leave it open and re-proposable. */}
+                    <Button
+                      variant="ghost"
+                      onClick={() => setPanel({ seedFocus: gap.focus, gapId: gap.id })}
+                    >
                       Talk it through
                     </Button>
                     {gap.status === 'answered' ? (
@@ -2529,26 +2788,85 @@ function InterviewTab({
   );
 }
 
+/** One chapter's pending drift, gathered for the "Needs you" strip (72 §4.4). */
+interface DriftCard {
+  chapterId: string;
+  title: string;
+  /** What the person reads: how much new material, and/or what they changed. */
+  lines: string[];
+  /** Whether any of it is genuinely NEW MATERIAL (vs only the author's own changes) — the two read
+   *  differently: one is an offer, the other is a consequence of something they did. */
+  hasMaterial: boolean;
+}
+
+/**
+ * Group the drift entries by chapter into the cards the strip renders. Pure, so the wording is testable
+ * without a DOM. A chapter that has since been deleted from the outline drops out silently.
+ */
+export function driftCards(
+  entries: NewMaterialEntry[],
+  chapters: { id: string; title: string }[],
+): DriftCard[] {
+  const titleById = new Map(chapters.map((c) => [c.id, c.title]));
+  const byChapter = new Map<string, NewMaterialEntry[]>();
+  for (const entry of entries) {
+    const list = byChapter.get(entry.chapterId) ?? [];
+    list.push(entry);
+    byChapter.set(entry.chapterId, list);
+  }
+  const cards: DriftCard[] = [];
+  for (const [chapterId, list] of byChapter) {
+    const title = titleById.get(chapterId);
+    if (title === undefined) continue;
+    const lines: string[] = [];
+    let hasMaterial = false;
+    for (const entry of list) {
+      if (entry.reason === 'newMaterial') {
+        hasMaterial = true;
+        const n = entry.items.length;
+        lines.push(
+          n === 0
+            ? 'Something it draws on has changed.'
+            : `${n} new detail${n === 1 ? '' : 's'} could go in.`,
+        );
+      } else if (entry.note) {
+        lines.push(entry.note);
+      }
+    }
+    if (lines.length > 0) cards.push({ chapterId, title, lines, hasMaterial });
+  }
+  return cards;
+}
+
 /** The "Needs you" strip (§13.4) — one card per pending decision. Self-hides entirely when you're caught up
  *  (replaced by a calm "all caught up" line). */
 function NeedsYou({
   proposals,
+  drift,
   toReviewCount,
   openTodoCount,
   onReview,
   onOpenTodos,
   onApprove,
   onDismiss,
+  onWeaveIn,
+  onNotNow,
+  busy,
 }: {
   proposals: StructuralProposal[];
+  drift: DriftCard[];
   toReviewCount: number;
   openTodoCount: number;
   onReview: () => void;
   onOpenTodos: () => void;
   onApprove: (proposalId: string) => void | Promise<void>;
   onDismiss: (proposalId: string) => void;
+  onWeaveIn: (chapterId: string) => void | Promise<void>;
+  onNotNow: (chapterId: string) => void | Promise<void>;
+  busy: boolean;
 }): JSX.Element {
-  const nothing = proposals.length === 0 && toReviewCount === 0 && openTodoCount === 0;
+  const nothing =
+    proposals.length === 0 && drift.length === 0 && toReviewCount === 0 && openTodoCount === 0;
   if (nothing) {
     return (
       <div className={styles.caughtUp}>
@@ -2558,7 +2876,8 @@ function NeedsYou({
       </div>
     );
   }
-  const count = proposals.length + (toReviewCount > 0 ? 1 : 0) + (openTodoCount > 0 ? 1 : 0);
+  const count =
+    proposals.length + drift.length + (toReviewCount > 0 ? 1 : 0) + (openTodoCount > 0 ? 1 : 0);
   return (
     <div className={styles.needs}>
       <div className={styles.needsHead}>
@@ -2568,6 +2887,36 @@ function NeedsYou({
         </Text>
       </div>
       <div className={styles.needsGrid}>
+        {/* Drift proposals (72 §4.4) — what a chapter has fallen out of step with. Nothing is rewritten
+            until the author says so, and "Not now" means it stays quiet until something else changes. */}
+        {drift.map((d) => (
+          <div key={d.chapterId} className={styles.needCard}>
+            <span className={d.hasMaterial ? styles.needKind : styles.needKindWarn}>
+              {d.hasMaterial ? 'New material' : 'Out of step'}
+            </span>
+            <Text size="sm" className={styles.needTitle}>
+              {d.title}
+            </Text>
+            {d.lines.map((line) => (
+              <Text key={line} size="sm" tone="tertiary">
+                {line}
+              </Text>
+            ))}
+            <Inline gap={2}>
+              <Button variant="primary" disabled={busy} onClick={() => void onWeaveIn(d.chapterId)}>
+                {d.hasMaterial ? 'Weave these in' : 'Rewrite it'}
+              </Button>
+              <button
+                type="button"
+                className={styles.sourcesToggle}
+                aria-label={`Not now for ${d.title}`}
+                onClick={() => void onNotNow(d.chapterId)}
+              >
+                Not now
+              </button>
+            </Inline>
+          </div>
+        ))}
         {proposals.map((p) => (
           <div key={p.id} className={styles.needCard}>
             <span className={styles.needKindWarn}>Suggested change</span>
@@ -2714,10 +3063,8 @@ function BookSwitcher({
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const others = books.filter((b) => b.id !== currentId);
-  const label =
-    books.length > 1
-      ? `Book ${books.findIndex((b) => b.id === currentId) + 1} of ${books.length}`
-      : 'Your books';
+  // "Book 2 of 4" reads as "chapter 2 of 4" at a glance — say what the number counts, or nothing.
+  const label = books.length > 1 ? `Your books (${books.length})` : 'Your books';
   return (
     <div className={styles.kebabWrap}>
       <button
@@ -2771,11 +3118,17 @@ function StudioKebab({
   onShare,
   onRename,
   onSettings,
+  onFinish,
+  onReopen,
+  finished,
 }: {
   onExport: () => void;
   onShare: () => void;
   onRename: () => void;
   onSettings: () => void;
+  onFinish: () => void;
+  onReopen: () => void;
+  finished: boolean;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const pick = (fn: () => void) => () => {
@@ -2829,6 +3182,16 @@ function StudioKebab({
               onClick={pick(onSettings)}
             >
               Book settings…
+            </button>
+            {/* A book has no natural end, so it needs a way to say "this one is done" (72 §3.6). Reversible:
+                the frozen edition stays and the living book carries on from where it was. */}
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.kebabItem}
+              onClick={pick(finished ? onReopen : onFinish)}
+            >
+              {finished ? 'Reopen this book' : 'Finish this edition'}
             </button>
           </div>
         </>
@@ -4202,17 +4565,11 @@ function ChapterRibbon({
       </div>
     );
   }
-  // new / updated / stale all lead with the ribbon (so a stale chapter keeps its status cue AND the spend-free
-  // "Looks good ✓" accept action — a `generating` chapter has no review action, so it shows nothing).
-  if (chapter.status !== 'new' && chapter.status !== 'updated' && chapter.status !== 'stale') {
-    return null;
-  }
-  const lead =
-    chapter.status === 'new'
-      ? 'New chapter'
-      : chapter.status === 'updated'
-        ? 'Rewritten from new material'
-        : 'New material to fold in';
+  // new / updated both lead with the ribbon + the spend-free "Looks good ✓" accept action. A `generating`
+  // chapter has no review action, so it shows nothing. Drift is no longer a status (72 §4.4) — it renders
+  // as its own proposal above the prose.
+  if (chapter.status !== 'new' && chapter.status !== 'updated') return null;
+  const lead = chapter.status === 'new' ? 'New chapter' : 'Rewritten from new material';
   return (
     <div className={styles.ribbon}>
       <div className={styles.ribbonRow}>

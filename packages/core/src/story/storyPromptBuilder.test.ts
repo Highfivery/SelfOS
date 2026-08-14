@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BookConfigSchema } from '../schemas';
-import { BIOGRAPHY_BOOK_TYPE } from './bookTypes';
+import { BIOGRAPHY_BOOK_TYPE, getBookType } from './bookTypes';
 import type { StoryCorpus } from './storyCorpus';
 import type { BookChapter, BookOutline, ExclusionItem, MarkupMark } from '../schemas';
 import {
@@ -9,6 +9,7 @@ import {
   buildFoundationsUserMessage,
   buildRevisionUserMessage,
   renderCorpusForPrompt,
+  renderTaggedCorpus,
   tagCorpusItems,
 } from './storyPromptBuilder';
 
@@ -125,15 +126,112 @@ describe('buildChapterUserMessage', () => {
     ],
   };
 
+  /**
+   * 72 §4.1 — a fictionalized book must be TOLD it may invent, or the doctrine's "never invent" silently
+   * governs and a children's story comes out as a diary entry. The told-true case must be told the opposite,
+   * just as explicitly.
+   */
+  it('states the truth contract, and states it differently for a fictionalized book', () => {
+    const told = buildBiographerSystem(BIOGRAPHY_BOOK_TYPE, cfg(), 'Ben');
+    expect(told).toMatch(/this book is TRUE/);
+    expect(told).toMatch(/Never invent an event/i);
+
+    const imagined = buildBiographerSystem(
+      { ...BIOGRAPHY_BOOK_TYPE, truthMode: 'fictionalized' },
+      cfg(),
+      'Ben',
+    );
+    expect(imagined).toMatch(/openly IMAGINED/);
+    expect(imagined).toMatch(/You may invent events/i);
+    // …but never the person. That is the line a fictionalized book must not cross.
+    expect(imagined).toMatch(/never misrepresent the human being/i);
+  });
+
+  it('shapes the outline by the book’s SPINE, not by assuming every book is a whole life', () => {
+    const eras = buildFoundationsUserMessage(corpus, BIOGRAPHY_BOOK_TYPE);
+    expect(eras).toMatch(/parts as life eras/i);
+
+    const span = buildFoundationsUserMessage(corpus, {
+      ...BIOGRAPHY_BOOK_TYPE,
+      spine: { kind: 'span', from: '2019', to: '2020' },
+    });
+    expect(span).toMatch(/ONE bounded stretch of time \(2019 to 2020\)/);
+    expect(span).toMatch(/Do not reach back across the whole life/i);
+    expect(span).not.toMatch(/parts as life eras/i);
+
+    const pages = buildFoundationsUserMessage(corpus, {
+      ...BIOGRAPHY_BOOK_TYPE,
+      spine: { kind: 'pages', count: 14, wordsPerPage: 40 },
+    });
+    expect(pages).toMatch(/exactly 14 short PAGES/);
+    expect(pages).toMatch(/roughly 40 words/);
+
+    const vignettes = buildFoundationsUserMessage(corpus, {
+      ...BIOGRAPHY_BOOK_TYPE,
+      spine: { kind: 'vignettes' },
+    });
+    expect(vignettes).toMatch(/standalone pieces/i);
+    expect(vignettes).toMatch(/no through-line/i);
+  });
+
+  /**
+   * 72 §4.1 — the commission answers are per BOOK, so they have to reach the model per book. Stored and
+   * never read would mean the person picks "written to them" and gets a book about them.
+   */
+  it('carries this book’s own commission answers into the prompt', () => {
+    const portrait = getBookType('portrait')!;
+    const to = buildBiographerSystem(
+      portrait,
+      cfg({ typeOptions: { addressee: 'toThem' } }),
+      'Ben',
+    );
+    expect(to).toMatch(/written TO its subject/);
+    expect(to).toMatch(/second person/i);
+
+    const about = buildBiographerSystem(
+      portrait,
+      cfg({ typeOptions: { addressee: 'aboutThem' } }),
+      'Ben',
+    );
+    expect(about).toMatch(/written ABOUT its subject/);
+    expect(about).toMatch(/Never address them as "you"/);
+  });
+
+  /**
+   * The explicit register must GOVERN the style preset, not sit under it — a warm or literary directive
+   * otherwise dilutes it back into the tasteful version, which is exactly the failure 08 §24.9 documented.
+   */
+  it('states the erotica register AFTER the style directive, and says it governs it', () => {
+    const erotica = getBookType('erotica')!;
+    const sys = buildBiographerSystem(
+      erotica,
+      cfg({ style: 'warm', typeOptions: { tier: 'unfiltered' } }),
+      'Ben',
+    );
+    expect(sys).toMatch(/most explicit/i);
+    expect(sys).toMatch(/GOVERNS the style and tone directives above/);
+    expect(sys.indexOf('GOVERNS the style')).toBeGreaterThan(
+      sys.indexOf('Warm, intimate register'),
+    );
+    // The boundary is never softened by the register.
+    expect(sys).toMatch(/consenting adult/i);
+    expect(sys).toMatch(/Never a minor/i);
+  });
+
+  it('an unanswered choice falls back to its first option rather than going silent', () => {
+    const erotica = getBookType('erotica')!;
+    const sys = buildBiographerSystem(erotica, cfg(), 'Ben');
+    expect(sys).toMatch(/most explicit/i); // `unfiltered` is declared first
+  });
+
   it('tags corpus items with stable index-based [sN] tags', () => {
     const tagged = tagCorpusItems(corpus);
     expect(tagged[0]?.tag).toBe('s0');
     expect(tagged[0]?.sourceRef.id).toBe('i1');
   });
 
-  it('embeds the brief + tagged corpus, marks the target chapter, and asks for [[SRC]] citations', () => {
-    const tagged = tagCorpusItems(corpus);
-    const msg = buildChapterUserMessage(corpus, tagged, {
+  it('embeds the brief, marks the target chapter, and asks for [[SRC]] citations', () => {
+    const msg = buildChapterUserMessage(corpus, {
       chapter: outline.parts[0]!.chapters[0]!,
       outline,
       essence: 'A quiet man.',
@@ -141,10 +239,26 @@ describe('buildChapterUserMessage', () => {
     expect(msg).toMatch(/WRITE THIS CHAPTER — "The Garage"/);
     expect(msg).toContain('He learns a machine obeys.'); // the brief
     expect(msg).toContain('▶'); // the target chapter is marked in the ToC
-    expect(msg).toContain('[s0]'); // the tagged source
-    expect(msg).toContain('He learned to sit with silence.'); // the source text
     expect(msg).toMatch(/\[\[SRC:sN,sN\]\]/); // the citation instruction
-    expect(msg).toMatch(/draw only on the source material/i);
+    expect(msg).toMatch(/draw only on it/i);
+    // The source material itself is NOT here — it rides the cached system prefix (72 §5.3), so the three or
+    // four passes over one chapter pay for it once instead of four times.
+    expect(msg).not.toContain('He learned to sit with silence.');
+    expect(msg).toMatch(/in your instructions above/i);
+  });
+
+  it('puts the tagged corpus in the SYSTEM prompt, where it can be cached across the craft passes', () => {
+    const tagged = tagCorpusItems(corpus);
+    const withCorpus = buildBiographerSystem(
+      BIOGRAPHY_BOOK_TYPE,
+      cfg(),
+      'Ben',
+      renderTaggedCorpus(corpus, tagged),
+    );
+    expect(withCorpus).toContain('[s0]');
+    expect(withCorpus).toContain('He learned to sit with silence.');
+    // Every other caller passes nothing and is byte-unchanged.
+    expect(buildBiographerSystem(BIOGRAPHY_BOOK_TYPE, cfg(), 'Ben')).not.toContain('[s0]');
   });
 });
 

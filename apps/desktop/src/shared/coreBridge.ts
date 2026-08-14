@@ -244,6 +244,8 @@ import {
   type CastEntry,
   type ConsentPerson,
   type ContinuityFinding,
+  type NewMaterialEntry,
+  type StoryAcceptMaterialResult,
   type StoryContinuityResult,
   type MarkupMark,
   type SharedBookSummary,
@@ -520,7 +522,12 @@ import {
   mineQuoteCandidates,
   setQuoteStatus,
   listBooks,
-  markStaleChapters,
+  clearNewMaterial,
+  finishEdition,
+  reopenBook,
+  declineNewMaterial,
+  detectNewMaterial,
+  getNewMaterial,
   mintTodoCheckIn,
   resolveSentQuestionTodos,
   bookMentionsReader,
@@ -5626,6 +5633,17 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         id: t.id,
         label: t.label,
         blurb: t.blurb,
+        gates: t.gates,
+        options: (t.options ?? []).map((o) => ({
+          id: o.id,
+          label: o.label,
+          kind: o.kind,
+          ...(o.help ? { help: o.help } : {}),
+          ...(o.choices ? { choices: o.choices } : {}),
+          ...(o.placeholder ? { placeholder: o.placeholder } : {}),
+          ...(o.required ? { required: o.required } : {}),
+        })),
+        ...(t.sourceSelect ? { sourceSelect: t.sourceSelect } : {}),
         structures: t.structures.map((s) => ({
           id: s.id,
           label: s.label,
@@ -5647,7 +5665,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return null;
       const p = StoryCreateInputSchema.parse(input);
-      if (!getBookType(p.type)) return null; // only a registered book type (v1: biography)
+      const bookType = getBookType(p.type);
+      if (!bookType) return null; // only a registered book type
+      // The 18+ gate is enforced HERE, not by hiding the card (72 §8.4): a hand-crafted IPC call must not be
+      // able to start an adult book without the acknowledgement, whatever the picker showed.
+      if (bookType.gates.adult) {
+        const acked =
+          (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
+        if (!acked) return null;
+      }
       return createBook(ctx.fs, ctx.key, {
         personId,
         type: p.type,
@@ -6188,7 +6214,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       };
     },
     storyMemoryOpen: async (input): Promise<StoryMemoryDetail | null> => {
-      const { memoryId, seedFocus } = StoryMemoryOpenInputSchema.parse(input);
+      const { memoryId, seedFocus, bookId, gapId } = StoryMemoryOpenInputSchema.parse(input);
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
@@ -6204,6 +6230,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         personName: person?.displayName ?? '',
         ...(memoryId ? { memoryId } : {}),
         ...(seedFocus ? { seedFocus } : {}),
+        ...(bookId ? { bookId } : {}),
+        ...(gapId ? { gapId } : {}),
         onDelta: (text) => host.emitStreamChunk('memory', text),
         now: new Date(),
       });
@@ -6405,7 +6433,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       let staled = 0;
       let rewritten = 0;
       let proposalsAdded: number | undefined;
-      let capped: boolean | undefined;
       let budgetReached: boolean | undefined;
       if (deps && aiReady) {
         // The auto cadence never spends during recurring distress (§8) — computed HOST-SIDE from the person's
@@ -6425,10 +6452,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         staled = res.staled;
         rewritten = res.rewritten;
         proposalsAdded = res.proposalsAdded;
-        capped = res.capped;
         budgetReached = res.budgetReached;
       } else {
-        staled = await markStaleChapters(ctx.fs, ctx.key, personId, bookId);
+        // AI off / no key: detection is free and still runs — knowing what could go in never spends.
+        staled = await detectNewMaterial(ctx.fs, ctx.key, personId, bookId, now);
       }
 
       // Stamp the auto-cadence throttle after a run (a manual refresh never touches it).
@@ -6444,7 +6471,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         rewritten,
         bundle,
         ...(proposalsAdded ? { proposalsAdded } : {}),
-        ...(capped ? { capped: true } : {}),
         ...(budgetReached ? { budgetReached: true } : {}),
       };
     },
@@ -6570,6 +6596,59 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         };
       }
       return checkContinuity(deps, bookId);
+    },
+    storyNewMaterial: async (input): Promise<NewMaterialEntry[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      return (await getNewMaterial(ctx.fs, ctx.key, personId, bookId)).entries;
+    },
+    storyAcceptMaterial: async (input): Promise<StoryAcceptMaterialResult> => {
+      const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
+      const deps = await aiDeps('story.own');
+      if (!deps) return { ok: false, reason: 'NO_KEY', message: 'SelfOS isn’t ready yet.' };
+      if ((await readVaultSettingsValues(deps.fs))['ai.enabled'] === false) {
+        return { ok: false, reason: 'AI_OFF', message: 'Turn on AI in Settings to weave this in.' };
+      }
+      // Accepting runs ONE rewrite through the craft loop (§3.6). Only on success do the entries clear —
+      // a failed or over-budget rewrite leaves the proposal standing so it can be tried again.
+      const res = await generateChapter(deps, { bookId, chapterId });
+      if (!res.ok) return { ok: false, reason: res.reason, message: res.message };
+      await clearNewMaterial(deps.fs, deps.key, deps.personId, bookId, { chapterId });
+      return { ok: true };
+    },
+    storyDeclineMaterial: async (input): Promise<NewMaterialEntry[]> => {
+      const { bookId, chapterId } = StoryChapterRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      await declineNewMaterial(ctx.fs, ctx.key, personId, bookId, { chapterId });
+      return (await getNewMaterial(ctx.fs, ctx.key, personId, bookId)).entries;
+    },
+    storyFinishEdition: async (
+      input,
+    ): Promise<{ ok: boolean; message?: string; bundle: StoryBookBundle | null }> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own')))
+        return { ok: false, message: 'Not permitted.', bundle: null };
+      const personId = await activePersonId();
+      if (!personId) return { ok: false, message: 'Not permitted.', bundle: null };
+      const res = await finishEdition(ctx.fs, ctx.key, personId, bookId, new Date());
+      const bundle = await readBookBundle(ctx.fs, ctx.key, personId, bookId);
+      return res.ok ? { ok: true, bundle } : { ok: false, message: res.message, bundle };
+    },
+    storyReopenBook: async (input): Promise<StoryBookBundle | null> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const personId = await activePersonId();
+      if (!personId) return null;
+      await reopenBook(ctx.fs, ctx.key, personId, bookId, new Date());
+      return readBookBundle(ctx.fs, ctx.key, personId, bookId);
     },
     storyManuscriptRead: async (input): Promise<StoryContinuityResult> => {
       const { bookId } = StoryBookRefSchema.parse(input);

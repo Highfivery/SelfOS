@@ -20,6 +20,7 @@ import {
   approveOutline,
   createBook,
   getChapter,
+  getNewMaterial,
   getMarkup,
   getOutline,
   getTodos,
@@ -83,7 +84,14 @@ async function seedBook(fs: ReturnType<typeof memFileSystem>): Promise<string> {
     personId: 'me',
     type: 'biography',
     title: 'The Story of Ben',
-    config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    config: {
+      voice: 'third',
+      style: 'warm',
+      length: 'standard',
+      autoRefresh: true,
+      typeOptions: {},
+      sourceIds: [],
+    },
     now,
   });
   // A deep clone per test — these mutations edit the outline in place.
@@ -168,7 +176,9 @@ describe('manual outline control (64 §16.1)', () => {
     // A new chapter gets a real, unwritten draft record — not just an outline entry.
     const shell = await getChapter(fs, key, 'me', bookId, after[2]!.chapters[0]!);
     expect(shell?.markdown).toBe('');
-    expect(shell?.status).toBe('stale');
+    // "Not written yet" is empty markdown, not a status (72 §4.4) — a shell used to be `stale`, which is how
+    // the refresh cadence ended up spending its rewrite allowance on first drafts.
+    expect(shell?.status).toBe('new');
     await assertConsistent(fs, bookId);
   });
 
@@ -213,7 +223,11 @@ describe('manual outline control (64 §16.1)', () => {
       title: 'The Garage',
       brief: 'Actually, it is about his father.',
     });
-    expect((await getChapter(fs, key, 'me', bookId, 'c1'))?.status).toBe('stale');
+    // The prose is untouched and a PROPOSAL is filed — the author gets a one-click rewrite, not a surprise
+    // one (72 §4.4).
+    expect((await getChapter(fs, key, 'me', bookId, 'c1'))?.status).toBe('reviewed');
+    const entries = (await getNewMaterial(fs, key, 'me', bookId)).entries;
+    expect(entries.map((e) => [e.chapterId, e.reason])).toEqual([['c1', 'briefChanged']]);
   });
 
   it('moves a chapter across parts without staling it', async () => {
@@ -266,7 +280,11 @@ describe('manual outline control (64 §16.1)', () => {
     const original = await getChapter(fs, key, 'me', bookId, 'c1');
     // The prose is NOT destroyed — it's kept, and marked for narrowing because the brief narrowed.
     expect(original?.markdown).toBe('Both halves of the story live here.');
-    expect(original?.status).toBe('stale');
+    expect(
+      (await getNewMaterial(fs, key, 'me', bookId)).entries.some(
+        (e) => e.chapterId === 'c1' && e.reason === 'briefChanged',
+      ),
+    ).toBe(true);
     const sibling = await getChapter(fs, key, 'me', bookId, first!.chapters[1]!);
     expect(sibling?.markdown).toBe('');
     await assertConsistent(fs, bookId);
@@ -301,7 +319,9 @@ describe('manual outline control (64 §16.1)', () => {
     // BOTH texts survive — the whole point.
     expect(merged?.markdown).toContain('The garage smelled of oil.');
     expect(merged?.markdown).toContain('The house was quiet after dark.');
-    expect(merged?.status).toBe('stale');
+    expect(
+      (await getNewMaterial(fs, key, 'me', bookId)).entries.some((e) => e.reason === 'merged'),
+    ).toBe(true);
     // The person's own investments come across with the prose they anchor to.
     expect(merged?.protectedBlocks).toHaveLength(2);
     expect(merged?.pinnedQuotes).toHaveLength(2);

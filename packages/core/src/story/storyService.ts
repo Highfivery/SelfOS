@@ -1,4 +1,5 @@
 import { decryptBytes, encryptBytes, isEncryptedEnvelope } from '../crypto';
+import { z } from 'zod';
 import type { FileSystem } from '../host';
 import { uuid } from '../id';
 import {
@@ -13,12 +14,13 @@ import {
   QuoteListSchema,
   BookConsentListSchema,
   StoryContinuityListSchema,
+  StoryNewMaterialListSchema,
   StoryImageIndexSchema,
   StoryInterviewStateSchema,
   StoryProposalListSchema,
   StoryTodoListSchema,
   type BookChapter,
-  type BookConfig,
+  BookConfigSchema,
   type BookManifest,
   type BookOutline,
   type BookTypeId,
@@ -31,6 +33,7 @@ import {
   type QuoteCandidate,
   type BookConsentList,
   type StoryContinuityList,
+  type StoryNewMaterialList,
   type StoryBookBundle,
   type StoryImageEntry,
   type StoryImageIndex,
@@ -115,6 +118,9 @@ function proposalsPath(personId: string, bookId: string): string {
 function continuityPath(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/continuity.enc`;
 }
+function materialPath(personId: string, bookId: string): string {
+  return `${bookDir(personId, bookId)}/material.enc`;
+}
 function consentPath(personId: string, bookId: string): string {
   return `${bookDir(personId, bookId)}/consent.enc`;
 }
@@ -149,7 +155,8 @@ export async function createBook(
     personId: string;
     type: BookTypeId;
     title: string;
-    config: BookConfig;
+    /** The Zod INPUT shape: a caller supplies what it cares about and the defaults fill the rest. */
+    config: z.input<typeof BookConfigSchema>;
     now: Date;
   },
 ): Promise<BookManifest> {
@@ -160,11 +167,12 @@ export async function createBook(
     schemaVersion: 1,
     personId: input.personId,
     type: input.type,
+    editions: [],
     // A blank title means "let the biographer name it" (§3.2): stamp a placeholder + mark it auto so the
     // foundations pass overwrites it with a title drawn from the content. A supplied title is the person's own.
     title: trimmedTitle || 'Your Story',
     ...(trimmedTitle ? {} : { titleAuto: true }),
-    config: input.config,
+    config: BookConfigSchema.parse(input.config),
     status: 'outlining',
     sharedWith: [],
     createdAt: at,
@@ -222,6 +230,8 @@ export async function updateBook(
       | 'matter'
       | 'sharedWith'
       | 'publishedAt'
+      | 'lifecycle'
+      | 'editions'
     >
   >,
   now: Date,
@@ -262,6 +272,32 @@ export const ARCHIVE_KEEP = 3;
 async function copyRaw(fs: FileSystem, from: string, to: string): Promise<void> {
   const bytes = await fs.read(from);
   if (bytes) await fs.writeAtomic(to, bytes);
+}
+
+function editionsDir(personId: string, bookId: string): string {
+  return `${bookDir(personId, bookId)}/editions`;
+}
+
+/**
+ * Freeze the book as it stands into `editions/<n>/` (72 §4.5) — a raw byte-for-byte copy of the manifest,
+ * outline, timeline and every chapter, so a finished edition stays readable exactly as it was however much
+ * the living book changes afterwards. Reuses the same `copyRaw` mechanism as `archiveDraftState`; unlike an
+ * archive, editions are never pruned — a finished edition is a thing the person made.
+ */
+export async function copyEdition(
+  fs: FileSystem,
+  personId: string,
+  bookId: string,
+  n: number,
+): Promise<void> {
+  const dest = `${editionsDir(personId, bookId)}/${n}`;
+  await copyRaw(fs, manifestPath(personId, bookId), `${dest}/book.enc`);
+  await copyRaw(fs, outlinePath(personId, bookId), `${dest}/outline.enc`);
+  await copyRaw(fs, timelinePath(personId, bookId), `${dest}/timeline.enc`);
+  for (const name of await fs.list(chaptersDir(personId, bookId))) {
+    if (!name.endsWith('.enc')) continue;
+    await copyRaw(fs, `${chaptersDir(personId, bookId)}/${name}`, `${dest}/chapters/${name}`);
+  }
 }
 
 /**
@@ -530,6 +566,27 @@ export async function getContinuity(
 ): Promise<StoryContinuityList> {
   const raw = await readEncryptedJson(fs, continuityPath(personId, bookId), key);
   return raw ? StoryContinuityListSchema.parse(raw) : { schemaVersion: 1, findings: [] };
+}
+
+/** What each chapter has drifted from, waiting on the author (72 §4.4). Absent → nothing pending. */
+export async function getNewMaterial(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<StoryNewMaterialList> {
+  const raw = await readEncryptedJson(fs, materialPath(personId, bookId), key);
+  return raw ? StoryNewMaterialListSchema.parse(raw) : { schemaVersion: 1, entries: [] };
+}
+
+export async function saveNewMaterial(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+  list: StoryNewMaterialList,
+): Promise<void> {
+  await writeEncryptedJson(fs, materialPath(personId, bookId), list, key);
 }
 
 export async function saveContinuity(

@@ -17,7 +17,14 @@ import { getStoryImage } from './storyImageService';
 
 const key = generateMasterKey();
 const now = new Date('2026-07-16T00:00:00.000Z');
-const config: BookConfig = { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true };
+const config: BookConfig = {
+  voice: 'third',
+  style: 'warm',
+  length: 'standard',
+  autoRefresh: true,
+  typeOptions: {},
+  sourceIds: [],
+};
 const ALL = { from: '2000-01-01T00:00:00.000Z', to: '2100-01-01T00:00:00.000Z' };
 const PNG = new Uint8Array([137, 80, 78, 71, 1, 2, 3]);
 

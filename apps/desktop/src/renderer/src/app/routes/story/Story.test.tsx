@@ -44,6 +44,8 @@ const BOOK_TYPES: StoryBookTypeView[] = [
     id: 'biography',
     label: 'Biography',
     blurb: 'A true life story.',
+    gates: { adult: false },
+    options: [],
     structures: [{ id: 'chronicle', label: 'Chronological', description: 'x', isDefault: true }],
     stylePresets: [
       { id: 'warm', label: 'Warm' },
@@ -60,10 +62,18 @@ function manifest(over: Partial<BookManifest> = {}): BookManifest {
     personId: 'me',
     type: 'biography',
     title: 'The Story of Ben',
-    config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    config: {
+      voice: 'third',
+      style: 'warm',
+      length: 'standard',
+      autoRefresh: true,
+      typeOptions: {},
+      sourceIds: [],
+    },
     essence: 'A quiet man learning to speak up.',
     status: 'outlining',
     sharedWith: [],
+    editions: [],
     createdAt: 'now',
     updatedAt: 'now',
     ...over,
@@ -442,16 +452,17 @@ describe('Story (64)', () => {
       },
     });
     renderStory();
-    // Lands on the first book; the switcher shows "Book 1 of 2".
+    // Lands on the first book; the switcher says what the number counts ("Your books (2)"), not "Book 1 of
+    // 2", which reads as a chapter position at a glance.
     await screen.findByRole('heading', { name: 'The Story of Ben', level: 1 });
-    await userEvent.click(await screen.findByRole('button', { name: /Book 1 of 2/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /Your books \(2\)/ }));
     // The menu lists the OTHER book; clicking it opens b2.
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Second Book' }));
     await waitFor(() => expect(opened).toContain('b2'));
     await screen.findByRole('heading', { name: 'Second Book', level: 1 });
 
     // "Start another book" enters the setup/commission flow even though books already exist.
-    await userEvent.click(await screen.findByRole('button', { name: /Book 2 of 2/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /Your books \(2\)/ }));
     await userEvent.click(await screen.findByRole('menuitem', { name: '+ Start another book' }));
     expect(await screen.findByRole('button', { name: 'Write my book' })).toBeInTheDocument();
   });
@@ -682,22 +693,70 @@ describe('Story (64)', () => {
     expect(screen.queryByRole('button', { name: 'What changed' })).not.toBeInTheDocument();
   });
 
-  it('a STALE chapter still shows its status cue AND a spend-free "Looks good" review (§13.5)', async () => {
-    const staleBundle = writtenBundle('new');
-    staleBundle.chapters[0] = { ...staleBundle.chapters[0]!, status: 'stale' };
-    const storyReviewChapter = vi.fn(() => Promise.resolve(writtenBundle('reviewed')));
+  /**
+   * 72 §4.4 — drift is a PROPOSAL now, not a status. It renders in "Needs you" naming what could go in, and
+   * nothing is rewritten until the author presses the button.
+   */
+  it('new material shows as a proposal with a one-click rewrite, and "Not now" declines it', async () => {
+    const storyAcceptMaterial = vi.fn(() => Promise.resolve({ ok: true }));
+    const storyDeclineMaterial = vi.fn(() => Promise.resolve([]));
     installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
-      storyGet: () => Promise.resolve(staleBundle),
-      storyReviewChapter,
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+      storyNewMaterial: () =>
+        Promise.resolve([
+          {
+            chapterId: 'c1',
+            reason: 'newMaterial' as const,
+            items: [
+              {
+                sourceRef: { kind: 'insight' as const, id: 'i1' },
+                label: 'In a coaching session, you said',
+                excerpt: 'the winter was brutal',
+              },
+            ],
+            detectedAt: '2026-08-13T00:00:00.000Z',
+          },
+        ]),
+      storyAcceptMaterial,
+      storyDeclineMaterial,
     });
     renderStory();
-    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
-    // The stale cue is shown (not a blank ribbon) and the accept-as-is review action is present.
-    expect(await screen.findByText('New material to fold in')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Looks good' }));
-    expect(storyReviewChapter).toHaveBeenCalledWith({ bookId: 'b1', chapterId: 'c1' });
+
+    expect(await screen.findByText('New material')).toBeInTheDocument();
+    expect(screen.getByText('1 new detail could go in.')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Weave these in' }));
+    expect(storyAcceptMaterial).toHaveBeenCalledWith({ bookId: 'b1', chapterId: 'c1' });
+
+    await userEvent.click(screen.getByRole('button', { name: /Not now for/ }));
+    expect(storyDeclineMaterial).toHaveBeenCalledWith({ bookId: 'b1', chapterId: 'c1' });
+  });
+
+  it('an author-driven change reads as "Out of step", not as new material', async () => {
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+      storyNewMaterial: () =>
+        Promise.resolve([
+          {
+            chapterId: 'c1',
+            reason: 'briefChanged' as const,
+            items: [],
+            note: 'You changed what this chapter is meant to be about.',
+            detectedAt: '2026-08-13T00:00:00.000Z',
+          },
+        ]),
+    });
+    renderStory();
+
+    expect(await screen.findByText('Out of step')).toBeInTheDocument();
+    expect(
+      screen.getByText('You changed what this chapter is meant to be about.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rewrite it' })).toBeInTheDocument();
   });
 
   it('marks a paragraph for deletion — the suggestion strip + apply bar appear', async () => {
@@ -2265,8 +2324,9 @@ describe('Story (64)', () => {
       await screen.findByRole('button', { name: 'Back to your memories' }),
     ).toBeInTheDocument();
     expect(await screen.findByText(/Take me back/)).toBeInTheDocument();
-    // A NEW memory opens with no id (an empty payload) — never a resume of some other memory.
-    expect(storyMemoryOpen).toHaveBeenCalledWith({});
+    // A NEW memory opens with no id — never a resume of some other memory. It does carry the BOOK, because
+    // the book decides whose interviewer speaks (72 §5.5).
+    expect(storyMemoryOpen).toHaveBeenCalledWith({ bookId: 'b1' });
   });
 
   it('the chat → save flow: synthesize → confirm card → "Add to my story" saves the edited memory (§14)', async () => {
@@ -2379,8 +2439,12 @@ describe('Story (64)', () => {
     expect(
       await screen.findByRole('button', { name: 'Back to your memories' }),
     ).toBeInTheDocument();
+    // It carries the GAP, so saving the memory closes it — talking something through and answering a
+    // check-in are equal ways to answer (72 §5.5). Without the gap it stayed open and re-proposable.
     expect(storyMemoryOpen).toHaveBeenCalledWith({
       seedFocus: 'Tell me about the hardest thing you have faced.',
+      bookId: 'b1',
+      gapId: 'g1',
     });
   });
 

@@ -4,9 +4,11 @@ import type { ClaudeClient, ClaudeUsage } from '../host';
 import { memFileSystem } from '../host/memFileSystem';
 import { getInsight, listInsightsForPerson } from '../insights';
 import { savePerson } from '../people';
-import type { BookChapter, ExclusionItem, Person } from '../schemas';
+import type { BookChapter, BookOutline, ExclusionItem, Person } from '../schemas';
 import { queryUsage } from '../usage';
-import { createBook, saveChapter } from './storyService';
+import { createBook, saveChapter, saveInterviewState, saveOutline } from './storyService';
+import { getStoryGaps } from './storyInterviewService';
+import { saveInsight } from '../insights';
 import { buildStoryCorpus, corpusText } from './storyCorpus';
 import {
   MEMORY_READY_MARKER,
@@ -560,7 +562,14 @@ describe('listMemoryViews — the "wove into <chapter>" linkage (64 §14)', () =
       personId: 'me',
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
       now,
     });
     await saveChapter(
@@ -621,5 +630,159 @@ describe('memory attachments (64 §14 — the Sessions precedent)', () => {
       'image/png',
     );
     expect('ok' in tooBig && tooBig.reason).toBe('TOO_LARGE');
+  });
+});
+
+/**
+ * 72 §5.5 — the two channels are equal. Talking something through used to leave the gap open and
+ * re-proposable, so the biographer asked again about the thing you had just spent twenty minutes telling it.
+ */
+describe('the conversation closes its gap (72 §5.5)', () => {
+  const outline: BookOutline = {
+    schemaVersion: 1,
+    approved: true,
+    parts: [
+      {
+        id: 'p1',
+        title: 'Roots',
+        chapters: [{ id: 'c1', title: 'One', brief: 'a', lifeAreas: [], order: 0 }],
+      },
+    ],
+  };
+
+  async function seedGap(
+    fs: ReturnType<typeof memFileSystem>,
+    bookId: string,
+    gap: { id: string; dimension: string },
+  ): Promise<void> {
+    await saveInterviewState(fs, key, 'me', bookId, {
+      schemaVersion: 1,
+      frameworkCoverage: {
+        chapters: false,
+        scenes: {},
+        challenges: false,
+        ideology: false,
+        futureScript: false,
+      },
+      askedPrompts: [],
+      photoAnswers: [],
+      lastGaps: [
+        {
+          id: gap.id,
+          dimension: gap.dimension,
+          label: 'The garage',
+          focus: 'Tell me about it.',
+          priority: 1,
+        },
+      ],
+    });
+  }
+
+  it('a saved conversation marks its gap answered; an abandoned draft leaves it open', async () => {
+    const fs = await fresh();
+    const book = await createBook(fs, key, {
+      personId: 'me',
+      type: 'biography',
+      title: 'B',
+      config: { voice: 'third', style: 'warm', length: 'standard' },
+      now,
+    });
+    await saveOutline(fs, key, 'me', book.id, outline);
+    await seedGap(fs, book.id, { id: 'g1', dimension: 'highPoint' });
+
+    const opened = await openMemoryChat(
+      deps(fs, fakeClient('Tell me about it.'), 'm1', {
+        personName: 'Ben',
+        bookId: book.id,
+        gapId: 'g1',
+        onDelta: () => {},
+      }),
+    );
+    expect(opened.ok).toBe(true);
+
+    // Under way, not answered — nothing has been told yet.
+    expect((await getStoryGaps(fs, key, 'me', book.id)).gaps[0]?.status).toBe('asked');
+
+    await patchMemory(fs, key, 'me', 'm1', {
+      status: 'ready',
+      narrative: 'The garage.',
+      title: 'T',
+    });
+    await saveMemory({ fs, key, personId: 'me', memoryId: 'm1', memoryEnabled: true, now });
+
+    expect((await getStoryGaps(fs, key, 'me', book.id)).gaps[0]?.status).toBe('answered');
+  });
+
+  /**
+   * `StoryMemory.scene` has been written since 64 §14 and read by nothing. Telling the story of your lowest
+   * point closes the low-point gap whether or not anyone routed you there.
+   */
+  it('a memory that IS a key scene closes that gap even without being routed to it', async () => {
+    const fs = await fresh();
+    const book = await createBook(fs, key, {
+      personId: 'me',
+      type: 'biography',
+      title: 'B',
+      config: { voice: 'third', style: 'warm', length: 'standard' },
+      now,
+    });
+    await saveOutline(fs, key, 'me', book.id, outline);
+    await seedGap(fs, book.id, { id: 'g-low', dimension: 'lowPoint' });
+
+    await openMemoryChat(
+      deps(fs, fakeClient('Go on.'), 'm2', {
+        personName: 'Ben',
+        bookId: book.id, // no gapId — they just started talking
+        onDelta: () => {},
+      }),
+    );
+    await patchMemory(fs, key, 'me', 'm2', {
+      status: 'ready',
+      narrative: 'The worst year.',
+      title: 'T',
+      scene: 'lowPoint',
+    });
+    await saveMemory({ fs, key, personId: 'me', memoryId: 'm2', memoryEnabled: true, now });
+
+    expect((await getStoryGaps(fs, key, 'me', book.id)).gaps[0]?.status).toBe('answered');
+  });
+});
+
+/**
+ * 72 §5.5 — the questionnaire path has always had the de-dup reference; the conversation never did, which is
+ * why it opened cold and asked about things answered in onboarding months ago.
+ */
+describe('the conversation opens informed (72 §5.5)', () => {
+  it('carries what it already knows into the biographer’s system prompt', async () => {
+    const fs = await fresh();
+    await saveInsight(fs, key, {
+      id: 'i-known',
+      schemaVersion: 1,
+      source: 'session',
+      subjectPersonId: 'me',
+      summary: 'A childhood in a machine shop.',
+      facts: [{ id: 'f1', text: 'his father worked a lathe with the door open', shareable: false }],
+      confidence: 'medium',
+      categories: [],
+      approved: true,
+      provenance: { at: '2026-05-01T00:00:00.000Z' },
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+
+    const systems: string[] = [];
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (options, onDelta) => {
+        systems.push(options.system ?? '');
+        onDelta('Tell me.');
+        return Promise.resolve({ text: 'Tell me.', usage: USAGE });
+      },
+    };
+
+    await openMemoryChat(deps(fs, capturing, 'm3', { personName: 'Ben', onDelta: () => {} }));
+
+    expect(systems[0]).toContain('WHAT YOU ALREADY KNOW ABOUT THEM');
+    expect(systems[0]).toContain('his father worked a lathe with the door open');
   });
 });

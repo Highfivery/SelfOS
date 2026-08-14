@@ -36,6 +36,7 @@ function book(id: string, autoRefresh: boolean): BookManifest {
     config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh },
     status: 'ready',
     sharedWith: [],
+    editions: [],
     createdAt: 'now',
     updatedAt: 'now',
   };

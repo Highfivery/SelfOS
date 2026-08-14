@@ -165,6 +165,7 @@ export async function createBook(
     schemaVersion: 1,
     personId: input.personId,
     type: input.type,
+    editions: [],
     // A blank title means "let the biographer name it" (§3.2): stamp a placeholder + mark it auto so the
     // foundations pass overwrites it with a title drawn from the content. A supplied title is the person's own.
     title: trimmedTitle || 'Your Story',
@@ -227,6 +228,8 @@ export async function updateBook(
       | 'matter'
       | 'sharedWith'
       | 'publishedAt'
+      | 'lifecycle'
+      | 'editions'
     >
   >,
   now: Date,
@@ -267,6 +270,32 @@ export const ARCHIVE_KEEP = 3;
 async function copyRaw(fs: FileSystem, from: string, to: string): Promise<void> {
   const bytes = await fs.read(from);
   if (bytes) await fs.writeAtomic(to, bytes);
+}
+
+function editionsDir(personId: string, bookId: string): string {
+  return `${bookDir(personId, bookId)}/editions`;
+}
+
+/**
+ * Freeze the book as it stands into `editions/<n>/` (72 §4.5) — a raw byte-for-byte copy of the manifest,
+ * outline, timeline and every chapter, so a finished edition stays readable exactly as it was however much
+ * the living book changes afterwards. Reuses the same `copyRaw` mechanism as `archiveDraftState`; unlike an
+ * archive, editions are never pruned — a finished edition is a thing the person made.
+ */
+export async function copyEdition(
+  fs: FileSystem,
+  personId: string,
+  bookId: string,
+  n: number,
+): Promise<void> {
+  const dest = `${editionsDir(personId, bookId)}/${n}`;
+  await copyRaw(fs, manifestPath(personId, bookId), `${dest}/book.enc`);
+  await copyRaw(fs, outlinePath(personId, bookId), `${dest}/outline.enc`);
+  await copyRaw(fs, timelinePath(personId, bookId), `${dest}/timeline.enc`);
+  for (const name of await fs.list(chaptersDir(personId, bookId))) {
+    if (!name.endsWith('.enc')) continue;
+    await copyRaw(fs, `${chaptersDir(personId, bookId)}/${name}`, `${dest}/chapters/${name}`);
+  }
 }
 
 /**

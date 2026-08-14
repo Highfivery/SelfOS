@@ -41,13 +41,17 @@ export interface StoryRefreshResult {
   message?: string;
 }
 
-async function countPasses(deps: AiDeps, type: string): Promise<number> {
+/** Passes of `type` for THIS BOOK in the trailing week (72 §5.4) — per-book, so a second book never starves
+ *  the first. A pass recorded before the book id was stamped simply doesn't count, which can only ever
+ *  under-count and let a pass through, never block one wrongly. */
+async function countPasses(deps: AiDeps, bookId: string, type: string): Promise<number> {
   const weekAgo = new Date(deps.now.getTime() - 7 * DAY_MS).toISOString();
   const passes = await queryUsage(deps.fs, deps.key, {
     from: weekAgo,
     to: deps.now.toISOString(),
     personId: deps.personId,
     type,
+    sessionId: bookId,
   });
   return passes.length;
 }
@@ -65,11 +69,14 @@ export async function refreshBook(
   // The cadence never spends during an active crisis (§8). Detection above is free, so it still ran.
   if (args.auto && args.crisis) return { ok: true, staled, rewritten: 0 };
 
-  if ((await countPasses(deps, 'story.structure')) >= STORY_STRUCTURE_WEEKLY_CAP) {
+  if ((await countPasses(deps, args.bookId, 'story.structure')) >= STORY_STRUCTURE_WEEKLY_CAP) {
     return { ok: true, staled, rewritten: 0 };
   }
 
-  const gen = await generateStructuralProposals(deps, { bookId: args.bookId });
+  const gen = await generateStructuralProposals(
+    { ...deps, sessionId: args.bookId },
+    { bookId: args.bookId },
+  );
   if (!gen.ok) {
     // A structural failure is non-fatal — the detection above still stands on its own.
     return {

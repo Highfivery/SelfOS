@@ -170,6 +170,9 @@ interface StoryState {
   /** Weave a chapter's new material in — one metered rewrite through the craft loop. */
   acceptMaterial: (bookId: string, chapterId: string) => Promise<StoryAcceptMaterialResult>;
   declineMaterial: (bookId: string, chapterId: string) => Promise<void>;
+  /** Freeze the book as the next edition and mark it finished (72 §3.6). */
+  finishEdition: (bookId: string) => Promise<{ ok: boolean; message?: string }>;
+  reopenBook: (bookId: string) => Promise<void>;
   resolveContinuity: (
     bookId: string,
     findingId: string,
@@ -680,6 +683,19 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     } finally {
       set({ chaptersGenerating: false });
     }
+  },
+  finishEdition: async (bookId) => {
+    const res = (await window.selfos?.storyFinishEdition({ bookId })) ?? {
+      ok: false,
+      message: 'SelfOS isn’t ready yet.',
+      bundle: null,
+    };
+    if (res.bundle) set({ bundle: res.bundle });
+    return res.ok ? { ok: true } : { ok: false, ...(res.message ? { message: res.message } : {}) };
+  },
+  reopenBook: async (bookId) => {
+    const bundle = await window.selfos?.storyReopenBook({ bookId });
+    if (bundle) set({ bundle });
   },
   declineMaterial: async (bookId, chapterId) => {
     set({ newMaterial: (await window.selfos?.storyDeclineMaterial({ bookId, chapterId })) ?? [] });

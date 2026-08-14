@@ -4255,6 +4255,20 @@ export type StorySetConsentInput = z.infer<typeof StorySetConsentInputSchema>;
 
 /** `book.enc` — the book's top-level record (64 §4). `sharedWith` = the household person ids granted read
  *  access (re-checked at every read, §3.5); `publishedAt` present once the person has published a head. */
+/** A book is LIVING while it is still being written and interviewed for, and FINISHED once the author calls
+ *  an edition done. Finishing is reversible — reopening is a first-class act, not a workaround (§3.6). */
+export const BookLifecycleSchema = z.enum(['living', 'finished']);
+export type BookLifecycle = z.infer<typeof BookLifecycleSchema>;
+
+/** One finished edition — a frozen, readable copy of the book at the moment it was called done (§4.5). */
+export const BookEditionSchema = z.object({
+  n: z.number().int().min(1),
+  finishedAt: z.string(),
+  chapterCount: z.number().int().min(0),
+  wordCount: z.number().int().min(0),
+});
+export type BookEdition = z.infer<typeof BookEditionSchema>;
+
 export const BookManifestSchema = z.object({
   id: z.string().min(1),
   schemaVersion: z.literal(1),
@@ -4274,6 +4288,12 @@ export const BookManifestSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   publishedAt: z.string().optional(),
+  /** Living (the default) or finished (72 §3.6). A finished book still notices new material quietly — it
+   *  just stops interviewing for it and offers the next edition instead. Absent ⇒ living, so every existing
+   *  book carries on exactly as it did. */
+  lifecycle: BookLifecycleSchema.optional(),
+  /** Editions finished so far, oldest first. */
+  editions: z.array(BookEditionSchema).default([]),
 });
 export type BookManifest = z.infer<typeof BookManifestSchema>;
 
@@ -5666,6 +5686,10 @@ export type StoryInterviewOutcome =
   | 'crisis'
   | 'noGaps'
   | 'noBook'
+  // The book is FINISHED (72 §3.6) — it still notices new material quietly, but the biographer does not
+  // interview you for a book you have called done. Distinct from `throttled`, because nothing is waiting to
+  // expire: the way to be asked again is to start the next edition.
+  | 'finished'
   // AI is off / no key — distinct from `throttled` so the UI can say HOW to enable it (the honest-states
   // rule: a prerequisite-absent feature must never render as "check back later").
   | 'aiOff';

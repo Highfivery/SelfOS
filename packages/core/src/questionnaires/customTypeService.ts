@@ -18,11 +18,32 @@ const encoder = new TextEncoder();
 
 const EMPTY_PREFS: QuestionnairePrefs = { schemaVersion: 1, customTypes: [] };
 
+/**
+ * Keys this file used to hold and no longer reads. Owner decision 2026-08-14: the retired custom intimacy
+ * topics are DELETED from the vault rather than left to sit there invisibly. `writePrefs` preserves unknown
+ * keys on purpose (never erase authored content as a side effect of an unrelated save), so retiring a field
+ * has to be an explicit, named act — this list is that act, and the reader below performs it once.
+ */
+const RETIRED_PREFS_KEYS = ['customIntimacyActivities', 'customIntimacyFantasies'] as const;
+
+/** Strip the retired keys, once, the first time the file is read after this shipped. Idempotent: after the
+ *  rewrite the keys are gone, the guard never fires again, and a file that never had them is untouched. */
+async function cleanupRetiredKeys(fs: FileSystem, raw: Record<string, unknown>): Promise<void> {
+  if (!RETIRED_PREFS_KEYS.some((k) => k in raw)) return;
+  const cleaned = { ...raw };
+  for (const k of RETIRED_PREFS_KEYS) delete cleaned[k];
+  await fs.writeAtomic(PREFS_PATH, encoder.encode(`${JSON.stringify(cleaned, null, 2)}\n`));
+}
+
 async function readPrefs(fs: FileSystem): Promise<QuestionnairePrefs> {
   const bytes = await fs.read(PREFS_PATH);
   if (!bytes) return EMPTY_PREFS;
   try {
-    return QuestionnairePrefsSchema.parse(JSON.parse(decoder.decode(bytes)));
+    const raw: unknown = JSON.parse(decoder.decode(bytes));
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      await cleanupRetiredKeys(fs, raw as Record<string, unknown>);
+    }
+    return QuestionnairePrefsSchema.parse(raw);
   } catch {
     // A corrupt or hand-edited file must never break authoring — fall back to no custom types.
     return EMPTY_PREFS;

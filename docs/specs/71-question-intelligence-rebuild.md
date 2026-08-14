@@ -510,6 +510,21 @@ _All resolved with the owner on 2026-08-12:_
   (`groundSummary`, type/tier-scoped) on both call sites (auto engine + the Suggested panel), as prompt
   steering rather than a hard filter, since the planner and question-level de-dup already bound the damage
   downstream. Guarded on both paths, each verified to FAIL when the wiring is reverted.
+- 2026-08-14 — **Close-out: the three loose ends (§5.7/§5.9).** (1) **The email caller is guarded.** The unit
+  proved `generateSuggestion` handles open ground; nothing proved the CALLER passes the person's real map —
+  which is exactly where the 2026-08-13 defect lived. An integration test now drives the real
+  `reconcileEmailSchedule` with a ledger that closes one intimacy family, and asserts the prompt carries the
+  OPEN one and not the closed one. Scoped to the ground block on purpose: the tier directive above it names
+  "oral" as an example of plain language, so a whole-prompt assertion always matches. Verified to fail when
+  the caller passes `[]`. (2) **Prompt composition is bounded by a test.** Nothing watched how big the prompt
+  got or which block was eating it, which is how the go-deeper list sat at 2,463 chars (29% of the message)
+  for months. A maximal fixture (101 rated acts, 60 emergent topics) now asserts each capped block stays under
+  a loose 2x budget AND that the governing instructions — tier register, the GOVERNS override, the safety
+  boundary, the planner's ground — survive when every block is at its cap. Verified: removing both caps takes
+  the go-deeper block from 1,200 to 7,172 chars and fails. (3) **The retired custom intimacy topics are
+  DELETED** (owner decision): `RETIRED_PREFS_KEYS` names them explicitly and the prefs reader strips them once,
+  idempotently. The general rule — preserve unknown keys, never erase authored content as a side effect —
+  stands, with this as a deliberate, named exception; both are pinned by tests.
 - 2026-08-14 — **Follow-up: never-asked ground now has a shelf life (§5.9).** Completes the trade the fix below
   made. Keeping every zero-ask topic forever turns planner-named ground into the map bloat §5.9 exists to
   prevent, just with a nicer provenance — but on ask count alone, ground planned five minutes ago and ground

@@ -498,6 +498,24 @@ A running log of durable decisions and feedback captured into the project config
   commit on the SHARED tree (and merged as #408) — the guard was extracted into a `git worktree` off
   origin/main, which is the only safe way to work while another session holds the checkout.**
 
+- 2026-08-14 — **Close-out (the three questionnaire loose ends; SPEC 71 §5.7/§5.9; on
+  `chore/questionnaire-loose-ends`, in a git WORKTREE).** (1) **The email CALLER is guarded** — the unit proved
+  `generateSuggestion` handles open ground, but nothing proved `reconcileEmailSchedule` passes the person's
+  real map, which is precisely where the shipped defect lived. An integration test drives the real reconcile
+  (full intimacy-email consent chain: partner edge, both 18+ acks, both YNM opt-ins, a shared rated act, the
+  separate `intimacyEmailOptIn`, and the family toggles — intimacy families are OFF by default and the
+  non-intimacy suggestion is tried FIRST and short-circuits the pair) and asserts the prompt carries the OPEN
+  family and not the closed one. Verified to fail when the caller passes `[]`. (2) **A prompt-composition
+  tripwire** — a maximal fixture (101 rated acts, 60 emergent topics) asserts each capped block stays under a
+  loose 2x budget and that the governing instructions survive at cap; removing both caps takes the go-deeper
+  block 1,200 → 7,172 chars and fails. (3) **The retired custom intimacy topics are DELETED** (owner decision)
+  via an explicit `RETIRED_PREFS_KEYS` list stripped once, idempotently — the general "preserve unknown keys"
+  rule stands, with this as a deliberate named exception. **Lessons: (a) a scoped assertion beats a broad one
+  — `/\boral\b/` over the whole system prompt always matches, because the tier directive names "oral" as an
+  example of plain language (the same false-positive class as "clitoral" earlier); assert the BLOCK, not the
+  message. (b) Fail-closed consent gates make an integration fixture non-obvious: zero AI calls meant a gate,
+  not a bug — intimacy families default OFF, `intimacyEmailOptIn` is a SEPARATE consent from the family
+  toggle, and the non-intimacy family wins the `||` unless disabled.**
 - 2026-08-14 — **Follow-up (never-asked ground gets a shelf life; SPEC 71 §5.9; on `fix/topic-createdat`, in a
   git WORKTREE).** Completes the trade the fix below made: keeping every zero-ask topic forever recreates the
   map bloat §5.9 exists to prevent. `Topic` gains additive-optional **`createdAt`** (stamped at mint) and

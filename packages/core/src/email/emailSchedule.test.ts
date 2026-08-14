@@ -4,6 +4,14 @@ import { memFileSystem } from '../host/memFileSystem';
 import type { EmailClient } from '../host';
 import { writeEncryptedJson } from '../vault';
 import { saveGoal } from '../goals/goalService';
+import { upsertPerson } from '../people/peopleService';
+import { upsertRelationship } from '../people/relationshipService';
+import { acknowledgeAdult } from '../conversations/guidanceService';
+import { setYnmOptIn } from '../together/ynmService';
+import { submitSectionForm } from '../intake/intakeService';
+import type { IntakeAnswerValue } from '../schemas';
+import { emptyLedger, writeLedger } from '../questionnaires/askLedger';
+import { SATURATION_ASKS } from '../questionnaires/topicMap';
 import { updateEmailConfig } from './emailConfig';
 import { setEmailPrefs } from './emailPrefs';
 import { listEmailActivity, sendFamilyEmail } from './emailSend';
@@ -55,6 +63,37 @@ async function configured(fs = memFileSystem(), now = new Date('2026-08-05T12:00
   await updateEmailConfig(fs, key, { fromAddress: 'hi@fam.example', fromName: 'SelfOS' }, now);
   await setEmailPrefs(fs, key, PERSON, { address: 'me@inbox.example' }, false, now);
   return fs;
+}
+
+/** Two partners with the full intimacy-email consent chain: a partner edge, both 18+ acks, both YNM opt-ins,
+ *  and one act both rate >= curious so a mutual overlap exists (67 §8.2). */
+async function seedIntimacyPartners(
+  fs: ReturnType<typeof memFileSystem>,
+): Promise<{ a: string; b: string }> {
+  const at = new Date('2026-08-01T00:00:00.000Z');
+  const a = await upsertPerson(fs, key, { displayName: 'Ash', isSubject: true, tags: [] });
+  const b = await upsertPerson(fs, key, { displayName: 'Bo', isSubject: true, tags: [] });
+  await upsertRelationship(fs, key, { fromPersonId: a.id, toPersonId: b.id, type: 'partner' });
+  await acknowledgeAdult(fs, key, a.id);
+  await acknowledgeAdult(fs, key, b.id);
+  await setYnmOptIn(fs, key, a.id, b.id, true, at);
+  await setYnmOptIn(fs, key, b.id, a.id, true, at);
+  for (const [id, rating] of [
+    [a.id, 3],
+    [b.id, 4],
+  ] as const) {
+    await submitSectionForm(
+      fs,
+      key,
+      id,
+      'intimacy',
+      { activities: { 'sensual-massage': rating } as unknown as IntakeAnswerValue },
+      at,
+      undefined,
+      false,
+    );
+  }
+  return { a: a.id, b: b.id };
 }
 
 async function seedSynthesis(fs: ReturnType<typeof memFileSystem>, observation: string) {
@@ -383,5 +422,87 @@ describe('reconcileEmailSchedule (67 §3.4 / Phase 3)', () => {
     expect(digests.some((d) => d.status === 'canceled')).toBe(false);
     expect(digests.some((d) => d.status === 'scheduled')).toBe(true);
     expect(fake.canceled).toHaveLength(0);
+  });
+});
+
+describe('the intimacy suggestion draws on the person’s OWN open ground (71 §5.3)', () => {
+  /**
+   * The caller-side guard for the defect shipped on 2026-08-13 and fixed on 2026-08-14: `emailSchedule`
+   * omitted `openGround` when nothing was open and `generateSuggestion` fell back to the seeded families, so
+   * an explicit email nobody reviews first nudged toward the exact areas the person had exhausted. The type
+   * now makes omission impossible; this pins that the caller passes their REAL map, which no unit of
+   * `generateSuggestion` in isolation can prove.
+   */
+  it('passes the recipient’s open topics, and never the closed ones', async () => {
+    const fs = await configured();
+    const partners = await seedIntimacyPartners(fs);
+    const at = new Date('2026-08-05T00:00:00.000Z');
+
+    // Oral is worked through; Edge play has never been touched. Both are seeded families on their map.
+    await writeLedger(fs, key, {
+      ...emptyLedger(partners.a),
+      backfilledAt: '2026-07-01T00:00:00.000Z',
+      entries: Array.from({ length: SATURATION_ASKS }, (_, i) => ({
+        questionId: `q${i}`,
+        assignmentId: `a${i}`,
+        at: '2026-08-01T00:00:00.000Z',
+        type: 'intimacy',
+        tier: 'unfiltered' as const,
+        topicIds: ['Intimacy:oral'],
+        gist: 'oral',
+        outcome: 'rich' as const,
+      })),
+    });
+
+    const systems: string[] = [];
+    const capture = {
+      send: () => Promise.resolve(''),
+      stream: (o: { system?: string }, onDelta: (s: string) => void) => {
+        systems.push(o.system ?? '');
+        const text = '{"headline":"A small idea","body":"One sentence."}';
+        onDelta(text);
+        return Promise.resolve({
+          text,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const prefs = await setEmailPrefs(
+      fs,
+      key,
+      partners.a,
+      {
+        address: 'ash@example.com',
+        // Intimacy families are OFF by default (fail-closed), and the non-intimacy suggestion is tried FIRST
+        // and short-circuits the pair — so opt in to the one under test and out of its competitor.
+        families: { 'ai-suggestion': false, 'ai-suggestion-intimacy': true },
+        intimacyEmailOptIn: true, // the distinct intimacy-email consent (67 §8.2)
+      },
+      true,
+      at,
+    );
+
+    await reconcileEmailSchedule(
+      baseReconcile(fs, {
+        personId: partners.a,
+        prefs,
+        now: at,
+        ai: { client: capture, apiKey: 'sk-x', model: 'claude-sonnet-4-6' },
+      }),
+    );
+
+    // The intimacy suggestion is the one carrying the explicit framing.
+    const system = systems.find((s) => s.includes('Subject matter to draw on')) ?? '';
+    expect(system).not.toBe('');
+    // Scoped to the GROUND block: the tier directive above it names "oral" as an example of plain language,
+    // so asserting over the whole system prompt would always match.
+    const ground = system
+      .slice(system.indexOf('Subject matter to draw on'))
+      .split('\nBoundary:')[0] as string;
+    // Their own OPEN ground reaches the prompt…
+    expect(ground).toContain('Edge play');
+    // …and the worked-through family does not. Falling back to the seeded list would list every family here,
+    // which is precisely how an intimacy email came to nudge toward exhausted ground.
+    expect(ground).not.toMatch(/\boral\b/i);
   });
 });

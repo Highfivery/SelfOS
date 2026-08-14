@@ -16,7 +16,14 @@ import { addUploadedPhoto, createBook, getChapter, saveChapter } from './storySe
 
 const key = generateMasterKey();
 const now = new Date('2026-07-16T00:00:00.000Z');
-const config: BookConfig = { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true };
+const config: BookConfig = {
+  voice: 'third',
+  style: 'warm',
+  length: 'standard',
+  autoRefresh: true,
+  typeOptions: {},
+  sourceIds: [],
+};
 const PNG = new Uint8Array([137, 80, 78, 71]);
 
 let fs: FileSystem;

@@ -5633,6 +5633,17 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         id: t.id,
         label: t.label,
         blurb: t.blurb,
+        gates: t.gates,
+        options: (t.options ?? []).map((o) => ({
+          id: o.id,
+          label: o.label,
+          kind: o.kind,
+          ...(o.help ? { help: o.help } : {}),
+          ...(o.choices ? { choices: o.choices } : {}),
+          ...(o.placeholder ? { placeholder: o.placeholder } : {}),
+          ...(o.required ? { required: o.required } : {}),
+        })),
+        ...(t.sourceSelect ? { sourceSelect: t.sourceSelect } : {}),
         structures: t.structures.map((s) => ({
           id: s.id,
           label: s.label,
@@ -5654,7 +5665,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return null;
       const p = StoryCreateInputSchema.parse(input);
-      if (!getBookType(p.type)) return null; // only a registered book type (v1: biography)
+      const bookType = getBookType(p.type);
+      if (!bookType) return null; // only a registered book type
+      // The 18+ gate is enforced HERE, not by hiding the card (72 §8.4): a hand-crafted IPC call must not be
+      // able to start an adult book without the acknowledgement, whatever the picker showed.
+      if (bookType.gates.adult) {
+        const acked =
+          (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
+        if (!acked) return null;
+      }
       return createBook(ctx.fs, ctx.key, {
         personId,
         type: p.type,

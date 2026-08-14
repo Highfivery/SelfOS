@@ -24,6 +24,8 @@ import { ImageStylePicker } from '../../../settings/ImageStyleControl';
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryStore } from '../../../stores/storyStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
+import { useDreamStore } from '../../../stores/dreamStore';
+import { useGuidanceStore } from '../../../stores/guidanceStore';
 import { ShareMemoryPanel } from './ShareMemoryPanel';
 import { MemoryCollection } from './MemoryCollection';
 import { StoryMemories } from './StoryMemories';
@@ -264,12 +266,12 @@ export function Story(): JSX.Element {
           personNameForPreview={personName}
           aiUnavailable={aiUnavailable}
           onCancel={() => setMode('idle')}
-          onCreate={async (title, config) => {
+          onCreate={async (typeId, title, config) => {
             setError(null);
             setMode('idle');
             // Create AND draft the whole book in one flow — no outline-review gate. The draft screen shows
             // immediately (progress is seeded), and the finished book lands ready to edit.
-            const res = await createAndDraft({ type: 'biography', title, config });
+            const res = await createAndDraft({ type: typeId, title, config });
             if (!res.ok && res.message) setError(res.message);
           }}
         />
@@ -468,16 +470,34 @@ function StorySetup({
   personNameForPreview: string;
   /** AI unavailable → the create-and-draft CTA is disabled (the notice above the card explains why). */
   aiUnavailable?: boolean;
-  onCreate: (title: string, config: BookConfig) => void | Promise<void>;
+  onCreate: (typeId: string, title: string, config: BookConfig) => void | Promise<void>;
   onCancel: () => void;
 }): JSX.Element {
   const [title, setTitle] = useState('');
   const [voice, setVoice] = useState<Voice>('third');
   const [style, setStyle] = useState<Style>('warm');
   const [length, setLength] = useState<Length>('full');
+  const [typeId, setTypeId] = useState<string>('biography');
+  const [typeOptions, setTypeOptions] = useState<Record<string, string>>({});
+  const [sourceIds, setSourceIds] = useState<string[]>([]);
+
+  const bookTypes = useStoryStore((s) => s.bookTypes);
+  const people = usePeopleStore((s) => s.people);
+  const dreams = useDreamStore((s) => s.dreams);
+  const adultAcknowledged = useGuidanceStore((s) => s.adultAcknowledged);
+  const acknowledgeAdult = useGuidanceStore((s) => s.acknowledgeAdult);
+  const bookType = bookTypes.find((t) => t.id === typeId);
+
+  // Everything a type asks at commission is DECLARED by the type (72 §4.1), so this renders whatever it
+  // declares — a new kind of book adds no code here.
+  const options = bookType?.options ?? [];
+  const answered = (id: string): string =>
+    typeOptions[id] ?? options.find((o) => o.id === id)?.choices?.[0]?.value ?? '';
+  const missing = options.filter((o) => o.required && !answered(o.id).trim());
+  const blockedByAge = Boolean(bookType?.gates.adult) && !adultAcknowledged;
 
   // "How your biographer will sound" — the specimen re-renders per style × voice (§13.3).
-  const specimen = specimenFor('biography', { style, voice });
+  const specimen = specimenFor(typeId, { style, voice });
 
   return (
     <Card>
@@ -490,9 +510,142 @@ function StorySetup({
           </Text>
         </Stack>
 
+        {/* What KIND of book (72 §3.2) — told-true kinds never invent; reimagined ones invent the events
+            but never the person. */}
+        <Labeled label="What kind of book">
+          <div className={styles.styleGallery} role="radiogroup" aria-label="Kind of book">
+            {bookTypes.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                role="radio"
+                aria-checked={typeId === t.id}
+                aria-label={t.label}
+                aria-describedby={`type-hint-${t.id}`}
+                className={`${styles.styleCard} ${typeId === t.id ? styles.styleCardOn : ''}`}
+                onClick={() => {
+                  setTypeId(t.id);
+                  setTypeOptions({});
+                  setSourceIds([]);
+                }}
+              >
+                <span className={styles.styleCardName}>
+                  {t.label}
+                  {t.gates.adult ? ' · 18+' : ''}
+                </span>
+                <span id={`type-hint-${t.id}`} className={styles.styleCardHint}>
+                  {t.blurb}
+                </span>
+              </button>
+            ))}
+          </div>
+        </Labeled>
+        {blockedByAge ? (
+          <Banner tone="warning">
+            <Stack gap={2}>
+              <Text size="sm">
+                This kind of book is explicit and for adults only. Confirming also unlocks the app’s
+                other adult content.
+              </Text>
+              <Inline>
+                <Button onClick={() => void acknowledgeAdult()}>I’m 18 or older</Button>
+              </Inline>
+            </Stack>
+          </Banner>
+        ) : null}
+
         <div className={styles.commission}>
           {/* The form. */}
           <div className={styles.commissionForm}>
+            {options.map((option) => (
+              <Labeled key={option.id} label={option.label}>
+                <Stack gap={1}>
+                  {option.kind === 'choice' ? (
+                    <div
+                      className={styles.styleGallery}
+                      role="radiogroup"
+                      aria-label={option.label}
+                    >
+                      {(option.choices ?? []).map((c) => (
+                        <button
+                          key={c.value}
+                          type="button"
+                          role="radio"
+                          aria-checked={answered(option.id) === c.value}
+                          aria-label={c.label}
+                          className={`${styles.styleCard} ${
+                            answered(option.id) === c.value ? styles.styleCardOn : ''
+                          }`}
+                          onClick={() =>
+                            setTypeOptions((prev) => ({ ...prev, [option.id]: c.value }))
+                          }
+                        >
+                          <span className={styles.styleCardName}>{c.label}</span>
+                          {c.description ? (
+                            <span className={styles.styleCardHint}>{c.description}</span>
+                          ) : null}
+                        </button>
+                      ))}
+                    </div>
+                  ) : option.kind === 'person' ? (
+                    <Select
+                      value={answered(option.id)}
+                      aria-label={option.label}
+                      onChange={(e) =>
+                        setTypeOptions((prev) => ({ ...prev, [option.id]: e.target.value }))
+                      }
+                    >
+                      <option value="">Choose someone…</option>
+                      {people.map((person) => (
+                        <option key={person.id} value={person.id}>
+                          {person.displayName}
+                        </option>
+                      ))}
+                    </Select>
+                  ) : (
+                    <TextInput
+                      value={answered(option.id)}
+                      aria-label={option.label}
+                      {...(option.placeholder ? { placeholder: option.placeholder } : {})}
+                      onChange={(e) =>
+                        setTypeOptions((prev) => ({ ...prev, [option.id]: e.target.value }))
+                      }
+                    />
+                  )}
+                  {option.help ? (
+                    <Text size="sm" tone="secondary">
+                      {option.help}
+                    </Text>
+                  ) : null}
+                </Stack>
+              </Labeled>
+            ))}
+            {bookType?.sourceSelect === 'dream' ? (
+              <Labeled label="Which dreams">
+                <Stack gap={1}>
+                  <Text size="sm" tone="secondary">
+                    Pick the ones you want in this book, or leave them all unticked to draw on every
+                    dream you’ve recorded.
+                  </Text>
+                  <div className={styles.dreamPicker} role="group" aria-label="Which dreams">
+                    {dreams.map((d) => (
+                      <label key={d.id} className={styles.dreamPickerRow}>
+                        <input
+                          type="checkbox"
+                          checked={sourceIds.includes(d.id)}
+                          onChange={(e) =>
+                            setSourceIds((prev) =>
+                              e.target.checked ? [...prev, d.id] : prev.filter((id) => id !== d.id),
+                            )
+                          }
+                        />
+                        <Text size="sm">{d.title?.trim() || 'Untitled dream'}</Text>
+                      </label>
+                    ))}
+                  </div>
+                </Stack>
+              </Labeled>
+            ) : null}
             <Labeled label="Title (optional)">
               <Stack gap={1}>
                 <TextInput
@@ -562,7 +715,7 @@ function StorySetup({
           {/* The live preview rail. */}
           <aside className={styles.commissionPreview} aria-label="Preview">
             <div className={styles.previewCover} aria-hidden="true">
-              <span className={styles.previewCoverKicker}>A Biography</span>
+              <span className={styles.previewCoverKicker}>{bookType?.label ?? 'A Book'}</span>
               <span className={styles.previewCoverTitle}>{title.trim() || titleHint}</span>
               {personNameForPreview ? (
                 <span className={styles.previewCoverBy}>{personNameForPreview}</span>
@@ -586,8 +739,17 @@ function StorySetup({
               the app's largest single AI run — not just an outline. */}
           <Button
             variant="primary"
-            disabled={aiUnavailable}
-            onClick={() => onCreate(title.trim(), { voice, style, length, autoRefresh: true })}
+            disabled={aiUnavailable || blockedByAge || missing.length > 0}
+            onClick={() =>
+              onCreate(typeId, title.trim(), {
+                voice,
+                style,
+                length,
+                autoRefresh: true,
+                typeOptions: Object.fromEntries(options.map((o) => [o.id, answered(o.id)])),
+                sourceIds,
+              })
+            }
           >
             Write my book
           </Button>

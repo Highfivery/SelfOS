@@ -14954,6 +14954,70 @@ test('story (64): the consent center sets a pseudonym + warns before publishing 
   }
 });
 
+test('story (72): choose a kind of book — its own questions, and the 18+ gate (§3.2/§4.1)', async () => {
+  test.setTimeout(60_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Your Story' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+
+    // Every kind of book is offered, and picking one shows ITS questions — nothing else's.
+    await expect(w.getByRole('radio', { name: 'Biography' })).toBeVisible();
+    await w.getByRole('radio', { name: /^Memoir/ }).click();
+    await expect(w.getByRole('radio', { name: 'A period of time' })).toBeVisible();
+    await expect(w.getByRole('radio', { name: 'How explicit' })).toHaveCount(0);
+
+    // An adult type is gated on the shared 18+ acknowledgement, and the CTA stays disabled until it's given.
+    await w.getByRole('radio', { name: /^Erotica/ }).click();
+    await expect(w.getByRole('button', { name: 'Write my book' })).toBeDisabled();
+    await w.getByRole('button', { name: 'I’m 18 or older' }).click();
+    await expect(w.getByRole('radio', { name: 'Unfiltered' })).toBeVisible();
+    // 360px: a six-card picker plus the type's own questions must still scroll vertically only (§12).
+    await w.setViewportSize({ width: 360, height: 780 });
+    expect(
+      await w.evaluate(() => {
+        const bad: string[] = [];
+        document.querySelectorAll('*').forEach((el) => {
+          const ox = getComputedStyle(el).overflowX;
+          if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+            bad.push(`${el.tagName}.${el.className}`);
+          }
+        });
+        return bad;
+      }),
+    ).toEqual([]);
+    await w.setViewportSize({ width: 1280, height: 900 });
+
+    // Commission a memoir with its own answers; they persist on the book, per book.
+    await w.getByRole('radio', { name: /^Memoir/ }).click();
+    await w.getByRole('radio', { name: 'A thread I followed' }).click();
+    await w.getByRole('textbox', { name: 'Which one' }).fill('my mother’s illness');
+    await w.getByRole('textbox', { name: 'Title' }).fill('The Long Year');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'The Long Year', level: 1 })).toBeVisible();
+
+    await expect
+      .poll(async () => {
+        const books = await listBooks(fs, key, 'owner-1');
+        const book = books.find((b) => b.title === 'The Long Year');
+        return book ? `${book.type}:${book.config.typeOptions['bound']}` : '';
+      })
+      .toBe('memoir:thread');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('story (72): new material is a proposal you accept — the book never rewrites itself (§4.4)', async () => {
   test.setTimeout(60_000);
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });

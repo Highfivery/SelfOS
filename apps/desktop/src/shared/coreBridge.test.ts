@@ -8655,16 +8655,49 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
 
-    // The registry crosses via IPC (v1: the biography, with a default structure + style presets).
+    // The registry crosses via IPC, each type carrying what the picker needs — its gate and the questions
+    // it asks at commission (72 §4.1).
     const types = await bridge.storyBookTypes();
-    expect(types.map((t) => t.id)).toEqual(['biography']);
+    expect(types.map((t) => t.id)).toContain('biography');
+    expect(types.map((t) => t.id)).toContain('erotica');
     expect(types[0]?.structures.some((s) => s.isDefault)).toBe(true);
     expect(types[0]?.stylePresets.length).toBeGreaterThan(0);
+    expect(types.find((t) => t.id === 'biography')?.gates.adult).toBe(false);
+    expect(types.find((t) => t.id === 'erotica')?.gates.adult).toBe(true);
+    expect(types.find((t) => t.id === 'portrait')?.options.map((o) => o.id)).toEqual([
+      'subject',
+      'addressee',
+    ]);
+    expect(types.find((t) => t.id === 'dreamBook')?.sourceSelect).toBe('dream');
+
+    // The 18+ gate is host-side (§8.4): an adult type can't be started without the acknowledgement, whatever
+    // the picker showed.
+    expect(
+      await bridge.storyCreate({
+        type: 'erotica',
+        title: 'Nope',
+        config: {
+          voice: 'first',
+          style: 'warm',
+          length: 'concise',
+          autoRefresh: true,
+          typeOptions: {},
+          sourceIds: [],
+        },
+      }),
+    ).toBeNull();
 
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     expect(book?.status).toBe('outlining');
     const bookId = book!.id;
@@ -8700,7 +8733,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'cinematic', length: 'full', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'cinematic',
+        length: 'full',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const drafted = await bridge.storyGenerateFullDraft({ bookId });
@@ -8731,7 +8771,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: '',
-      config: { voice: 'third', style: 'warm', length: 'full', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'full',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const res = await bridge.storyGenerateFullDraft({ bookId: book!.id });
     expect(res.ok).toBe(true);
@@ -8756,7 +8803,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'X',
-      config: { voice: 'third', style: 'warm', length: 'full', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'full',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const res = await bridge.storyGenerateFullDraft({ bookId: book!.id });
     expect(res.ok).toBe(false);
@@ -8774,7 +8828,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: '',
-      config: { voice: 'third', style: 'cinematic', length: 'full', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'cinematic',
+        length: 'full',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     expect(book?.title).toBe('Your Story');
     expect(book?.titleAuto).toBe(true);
@@ -8803,7 +8864,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'X',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
 
@@ -8827,7 +8895,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -8862,7 +8937,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -8896,7 +8978,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -9093,7 +9182,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -9167,7 +9263,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -9218,7 +9321,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -9255,7 +9365,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -9297,7 +9414,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -9342,7 +9466,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -9379,7 +9510,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'Quoted Book',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
 
@@ -9416,7 +9554,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'Cast Book',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const register = await bridge.storyCastRegister({ bookId: book!.id });
     expect(register.find((c) => c.name === 'Angel')).toMatchObject({ relationship: 'partner' });
@@ -9435,7 +9580,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'Continuity Book',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -9488,7 +9640,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'Consent Book',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const register = await bridge.storyConsent({ bookId });
@@ -9544,7 +9703,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -9566,7 +9732,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -9596,7 +9769,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -9658,7 +9838,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     await bridge.storyGenerateFoundations({ bookId });
@@ -9698,7 +9885,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Dated Book',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -9756,7 +9950,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -9845,7 +10046,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -9925,7 +10133,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -9968,7 +10183,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -10062,7 +10284,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -10135,7 +10364,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -10205,7 +10441,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -10248,7 +10491,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -10282,7 +10532,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -10315,7 +10572,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -10343,7 +10607,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -10395,7 +10666,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
 
@@ -10451,7 +10729,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });
@@ -10521,7 +10806,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const book = await bridge.storyCreate({
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
     });
     const bookId = book!.id;
     const gen = await bridge.storyGenerateFoundations({ bookId });

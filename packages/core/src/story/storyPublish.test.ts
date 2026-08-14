@@ -124,7 +124,14 @@ async function seedBook(fs: ReturnType<typeof memFileSystem>): Promise<string> {
     personId: 'author',
     type: 'biography',
     title: 'The Story of Ben',
-    config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    config: {
+      voice: 'third',
+      style: 'warm',
+      length: 'standard',
+      autoRefresh: true,
+      typeOptions: {},
+      sourceIds: [],
+    },
     now,
   });
   await applyFoundations(
@@ -153,7 +160,14 @@ describe('publishBook (64 §3.5)', () => {
       personId: 'author',
       type: 'biography',
       title: 'x',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
       now,
     });
     await applyFoundations(fs, key, 'author', book.id, { essence: 'x', outline, timeline }, now);
@@ -541,7 +555,14 @@ describe('readOwnBook — the owner reads their OWN book from the DRAFT head (§
       personId: 'author',
       type: 'biography',
       title: 'Half a Book',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
       now,
     });
     await applyFoundations(fs, key, 'author', book.id, { essence: 'x', outline, timeline }, now);

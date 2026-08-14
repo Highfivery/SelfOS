@@ -57,7 +57,14 @@ async function seedBook(fs: ReturnType<typeof memFileSystem>, events: TimelineEv
     personId: 'me',
     type: 'biography',
     title: 'The Story of Ben',
-    config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    config: {
+      voice: 'third',
+      style: 'warm',
+      length: 'standard',
+      autoRefresh: true,
+      typeOptions: {},
+      sourceIds: [],
+    },
     now,
   });
   const timeline: LifeTimeline = { schemaVersion: 1, events };
@@ -126,7 +133,14 @@ describe('the timeline studio (64 §16.2)', () => {
       personId: 'me',
       type: 'biography',
       title: 'Unwritten',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
       now,
     });
     // No foundations pass yet → no timeline file at all.

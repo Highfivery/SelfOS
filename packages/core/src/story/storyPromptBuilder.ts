@@ -8,6 +8,7 @@ import type {
   OutlineChapter,
   StorySourceRef,
 } from '../schemas';
+import { resolveSpine, resolveTypeOptions } from './bookTypes';
 import type { BookInterviewFramework, BookSpine, BookType } from './bookTypes';
 import type { CorpusItem, StoryCorpus } from './storyCorpus';
 
@@ -42,6 +43,69 @@ function truthDirective(mode: BookType['truthMode']): string {
   return mode === 'fictionalized'
     ? 'TRUTH: this book is openly IMAGINED. You may invent events, scenes, dialogue and detail — that is what it is for. What you may NOT invent is the person: their character, their voice, what they actually feel and care about, and the real relationships they are in must all stay true to the material. Invent the story; never misrepresent the human being.'
     : 'TRUTH: this book is TRUE. Everything in it happened. Never invent an event, a line of dialogue, a date or a sensory detail to fill a gap — write around the silence, or leave it as a silence.';
+}
+
+/**
+ * What THIS book's commission answers mean for the prose (72 §4.1). Without this the answers would be stored
+ * and never read — the person picks "written to them" and gets a book about them.
+ *
+ * Each type interprets its own option ids; anything unrecognised is skipped rather than guessed at.
+ */
+function optionDirectives(bookType: BookType, options: Record<string, string>): string[] {
+  const out: string[] = [];
+  const opt = (id: string): string => options[id] ?? '';
+
+  if (opt('addressee') === 'toThem') {
+    out.push(
+      'ADDRESSEE: this book is written TO its subject, in the second person — "you". Address them throughout. They are the reader.',
+    );
+  } else if (opt('addressee') === 'aboutThem') {
+    out.push(
+      'ADDRESSEE: this book is written ABOUT its subject, not to them. Never address them as "you".',
+    );
+  }
+
+  if (opt('bound') === 'thread' && opt('boundValue')) {
+    out.push(
+      `THE THREAD: this book follows one thread — ${opt('boundValue')} — wherever in time it goes. Chapters are held together by that thread, not by chronology; do not pad it out into a whole life.`,
+    );
+  } else if (opt('boundValue')) {
+    out.push(
+      `THE PERIOD: this book covers ${opt('boundValue')}. Everything outside it is context, never a chapter.`,
+    );
+  }
+
+  if (opt('year')) {
+    out.push(
+      `THE YEAR: this book covers ${opt('year')} only. Do not sum the year up or draw a lesson from it — it is too close for that.`,
+    );
+  }
+
+  if (opt('shape') === 'woven') {
+    out.push(
+      'SHAPE: weave the dreams into one continuous story through their recurring figures and places — but never invent a plot that connects dreams which share nothing.',
+    );
+  } else if (opt('shape') === 'motifs') {
+    out.push(
+      'SHAPE: group the dreams by what actually recurs across them — a place, a figure, a fear — and name the parts for those things.',
+    );
+  }
+
+  // The explicit register, per book (owner decision, 2026-08-13). It mirrors the questionnaire tiers the
+  // person already set their expectations by, and it GOVERNS the style preset: a warm or literary register
+  // must not dilute it back into the tasteful version.
+  if (opt('tier') === 'unfiltered') {
+    out.push(
+      'REGISTER: write this at its most explicit. Frank, specific, graphic sexual writing from the first page — name acts and bodies plainly. This GOVERNS the style and tone directives above: never soften it into the tasteful, fade-to-black, or merely sensual version. The boundary in your doctrine still holds absolutely.',
+    );
+  } else if (opt('tier') === 'explicit') {
+    out.push(
+      'REGISTER: write this explicitly — real sexual detail, plainly named, a step back from the most graphic register. This GOVERNS the style and tone directives above: do not dilute it into the merely suggestive. The boundary in your doctrine still holds absolutely.',
+    );
+  }
+
+  void bookType;
+  return out;
 }
 
 function lengthDirective(length: BookConfig['length']): string {
@@ -84,6 +148,9 @@ export function buildBiographerSystem(
     voiceDirective(config.voice, name),
     styleDirective(config.style, bookType),
     lengthDirective(config.length),
+    // AFTER the style directives, because a per-book answer (the explicit register especially) has to be
+    // able to govern them — the tier-swamped-by-warmth failure from 08 §24.9.
+    ...optionDirectives(bookType, resolveTypeOptions(bookType, config.typeOptions)),
     ...(corpusBlock && corpusBlock.trim().length > 0 ? [corpusBlock] : []),
   ]
     .filter((part) => part.trim().length > 0)
@@ -484,8 +551,13 @@ export function buildAnswerAuthorMessage(opts: {
  * OUTLINE (parts + chapters, each with a one–two sentence brief). Structural JSON only — no prose chapters
  * yet. Ids/order are minted server-side (never trusted from the model).
  */
-export function buildFoundationsUserMessage(corpus: StoryCorpus, bookType: BookType): string {
+export function buildFoundationsUserMessage(
+  corpus: StoryCorpus,
+  bookType: BookType,
+  config?: Pick<BookConfig, 'typeOptions'>,
+): string {
   const framework = bookType.interview;
+  const typeOptions = config?.typeOptions ?? {};
   return [
     `You are about to plan a ${bookType.label.toLowerCase()} of ${corpus.personName || 'this person'}.`,
     'First, READ everything below. Let the themes and the through-line emerge from the material before you shape anything (do not impose a template).',
@@ -498,7 +570,7 @@ export function buildFoundationsUserMessage(corpus: StoryCorpus, bookType: BookT
     '- "timeline": an array of the key dated moments you can anchor, each { "label": string, "date"?: "YYYY" or "YYYY-MM-DD", "approx"?: a fuzzy label like "mid-90s" when no date is known }. Include only moments the material supports.',
     '- "outline": { "parts": [ { "title": string, "chapters": [ { "title": an evocative chapter title (not a bare number), "brief": 1–2 sentences on what this chapter is about and the one scene it turns on, "eraFrom"?: "YYYY", "eraTo"?: "YYYY", "lifeAreas"?: string[] } ] } ] }.',
     '',
-    spineDirective(bookType.spine, framework),
+    spineDirective(resolveSpine(bookType, typeOptions), framework),
     'Propose only chapters the material can actually support; where one would be thin, make it broader or leave it for later.',
     'Return ONLY the JSON object — no prose, no markdown fences.',
   ].join('\n');

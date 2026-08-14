@@ -135,7 +135,7 @@ export async function generateFoundations(
     await buildStoryCorpus(deps.fs, deps.key, deps.personId, opts.bookId, opts.exclusions ?? []),
   );
   const system = buildBiographerSystem(opts.bookType, opts.config, corpus.personName);
-  const user = buildFoundationsUserMessage(corpus, opts.bookType);
+  const user = buildFoundationsUserMessage(corpus, opts.bookType, opts.config);
 
   const result = await runClaude(deps, system, user, 'story.outline', FOUNDATIONS_MAX_TOKENS);
   if (!result.ok) return { ok: false, reason: result.reason, message: result.message };

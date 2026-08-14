@@ -100,7 +100,14 @@ async function seedBook(
     personId: 'me',
     type: 'biography',
     title: 'The Story of Ben',
-    config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+    config: {
+      voice: 'third',
+      style: 'warm',
+      length: 'standard',
+      autoRefresh: true,
+      typeOptions: {},
+      sourceIds: [],
+    },
     now,
   });
   await applyFoundations(fs, key, 'me', book.id, { essence: 'A life.', outline, timeline }, now);
@@ -220,7 +227,14 @@ describe('per-book cadence caps (72 §5.4)', () => {
       personId: 'me',
       type: 'biography',
       title: 'Another Book',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
       now,
     });
     await applyFoundations(fs, key, 'me', bookB.id, { essence: 'x', outline, timeline }, now);

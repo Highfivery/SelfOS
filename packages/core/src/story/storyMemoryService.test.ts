@@ -560,7 +560,14 @@ describe('listMemoryViews — the "wove into <chapter>" linkage (64 §14)', () =
       personId: 'me',
       type: 'biography',
       title: 'The Story of Ben',
-      config: { voice: 'third', style: 'warm', length: 'standard', autoRefresh: true },
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
       now,
     });
     await saveChapter(

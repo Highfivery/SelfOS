@@ -9,6 +9,7 @@ import {
   buildFoundationsUserMessage,
   buildRevisionUserMessage,
   renderCorpusForPrompt,
+  renderTaggedCorpus,
   tagCorpusItems,
 } from './storyPromptBuilder';
 
@@ -131,9 +132,8 @@ describe('buildChapterUserMessage', () => {
     expect(tagged[0]?.sourceRef.id).toBe('i1');
   });
 
-  it('embeds the brief + tagged corpus, marks the target chapter, and asks for [[SRC]] citations', () => {
-    const tagged = tagCorpusItems(corpus);
-    const msg = buildChapterUserMessage(corpus, tagged, {
+  it('embeds the brief, marks the target chapter, and asks for [[SRC]] citations', () => {
+    const msg = buildChapterUserMessage(corpus, {
       chapter: outline.parts[0]!.chapters[0]!,
       outline,
       essence: 'A quiet man.',
@@ -141,10 +141,26 @@ describe('buildChapterUserMessage', () => {
     expect(msg).toMatch(/WRITE THIS CHAPTER — "The Garage"/);
     expect(msg).toContain('He learns a machine obeys.'); // the brief
     expect(msg).toContain('▶'); // the target chapter is marked in the ToC
-    expect(msg).toContain('[s0]'); // the tagged source
-    expect(msg).toContain('He learned to sit with silence.'); // the source text
     expect(msg).toMatch(/\[\[SRC:sN,sN\]\]/); // the citation instruction
-    expect(msg).toMatch(/draw only on the source material/i);
+    expect(msg).toMatch(/draw only on it/i);
+    // The source material itself is NOT here — it rides the cached system prefix (72 §5.3), so the three or
+    // four passes over one chapter pay for it once instead of four times.
+    expect(msg).not.toContain('He learned to sit with silence.');
+    expect(msg).toMatch(/in your instructions above/i);
+  });
+
+  it('puts the tagged corpus in the SYSTEM prompt, where it can be cached across the craft passes', () => {
+    const tagged = tagCorpusItems(corpus);
+    const withCorpus = buildBiographerSystem(
+      BIOGRAPHY_BOOK_TYPE,
+      cfg(),
+      'Ben',
+      renderTaggedCorpus(corpus, tagged),
+    );
+    expect(withCorpus).toContain('[s0]');
+    expect(withCorpus).toContain('He learned to sit with silence.');
+    // Every other caller passes nothing and is byte-unchanged.
+    expect(buildBiographerSystem(BIOGRAPHY_BOOK_TYPE, cfg(), 'Ben')).not.toContain('[s0]');
   });
 });
 

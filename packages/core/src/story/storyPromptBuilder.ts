@@ -51,6 +51,18 @@ export function buildBiographerSystem(
   bookType: BookType,
   config: BookConfig,
   subjectName: string,
+  /**
+   * The tagged source material, when the caller wants it in the SYSTEM prompt rather than the user message
+   * (72 §5.3). This is a cost decision, not a wording one: `cache_control` sits on the system prefix, so
+   * material placed here is written to the cache once and read at ~0.1× by every later pass of the same
+   * chapter. The craft loop makes three or four passes over an identical corpus slice, so the same ~40k
+   * tokens were being paid for in full three or four times over.
+   *
+   * Only the craft loop passes it. Every other caller (foundations, the markup revision, answer-the-author,
+   * continuity, line-edit, the manuscript read) is a single call with nothing to reuse, so their prompts are
+   * byte-unchanged.
+   */
+  corpusBlock?: string,
 ): string {
   const name = subjectName.trim() || 'the subject';
   return [
@@ -59,6 +71,7 @@ export function buildBiographerSystem(
     voiceDirective(config.voice, name),
     styleDirective(config.style, bookType),
     lengthDirective(config.length),
+    ...(corpusBlock && corpusBlock.trim().length > 0 ? [corpusBlock] : []),
   ]
     .filter((part) => part.trim().length > 0)
     .join('\n\n');
@@ -98,7 +111,7 @@ export function tagCorpusItems(corpus: StoryCorpus): TaggedCorpusItem[] {
 
 /** Render the tagged corpus for a chapter prompt: profile first, then each source line prefixed with its
  *  `[sN]` tag so the model can cite it. */
-function renderTaggedCorpus(corpus: StoryCorpus, tagged: TaggedCorpusItem[]): string {
+export function renderTaggedCorpus(corpus: StoryCorpus, tagged: TaggedCorpusItem[]): string {
   const lines: string[] = [];
   if (corpus.profile.length > 0) {
     lines.push('WHO THEY ARE (profile):');
@@ -122,7 +135,6 @@ function renderTaggedCorpus(corpus: StoryCorpus, tagged: TaggedCorpusItem[]): st
  */
 export function buildChapterUserMessage(
   corpus: StoryCorpus,
-  tagged: TaggedCorpusItem[],
   opts: {
     chapter: OutlineChapter;
     outline: BookOutline;
@@ -164,7 +176,7 @@ export function buildChapterUserMessage(
   }
   parts.push(
     '',
-    renderTaggedCorpus(corpus, tagged),
+    POINTER_TO_SOURCES,
     '',
     'Write the chapter as Markdown prose (short paragraphs; you may use *italics*; no headings, no lists, no tables). Open on a rendered scene, not a summary. Draw ONLY on the source material above — if a detail you need is missing, write around it rather than inventing it.',
     'At the END of each paragraph, cite the [sN] sources you drew on for it as `[[SRC:sN,sN]]` (use the exact tags above; omit the marker for a paragraph that draws on nothing specific). Do not cite sources you did not use.',
@@ -172,6 +184,11 @@ export function buildChapterUserMessage(
   );
   return parts.join('\n');
 }
+
+/** The craft loop's four passes read their source material from the SYSTEM prompt, where it can be cached
+ *  across the passes (see `buildBiographerSystem`). The user message points at it rather than repeating it. */
+const POINTER_TO_SOURCES =
+  'The SOURCE MATERIAL you may draw on — each line tagged [sN] — is in your instructions above. Draw ONLY on it; if a detail you need is missing, write around it rather than inventing it.';
 
 // --- The craft loop: plan → draft → critique → revise (72 §5.3) ------------------------------------------
 
@@ -196,7 +213,6 @@ export interface ChapterPlan {
  */
 export function buildChapterPlanMessage(
   corpus: StoryCorpus,
-  tagged: TaggedCorpusItem[],
   opts: { chapter: OutlineChapter; outline: BookOutline; essence?: string },
 ): string {
   const { chapter, outline, essence } = opts;
@@ -216,7 +232,7 @@ export function buildChapterPlanMessage(
     'THE OTHER CHAPTERS (what belongs to them, not to this one):',
     neighbours || '  (none — this is the only chapter)',
     '',
-    renderTaggedCorpus(corpus, tagged),
+    POINTER_TO_SOURCES,
     '',
     'Return ONE JSON object with exactly these keys:',
     '- "thread": one sentence naming the single thing this chapter is about — the through-line every scene serves. Not a topic ("his childhood"); a claim about a person ("he learned that being useful was how you got to stay").',
@@ -262,7 +278,6 @@ export interface CritiqueFinding {
  */
 export function buildCritiqueMessage(
   corpus: StoryCorpus,
-  tagged: TaggedCorpusItem[],
   opts: { chapter: OutlineChapter; markdown: string; plan?: ChapterPlan },
 ): string {
   const { chapter, markdown, plan } = opts;
@@ -273,7 +288,7 @@ export function buildCritiqueMessage(
     `THE DRAFT — "${chapter.title}":`,
     markdown.trim(),
     '',
-    renderTaggedCorpus(corpus, tagged),
+    POINTER_TO_SOURCES,
     '',
     'Judge it against these, in this order of seriousness:',
     '1. metaNarration — ANY sentence that refers to the record, the material, the sources, the biographer, "this chapter", "this book", or what is or is not known. This is the worst defect: the reader must never be able to tell that a corpus or a writer was involved. A gap must read as a fact about a PERSON ("he never explained why"), never about your sources ("the record doesn\'t say").',
@@ -296,7 +311,6 @@ export function buildCritiqueMessage(
  */
 export function buildReviseMessage(
   corpus: StoryCorpus,
-  tagged: TaggedCorpusItem[],
   opts: {
     chapter: OutlineChapter;
     markdown: string;
@@ -323,10 +337,10 @@ export function buildReviseMessage(
   }
   parts.push(
     '',
-    renderTaggedCorpus(corpus, tagged),
+    POINTER_TO_SOURCES,
     '',
     'Return the FULL revised chapter as Markdown prose (short paragraphs; *italics* allowed; no headings, lists, or tables).',
-    'At the END of each paragraph, cite the [sN] sources you drew on as `[[SRC:sN,sN]]` (exact tags above; omit for a paragraph that draws on nothing specific).',
+    'At the END of each paragraph, cite the [sN] sources you drew on as `[[SRC:sN,sN]]` (exact tags; omit for a paragraph that draws on nothing specific).',
     'Return ONLY the chapter prose with its inline [[SRC:…]] markers — no title heading, no preamble, no note about what you changed.',
   );
   return parts.join('\n');

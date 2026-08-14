@@ -417,10 +417,24 @@ export function pruneTopicMap(
   // Support = how many questions ended up under each name once merges are applied.
   const support = new Map<string, number>();
   for (const e of entries) for (const id of e.topicIds) support.set(id, (support.get(id) ?? 0) + 1);
-  const survivors = kept.filter(
-    (t) =>
-      t.seeded || protectedIds.has(t.topicId) || (support.get(t.topicId) ?? 0) >= MIN_TOPIC_SUPPORT,
-  );
+  // Support gates a name that has BEEN ASKED under. It must not gate one that has never been asked at all:
+  // zero asks is not evidence of noise, it is evidence of not-yet-used.
+  //
+  // The rule's premise ("a name has to be arrived at independently more than once") predates the PLANNER,
+  // which names ground BEFORE anything is asked about it — so planner-named ground is born at zero support and
+  // the >= 2 test deletes it. Measured on a real vault: a re-tag would have dropped 25 of one person's 36 open
+  // emergent areas, including the five generation was drawing on that day, leaving her with almost nothing
+  // open. The noise this rule exists to kill looks different: it came from the per-question classifier, so
+  // each of those names carried exactly ONE ask. Gating on `askedCount >= 1` separates them cleanly.
+  //
+  // Honest trade: a name orphaned by an EARLIER pass also has zero asks, so it survives too. Without a
+  // `createdAt` on `Topic` there is nothing to tell it apart from ground planned five minutes ago, and on real
+  // data the zero-ask population is deliberate ground ("Aftercare", "Grief over estrangement"), not debris.
+  const survivors = kept.filter((t) => {
+    if (t.seeded || protectedIds.has(t.topicId)) return true;
+    const asked = support.get(t.topicId) ?? 0;
+    return asked === 0 || asked >= MIN_TOPIC_SUPPORT;
+  });
   const surviving = new Set(survivors.map((t) => t.topicId));
   // Strip dropped names from the ledger. Their family tag remains, so the ask still counts toward
   // saturation and de-dup — only the map row goes away.

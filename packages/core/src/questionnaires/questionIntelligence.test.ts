@@ -329,24 +329,43 @@ describe('topicMap', () => {
 // ── Type + tier scoping ───────────────────────────────────────────────────────────────────────────────
 
 describe('topic-map hygiene (spec 71 §5.9)', () => {
-  it('drops emergent topics nothing references, and never drops a seeded family', () => {
-    // Re-tagging orphans the names an earlier pass invented: they stay in the map, referenced by nothing.
-    // A real map reached 341 topics for 277 questions this way, 11 of them with zero references.
-    const { topics } = mintTopics(seedTopics(), [
-      { label: 'What felt different' },
-      { label: 'Who initiates' },
-    ]);
-    const live = topics.find((t) => t.label === 'Who initiates')!;
+  it('drops a name carried by ONE ask, and never drops a seeded family', () => {
+    // The noise this exists to kill came from the per-question classifier — one question, one name — so each
+    // of those names carries exactly one ask. A real map reached 341 topics for 277 questions that way.
+    const { topics } = mintTopics(seedTopics(), [{ label: 'What felt different' }]);
+    const oneAsk = topics.find((t) => t.label === 'What felt different')!;
     const ledger = {
       ...emptyLedger('p'),
-      entries: [entry({ questionId: 'q1', topicIds: [live.topicId] })],
+      entries: [entry({ questionId: 'q1', topicIds: [oneAsk.topicId] })],
     };
     const gc = pruneTopicMap(topics, ledger);
-    // One ask is not enough support for a name to be real ground — both go, and the family tag carries them.
     expect(gc.topics.some((t) => t.label === 'What felt different')).toBe(false);
-    expect(gc.dropped).toBe(2);
+    expect(gc.dropped).toBe(1);
     // Seeded families survive at zero asks — they are the roll-up vocabulary.
     expect(gc.topics.filter((t) => t.seeded)).toHaveLength(seedTopics().length);
+  });
+
+  it('KEEPS ground the planner named but nothing has been asked about yet (zero asks ≠ noise)', () => {
+    // The regression this pins, measured on a real vault: a re-tag would have deleted 25 of one person's 36
+    // open emergent areas — including the five generation was drawing on that day ("Script vs improvise",
+    // "Aftercare", …) — because the planner names ground BEFORE asking about it, so it is born at zero
+    // support and the >= 2 support test swept it away. Zero asks is a backlog item, not debris.
+    const { topics } = mintTopics(seedTopics(), [
+      { label: 'Aftercare' }, // planned, never asked
+      { label: 'What felt different' }, // classifier noise: one ask, never recurs
+    ]);
+    const planned = topics.find((t) => t.label === 'Aftercare')!;
+    const noise = topics.find((t) => t.label === 'What felt different')!;
+    const ledger = {
+      ...emptyLedger('p'),
+      entries: [entry({ questionId: 'q1', topicIds: [noise.topicId] })],
+    };
+    const gc = pruneTopicMap(topics, ledger);
+    // The planner's ground survives to be asked about…
+    expect(gc.topics.some((t) => t.topicId === planned.topicId)).toBe(true);
+    // …while the one-ask name still goes, so this is a narrowing, not an abolition.
+    expect(gc.topics.some((t) => t.topicId === noise.topicId)).toBe(false);
+    expect(gc.dropped).toBe(1);
   });
 
   it('folds duplicates two passes coined independently, keeping the counts', () => {
@@ -1041,10 +1060,13 @@ describe('closure inheritance — emergent ground is born OPEN (71 §5.3)', () =
 });
 
 describe('pruneTopicMap — adopted ground survives (71 §5.9)', () => {
-  it('keeps a protected zero-ask topic that pruning would otherwise delete', () => {
-    // Ground adopted from the legacy coverage rows has no asks of its own yet. Pruning drops a non-seeded
-    // topic below MIN_TOPIC_SUPPORT, so without protection the very next re-tag deletes it and the panel goes
-    // back to rendering a bare row -- the bug the adoption exists to fix, returning silently.
+  it('keeps protected ground that pruning would otherwise delete', () => {
+    // Ground adopted from the legacy coverage rows must survive a re-tag, or the panel goes back to rendering
+    // a bare row -- the bug the adoption exists to fix, returning silently.
+    //
+    // Since 2026-08-14 a ZERO-ask topic survives on its own (never-asked is a backlog item, not noise), so the
+    // discriminating case for `protectedIds` is adopted ground that HAS been asked about once: without
+    // protection one ask is below the support threshold and it goes.
     const adopted: Topic = {
       topicId: 'Relationships:friendships',
       label: 'Friendships & loneliness',
@@ -1052,12 +1074,21 @@ describe('pruneTopicMap — adopted ground survives (71 §5.9)', () => {
       seeded: false,
       aliases: [],
     };
-    const ledger = { ...emptyLedger('p1'), backfilledAt: new Date().toISOString(), entries: [] };
+    const ledger = {
+      ...emptyLedger('p1'),
+      backfilledAt: new Date().toISOString(),
+      entries: [entry({ questionId: 'q1', topicIds: [adopted.topicId] })],
+    };
     expect(pruneTopicMap([adopted], ledger).topics.map((t) => t.topicId)).not.toContain(
       adopted.topicId,
     );
     expect(
       pruneTopicMap([adopted], ledger, new Set([adopted.topicId])).topics.map((t) => t.topicId),
     ).toContain(adopted.topicId);
+    // …and with no asks at all it survives either way, which is the 2026-08-14 fix.
+    const unasked = { ...emptyLedger('p1'), backfilledAt: new Date().toISOString(), entries: [] };
+    expect(pruneTopicMap([adopted], unasked).topics.map((t) => t.topicId)).toContain(
+      adopted.topicId,
+    );
   });
 });

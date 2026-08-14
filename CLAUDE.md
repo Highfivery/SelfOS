@@ -498,6 +498,23 @@ A running log of durable decisions and feedback captured into the project config
   commit on the SHARED tree (and merged as #408) — the guard was extracted into a `git worktree` off
   origin/main, which is the only safe way to work while another session holds the checkout.**
 
+- 2026-08-14 — **Fix (topic-map pruning deleted the ground the planner had just named; SPEC 71 §5.9; on
+  `fix/prune-keeps-unasked-ground`).** Found by investigating the post-saturation steady state, not from a
+  report. `MIN_TOPIC_SUPPORT` gates an emergent name on how many ASKS sit under it — a premise older than the
+  planner, which names ground BEFORE asking about it, so planner-named ground is born at zero support and the
+  next re-tag deletes it. Pruning only runs on a `TAGGING_VERSION` bump, so nothing was live-broken; it was a
+  landmine on a routine dev action. **Measured against the real vault:** a bump would have deleted **25 of
+  Angel's 36 open emergent areas**, including the five generation was drawing on that day, leaving her with
+  almost nothing open. **My expected fix was wrong and measuring killed it** — "protect topics with a blurb"
+  is useless when 87/87 emergent topics have one. The real discriminator is inverted from the rule: the noise
+  it targets came from the per-question classifier and carries exactly ONE ask; live planned ground carries
+  ZERO. Pruning now keeps zero-ask topics and still drops one-ask ones. Re-measured: Angel 0 of 36 lost (was
+  25), Ben 6 dropped instead of 11. Gate green: typecheck (4 pkgs), lint, format, **2000 core + 1560 desktop +
+  13 relay** unit. Both guards verified to FAIL when reverted; the #440 adoption guard rewritten around a
+  one-ask fixture since its zero-ask half IS the fix now. **Lesson: a support threshold measures the PAST, so
+  it silently deletes anything the system creates AHEAD of that evidence — when a rule counts evidence, check
+  what gets created before the evidence exists. And "the obvious discriminator" (a blurb) was 100% present on
+  both populations; one measurement killed a fix I would otherwise have shipped.**
 - 2026-08-13 — **Fix (an intimacy EMAIL could nudge toward ground already exhausted; SPEC 71 §5.3; on
   `fix/email-open-ground-required`).** A defect I INTRODUCED in the change below, found while going to write
   its E2E. The email caller omitted `openGround` when nothing was open and the consumer fell back to the seeded

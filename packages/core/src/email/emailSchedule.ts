@@ -348,6 +348,11 @@ async function cancelScheduled(
 /** How far ahead an AI suggestion is scheduled (67 §3.4) — a gentle delay so it reaches a closed app. */
 const SUGGESTION_SCHEDULE_HOURS = 20;
 /** The tappable options an embedded email check-in offers (67 §3.5). */
+/**
+ * Fallback options for a check-in whose model reply carried none. Only ever used for a body the model was
+ * asked to phrase as a yes/somewhat/no check-in — NEVER stapled onto an arbitrary question, which is the
+ * #459 defect: options must be plausible answers to the exact prompt (08 §32.8).
+ */
 const CHECKIN_OPTIONS = ['Yes', 'Somewhat', 'Not really'];
 
 /**
@@ -477,9 +482,18 @@ async function trySuggestion(ctx: {
   let reactions: { label: string; url: string }[] = [];
   let tuning: { label: string; url: string }[] = [];
 
-  if (suggestion.suggestionType === 'check-in' && ctx.relay && endpoint) {
+  // A suggestion whose body ASKS something is delivered as a real one-question check-in with options that
+  // answer it — not with engagement reactions. Reported (#459): a question arrived with "I'm game / Maybe
+  // later / Not for me", which reads as "do you want to answer this?" and answers nothing.
+  const answerable = suggestion.options.length >= 2;
+  const asksSomething =
+    suggestion.suggestionType === 'check-in' ||
+    (suggestion.suggestionType === 'question-to-sit-with' && answerable);
+  if (asksSomething && ctx.relay && endpoint) {
     // Deliver a real self auto check-in: a one-question assignment whose tappable options drain back (§3.5).
     const questionId = uuid();
+    // The model's own answers to its own question; the fixed set only backstops a plain check-in.
+    const answerOptions = answerable ? suggestion.options : CHECKIN_OPTIONS;
     const draft: QuestionnaireInput = {
       title: suggestion.headline,
       type: 'general',
@@ -491,7 +505,7 @@ async function trySuggestion(ctx: {
           type: 'singleChoice',
           prompt: suggestion.body,
           required: false,
-          options: CHECKIN_OPTIONS,
+          options: answerOptions,
         },
       ],
     };
@@ -505,7 +519,7 @@ async function trySuggestion(ctx: {
         privacy: 'standard',
         senderVisibleToRecipient: true,
       });
-      for (const option of CHECKIN_OPTIONS) {
+      for (const option of answerOptions) {
         const tap = await mintTap('checkin-answer', option, option, {
           questionId,
           assignmentId: assignment.id,

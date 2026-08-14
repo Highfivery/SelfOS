@@ -359,3 +359,74 @@ describe('generateSuggestion — shared steering (spec 69 P4: email joins the on
     expect(seen()).not.toContain('WHERE THIS PERSON');
   });
 });
+
+describe('emailed questions carry answers, not reactions (#459)', () => {
+  it('keeps options that answer the question, and drops a set that cannot', async () => {
+    // Reported: an emailed question arrived with "I'm game / Maybe later / Not for me", which reads as
+    // "do you want to answer this?" and answers nothing. Options must answer the exact prompt (08 §32.8) —
+    // the rule already enforced for in-app generation, which the email surface bypassed entirely.
+    const fs = memFileSystem();
+    const good = await generateSuggestion(
+      deps(
+        fs,
+        clientReturning(
+          '{"headline":"A question","body":"What would make this week feel different?",' +
+            '"options":["More time alone","Fewer obligations","Something to look forward to","Not sure yet"]}',
+        ),
+      ),
+      {
+        openGround: [],
+        family: 'ai-suggestion',
+        signals: { ...emptySignals, observation: 'You have been reflecting on rest.' },
+        avoid: { texts: [], subjects: new Set() },
+      },
+    );
+    expect(good?.suggestion.options).toEqual([
+      'More time alone',
+      'Fewer obligations',
+      'Something to look forward to',
+      'Not sure yet',
+    ]);
+
+    // An unusable set (blank + a case-insensitive duplicate leaves one real option) degrades to NO buttons.
+    // Better an email that links into the app than buttons that cannot answer the question.
+    const bad = await generateSuggestion(
+      deps(
+        fs,
+        clientReturning(
+          '{"headline":"Another","body":"What is on your mind?","options":["Rest","  ","REST"]}',
+        ),
+      ),
+      {
+        openGround: [],
+        family: 'ai-suggestion',
+        signals: { ...emptySignals, observation: 'Something new entirely to avoid the de-dup.' },
+        avoid: { texts: [], subjects: new Set() },
+      },
+    );
+    expect(bad?.suggestion.options).toEqual([]);
+  });
+
+  it('tells the model the options are ANSWERS, never engagement reactions', async () => {
+    // A prompt rule with no assertion silently rots — and this is the exact wording the defect came from.
+    const fs = memFileSystem();
+    let system = '';
+    const base = clientReturning('{"headline":"h","body":"b","options":[]}');
+    const client: ClaudeClient = {
+      ...base,
+      stream: (o, onDelta) => {
+        system = o.system ?? '';
+        return base.stream(o, onDelta);
+      },
+    };
+    await generateSuggestion(deps(fs, client), {
+      openGround: [],
+      family: 'ai-suggestion',
+      signals: { ...emptySignals, observation: 'Fresh ground.' },
+      avoid: { texts: [], subjects: new Set() },
+    });
+    expect(system).toMatch(/must be 2–5 short answers to THAT question/);
+    expect(system).toMatch(/They are answers, NOT reactions/);
+    expect(system).toMatch(/I'm game/);
+  });
+});

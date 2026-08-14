@@ -25,7 +25,7 @@ import { computeStreak } from '../home/streak';
 import { computeLifeRings } from '../home/rings';
 import { generateRelayToken } from '../relay';
 import { uuid } from '../id';
-import { saveQuestionnaire } from '../questionnaires/questionnaireService';
+import { saveQuestionnaire, validateQuestionnaire } from '../questionnaires/questionnaireService';
 import { createAssignment } from '../questionnaires/assignmentService';
 import type { AiDeps } from '../questionnaires/aiCall';
 import type { QuestionnaireInput } from '../schemas';
@@ -510,6 +510,12 @@ async function trySuggestion(ctx: {
       ],
     };
     try {
+      // Defense in depth at the PRODUCER (#459). The options are already validated upstream by
+      // `normalizeOptions` in the suggestion service, but this was the one questionnaire producer that ran no
+      // validator of its own — every other (`autoCheckins`, `dreams`, `story`, the bridge) goes through
+      // `generateQuestions`, which validates. A malformed draft is dropped rather than emailed as buttons
+      // that cannot answer the question.
+      if (validateQuestionnaire(draft).length > 0) throw new Error('invalid check-in draft');
       const questionnaire = await saveQuestionnaire(fs, key, draft, personId);
       const assignment = await createAssignment(fs, key, {
         questionnaireId: questionnaire.id,

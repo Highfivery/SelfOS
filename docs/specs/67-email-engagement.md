@@ -1076,5 +1076,22 @@ prefs.enc`, fail-closed, unsubscribe token minted once, intimacy opt-in coerced 
   `config/*.enc` + device-override-resolver precedent; per-person `EmailPrefs`; an owner-only
   Email-activity view (Owner full-access, member copy never implies watching). Implementation phased
   (§5.6). Decisions from the owner are encoded; §11 lists the genuine remaining forks.
+- 2026-08-14 — **Fix: an emailed QUESTION carries answers, not engagement reactions (#459).** Reported: a
+  coaching email posed a question and offered "I'm game / Maybe later / Not for me"; those read as "do you
+  want to answer this?", and tapping one recorded a reaction. Two defects. `EmailSuggestionType` includes
+  `question-to-sit-with` — a suggestion whose body IS a question — but only `check-in` took the path that
+  mints real answer options; everything else fell through to generic engagement taps. And even that path
+  stapled a FIXED set (Yes / Somewhat / Not really) onto an arbitrary AI-written body, which is the 08 §32.8
+  defect (options must be plausible answers to the exact prompt) on a surface that ran NO validator.
+  **The enumeration that should have caught it:** of the five questionnaire producers (`coreBridge`,
+  `autoCheckins`, `dreams`, `story`, `email`), four route through `generateQuestions`, which validates;
+  `emailSchedule` alone had zero calls to `normalizeOptions` / `questionShapeProblems` /
+  `validateQuestionnaire`. The §32.10 audit swept "the questionnaire flow" by intuition instead of
+  enumerating producers, so the one AI-written question nobody reviews before it reaches a person was the one
+  surface never checked. Fixed: the model returns `options` answering its own question, validated by the SAME
+  `normalizeOptions` as in-app generation; a question-shaped suggestion is delivered as a real one-question
+  check-in using them; an unusable set degrades to NO buttons rather than buttons that cannot answer; and the
+  producer now validates its own draft. Guards pin all three, the validator guard verified to FAIL on revert.
+
 - 2026-08-06 — reviewed with the owner; separate engagement address, Resend-poll open tracking, activity
   view as a Settings subsection, remaining questions resolved; **Approved.**

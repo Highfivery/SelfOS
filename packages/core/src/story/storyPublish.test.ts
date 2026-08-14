@@ -217,7 +217,6 @@ describe('publishBook (64 §3.5)', () => {
     await setConsentEntry(fs, key, 'author', {
       bookId,
       name: 'Angel',
-      consent: 'declined',
       pseudonym: 'A.',
       now,
     });
@@ -344,7 +343,6 @@ describe('publish lifecycle: diff + unpublish (64 §18.2, #300)', () => {
     await setConsentEntry(fs, key, 'author', {
       bookId,
       name: 'Angel',
-      consent: 'declined',
       pseudonym: 'A.',
       now,
     });

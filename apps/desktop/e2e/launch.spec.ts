@@ -83,7 +83,7 @@ import {
   getMarkup,
   getOutline,
   getQuotes,
-  getTimeline,
+  readBookTimeline,
   listBooks,
   getNewMaterial,
   listChapters,
@@ -14496,19 +14496,19 @@ test('story (64): the timeline is editable, and a corrected date reaches the bio
     await when.blur();
     const bookId = (await listBooks(fs, key, 'owner-1'))[0]!.id;
     await expect
-      .poll(async () => (await getTimeline(fs, key, 'owner-1', bookId))?.events[0]?.date)
+      .poll(async () => (await readBookTimeline(fs, key, 'owner-1', bookId)).events[0]?.date)
       .toBe('1987');
     // Stamped as theirs — that flag is what stops a later pass reverting it.
-    expect((await getTimeline(fs, key, 'owner-1', bookId))?.events[0]?.userEdited).toBe(true);
+    expect((await readBookTimeline(fs, key, 'owner-1', bookId)).events[0]?.userEdited).toBe(true);
 
     await w.getByLabel('What happened', { exact: true }).fill('We moved west');
     await w.getByLabel('When it happened', { exact: true }).fill('mid-90s');
-    await w.getByRole('button', { name: 'Add a moment' }).click();
+    await w.getByRole('button', { name: 'Add to your life' }).click();
     await expect
-      .poll(async () => (await getTimeline(fs, key, 'owner-1', bookId))?.events.length)
+      .poll(async () => (await readBookTimeline(fs, key, 'owner-1', bookId)).events.length)
       .toBe(2);
     // A fuzzy era is stored as `approx`, not a bogus `date`.
-    const moved = (await getTimeline(fs, key, 'owner-1', bookId))?.events.find(
+    const moved = (await readBookTimeline(fs, key, 'owner-1', bookId)).events.find(
       (e) => e.label === 'We moved west',
     );
     expect(moved?.approx).toBe('mid-90s');
@@ -14958,7 +14958,7 @@ test('books (72 §3.9): the People tab renames someone for the book, clearing th
 
     // Sharing tab: the warning names the person who'd appear under their real name.
     await w.getByRole('tab', { name: 'Sharing' }).click();
-    await expect(w.getByText(/Angel appears/)).toBeVisible();
+    await expect(w.getByText(/Your readers will see/)).toBeVisible();
 
     // People → give them a different name for the book (commits on blur).
     await w.getByRole('tab', { name: 'People' }).click();
@@ -14974,7 +14974,7 @@ test('books (72 §3.9): the People tab renames someone for the book, clearing th
       })
       .toBe('A.');
     await w.getByRole('tab', { name: 'Sharing' }).click();
-    await expect(w.getByText(/Angel appears/)).toBeHidden();
+    await expect(w.getByText(/Angel → A\./)).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -15338,6 +15338,51 @@ test('books (72 §3.5): the workspace is six tabs — timeline and people are th
     // 360px: six tabs must fit without a horizontal scroller (§12).
     await w.setViewportSize({ width: 360, height: 900 });
     await expectNoInnerOverflow(w);
+  } finally {
+    await app.close();
+  }
+});
+
+test('books (72 §3.8): a moment you fix in one book follows you into the next; a book-scoped one does not', async () => {
+  test.setTimeout(90_000);
+  const { userData } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Books' }).click();
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('First Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'First Book', level: 1 })).toBeVisible();
+
+    // One moment of the LIFE, one that belongs only to this book.
+    await w.getByRole('tab', { name: 'Timeline' }).click();
+    await w.getByRole('textbox', { name: 'When it happened' }).fill('2002');
+    await w.getByRole('textbox', { name: 'What happened' }).fill('Left home at sixteen');
+    await w.getByRole('button', { name: 'Add to your life' }).click();
+    await expect(w.locator('input[value="Left home at sixteen"]')).toBeVisible();
+
+    await w.getByRole('textbox', { name: 'When it happened' }).fill('2026');
+    await w.getByRole('textbox', { name: 'What happened' }).fill('The dragon arrives');
+    await w.getByRole('button', { name: 'Only this book' }).click();
+    await expect(w.locator('input[value="The dragon arrives"]')).toBeVisible();
+
+    // A second book, started from the shelf.
+    await w.getByRole('button', { name: '← All books' }).click();
+    await w.getByRole('button', { name: '+ New book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Second Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'Second Book', level: 1 })).toBeVisible();
+
+    // The life moment came with you. The one that belongs to the first book did not.
+    await w.getByRole('tab', { name: 'Timeline' }).click();
+    await expect(w.locator('input[value="Left home at sixteen"]')).toBeVisible();
+    await expect(w.locator('input[value="The dragon arrives"]')).toHaveCount(0);
   } finally {
     await app.close();
   }

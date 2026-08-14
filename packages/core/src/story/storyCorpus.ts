@@ -1,3 +1,4 @@
+import { readBookTimeline } from './personTimeline';
 import { listChallenges } from '../challenges';
 import { listConversations } from '../conversations/conversationService';
 import { listDreams } from '../dreams';
@@ -27,13 +28,7 @@ import {
   type StorySourceRef,
 } from '../schemas';
 import { getBookType } from './bookTypes';
-import {
-  getBook,
-  getPhotoAnswers,
-  getQuotes,
-  getStoryImageIndex,
-  getTimeline,
-} from './storyService';
+import { getBook, getPhotoAnswers, getQuotes, getStoryImageIndex } from './storyService';
 import { sortTimeline } from './storyTimeline';
 import { listMemories } from './storyMemoryService';
 
@@ -372,7 +367,7 @@ export async function buildStoryCorpus(
   //     biographer place a scene in the right year instead of inferring it; before this the timeline was
   //     generated, stored, shipped to the renderer and read by NOTHING.
   for (const event of sortTimeline(
-    (await safely(() => getTimeline(fs, key, personId, bookId), null))?.events ?? [],
+    (await safely(() => readBookTimeline(fs, key, personId, bookId), null))?.events ?? [],
   )) {
     const when = event.date?.trim() || event.approx?.trim();
     add({

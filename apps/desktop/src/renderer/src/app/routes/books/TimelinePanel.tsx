@@ -124,20 +124,50 @@ export function TimelinePanel({ bundle }: { bundle: StoryBookBundle }): JSX.Elem
             onChange={(e) => setLabel(e.currentTarget.value)}
           />
         </div>
+        {/* Which chronology it belongs to (72 §3.8). A moment added to your LIFE shows up in every book
+            that covers those years; one added to this book stays here — an invented event in a children's
+            book, or a beat that only matters to one story. */}
         <Button
           variant="ghost"
           disabled={busy || !label.trim()}
           onClick={async () => {
-            const ok = await run({ op: 'add', label, ...whenFields(when, { clear: false }) });
+            const ok = await run({
+              op: 'add',
+              label,
+              scope: 'life',
+              ...whenFields(when, { clear: false }),
+            });
             if (ok) {
               setLabel('');
               setWhen('');
             }
           }}
         >
-          Add a moment
+          Add to your life
+        </Button>
+        <Button
+          variant="ghost"
+          disabled={busy || !label.trim()}
+          onClick={async () => {
+            const ok = await run({
+              op: 'add',
+              label,
+              scope: 'book',
+              ...whenFields(when, { clear: false }),
+            });
+            if (ok) {
+              setLabel('');
+              setWhen('');
+            }
+          }}
+        >
+          Only this book
         </Button>
       </div>
+      <Text tone="tertiary" size="sm">
+        A moment added to <strong>your life</strong> appears in every book that covers those years.
+        One added to <strong>this book</strong> stays here.
+      </Text>
     </Stack>
   );
 }

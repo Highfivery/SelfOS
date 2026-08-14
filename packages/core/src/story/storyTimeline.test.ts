@@ -1,3 +1,4 @@
+import { readBookTimeline } from './personTimeline';
 import { describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
@@ -14,13 +15,7 @@ import {
   timelineLines,
   updateTimelineEvent,
 } from './storyTimeline';
-import {
-  applyFoundations,
-  createBook,
-  getTimeline,
-  rewriteBookFromScratch,
-  saveTimeline,
-} from './storyService';
+import { applyFoundations, createBook, rewriteBookFromScratch, saveTimeline } from './storyService';
 
 const key = generateMasterKey();
 const now = new Date('2026-07-22T00:00:00.000Z');
@@ -97,20 +92,20 @@ describe('the timeline studio (64 §16.2)', () => {
     expect(
       (await addTimelineEvent(fs, key, 'me', bookId, { label: 'Born', date: '1985' })).ok,
     ).toBe(true);
-    const added = (await getTimeline(fs, key, 'me', bookId))!.events[0]!;
+    const added = (await readBookTimeline(fs, key, 'me', bookId))!.events[0]!;
     expect(added).toMatchObject({ label: 'Born', date: '1985', userEdited: true });
 
     expect(
       (await updateTimelineEvent(fs, key, 'me', bookId, { eventId: added.id, date: '1987' })).ok,
     ).toBe(true);
-    expect((await getTimeline(fs, key, 'me', bookId))!.events[0]!.date).toBe('1987');
+    expect((await readBookTimeline(fs, key, 'me', bookId))!.events[0]!.date).toBe('1987');
 
     // Clearing a date is expressible — "actually I don't know the year".
     await updateTimelineEvent(fs, key, 'me', bookId, { eventId: added.id, date: '' });
-    expect((await getTimeline(fs, key, 'me', bookId))!.events[0]!.date).toBeUndefined();
+    expect((await readBookTimeline(fs, key, 'me', bookId))!.events[0]!.date).toBeUndefined();
 
     expect((await removeTimelineEvent(fs, key, 'me', bookId, { eventId: added.id })).ok).toBe(true);
-    expect((await getTimeline(fs, key, 'me', bookId))!.events).toEqual([]);
+    expect((await readBookTimeline(fs, key, 'me', bookId))!.events).toEqual([]);
   });
 
   it('degrades honestly on a vanished moment, and refuses a blank name', async () => {
@@ -143,12 +138,12 @@ describe('the timeline studio (64 §16.2)', () => {
       },
       now,
     });
-    // No foundations pass yet → no timeline file at all.
-    expect(await getTimeline(fs, key, 'me', book.id)).toBeNull();
+    // No foundations pass yet → an empty chronology, not a missing one (the read always answers).
+    expect((await readBookTimeline(fs, key, 'me', book.id)).events).toEqual([]);
     expect(
       (await addTimelineEvent(fs, key, 'me', book.id, { label: 'Born', date: '1985' })).ok,
     ).toBe(true);
-    expect((await getTimeline(fs, key, 'me', book.id))!.events).toHaveLength(1);
+    expect((await readBookTimeline(fs, key, 'me', book.id))!.events).toHaveLength(1);
   });
 
   // --- The promise `userEdited` has always encoded, and nothing honoured until now -------------------
@@ -179,7 +174,7 @@ describe('the timeline studio (64 §16.2)', () => {
     const bookId = await seedBook(fs, [event({ id: 'e1', label: 'Born in Ohio', date: '1985' })]);
 
     // The person fixes the year…
-    const stored = (await getTimeline(fs, key, 'me', bookId))!.events[0]!;
+    const stored = (await readBookTimeline(fs, key, 'me', bookId))!.events[0]!;
     await updateTimelineEvent(fs, key, 'me', bookId, { eventId: stored.id, date: '1987' });
 
     // …and a later pass re-proposes its original (wrong) version.
@@ -199,7 +194,7 @@ describe('the timeline studio (64 §16.2)', () => {
       now,
     );
 
-    const after = (await getTimeline(fs, key, 'me', bookId))!.events;
+    const after = (await readBookTimeline(fs, key, 'me', bookId))!.events;
     expect(after.filter((e) => e.label === 'Born in Ohio')).toHaveLength(1);
     expect(after[0]!.date).toBe('1987');
   });
@@ -235,7 +230,7 @@ describe('the timeline studio (64 §16.2)', () => {
     const bookId = await seedBook(fs, [event({ id: 'e1', label: 'The divorce', date: '2004' })]);
 
     await removeTimelineEvent(fs, key, 'me', bookId, { eventId: 'e1' });
-    expect((await getTimeline(fs, key, 'me', bookId))!.events).toEqual([]);
+    expect((await readBookTimeline(fs, key, 'me', bookId))!.events).toEqual([]);
 
     await applyFoundations(
       fs,
@@ -253,12 +248,14 @@ describe('the timeline studio (64 §16.2)', () => {
       now,
     );
     // "Take this out of my book" is the most likely reason to open the panel — it has to stick.
-    expect((await getTimeline(fs, key, 'me', bookId))!.events).toEqual([]);
+    expect((await readBookTimeline(fs, key, 'me', bookId))!.events).toEqual([]);
 
     // Adding it back clears the tombstone — they're allowed to change their mind.
     await addTimelineEvent(fs, key, 'me', bookId, { label: 'The divorce', date: '2004' });
-    expect((await getTimeline(fs, key, 'me', bookId))!.events).toHaveLength(1);
-    expect((await getTimeline(fs, key, 'me', bookId))!.removed ?? []).not.toContain('the divorce');
+    expect((await readBookTimeline(fs, key, 'me', bookId))!.events).toHaveLength(1);
+    expect((await readBookTimeline(fs, key, 'me', bookId))!.removed ?? []).not.toContain(
+      'the divorce',
+    );
   });
 
   it('normalizes punctuation/case/spacing when matching a re-proposal', () => {
@@ -272,7 +269,7 @@ describe('the timeline studio (64 §16.2)', () => {
       event({ id: 'e1', label: 'Started the shop', date: '2001' }),
     ]);
     await addTimelineEvent(fs, key, 'me', bookId, { label: 'Born', date: '1985' });
-    expect((await getTimeline(fs, key, 'me', bookId))!.events.map((e) => e.label)).toEqual([
+    expect((await readBookTimeline(fs, key, 'me', bookId))!.events.map((e) => e.label)).toEqual([
       'Born',
       'Started the shop',
     ]);
@@ -287,7 +284,7 @@ describe('the timeline studio (64 §16.2)', () => {
     await saveTimeline(fs, key, 'me', bookId, {
       schemaVersion: 1,
       events: [
-        ...(await getTimeline(fs, key, 'me', bookId))!.events,
+        ...(await readBookTimeline(fs, key, 'me', bookId))!.events,
         event({ id: 'gen', label: 'A guessed milestone', date: '1999' }),
       ],
     });
@@ -296,7 +293,7 @@ describe('the timeline studio (64 §16.2)', () => {
 
     // The dialog promises the timeline is kept — so the person's own moments must survive, and only the
     // biographer's guesses go with the discarded draft.
-    const after = (await getTimeline(fs, key, 'me', bookId))!.events.map((e) => e.label);
+    const after = (await readBookTimeline(fs, key, 'me', bookId))!.events.map((e) => e.label);
     expect(after).toContain('Born in Ohio');
     expect(after).toContain('We moved west');
     expect(after).not.toContain('A guessed milestone');

@@ -4226,19 +4226,13 @@ export interface CastEntry {
   sources: ('graph' | 'memory' | 'mention')[];
 }
 
-// --- People-in-your-book consent center + pseudonyms (64 §17.5, #290) -------------------------------------
-
-/** Where a named living person stands on appearing in the book — tracked manually by the author (no outbound
- *  requests). Only ever WARNS at publish; a pseudonym is the fix, never a hard block. */
-export const ConsentStateSchema = z.enum(['unknown', 'requested', 'granted', 'declined']);
-export type ConsentState = z.infer<typeof ConsentStateSchema>;
+// --- People in your book: what each is called in it (72 §4.7; was 64 §17.5's consent center) -------------------------------------
 
 export const BookConsentEntrySchema = z.object({
   /** The real display name as it appears in the book (the key the author is deciding about). */
   name: z.string().min(1),
   /** The linked household person, when this is one. */
   personId: z.string().optional(),
-  consent: ConsentStateSchema,
   /** A name to substitute for this person in the READ + EXPORTED book (their real name stays in the draft). */
   pseudonym: z.string().optional(),
   updatedAt: z.string(),
@@ -4251,7 +4245,13 @@ export const BookConsentListSchema = z.object({
 });
 export type BookConsentList = z.infer<typeof BookConsentListSchema>;
 
-/** One person in the consent center — the cast entry joined with the author's consent decision. The Studio read. */
+/**
+ * One person in the People tab (72 §3.9) — the cast entry joined with what the author calls them in the book.
+ *
+ * The four consent states this used to carry are gone: nothing was ever sent to anyone and nothing was ever
+ * blocked, so they were an author's private note kept in a form the app made them maintain. A pseudonym is
+ * the thing that actually changes what a reader sees.
+ */
 export interface ConsentPerson {
   name: string;
   personId?: string;
@@ -4260,14 +4260,12 @@ export interface ConsentPerson {
   /** How many WRITTEN CHAPTERS name them — what the People tab reports, because "named in the book" is the
    *  thing a person cares about, not how often the underlying material happens to mention someone. */
   chapterMentions: number;
-  consent: ConsentState;
   pseudonym?: string;
 }
 
 export const StorySetConsentInputSchema = z.object({
   bookId: z.string().min(1),
   name: z.string().min(1),
-  consent: ConsentStateSchema,
   /** Empty string clears the pseudonym. */
   pseudonym: z.string().optional(),
 });
@@ -4594,6 +4592,9 @@ export const TimelineEventSchema = z.object({
   label: z.string(),
   sourceRef: StorySourceRefSchema.optional(),
   userEdited: z.boolean().default(false),
+  /** This moment belongs to ONE book, not the life (72 §3.8) — an invented event in a children's book, a
+   *  beat only that story stages. Absent ⇒ a life moment, which is what every moment written before 72 is. */
+  bookScoped: z.boolean().optional(),
 });
 export type TimelineEvent = z.infer<typeof TimelineEventSchema>;
 
@@ -5593,6 +5594,9 @@ export const StoryTimelineEditInputSchema = StoryBookRefSchema.extend({
       label: z.string(),
       date: z.string().optional(),
       approx: z.string().optional(),
+      /** Where the moment belongs (72 §3.8): 'life' (the default) is shared by every book that covers
+       *  those years; 'book' stays in this one. */
+      scope: z.enum(['life', 'book']).optional(),
     }),
     z.object({
       op: z.literal('update'),

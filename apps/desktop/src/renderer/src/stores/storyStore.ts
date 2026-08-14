@@ -16,7 +16,6 @@ import type {
   StoryAcceptMaterialResult,
   StoryContinuityResult,
   ConsentPerson,
-  ConsentState,
   MarkupMark,
   StoryBookBundle,
   StoryBookTypeView,
@@ -205,12 +204,8 @@ interface StoryState {
   loadCastRegister: (bookId: string) => Promise<void>;
   consent: ConsentPerson[];
   loadConsent: (bookId: string) => Promise<void>;
-  setConsent: (
-    bookId: string,
-    name: string,
-    consent: ConsentState,
-    pseudonym?: string,
-  ) => Promise<void>;
+  /** Rename someone for the book (72 §4.7) — an empty string puts their real name back. */
+  setConsent: (bookId: string, name: string, pseudonym?: string) => Promise<void>;
   /** How far along the book is (§3.6) — a qualitative stage + subtle ratio, from the stored coverage. */
   completeness: StoryCompleteness | null;
   loadCompleteness: (bookId: string) => Promise<void>;
@@ -765,11 +760,10 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   loadConsent: async (bookId) => {
     set({ consent: (await window.selfos?.storyConsent({ bookId })) ?? [] });
   },
-  setConsent: async (bookId, name, consent, pseudonym) => {
+  setConsent: async (bookId, name, pseudonym) => {
     const next = await window.selfos?.storySetConsent({
       bookId,
       name,
-      consent,
       ...(pseudonym !== undefined ? { pseudonym } : {}),
     });
     if (next) set({ consent: next });

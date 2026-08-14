@@ -2,6 +2,7 @@ import { uuid } from '../id';
 import type { FileSystem } from '../host';
 import type { LifeTimeline, TimelineEvent } from '../schemas';
 import { getTimeline, saveTimeline } from './storyService';
+import { getPersonTimeline, savePersonTimeline } from './personTimeline';
 
 /**
  * The timeline studio (64 §16.2) — the chronology spine, finally first-class.
@@ -72,13 +73,28 @@ export function sortTimeline(events: TimelineEvent[]): TimelineEvent[] {
   });
 }
 
+/**
+ * Edit whichever timeline owns the moment (72 §3.8). A life moment lives on the person and is shared by
+ * every book; a `bookScoped` one lives on the book. `scope` picks the file for an ADD; for an update or a
+ * remove the caller passes the scope the moment is already in, so a correction lands where the moment is.
+ */
 async function withTimeline(
   fs: FileSystem,
   key: Uint8Array,
   personId: string,
   bookId: string,
+  scope: 'life' | 'book',
   edit: (timeline: LifeTimeline) => TimelineEditResult,
 ): Promise<TimelineEditResult> {
+  if (scope === 'life') {
+    const timeline = (await getPersonTimeline(fs, key, personId)) ?? {
+      schemaVersion: 1 as const,
+      events: [],
+    };
+    const res = edit(timeline);
+    if (res.ok) await savePersonTimeline(fs, key, personId, timeline);
+    return res;
+  }
   // A book whose foundations haven't run yet has no timeline file — start one rather than refusing, so a
   // person can lay out their own chronology before the biographer proposes anything.
   const timeline = (await getTimeline(fs, key, personId, bookId)) ?? {
@@ -103,11 +119,18 @@ export async function addTimelineEvent(
   key: Uint8Array,
   personId: string,
   bookId: string,
-  args: { label: string; date?: string | undefined; approx?: string | undefined },
+  args: {
+    label: string;
+    date?: string | undefined;
+    approx?: string | undefined;
+    /** 'life' (the default) shows up in every book that covers those years; 'book' stays in this one. */
+    scope?: 'life' | 'book' | undefined;
+  },
 ): Promise<TimelineEditResult> {
   const label = args.label.trim();
   if (!label) return { ok: false, message: 'A moment needs a name.' };
-  return withTimeline(fs, key, personId, bookId, (timeline) => {
+  const scope = args.scope ?? 'life';
+  return withTimeline(fs, key, personId, bookId, scope, (timeline) => {
     // Adding it back clears any tombstone — they changed their mind, and the biographer may fill it in.
     const marker = normalizeMoment(label);
     if (timeline.removed?.includes(marker)) {
@@ -119,6 +142,7 @@ export async function addTimelineEvent(
       ...(args.date?.trim() ? { date: args.date.trim() } : {}),
       ...(args.approx?.trim() ? { approx: args.approx.trim() } : {}),
       userEdited: true,
+      ...(scope === 'book' ? { bookScoped: true } : {}),
     });
     return { ok: true };
   });
@@ -141,7 +165,11 @@ export async function updateTimelineEvent(
     approx?: string | undefined;
   },
 ): Promise<TimelineEditResult> {
-  return withTimeline(fs, key, personId, bookId, (timeline) => {
+  // The moment lives in one of the two timelines; edit the one that has it.
+  const inLife = ((await getPersonTimeline(fs, key, personId))?.events ?? []).some(
+    (e) => e.id === args.eventId,
+  );
+  return withTimeline(fs, key, personId, bookId, inLife ? 'life' : 'book', (timeline) => {
     const event = timeline.events.find((e) => e.id === args.eventId);
     if (!event) return { ok: false, message: NOT_FOUND };
     if (args.label !== undefined) {
@@ -172,7 +200,11 @@ export async function removeTimelineEvent(
   bookId: string,
   args: { eventId: string },
 ): Promise<TimelineEditResult> {
-  return withTimeline(fs, key, personId, bookId, (timeline) => {
+  // The moment lives in one of the two timelines; edit the one that has it.
+  const inLife = ((await getPersonTimeline(fs, key, personId))?.events ?? []).some(
+    (e) => e.id === args.eventId,
+  );
+  return withTimeline(fs, key, personId, bookId, inLife ? 'life' : 'book', (timeline) => {
     const index = timeline.events.findIndex((e) => e.id === args.eventId);
     if (index < 0) return { ok: false, message: NOT_FOUND };
     const [gone] = timeline.events.splice(index, 1);

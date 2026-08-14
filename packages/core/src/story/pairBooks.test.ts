@@ -174,6 +174,41 @@ describe('the shared-book gate (72 §5.8) — membership plus a LIVE partner edg
   });
 });
 
+/**
+ * Deleting a shared book destroys the other person's copy too, so it is NOT the symmetric act that editing
+ * and publishing are: only the partner who commissioned it may delete it (owner decision, 2026-08-14).
+ * The manifest records who that was, because `personId` on a pair book is the pair, not a person.
+ */
+describe('who commissioned a shared book', () => {
+  it('records the commissioner, and leaves a solo book without one', async () => {
+    const fs = memFileSystem();
+    await household(fs);
+    const ref = pairKeyFor('ben', 'angel');
+    const shared = await createBook(fs, key, {
+      personId: ref,
+      commissionedBy: 'ben',
+      type: 'biography',
+      title: 'Us',
+      config,
+      now,
+    });
+    expect(shared.commissionedBy).toBe('ben');
+    // It survives a round-trip, and it is what a delete gate would read — `personId` names the pair.
+    expect((await getBook(fs, key, ref, shared.id))?.commissionedBy).toBe('ben');
+    expect(shared.personId).toBe(ref);
+
+    const solo = await createBook(fs, key, {
+      personId: 'ben',
+      type: 'biography',
+      title: 'Mine',
+      config,
+      now,
+    });
+    // On a solo book `personId` already answers the question, so the field stays absent.
+    expect(solo.commissionedBy).toBeUndefined();
+  });
+});
+
 describe('pair ref helpers', () => {
   it('names the two members and the other one', () => {
     const ref = pairKeyFor('ben', 'angel');

@@ -173,7 +173,10 @@ export async function createBook(
   fs: FileSystem,
   key: Uint8Array,
   input: {
+    /** The owner ref — a person, or a `pairKey` for a shared book (72 §5.8). */
     personId: string;
+    /** Who started a SHARED book, and therefore the only person who may delete it. */
+    commissionedBy?: string;
     type: BookTypeId;
     title: string;
     /** The Zod INPUT shape: a caller supplies what it cares about and the defaults fill the rest. */
@@ -187,6 +190,7 @@ export async function createBook(
     id: uuid(),
     schemaVersion: 1,
     personId: input.personId,
+    ...(input.commissionedBy ? { commissionedBy: input.commissionedBy } : {}),
     type: input.type,
     editions: [],
     // A blank title means "let the biographer name it" (§3.2): stamp a placeholder + mark it auto so the

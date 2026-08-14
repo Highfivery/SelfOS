@@ -17,7 +17,18 @@ export interface AiDeps {
   client: ClaudeClient;
   apiKey: string | null;
   model: string;
+  /**
+   * Whose data this call is FOR. For a book this doubles as the storage owner ref, which for a pair-owned
+   * "Our Story" (72 §5.8) is a `pairKey` rather than a person — so it is not always a spendable identity.
+   */
   personId: string;
+  /**
+   * Who the spend is BILLED to, when that differs from `personId`. A pair root has no budget and no usage
+   * history of its own, so a shared book's calls are metered against the partner who ran them — without
+   * this the budget check would look up a person that doesn't exist and the usage event would be filed
+   * under an id no Usage screen can resolve. Absent ⇒ `personId`, which is every other caller.
+   */
+  meterPersonId?: string;
   now: Date;
   override?: boolean;
   /**
@@ -55,7 +66,9 @@ export async function runClaude(
   type: string,
   maxTokens: number,
 ): Promise<ClaudeCallResult> {
-  const { fs, key, apiKey, personId, now } = deps;
+  const { fs, key, apiKey, now } = deps;
+  // Budget + usage are always a PERSON's; `personId` may be a pair ref (see `meterPersonId`).
+  const personId = deps.meterPersonId ?? deps.personId;
   // A per-task override wins over the app-wide model (§5.3); everything else keeps the person's setting.
   const model = deps.models?.[type] ?? deps.model;
   if (!apiKey) return { ok: false, reason: 'NO_KEY', message: 'Add your Claude API key first.' };

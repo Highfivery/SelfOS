@@ -208,7 +208,10 @@ export interface GenerateStoryImageDeps {
   imageModel: string;
   style: string;
   styleNotes?: string;
+  /** The book's owner ref — a person, or a `pairKey` for a shared "Our Story" (72 §5.8). */
   personId: string;
+  /** Who the spend is billed to, when the owner ref is a pair (which has no budget of its own). */
+  meterPersonId?: string;
   bookId: string;
   target: StoryImageTarget;
   now: Date;
@@ -231,6 +234,8 @@ export async function generateStoryImage(
 ): Promise<StoryImageGenerateResult> {
   const { fs, key, claude, image, anthropicApiKey, openaiApiKey, consent } = deps;
   const { claudeModel, imageModel, personId, bookId, target, now } = deps;
+  // Storage is addressed by `personId` (possibly a pair ref); budget + usage are always a person's.
+  const meterId = deps.meterPersonId ?? personId;
 
   if (!consent) {
     return {
@@ -276,7 +281,7 @@ export async function generateStoryImage(
     if (!seed.trim()) seed = chapter.title || book.title;
   }
 
-  if (await overBudget(fs, key, personId, now, deps.override)) {
+  if (await overBudget(fs, key, meterId, now, deps.override)) {
     return { ok: false, reason: 'BUDGET', message: 'AI budget reached for this period.' };
   }
 
@@ -326,7 +331,7 @@ export async function generateStoryImage(
     'story.imagePrompt',
     claudeModel,
     bookId,
-    personId,
+    meterId,
     at,
     distilled.usage,
   );
@@ -370,7 +375,7 @@ export async function generateStoryImage(
 
   // The OpenAI call was billed → meter the flat charge regardless of post-validation (§7). Zero tokens: the
   // flat per-image price comes from IMAGE_PRICING in costOf, not from token counts.
-  const imageUsage = usageEvent('story.image', imageModel, bookId, personId, at, {
+  const imageUsage = usageEvent('story.image', imageModel, bookId, meterId, at, {
     inputTokens: 0,
     outputTokens: 0,
     cacheWriteTokens: 0,

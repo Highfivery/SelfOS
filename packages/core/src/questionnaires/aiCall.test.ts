@@ -143,3 +143,93 @@ describe('runClaude — truncation-safe continuation (66 §5.1)', () => {
     expect(await recordedEvents(fs, 'test.pass')).toHaveLength(1);
   });
 });
+
+/**
+ * 72 §5.8 — a pair-owned book's `personId` is a `pairKey`, not a person, so it is not a spendable identity.
+ * Without splitting the two, the budget check would look up a person that doesn't exist and the usage event
+ * would be filed under an id no Usage screen can resolve.
+ */
+describe('metering a call made on behalf of a pair', () => {
+  it('bills the person who ran it, not the pair the book belongs to', async () => {
+    const fs = memFileSystem();
+    const result = await runClaude(
+      {
+        ...deps(
+          fs,
+          scriptedClient([{ text: 'hello', usage: USAGE_1, stopReason: 'end_turn' }]).client,
+        ),
+        personId: 'angel~ben',
+        meterPersonId: 'ben',
+      },
+      'sys',
+      'user',
+      'story.chapter',
+      100,
+    );
+    expect(result.ok).toBe(true);
+    // Filed under the person…
+    const underBen = await queryUsage(fs, key, {
+      from: '2000-01-01T00:00:00.000Z',
+      to: '2100-01-01T00:00:00.000Z',
+      personId: 'ben',
+      type: 'story.chapter',
+    });
+    expect(underBen.length).toBe(1);
+    // …and nothing under the pair.
+    const underPair = await queryUsage(fs, key, {
+      from: '2000-01-01T00:00:00.000Z',
+      to: '2100-01-01T00:00:00.000Z',
+      personId: 'angel~ben',
+      type: 'story.chapter',
+    });
+    expect(underPair).toEqual([]);
+  });
+
+  it('honours the RUNNING person’s budget, not the pair’s (which has none)', async () => {
+    const fs = memFileSystem();
+    await setPersonBudget(fs, key, 'ben', { limitUsd: 0.01, period: 'week', warnRatio: 0.8 });
+    // Ben has already spent his allowance elsewhere this period.
+    await recordUsage(fs, key, {
+      id: 'spent',
+      schemaVersion: 1,
+      type: 'chat',
+      personId: 'ben',
+      model: 'claude-sonnet-4-6',
+      at: now.toISOString(),
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheWriteTokens: 0,
+      cacheReadTokens: 0,
+      costUsd: 5,
+    });
+    const result = await runClaude(
+      {
+        ...deps(
+          fs,
+          scriptedClient([{ text: 'hello', usage: USAGE_1, stopReason: 'end_turn' }]).client,
+        ),
+        personId: 'angel~ben',
+        meterPersonId: 'ben',
+      },
+      'sys',
+      'user',
+      'story.chapter',
+      100,
+    );
+    // Ben is over budget, so the shared book cannot be written on his allowance either.
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe('BUDGET');
+  });
+
+  it('every other caller is unchanged — personId bills personId', async () => {
+    const fs = memFileSystem();
+    await runClaude(
+      deps(fs, scriptedClient([{ text: 'hello', usage: USAGE_1, stopReason: 'end_turn' }]).client),
+      'sys',
+      'user',
+      'story.chapter',
+      100,
+    );
+    expect((await recordedEvents(fs, 'story.chapter')).length).toBe(1);
+  });
+});

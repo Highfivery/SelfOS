@@ -2571,6 +2571,9 @@
   color: var(--color-text-muted);
   border-bottom: 1px solid var(--color-border);
 }
+.peopleRow:has(.peopleSheet) {
+  align-items: start;
+}
 .peopleRow + .peopleRow {
   border-top: 1px solid var(--color-border);
 }
@@ -2587,6 +2590,28 @@
 .peopleMeta {
   font-size: 0.78rem;
   color: var(--color-text-muted);
+}
+/* The character sheet (72 §4.8) — a picture book only. Sits under the person, above the name field, because
+   it belongs to the person rather than to what the book calls them. */
+.peopleSheet {
+  display: flex;
+  flex-direction: column;
+  /* Hug the left like everything else in the person block — a column flex would otherwise stretch the
+     collapsed "Describe how they look" button across the cell and centre its label. */
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  min-width: 0;
+  align-self: stretch;
+}
+/* …but the open editor's textarea should still fill the cell. */
+.peopleSheet textarea {
+  width: 100%;
+}
+.peopleSheetActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 @media (max-width: 767px) {
   .peopleHead {

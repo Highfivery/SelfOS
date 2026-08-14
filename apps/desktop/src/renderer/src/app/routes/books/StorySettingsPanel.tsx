@@ -14,7 +14,7 @@ import { useImagePrefsStore } from '../../../stores/imagePrefsStore';
 import { useStoryStore } from '../../../stores/storyStore';
 import { useEffect, useState } from 'react';
 import type { BookConfig } from '@shared/schemas';
-import { LENGTH_OPTIONS, STYLE_CHOICES, VOICE_OPTIONS } from './bookConfigOptions';
+import { LENGTH_OPTIONS, stylesForType, VOICE_OPTIONS } from './bookConfigOptions';
 import type { Length, Style, Voice } from './bookConfigOptions';
 
 /**
@@ -27,9 +27,12 @@ import type { Length, Style, Voice } from './bookConfigOptions';
 export function StorySettingsPanel({
   bookId,
   config,
+  stylePresets,
 }: {
   bookId: string;
   config: BookConfig;
+  /** This kind of book's own registers (72 §4.1) — the same set the commission offered. */
+  stylePresets?: { id: Style; label: string }[];
 }): JSX.Element {
   const update = useStoryStore((s) => s.update);
   // The fallback when this book hasn't set its own style is the author's per-person STORY style
@@ -57,7 +60,8 @@ export function StorySettingsPanel({
     void update(bookId, { config: next });
   };
 
-  const styleHint = STYLE_CHOICES.find((s) => s.value === draft.style)?.hint ?? '';
+  const styleChoices = stylesForType(stylePresets);
+  const styleHint = styleChoices.find((s) => s.value === draft.style)?.hint ?? '';
   // Show what images will actually use: this book's own style, or your per-person story style until one is chosen.
   const effectiveImageStyle = draft.imageStyle ?? storyPrefsStyle ?? '';
 
@@ -92,7 +96,7 @@ export function StorySettingsPanel({
                 value={draft.style}
                 onChange={(e) => saveField({ style: e.target.value as Style })}
               >
-                {STYLE_CHOICES.map((o) => (
+                {styleChoices.map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>

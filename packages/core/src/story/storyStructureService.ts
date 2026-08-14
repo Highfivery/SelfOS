@@ -10,6 +10,7 @@ import {
   type UsageEvent,
 } from '../schemas';
 import { getBookType } from './bookTypes';
+import { resolvePersonOptionNames } from './castRegister';
 import { recordAuthorDrift } from './storyMaterial';
 import { chapterShell, syncPartChapterOrder } from './storyOutline';
 import { buildStoryCorpus, type StoryCorpus } from './storyCorpus';
@@ -198,7 +199,13 @@ export async function generateStructuralProposals(
       args.bookId,
       await getExclusions(deps.fs, deps.key, deps.personId, args.bookId),
     ));
-  const system = buildBiographerSystem(bookType, book.config, corpus.personName);
+  const system = buildBiographerSystem(
+    bookType,
+    book.config,
+    corpus.personName,
+    undefined,
+    await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
+  );
   // The chronology is grounding for ORDERING (§16.2) — the pass still only ever PROPOSES; a corrected date
   // never silently rearranges a drafted outline.
   // The chronology the biographer is handed is the LIFE one plus this book's own moments (72 §3.8) —

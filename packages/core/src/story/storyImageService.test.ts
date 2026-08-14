@@ -11,6 +11,8 @@ import { memFileSystem } from '../host/memFileSystem';
 import { savePerson } from '../people';
 import type { BookChapter, BookConfig, Person } from '../schemas';
 import { queryUsage, setPersonBudget } from '../usage';
+import { CHILDRENS_IMAGE_FRAMING } from './bookTypes';
+import { setConsentEntry } from './storyConsent';
 import {
   buildStoryImagePromptInput,
   deleteStoryImage,
@@ -33,6 +35,7 @@ const config: BookConfig = {
 
 const captured: {
   claudeInput?: string | undefined;
+  claudeSystem?: string | undefined;
   imagePrompt?: string | undefined;
   imageSize?: string | undefined;
 } = {};
@@ -42,6 +45,7 @@ let fs: FileSystem;
 beforeEach(() => {
   fs = memFileSystem();
   captured.claudeInput = undefined;
+  captured.claudeSystem = undefined;
   captured.imagePrompt = undefined;
   captured.imageSize = undefined;
 });
@@ -54,6 +58,7 @@ function fakeClaude(
     send: () => Promise.resolve(''),
     stream: (options) => {
       captured.claudeInput = options.messages.map((m) => m.content).join('\n');
+      captured.claudeSystem = options.system;
       return Promise.resolve({
         text: distilled,
         usage: { inputTokens: 20, outputTokens: 10, cacheWriteTokens: 0, cacheReadTokens: 0 },
@@ -121,6 +126,40 @@ async function seed(essence = 'A quiet man who kept things running.'): Promise<s
   return book.id;
 }
 
+/** Seed a picture book with a named hero, a page that names them, and the author's character sheet. */
+async function seedPictureBook(): Promise<string> {
+  await savePerson(fs, key, person('author'));
+  const book = await createBook(fs, key, {
+    personId: 'author',
+    type: 'childrens',
+    title: 'Mira and the Fox',
+    config: { ...config, typeOptions: { hero: 'p-mira' } },
+    now,
+  });
+  await saveChapter(fs, key, 'author', book.id, {
+    id: 'c1',
+    schemaVersion: 1,
+    partId: 'p1',
+    order: 0,
+    title: 'Down the Lane',
+    markdown: 'Mira ran down the lane with the fox tucked under her arm.',
+    revision: 1,
+    status: 'reviewed',
+    sourceSignature: '',
+    provenance: [],
+    protectedBlocks: [],
+    pinnedQuotes: [],
+    imagePlacements: [],
+  });
+  await setConsentEntry(fs, key, 'author', {
+    bookId: book.id,
+    name: 'Mira',
+    sheet: 'Six years old, dark curls, red wellies',
+    now,
+  });
+  return book.id;
+}
+
 function deps(over: Partial<GenerateStoryImageDeps> = {}): GenerateStoryImageDeps {
   return {
     fs,
@@ -163,6 +202,56 @@ describe('buildStoryImagePromptInput (name-free by construction)', () => {
       style: 'z',
     });
     expect(noNotes).not.toContain('Additional style direction');
+  });
+
+  /**
+   * 72 §8.5 — the picture-book exception, and its edges. This is the ONE place SelfOS lets appearance data
+   * about a real person reach a third-party image provider, so what it does and does NOT do is pinned here.
+   */
+  it('carries a character sheet ONLY under a framing that permits likeness', () => {
+    const seedText = 'Mira runs down the lane with the fox under her arm.';
+    const sheets = { Mira: 'Six, dark curls, red wellies', Arlo: 'Four, freckles, striped jumper' };
+
+    const picture = buildStoryImagePromptInput({
+      kind: 'illustration',
+      title: 'Mira and the Fox',
+      seed: seedText,
+      style: 'watercolour',
+      framing: CHILDRENS_IMAGE_FRAMING,
+      characterSheets: sheets,
+    });
+    expect(picture).toContain('CHARACTER SHEETS');
+    expect(picture).toContain('Mira: Six, dark curls, red wellies');
+    // Only the characters this page NAMES — a 32-page book must not ship its whole cast into every prompt.
+    expect(picture).not.toContain('Arlo');
+    // The relaxation is bounded even here.
+    expect(picture).toMatch(/non-photorealistic/i);
+    expect(picture).toMatch(/NO text/i);
+
+    // The default framing ignores sheets entirely, even when a caller passes them. A sheet must never ride
+    // along by accident into a book whose type never agreed to it.
+    const symbolic = buildStoryImagePromptInput({
+      kind: 'illustration',
+      title: 'A Life',
+      seed: seedText,
+      style: 'watercolour',
+      characterSheets: sheets,
+    });
+    expect(symbolic).not.toContain('CHARACTER SHEETS');
+    expect(symbolic).not.toContain('red wellies');
+    expect(symbolic).toContain('NEVER a portrait');
+  });
+
+  it('matches a named character whole-word, so a short name never phantom-matches', () => {
+    const input = buildStoryImagePromptInput({
+      kind: 'illustration',
+      title: 'x',
+      seed: 'The banana sat on the windowsill.',
+      style: 'z',
+      framing: CHILDRENS_IMAGE_FRAMING,
+      characterSheets: { Ana: 'Three, blonde' },
+    });
+    expect(input).not.toContain('CHARACTER SHEETS');
   });
 });
 
@@ -324,5 +413,55 @@ describe('generateStoryImage (§3.8)', () => {
     expect((await getStoryImageIndex(fs, key, 'author', bookId)).images).toEqual([]);
     expect(await getStoryImage(fs, key, 'author', bookId, res.image.id)).toBeNull();
     expect((await getBook(fs, key, 'author', bookId))?.coverImageId).toBeUndefined();
+  });
+});
+
+/**
+ * 72 §8.5 end-to-end. The framing alone is not the gate — the Claude distillation independently strips names
+ * and likeness, so a picture book that relaxed only the framing would still have its character sheet removed
+ * before anything reached OpenAI, and its hero would change face on every page. Both halves are asserted at
+ * the boundary they actually cross: what the distiller is TOLD, and what the image provider RECEIVES.
+ */
+describe('the picture-book likeness exception (72 §8.5)', () => {
+  it('sends the character sheet and the character-permitting distillation for a children’s book', async () => {
+    const bookId = await seedPictureBook();
+    const result = await generateStoryImage(
+      deps({ bookId, target: { kind: 'illustration', chapterId: 'c1' } }),
+    );
+    expect(result.ok).toBe(true);
+    // The distiller is told to KEEP the sheet, not to strip names.
+    expect(captured.claudeSystem).toMatch(/picture-book/i);
+    expect(captured.claudeSystem).toMatch(/CHARACTER SHEET/i);
+    expect(captured.claudeSystem).not.toMatch(/NEVER include any person’s name/);
+    // …and the sheet is actually in the brief it reads.
+    expect(captured.claudeInput).toContain('Six years old, dark curls, red wellies');
+    expect(captured.claudeInput).toContain(CHILDRENS_IMAGE_FRAMING);
+    // A page is a landscape spread, not a square that would crop the hero out.
+    expect(captured.imageSize).toBe('1536x1024');
+  });
+
+  it('leaves every other book on the symbolic, name-free path — even with a sheet stored', async () => {
+    const bookId = await seed();
+    // A sheet saved against a biography is inert: it must never reach the distiller or the provider.
+    await setConsentEntry(fs, key, 'author', {
+      bookId,
+      name: 'Ben',
+      sheet: 'Tall, grey beard, blue overalls',
+      now,
+    });
+    const result = await generateStoryImage(
+      deps({ bookId, target: { kind: 'illustration', chapterId: 'c1' } }),
+    );
+    expect(result.ok).toBe(true);
+    expect(captured.claudeSystem).toMatch(/NEVER include any person’s name/);
+    expect(captured.claudeInput).not.toContain('blue overalls');
+    expect(captured.claudeInput).not.toContain('CHARACTER SHEETS');
+    expect(captured.imageSize).toBe('1024x1024');
+  });
+
+  it('a cover stays a 2:3 portrait whatever the book’s spine', async () => {
+    const bookId = await seedPictureBook();
+    await generateStoryImage(deps({ bookId, target: { kind: 'cover' } }));
+    expect(captured.imageSize).toBe('1024x1536');
   });
 });

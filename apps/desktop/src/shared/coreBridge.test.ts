@@ -9715,6 +9715,71 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(await bridge.storySetConsent({ bookId, name: 'Angel', pseudonym: 'A.' })).toEqual([]);
   });
 
+  /**
+   * 72 §4.8 — the character sheet at the seam. It shares storage with the pseudonym, so the thing worth
+   * proving here is that the two independent editors don't overwrite each other through the bridge.
+   */
+  it('books: a character sheet round-trips and does not clobber the pseudonym (72 §4.8)', async () => {
+    const { bridge } = await freshOwner();
+    const kid = await bridge.peopleSave({ displayName: 'Mira', isSubject: false, tags: [] });
+    const owner = await bridge.getActivePerson();
+    await bridge.relationshipsSave({
+      fromPersonId: owner!.id,
+      toPersonId: kid.id,
+      type: 'child',
+    });
+    const book = await bridge.storyCreate({
+      type: 'childrens',
+      title: 'Mira and the Fox',
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: { hero: kid.id },
+        sourceIds: [],
+      },
+    });
+    expect(book).not.toBeNull();
+    const bookId = book!.id;
+
+    await bridge.storySetConsent({ bookId, name: 'Mira', sheet: 'Six, dark curls, red wellies' });
+    await bridge.storySetConsent({ bookId, name: 'Mira', pseudonym: 'M.' });
+    const after = await bridge.storyConsent({ bookId });
+    // Renaming her for the book did NOT delete how she looks — the next page would redraw a stranger.
+    expect(after.find((p) => p.name === 'Mira')).toMatchObject({
+      sheet: 'Six, dark curls, red wellies',
+      pseudonym: 'M.',
+    });
+
+    // A Guest can't read or write it.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.storySetConsent({ bookId, name: 'Mira', sheet: 'x' })).toEqual([]);
+  });
+
+  it('books: the type picker carries each type’s cast policy and counting unit (72 §3.1/§4.1)', async () => {
+    const { bridge } = await freshOwner();
+    const types = await bridge.storyBookTypes();
+    const childrens = types.find((t) => t.id === 'childrens');
+    expect(childrens).toMatchObject({
+      castPolicy: 'childrenAsHeroes',
+      unit: { one: 'page', many: 'pages' },
+    });
+    // …and the hero question reaches the commission screen as a multi-person pick.
+    expect(childrens?.options.find((o) => o.id === 'hero')).toMatchObject({
+      kind: 'person',
+      multiple: true,
+      required: true,
+    });
+    // Every other type still counts chapters and names people as themselves or renames them.
+    for (const t of types.filter((t) => t.id !== 'childrens')) {
+      expect(t.unit).toEqual({ one: 'chapter', many: 'chapters' });
+      expect(t.castPolicy).not.toBe('childrenAsHeroes');
+    }
+  });
+
   it('story: continuity + line-edit refused without story.own (§17.3)', async () => {
     const { bridge } = await freshOwner();
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });

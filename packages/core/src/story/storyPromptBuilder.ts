@@ -51,9 +51,43 @@ function truthDirective(mode: BookType['truthMode']): string {
  *
  * Each type interprets its own option ids; anything unrecognised is skipped rather than guessed at.
  */
-function optionDirectives(bookType: BookType, options: Record<string, string>): string[] {
+function optionDirectives(
+  bookType: BookType,
+  options: Record<string, string>,
+  /**
+   * personId → display name, for `kind: 'person'` options. Without it a person option can only be resolved
+   * to a raw uuid, so those directives are SKIPPED rather than emitted — a prompt must never carry an id.
+   */
+  personNames: Record<string, string> = {},
+): string[] {
   const out: string[] = [];
   const opt = (id: string): string => options[id] ?? '';
+
+  /** The named people behind a `person` option, dropping any id we can't put a name to. */
+  const named = (id: string): string[] =>
+    opt(id)
+      .split(',')
+      .map((personId) => personNames[personId.trim()]?.trim() ?? '')
+      .filter((name) => name.length > 0);
+
+  // Who a portrait is OF. This was a required question whose answer reached nothing: the option was stored
+  // and no directive read it, so the model wrote a portrait without being told whose (found while building
+  // the children's hero, fixed here per CLAUDE.md §6).
+  const subject = named('subject');
+  if (subject.length > 0) {
+    out.push(
+      `THE SUBJECT: this book is about ${subject.join(' and ')}. They are its subject throughout — not the person whose material it is drawn from.`,
+    );
+  }
+
+  const heroes = named('hero');
+  if (heroes.length > 0) {
+    out.push(
+      heroes.length === 1
+        ? `THE HERO: ${heroes[0]} is the hero of this book. Name them on the page. They are the one who acts and the one who puts things right — never a bystander in their own story.`
+        : `THE HEROES: ${heroes.join(' and ')} are the heroes of this book, together. Name them on the page, give each of them their own way of doing things, and let both of them act — neither is a sidekick.`,
+    );
+  }
 
   if (opt('addressee') === 'toThem') {
     out.push(
@@ -108,7 +142,24 @@ function optionDirectives(bookType: BookType, options: Record<string, string>): 
   return out;
 }
 
-function lengthDirective(length: BookConfig['length']): string {
+/**
+ * Who the book is FOR, when that changes how it must be written (§4.1). Declared only by types whose
+ * audience is not the author — a picture book read aloud to a four-year-old.
+ */
+function audienceDirective(audience: BookType['audience']): string {
+  if (!audience) return '';
+  return `AUDIENCE: this book is for children aged ${audience.ageFrom}–${audience.ageTo}, ${audience.readingLevel}. Every sentence must be within reach of that listener: concrete, short, and comfortable to say out loud. Where a word would stop a child, use the one they already have.`;
+}
+
+/**
+ * How long, in the unit this book is actually measured in. A `pages` spine overrides the concise/standard/
+ * full enum entirely: a picture book is 32 pages of ~40 words, and telling the model "roughly 10–18
+ * chapters of 1,500–3,000 words" alongside that is a contradiction it will resolve the wrong way.
+ */
+function lengthDirective(length: BookConfig['length'], spine?: BookSpine): string {
+  if (spine?.kind === 'pages') {
+    return `Length: exactly ${spine.count} pages, each about ${spine.wordsPerPage} words — a page, not a chapter. This governs the length: never write a page at chapter length.`;
+  }
   switch (length) {
     case 'concise':
       return 'Length: a concise book — roughly 6–10 chapters, each short (about 900–1,500 words).';
@@ -139,18 +190,27 @@ export function buildBiographerSystem(
    * byte-unchanged.
    */
   corpusBlock?: string,
+  /**
+   * personId → display name, for this type's `kind: 'person'` commission answers (the portrait's subject,
+   * the picture book's hero). Threaded from every caller rather than left optional-and-forgettable: an
+   * omitted map silently drops the hero from the prompt, and a book that never names its hero is the exact
+   * failure this exists to prevent.
+   */
+  personNames: Record<string, string> = {},
 ): string {
   const name = subjectName.trim() || 'the subject';
+  const typeOptions = resolveTypeOptions(bookType, config.typeOptions);
   return [
     SAFETY,
     bookType.doctrine,
     truthDirective(bookType.truthMode),
     voiceDirective(config.voice, name),
     styleDirective(config.style, bookType),
-    lengthDirective(config.length),
+    lengthDirective(config.length, resolveSpine(bookType, typeOptions)),
+    audienceDirective(bookType.audience),
     // AFTER the style directives, because a per-book answer (the explicit register especially) has to be
     // able to govern them — the tier-swamped-by-warmth failure from 08 §24.9.
-    ...optionDirectives(bookType, resolveTypeOptions(bookType, config.typeOptions)),
+    ...optionDirectives(bookType, typeOptions, personNames),
     ...(corpusBlock && corpusBlock.trim().length > 0 ? [corpusBlock] : []),
   ]
     .filter((part) => part.trim().length > 0)

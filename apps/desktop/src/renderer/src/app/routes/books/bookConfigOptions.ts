@@ -42,3 +42,23 @@ export const LENGTH_CARDS: { value: Length; label: string; sub: string }[] = [
   { value: 'standard', label: 'Standard', sub: 'A full evening — a dozen or so chapters.' },
   { value: 'full', label: 'Full', sub: 'The whole story — as many chapters as it takes.' },
 ];
+
+/**
+ * The style registers a PARTICULAR kind of book offers, in the type's own words (72 §4.1).
+ *
+ * A book type declares its own `stylePresets`, and until now nothing read them: every commission screen
+ * rendered the full seven regardless, so a picture book offered "Journalistic" and picking it produced an
+ * EMPTY style directive (`styleDirective` returns '' for a register the type doesn't declare). The type's
+ * label wins where it has one — a picture book's warm register is "Cosy", not "Warm" — and the hint is
+ * reused by id. A type that declares nothing falls back to the full list.
+ */
+export function stylesForType(
+  presets: { id: Style; label: string }[] | undefined,
+): { value: Style; label: string; hint: string }[] {
+  if (!presets || presets.length === 0) return STYLE_CHOICES;
+  return presets.map((preset) => ({
+    value: preset.id,
+    label: preset.label,
+    hint: STYLE_CHOICES.find((s) => s.value === preset.id)?.hint ?? '',
+  }));
+}

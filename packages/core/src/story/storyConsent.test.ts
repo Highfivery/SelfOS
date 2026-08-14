@@ -5,7 +5,7 @@ import { saveInsight } from '../insights';
 import { savePerson, saveRelationship } from '../people';
 import type { Insight, Person, Relationship } from '../schemas';
 import { applyPseudonyms } from './storyText';
-import { getConsentRegister, pseudonymMap, setConsentEntry } from './storyConsent';
+import { characterSheets, getConsentRegister, pseudonymMap, setConsentEntry } from './storyConsent';
 import { createBook } from './storyService';
 
 const key = generateMasterKey();
@@ -119,5 +119,72 @@ describe('people in your book (72 §4.7)', () => {
     const cleared = await getConsentRegister(fs, key, 'me', bookId);
     expect(cleared.find((p) => p.name === 'Angel')?.pseudonym).toBeUndefined();
     expect(await pseudonymMap(fs, key, 'me', bookId)).toEqual({});
+  });
+});
+
+/**
+ * 72 §4.8 — the character sheet. It shares its storage with the pseudonym because both are the same kind of
+ * thing (a per-book, per-person, author-authored note), which makes independent-field merging load-bearing.
+ */
+describe('character sheets (72 §4.8)', () => {
+  it('round-trips a sheet and exposes it to the image path', async () => {
+    const fs = memFileSystem();
+    const bookId = await seed(fs);
+    await setConsentEntry(fs, key, 'me', {
+      bookId,
+      name: 'Angel',
+      sheet: 'Six years old, dark curls, red wellies, always carrying a toy fox.',
+      now,
+    });
+    const register = await getConsentRegister(fs, key, 'me', bookId);
+    expect(register.find((p) => p.name === 'Angel')?.sheet).toContain('red wellies');
+    expect(await characterSheets(fs, key, 'me', bookId)).toEqual({
+      Angel: 'Six years old, dark curls, red wellies, always carrying a toy fox.',
+    });
+  });
+
+  /**
+   * The regression the merge exists for. The two fields have SEPARATE editors, so a whole-entry replace
+   * means renaming someone silently deletes how they look — and the next page redraws the hero as a
+   * stranger. Verified to fail against a replacing `setConsentEntry`.
+   */
+  it('setting a pseudonym does not wipe the sheet, and setting a sheet does not wipe the pseudonym', async () => {
+    const fs = memFileSystem();
+    const bookId = await seed(fs);
+    await setConsentEntry(fs, key, 'me', { bookId, name: 'Angel', sheet: 'red wellies', now });
+    await setConsentEntry(fs, key, 'me', { bookId, name: 'Angel', pseudonym: 'Ana', now });
+
+    let entry = (await getConsentRegister(fs, key, 'me', bookId)).find((p) => p.name === 'Angel');
+    expect(entry?.sheet).toBe('red wellies');
+    expect(entry?.pseudonym).toBe('Ana');
+
+    await setConsentEntry(fs, key, 'me', { bookId, name: 'Angel', sheet: 'blue coat', now });
+    entry = (await getConsentRegister(fs, key, 'me', bookId)).find((p) => p.name === 'Angel');
+    expect(entry?.sheet).toBe('blue coat');
+    expect(entry?.pseudonym).toBe('Ana');
+  });
+
+  it('an empty string clears a sheet, and clearing one leaves the other alone', async () => {
+    const fs = memFileSystem();
+    const bookId = await seed(fs);
+    await setConsentEntry(fs, key, 'me', {
+      bookId,
+      name: 'Angel',
+      sheet: 'red wellies',
+      pseudonym: 'Ana',
+      now,
+    });
+    await setConsentEntry(fs, key, 'me', { bookId, name: 'Angel', sheet: '', now });
+    const entry = (await getConsentRegister(fs, key, 'me', bookId)).find((p) => p.name === 'Angel');
+    expect(entry?.sheet).toBeUndefined();
+    expect(entry?.pseudonym).toBe('Ana');
+    expect(await characterSheets(fs, key, 'me', bookId)).toEqual({});
+  });
+
+  it('a book with no sheets hands the image path an empty map', async () => {
+    const fs = memFileSystem();
+    const bookId = await seed(fs);
+    await setConsentEntry(fs, key, 'me', { bookId, name: 'Angel', pseudonym: 'Ana', now });
+    expect(await characterSheets(fs, key, 'me', bookId)).toEqual({});
   });
 });

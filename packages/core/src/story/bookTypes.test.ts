@@ -3,19 +3,22 @@ import { BookStyleSchema } from '../schemas';
 import {
   BOOK_TYPES,
   BIOGRAPHY_BOOK_TYPE,
+  CHILDRENS_BOOK_TYPE,
   MCADAMS_SCENES,
   getBookType,
   listBookTypes,
+  resolveSpine,
   SYMBOLIC_IMAGE_FRAMING,
 } from './bookTypes';
 
 describe('BookType registry (64)', () => {
-  it('registers the six built types (72 §3.2; childrens + ourStory are P6)', () => {
+  it('registers the seven built types (72 §3.2; ourStory is P6b)', () => {
     expect(BOOK_TYPES.map((t) => t.id)).toEqual([
       'biography',
       'memoir',
       'yearInReview',
       'portrait',
+      'childrens',
       'dreamBook',
       'erotica',
     ]);
@@ -174,6 +177,106 @@ describe('BookType registry (64)', () => {
       if (type.imageFraming !== SYMBOLIC_IMAGE_FRAMING) continue;
       expect(type.imageFraming).toMatch(/never a likeness/i);
       expect(type.imageFraming).toMatch(/never a photograph/i);
+    }
+  });
+
+  /**
+   * The §8.5 boundary guard. Relaxing the likeness rule is a ONE-TYPE exception the owner signed off on, and
+   * the thing that must never happen quietly is a second type acquiring it. This fails the moment any other
+   * type stops using the symbolic default — which is exactly when someone should have to come back to §8.5.
+   */
+  it('EXACTLY ONE type departs from the symbolic framing, and it is the children’s book (§8.5)', () => {
+    const departs = listBookTypes().filter((t) => t.imageFraming !== SYMBOLIC_IMAGE_FRAMING);
+    expect(departs.map((t) => t.id)).toEqual(['childrens']);
+    // …and only for a type that names children as its heroes.
+    expect(departs[0]?.castPolicy).toBe('childrenAsHeroes');
+    // The relaxation is bounded: illustration only, and still no text in the image.
+    expect(CHILDRENS_BOOK_TYPE.imageFraming).toMatch(/non-photorealistic/i);
+    expect(CHILDRENS_BOOK_TYPE.imageFraming).toMatch(/NO text/i);
+  });
+
+  it('the children’s book is a picture book for children, told in pages (§4.1)', () => {
+    expect(CHILDRENS_BOOK_TYPE.spine).toEqual({ kind: 'pages', count: 32, wordsPerPage: 40 });
+    expect(CHILDRENS_BOOK_TYPE.truthMode).toBe('fictionalized');
+    expect(CHILDRENS_BOOK_TYPE.gates.adult).toBe(false);
+    expect(CHILDRENS_BOOK_TYPE.audience?.ageFrom).toBe(3);
+    // The page count is a commission answer, and it must actually change the shape.
+    expect(resolveSpine(CHILDRENS_BOOK_TYPE, { length: '16' })).toEqual({
+      kind: 'pages',
+      count: 16,
+      wordsPerPage: 40,
+    });
+    // A missing or junk answer falls back to the standard 32, never NaN pages.
+    expect(resolveSpine(CHILDRENS_BOOK_TYPE, {})).toEqual({
+      kind: 'pages',
+      count: 32,
+      wordsPerPage: 40,
+    });
+    expect(resolveSpine(CHILDRENS_BOOK_TYPE, { length: 'nonsense' })).toEqual({
+      kind: 'pages',
+      count: 32,
+      wordsPerPage: 40,
+    });
+  });
+
+  it('asks the parent about the CHILD, not about themselves (§4.1 — the framework is the only source)', () => {
+    // The reason `scenes` stopped being the McAdams tuple. Asking a parent for "a low point — a hard time
+    // that stayed with you" in order to write a bedtime story is the wrong interview.
+    expect(CHILDRENS_BOOK_TYPE.interview.scenes).not.toBe(MCADAMS_SCENES);
+    const keys = CHILDRENS_BOOK_TYPE.interview.scenes.map((s) => s.key);
+    expect(keys).not.toContain('lowPoint');
+    expect(keys).toContain('delight');
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const scene of CHILDRENS_BOOK_TYPE.interview.scenes) {
+      expect(scene.prompt.trim().length).toBeGreaterThan(0);
+      expect(scene.label.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  it('demos its OWN voice — never the biography’s literary-memoir specimen', () => {
+    // The panel is labelled "how your biographer will sound", so a picture book showing a line of adult
+    // memoir prose is the product lying about itself before a word is written.
+    const ids = CHILDRENS_BOOK_TYPE.stylePresets.map((p) => p.id);
+    expect(ids).toContain('warm'); // BookConfig.style's default must resolve to a real directive
+    expect(ids).not.toContain('journalistic');
+    for (const preset of CHILDRENS_BOOK_TYPE.stylePresets) {
+      expect(preset.directive.trim().length).toBeGreaterThan(0);
+      const biography = BIOGRAPHY_BOOK_TYPE.stylePresets.find((p) => p.id === preset.id);
+      expect(preset.specimen.third).not.toBe(biography?.specimen.third);
+      // Picture-book sentences are short by nature — a 30-word specimen is the wrong demonstration.
+      expect(preset.specimen.third.split(/\s+/).length).toBeLessThan(30);
+    }
+  });
+
+  it('the picture-book doctrine overrides the craft rules that do not apply to it', () => {
+    const d = CHILDRENS_BOOK_TYPE.doctrine;
+    // It still inherits the shared IP…
+    expect(d).toContain('NEVER NARRATE THE BOOK’S OWN CONSTRUCTION'.replace('’', "'"));
+    expect(d).toContain('FORBIDDEN AI-PROSE TELLS');
+    // …but says plainly which general rules it supersedes, so the model isn't left to reconcile
+    // "one voice, present tense, no hindsight" against "run the double perspective".
+    expect(d).toMatch(/THIS wins/i);
+    expect(d).toMatch(/NO double perspective/i);
+    expect(d).toMatch(/read ALOUD/i);
+  });
+
+  /**
+   * The bookshelf resolves a book's unit from `type.spine` alone — it has the type id but not the book's
+   * commission answers (72 §3.1). That is only correct while no type's `spineFor` can cross INTO or OUT OF a
+   * `pages` spine. Pin it: if a future type breaks the assumption, this fails and names the shelf.
+   */
+  it('no type’s commission answers can turn a page book into a chapter book, or the reverse', () => {
+    for (const type of listBookTypes()) {
+      const answerSets: Record<string, string>[] = [{}];
+      for (const option of type.options ?? []) {
+        for (const choice of option.choices ?? []) answerSets.push({ [option.id]: choice.value });
+      }
+      for (const answers of answerSets) {
+        expect(
+          resolveSpine(type, answers).kind === 'pages',
+          `${type.id} with ${JSON.stringify(answers)}`,
+        ).toBe(type.spine.kind === 'pages');
+      }
     }
   });
 });

@@ -339,3 +339,91 @@ describe('buildRevisionUserMessage (64 §3.3.1/§5.3)', () => {
     expect(msg).not.toMatch(/NEVER include or reintroduce/);
   });
 });
+
+/**
+ * 72 P6 — the commission answers that name a PERSON. These reach the model or they reach nothing: a picture
+ * book whose prompt never names its hero writes about a generic child, and a portrait whose prompt never
+ * names its subject writes about the author. Both assert the PROMPT, never a call count.
+ */
+describe('person commission answers reach the prompt (72 §4.1)', () => {
+  const childrens = getBookType('childrens')!;
+
+  it('names the hero of a children’s book', () => {
+    const sys = buildBiographerSystem(
+      childrens,
+      cfg({ typeOptions: { hero: 'p-mira' } }),
+      'Ben',
+      undefined,
+      { 'p-mira': 'Mira' },
+    );
+    expect(sys).toContain('THE HERO: Mira');
+    expect(sys).toMatch(/the one who acts/i);
+  });
+
+  it('names BOTH heroes when a book stars two siblings, and makes neither a sidekick', () => {
+    const sys = buildBiographerSystem(
+      childrens,
+      cfg({ typeOptions: { hero: 'p-mira,p-arlo' } }),
+      'Ben',
+      undefined,
+      { 'p-mira': 'Mira', 'p-arlo': 'Arlo' },
+    );
+    expect(sys).toContain('THE HEROES: Mira and Arlo');
+    expect(sys).toMatch(/neither is a sidekick/i);
+  });
+
+  it('NEVER puts a raw person id in the prompt when the name cannot be resolved', () => {
+    // A deleted person, or a caller that forgot the map. Emitting the uuid would both leak an internal id
+    // into the model's context and produce a book about someone called "p-mira".
+    const sys = buildBiographerSystem(childrens, cfg({ typeOptions: { hero: 'p-mira' } }), 'Ben');
+    expect(sys).not.toContain('p-mira');
+    expect(sys).not.toContain('THE HERO');
+  });
+
+  it('names the subject of a PORTRAIT — the answer that was stored and read by nothing', () => {
+    // Pre-P6 this required question reached no directive, so the model was never told whose portrait it was.
+    const sys = buildBiographerSystem(
+      getBookType('portrait')!,
+      cfg({ typeOptions: { subject: 'p-ang', addressee: 'aboutThem' } }),
+      'Ben',
+      undefined,
+      { 'p-ang': 'Angel' },
+    );
+    expect(sys).toContain('THE SUBJECT: this book is about Angel.');
+    // …and it does not confuse the subject with the person whose material it is drawn from.
+    expect(sys).toMatch(/not the person whose material/i);
+  });
+});
+
+describe('a picture book is measured in pages, not chapters (72 §4.1)', () => {
+  const childrens = getBookType('childrens')!;
+
+  it('states the exact page count and page length, and never the chapter-length directive', () => {
+    const sys = buildBiographerSystem(childrens, cfg({ length: 'full' }), 'Ben');
+    expect(sys).toContain('exactly 32 pages');
+    expect(sys).toContain('about 40 words');
+    // `length: 'full'` would otherwise ask for "16–24 chapters of 2,500–5,000 words" alongside it — a
+    // contradiction the model resolves the wrong way.
+    expect(sys).not.toMatch(/2,500–5,000 words/);
+    expect(sys).not.toMatch(/roughly 16–24 chapters/);
+  });
+
+  it('follows the commission’s page count', () => {
+    const sys = buildBiographerSystem(childrens, cfg({ typeOptions: { length: '16' } }), 'Ben');
+    expect(sys).toContain('exactly 16 pages');
+  });
+
+  it('tells the model who is listening, and how', () => {
+    const sys = buildBiographerSystem(childrens, cfg(), 'Ben');
+    expect(sys).toContain('AUDIENCE:');
+    expect(sys).toContain('aged 3–7');
+    expect(sys).toContain('read aloud by an adult');
+  });
+
+  it('leaves every other type’s length directive byte-unchanged', () => {
+    const sys = buildBiographerSystem(BIOGRAPHY_BOOK_TYPE, cfg({ length: 'full' }), 'Ben');
+    expect(sys).toContain('roughly 16–24 chapters');
+    expect(sys).not.toContain('pages');
+    expect(sys).not.toContain('AUDIENCE:');
+  });
+});

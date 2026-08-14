@@ -35,6 +35,8 @@ function renderShelf(shelf: BookShelfEntry[], onOpen = vi.fn()): { onOpen: typeo
         truthMode: 'true',
         summary: { drawsOn: '', shape: '', asksAbout: '' },
         gates: { adult: false },
+        castPolicy: 'realNames' as const,
+        unit: { one: 'chapter', many: 'chapters' },
         options: [],
         structures: [],
         stylePresets: [],

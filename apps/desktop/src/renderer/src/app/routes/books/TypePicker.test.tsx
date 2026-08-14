@@ -15,6 +15,8 @@ function type(over: Partial<StoryBookTypeView> = {}): StoryBookTypeView {
     truthMode: 'true',
     summary: { drawsOn: 'everything on record', shape: 'life eras', asksAbout: 'scenes' },
     gates: { adult: false },
+    castPolicy: 'realNames' as const,
+    unit: { one: 'chapter', many: 'chapters' },
     options: [],
     structures: [],
     stylePresets: [],

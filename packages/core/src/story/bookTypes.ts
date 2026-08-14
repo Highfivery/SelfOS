@@ -87,12 +87,25 @@ export interface BookInterviewCategory {
   examplePrompts: string[];
 }
 
+/**
+ * One set-piece the interview probes for. Structural, not the McAdams tuple: typing this as
+ * `typeof MCADAMS_SCENES` made "the framework is the only source of interview dimensions" (§4.1)
+ * unachievable — every type had to reuse biography's eight scenes verbatim, which is why all five
+ * non-biography types still declare `interview: BIOGRAPHY_BOOK_TYPE.interview`. A picture book must be
+ * able to ask a parent about their child rather than about their own low point.
+ */
+export interface BookInterviewScene {
+  key: string;
+  label: string;
+  prompt: string;
+}
+
 /** The interview framework a book type uses to know what to ask (§5.5). */
 export interface BookInterviewFramework {
   /** The stance the interviewer opens with (the McAdams framing, adapted). */
   framing: string;
-  /** The eight key scenes. */
-  scenes: typeof MCADAMS_SCENES;
+  /** This type's key scenes — biography's are the McAdams eight; another type names its own. */
+  scenes: readonly BookInterviewScene[];
   /** Question categories beyond the scenes. */
   categories: BookInterviewCategory[];
   /** The deepening ladder (flat answer → scene-level material): place → body → object → dialogue →
@@ -148,6 +161,8 @@ export interface BookTypeOption {
   kind: 'choice' | 'text' | 'person';
   /** For `choice` — the first entry is the default. */
   choices?: { value: string; label: string; description?: string }[];
+  /** For `person` — several may be named (a picture book can star two siblings). Stored comma-separated. */
+  multiple?: boolean;
   placeholder?: string;
   /** The commission step won't proceed without an answer. */
   required?: boolean;
@@ -222,6 +237,21 @@ export function resolveTypeOptions(
 /** The default image contract (§8.5): evocative and symbolic, never a photoreal likeness of a real person. */
 export const SYMBOLIC_IMAGE_FRAMING =
   'Evocative, non-photorealistic art that suggests the moment rather than depicting it. Never a likeness of a real person, never a recognisable face, never a photograph.';
+
+/**
+ * The one deliberate exception (§8.5, owner decision 2026-08-13). A picture book whose hero changes face
+ * between pages is not a picture book, so this framing permits depicting the named children and carries
+ * their character sheet through to the image provider.
+ *
+ * Stated plainly, because it is the only place in SelfOS where this happens: appearance data about a real
+ * child leaves the app to a third-party image provider. It applies to this ONE type, only to children in
+ * the author's own household, only when image generation is switched on, and only once the author has
+ * saved a character sheet themselves (§4.8) — the sheet is never auto-sent from the profile.
+ *
+ * What does NOT relax: no photorealism (illustration only), and still no text anywhere in the image.
+ */
+export const CHILDRENS_IMAGE_FRAMING =
+  'Warm, hand-illustrated children’s picture-book art — stylised and non-photorealistic, never a photograph. Depict the named child characters as described in their character sheets, and keep each character visually IDENTICAL on every page: the same face, hair, skin tone, build and clothing every time. Put NO text, letters, title, or typography anywhere in the image.';
 
 /**
  * The doctrine is composed from shared blocks, not copied per type (72 §5.1). The craft principles, the
@@ -779,11 +809,192 @@ export const EROTICA_BOOK_TYPE: BookType = {
   spineFor: (o) => (o['arc'] === 'arc' ? { kind: 'eras' } : { kind: 'vignettes' }),
 };
 
+/**
+ * A picture book starring the author's own children (§3.2, P6). The one type with a `pages` spine, the one
+ * with `childrenAsHeroes`, and the one that relaxes the image-likeness rule (§8.5).
+ *
+ * Its interview is the reason `BookInterviewFramework.scenes` had to stop being the McAdams tuple: asking a
+ * parent for "a low point — a hard time that stayed with you" to write a bedtime story is the wrong
+ * question. These scenes ask about the child.
+ */
+export const CHILDRENS_BOOK_TYPE: BookType = {
+  id: 'childrens',
+  label: 'Children’s book',
+  blurb: 'A picture book starring your own children, made from the small things they actually do.',
+  doctrine: reimagines(
+    `You are writing a picture book for young children, starring real children from ${'${subject}'}'s own family. The events are invented; the children are not — their names, their natures, the things they love and fear and say come from the material and must stay true. A parent reading this aloud should recognise their own child on every page.`,
+    [
+      `PICTURE-BOOK CRAFT (where this contradicts a general craft rule above, THIS wins — a picture book is not narrative nonfiction)
+- One image-able moment per page. Every page must give the illustrator something concrete to draw: an action, a place, a face. Never a page of interior reflection.
+- Write to be read ALOUD by a tired adult at bedtime. Short sentences. Concrete nouns. Rhythm you can hear. Read every line aloud in your head before you keep it.
+- Vocabulary a child of the stated age can hold. No abstraction a child cannot picture.
+- Repetition is a feature, not a tell: a refrain a child can join in with is good writing here.
+- NO double perspective, NO earned hindsight, NO reflective narrator looking back. There is one voice and it is in the present of the story.
+- Never end on a lesson, a moral, or "and she learned that…". End on an image or a feeling. The child draws their own conclusion.
+- The child is the one who acts. Never let an adult solve the problem for them.`,
+    ],
+  ),
+  structures: [
+    {
+      id: 'adventure',
+      label: 'A small adventure',
+      description: 'Something ordinary goes sideways, and they put it right themselves.',
+      isDefault: true,
+    },
+    {
+      id: 'day',
+      label: 'One day, start to finish',
+      description: 'Morning to bedtime, in order — the shape of their actual day.',
+    },
+    {
+      id: 'refrain',
+      label: 'A repeating refrain',
+      description: 'The same line comes back each page, with one thing changed.',
+    },
+  ],
+  /**
+   * Its OWN registers, and deliberately only three. The biography presets demo literary-memoir prose under
+   * the label "how your biographer will sound" — for a picture book that is simply a lie about the product,
+   * and "journalistic" or "cinematic" are not things a book for a four-year-old can be. `warm` is included
+   * because it is `BookConfig.style`'s default, so the default always resolves to a real directive.
+   */
+  stylePresets: [
+    {
+      id: 'warm',
+      label: 'Cosy',
+      directive:
+        'Cosy register: gentle, affectionate, bedtime-soft. The voice of someone who loves this child.',
+      specimen: {
+        first: 'I put on my red boots. The puddle was deeper than yesterday. I jumped anyway.',
+        third: 'She put on her red boots. The puddle was deeper than yesterday. She jumped anyway.',
+      },
+    },
+    {
+      id: 'plain',
+      label: 'Simple',
+      directive:
+        'Simple register: the shortest true sentence, every time. Concrete nouns, ordinary words, nothing decorative.',
+      specimen: {
+        first: 'The fox was under the hedge. I was very quiet. The fox looked right at me.',
+        third: 'The fox was under the hedge. She was very quiet. The fox looked right at her.',
+      },
+    },
+    {
+      id: 'poetic',
+      label: 'Sing-song',
+      directive:
+        'Sing-song register: rhythm you can hear, and a refrain a child can join in with. Never force a rhyme that bends a true word out of shape.',
+      specimen: {
+        first:
+          'Boots on, hood up, out I go — and the puddle at the gate is waiting, just the same as long ago.',
+        third:
+          'Boots on, hood up, out she goes — and the puddle at the gate is waiting, just the same as long ago.',
+      },
+    },
+  ],
+  interview: {
+    framing:
+      'You are gathering the small, true, specific things about this child so a story can be built around them. You are not asking the parent about themselves.',
+    scenes: [
+      {
+        key: 'delight',
+        label: 'What delights them',
+        prompt: 'What makes them light up? The specific thing, not the category.',
+      },
+      {
+        key: 'fear',
+        label: 'What they are working up to',
+        prompt: 'Is there something they find hard or frightening right now?',
+      },
+      {
+        key: 'saying',
+        label: 'Something they say',
+        prompt: 'A phrase or a word they say the way only they say it.',
+      },
+      {
+        key: 'habit',
+        label: 'A thing they always do',
+        prompt: 'Something they do every time — a ritual, a habit, a way of doing a small thing.',
+      },
+      {
+        key: 'place',
+        label: 'Their place',
+        prompt: 'Where are they most themselves? Describe it the way they would see it.',
+      },
+      {
+        key: 'companion',
+        label: 'Who or what is with them',
+        prompt: 'A toy, an animal, a sibling, a friend they are inseparable from.',
+      },
+    ],
+    categories: [
+      {
+        key: 'character',
+        label: 'Who they are',
+        examplePrompts: [
+          'What are they like when nobody is asking anything of them?',
+          'What do they do when something goes wrong?',
+        ],
+      },
+      {
+        key: 'world',
+        label: 'Their world',
+        examplePrompts: ['What does their day actually look like?', 'Who is in it besides you?'],
+      },
+    ],
+    deepeningLadder: [
+      'Where does this happen — what does the room or the place look like?',
+      'What do they do with their hands or their body when this happens?',
+      'Is there an object involved? Describe it.',
+      'What do they say, in their words?',
+      'What is the feeling underneath it?',
+    ],
+  },
+  gates: { adult: false },
+  summary: {
+    drawsOn: 'what you’ve told it about your children',
+    shape: 'illustrated pages',
+    asksAbout: 'your child — what they love, say and do',
+  },
+  truthMode: 'fictionalized',
+  // 32 pages is the picture-book standard (a printer's signature); ~40 words a page is a read-aloud page.
+  spine: { kind: 'pages', count: 32, wordsPerPage: 40 },
+  castPolicy: 'childrenAsHeroes',
+  imageFraming: CHILDRENS_IMAGE_FRAMING,
+  audience: { ageFrom: 3, ageTo: 7, readingLevel: 'read aloud by an adult' },
+  options: [
+    {
+      id: 'hero',
+      label: 'Who it stars',
+      kind: 'person',
+      multiple: true,
+      help: 'One child, or several — a book can star two siblings.',
+      required: true,
+    },
+    {
+      id: 'length',
+      label: 'How long',
+      kind: 'choice',
+      choices: [
+        { value: '32', label: '32 pages', description: 'The picture-book standard.' },
+        { value: '24', label: '24 pages', description: 'Shorter — for a younger listener.' },
+        { value: '16', label: '16 pages', description: 'A very short board-book length.' },
+      ],
+    },
+  ],
+  spineFor: (o) => ({
+    kind: 'pages',
+    count: Number(o['length']) || 32,
+    wordsPerPage: 40,
+  }),
+};
+
 export const BOOK_TYPES: readonly BookType[] = [
   BIOGRAPHY_BOOK_TYPE,
   MEMOIR_BOOK_TYPE,
   YEAR_IN_REVIEW_BOOK_TYPE,
   PORTRAIT_BOOK_TYPE,
+  CHILDRENS_BOOK_TYPE,
   DREAM_BOOK_TYPE,
   EROTICA_BOOK_TYPE,
 ];

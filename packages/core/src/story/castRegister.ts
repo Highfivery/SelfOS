@@ -21,6 +21,38 @@ function normalize(name: string): string {
   return name.trim().toLowerCase();
 }
 
+/**
+ * personId → display name for every `kind: 'person'` commission answer this book gave (the portrait's
+ * subject, the picture book's hero). Fed to `buildBiographerSystem` so those answers can become directives.
+ *
+ * Reads the People graph directly rather than the gated related-people read: a person can only be chosen
+ * here by the author, on their own commission screen, and the ONLY thing that crosses is the display name
+ * they picked from a list they were already shown. An id with no matching person is simply absent, so a
+ * deleted person degrades to "no directive" rather than a uuid in the prompt.
+ */
+export async function resolvePersonOptionNames(
+  fs: FileSystem,
+  key: Uint8Array,
+  bookType: { options?: { id: string; kind: string }[] },
+  typeOptions: Record<string, string> | undefined,
+): Promise<Record<string, string>> {
+  const personOptions = (bookType.options ?? []).filter((option) => option.kind === 'person');
+  if (personOptions.length === 0 || !typeOptions) return {};
+  const wanted = new Set<string>();
+  for (const option of personOptions) {
+    for (const id of (typeOptions[option.id] ?? '').split(',')) {
+      const trimmed = id.trim();
+      if (trimmed) wanted.add(trimmed);
+    }
+  }
+  if (wanted.size === 0) return {};
+  const out: Record<string, string> = {};
+  for (const person of await listPeople(fs, key)) {
+    if (wanted.has(person.id) && person.displayName.trim()) out[person.id] = person.displayName;
+  }
+  return out;
+}
+
 /** A human relationship label from the subject's link to a person: a custom label wins, else the type. */
 function labelFor(type: string, label: string | undefined): string {
   return label?.trim() ? label.trim() : type;

@@ -4,6 +4,7 @@ import type { AiDeps } from '../questionnaires';
 import { runClaude } from '../questionnaires';
 import type { AiFailureReason } from '../schemas';
 import { getBookType } from './bookTypes';
+import { resolvePersonOptionNames } from './castRegister';
 import { buildStoryCorpus, corpusText } from './storyCorpus';
 import { buildBiographerSystem } from './storyPromptBuilder';
 import { getBook, getExclusions } from './storyService';
@@ -62,7 +63,13 @@ async function bookContext(
   );
   return {
     ok: true,
-    system: buildBiographerSystem(bookType, book.config, corpus.personName),
+    system: buildBiographerSystem(
+      bookType,
+      book.config,
+      corpus.personName,
+      undefined,
+      await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
+    ),
     corpus: corpusText(corpus),
     title: book.title,
   };

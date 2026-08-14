@@ -4235,6 +4235,18 @@ export const BookConsentEntrySchema = z.object({
   personId: z.string().optional(),
   /** A name to substitute for this person in the READ + EXPORTED book (their real name stays in the draft). */
   pseudonym: z.string().optional(),
+  /**
+   * A character sheet: how this person LOOKS, written by the author, injected verbatim into every image
+   * prompt for a `childrenAsHeroes` book so the hero has the same face on every page (72 §4.8/§8.5).
+   *
+   * It lives here rather than on `CastEntry` because the cast register is derived and recomputed on every
+   * read — nothing on it survives. This is the per-book, per-person, author-authored record, which is
+   * exactly what a pseudonym is, so it shares its storage and its write path.
+   *
+   * It is ONLY ever read for a book type whose framing permits likeness. Setting it on any other type is
+   * inert; it never reaches an image provider.
+   */
+  sheet: z.string().optional(),
   updatedAt: z.string(),
 });
 export type BookConsentEntry = z.infer<typeof BookConsentEntrySchema>;
@@ -4261,6 +4273,9 @@ export interface ConsentPerson {
    *  thing a person cares about, not how often the underlying material happens to mention someone. */
   chapterMentions: number;
   pseudonym?: string;
+  /** The author's character sheet for this person (§4.8) — only meaningful for a book whose type permits
+   *  likeness; the People tab offers the field only there. */
+  sheet?: string;
 }
 
 export const StorySetConsentInputSchema = z.object({
@@ -4268,6 +4283,8 @@ export const StorySetConsentInputSchema = z.object({
   name: z.string().min(1),
   /** Empty string clears the pseudonym. */
   pseudonym: z.string().optional(),
+  /** Empty string clears the character sheet (§4.8). Absent leaves it untouched. */
+  sheet: z.string().optional(),
 });
 export type StorySetConsentInput = z.infer<typeof StorySetConsentInputSchema>;
 
@@ -5209,6 +5226,13 @@ export interface StoryBookTypeView {
   stylePresets: { id: BookStyle; label: string }[];
   /** Whether this kind of book is behind the shared 18+ acknowledgement (72 §8.4). */
   gates: { adult: boolean };
+  /** How real people appear (72 §4.1). `childrenAsHeroes` is the one policy whose images may depict them,
+   *  so it is also what tells the People tab to offer a character sheet (§4.8). */
+  castPolicy: 'realNames' | 'renamed' | 'childrenAsHeroes';
+  /** What this kind of book is counted in — pages for a picture book, chapters otherwise (72 §3.1). The
+   *  SAME derivation the bookshelf uses, so the workspace and the shelf can never disagree about what a
+   *  book is made of. */
+  unit: { one: string; many: string };
   /** What this type asks at commission (72 §4.1) — the picker renders whatever it declares. */
   options: {
     id: string;
@@ -5216,6 +5240,8 @@ export interface StoryBookTypeView {
     help?: string;
     kind: 'choice' | 'text' | 'person';
     choices?: { value: string; label: string; description?: string }[];
+    /** For `person` — several may be named (a picture book can star two siblings). */
+    multiple?: boolean;
     placeholder?: string;
     required?: boolean;
   }[];

@@ -205,7 +205,12 @@ interface StoryState {
   consent: ConsentPerson[];
   loadConsent: (bookId: string) => Promise<void>;
   /** Rename someone for the book (72 §4.7) — an empty string puts their real name back. */
-  setConsent: (bookId: string, name: string, pseudonym?: string) => Promise<void>;
+  /** Each field is independent: omit one to leave it untouched, pass '' to clear it. */
+  setConsent: (
+    bookId: string,
+    name: string,
+    fields: { pseudonym?: string; sheet?: string },
+  ) => Promise<void>;
   /** How far along the book is (§3.6) — a qualitative stage + subtle ratio, from the stored coverage. */
   completeness: StoryCompleteness | null;
   loadCompleteness: (bookId: string) => Promise<void>;
@@ -760,11 +765,12 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   loadConsent: async (bookId) => {
     set({ consent: (await window.selfos?.storyConsent({ bookId })) ?? [] });
   },
-  setConsent: async (bookId, name, pseudonym) => {
+  setConsent: async (bookId, name, fields) => {
     const next = await window.selfos?.storySetConsent({
       bookId,
       name,
-      ...(pseudonym !== undefined ? { pseudonym } : {}),
+      ...(fields.pseudonym !== undefined ? { pseudonym: fields.pseudonym } : {}),
+      ...(fields.sheet !== undefined ? { sheet: fields.sheet } : {}),
     });
     if (next) set({ consent: next });
   },

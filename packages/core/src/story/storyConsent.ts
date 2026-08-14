@@ -11,14 +11,20 @@ import { getConsent, saveConsent } from './storyService';
 import { applyPseudonyms } from './storyText';
 
 /**
- * People-in-your-book consent center + pseudonyms (64-your-story §17.5, #290).
+ * People in your book (72 §3.9/§4.7; was 64 §17.5's consent center).
  *
- * A biography names real living people. This gives the author a per-book register of everyone the book names
- * (from the same source as the cast register — the People graph + memories + named mentions) with a MANUAL
- * consent state (unknown / requested / granted / declined; SelfOS never contacts anyone) and an optional
- * pseudonym. The pseudonym map is applied everywhere the book is READ or EXPORTED — the owner's own immersive
- * reader, a shared reader, and every export — while the draft keeps the real name. A declined/un-consented
- * name only WARNS at publish (a pseudonym is the fix); it is never a hard block.
+ * A book names real living people. This gives the author a per-book register of everyone the book names (from
+ * the same source as the cast register — the People graph + memories + named mentions) and, per person, the
+ * two things that actually change something:
+ *
+ * - a **pseudonym**, applied everywhere the book is READ or EXPORTED (the owner's immersive reader, a shared
+ *   reader, every export) while the draft keeps the real name;
+ * - a **character sheet** (§4.8), the author's description of how someone looks, injected into image prompts
+ *   for a book type whose framing permits likeness — a picture book's hero. Inert for every other type.
+ *
+ * The four manual consent states are gone (72 §5.9): nothing was ever sent to anyone and nothing was ever
+ * blocked, so they were an author's private note the app made them maintain, and the publish-time warning
+ * they drove is gone with them.
  */
 
 function normalize(name: string): string {
@@ -26,9 +32,9 @@ function normalize(name: string): string {
 }
 
 /**
- * The consent center read: every person the book names, joined with the author's decision. New people (in the
- * cast, not yet in the store) default to `unknown`; a stored decision for someone no longer named is kept
- * (they may reappear). Ordered by cast prominence, then any leftover stored-only names.
+ * The People-tab read: every person the book names, joined with what the author calls them and how they look.
+ * A stored entry for someone the cast no longer surfaces is kept (they may reappear). Ordered by cast
+ * prominence, then any leftover stored-only names.
  */
 export async function getConsentRegister(
   fs: FileSystem,
@@ -56,6 +62,7 @@ export async function getConsentRegister(
       mentions: c.mentions,
       chapterMentions: c.chapterMentions,
       ...(decision?.pseudonym ? { pseudonym: decision.pseudonym } : {}),
+      ...(decision?.sheet ? { sheet: decision.sheet } : {}),
     });
   }
   // A stored decision for someone the cast no longer surfaces — keep it visible (they were named before).
@@ -67,27 +74,38 @@ export async function getConsentRegister(
       mentions: 0,
       chapterMentions: 0,
       ...(e.pseudonym ? { pseudonym: e.pseudonym } : {}),
+      ...(e.sheet ? { sheet: e.sheet } : {}),
     });
   }
   return out;
 }
 
-/** Set (or update) a person's consent + pseudonym. An empty pseudonym clears it. Returns the fresh register. */
+/**
+ * Set what a person is called in the book and/or how they look. Each field is INDEPENDENT: an absent field
+ * leaves the stored value alone, an empty string clears it. That distinction is the whole point — the two
+ * fields have separate editors, so a whole-entry replace would silently wipe a character sheet the moment the
+ * author set a pseudonym (the merge-by-id lesson from Memory's per-fact edit). Returns the fresh register.
+ */
 export async function setConsentEntry(
   fs: FileSystem,
   key: Uint8Array,
   personId: string,
-  args: { bookId: string; name: string; pseudonym?: string; now: Date },
+  args: { bookId: string; name: string; pseudonym?: string; sheet?: string; now: Date },
 ): Promise<ConsentPerson[]> {
   const list = await getConsent(fs, key, personId, args.bookId);
   const k = normalize(args.name);
-  const pseudonym = args.pseudonym?.trim();
+  const existing = list.entries.find((e) => normalize(e.name) === k);
+  /** Absent ⇒ keep what's stored; present ⇒ take it (blank clears). */
+  const merge = (next: string | undefined, prev: string | undefined): string | undefined =>
+    next === undefined ? prev : next.trim() || undefined;
+  const pseudonym = merge(args.pseudonym, existing?.pseudonym);
+  const sheet = merge(args.sheet, existing?.sheet);
   const entry: BookConsentEntry = {
     name: args.name.trim(),
     ...(pseudonym ? { pseudonym } : {}),
+    ...(sheet ? { sheet } : {}),
     updatedAt: args.now.toISOString(),
   };
-  const existing = list.entries.find((e) => normalize(e.name) === k);
   const next = existing
     ? list.entries.map((e) =>
         normalize(e.name) === k ? { ...entry, ...(e.personId ? { personId: e.personId } : {}) } : e,
@@ -181,4 +199,27 @@ export function pseudonymizeManifest(
       ...(img.visionNotes ? { visionNotes: sub(img.visionNotes) } : {}),
     })),
   };
+}
+
+/**
+ * The character-sheet map (realName → sheet) for a book, for the image path (§4.8/§8.5).
+ *
+ * The CALLER decides whether to use it: it is only ever read for a book type whose `imageFraming` permits
+ * likeness, so a sheet stored against any other type never reaches an image provider. Empty when none are set.
+ */
+export async function characterSheets(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<Record<string, string>> {
+  const list = await getConsent(fs, key, personId, bookId).catch(() => ({
+    schemaVersion: 1 as const,
+    entries: [] as BookConsentEntry[],
+  }));
+  const map: Record<string, string> = {};
+  for (const e of list.entries) {
+    if (e.sheet?.trim()) map[e.name] = e.sheet.trim();
+  }
+  return map;
 }

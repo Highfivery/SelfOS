@@ -7,10 +7,12 @@ import {
   Stack,
   Text,
 } from '../../../design-system/components';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryStore } from '../../../stores/storyStore';
 import { OutlineEditor } from './OutlineEditor';
 import styles from './Books.module.css';
 import { manuscriptMetrics } from '@selfos/core/story-metrics';
+import { IMAGE_PRICING } from '@selfos/core/usage';
 import { useEffect, useState } from 'react';
 import type { ContinuityFinding, StoryBookBundle, StoryDraftProgress } from '@shared/schemas';
 import { DraftProgress } from './DraftProgress';
@@ -19,7 +21,10 @@ import { chapterBadge, coverPosition, partLabel } from './chapterDisplay';
 /** What each review finding is about, in the author's language. Two passes write into one list — the
  *  continuity check (names/dates/facts) and the whole-book manuscript read (72 §5.3) — so the kind is what
  *  tells them apart at a glance. */
-export const FINDING_KIND_LABEL: Record<ContinuityFinding['kind'], string> = {
+export const PER_IMAGE_USD = IMAGE_PRICING['gpt-image-2']?.perImageUsd ?? 0.17;
+
+/** What each review finding is about, in the author's language. */
+const FINDING_KIND_LABEL: Record<ContinuityFinding['kind'], string> = {
   name: 'Name',
   date: 'Date',
   fact: 'Fact',
@@ -35,10 +40,13 @@ export function ChaptersTab({
   bundle,
   chapterProgress,
   pending,
+  isPageBook,
   onOpenChapter,
   onWrite,
 }: {
   bundle: StoryBookBundle;
+  /** A `pages`-spine book (a picture book) — every page wants a picture, so it gets the bulk action. */
+  isPageBook: boolean;
   chapterProgress: (StoryDraftProgress & { startedAt: number }) | null;
   pending: number;
   onOpenChapter: (chapterId: string) => void;
@@ -58,6 +66,15 @@ export function ChaptersTab({
   const resolveContinuity = useStoryStore((s) => s.resolveContinuity);
   const busy = useStoryStore((s) => s.chaptersGenerating);
   const [continuityNote, setContinuityNote] = useState<string | null>(null);
+  // Illustrating a whole picture book (72 P6). A 32-page book is 32 separate paid image generations, so it
+  // is never automatic: the author is told how many and (if they may see money) what it costs, and has to
+  // ask for it. Per page it is the SAME `generateImage` the chapter editor uses — no new op, so each page
+  // meters on its own and the budget gate stops the run cleanly partway.
+  const generateImage = useStoryStore((s) => s.generateImage);
+  const isAdmin = useSessionStore((s) => s.can('budgets.manage'));
+  const [illustrating, setIllustrating] = useState<{ done: number; total: number } | null>(null);
+  const [illustrateNote, setIllustrateNote] = useState<string | null>(null);
+  const [confirmIllustrate, setConfirmIllustrate] = useState(false);
   useEffect(() => {
     void loadContinuity(bookId);
   }, [bookId, loadContinuity]);
@@ -72,6 +89,10 @@ export function ChaptersTab({
   );
   // Per-chapter length + pacing (§16.5) — keyed by id so each card reads its own share/outlier.
   const metricById = new Map(manuscriptMetrics(chapters).chapters.map((m) => [m.id, m]));
+  // A picture book counts pages, and every page wants a picture; a chapter book illustrates by choice.
+  const needingArt = isPageBook
+    ? chapters.filter((c) => c.markdown.trim().length > 0 && c.imagePlacements.length === 0)
+    : [];
 
   return (
     <Stack gap={5}>
@@ -110,7 +131,71 @@ export function ChaptersTab({
             {busy ? 'Reading…' : 'Read the whole book'}
           </Button>
         ) : null}
+        {/* A page book is illustrated as a book, not a page at a time — but only when asked (72 P6). */}
+        {isPageBook && needingArt.length > 0 ? (
+          <Button
+            variant="ghost"
+            disabled={busy || illustrating !== null}
+            onClick={() => {
+              setIllustrateNote(null);
+              setConfirmIllustrate(true);
+            }}
+          >
+            {illustrating
+              ? `Illustrating… ${illustrating.done} of ${illustrating.total}`
+              : `Illustrate this book (${needingArt.length})`}
+          </Button>
+        ) : null}
       </div>
+      {confirmIllustrate ? (
+        <Banner tone="info">
+          <Stack gap={2}>
+            <Text size="sm">
+              {needingArt.length === 1
+                ? 'One page still needs a picture.'
+                : `${needingArt.length} pages still need a picture.`}{' '}
+              {isAdmin
+                ? `That is ${needingArt.length} image generations, about $${(needingArt.length * PER_IMAGE_USD).toFixed(2)}.`
+                : 'That will use a chunk of this period’s AI allowance.'}{' '}
+              You can keep working while it runs.
+            </Text>
+            <Inline gap={2}>
+              <Button
+                onClick={async () => {
+                  setConfirmIllustrate(false);
+                  const queue = needingArt;
+                  setIllustrating({ done: 0, total: queue.length });
+                  let done = 0;
+                  for (const chapter of queue) {
+                    const res = await generateImage(bookId, {
+                      kind: 'illustration',
+                      chapterId: chapter.id,
+                    });
+                    if (!res.ok) {
+                      // Budget or a provider refusal — stop cleanly and say where it got to, rather than
+                      // burning the rest of the allowance on calls that will fail the same way.
+                      setIllustrateNote(
+                        `${res.message} Illustrated ${done} of ${queue.length} — the rest are still waiting.`,
+                      );
+                      break;
+                    }
+                    done += 1;
+                    setIllustrating({ done, total: queue.length });
+                  }
+                  setIllustrating(null);
+                  if (done === queue.length) setIllustrateNote('Every page has a picture now.');
+                }}
+              >
+                Illustrate {needingArt.length === 1 ? 'the page' : `all ${needingArt.length}`}
+              </Button>
+              <Button variant="ghost" onClick={() => setConfirmIllustrate(false)}>
+                Not now
+              </Button>
+            </Inline>
+          </Stack>
+        </Banner>
+      ) : null}
+      {illustrateNote ? <Banner tone="info">{illustrateNote}</Banner> : null}
       {continuityNote ? <Banner tone="info">{continuityNote}</Banner> : null}
       {continuity.length > 0 ? (
         <Card>
@@ -184,7 +269,7 @@ export function ChaptersTab({
                 </Text>
                 <Button variant="primary" onClick={() => void onWrite()}>
                   {chapters.length > 0
-                    ? `Write the remaining ${pending} chapter${pending === 1 ? '' : 's'}`
+                    ? `Write the remaining ${pending} ${isPageBook ? (pending === 1 ? 'page' : 'pages') : pending === 1 ? 'chapter' : 'chapters'}`
                     : 'Write your chapters'}
                 </Button>
               </div>
@@ -195,7 +280,9 @@ export function ChaptersTab({
                   (c) => c.id === chapter.id && c.markdown.trim().length > 0,
                 );
                 const num = outlineChapters.findIndex((c) => c.id === chapter.id) + 1;
-                const numLabel = num > 0 ? `Chapter ${num}` : 'Chapter';
+                // "Chapter 1" on a card in a 32-page picture book is the wrong noun for the thing.
+                const unitWord = isPageBook ? 'Page' : 'Chapter';
+                const numLabel = num > 0 ? `${unitWord} ${num}` : unitWord;
                 if (!written) {
                   return (
                     <div key={chapter.id} className={styles.notYetCard}>

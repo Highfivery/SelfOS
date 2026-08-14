@@ -617,7 +617,11 @@ export function fakeClaudeClient(): ClaudeClient {
       }
 
       // Foundations (§5.3): a proposed title + essence + timeline + a small outline (two chapters).
-      if (userText.includes('plan a biography of')) {
+      // Matched on the type-agnostic stem, because the opener names the TYPE ("plan a memoir of…",
+      // "plan a children's book of…"). Matching "plan a biography of" meant every non-biography book
+      // fell through to the prose branch, failed to parse an outline, and left the workspace unreachable
+      // — a fake that only served the type it was written for.
+      if (userText.includes('about to plan a')) {
         return Promise.resolve({
           text: JSON.stringify({
             title: 'The Weight of Quiet',

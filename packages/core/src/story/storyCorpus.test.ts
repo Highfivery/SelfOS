@@ -875,3 +875,107 @@ describe('own recorded speech in the corpus (72 §5.2)', () => {
     expect(text).not.toContain('DROPPED line');
   });
 });
+
+/**
+ * 72 §5.8 — a pair-owned book is written from BOTH partners' lives, so its corpus is the merge of two.
+ * The owner chose full corpora; the one thing withheld is the break-glass tier, because the prose is read
+ * by the other partner and that is exactly the case 58's `excludeRestricted` exists for.
+ */
+describe('the shared "Our Story" corpus (72 §5.8)', () => {
+  const pair = 'angel~ben';
+
+  async function couple(fs: ReturnType<typeof fresh>): Promise<void> {
+    await savePerson(fs, key, person('ben', 'Ben', { occupation: 'teacher' }));
+    await savePerson(fs, key, person('angel', 'Angel', { occupation: 'nurse' }));
+    await saveRelationship(fs, key, {
+      id: 'rel-partner',
+      schemaVersion: 2,
+      fromPersonId: 'ben',
+      toPersonId: 'angel',
+      type: 'partner',
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+  }
+
+  it('reads BOTH partners’ lives, and names them both', async () => {
+    const fs = fresh();
+    await couple(fs);
+    await saveInsight(
+      fs,
+      key,
+      insight('i-ben', 'ben', { summary: 'Ben rebuilt the porch that summer' }),
+    );
+    await saveInsight(
+      fs,
+      key,
+      insight('i-angel', 'angel', { summary: 'Angel took the night shift for a year' }),
+    );
+
+    const corpus = await buildStoryCorpus(fs, key, pair, 'book-1');
+    const text = corpusText(corpus);
+    expect(text).toContain('Ben rebuilt the porch');
+    expect(text).toContain('Angel took the night shift');
+    // The book is about the two of them, so it is written to know both names.
+    expect(corpus.personName).toContain('Ben');
+    expect(corpus.personName).toContain('Angel');
+    // Profile lines are attributed, or the writer reads two contradictory sets of facts about one person.
+    expect(corpus.profile.some((l) => l.startsWith('Ben:'))).toBe(true);
+    expect(corpus.profile.some((l) => l.startsWith('Angel:'))).toBe(true);
+  });
+
+  /**
+   * The safety guard. A solo book reads its own subject's restricted facts (the §8.3 story exception) —
+   * a SHARED one must not, from either side. Verified to fail without `excludeRestricted`.
+   */
+  it('withholds each partner’s break-glass material from the book they BOTH read', async () => {
+    const fs = fresh();
+    await couple(fs);
+    await saveInsight(
+      fs,
+      key,
+      insight('i-ben-weighs', 'ben', {
+        source: 'intake',
+        summary: 'an ordinary summary',
+        facts: [
+          fact('bens restricted trauma detail', {
+            restricted: true,
+            lifeArea: 'Emotions & patterns',
+          }),
+        ],
+      }),
+    );
+    await saveInsight(
+      fs,
+      key,
+      insight('i-angel-weighs', 'angel', {
+        source: 'intake',
+        summary: 'another ordinary summary',
+        facts: [
+          fact('angels restricted intimacy detail', { restricted: true, lifeArea: 'Intimacy' }),
+        ],
+      }),
+    );
+
+    const shared = corpusText(await buildStoryCorpus(fs, key, pair, 'book-1'));
+    expect(shared).not.toContain('bens restricted trauma detail');
+    expect(shared).not.toContain('angels restricted intimacy detail');
+
+    // …while each partner's OWN book still reads their own, unchanged (§8.3).
+    expect(corpusText(await buildStoryCorpus(fs, key, 'ben', 'book-1'))).toContain(
+      'bens restricted trauma detail',
+    );
+    expect(corpusText(await buildStoryCorpus(fs, key, 'angel', 'book-1'))).toContain(
+      'angels restricted intimacy detail',
+    );
+  });
+
+  it('a solo book is byte-unchanged by the pair branch', async () => {
+    const fs = fresh();
+    await couple(fs);
+    await saveInsight(fs, key, insight('i-ben', 'ben', { summary: 'Ben rebuilt the porch' }));
+    const solo = await buildStoryCorpus(fs, key, 'ben', 'book-1');
+    expect(solo.personName).toBe('Ben');
+    expect(corpusText(solo)).not.toContain('Angel took the night shift');
+  });
+});

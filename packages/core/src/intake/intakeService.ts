@@ -1048,7 +1048,20 @@ function parseCoveredActs(q: Question, value: IntakeAnswerValue | undefined): Co
  * (so the intimacy framing can go DEEPER instead of re-asking, §19.3). Hidden/orphaned answers are excluded
  * (the §47 cleared-trigger rule), exactly as synthesis does.
  */
-export function formatIntakeForGeneration(session: IntakeSession): {
+export function formatIntakeForGeneration(
+  session: IntakeSession,
+  /**
+   * `excludeRestricted` drops the break-glass sections (the "what weighs on you" trauma block and the
+   * intimacy block) and any per-question sensitive answers. Off by default, because a person's own book
+   * reads their own intake in full (the 72 §8.3 story exception).
+   *
+   * It exists for output ANOTHER person reads — a shared "Our Story" (72 §5.8), where the rule couples
+   * sessions already apply (58's `excludeRestricted`) has to hold: the break-glass tier is the one boundary
+   * the app has never crossed, and a book both partners read is exactly where it would be crossed by
+   * accident.
+   */
+  opts: { excludeRestricted?: boolean } = {},
+): {
   text: string;
   coveredActs: CoveredAct[];
   /** The prompts of every answered, visible onboarding question — fed to the deterministic hard near-dup
@@ -1061,12 +1074,15 @@ export function formatIntakeForGeneration(session: IntakeSession): {
   const prompts: string[] = [];
   for (const def of INTAKE_CATALOG) {
     if (!def.questions) continue;
+    if (opts.excludeRestricted && def.restricted) continue;
     const section = session.sections.find((s) => s.id === def.id);
     if (!section || Object.keys(section.answers).length === 0) continue;
     const answerMap = section.answers as unknown as AnswerMap;
     const sectionLines: string[] = [];
     for (const m of def.questions) {
       if (!isQuestionVisible(m.q, answerMap)) continue;
+      // A sensitive answer inside an otherwise-ordinary section (§14.8) is restricted too.
+      if (opts.excludeRestricted && m.restricted) continue;
       const q = withResolvedActivityRows(m.q, actCtx);
       const value = section.answers[m.q.id];
       const str = formatAnswerForSynthesis(q, value);

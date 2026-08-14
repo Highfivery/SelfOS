@@ -27,6 +27,7 @@ import {
   type StoryPhotoAnswer,
   type StorySourceRef,
 } from '../schemas';
+import { pairMembers } from './pairBooks';
 import { getBookType } from './bookTypes';
 import { getBook, getPhotoAnswers, getQuotes, getStoryImageIndex } from './storyService';
 import { sortTimeline } from './storyTimeline';
@@ -169,9 +170,47 @@ function makeExclusionFilter(
 export async function buildStoryCorpus(
   fs: FileSystem,
   key: Uint8Array,
-  personId: string,
+  ownerRef: string,
   bookId: string,
   exclusions: ExclusionItem[] = [],
+): Promise<StoryCorpus> {
+  // A pair-owned book ("Our Story", 72 §5.8) is written from BOTH partners' lives, so its corpus is the
+  // merge of two subject corpora rather than one. The break-glass tier is withheld from both sides — the
+  // prose is read by the other partner, which is precisely the case 58's `excludeRestricted` exists for.
+  const members = pairMembers(ownerRef);
+  if (members) {
+    const each = await Promise.all(
+      members.map((memberId) =>
+        buildSubjectCorpus(fs, key, memberId, ownerRef, bookId, exclusions, {
+          excludeRestricted: true,
+        }),
+      ),
+    );
+    const named = each.filter((c) => c.personName);
+    return {
+      personName: named.map((c) => c.personName).join(' and '),
+      // Each partner's profile lines are attributed, or the writer reads two contradictory sets of facts
+      // about one person.
+      profile: named.flatMap((c) => c.profile.map((line) => `${c.personName}: ${line}`)),
+      items: each.flatMap((c) => c.items),
+    };
+  }
+  return buildSubjectCorpus(fs, key, ownerRef, ownerRef, bookId, exclusions, {});
+}
+
+/**
+ * One subject's corpus. `subjectPersonId` is whose life is read; `bookOwnerRef` is where the BOOK lives —
+ * the same for a solo book, different for a pair-owned one (whose config and exclusions belong to the pair,
+ * not to either partner).
+ */
+async function buildSubjectCorpus(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  bookOwnerRef: string,
+  bookId: string,
+  exclusions: ExclusionItem[] = [],
+  opts: { excludeRestricted?: boolean } = {},
 ): Promise<StoryCorpus> {
   const person = await getPerson(fs, key, personId);
   if (!person) return { personName: '', profile: [], items: [] };
@@ -185,7 +224,7 @@ export async function buildStoryCorpus(
   // particular dreams (72 §4.2). It narrows only the KIND the type lets you pick, so choosing five dreams
   // still leaves the person's profile and the rest of their life as context; it just stops the other 200
   // dreams from being in the book.
-  const book = await safely(() => getBook(fs, key, personId, bookId), null);
+  const book = await safely(() => getBook(fs, key, bookOwnerRef, bookId), null);
   const pickKind = book ? getBookType(book.type)?.sourceSelect : undefined;
   const picked = new Set(book?.config.sourceIds ?? []);
   const narrowed = pickKind !== undefined && picked.size > 0;
@@ -200,7 +239,7 @@ export async function buildStoryCorpus(
   //    distilled portrait rides in as an insight below; this is the raw material beneath it.
   const intake = await safely(() => getIntakeSession(fs, key, personId), null);
   if (intake) {
-    const intakeText = formatIntakeForGeneration(intake).text.trim();
+    const intakeText = formatIntakeForGeneration(intake, opts).text.trim();
     if (intakeText) {
       add({
         sourceRef: { kind: 'intakeAnswer', id: intake.id },
@@ -225,10 +264,15 @@ export async function buildStoryCorpus(
     [],
   );
   for (const insight of ownInsights) {
-    const liveFacts = insight.facts.filter((fact) => !fact.flaggedInaccurate);
+    const liveFacts = insight.facts.filter(
+      // A book the OTHER partner reads withholds the break-glass tier from both sides (72 §5.8) — the same
+      // rule couples sessions apply. A person's own book still reads their own (the §8.3 exception).
+      (fact) => !fact.flaggedInaccurate && !(opts.excludeRestricted && fact.restricted),
+    );
     // A WHOLLY-flagged insight (had facts, all now flagged) is dropped ENTIRELY — its summary restates the
     // corrected claim, so it must not reach the Biographer either (mirrors `summarizeForContext`). A MIXED
-    // insight keeps its summary + its live facts.
+    // insight keeps its summary + its live facts. The same holds once restricted facts are withheld: an
+    // insight that was ONLY restricted facts has a summary that restates them, so it goes too.
     if (insight.facts.length > 0 && liveFacts.length === 0) continue;
     const label = insightLabel(insight.source);
     const at = insight.provenance.at;
@@ -367,7 +411,8 @@ export async function buildStoryCorpus(
   //     biographer place a scene in the right year instead of inferring it; before this the timeline was
   //     generated, stored, shipped to the renderer and read by NOTHING.
   for (const event of sortTimeline(
-    (await safely(() => readBookTimeline(fs, key, personId, bookId), null))?.events ?? [],
+    (await safely(() => readBookTimeline(fs, key, personId, bookId, bookOwnerRef), null))?.events ??
+      [],
   )) {
     const when = event.date?.trim() || event.approx?.trim();
     add({
@@ -388,9 +433,9 @@ export async function buildStoryCorpus(
   //    photo that was only vision-captioned but never answered contributes NOTHING — a bare AI caption is the
   //    model's guess, not the subject's words, so it's not fed back as "source material". Exclusion-filtered via
   //    `add()` (a `source` exclusion on the imageId drops the photo). Book-scoped via `bookId`.
-  const photoAnswers = await safely(() => getPhotoAnswers(fs, key, personId, bookId), []);
+  const photoAnswers = await safely(() => getPhotoAnswers(fs, key, bookOwnerRef, bookId), []);
   if (photoAnswers.length > 0) {
-    const imageIndex = await safely(() => getStoryImageIndex(fs, key, personId, bookId), null);
+    const imageIndex = await safely(() => getStoryImageIndex(fs, key, bookOwnerRef, bookId), null);
     const captionOf = new Map((imageIndex?.images ?? []).map((img) => [img.id, img.caption ?? '']));
     const byImage = new Map<string, StoryPhotoAnswer[]>();
     for (const answer of photoAnswers) {
@@ -439,7 +484,7 @@ export async function buildStoryCorpus(
   // 7.5) Approved quotes (§17.4) — verbatim lines the person actually said, mined + author-APPROVED. Only
   //      `status:'approved'` items are emitted (the single funnel: a pending/rejected candidate never reaches
   //      the corpus, so it can't be generated into a chapter or exported). Exclusion-filtered via `add()`.
-  const quotes = await safely(() => getQuotes(fs, key, personId, bookId), []);
+  const quotes = await safely(() => getQuotes(fs, key, bookOwnerRef, bookId), []);
   for (const quote of quotes) {
     if (quote.status !== 'approved') continue;
     const text = quote.text.trim();

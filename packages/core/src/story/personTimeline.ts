@@ -109,9 +109,12 @@ export async function readBookTimeline(
   key: Uint8Array,
   personId: string,
   bookId: string,
+  /** Where the BOOK lives, when that isn't the person — a pair-owned book's own moments belong to the pair
+   *  root while the chronology they merge with is still each partner's own life (72 §5.8). */
+  bookOwnerRef: string = personId,
 ): Promise<LifeTimeline> {
   const person = await getPersonTimeline(fs, key, personId);
-  const book = await getTimeline(fs, key, personId, bookId);
+  const book = await getTimeline(fs, key, bookOwnerRef, bookId);
   const seen = new Set((person?.events ?? []).map((e) => normalizeMoment(e.label)));
   const fromBook = (book?.events ?? []).filter(
     (e) => e.bookScoped || !seen.has(normalizeMoment(e.label)),

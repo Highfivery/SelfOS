@@ -4,7 +4,7 @@ import { Button, Card, Heading, Stack, Text } from '../../../design-system/compo
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { MemoryCollection } from './MemoryCollection';
 import { ShareMemoryPanel } from './ShareMemoryPanel';
-import styles from './Story.module.css';
+import styles from './Books.module.css';
 
 /**
  * "Memories you've shared" (§15.1) — the book-INDEPENDENT home for the biographer's memory chats.
@@ -63,7 +63,7 @@ export function StoryMemories({ hasBook }: { hasBook: boolean }): JSX.Element {
                 Share a memory
               </Button>
               {hasBook ? (
-                <Button variant="ghost" onClick={() => navigate('/story')}>
+                <Button variant="ghost" onClick={() => navigate('/books')}>
                   Back to your book
                 </Button>
               ) : null}

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type {
+  BookShelfEntry,
   BookConfig,
   BookManifest,
   BookOutline,
@@ -64,6 +65,9 @@ import type {
 interface StoryState {
   /** The registered book types (v1: the biography) — for the create picker. */
   bookTypes: StoryBookTypeView[];
+  /** Every book with its progress counted — the §3.1 shelf. Loaded with the list; refreshed after a
+   *  create/delete so the shelf never shows a book that is gone or misses one just made. */
+  shelf: BookShelfEntry[];
   /** The ACTIVE person's OWN books. The bridge scopes it; this store never holds another member's books and
    *  resets on a person switch (per-person isolation, 64-your-story §5.7). */
   books: BookManifest[];
@@ -331,6 +335,7 @@ const REFRESH_NOT_AVAILABLE: StoryRefreshViewResult = { staled: 0, rewritten: 0,
 export const useStoryStore = create<StoryState>((set, get) => ({
   bookTypes: [],
   books: [],
+  shelf: [],
   bundle: null,
   markup: null,
   todos: [],
@@ -353,11 +358,12 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   chaptersGenerating: false,
   progress: null,
   load: async () => {
-    const [bookTypes, books] = await Promise.all([
+    const [bookTypes, books, shelf] = await Promise.all([
       window.selfos?.storyBookTypes() ?? Promise.resolve([]),
       window.selfos?.storyList() ?? Promise.resolve([]),
+      window.selfos?.storyShelf() ?? Promise.resolve([]),
     ]);
-    set({ bookTypes, books, loaded: true });
+    set({ bookTypes, books, shelf, loaded: true });
   },
   create: async (input) => {
     const book = (await window.selfos?.storyCreate(input)) ?? null;
@@ -998,6 +1004,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     set({
       bookTypes: [],
       books: [],
+      shelf: [],
       bundle: null,
       markup: null,
       todos: [],

@@ -20,7 +20,8 @@ import type {
   StoryRevisionResult,
   StructuralProposal,
 } from '@shared/schemas';
-import { Story, buildAnchor, countApplicable } from './Story';
+import { Story } from './Story';
+import { buildAnchor, countApplicable } from './markupHelpers';
 import { useStoryStore } from '../../../stores/storyStore';
 import { useStoryMemoryStore } from '../../../stores/storyMemoryStore';
 import { useSessionStore } from '../../../stores/sessionStore';
@@ -44,6 +45,8 @@ const BOOK_TYPES: StoryBookTypeView[] = [
     id: 'biography',
     label: 'Biography',
     blurb: 'A true life story.',
+    truthMode: 'true',
+    summary: { drawsOn: 'everything on record', shape: 'life eras', asksAbout: 'scenes' },
     gates: { adult: false },
     options: [],
     structures: [{ id: 'chronicle', label: 'Chronological', description: 'x', isDefault: true }],
@@ -145,7 +148,24 @@ function installStoryBridge(
   overrides: Parameters<typeof installMockBridge>[0] = {},
 ): ReturnType<typeof installMockBridge> {
   useSettingsStore.setState((s) => ({ values: { ...s.values, 'ai.enabled': true } }));
+  // The shelf (72 §3.1) is the front door, so it must agree with the book list a test sets up. Deriving it
+  // here means no test has to state its books twice — and none can drift from its own shelf.
+  const list = overrides.storyList ?? ((): Promise<BookManifest[]> => Promise.resolve([]));
   return installMockBridge({
+    storyShelf: async () =>
+      (await list()).map((m) => ({
+        id: m.id,
+        type: m.type,
+        title: m.title,
+        status: m.status,
+        lifecycle: m.lifecycle ?? ('living' as const),
+        editions: m.editions.length,
+        written: 1,
+        total: 1,
+        words: 120,
+        unit: { one: 'chapter', many: 'chapters' },
+        updatedAt: m.updatedAt,
+      })),
     aiKeyStatus: () =>
       Promise.resolve({
         hasSharedKey: true,
@@ -211,28 +231,60 @@ function twoChapterBundle(): StoryBookBundle {
   };
 }
 
-function renderStory(): void {
+/**
+ * Render the section and open the first book, the way a person reaches it: the shelf is the front door now
+ * (72 §3.1), so a test about the Studio has to walk through it rather than land in a book by accident.
+ * With no books, this leaves the invitation on screen.
+ */
+async function renderStory(): Promise<void> {
   render(
     <MemoryRouter>
       <Story />
     </MemoryRouter>,
   );
+  await openFirstBook();
+}
+
+/** Beginning a book now goes through "What kind of book?" (72 §3.2) before the commission. */
+async function pickKind(kind = 'Biography'): Promise<void> {
+  const card = await screen.findAllByRole('button', { name: new RegExp(`^${kind}`) });
+  await userEvent.click(card[0]!);
+}
+
+/**
+ * Open the first book, so a test about the STUDIO starts where its subject is. The shelf is the front door
+ * now (72 §3.1), and nothing opens itself.
+ *
+ * This drives the store rather than clicking a card: the click path is what `Bookshelf.test.tsx` and the
+ * E2E walk exist to prove, and putting 114 real clicks in front of every unrelated Studio assertion made
+ * the file take ten minutes without testing anything the shelf's own tests don't. A no-op with no books —
+ * the invitation and the memories route show no shelf.
+ */
+async function openFirstBook(): Promise<void> {
+  await waitFor(() => expect(useStoryStore.getState().loaded).toBe(true));
+  const first = useStoryStore.getState().shelf[0];
+  if (!first) return;
+  await act(async () => {
+    await useStoryStore.getState().open(first.id);
+  });
 }
 
 /** The Studio's panels live in tabs (§13.2). Wait for the tab bar, then switch. */
 async function openTab(name: string): Promise<void> {
-  await userEvent.click(await screen.findByRole('tab', { name }));
+  // A tab's accessible name can carry its count ("Photos 3"), so match the label rather than the whole name.
+  await userEvent.click(await screen.findByRole('tab', { name: new RegExp(`^${name}`) }));
 }
 
 /** Render under a real `story/*` route so a deep-linked tab is read from the URL (§13.2). */
-function renderStoryAt(path: string): void {
+async function renderStoryAt(path: string): Promise<void> {
   render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="story/*" element={<Story />} />
+        <Route path="books/*" element={<Story />} />
       </Routes>
     </MemoryRouter>,
   );
+  await openFirstBook();
 }
 
 afterEach(() => {
@@ -263,7 +315,7 @@ describe('Story (64)', () => {
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]),
     });
-    renderStory();
+    await renderStory();
     expect(await screen.findByRole('button', { name: 'Begin your book' })).toBeInTheDocument();
   });
 
@@ -275,8 +327,9 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle()),
       storyGenerateFullDraft: () => Promise.resolve({ ok: true, bundle: writtenBundle() }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Begin your book' }));
+    await pickKind();
     expect(await screen.findByLabelText('Title')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Write my book' }));
     // No outline-review gate — it drafts straight through to the finished, editable book.
@@ -289,7 +342,7 @@ describe('Story (64)', () => {
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]),
     });
-    renderStory();
+    await renderStory();
     await screen.findByRole('button', { name: 'Begin your book' });
     act(() =>
       useStoryStore.setState({
@@ -322,8 +375,9 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle()),
       storyGenerateFullDraft: () => Promise.resolve({ ok: true, bundle: writtenBundle() }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Begin your book' }));
+    await pickKind();
     // A new style register is offered in the Style card gallery.
     expect(await screen.findByRole('radio', { name: 'Cinematic' })).toBeInTheDocument();
     // The Create button is enabled with NO title typed — blank means the AI names it.
@@ -350,7 +404,7 @@ describe('Story (64)', () => {
           yearTo: 2026,
         }),
     });
-    renderStory();
+    await renderStory();
     expect(await screen.findByRole('button', { name: 'Begin your book' })).toBeInTheDocument();
     expect(screen.getByText('It reads')).toBeInTheDocument();
     expect(screen.getByText('It keeps writing')).toBeInTheDocument();
@@ -370,8 +424,9 @@ describe('Story (64)', () => {
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Begin your book' }));
+    await pickKind();
     // The default (Warm) specimen is on screen; the preview rail is labelled "How your biographer will sound".
     expect(screen.getByText('How your biographer will sound')).toBeInTheDocument();
     expect(await screen.findByText(/porch light on/)).toBeInTheDocument();
@@ -386,7 +441,7 @@ describe('Story (64)', () => {
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]),
     });
-    renderStory();
+    await renderStory();
     await screen.findByRole('button', { name: 'Begin your book' });
     act(() =>
       useStoryStore.setState({
@@ -419,7 +474,7 @@ describe('Story (64)', () => {
         return Promise.resolve(manifest());
       },
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Rename this book' }));
     const titleInput = await screen.findByLabelText('Book title');
     await userEvent.clear(titleInput);
@@ -451,7 +506,7 @@ describe('Story (64)', () => {
         });
       },
     });
-    renderStory();
+    await renderStory();
     // Lands on the first book; the switcher says what the number counts ("Your books (2)"), not "Book 1 of
     // 2", which reads as a chapter position at a glance.
     await screen.findByRole('heading', { name: 'The Story of Ben', level: 1 });
@@ -464,6 +519,7 @@ describe('Story (64)', () => {
     // "Start another book" enters the setup/commission flow even though books already exist.
     await userEvent.click(await screen.findByRole('button', { name: /Your books \(2\)/ }));
     await userEvent.click(await screen.findByRole('menuitem', { name: '+ Start another book' }));
+    await pickKind();
     expect(await screen.findByRole('button', { name: 'Write my book' })).toBeInTheDocument();
   });
 
@@ -474,7 +530,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('reviewed')),
       storyImages: () => Promise.resolve([]),
     });
-    renderStory();
+    await renderStory();
     // The part is a titled section with an eyebrow; the chapter is a clickable card carrying its number + a
     // status pill (reviewed → "Reviewed") — not a plain list row.
     expect(await screen.findByText('Part one')).toBeInTheDocument();
@@ -495,7 +551,7 @@ describe('Story (64)', () => {
         return Promise.resolve(manifest());
       },
     });
-    renderStory();
+    await renderStory();
     // The settings live in the Settings tab (§13.4) — writing + images groups, open (no collapsible).
     await openTab('Settings');
     // Writing controls are editable (voice/tone/length) + the book's OWN image style.
@@ -525,8 +581,9 @@ describe('Story (64)', () => {
       storyGenerateFullDraft: () =>
         Promise.resolve({ ok: false, reason: 'AI_OFF', message: 'Turn on AI in Settings.' }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Begin your book' }));
+    await pickKind();
     await userEvent.click(await screen.findByRole('button', { name: 'Write my book' }));
     expect(await screen.findByText('Turn on AI in Settings.')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument();
@@ -540,7 +597,7 @@ describe('Story (64)', () => {
       storyGenerateChapters: () =>
         Promise.resolve({ ok: true, generated: 1, bundle: writtenBundle() }),
     });
-    renderStory();
+    await renderStory();
     // Overview offers to write the chapters.
     await userEvent.click(await screen.findByRole('button', { name: 'Write your chapters' }));
     // The chapter becomes a clickable row → open it.
@@ -570,7 +627,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')),
       storyRegenerateChapter: () => Promise.resolve({ ok: true, generated: 1, bundle: rewritten }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Rewrite this chapter' }));
     // The metered rewrite sits behind a two-step confirm (§8.2 spend legibility).
@@ -586,7 +643,7 @@ describe('Story (64)', () => {
       storyRegenerateChapter: () =>
         Promise.resolve({ ok: false, reason: 'BUDGET', message: 'AI budget reached.' }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Rewrite this chapter' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Rewrite it' }));
@@ -601,7 +658,7 @@ describe('Story (64)', () => {
       storyGenerateChapters: () =>
         Promise.resolve({ ok: false, reason: 'REFUSED', message: 'Couldn’t write the chapters.' }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Write your chapters' }));
     expect(await screen.findByText('Couldn’t write the chapters.')).toBeInTheDocument();
     // The action is still offered — not a dead-end.
@@ -614,7 +671,7 @@ describe('Story (64)', () => {
       storyList: () => Promise.resolve([manifest({ status: 'drafting' })]),
       storyGet: () => Promise.resolve(bundle(true)), // approved outline, no chapters → a pending write
     });
-    renderStory();
+    await renderStory();
     await screen.findByRole('button', { name: 'Write your chapters' });
     act(() =>
       useStoryStore.setState({
@@ -642,7 +699,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')),
       storyReviewChapter: () => Promise.resolve(writtenBundle('reviewed')),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Looks good' }));
     // The button is replaced by a Reviewed marker once the chapter is reviewed.
@@ -665,7 +722,7 @@ describe('Story (64)', () => {
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(updated),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     // The ribbon leads with the rewrite eyebrow + the review action; the diff is hidden until asked for.
     expect(await screen.findByText('Rewritten from new material')).toBeInTheDocument();
@@ -687,7 +744,7 @@ describe('Story (64)', () => {
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(writtenBundle('new')), // status 'new', no previousMarkdown
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     expect(await screen.findByText('New chapter')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'What changed' })).not.toBeInTheDocument();
@@ -722,7 +779,7 @@ describe('Story (64)', () => {
       storyAcceptMaterial,
       storyDeclineMaterial,
     });
-    renderStory();
+    await renderStory();
 
     expect(await screen.findByText('New material')).toBeInTheDocument();
     expect(screen.getByText('1 new detail could go in.')).toBeInTheDocument();
@@ -750,7 +807,7 @@ describe('Story (64)', () => {
           },
         ]),
     });
-    renderStory();
+    await renderStory();
 
     expect(await screen.findByText('Out of step')).toBeInTheDocument();
     expect(
@@ -772,7 +829,7 @@ describe('Story (64)', () => {
         Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
       storyMark,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     // Each paragraph offers a "Mark up" affordance; open the first paragraph's toolbar.
     await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!);
@@ -801,7 +858,7 @@ describe('Story (64)', () => {
       storyMark,
       insightsFlag,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!); // p0
     await userEvent.click(await screen.findByRole('button', { name: 'Comment' }));
@@ -824,7 +881,7 @@ describe('Story (64)', () => {
       storyGetMarkup: (): Promise<ChapterMarkup> =>
         Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!);
     await userEvent.click(await screen.findByRole('button', { name: 'Comment' }));
@@ -847,7 +904,7 @@ describe('Story (64)', () => {
         Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
       storyMark,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!);
     await userEvent.click(await screen.findByRole('button', { name: 'Comment' }));
@@ -893,7 +950,7 @@ describe('Story (64)', () => {
         }),
       storyApplyMarkup,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     // The pending delete surfaces the pill on load → open the Review & apply sheet → apply the one revision.
     await userEvent.click(await screen.findByRole('button', { name: /1 change ready/ }));
@@ -929,7 +986,7 @@ describe('Story (64)', () => {
         }),
       storyRemoveMark,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Undo this deletion' }));
     expect(storyRemoveMark).toHaveBeenCalledWith({ bookId: 'b1', chapterId: 'c1', markId: 'd1' });
@@ -945,7 +1002,7 @@ describe('Story (64)', () => {
         Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
       storyPinQuote,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!);
     await userEvent.click(await screen.findByRole('button', { name: 'Pin' }));
@@ -976,7 +1033,7 @@ describe('Story (64)', () => {
           ],
         }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     // The comment shows in the rail, but it's not an "apply" change → no pending pill.
     expect(await screen.findByText(/why frame it this way/)).toBeInTheDocument();
@@ -993,7 +1050,7 @@ describe('Story (64)', () => {
         Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
       storyEditPassage,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!);
     await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
@@ -1019,7 +1076,7 @@ describe('Story (64)', () => {
         Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
       storyMark,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!);
     await userEvent.click(await screen.findByRole('button', { name: 'To-do' }));
@@ -1066,7 +1123,7 @@ describe('Story (64)', () => {
         Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
       storyTodoToQuestions,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!);
     await userEvent.click(await screen.findByRole('button', { name: 'To-do' }));
@@ -1101,7 +1158,7 @@ describe('Story (64)', () => {
           ],
         }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     expect(await screen.findByRole('button', { name: /1 change ready/ })).toBeInTheDocument();
     expect(screen.getByText(/1 to-do/)).toBeInTheDocument();
@@ -1115,7 +1172,7 @@ describe('Story (64)', () => {
       storyGetMarkup: (): Promise<ChapterMarkup> =>
         Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     // The Sources affordance is now a numbered footnote superscript (not an inline "Sources (N)" button).
     const sup = await screen.findByRole('button', { name: 'Sources (1)' });
@@ -1146,7 +1203,7 @@ describe('Story (64)', () => {
           ],
         }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     const rail = (await screen.findAllByTestId('shape-mark-rail'))[0]!;
     expect(within(rail).getByText(/The garage smelled of cut pine/)).toBeInTheDocument();
@@ -1241,7 +1298,7 @@ describe('Story (64)', () => {
       storyRemoveMark,
       storyApplyMarkup,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     // The pill counts the three applicable marks (the question comment is excluded).
     await userEvent.click(await screen.findByRole('button', { name: /3 changes ready/ }));
@@ -1290,7 +1347,7 @@ describe('Story (64)', () => {
         }),
       storyRemoveMark,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click(await screen.findByRole('button', { name: /1 change ready/ }));
     const sheet = await screen.findByRole('dialog', { name: /Review and apply/ });
@@ -1315,7 +1372,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')),
       storyRefreshCheck,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Refresh from what’s new' }));
     expect(storyRefreshCheck).toHaveBeenCalledWith(
       expect.objectContaining({ bookId: 'b1', auto: false }),
@@ -1331,7 +1388,7 @@ describe('Story (64)', () => {
       storyRefreshCheck: () =>
         Promise.resolve({ staled: 0, rewritten: 0, bundle: writtenBundle('new') }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Refresh from what’s new' }));
     expect(await screen.findByText('Your story is up to date.')).toBeInTheDocument();
   });
@@ -1358,7 +1415,7 @@ describe('Story (64)', () => {
       storyProposals: () => Promise.resolve([proposal]),
       storyResolveProposal,
     });
-    renderStory();
+    await renderStory();
     expect(await screen.findByText(/Add a new chapter/)).toBeInTheDocument();
     expect(screen.getByText(/A new era emerged/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
@@ -1380,7 +1437,7 @@ describe('Story (64)', () => {
           bundle: writtenBundle('new'),
         }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Refresh from what’s new' }));
     expect(await screen.findByText(/1 suggested change to review below/)).toBeInTheDocument();
   });
@@ -1393,7 +1450,7 @@ describe('Story (64)', () => {
       storyCompleteness: () =>
         Promise.resolve({ stage: 'takingShape' as const, ratio: 0.33, covered: 4, total: 12 }),
     });
-    renderStory();
+    await renderStory();
     expect(await screen.findByText('Taking shape')).toBeInTheDocument();
     const meter = screen.getByRole('progressbar');
     expect(meter).toBeInTheDocument();
@@ -1416,7 +1473,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')),
       storyInterviewCheck,
     });
-    renderStory();
+    await renderStory();
     await openTab('Interview');
     await userEvent.click(await screen.findByRole('button', { name: 'Find what’s missing' }));
     // Manual = the plain `{ bookId }` call (no `auto` flag).
@@ -1466,7 +1523,7 @@ describe('Story (64)', () => {
           },
         ]),
     });
-    renderStory();
+    await renderStory();
     await openTab('Interview');
     // Life map: the part title + its coverage word (the §9 text equivalent, never colour alone).
     expect(await screen.findByText('Roots')).toBeInTheDocument();
@@ -1521,7 +1578,7 @@ describe('Story (64)', () => {
         }),
       storyAnsweredCheckIns: () => Promise.resolve([]), // keep the "Answered" heading out of the way
     });
-    renderStory();
+    await renderStory();
     await openTab('Interview');
     // All three gaps render.
     expect(await screen.findByText('An open thread')).toBeInTheDocument();
@@ -1561,7 +1618,7 @@ describe('Story (64)', () => {
         return Promise.resolve(store);
       },
     });
-    renderStory();
+    await renderStory();
     await openTab('Interview');
 
     // The pending candidate shows for review with Use it / Skip.
@@ -1632,7 +1689,7 @@ describe('Story (64)', () => {
         return Promise.resolve({ ok: true, timeline: withTimeline().timeline });
       },
     });
-    renderStory();
+    await renderStory();
 
     expect(await screen.findByRole('heading', { name: 'Your timeline' })).toBeInTheDocument();
     const when = screen.getByLabelText('When “Born in Ohio” happened');
@@ -1665,7 +1722,7 @@ describe('Story (64)', () => {
         return Promise.resolve({ ok: true, timeline: { schemaVersion: 1, events: [] } });
       },
     });
-    renderStory();
+    await renderStory();
 
     await userEvent.type(await screen.findByLabelText('What happened'), 'We moved west');
     await userEvent.type(screen.getByLabelText('When it happened'), 'sometime in the 90s');
@@ -1693,7 +1750,7 @@ describe('Story (64)', () => {
         return Promise.resolve(manifest({ status: 'ready' }));
       },
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
 
     // The nudge names what's absent — a prompt, never a gate.
@@ -1757,7 +1814,7 @@ describe('Story (64)', () => {
         return Promise.resolve(findings);
       },
     });
-    renderStory();
+    await renderStory();
     // Chapters tab is the default landing.
     await userEvent.click(await screen.findByRole('button', { name: 'Check continuity' }));
     expect(await screen.findByText("'Ana' vs 'Anna'")).toBeInTheDocument();
@@ -1788,7 +1845,7 @@ describe('Story (64)', () => {
         return Promise.resolve(register);
       },
     });
-    renderStory();
+    await renderStory();
     // The Share tab warns that a named person would appear under their real name (warn, not block).
     await userEvent.click(await screen.findByRole('tab', { name: 'Sharing' }));
     expect(await screen.findByText(/Angel appears/)).toBeInTheDocument();
@@ -1826,7 +1883,7 @@ describe('Story (64)', () => {
         return Promise.resolve(manifest({ status: 'ready' }));
       },
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
 
     // The register count shows; the preview list appears only once the toggle is on.
@@ -1855,7 +1912,7 @@ describe('Story (64)', () => {
         return Promise.resolve(manifest({ status: 'ready' }));
       },
     });
-    renderStory();
+    await renderStory();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Title workshop' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Suggest titles' }));
@@ -1882,7 +1939,7 @@ describe('Story (64)', () => {
         return Promise.resolve(manifest({ status: 'ready' }));
       },
     });
-    renderStory();
+    await renderStory();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Title workshop' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Rewrite the essence' }));
@@ -1905,7 +1962,7 @@ describe('Story (64)', () => {
         return Promise.resolve({ ok: true, bundle: writtenBundle('reviewed') });
       },
     });
-    renderStory();
+    await renderStory();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit outline' }));
     expect(await screen.findByRole('heading', { name: 'Edit your outline' })).toBeInTheDocument();
@@ -1952,7 +2009,7 @@ describe('Story (64)', () => {
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
       storyGet: () => Promise.resolve(metricsBundle),
     });
-    renderStory();
+    await renderStory();
 
     // Whole-book read on the hero: total + written count + a rounded average.
     expect(
@@ -1978,7 +2035,7 @@ describe('Story (64)', () => {
         return Promise.resolve({ ok: true, bundle: twoChapterBundle() });
       },
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Edit outline' }));
 
     // The secondary actions live in a kebab (§12), not a wrapping button pile.
@@ -2012,7 +2069,7 @@ describe('Story (64)', () => {
         return Promise.resolve({ ok: true, bundle: twoPartBundle() });
       },
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Edit outline' }));
 
     // Last chapter of part one, moved DOWN → the START of part two.
@@ -2045,7 +2102,7 @@ describe('Story (64)', () => {
         return Promise.resolve({ ok: true, bundle: writtenBundle('reviewed') });
       },
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Edit outline' }));
     await userEvent.click(screen.getByRole('button', { name: 'More actions for “The Garage”' }));
     await userEvent.click(
@@ -2078,7 +2135,7 @@ describe('Story (64)', () => {
       storyEditOutline: () =>
         Promise.resolve({ ok: false, bundle: null, message: 'That chapter is no longer here.' }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Edit outline' }));
     await userEvent.click(screen.getByRole('button', { name: 'More actions for “The Garage”' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete “The Garage”' }));
@@ -2110,7 +2167,7 @@ describe('Story (64)', () => {
           },
         ]),
     });
-    renderStoryAt('/story/memories');
+    await renderStoryAt('/books/memories');
 
     // Both sections render — with no book at all, so the memory is never stranded behind "Begin your book".
     expect(
@@ -2153,7 +2210,7 @@ describe('Story (64)', () => {
         );
       },
     });
-    renderStoryAt('/story/memories?memory=m1');
+    await renderStoryAt('/books/memories?memory=m1');
 
     expect(await screen.findByText('Tell me about it.')).toBeInTheDocument();
     expect(openedWith).toMatchObject({ memoryId: 'm1' });
@@ -2165,7 +2222,7 @@ describe('Story (64)', () => {
       storyList: () => Promise.resolve([]),
       storyMemoryList: () => Promise.resolve([]),
     });
-    renderStoryAt('/story/memories');
+    await renderStoryAt('/books/memories');
 
     expect(await screen.findByText(/haven’t shared a memory yet/)).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Share a memory' })).toBeInTheDocument();
@@ -2205,7 +2262,7 @@ describe('Story (64)', () => {
       storyMemoryList: () =>
         Promise.resolve(byPerson[useSessionStore.getState().activePerson?.id ?? 'me'] ?? []),
     });
-    renderStoryAt('/story/memories');
+    await renderStoryAt('/books/memories');
     expect(
       await screen.findByRole('button', { name: /Re-read the memory “Ben’s bicycle”/ }),
     ).toBeInTheDocument();
@@ -2232,7 +2289,7 @@ describe('Story (64)', () => {
       storyList: () => Promise.resolve([]),
       storyMemoryList: () => Promise.resolve([]),
     });
-    renderStoryAt('/story');
+    await renderStoryAt('/books');
     await userEvent.click(await screen.findByRole('button', { name: 'Your memories' }));
     expect(await screen.findByRole('heading', { name: 'Your memories' })).toBeInTheDocument();
     expect(await screen.findByText(/haven’t shared a memory yet/)).toBeInTheDocument();
@@ -2263,7 +2320,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')),
       storyMemoryList: () => Promise.resolve(memories),
     });
-    renderStory();
+    await renderStory();
     await openTab('Interview');
     // The invite card leads with a primary "Share a memory" button.
     expect(await screen.findByRole('button', { name: 'Share a memory' })).toBeInTheDocument();
@@ -2316,7 +2373,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')),
       storyMemoryOpen,
     });
-    renderStory();
+    await renderStory();
     await openTab('Interview');
     await userEvent.click(await screen.findByRole('button', { name: 'Share a memory' }));
     // The panel replaces the tab body: a back affordance + the biographer's streamed opener.
@@ -2371,7 +2428,7 @@ describe('Story (64)', () => {
         return Promise.resolve({ ok: true as const, memory: { ...readyMemory, status: 'saved' } });
       },
     });
-    renderStory();
+    await renderStory();
     await openTab('Interview');
     // Open the still-gathering memory from the "Pick up where you left off" list (its row is a "Continue …" button).
     await userEvent.click(
@@ -2432,7 +2489,7 @@ describe('Story (64)', () => {
         }),
       storyMemoryOpen,
     });
-    renderStory();
+    await renderStory();
     await openTab('Interview');
     await userEvent.click(await screen.findByRole('button', { name: 'Talk it through' }));
     // The chat opens seeded from the gap's focus — a NEW memory keyed to that thread.
@@ -2463,7 +2520,7 @@ describe('Story (64)', () => {
     });
     // The Studio still renders (an existing ready book), but AI is unavailable for the chat.
     useSettingsStore.setState((s) => ({ values: { ...s.values, 'ai.enabled': false } }));
-    renderStory();
+    await renderStory();
     await openTab('Interview');
     // The invite card is still present.
     await userEvent.click(await screen.findByRole('button', { name: 'Share a memory' }));
@@ -2492,7 +2549,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')),
       storyMemoryOpen,
     });
-    renderStoryAt('/story/interview?memory=m1');
+    await renderStoryAt('/books/b1/interview?memory=m1');
     // The deep-link opens exactly that memory (a resume, by id).
     expect(
       await screen.findByRole('button', { name: 'Back to your memories' }),
@@ -2530,7 +2587,7 @@ describe('Story (64)', () => {
         ),
       storyMemorySynthesize,
     });
-    renderStoryAt('/story/interview?memory=m1');
+    await renderStoryAt('/books/b1/interview?memory=m1');
     // It lands straight on the review card, from the draft it already wrote — the Title is pre-filled…
     expect(
       await screen.findByRole('heading', { name: 'Your memory, in your words' }),
@@ -2575,7 +2632,7 @@ describe('Story (64)', () => {
         ] as StoryMemoryView[]),
       storyMemoryOpen,
     });
-    renderStory();
+    await renderStory();
     await openTab('Interview');
     const section = (
       await screen.findByRole('heading', { name: 'Pick up where you left off' })
@@ -2622,7 +2679,7 @@ describe('Story (64)', () => {
       storyGetMarkup: (): Promise<ChapterMarkup> => Promise.resolve(questionComment()),
       storyAnswerQuestion,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     // A question comment offers "Ask your biographer" (no answer yet).
     await userEvent.click(await screen.findByRole('button', { name: 'Ask your biographer' }));
@@ -2659,7 +2716,7 @@ describe('Story (64)', () => {
           ],
         }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     expect(await screen.findByText('From a dream you recorded.')).toBeInTheDocument();
     // Already answered → no "Ask your biographer" button.
@@ -2677,7 +2734,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')),
       storyPublish,
     });
-    renderStory();
+    await renderStory();
     await openTab('Sharing');
     await userEvent.click(await screen.findByRole('button', { name: 'Publish & choose readers' }));
     expect(storyPublish).toHaveBeenCalledWith({ bookId: 'b1' });
@@ -2708,7 +2765,7 @@ describe('Story (64)', () => {
       storyReaderFeatured: () => Promise.resolve(true),
       storyGrantReader,
     });
-    renderStory();
+    await renderStory();
     await openTab('Sharing');
     const select = await screen.findByRole('combobox', { name: 'Add a reader' });
     await userEvent.selectOptions(select, 'r1');
@@ -2725,7 +2782,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')),
       storyUpdate,
     });
-    renderStory();
+    await renderStory();
     await openTab('Settings');
     await userEvent.type(await screen.findByLabelText('Dedication'), 'For my mother');
     await userEvent.click(screen.getByRole('button', { name: 'Save front and back matter' }));
@@ -2791,7 +2848,7 @@ describe('Story (64)', () => {
       storyReadShared: () => Promise.resolve(readerView),
       storyReadSharedImage: () => Promise.resolve({ mime: 'image/png', dataBase64: 'AAAA' }),
     });
-    renderStory();
+    await renderStory();
     expect(await screen.findByText('Shared with you')).toBeInTheDocument();
     expect(screen.getByText(/By Ben · 1 chapter/)).toBeInTheDocument();
     // Open it → the immersive reader (§13.5) opens on the FRONT MATTER (title page + dedication + contents).
@@ -2851,7 +2908,7 @@ describe('Story (64)', () => {
       storyReadOwnBook: () => Promise.resolve(ownView),
     });
     // Deep-link straight into the reader's front matter (§13.2 route).
-    renderStoryAt('/story/read');
+    await renderStoryAt('/books/b1/read');
     // Front matter: title page + the essence + a Contents list of both chapters.
     expect(await screen.findByRole('heading', { name: 'The Story of Ben' })).toBeInTheDocument();
     expect(screen.getByText(/quiet man learning to speak up/)).toBeInTheDocument();
@@ -2903,7 +2960,7 @@ describe('Story (64)', () => {
           lastChapterId: null,
         }),
     });
-    renderStoryAt('/story');
+    await renderStoryAt('/books');
     // The Studio hero's primary "Read your story" navigates to the reader (front matter).
     await userEvent.click(await screen.findByRole('button', { name: 'Read your story' }));
     expect(await screen.findByRole('button', { name: /Begin reading/ })).toBeInTheDocument();
@@ -2950,7 +3007,7 @@ describe('Story (64)', () => {
       storyReadOwnBook: () => Promise.resolve(ownView),
       storyGetImage: () => Promise.resolve({ mime: 'image/png', dataBase64: png }),
     });
-    renderStoryAt('/story/read');
+    await renderStoryAt('/books/b1/read');
     await userEvent.click(await screen.findByRole('button', { name: /Begin reading/ }));
     expect(await screen.findByText('The garage smelled of cut pine.')).toBeInTheDocument();
 
@@ -2976,7 +3033,7 @@ describe('Story (64)', () => {
         }),
       storyExportMarkdown,
     });
-    renderStory();
+    await renderStory();
     await openTab('Sharing');
     await userEvent.click(await screen.findByRole('button', { name: 'Export…' }));
     // A published book → the dialog defaults to the Published version; Export as Markdown (the default format).
@@ -2995,7 +3052,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')), // NEVER published — no publishedAt
       storyExportPdf,
     });
-    renderStory();
+    await renderStory();
     await openTab('Sharing');
     await userEvent.click(await screen.findByRole('button', { name: 'Export…' }));
     // Never published → the version defaults to "Working draft" and Published is unusable.
@@ -3015,7 +3072,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')), // never published
       storyExportEpub,
     });
-    renderStory();
+    await renderStory();
     await openTab('Sharing');
     await userEvent.click(await screen.findByRole('button', { name: 'Export…' }));
     await userEvent.click(await screen.findByRole('button', { name: 'EPUB' }));
@@ -3034,7 +3091,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')), // never published
       storyExportDocx,
     });
-    renderStory();
+    await renderStory();
     await openTab('Sharing');
     await userEvent.click(await screen.findByRole('button', { name: 'Export…' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Word' }));
@@ -3065,7 +3122,7 @@ describe('Story (64)', () => {
           { personId: 'r3', displayName: 'Kai' }, // no receipt → hasn't opened it yet
         ]),
     });
-    renderStory();
+    await renderStory();
     await openTab('Sharing');
     expect(await screen.findByText(/Read the latest/)).toBeInTheDocument();
     expect(screen.getByText(/older version/)).toBeInTheDocument();
@@ -3094,7 +3151,7 @@ describe('Story (64)', () => {
         }),
       storyPublish,
     });
-    renderStory();
+    await renderStory();
     await openTab('Sharing');
     // The diff preview names the chapter readers would lose.
     expect(await screen.findByText(/Remove 1/)).toBeInTheDocument();
@@ -3124,7 +3181,7 @@ describe('Story (64)', () => {
         }),
       storyUnpublish,
     });
-    renderStory();
+    await renderStory();
     await openTab('Sharing');
     // The Unshare button appears only for a published book.
     await userEvent.click(await screen.findByRole('button', { name: 'Unshare' }));
@@ -3162,7 +3219,7 @@ describe('Story (64)', () => {
       storyGetImage: () => Promise.resolve({ mime: 'image/png', dataBase64: 'AAAA' }),
       storyImages: () => Promise.resolve([]),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Create a cover' }));
     // No per-image style — every image uses the single global style (Settings → Images, §3.8).
     expect(storyGenerateImage).toHaveBeenCalledWith({
@@ -3184,7 +3241,7 @@ describe('Story (64)', () => {
       storyGet: () =>
         Promise.resolve({ ...writtenBundle('new'), manifest: manifest({ status: 'ready' }) }),
     });
-    renderStory();
+    await renderStory();
     expect(
       await screen.findByText(/Turn on AI image generation .* to create a cover/),
     ).toBeInTheDocument();
@@ -3222,7 +3279,7 @@ describe('Story (64)', () => {
       storyAnalyzePhoto,
       storyAnswerPhoto,
     });
-    renderStory();
+    await renderStory();
     // The Photos panel shows the uploaded thumbnail; analyze → caption + a question to answer.
     await openTab('Photos');
     await userEvent.click(await screen.findByRole('button', { name: /Caption & ask about this/ }));
@@ -3261,7 +3318,7 @@ describe('Story (64)', () => {
           { imageId: 'ph1', question: 'Who took this?', answer: 'My grandfather.', at: 'now' },
         ]),
     });
-    renderStory();
+    await renderStory();
     await openTab('Photos');
     // The gallery shows the caption, an accessible thumbnail, the captured-memories chip and the answer.
     expect(await screen.findByText('Us on the pier at Lake Michigan')).toBeInTheDocument();
@@ -3300,7 +3357,7 @@ describe('Story (64)', () => {
       storySuggestPlacement,
       storySetPlacement,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     // Add the photo → the AI suggests an anchor, then it's placed.
     await userEvent.selectOptions(
@@ -3347,7 +3404,7 @@ describe('Story (64)', () => {
         }),
       storyUpdateMark,
     });
-    renderStory();
+    await renderStory();
     // The Needs-you strip shows a "To-dos" card; opening it raises the book-level to-do sheet.
     await userEvent.click(await screen.findByRole('button', { name: 'View ›' }));
     expect(await screen.findByRole('heading', { name: 'To do' })).toBeInTheDocument();
@@ -3377,7 +3434,7 @@ describe('Story (64)', () => {
         Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
       storyExclude,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click((await screen.findAllByRole('button', { name: 'Mark up' }))[0]!);
     await userEvent.click(await screen.findByRole('button', { name: 'Exclude' }));
@@ -3408,7 +3465,7 @@ describe('Story (64)', () => {
         Promise.resolve({ schemaVersion: 1, chapterId: 'c1', marks: [] }),
       storyExclude,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click(await screen.findByRole('button', { name: /Sources/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'Don’t draw on this again' }));
@@ -3431,7 +3488,7 @@ describe('Story (64)', () => {
         ]),
       storyUnexclude,
     });
-    renderStory();
+    await renderStory();
     // The "Never written about" panel lives in the Settings tab (§13.4).
     await openTab('Settings');
     expect(await screen.findByRole('heading', { name: 'Never written about' })).toBeInTheDocument();
@@ -3452,7 +3509,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')),
     });
     // Deep-link: /story/settings opens on the Settings tab (the danger zone shows).
-    renderStoryAt('/story/settings');
+    await renderStoryAt('/books/b1/settings');
     expect(
       await screen.findByRole('tab', { name: 'Settings', selected: true }),
     ).toBeInTheDocument();
@@ -3471,7 +3528,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')),
       storyDelete,
     });
-    renderStory();
+    await renderStory();
     await openTab('Settings');
     await userEvent.click(await screen.findByRole('button', { name: 'Delete this book…' }));
     const del = await screen.findByRole('button', { name: 'Delete forever' });
@@ -3498,7 +3555,7 @@ describe('Story (64)', () => {
       storyRewriteFromScratch,
       storyGenerateFullDraft,
     });
-    renderStory();
+    await renderStory();
     await openTab('Settings');
     await userEvent.click(await screen.findByRole('button', { name: 'Rewrite from scratch…' }));
     // The confirmation dialog opens (names the keeps/discards), then confirms.
@@ -3540,7 +3597,7 @@ describe('Story (64)', () => {
         }),
       storyRestoreChapterVersion,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'History' }));
     const sheet = await screen.findByRole('dialog', { name: 'Chapter history' });
@@ -3573,7 +3630,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')),
       storyChapterHistory: () => Promise.resolve({ chapterId: 'c1', versions: [] }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     await userEvent.click(await screen.findByRole('button', { name: 'History' }));
     expect(await screen.findByText(/No earlier versions yet/)).toBeInTheDocument();
@@ -3589,7 +3646,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')),
       storyRegenerateChapter,
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
     // Opening the confirm does NOT spend; Cancel closes it with no call.
     await userEvent.click(await screen.findByRole('button', { name: 'Rewrite this chapter' }));
@@ -3617,7 +3674,7 @@ describe('Story (64)', () => {
           bundle: writtenBundle('new'),
         }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Refresh from what’s new' }));
     expect(await screen.findByText(/AI budget for this period is used up/)).toBeInTheDocument();
   });
@@ -3630,7 +3687,7 @@ describe('Story (64)', () => {
       storyRefreshCheck: () =>
         Promise.resolve({ staled: 0, rewritten: 3, capped: true, bundle: writtenBundle('new') }),
     });
-    renderStory();
+    await renderStory();
     await userEvent.click(await screen.findByRole('button', { name: 'Refresh from what’s new' }));
     expect(await screen.findByText(/weekly allowance/)).toBeInTheDocument();
   });
@@ -3642,7 +3699,7 @@ describe('Story (64)', () => {
       storyGet: () => Promise.resolve(writtenBundle('new')),
       storyInterviewCheck: () => Promise.resolve({ outcome: 'aiOff' as const }),
     });
-    renderStory();
+    await renderStory();
     await openTab('Interview');
     await userEvent.click(await screen.findByRole('button', { name: 'Find what’s missing' }));
     // The baseline persona is NOT an owner (no settings.manage) → the member wording, never a key prompt.
@@ -3661,7 +3718,7 @@ describe('Story (64)', () => {
       storyInterviewCheck: () =>
         Promise.resolve({ outcome: 'throttled' as const, throttleReason: 'weeklyCap' as const }),
     });
-    renderStory();
+    await renderStory();
     await openTab('Interview');
     await userEvent.click(await screen.findByRole('button', { name: 'Find what’s missing' }));
     expect(await screen.findByText(/already taken stock twice this week/)).toBeInTheDocument();
@@ -3680,7 +3737,7 @@ describe('Story (64)', () => {
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]),
     });
-    renderStory();
+    await renderStory();
     const begin = await screen.findByRole('button', { name: 'Begin your book' });
     await waitFor(() => expect(begin).toBeDisabled());
     // The role-aware notice explains how to enable it (the baseline persona is not an owner).
@@ -3716,7 +3773,7 @@ describe('Story (64)', () => {
       insightsList: () => Promise.resolve([crisisInsight('i-a'), crisisInsight('i-b')]),
     });
     useSessionStore.setState({ activePerson: ACTIVE_PERSON }); // the signal is per active person
-    renderStory();
+    await renderStory();
     expect(
       await screen.findByText(/Your biographer is resting while things are heavy/),
     ).toBeInTheDocument();
@@ -3727,7 +3784,7 @@ describe('Story (64)', () => {
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([]),
     });
-    renderStory();
+    await renderStory();
     await screen.findByRole('button', { name: 'Begin your book' });
     expect(screen.getByRole('button', { name: 'Get help now' })).toBeInTheDocument();
   });
@@ -3738,7 +3795,7 @@ describe('Story (64)', () => {
       storyList: () => Promise.resolve([manifest({ status: 'drafting' })]),
       storyGet: () => Promise.resolve(bundle(true)), // approved outline, no chapters yet
     });
-    renderStory();
+    await renderStory();
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: 'The Story of Ben' })).toBeInTheDocument(),
     );

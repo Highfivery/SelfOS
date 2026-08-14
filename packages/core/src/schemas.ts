@@ -5197,6 +5197,10 @@ export interface StoryBookTypeView {
   id: string;
   label: string;
   blurb: string;
+  /** Whether this kind of book may depart from the record — the two groups the picker splits by (72 §3.2). */
+  truthMode: 'true' | 'fictionalized';
+  /** The one-line "what IS this?" shown on the picker card. */
+  summary: { drawsOn: string; shape: string; asksAbout: string };
   structures: { id: string; label: string; description: string; isDefault?: boolean }[];
   stylePresets: { id: BookStyle; label: string }[];
   /** Whether this kind of book is behind the shared 18+ acknowledgement (72 §8.4). */
@@ -5920,4 +5924,30 @@ export interface StoryExcludeResult {
   exclusions: ExclusionItem[];
   bundle: StoryBookBundle;
   staled: number;
+}
+
+/**
+ * One book as the shelf shows it (72 §3.1) — enough to say something true at a glance without opening it.
+ *
+ * `written`/`total` are counted in the book's own unit (chapters, or pages for a picture book), so the card
+ * can say "23 of 45 chapters written" rather than a percentage that means nothing. `total` falls back to what
+ * is written when there is no outline yet, so a book mid-commission reads as whole rather than 0 of 0.
+ */
+export interface BookShelfEntry {
+  id: string;
+  type: string;
+  title: string;
+  status: BookStatus;
+  lifecycle: BookLifecycle;
+  /** How many editions have been finished; the newest one's date, when there is one. */
+  editions: number;
+  finishedAt?: string;
+  coverImageId?: string;
+  essence?: string;
+  written: number;
+  total: number;
+  words: number;
+  /** Singular/plural of the unit this book is measured in — "chapter"/"chapters", "page"/"pages". */
+  unit: { one: string; many: string };
+  updatedAt: string;
 }

@@ -11,7 +11,7 @@ import {
 } from '../../../design-system/components';
 import { useStoryStore } from '../../../stores/storyStore';
 import type { BookOutline, StoryBookBundle } from '@shared/schemas';
-import styles from './Story.module.css';
+import styles from './Books.module.css';
 
 /**
  * Manual outline control (64 §16.1) — the author's own hands on the structure, with no AI in the loop.

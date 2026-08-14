@@ -26,7 +26,7 @@ import {
 import { Composer } from '../sessions/Composer';
 import { awaitingReply } from '../../../stores/conversationStore';
 import { CrisisFooter } from '../sessions/CrisisFooter';
-import styles from './Story.module.css';
+import styles from './Books.module.css';
 
 /** The user message's stored image attachments — resolved via the memory store's cache (45 §3.3). */
 function MemoryAttachments({ attachments }: { attachments: AttachmentRef[] }): JSX.Element {

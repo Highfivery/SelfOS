@@ -16,6 +16,7 @@ import type {
   OwnerEmailActivityEntry,
   MutualGreenLight,
   BookManifest,
+  BookShelfEntry,
   ChapterMarkup,
   ChapterVersion,
   ExclusionItem,
@@ -445,6 +446,7 @@ export const IpcChannels = {
   // Your Story (64-your-story §5.6)
   storyBookTypes: 'story:bookTypes',
   storyList: 'story:list',
+  storyShelf: 'story:shelf',
   storyCreate: 'story:create',
   storyGet: 'story:get',
   storyGenerateFoundations: 'story:generateFoundations',
@@ -1437,6 +1439,7 @@ export interface SelfosBridge {
   storyBookTypes(): Promise<StoryBookTypeView[]>;
   /** The active person's own books, newest-updated first. */
   storyList(): Promise<BookManifest[]>;
+  storyShelf(): Promise<BookShelfEntry[]>;
   /** Create a new book from the setup choices (status `outlining`). */
   storyCreate(input: StoryCreateInput): Promise<BookManifest | null>;
   /** The full book bundle (manifest + outline + timeline + chapters) for the detail view. */

@@ -459,20 +459,20 @@ export function AppShell(): JSX.Element {
             ) : null}
             {canOwnStory ? (
               <NavLink
-                to="/story"
+                to="/books"
                 className={navClass}
                 aria-label={
                   storyProgress
                     ? storyProgress.phase === 'writing' && storyProgress.chaptersTotal > 0
-                      ? `Your Story, writing chapter ${Math.min(storyProgress.chaptersDone + 1, storyProgress.chaptersTotal)} of ${storyProgress.chaptersTotal}`
-                      : 'Your Story, writing'
-                    : 'Your Story'
+                      ? `Books, writing chapter ${Math.min(storyProgress.chaptersDone + 1, storyProgress.chaptersTotal)} of ${storyProgress.chaptersTotal}`
+                      : 'Books, writing'
+                    : 'Books'
                 }
-                title={tip('Your Story')}
+                title={tip('Books')}
                 onClick={closeDrawer}
               >
                 <BookOpen size={18} aria-hidden="true" />
-                <span className={styles.label}>Your Story</span>
+                <span className={styles.label}>Books</span>
                 {storyProgress ? (
                   <span className={styles.navWriting} aria-hidden="true">
                     <span className={styles.navWritingDot} />

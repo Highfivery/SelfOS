@@ -146,6 +146,17 @@ async function seedOwnerImagePrefs(
  * onboarding until their portrait is generated, so tests that exercise OTHER member features seed this so the
  * member isn't gated — reflecting that in reality they'd have onboarded first.
  */
+/**
+ * Reach Books and open the first book on the shelf, the way a person does (72 §3.1). Before the shelf, the
+ * section opened the only book on arrival; now the shelf is the front door, so every test that wants the
+ * workspace has to walk through it. A no-op when there are no books (the invitation shows instead).
+ */
+async function openFirstBook(w: Page): Promise<void> {
+  await w.getByRole('link', { name: 'Books' }).click();
+  const card = w.getByRole('button', { name: /^Open / }).first();
+  if (await card.isVisible().catch(() => false)) await card.click();
+}
+
 async function seedCompletedIntake(
   fs: ReturnType<typeof createNodeFileSystem>,
   key: Uint8Array,
@@ -13693,7 +13704,7 @@ test('story (64): setup names the book, outline rename, chapters + sources, mark
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     // ~360px: the invitation (book-cover hero + promise cards + chips) stacks with no horizontal overflow (§12).
     await expect(w.getByRole('button', { name: 'Begin your book' })).toBeVisible();
     await w.setViewportSize({ width: 360, height: 900 });
@@ -13710,6 +13721,7 @@ test('story (64): setup names the book, outline rename, chapters + sources, mark
     expect(invitationOffenders).toEqual([]);
     await w.setViewportSize({ width: 1280, height: 800 });
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
 
     // The commission (§13.3): the Style control is a card gallery (radiogroup) offering more than the original
     // three registers; a live preview rail shows how the biographer will sound; the title is optional (Create is
@@ -13860,8 +13872,9 @@ test('story (64): the biographer answers a question about a passage (§3.3)', as
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('button', { name: 'Write my book' }).click();
 
     // Open a drafted chapter and mark up its first paragraph with a QUESTION comment (the "Ask" intent).
@@ -13905,8 +13918,9 @@ test('story (64): living book — refresh proposes a structural change, approvin
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('Living Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     // One-flow draft (no outline gate): read + outline (auto-approved) + every chapter, landing on the book.
@@ -13971,8 +13985,9 @@ test('story (64): share a memory — the biographer interviews, synthesizes, and
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('button', { name: 'Write my book' }).click();
     // The one-flow draft lands on the finished, editable book.
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
@@ -14068,8 +14083,9 @@ test('story (64): a memory outlives its book — the insight deep-link still ope
     const w = await app.firstWindow();
 
     // 1) Commission a book and share a memory with the biographer, all the way to saved.
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('The Doomed Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('heading', { name: 'The Doomed Book', level: 1 })).toBeVisible();
@@ -14185,8 +14201,9 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
   });
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('Shared Life');
     await w.getByRole('button', { name: 'Write my book' }).click();
     // One-flow draft (no outline gate): read + outline (auto-approved) + every chapter, landing on the book.
@@ -14305,7 +14322,7 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
 
     // The reader signs in: the first share raises a one-time notification + a "New" marker on the card (§3.6).
     await switchTogetherPerson(w, 'Reader');
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await expect(w.getByRole('heading', { name: 'Shared with you' })).toBeVisible();
     const card = w.getByRole('button', { name: /Shared Life/ });
     await expect(card.getByText('New')).toBeVisible();
@@ -14337,7 +14354,7 @@ test('story (64): a cover, publish to a household reader who reads the shared bo
 
     // Back on the author's account, the Sharing tab now shows the reader has read the latest (§13.6.8 receipt).
     await switchTogetherPerson(w, 'Tester');
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('tab', { name: 'Sharing' }).click();
     await expect(w.getByText(/Read the latest/)).toBeVisible();
 
@@ -14379,8 +14396,9 @@ test('story (64): a photo answer feeds the biographer’s corpus — it reaches 
   });
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('Photo Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     // One-flow draft (no outline gate): read + outline (auto-approved) + every chapter, landing on the book.
@@ -14459,8 +14477,9 @@ test('story (64): the timeline is editable, and a corrected date reaches the bio
   });
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('The Dated Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('heading', { name: 'The Dated Book', level: 1 })).toBeVisible();
@@ -14544,8 +14563,9 @@ test('story (64): the author edits the outline by hand — rename + reorder + me
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('The Shaped Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
@@ -14636,8 +14656,9 @@ test('story (64): the Studio tabs deep-link, and the Danger zone deletes only af
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('Studio Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     // Lands on the Studio (Chapters tab default): the hero title + the chapter grid.
@@ -14698,10 +14719,11 @@ test('story (64): the shelf switcher keeps two books and switches between them (
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
 
     // Book 1.
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('First Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('heading', { name: 'First Book', level: 1 })).toBeVisible();
@@ -14709,6 +14731,7 @@ test('story (64): the shelf switcher keeps two books and switches between them (
     // Start a SECOND book from the shelf switcher (reuses the Begin flow, §19.2).
     await w.getByRole('button', { name: 'Your books ▾' }).click();
     await w.getByRole('menuitem', { name: '+ Start another book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('Second Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('heading', { name: 'Second Book', level: 1 })).toBeVisible();
@@ -14741,8 +14764,9 @@ test('story (64): the title workshop offers alternative titles + a fresh essence
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('Studio Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('heading', { name: 'Studio Book', level: 1 })).toBeVisible();
@@ -14805,8 +14829,9 @@ test('story (64): quote mining — approve a line you said so the book can quote
     await expect(w.getByText(/allowed to want things/).first()).toBeVisible();
 
     // Create a book, open the Interview tab, mine the queue, and approve the line.
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('Quoted Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('heading', { name: 'Quoted Book', level: 1 })).toBeVisible();
@@ -14863,8 +14888,9 @@ test('story (64): the cast register — a recurring person appears, opt-in publi
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('Cast Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('heading', { name: 'Cast Book', level: 1 })).toBeVisible();
@@ -14922,8 +14948,9 @@ test('story (64): the consent center sets a pseudonym + warns before publishing 
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('Consent Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('heading', { name: 'Consent Book', level: 1 })).toBeVisible();
@@ -14963,8 +14990,9 @@ test('story (72): talking a gap through closes it, and you can talk about anythi
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('Gap Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('heading', { name: 'Gap Book', level: 1 })).toBeVisible();
@@ -15015,17 +15043,18 @@ test('story (72): choose a kind of book — its own questions, and the 18+ gate 
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
 
-    // Every kind of book is offered, and picking one shows ITS questions — nothing else's.
-    await expect(w.getByRole('radio', { name: 'Biography' })).toBeVisible();
-    await w.getByRole('radio', { name: /^Memoir/ }).click();
+    // The kind is chosen on its own screen now (72 §3.2), and picking one shows ITS questions — nothing else's.
+    await expect(w.getByRole('button', { name: /^Biography/ })).toBeVisible();
+    await w.getByRole('button', { name: /^Memoir/ }).click();
     await expect(w.getByRole('radio', { name: 'A period of time' })).toBeVisible();
     await expect(w.getByRole('radio', { name: 'How explicit' })).toHaveCount(0);
 
     // An adult type is gated on the shared 18+ acknowledgement, and the CTA stays disabled until it's given.
-    await w.getByRole('radio', { name: /^Erotica/ }).click();
+    await w.getByRole('button', { name: 'Cancel' }).click();
+    await w.getByRole('button', { name: /^Erotica/ }).click();
     await expect(w.getByRole('button', { name: 'Write my book' })).toBeDisabled();
     await w.getByRole('button', { name: 'I’m 18 or older' }).click();
     await expect(w.getByRole('radio', { name: 'Unfiltered' })).toBeVisible();
@@ -15046,7 +15075,8 @@ test('story (72): choose a kind of book — its own questions, and the 18+ gate 
     await w.setViewportSize({ width: 1280, height: 900 });
 
     // Commission a memoir with its own answers; they persist on the book, per book.
-    await w.getByRole('radio', { name: /^Memoir/ }).click();
+    await w.getByRole('button', { name: 'Cancel' }).click();
+    await w.getByRole('button', { name: /^Memoir/ }).click();
     await w.getByRole('radio', { name: 'A thread I followed' }).click();
     await w.getByRole('textbox', { name: 'Which one' }).fill('my mother’s illness');
     await w.getByRole('textbox', { name: 'Title' }).fill('The Long Year');
@@ -15079,8 +15109,9 @@ test('story (72): new material is a proposal you accept — the book never rewri
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('Living Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('heading', { name: 'Living Book', level: 1 })).toBeVisible();
@@ -15131,8 +15162,9 @@ test('story (72): the manuscript read files whole-book findings into the review 
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('Manuscript Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('heading', { name: 'Manuscript Book', level: 1 })).toBeVisible();
@@ -15170,8 +15202,9 @@ test('story (64): opt-in line-edit polishes a chapter and is reversible via Hist
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('Polish Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('heading', { name: 'Polish Book', level: 1 })).toBeVisible();
@@ -15202,6 +15235,70 @@ test('story (64): opt-in line-edit polishes a chapter and is reversible via Hist
   }
 });
 
+test('books (72 §3.1/§3.2): the shelf is the front door — two books, each with its own progress; "+ New book" picks a KIND first; 360px clean', async () => {
+  test.setTimeout(90_000);
+  const { userData } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // With no books at all the shelf stays out of the way and the invitation leads.
+    await w.getByRole('link', { name: 'Books' }).click();
+    await expect(w.getByRole('button', { name: 'Begin your book' })).toBeVisible();
+
+    // Write one, then return to the shelf — the book is on it, counted.
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('The First Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'The First Book', level: 1 })).toBeVisible();
+    await w.getByRole('button', { name: '← All books' }).click();
+
+    await expect(w.getByRole('heading', { name: 'Your books', level: 1 })).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Open The First Book' })).toBeVisible();
+    // The count is in the book's own unit, not a bare percentage.
+    await expect(w.getByText(/of \d+ chapters written/).first()).toBeVisible();
+
+    // A second book from the shelf — and the kind is chosen BEFORE the commission (§3.2).
+    await w.getByRole('button', { name: '+ New book' }).click();
+    await expect(w.getByRole('heading', { name: 'What kind of book?', level: 1 })).toBeVisible();
+    // Both truth-mode groups are there, and each card says what it draws on.
+    await expect(w.getByRole('region', { name: 'Told true' })).toBeVisible();
+    await expect(w.getByRole('region', { name: 'Reimagined' })).toBeVisible();
+    await expect(w.getByText(/Draws on/).first()).toBeVisible();
+
+    // 360px: the shelf grid + the picker cards stack with no horizontal overflow (§12).
+    await w.setViewportSize({ width: 360, height: 900 });
+    await expectNoInnerOverflow(w);
+    await w.setViewportSize({ width: 1280, height: 900 });
+
+    await w.getByRole('button', { name: /^Memoir/ }).click();
+    // A memoir asks its own questions, and the commission stays gated until they're answered (§4.1).
+    await expect(w.getByRole('button', { name: 'Write my book' })).toBeDisabled();
+    await w.getByRole('radio', { name: 'A thread I followed' }).click();
+    await w.getByRole('textbox', { name: 'Which one' }).fill('the year we moved');
+    await w.getByRole('textbox', { name: 'Title' }).fill('The Second Book');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'The Second Book', level: 1 })).toBeVisible();
+
+    // Both books now sit on the shelf — the single-book assumption is gone.
+    await w.getByRole('button', { name: '← All books' }).click();
+    await expect(w.getByRole('button', { name: 'Open The First Book' })).toBeVisible();
+    await expect(w.getByRole('button', { name: 'Open The Second Book' })).toBeVisible();
+
+    // A link minted before the rename still lands (§3.1).
+    await w.evaluate(() => {
+      window.location.hash = '#/story';
+    });
+    await expect(w.getByRole('heading', { name: 'Your books', level: 1 })).toBeVisible();
+  } finally {
+    await app.close();
+  }
+});
+
 test('story (64): the owner reads their own book in the immersive reader — front matter → chapter → edit; text size; 360px clean (§13.5)', async () => {
   test.setTimeout(60_000);
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
@@ -15211,8 +15308,9 @@ test('story (64): the owner reads their own book in the immersive reader — fro
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('The Reading Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
 
@@ -15281,8 +15379,9 @@ test('story (64): the draft shows live progress, keeps writing in the background
   });
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('Background Book');
     await w.getByRole('button', { name: 'Write my book' }).click();
 
@@ -15292,15 +15391,15 @@ test('story (64): the draft shows live progress, keeps writing in the background
 
     // Navigate AWAY mid-draft → the sidebar still shows it writing (it continues in the background, in main).
     await w.getByRole('link', { name: 'Home' }).click();
-    await expect(w.getByRole('link', { name: /Your Story, writing/ })).toBeVisible();
+    await expect(w.getByRole('link', { name: /Books, writing/ })).toBeVisible();
 
     // It finishes while we're on another page — the writing indicator clears (the nav reverts to plain).
-    await expect(w.getByRole('link', { name: 'Your Story', exact: true })).toBeVisible({
+    await expect(w.getByRole('link', { name: 'Books', exact: true })).toBeVisible({
       timeout: 25_000,
     });
 
     // Returning shows the finished, fully-drafted book (no outline gate was ever shown).
-    await w.getByRole('link', { name: 'Your Story', exact: true }).click();
+    await w.getByRole('link', { name: 'Books', exact: true }).click();
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
     expect(await w.getByRole('heading', { name: 'Review your outline' }).count()).toBe(0);
   } finally {
@@ -15319,8 +15418,9 @@ test('story (64): trust repairs — protected words survive a rewrite + history 
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('textbox', { name: 'Title' }).fill('Trust Repairs');
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible({ timeout: 30_000 });
@@ -15394,8 +15494,9 @@ test('story (64): resume an unfinished memory later — pick up where you left o
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    await w.getByRole('link', { name: 'Your Story' }).click();
+    await openFirstBook(w);
     await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click(); // what KIND of book (72 §3.2)
     await w.getByRole('button', { name: 'Write my book' }).click();
     await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
 

@@ -250,6 +250,7 @@ import {
   type MarkupMark,
   type SharedBookSummary,
   type StoryBookBundle,
+  type BookShelfEntry,
   type StoryBookTypeView,
   type StoryChaptersResult,
   type StoryExcludeResult,
@@ -522,6 +523,7 @@ import {
   mineQuoteCandidates,
   setQuoteStatus,
   listBooks,
+  listShelf,
   clearNewMaterial,
   finishEdition,
   reopenBook,
@@ -5633,6 +5635,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         id: t.id,
         label: t.label,
         blurb: t.blurb,
+        truthMode: t.truthMode,
+        summary: t.summary,
         gates: t.gates,
         options: (t.options ?? []).map((o) => ({
           id: o.id,
@@ -5658,6 +5662,21 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = await activePersonId();
       if (!personId) return [];
       return listBooks(ctx.fs, ctx.key, personId);
+    },
+    /** The bookshelf (72 §3.1) — every book with enough counted to show it without opening it. */
+    storyShelf: async (): Promise<BookShelfEntry[]> => {
+      const ctx = await host.vaultAndKey();
+      if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      const personId = await activePersonId();
+      if (!personId) return [];
+      // The unit a book is counted in belongs to its TYPE, which lives in the code registry — resolved here
+      // so the shelf read stays a pure count and a picture book's pages need no change to it (72 P6).
+      return listShelf(ctx.fs, ctx.key, personId, (typeId) => {
+        const spine = getBookType(typeId)?.spine;
+        return spine?.kind === 'pages'
+          ? { one: 'page', many: 'pages' }
+          : { one: 'chapter', many: 'chapters' };
+      });
     },
     storyCreate: async (input): Promise<BookManifest | null> => {
       const ctx = await host.vaultAndKey();

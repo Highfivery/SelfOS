@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Banner, Button, Heading, Stack, Text, TextInput } from '../../../design-system/components';
 import { useStoryStore } from '../../../stores/storyStore';
 import type { StoryBookBundle, TimelineEvent } from '@shared/schemas';
-import styles from './Story.module.css';
+import styles from './Books.module.css';
 
 /**
  * A real calendar date (`YYYY`, `YYYY-MM`, `YYYY-MM-DD`) vs a fuzzy era ("mid-90s"). Month/day are range

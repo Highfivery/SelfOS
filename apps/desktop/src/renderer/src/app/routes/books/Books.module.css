@@ -2292,3 +2292,254 @@
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
+
+/* ── The bookshelf (72 §3.1) ─────────────────────────────────────────────────────────────── */
+.shelfHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+/* Let the title block shrink so the action stays on the header line; a long subtitle would otherwise push
+   it onto its own row, where it reads as orphaned rather than as the header's action. */
+.shelfHead > div:first-child {
+  flex: 1 1 380px;
+  min-width: 0;
+}
+.shelf {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+  gap: var(--space-6) var(--space-5);
+}
+.shelfItem,
+.shelfNew {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  border-radius: var(--radius-md);
+}
+.shelfItem:focus-visible,
+.shelfNew:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 4px;
+}
+.shelfCover {
+  aspect-ratio: 5 / 7.4;
+  border-radius: 3px 8px 8px 3px;
+  box-shadow:
+    0 2px 4px rgb(30 20 8 / 0.14),
+    0 12px 28px rgb(30 20 8 / 0.2);
+  background-image: linear-gradient(155deg, #33475a 0%, #4f7388 45%, #8aa4b4 70%, #c9a26b 100%);
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: flex-end;
+  padding: var(--space-4) var(--space-3);
+  transition: transform var(--motion-fast) ease;
+}
+.shelfItem:hover .shelfCover {
+  transform: translateY(-2px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .shelfCover,
+  .shelfItem:hover .shelfCover {
+    transition: none;
+    transform: none;
+  }
+}
+.shelfCoverTitle {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  line-height: 1.15;
+  color: #fdf6ea;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 0.4);
+}
+.shelfTitle {
+  font-weight: 500;
+  color: var(--color-text);
+  line-height: 1.3;
+}
+.shelfMeta {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+.shelfBar {
+  height: 3px;
+  background: var(--color-surface-alt);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.shelfBar i {
+  display: block;
+  height: 100%;
+  background: var(--color-accent);
+}
+.shelfChips {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+.shelfChipLiving,
+.shelfChipDone,
+.shelfCount {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 0.7rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.shelfChipLiving {
+  color: var(--color-accent-subtle-text);
+  background: var(--color-accent-subtle-bg);
+}
+.shelfChipDone {
+  color: var(--color-success);
+  background: var(--color-success-subtle-bg);
+}
+.shelfCount {
+  color: var(--color-text-muted);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+}
+.shelfNew .shelfNewPlus {
+  /* Match the cover it sits beside — a small square reads as a stray icon, not a place to start a book. */
+  width: 100%;
+  aspect-ratio: 5 / 7.4;
+  border: 2px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  font-weight: 300;
+  color: var(--color-text-muted);
+}
+.shelfNewLabel {
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+/* ── "What kind of book?" (72 §3.2) ──────────────────────────────────────────────────────── */
+.pickerPage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.pickerGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.pickerGroupHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.pickerGroupTitle {
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+.pickerGroupHint {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+.pickerGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(262px, 1fr));
+  gap: var(--space-3);
+}
+.pickerCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  text-align: left;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.pickerCard:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+}
+.pickerCard:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.pickerCard:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+.pickerCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.pickerCardTitle {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: var(--color-text);
+}
+.pickerAdult {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--color-danger);
+  background: var(--color-danger-subtle-bg);
+}
+.pickerBlurb {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+.pickerFacts {
+  /* Pinned to the bottom so the dashed rule lines up across a row of uneven blurbs. */
+  margin-top: auto;
+  border-top: 1px dashed var(--color-border);
+  padding-top: var(--space-2);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+.pickerFacts b {
+  font-weight: 600;
+}
+.backToShelf {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-accent-subtle-text);
+  cursor: pointer;
+}
+.backToShelf:hover {
+  text-decoration: underline;
+}
+.backToShelf:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}

@@ -429,6 +429,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.autoCheckinsSetBlock, bridge.autoCheckinsSetBlock);
   handle(IpcChannels.storyBookTypes, bridge.storyBookTypes);
   handle(IpcChannels.storyList, bridge.storyList);
+  handle(IpcChannels.storyShelf, bridge.storyShelf);
   handle(IpcChannels.storyCreate, bridge.storyCreate);
   handle(IpcChannels.storyGet, bridge.storyGet);
   handle(IpcChannels.storyGenerateFoundations, bridge.storyGenerateFoundations);

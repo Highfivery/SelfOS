@@ -447,6 +447,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     autoCheckinsSetBlock: () => Promise.resolve({ schemaVersion: 1, blockedSenders: [] }),
     storyBookTypes: () => Promise.resolve([]),
     storyList: () => Promise.resolve([]),
+    storyShelf: () => Promise.resolve([]),
     storyCreate: () => Promise.resolve(null),
     storyGet: () => Promise.resolve(null),
     storyGenerateFoundations: () =>

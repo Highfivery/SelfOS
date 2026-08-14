@@ -3,7 +3,7 @@ import { Button, Card, Heading, Stack, Text } from '../../../design-system/compo
 import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryMemoryStore } from '../../../stores/storyMemoryStore';
 import type { StoryMemoryView } from '@shared/schemas';
-import styles from './Story.module.css';
+import styles from './Books.module.css';
 
 /** A friendly "last worked on" label for an in-progress memory row (§14) — today/yesterday, else a short date. */
 function formatMemoryWhen(iso: string): string {

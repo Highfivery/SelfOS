@@ -16,7 +16,8 @@ import {
   type StoryCraftPhase,
   type UsageEvent,
 } from '../schemas';
-import { getBookType, type BookType } from './bookTypes';
+import { getBookType, resolveSpine, resolveTypeOptions, type BookType } from './bookTypes';
+import { resolvePersonOptionNames } from './castRegister';
 import { CHAPTER_CORPUS_TOKEN_BUDGET, budgetCorpus, sliceCorpusForChapter } from './corpusBudget';
 import { buildStoryCorpus, type CorpusItem, type StoryCorpus } from './storyCorpus';
 import { critiqueChapter, planChapter, reviseChapter } from './storyCraft';
@@ -134,7 +135,13 @@ export async function generateFoundations(
   const corpus = budgetCorpus(
     await buildStoryCorpus(deps.fs, deps.key, deps.personId, opts.bookId, opts.exclusions ?? []),
   );
-  const system = buildBiographerSystem(opts.bookType, opts.config, corpus.personName);
+  const system = buildBiographerSystem(
+    opts.bookType,
+    opts.config,
+    corpus.personName,
+    undefined,
+    await resolvePersonOptionNames(deps.fs, deps.key, opts.bookType, opts.config.typeOptions),
+  );
   const user = buildFoundationsUserMessage(corpus, opts.bookType, opts.config);
 
   const result = await runClaude(deps, system, user, 'story.outline', FOUNDATIONS_MAX_TOKENS);
@@ -160,27 +167,43 @@ export async function generateFoundations(
   }
 
   const validArea = new Set<string>(LIFE_AREAS);
+  // A `pages` spine states an exact count, and until now that was a request in the prompt with nothing
+  // behind it — a 32-page picture book could come back with 40 pages. Enforce the ceiling here (the model
+  // gets the count, the code guarantees it). A SHORT reply is left alone deliberately: dropping pages the
+  // model actually wrote briefs for is honest, padding with empty shells is the §7.5 defect we removed.
+  const spine = resolveSpine(
+    opts.bookType,
+    resolveTypeOptions(opts.bookType, opts.config.typeOptions),
+  );
+  const pageCap = spine.kind === 'pages' ? spine.count : Infinity;
+  let taken = 0;
   const outline: BookOutline = {
     schemaVersion: 1,
     approved: false,
-    parts: draft.outline.parts.map((part, partIndex) => {
-      const partId = uuid();
-      return {
-        id: partId,
-        title: part.title.trim() || `Part ${partIndex + 1}`,
-        chapters: part.chapters.map((chapter, chapterIndex) => ({
-          id: uuid(),
-          title: chapter.title.trim(),
-          brief: chapter.brief.trim(),
-          ...(chapter.eraFrom ? { eraFrom: chapter.eraFrom } : {}),
-          ...(chapter.eraTo ? { eraTo: chapter.eraTo } : {}),
-          // Normalize the advisory life-areas against the fixed taxonomy (the schema's server-side promise) —
-          // drop anything the model invented; an empty list stays empty (never forced to 'Other').
-          lifeAreas: (chapter.lifeAreas ?? []).filter((area) => validArea.has(area)),
-          order: chapterIndex,
-        })),
-      };
-    }),
+    parts: draft.outline.parts
+      .map((part, partIndex) => {
+        const partId = uuid();
+        // `taken` runs across parts, not within one, so the cap is the BOOK's page count even if the model
+        // split a picture book into several parts.
+        const kept = part.chapters.filter(() => taken++ < pageCap);
+        return {
+          id: partId,
+          title: part.title.trim() || `Part ${partIndex + 1}`,
+          chapters: kept.map((chapter, chapterIndex) => ({
+            id: uuid(),
+            title: chapter.title.trim(),
+            brief: chapter.brief.trim(),
+            ...(chapter.eraFrom ? { eraFrom: chapter.eraFrom } : {}),
+            ...(chapter.eraTo ? { eraTo: chapter.eraTo } : {}),
+            // Normalize the advisory life-areas against the fixed taxonomy (the schema's server-side promise) —
+            // drop anything the model invented; an empty list stays empty (never forced to 'Other').
+            lifeAreas: (chapter.lifeAreas ?? []).filter((area) => validArea.has(area)),
+            order: chapterIndex,
+          })),
+        };
+      })
+      // A part the cap emptied would render as a heading with nothing under it.
+      .filter((part) => part.chapters.length > 0),
   };
   const timeline: LifeTimeline = {
     schemaVersion: 1,
@@ -298,6 +321,7 @@ export async function generateChapter(
     book.config,
     corpus.personName,
     renderTaggedCorpus(slice, tagged),
+    await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
   );
 
   // Pass 1 of the craft loop (72 §5.3) — decide what this chapter IS before writing a word. Optional by
@@ -609,7 +633,13 @@ export async function applyMarkup(
     : budgetCorpus(corpus, { tokenBudget: CHAPTER_CORPUS_TOKEN_BUDGET });
   const tagged = tagCorpusItems(source);
   const tagToRef = new Map(tagged.map((t) => [t.tag, t.sourceRef]));
-  const system = buildBiographerSystem(bookType, book.config, corpus.personName);
+  const system = buildBiographerSystem(
+    bookType,
+    book.config,
+    corpus.personName,
+    undefined,
+    await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
+  );
   const user = buildRevisionUserMessage(source, tagged, {
     chapter: existing,
     marks: pending,
@@ -745,7 +775,13 @@ export async function answerAuthorQuestion(
     .map((id) => byRefId.get(id))
     .filter((it): it is CorpusItem => Boolean(it));
 
-  const system = buildBiographerSystem(bookType, book.config, corpus.personName);
+  const system = buildBiographerSystem(
+    bookType,
+    book.config,
+    corpus.personName,
+    undefined,
+    await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
+  );
   const user = buildAnswerAuthorMessage({
     personName: corpus.personName,
     chapterTitle: chapter.title,

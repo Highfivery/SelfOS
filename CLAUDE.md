@@ -467,6 +467,42 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-14 — **Build (Books P6a — the children's picture book; SPEC 72 §5.10 P6; on `feat/books-childrens`,
+  in a git WORKTREE).** The first of the two hard types. Most of §4.1's declarative model was already there
+  from P3 — the work was that three declared slots **did nothing**. **The load-bearing finding: the image
+  likeness rule is enforced TWICE, and the half that matters is the Claude distillation, not the framing.**
+  The framing only asks the image generator; the distillation rewrites the brief before anything leaves the
+  app, so a picture book that relaxed only `imageFraming` would still have had its character sheets stripped
+  and its hero would have changed face on every page. Both are now per-type, with the relaxation bounded
+  (illustration only, no text, content policy) and pinned by a §8.5 guard asserting **exactly one** type
+  departs from the symbolic default. **`BookInterviewFramework.scenes` was typed `typeof MCADAMS_SCENES`**,
+  which made §4.1's "the framework is the only source of interview dimensions" unachievable — all five
+  non-biography types were _forced_ to reuse biography's eight scenes; now structural, and the picture book
+  asks about the CHILD, not the parent's own low point. **The character sheet lives on `BookConsentEntry`,
+  not `CastEntry`** as the spec proposed — the cast register is derived and recomputed on every read, so
+  nothing on it survives; sharing the pseudonym's storage makes independent-field merging load-bearing (a
+  whole-entry replace deletes how someone looks the moment you rename them — guarded, **verified to fail**
+  against the replacing version). **Three pre-existing defects fixed on the way (§6):** `portrait`'s
+  _required_ "Who it's about" answer reached **no directive**, so the model was never told whose portrait it
+  was; person options offered the **author themselves** as the hero of their own children's book; and the
+  style picker ignored each type's declared `stylePresets`, offering all seven registers — for a type
+  declaring a subset that meant offering one whose directive resolves to the **empty string**. Also: the
+  `pages` spine's exact count was a request in the prompt with nothing behind it (now capped, a SHORT reply
+  deliberately left alone rather than padded with the §7.5 empty shells), and the workspace now counts in the
+  type's own unit from ONE `unitForType` shared with the shelf. Owner decisions taken first: hero = one or
+  more children; the sheet is **suggested from the profile but saved explicitly** (saving is what lets it
+  leave the app); illustration is an **explicit bulk action stating count and cost** — with the `$` gated on
+  `budgets.manage` per the app-wide money rule, which the owner's "state the cost" answer hadn't
+  contemplated. Gate green: typecheck (4 pkgs), lint, format, **2095 core + 1578 desktop + 13 relay** unit,
+  **209 E2E** (a new decrypt-level picture-book walk). **Visual QA is what caught four of the defects above**
+  — the author in his own hero list, biography prose under "how your biographer will sound", a style the type
+  doesn't offer, and "2 chapters" on a book made of pages. **Lessons: (1) when a rule is enforced in two
+  places, find out which one is the actual gate before relaxing either — here the prompt framing is
+  decorative and the distillation is the boundary. (2) An offline fake that branches on prompt text will
+  serve only the type it was written for: the foundations fake matched `'plan a biography of'` while the
+  opener names the TYPE, so every non-biography book silently failed to parse an outline and left the
+  workspace unreachable — matched on the type-agnostic stem instead.**
+
 - 2026-08-11 — **Fix (relay: "Update relay" appeared to do nothing + the email cadence died on its 404;
   user-reported; SPEC 08 §17.14c-2 + 67 §3.5; on `fix/relay-stale-bundle-guard`).** Reported as an
   `email:scheduleReconcile` crash on every launch — `Relay request failed (404) for /api/admin/drainTaps` —

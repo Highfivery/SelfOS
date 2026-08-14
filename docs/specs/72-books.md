@@ -413,6 +413,34 @@ Each is its own PR-gated slice under the standard CLAUDE.md §6/§7 cadence.
 | **P5** | **The UI rebuild.** Split `Story.tsx`; bookshelf; type picker; the six tabs; person-level timeline; People without consent states; photos into the interview.                                                                   | Presents everything above.                                                                   |
 | **P6** | **The two hard types.** `childrens` (page spine, character sheet, per-type image framing, audience) and `ourStory` (shared pair storage).                                                                                       | Each is a genuine new build.                                                                 |
 
+**As built (P6a — `childrens`).** Most of what §4.1 declared was already in place from P3, and the work was
+mostly making declared-but-inert slots actually do something:
+
+- `imageFraming`, `castPolicy` and `audience` were **declared and read by nothing**. The image service
+  hard-coded its own framing AND its own distillation instruction; the distillation is the real gate (it
+  rewrites the brief before anything leaves the app), so relaxing only the framing would have stripped the
+  character sheet anyway and the hero would have changed face every page. Both are now per-type.
+- `BookInterviewFramework.scenes` was typed as `typeof MCADAMS_SCENES`, which made "the framework is the
+  only source of interview dimensions" unachievable — every type was forced to reuse biography's eight
+  scenes, and all five did. It is now structural, and the picture book asks about the CHILD.
+- The **character sheet lives on `BookConsentEntry`**, not `CastEntry` as §4.8 proposed: the cast register is
+  derived and recomputed on every read, so nothing on it survives. It is the same kind of per-book,
+  per-person, author-authored record as a pseudonym, so it shares its storage and its write path — which
+  makes independent-field merging load-bearing (a whole-entry replace would delete how someone looks the
+  moment you renamed them).
+- `spine.count` was a **request in the prompt with nothing behind it**; the outline is now capped to it. A
+  SHORT reply is deliberately left alone — padding with empty shells is the §7.5 defect this spec removed.
+- Two pre-existing defects were fixed in passing (CLAUDE.md §6): `portrait`'s **required** "Who it's about"
+  answer reached no directive, so the model was never told whose portrait it was; and person options offered
+  the author themselves. The style picker also ignored each type's declared `stylePresets` and offered all
+  seven registers — for a type declaring a subset that meant offering a register whose directive resolves to
+  the empty string.
+- **Illustration is explicit** (owner decision): a 32-page book is 32 paid generations, so the bulk action
+  states how many and — for a `budgets.manage` admin, per the app-wide money rule — what it will cost,
+  before spending anything.
+- The workspace now **counts in the type's own unit** (pages, not chapters) everywhere the shelf already
+  did, from one `unitForType` derivation shared by both.
+
 ## 6. IPC / API contracts
 
 All channels stay gated `story.own` and active-person-scoped in the bridge (the trust boundary); keys
@@ -505,8 +533,16 @@ The default image framing stays 64's: symbolic, non-photorealistic, **never a li
 person and never a name**, with the Claude distillation stripping both before anything reaches OpenAI.
 
 **The `childrens` type deliberately relaxes this** (owner decision, 2026-08-13): its framing permits
-depicting the author's own children, and a `CastEntry.sheet` describing their appearance passes through
-the distillation to OpenAI so the character stays consistent across pages. The consequence, stated
+depicting the author's own children, and a character sheet describing their appearance passes through
+the distillation to OpenAI so the character stays consistent across pages.
+
+**As built, the gate is the DISTILLATION, not the framing.** There are two independent enforcement points,
+and only one of them matters: the framing merely asks the image generator, while the Claude distillation
+rewrites the brief before anything leaves the app. A type that relaxed only the framing would still have its
+sheets stripped. Both are per-type, and the relaxation stays bounded even here — illustration only (never
+photoreal), still no text in the image, still content policy. A sheet is **never auto-sent from the
+profile**: the People tab suggests it from `Person.appearanceDescription` and shows what will leave, and the
+author must save it themselves. A sheet stored against any other type is inert and never read. The consequence, stated
 plainly: appearance data about a real child leaves the app to a third-party image provider, which no
 other SelfOS surface does today. It applies to this one type, only for children in the author's own
 household, and only when image generation is switched on.
@@ -611,6 +647,13 @@ Two items are **deliberately deferred** rather than open:
 
 ## 12. Changelog
 
+- 2026-08-14 — **P6a built** — the `childrens` picture book. Registered the type (page spine, own interview
+  scenes, own registers, 3–7 audience); made `imageFraming` / `castPolicy` / `audience` actually consumed;
+  added the character sheet on `BookConsentEntry` with independent-field merging; enforced `spine.count`;
+  gave the workspace the type's own counting unit; added the explicit bulk illustrate. Fixed three
+  pre-existing defects found on the way: `portrait`'s subject answer reached no directive, person options
+  offered the author themselves, and the style picker ignored each type's declared presets. `ourStory`
+  remains (P6b).
 - 2026-08-13 — **Approved.** The three drafting questions resolved with the owner: §8.5's likeness
   wording stands as written; the capability stays `story.own` while the channels become `books:*` (no
   role-config migration); the core module is renamed `story/` → `books/` behind a compatibility barrel.

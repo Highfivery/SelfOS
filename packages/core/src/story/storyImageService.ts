@@ -2,6 +2,8 @@ import type { ClaudeClient, FileSystem, ImageClient } from '../host';
 import { uuid } from '../id';
 import type { StoryImageEntry, StoryImageGenerateResult, UsageEvent } from '../schemas';
 import { checkBudget, costOf, recordUsage } from '../usage';
+import { getBookType, resolveSpine, resolveTypeOptions, type BookType } from './bookTypes';
+import { characterSheets } from './storyConsent';
 import {
   clearBookCover,
   getBook,
@@ -29,10 +31,28 @@ const IMAGE_SIZE = '1024x1024'; // a square, for chapter illustrations (inline f
 // A book cover is a portrait at the standard 2:3 book trim (§18.4, #303) — the largest 2:3 OpenAI offers. So the
 // cover is generated at its true print aspect (not a square the UI crops to 2:3), and exports/prints unstretched.
 const COVER_SIZE = '1024x1536';
+// A picture-book page is a landscape spread, not a square (§5.6). Cropping a 32-page book's art to a square
+// would cut the hero out of half of it.
+const PAGE_SIZE = '1536x1024';
 const ALLOWED_MIME = ['image/png', 'image/webp', 'image/jpeg'] as const;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // ~5 MB (the 08 §13.2 bound, reused)
 const DISTILL_MAX_TOKENS = 400;
 const CHAPTER_SEED_CHARS = 800; // a bounded excerpt is plenty for a symbolic scene
+
+/**
+ * The aspect this image is generated at. A cover is a 2:3 portrait; a page of a `pages`-spine book is a
+ * landscape spread; every other illustration is a square inline figure.
+ */
+function imageSize(
+  kind: 'cover' | 'illustration',
+  bookType: BookType | undefined,
+  config: { typeOptions?: Record<string, string> },
+): string {
+  if (kind === 'cover') return COVER_SIZE;
+  if (!bookType) return IMAGE_SIZE;
+  const spine = resolveSpine(bookType, resolveTypeOptions(bookType, config.typeOptions));
+  return spine.kind === 'pages' ? PAGE_SIZE : IMAGE_SIZE;
+}
 
 function isAllowedMime(mime: string): boolean {
   return (ALLOWED_MIME as readonly string[]).includes(mime);
@@ -55,6 +75,35 @@ const DISTILLATION_INSTRUCTION =
   'and add nothing designed to evade a content policy.';
 
 /**
+ * The distillation system for a book whose type permits likeness (§8.5 — a picture book, and only a picture
+ * book). This is the SECOND place the no-likeness rule is enforced, and the one that actually matters: the
+ * framing above only asks the image generator, whereas this pass rewrites the brief before anything leaves
+ * the app. A children's book that relaxed only the framing would still have its character sheets stripped
+ * here and its hero would change face every page.
+ *
+ * What is relaxed: describing the named characters, and their names surviving into the prompt so the sheet
+ * can be attached to the right one. What is NOT relaxed: photorealism, text in the image, and content policy.
+ */
+const CHARACTER_DISTILLATION_INSTRUCTION =
+  'You turn a picture-book page brief into a SINGLE vivid visual prompt for an image generator. Output ONLY ' +
+  'the prompt — one tight paragraph, no preamble, no quotes, no lists. This is a children’s picture-book ' +
+  'illustration: describe the scene concretely and describe each named character using their CHARACTER SHEET ' +
+  'exactly as given, so the same character is drawn identically on every page. Keep every detail of a ' +
+  'character sheet you are given — hair, skin tone, build, clothing — these are what keep the character ' +
+  'consistent. Keep it hand-illustrated and NON-photorealistic (never a photograph, never photoreal). Do NOT ' +
+  'put any words, letters, title, or typography in the image. Stay strictly within content policy: children ' +
+  'depicted only in ordinary, wholesome, fully-clothed everyday scenes, and add nothing designed to evade a ' +
+  'content policy.';
+
+/**
+ * Whether this book's type permits depicting real people (§8.5). Derived from the ONE declared signal —
+ * `castPolicy: 'childrenAsHeroes'` — rather than a second flag that could disagree with it.
+ */
+function permitsLikeness(bookType: BookType | undefined): boolean {
+  return bookType?.castPolicy === 'childrenAsHeroes';
+}
+
+/**
  * Assemble the **distillation input** handed to Claude — pure, so it is unit-tested in isolation. Name-free by
  * construction: the seed is thematic prose (the book essence, or a chapter's title/brief/excerpt), and any
  * name inside it is stripped by the distillation instruction before the prompt reaches OpenAI. Optional
@@ -66,13 +115,34 @@ export function buildStoryImagePromptInput(input: {
   seed: string;
   style: string;
   styleNotes?: string;
+  /** This book type's image contract (§8.5). Defaults to the symbolic, no-likeness framing. */
+  framing?: string;
+  /**
+   * name → character sheet, for a type whose framing permits likeness (§4.8). Only the characters the seed
+   * actually NAMES are attached, so a picture book doesn't ship its whole cast into every page prompt.
+   * Ignored entirely when the framing is the symbolic default — a sheet must never ride along by accident.
+   */
+  characterSheets?: Record<string, string>;
 }): string {
   const what = input.kind === 'cover' ? 'book cover' : 'chapter illustration';
+  const framing = input.framing?.trim() || STORY_IMAGE_FRAMING;
+  const symbolic = framing === STORY_IMAGE_FRAMING;
   const lines: string[] = [
-    `Brief for a symbolic ${what} for a life-story titled “${input.title}”.`,
+    `Brief for a ${symbolic ? 'symbolic ' : ''}${what} for a book titled “${input.title}”.`,
     `Themes to evoke:\n${input.seed.trim()}`,
     `Visual style: ${input.style}.`,
   ];
+  if (!symbolic) {
+    const sheets = Object.entries(input.characterSheets ?? {}).filter(([name]) =>
+      new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(input.seed),
+    );
+    if (sheets.length > 0) {
+      lines.push(
+        'CHARACTER SHEETS — draw these characters exactly as described, identically on every page:\n' +
+          sheets.map(([name, sheet]) => `- ${name}: ${sheet}`).join('\n'),
+      );
+    }
+  }
   // A cover is a tall portrait (2:3 book trim, §18.4) — compose for a vertical frame so nothing important sits
   // where the spine/edges would crop.
   if (input.kind === 'cover') {
@@ -82,7 +152,7 @@ export function buildStoryImagePromptInput(input: {
   }
   const styleNotes = input.styleNotes?.trim();
   if (styleNotes) lines.push(`Additional style direction: ${styleNotes}.`);
-  lines.push(STORY_IMAGE_FRAMING);
+  lines.push(framing);
   return lines.join('\n\n');
 }
 
@@ -211,12 +281,20 @@ export async function generateStoryImage(
   }
 
   const at = now.toISOString();
+  // The per-type image contract (§8.5). Everything except a picture book gets the symbolic, no-likeness
+  // default; a picture book gets its own framing AND the author's character sheets, so its hero has the
+  // same face on every page.
+  const bookType = getBookType(book.type);
+  const likeness = permitsLikeness(bookType);
+  const sheets = likeness ? await characterSheets(fs, key, personId, bookId) : {};
   const promptInput = buildStoryImagePromptInput({
     kind: target.kind,
     title: book.title,
     seed,
     style,
     ...(styleNotes ? { styleNotes } : {}),
+    ...(bookType ? { framing: bookType.imageFraming } : {}),
+    ...(likeness ? { characterSheets: sheets } : {}),
   });
 
   // 1. Distill via Claude. A pre-render failure here makes no OpenAI call and is not metered.
@@ -227,7 +305,7 @@ export async function generateStoryImage(
       {
         apiKey: anthropicApiKey,
         model: claudeModel,
-        system: DISTILLATION_INSTRUCTION,
+        system: likeness ? CHARACTER_DISTILLATION_INSTRUCTION : DISTILLATION_INSTRUCTION,
         messages: [{ role: 'user', content: promptInput }],
         maxTokens: DISTILL_MAX_TOKENS,
         // A bounded 400-token output — adaptive thinking SHARES this budget and can starve the prompt to
@@ -270,7 +348,7 @@ export async function generateStoryImage(
     apiKey: openaiApiKey,
     model: imageModel,
     prompt: distilledPrompt,
-    size: target.kind === 'cover' ? COVER_SIZE : IMAGE_SIZE,
+    size: imageSize(target.kind, bookType, book.config),
   });
   if (!outcome.ok) {
     if (outcome.reason === 'REFUSED') {

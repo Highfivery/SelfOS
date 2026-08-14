@@ -18,6 +18,8 @@ export function NeedsYou({
   onWeaveIn,
   onNotNow,
   busy,
+  unitOne = 'chapter',
+  unitMany = 'chapters',
 }: {
   proposals: StructuralProposal[];
   drift: DriftCard[];
@@ -29,6 +31,10 @@ export function NeedsYou({
   onDismiss: (proposalId: string) => void;
   onWeaveIn: (chapterId: string) => void | Promise<void>;
   onNotNow: (chapterId: string) => void | Promise<void>;
+  /** What this kind of book is counted in (72 §3.1) — "2 newly written chapters" is the wrong noun for a
+   *  picture book, and the shelf and workspace already say pages. */
+  unitOne?: string;
+  unitMany?: string;
   busy: boolean;
 }): JSX.Element {
   const nothing =
@@ -113,7 +119,7 @@ export function NeedsYou({
           <div className={styles.needCard}>
             <span className={styles.needKind}>To review</span>
             <Text size="sm" className={styles.needTitle}>
-              {toReviewCount} newly written chapter{toReviewCount === 1 ? '' : 's'}
+              {toReviewCount} newly written {toReviewCount === 1 ? unitOne : unitMany}
             </Text>
             <Text size="sm" tone="tertiary">
               Read {toReviewCount === 1 ? 'it' : 'them'} and mark “Looks good” to share.

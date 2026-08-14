@@ -35,7 +35,7 @@ import { TimelinePanel } from './TimelinePanel';
 import { StudioKebab } from './StudioKebab';
 import { TitleWorkshop } from './TitleWorkshop';
 import { TodoSheet } from './TodoSheet';
-import { LENGTH_OPTIONS, STYLE_CHOICES } from './bookConfigOptions';
+import { LENGTH_OPTIONS, stylesForType } from './bookConfigOptions';
 import { driftCards } from './driftCards';
 import { STUDIO_TABS, TAB_LABEL, isStudioTab } from './studioTabs';
 import type { StudioTab } from './studioTabs';
@@ -95,8 +95,8 @@ export function StudioLayout({
   // Route context (RTL renders <Story/> directly). Clicking a tab updates both.
   // `/books/<bookId>/<tab>` — segment 0 is the book, segment 1 the tab.
   const bookTypes = useStoryStore((s) => s.bookTypes);
-  const typeLabel =
-    bookTypes.find((bt) => bt.id === bundle.manifest.type)?.label ?? bundle.manifest.type;
+  const bookTypeView = bookTypes.find((bt) => bt.id === manifest.type);
+  const typeLabel = bookTypeView?.label ?? bundle.manifest.type;
   const segments = (useParams()['*'] ?? '').split('/').filter(Boolean);
   const routeTab = segments[1] ?? '';
   const navigate = useNavigate();
@@ -229,11 +229,23 @@ export function StudioLayout({
     setRefreshNotice(bits.length > 0 ? bits.join(' ') : 'This book is up to date.');
   };
 
+  // What this book is COUNTED in — pages for a picture book, chapters for everything else (72 §3.1). The
+  // shelf has said "11 of 32 pages" since P5; the workspace saying "2 chapters" about the same book was the
+  // app disagreeing with itself about what the thing is made of.
+  const unit = bookTypeView?.unit ?? { one: 'chapter', many: 'chapters' };
+  const countUnit = (n: number): string => `${n} ${n === 1 ? unit.one : unit.many}`;
   const chips = [
     manifest.config.voice === 'first' ? 'First person' : 'Third person',
-    STYLE_CHOICES.find((s) => s.value === manifest.config.style)?.label ?? manifest.config.style,
-    `${LENGTH_OPTIONS.find((l) => l.value === manifest.config.length)?.label ?? manifest.config.length} length`,
-    `${chapters.length} chapter${chapters.length === 1 ? '' : 's'}`,
+    stylesForType(bookTypeView?.stylePresets).find((s) => s.value === manifest.config.style)
+      ?.label ?? manifest.config.style,
+    // A page book's length is its page count, which the count chip already states — "Full length" beside
+    // "16 pages" is a second, contradicting answer to the same question.
+    ...(unit.one === 'page'
+      ? []
+      : [
+          `${LENGTH_OPTIONS.find((l) => l.value === manifest.config.length)?.label ?? manifest.config.length} length`,
+        ]),
+    countUnit(chapters.length),
   ];
 
   return (
@@ -244,6 +256,7 @@ export function StudioLayout({
           <CoverPanel
             bookId={bookId}
             {...(manifest.coverImageId ? { coverImageId: manifest.coverImageId } : {})}
+            permitsLikeness={bookTypeView?.castPolicy === 'childrenAsHeroes'}
           />
         </div>
         <div className={styles.heroBody}>
@@ -336,8 +349,8 @@ export function StudioLayout({
           {completeness && chapters.length > 0 ? <CompletenessMeter c={completeness} /> : null}
           {metrics.totalWords > 0 ? (
             <Text size="sm" tone="tertiary">
-              {metrics.totalWords.toLocaleString()} words across {metrics.writtenCount} written
-              chapter{metrics.writtenCount === 1 ? '' : 's'}
+              {metrics.totalWords.toLocaleString()} words across {metrics.writtenCount} written{' '}
+              {metrics.writtenCount === 1 ? unit.one : unit.many}
               {metrics.writtenCount > 1
                 ? ` · about ${metrics.averageWords.toLocaleString()} words each`
                 : ''}
@@ -379,6 +392,8 @@ export function StudioLayout({
 
       {/* ---- Needs you: pending decisions, gathered (hidden when caught up) ---- */}
       <NeedsYou
+        unitOne={unit.one}
+        unitMany={unit.many}
         proposals={proposals}
         drift={drift}
         busy={busy}
@@ -423,6 +438,7 @@ export function StudioLayout({
           bundle={bundle}
           chapterProgress={chapterProgress}
           pending={pending}
+          isPageBook={bookTypeView?.unit.one === 'page'}
           onOpenChapter={onOpenChapter}
           onWrite={async () => {
             setError(null);
@@ -434,7 +450,9 @@ export function StudioLayout({
       ) : null}
 
       {tab === 'timeline' ? <TimelinePanel bundle={bundle} /> : null}
-      {tab === 'people' ? <PeopleTab bookId={bookId} /> : null}
+      {tab === 'people' ? (
+        <PeopleTab bookId={bookId} castPolicy={bookTypeView?.castPolicy ?? 'realNames'} />
+      ) : null}
 
       {tab === 'interview' ? (
         <InterviewTab
@@ -486,7 +504,11 @@ export function StudioLayout({
       {tab === 'settings' ? (
         <div className={styles.settingsTab}>
           <MatterEditor bookId={bookId} {...(manifest.matter ? { matter: manifest.matter } : {})} />
-          <StorySettingsPanel bookId={bookId} config={manifest.config} />
+          <StorySettingsPanel
+            bookId={bookId}
+            config={manifest.config}
+            {...(bookTypeView ? { stylePresets: bookTypeView.stylePresets } : {})}
+          />
           {exclusions.length > 0 ? (
             <Card>
               <Stack gap={2}>

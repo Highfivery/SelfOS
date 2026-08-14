@@ -35,6 +35,7 @@ import {
 import { checkBudget, costOf, recordUsage } from '../usage';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { BIOGRAPHY_BOOK_TYPE, MCADAMS_SCENES, getBookType } from './bookTypes';
+import { resolvePersonOptionNames } from './castRegister';
 import { buildBiographerSystem } from './storyPromptBuilder';
 import { gatherBiographerReference } from './storyReference';
 import { getInterviewState, listBooks, listChapters, saveInterviewState } from './storyService';
@@ -316,7 +317,13 @@ async function buildMemorySystem(
     typeOptions: {},
     sourceIds: [],
   };
-  const system = buildBiographerSystem(bookType, config, name);
+  const system = buildBiographerSystem(
+    bookType,
+    config,
+    name,
+    undefined,
+    await resolvePersonOptionNames(fs, key, bookType, config.typeOptions),
+  );
   const guidance = MEMORY_INTERVIEW_GUIDANCE.replace('${name}', name || 'this person');
   // What it already knows (72 §5.5). Without this the conversation opens cold and asks about things the
   // person answered in onboarding months ago — the questionnaire path has always had this reference and the

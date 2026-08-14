@@ -1211,6 +1211,19 @@ const ApplyProfileFixSchema = z
   });
 
 /** A strict YYYY-MM-DD that is also a REAL date (rejects 2026-02-31, which `new Date` would roll over). */
+/**
+ * What a kind of book is COUNTED in (72 §3.1). One derivation, read by both the bookshelf and the type view,
+ * so "23 of 45 chapters" on the shelf and the workspace's own language can never drift apart.
+ *
+ * It reads the type's fixed `spine` rather than a per-book `spineFor`, which is correct while no type's
+ * commission answers can turn a page book into a chapter book — pinned by a test in `bookTypes.test.ts`.
+ */
+function unitForType(typeId: string): { one: string; many: string } {
+  return getBookType(typeId)?.spine.kind === 'pages'
+    ? { one: 'page', many: 'pages' }
+    : { one: 'chapter', many: 'chapters' };
+}
+
 function isCalendarDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const d = new Date(`${value}T00:00:00.000Z`);
@@ -5638,12 +5651,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         truthMode: t.truthMode,
         summary: t.summary,
         gates: t.gates,
+        castPolicy: t.castPolicy,
+        unit: unitForType(t.id),
         options: (t.options ?? []).map((o) => ({
           id: o.id,
           label: o.label,
           kind: o.kind,
           ...(o.help ? { help: o.help } : {}),
           ...(o.choices ? { choices: o.choices } : {}),
+          ...(o.multiple ? { multiple: true } : {}),
           ...(o.placeholder ? { placeholder: o.placeholder } : {}),
           ...(o.required ? { required: o.required } : {}),
         })),
@@ -5671,12 +5687,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!personId) return [];
       // The unit a book is counted in belongs to its TYPE, which lives in the code registry — resolved here
       // so the shelf read stays a pure count and a picture book's pages need no change to it (72 P6).
-      return listShelf(ctx.fs, ctx.key, personId, (typeId) => {
-        const spine = getBookType(typeId)?.spine;
-        return spine?.kind === 'pages'
-          ? { one: 'page', many: 'pages' }
-          : { one: 'chapter', many: 'chapters' };
-      });
+      return listShelf(ctx.fs, ctx.key, personId, unitForType);
     },
     storyCreate: async (input): Promise<BookManifest | null> => {
       const ctx = await host.vaultAndKey();
@@ -6764,15 +6775,18 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return getConsentRegister(ctx.fs, ctx.key, personId, bookId);
     },
     storySetConsent: async (input): Promise<ConsentPerson[]> => {
-      const { bookId, name, pseudonym } = StorySetConsentInputSchema.parse(input);
+      const { bookId, name, pseudonym, sheet } = StorySetConsentInputSchema.parse(input);
       const ctx = await host.vaultAndKey();
       if (!ctx || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
       const personId = await activePersonId();
       if (!personId) return [];
+      // Each field is passed only when the caller sent it, so the two editors (pseudonym, character sheet)
+      // never clobber each other — `setConsentEntry` merges (absent keeps, blank clears).
       return setConsentEntry(ctx.fs, ctx.key, personId, {
         bookId,
         name,
         ...(pseudonym !== undefined ? { pseudonym } : {}),
+        ...(sheet !== undefined ? { sheet } : {}),
         now: new Date(),
       });
     },

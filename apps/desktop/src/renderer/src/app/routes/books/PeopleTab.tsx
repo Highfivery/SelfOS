@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Heading, Text, TextInput } from '../../../design-system/components';
+import { Button, Heading, Text, TextInput, Textarea } from '../../../design-system/components';
+import { usePeopleStore } from '../../../stores/peopleStore';
 import { useStoryStore } from '../../../stores/storyStore';
 import styles from './Books.module.css';
 
@@ -11,19 +12,40 @@ import styles from './Books.module.css';
  * them; "named in 8 chapters" is the thing a person can actually check.
  *
  * A different name substitutes everywhere the book is read, shared or exported — the draft keeps the real
- * one. That is the only control here. The four consent states this replaced were manual bookkeeping with no
- * enforcement: nothing was ever sent to anyone, nothing was blocked, and an author's private note about
- * whether they'd asked their mother is not something the app should be asking them to maintain in a form.
+ * one. The four consent states this replaced were manual bookkeeping with no enforcement: nothing was ever
+ * sent to anyone, nothing was blocked, and an author's private note about whether they'd asked their mother
+ * is not something the app should be asking them to maintain in a form.
+ *
+ * For a picture book (`castPolicy: 'childrenAsHeroes'`) each person also gets a **character sheet** (§4.8) —
+ * how they look, so the hero has the same face on every page. That field is offered ONLY here, because it is
+ * the only kind of book whose images may depict a real person (§8.5); on any other type a sheet would be
+ * stored and never used, which is worse than not offering it.
  */
-export function PeopleTab({ bookId }: { bookId: string }): JSX.Element {
+export function PeopleTab({
+  bookId,
+  castPolicy,
+}: {
+  bookId: string;
+  castPolicy: 'realNames' | 'renamed' | 'childrenAsHeroes';
+}): JSX.Element {
   const people = useStoryStore((s) => s.consent);
   const loadConsent = useStoryStore((s) => s.loadConsent);
   const setConsent = useStoryStore((s) => s.setConsent);
+  const household = usePeopleStore((s) => s.people);
+  const loadPeople = usePeopleStore((s) => s.load);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [sheetDrafts, setSheetDrafts] = useState<Record<string, string>>({});
+  const [editingSheet, setEditingSheet] = useState<string | null>(null);
+
+  const sheets = castPolicy === 'childrenAsHeroes';
 
   useEffect(() => {
     void loadConsent(bookId);
   }, [bookId, loadConsent]);
+  // Only a book that can actually use a sheet needs the household profiles (for the suggestion below).
+  useEffect(() => {
+    if (sheets) void loadPeople();
+  }, [sheets, loadPeople]);
 
   // Everyone the register knows, not only those already named in written prose. The Sharing tab warns
   // about anyone who'd appear under their real name, and filtering here would warn about someone this
@@ -59,6 +81,14 @@ export function PeopleTab({ bookId }: { bookId: string }): JSX.Element {
           </div>
           {named.map((p) => {
             const draft = drafts[p.name] ?? p.pseudonym ?? '';
+            const open = editingSheet === p.name;
+            // Suggested from the profile the author already filled in — but never sent on its own. The
+            // author has to read it and press save, because saving is what lets it reach an image
+            // provider (§8.5).
+            const suggestion = p.personId
+              ? (household.find((h) => h.id === p.personId)?.appearanceDescription ?? '')
+              : '';
+            const sheetDraft = sheetDrafts[p.name] ?? p.sheet ?? '';
             return (
               <div key={p.name} className={styles.peopleRow}>
                 <span className={styles.peopleWho}>
@@ -71,6 +101,73 @@ export function PeopleTab({ bookId }: { bookId: string }): JSX.Element {
                         ? 'named in 1 chapter'
                         : `named in ${p.chapterMentions} chapters`}
                   </span>
+                  {sheets ? (
+                    <span className={styles.peopleSheet}>
+                      {open ? (
+                        <>
+                          <Textarea
+                            aria-label={`How ${p.name} looks`}
+                            rows={3}
+                            placeholder="Six years old, dark curls, red wellies, always carrying a toy fox…"
+                            value={sheetDraft}
+                            onChange={(e) =>
+                              setSheetDrafts((d) => ({ ...d, [p.name]: e.target.value }))
+                            }
+                          />
+                          <Text size="sm" tone="secondary">
+                            This description is sent to the image service so {p.name} is drawn the
+                            same way on every page. It is the only thing here that leaves SelfOS.
+                          </Text>
+                          <span className={styles.peopleSheetActions}>
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                void setConsent(bookId, p.name, { sheet: sheetDraft.trim() });
+                                setEditingSheet(null);
+                              }}
+                            >
+                              Save description
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setSheetDrafts((d) => ({ ...d, [p.name]: p.sheet ?? '' }));
+                                setEditingSheet(null);
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            {suggestion && sheetDraft.trim() !== suggestion ? (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  setSheetDrafts((d) => ({ ...d, [p.name]: suggestion }))
+                                }
+                              >
+                                Use their profile description
+                              </Button>
+                            ) : null}
+                          </span>
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setSheetDrafts((d) => ({
+                              ...d,
+                              [p.name]: p.sheet ?? d[p.name] ?? suggestion,
+                            }));
+                            setEditingSheet(p.name);
+                          }}
+                        >
+                          {p.sheet ? 'Edit how they look' : 'Describe how they look'}
+                        </Button>
+                      )}
+                    </span>
+                  ) : null}
                 </span>
                 <TextInput
                   aria-label={`What ${p.name} is called in the book`}
@@ -80,7 +177,7 @@ export function PeopleTab({ bookId }: { bookId: string }): JSX.Element {
                   onBlur={() => {
                     const next = draft.trim();
                     if (next === (p.pseudonym ?? '')) return;
-                    void setConsent(bookId, p.name, next);
+                    void setConsent(bookId, p.name, { pseudonym: next });
                   }}
                 />
               </div>

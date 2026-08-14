@@ -10,6 +10,7 @@ import {
   type StoryContinuityResult,
 } from '../schemas';
 import { getBookType } from './bookTypes';
+import { resolvePersonOptionNames } from './castRegister';
 import { enforceProtected } from './storyMarkup';
 import { buildBiographerSystem } from './storyPromptBuilder';
 import { chapterParagraphs } from './storyText';
@@ -85,7 +86,13 @@ export async function checkContinuity(
     return { ok: true, findings: existing.findings.filter((f) => f.status === 'pending') };
   }
 
-  const system = buildBiographerSystem(bookType, book.config, book.title);
+  const system = buildBiographerSystem(
+    bookType,
+    book.config,
+    book.title,
+    undefined,
+    await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
+  );
   const chaptersBlock = written
     .map((c) => `### ${c.title}\n\n${c.markdown.trim()}`)
     .join('\n\n---\n\n');
@@ -193,7 +200,13 @@ export async function lineEditChapter(
     ...existing.pinnedQuotes.map((q) => q.text),
   ].filter((t) => t.trim().length > 0);
 
-  const system = buildBiographerSystem(bookType, book.config, book.title);
+  const system = buildBiographerSystem(
+    bookType,
+    book.config,
+    book.title,
+    undefined,
+    await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
+  );
   const user = [
     `Line-edit this ONE chapter of ${book.title}. Polish only: tighten grammar, smooth the flow, fix awkward`,
     'phrasing. Keep the meaning, the facts, and the person’s own voice. Do NOT add new events or details, do',

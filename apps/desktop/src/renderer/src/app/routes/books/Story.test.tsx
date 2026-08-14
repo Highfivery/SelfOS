@@ -48,12 +48,20 @@ const BOOK_TYPES: StoryBookTypeView[] = [
     truthMode: 'true',
     summary: { drawsOn: 'everything on record', shape: 'life eras', asksAbout: 'scenes' },
     gates: { adult: false },
+    castPolicy: 'realNames' as const,
+    unit: { one: 'chapter', many: 'chapters' },
     options: [],
     structures: [{ id: 'chronicle', label: 'Chronological', description: 'x', isDefault: true }],
+    // The real biography declares all seven registers, and the commission now renders exactly what the
+    // TYPE declares — so a fixture listing three would legitimately hide the other four.
     stylePresets: [
-      { id: 'warm', label: 'Warm' },
       { id: 'literary', label: 'Literary' },
+      { id: 'warm', label: 'Warm' },
       { id: 'plain', label: 'Plain' },
+      { id: 'journalistic', label: 'Journalistic' },
+      { id: 'reflective', label: 'Reflective' },
+      { id: 'cinematic', label: 'Cinematic' },
+      { id: 'poetic', label: 'Poetic' },
     ],
   },
 ];
@@ -1836,6 +1844,8 @@ describe('Story (64)', () => {
             truthMode: 'true' as const,
             summary: { drawsOn: 'one era', shape: '8–12 chapters', asksAbout: 'that era' },
             gates: { adult: false },
+            castPolicy: 'realNames' as const,
+            unit: { one: 'chapter', many: 'chapters' },
             options: [],
             structures: [],
             stylePresets: [],
@@ -1893,6 +1903,200 @@ describe('Story (64)', () => {
     // Back on Sharing, they're listed under the new name.
     await userEvent.click(screen.getByRole('tab', { name: 'Sharing' }));
     expect(await screen.findByText(/Angel → A\./)).toBeInTheDocument();
+  });
+
+  /**
+   * 72 §4.8/§8.5 — the character sheet. It is offered on a picture book and nowhere else, because a picture
+   * book is the only type whose images may depict a real person: a sheet on any other book would be stored
+   * and silently never used, which is worse than not offering it at all.
+   */
+  it('offers a character sheet ONLY on a picture book, and only saves it when asked', async () => {
+    const pictureType = {
+      id: 'childrens',
+      label: 'Children’s book',
+      blurb: 'A picture book.',
+      truthMode: 'fictionalized' as const,
+      summary: { drawsOn: 'your children', shape: 'pages', asksAbout: 'your child' },
+      gates: { adult: false },
+      castPolicy: 'childrenAsHeroes' as const,
+      unit: { one: 'page', many: 'pages' },
+      options: [],
+      structures: [],
+      stylePresets: [],
+    };
+    const saved: { name: string; sheet?: string; pseudonym?: string }[] = [];
+    let register: ConsentPerson[] = [
+      { name: 'Mira', personId: 'kid', mentions: 4, chapterMentions: 2 },
+    ];
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve([pictureType]),
+      storyList: () => Promise.resolve([{ ...manifest({ status: 'ready' }), type: 'childrens' }]),
+      storyGet: () =>
+        Promise.resolve({
+          ...writtenBundle('reviewed'),
+          manifest: { ...writtenBundle('reviewed').manifest, type: 'childrens' },
+        }),
+      storyConsent: () => Promise.resolve(register),
+      // The profile the suggestion is drawn from — it must NOT be sent on its own.
+      peopleList: () =>
+        Promise.resolve([
+          {
+            id: 'kid',
+            schemaVersion: 2,
+            displayName: 'Mira',
+            isSubject: false,
+            tags: [],
+            appearanceDescription: 'Six, dark curls, red wellies',
+            createdAt: 'now',
+            updatedAt: 'now',
+          },
+        ]),
+      storySetConsent: (input: unknown) => {
+        const patch = input as { name: string; sheet?: string; pseudonym?: string };
+        saved.push(patch);
+        register = register.map((p) =>
+          p.name === patch.name && patch.sheet !== undefined ? { ...p, sheet: patch.sheet } : p,
+        );
+        return Promise.resolve(register);
+      },
+    });
+    await renderStory();
+    await openTab('People');
+
+    // Opening the editor pre-fills from the profile, but nothing has been saved yet: reaching an image
+    // provider takes a deliberate act.
+    await userEvent.click(await screen.findByRole('button', { name: 'Describe how they look' }));
+    const field = await screen.findByLabelText('How Mira looks');
+    expect(field).toHaveValue('Six, dark curls, red wellies');
+    expect(saved).toHaveLength(0);
+    // …and it says plainly what leaves the app.
+    expect(screen.getByText(/only thing here that leaves SelfOS/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save description' }));
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0]).toEqual({
+      bookId: expect.any(String),
+      name: 'Mira',
+      sheet: 'Six, dark curls, red wellies',
+    });
+    // Only the sheet is sent — the pseudonym is left untouched rather than blanked.
+    expect(saved[0]).not.toHaveProperty('pseudonym');
+  });
+
+  /**
+   * 72 P6 — illustrating a whole picture book is 32 paid generations, so it is never automatic and never
+   * silent about its size. The $ figure follows the app-wide rule that money is admin-only.
+   */
+  it('offers a bulk illustrate for a page book, stating how many, and only spends when asked', async () => {
+    const pictureType = {
+      id: 'childrens',
+      label: 'Children’s book',
+      blurb: 'A picture book.',
+      truthMode: 'fictionalized' as const,
+      summary: { drawsOn: 'your children', shape: 'pages', asksAbout: 'your child' },
+      gates: { adult: false },
+      castPolicy: 'childrenAsHeroes' as const,
+      unit: { one: 'page', many: 'pages' },
+      options: [],
+      structures: [],
+      stylePresets: [],
+    };
+    const generated: string[] = [];
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve([pictureType]),
+      storyList: () => Promise.resolve([{ ...manifest({ status: 'ready' }), type: 'childrens' }]),
+      storyGet: () =>
+        Promise.resolve({
+          ...writtenBundle('reviewed'),
+          manifest: { ...writtenBundle('reviewed').manifest, type: 'childrens' },
+        }),
+      storyGenerateImage: (input: { target: { kind: string; chapterId?: string } }) => {
+        generated.push(input.target.chapterId ?? input.target.kind);
+        return Promise.resolve({
+          ok: true as const,
+          image: {
+            id: `img-${generated.length}`,
+            kind: 'generated' as const,
+            mime: 'image/png',
+            createdAt: 'now',
+          },
+        });
+      },
+    });
+    await renderStory();
+
+    const start = await screen.findByRole('button', { name: /Illustrate this book \(\d+\)/ });
+    await userEvent.click(start);
+    // It says how many BEFORE anything is spent, and nothing has been generated yet.
+    expect(await screen.findByText(/still needs? a picture/)).toBeInTheDocument();
+    expect(generated).toHaveLength(0);
+
+    // "Not now" spends nothing.
+    await userEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    expect(generated).toHaveLength(0);
+  });
+
+  /**
+   * 72 §3.1 — the shelf has counted in the type's own unit since P5. The WORKSPACE saying "2 chapters"
+   * about the same 32-page picture book was the app disagreeing with itself about what the thing is made
+   * of, in four places at once.
+   */
+  it('a picture book is counted in PAGES everywhere in the workspace, never chapters', async () => {
+    const pictureType = {
+      id: 'childrens',
+      label: 'Children’s book',
+      blurb: 'A picture book.',
+      truthMode: 'fictionalized' as const,
+      summary: { drawsOn: 'your children', shape: 'pages', asksAbout: 'your child' },
+      gates: { adult: false },
+      castPolicy: 'childrenAsHeroes' as const,
+      unit: { one: 'page', many: 'pages' },
+      options: [],
+      structures: [],
+      stylePresets: [],
+    };
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve([pictureType]),
+      storyList: () => Promise.resolve([{ ...manifest({ status: 'ready' }), type: 'childrens' }]),
+      storyGet: () =>
+        Promise.resolve({
+          ...writtenBundle('reviewed'),
+          manifest: { ...writtenBundle('reviewed').manifest, type: 'childrens' },
+        }),
+    });
+    await renderStory();
+    // The hero's count chip, the word-count line, and the page cards.
+    expect(await screen.findByText(/\d+ pages?$/)).toBeInTheDocument();
+    expect(screen.getByText(/written pages?/)).toBeInTheDocument();
+    expect(screen.getAllByText(/^Page \d+$/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/^Chapter \d+$/)).not.toBeInTheDocument();
+    // A page book's length IS its page count — "Full length" beside it is a contradicting second answer.
+    expect(screen.queryByText(/length$/)).not.toBeInTheDocument();
+  });
+
+  it('a chapter book is never offered a bulk illustrate', async () => {
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+    });
+    await renderStory();
+    expect(await screen.findByRole('tab', { name: 'Chapters' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Illustrate this book/ })).not.toBeInTheDocument();
+  });
+
+  it('a biography’s People tab offers no character sheet at all', async () => {
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+      storyConsent: () =>
+        Promise.resolve([{ name: 'Angel', personId: 'a', mentions: 3, chapterMentions: 3 }]),
+    });
+    await renderStory();
+    await openTab('People');
+    expect(await screen.findByLabelText('What Angel is called in the book')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /how they look/i })).not.toBeInTheDocument();
   });
 
   it('publishes the cast list only when toggled on, showing the register preview (§17.2)', async () => {

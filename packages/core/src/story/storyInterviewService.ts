@@ -33,6 +33,7 @@ import {
 } from '../questionnaires/questionnaireService';
 import { getResponse } from '../questionnaires/responseService';
 import { isLiving } from './storyEditions';
+import { resolvePersonOptionNames } from './castRegister';
 import { getMemory } from './storyMemoryService';
 import { gatherBiographerReference } from './storyReference';
 import { queryUsage } from '../usage';
@@ -282,7 +283,13 @@ export async function runGapPass(
         await getExclusions(deps.fs, deps.key, deps.personId, args.bookId),
       )),
   );
-  const system = buildBiographerSystem(bookType, book.config, corpus.personName);
+  const system = buildBiographerSystem(
+    bookType,
+    book.config,
+    corpus.personName,
+    undefined,
+    await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
+  );
   const user = buildGapPassUserMessage(corpus, {
     outline,
     chapters,

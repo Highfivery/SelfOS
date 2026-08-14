@@ -9,6 +9,7 @@ import {
   type StoryContinuityResult,
 } from '../schemas';
 import { getBookType } from './bookTypes';
+import { resolvePersonOptionNames } from './castRegister';
 import { findingSignature } from './storyContinuity';
 import { manuscriptMetrics } from './manuscriptMetrics';
 import { countWords } from './storyText';
@@ -101,7 +102,13 @@ export async function readManuscript(deps: AiDeps, bookId: string): Promise<Stor
   const chaptersBlock = blocks.join('\n\n---\n\n');
   const skipped = readFrom;
 
-  const system = buildBiographerSystem(bookType, book.config, book.title);
+  const system = buildBiographerSystem(
+    bookType,
+    book.config,
+    book.title,
+    undefined,
+    await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
+  );
   const user = [
     `You are reading ${book.title} straight through, as a whole book, the way an editor reads a manuscript before it goes out. You are NOT rewriting it and NOT proofreading it — you are naming the few things that are wrong at the level of the WHOLE, which no one can see one chapter at a time.`,
     ...(skipped > 0

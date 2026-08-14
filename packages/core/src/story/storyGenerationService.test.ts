@@ -5,7 +5,7 @@ import { memFileSystem } from '../host/memFileSystem';
 import { savePerson } from '../people';
 import type { AiDeps } from '../questionnaires';
 import { BookConfigSchema, type Person } from '../schemas';
-import { BIOGRAPHY_BOOK_TYPE } from './bookTypes';
+import { BIOGRAPHY_BOOK_TYPE, getBookType } from './bookTypes';
 import { generateFoundations } from './storyGenerationService';
 
 const key = generateMasterKey();
@@ -248,5 +248,95 @@ describe('generateFoundations (64 §5.3)', () => {
     });
     const res = await generateFoundations(deps(fs, fakeClient(VALID_JSON), 'sk-test'), opts);
     expect(res.ok).toBe(true);
+  });
+});
+
+/**
+ * 72 P6 — a `pages` spine states an EXACT count. Before this the count was a sentence in the prompt with
+ * nothing behind it, so a 32-page picture book could come back 40 pages long and simply be 40 pages long.
+ */
+describe('a page-counted book gets the page count it commissioned', () => {
+  const CHILDRENS = getBookType('childrens')!;
+  /** A reply with `n` pages spread over two parts — so the cap has to run ACROSS parts, not within one. */
+  const pagesReply = (n: number): string =>
+    JSON.stringify({
+      title: 'Mira and the Fox',
+      essence: 'A small adventure.',
+      timeline: [],
+      outline: {
+        parts: [
+          {
+            title: 'One',
+            chapters: Array.from({ length: Math.ceil(n / 2) }, (_, i) => ({
+              title: `Page ${i + 1}`,
+              brief: 'b',
+            })),
+          },
+          {
+            title: 'Two',
+            chapters: Array.from({ length: Math.floor(n / 2) }, (_, i) => ({
+              title: `Page ${Math.ceil(n / 2) + i + 1}`,
+              brief: 'b',
+            })),
+          },
+        ],
+      },
+    });
+
+  const countPages = (outline: { parts: { chapters: unknown[] }[] }): number =>
+    outline.parts.reduce((n, p) => n + p.chapters.length, 0);
+
+  it('caps an over-long reply at the commissioned count, across parts', async () => {
+    const fs = memFileSystem();
+    await subject(fs);
+    const res = await generateFoundations(deps(fs, fakeClient(pagesReply(40)), 'sk-test'), {
+      bookId: 'book-1',
+      bookType: CHILDRENS,
+      config: BookConfigSchema.parse({ typeOptions: { hero: 'p-mira' } }),
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(countPages(res.outline)).toBe(32);
+    // Order is re-stamped within each surviving part, so a truncated part is still coherent.
+    for (const part of res.outline.parts) {
+      expect(part.chapters.map((c) => c.order)).toEqual(part.chapters.map((_, i) => i));
+    }
+  });
+
+  it('honours the commissioned page count, not just the type default', async () => {
+    const fs = memFileSystem();
+    await subject(fs);
+    const res = await generateFoundations(deps(fs, fakeClient(pagesReply(40)), 'sk-test'), {
+      bookId: 'book-1',
+      bookType: CHILDRENS,
+      config: BookConfigSchema.parse({ typeOptions: { hero: 'p-mira', length: '16' } }),
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(countPages(res.outline)).toBe(16);
+  });
+
+  it('leaves a SHORT reply alone rather than padding it with empty shells', async () => {
+    // Padding would recreate the §7.5 defect (unwritten shells that leave a book stuck mid-commission);
+    // dropping pages the model wrote briefs for would be worse. Fewer real pages is the honest outcome.
+    const fs = memFileSystem();
+    await subject(fs);
+    const res = await generateFoundations(deps(fs, fakeClient(pagesReply(12)), 'sk-test'), {
+      bookId: 'book-1',
+      bookType: CHILDRENS,
+      config: BookConfigSchema.parse({ typeOptions: { hero: 'p-mira' } }),
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(countPages(res.outline)).toBe(12);
+  });
+
+  it('never caps a chapter book — a long biography outline is untouched', async () => {
+    const fs = memFileSystem();
+    await subject(fs);
+    const res = await generateFoundations(deps(fs, fakeClient(pagesReply(40)), 'sk-test'), opts);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(countPages(res.outline)).toBe(40);
   });
 });

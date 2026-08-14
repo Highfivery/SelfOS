@@ -13,13 +13,14 @@ import {
 import { useDreamStore } from '../../../stores/dreamStore';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
 import { usePeopleStore } from '../../../stores/peopleStore';
+import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryStore } from '../../../stores/storyStore';
 import styles from './Books.module.css';
 import { specimenFor } from './begin';
 import { useState } from 'react';
 import type { BookConfig } from '@shared/schemas';
 import { Labeled } from './Labeled';
-import { LENGTH_CARDS, STYLE_CHOICES, VOICE_OPTIONS } from './bookConfigOptions';
+import { LENGTH_CARDS, stylesForType, VOICE_OPTIONS } from './bookConfigOptions';
 import type { Length, Style, Voice } from './bookConfigOptions';
 
 export function StorySetup({
@@ -47,7 +48,11 @@ export function StorySetup({
   const [sourceIds, setSourceIds] = useState<string[]>([]);
 
   const bookTypes = useStoryStore((s) => s.bookTypes);
-  const people = usePeopleStore((s) => s.people);
+  const activePerson = useSessionStore((s) => s.activePerson);
+  // A person option always names SOMEONE ELSE — the hero of your children's book, the subject of a
+  // portrait ("a book about one person you love"). Offering the author themselves is never the answer,
+  // and it read as a bug the moment the answer started reaching the prose.
+  const people = usePeopleStore((s) => s.people).filter((p) => p.id !== activePerson?.id);
   const dreams = useDreamStore((s) => s.dreams);
   const adultAcknowledged = useGuidanceStore((s) => s.adultAcknowledged);
   const acknowledgeAdult = useGuidanceStore((s) => s.acknowledgeAdult);
@@ -60,9 +65,16 @@ export function StorySetup({
     typeOptions[id] ?? options.find((o) => o.id === id)?.choices?.[0]?.value ?? '';
   const missing = options.filter((o) => o.required && !answered(o.id).trim());
   const blockedByAge = Boolean(bookType?.gates.adult) && !adultAcknowledged;
+  // Only the registers THIS kind of book has (72 §4.1). A style the type doesn't declare resolves to an
+  // empty directive downstream, so offering one would silently strip the tone steering from the book.
+  const styleChoices = stylesForType(bookType?.stylePresets);
+  // Switching type can strip the chosen register out from under the picker — fall back to its first.
+  const effectiveStyle = styleChoices.some((c) => c.value === style)
+    ? style
+    : (styleChoices[0]?.value ?? 'warm');
 
   // "How your biographer will sound" — the specimen re-renders per style × voice (§13.3).
-  const specimen = specimenFor(typeId, { style, voice });
+  const specimen = specimenFor(typeId, { style: effectiveStyle, voice });
 
   return (
     <Card>
@@ -121,6 +133,40 @@ export function StorySetup({
                           ) : null}
                         </button>
                       ))}
+                    </div>
+                  ) : option.kind === 'person' && option.multiple ? (
+                    // Several people may be named — a picture book can star two siblings. Stored
+                    // comma-separated, which is what `required` already validates and what the prompt
+                    // builder already splits.
+                    <div className={styles.styleGallery} role="group" aria-label={option.label}>
+                      {people.map((person) => {
+                        const chosen = answered(option.id)
+                          .split(',')
+                          .map((id) => id.trim())
+                          .filter(Boolean);
+                        const on = chosen.includes(person.id);
+                        return (
+                          <button
+                            key={person.id}
+                            type="button"
+                            role="checkbox"
+                            aria-checked={on}
+                            aria-label={person.displayName}
+                            className={`${styles.styleCard} ${on ? styles.styleCardOn : ''}`}
+                            onClick={() =>
+                              setTypeOptions((prev) => ({
+                                ...prev,
+                                [option.id]: (on
+                                  ? chosen.filter((id) => id !== person.id)
+                                  : [...chosen, person.id]
+                                ).join(','),
+                              }))
+                            }
+                          >
+                            <span className={styles.styleCardName}>{person.displayName}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : option.kind === 'person' ? (
                     <Select
@@ -205,15 +251,15 @@ export function StorySetup({
             </Labeled>
             <Labeled label="Style">
               <div className={styles.styleGallery} role="radiogroup" aria-label="Style">
-                {STYLE_CHOICES.map((s) => (
+                {styleChoices.map((s) => (
                   <button
                     key={s.value}
                     type="button"
                     role="radio"
-                    aria-checked={style === s.value}
+                    aria-checked={effectiveStyle === s.value}
                     aria-label={s.label}
                     aria-describedby={`style-hint-${s.value}`}
-                    className={`${styles.styleCard} ${style === s.value ? styles.styleCardOn : ''}`}
+                    className={`${styles.styleCard} ${effectiveStyle === s.value ? styles.styleCardOn : ''}`}
                     onClick={() => setStyle(s.value)}
                   >
                     <span className={styles.styleCardName}>{s.label}</span>
@@ -278,7 +324,8 @@ export function StorySetup({
             onClick={() =>
               onCreate(typeId, title.trim(), {
                 voice,
-                style,
+                // The register actually shown as chosen — never one this type doesn't offer.
+                style: effectiveStyle,
                 length,
                 autoRefresh: true,
                 typeOptions: Object.fromEntries(options.map((o) => [o.id, answered(o.id)])),

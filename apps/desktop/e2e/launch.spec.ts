@@ -15098,6 +15098,122 @@ test('story (72): choose a kind of book — its own questions, and the 18+ gate 
   }
 });
 
+/**
+ * 72 P6 — the picture book. Two things are worth driving through the real UI: the commission's own
+ * questions (a hero picked from the People graph, a page count), and the character sheet, which is the ONE
+ * place in SelfOS where appearance data about a real person can reach a third-party image provider (§8.5).
+ * The sheet is asserted at DECRYPT level, because "it looked saved" is not the same as "it is on disk".
+ */
+test('books (72 P6): commission a picture book — a hero, pages not chapters, and a character sheet; 360px clean', async () => {
+  test.setTimeout(240_000);
+  const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });
+  const secrets = createNodeSecretStore(userData, passthrough);
+  await secrets.set('anthropic.apiKey', 'sk-ant-e2e');
+  const fs = createNodeFileSystem(vault);
+  const key = await loadMasterKey(secrets);
+  if (!key) throw new Error('master key missing');
+  // A child in the household to star in it.
+  const now = new Date().toISOString();
+  await savePerson(fs, key, {
+    id: 'kid-1',
+    schemaVersion: 1,
+    displayName: 'Mira',
+    isSubject: false,
+    tags: [],
+    appearanceDescription: 'Six years old, dark curls, red wellies',
+    createdAt: now,
+    updatedAt: now,
+  });
+  // The cast register is built from the People graph, so she needs a real edge to be in the book's cast.
+  await saveRelationship(fs, key, {
+    id: 'rel-kid',
+    schemaVersion: 2,
+    fromPersonId: 'owner-1',
+    toPersonId: 'kid-1',
+    type: 'child',
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await openFirstBook(w);
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+
+    await w.getByRole('button', { name: /^Children’s book/ }).click();
+    // Its OWN questions: who it stars (several may be picked) and how long — never the memoir's.
+    await expect(w.getByRole('checkbox', { name: 'Mira' })).toBeVisible();
+    await expect(w.getByRole('radio', { name: 'A period of time' })).toHaveCount(0);
+    // Required: no hero, no book.
+    await expect(w.getByRole('button', { name: 'Write my book' })).toBeDisabled();
+    await w.getByRole('checkbox', { name: 'Mira' }).click();
+    await w.getByRole('radio', { name: '16 pages' }).click();
+
+    // 360px: the picker's hero checkboxes and page choices must scroll vertically only (§12).
+    await w.setViewportSize({ width: 360, height: 780 });
+    expect(
+      await w.evaluate(() => {
+        const bad: string[] = [];
+        document.querySelectorAll('*').forEach((el) => {
+          const ox = getComputedStyle(el).overflowX;
+          if (el.scrollWidth - el.clientWidth > 1 && (ox === 'auto' || ox === 'scroll')) {
+            bad.push(`${el.tagName}.${el.className}`);
+          }
+        });
+        return bad;
+      }),
+    ).toEqual([]);
+    await w.setViewportSize({ width: 1280, height: 900 });
+
+    await w.getByRole('textbox', { name: 'Title' }).fill('Mira and the Fox');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('heading', { name: 'Mira and the Fox', level: 1 })).toBeVisible();
+
+    // The hero and the page count persisted on the book, per book.
+    await expect
+      .poll(
+        async () => {
+          const found = (await listBooks(fs, key, 'owner-1')).find(
+            (b) => b.title === 'Mira and the Fox',
+          );
+          return found
+            ? `${found.type}:${found.config.typeOptions['hero']}:${found.config.typeOptions['length']}`
+            : '';
+        },
+        { timeout: 30_000 },
+      )
+      .toBe('childrens:kid-1:16');
+    const bookId = (await listBooks(fs, key, 'owner-1')).find(
+      (b) => b.title === 'Mira and the Fox',
+    )!.id;
+
+    // The character sheet: suggested from her profile, but it takes a deliberate save to store it.
+    // A 16-page book is 16 chapters × the four craft passes, so the workspace takes a while to settle.
+    await expect(w.getByRole('tab', { name: 'People' })).toBeVisible({ timeout: 120_000 });
+    await w.getByRole('tab', { name: 'People' }).click();
+    await w.getByRole('button', { name: 'Describe how they look' }).click();
+    await expect(w.getByLabel('How Mira looks')).toHaveValue(
+      'Six years old, dark curls, red wellies',
+    );
+    await w.getByRole('button', { name: 'Save description' }).click();
+
+    await expect
+      .poll(
+        async () => {
+          const stored = await getConsent(fs, key, 'owner-1', bookId).catch(() => null);
+          return stored?.entries.find((e) => e.name === 'Mira')?.sheet ?? '';
+        },
+        { timeout: 15_000 },
+      )
+      .toBe('Six years old, dark curls, red wellies');
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
 test('story (72): new material is a proposal you accept — the book never rewrites itself (§4.4)', async () => {
   test.setTimeout(60_000);
   const { userData, vault } = await seedReadyVault({ 'ai.enabled': true });

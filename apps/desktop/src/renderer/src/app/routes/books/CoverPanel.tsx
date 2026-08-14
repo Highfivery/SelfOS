@@ -20,16 +20,21 @@ import { useEffect, useState } from 'react';
 /**
  * The book cover (§3.8, Phase H). Reuses the spec-13 distill→render image flow behind the ONE shared image
  * consent (`dreams.imageGenerationEnabled`) + the OpenAI key. A cover is symbolic — never a portrait of the
- * subject (the service enforces name-free/no-likeness). When AI images aren't set up, a calm setup note
+ * subject (the service enforces name-free/no-likeness) — EXCEPT for a type whose framing permits likeness
+ * (72 §8.5, a picture book), where the blurb says so rather than promising the opposite. When AI images aren't set up, a calm setup note
  * appears instead of a button that could only fail — owner sees the Settings path, a member is pointed at
  * the owner (41 §3.3). An existing cover always stays viewable/removable even if AI is later turned off.
  */
 export function CoverPanel({
   bookId,
   coverImageId,
+  permitsLikeness,
 }: {
   bookId: string;
   coverImageId?: string;
+  /** A type whose images may depict its real people (§8.5 — a picture book). The blurb must not promise
+   *  "never a literal portrait" for the one kind of book where that is deliberately untrue. */
+  permitsLikeness?: boolean;
 }): JSX.Element {
   const isAdmin = useSessionStore((s) => s.can('budgets.manage'));
   const canManageAi = useSessionStore((s) => s.can('settings.manage'));
@@ -89,7 +94,9 @@ export function CoverPanel({
           <img className={styles.coverImage} src={coverUrl} alt={`Cover for this book`} />
         ) : (
           <Text tone="secondary" size="sm">
-            A symbolic cover for your story — evocative art, never a literal portrait.
+            {permitsLikeness
+              ? 'A hand-illustrated cover, drawn in your book’s own style.'
+              : 'A symbolic cover for your story — evocative art, never a literal portrait.'}
           </Text>
         )}
         {generating ? (

@@ -15,6 +15,7 @@ export * from './storyPublish';
 export * from './storyGenerationService';
 export * from './storyInterviewService';
 export * from './storyMarkup';
+export * from './storyMaterial';
 export * from './storyMarkupService';
 export * from './storyMemoryService';
 export * from './storyRefreshService';

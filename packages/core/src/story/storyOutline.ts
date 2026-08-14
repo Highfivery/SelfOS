@@ -14,6 +14,7 @@ import {
   saveStoryImageIndex,
   deleteChapterRecord as removeChapterRecord,
 } from './storyService';
+import { recordAuthorDrift } from './storyMaterial';
 import { syncChapterTodos } from './storyMarkupService';
 
 /**
@@ -60,7 +61,10 @@ export function chapterShell(
     title,
     markdown: '',
     revision: 0,
-    status: 'stale',
+    // A shell has never been written; that is what empty `markdown` says, and every surface reads it that
+    // way (§7.5). It used to be stamped `stale`, which made the refresh cadence spend its weekly rewrite
+    // allowance on first drafts — the reason a 45-chapter book with 22 unwritten shells never converged.
+    status: 'new',
     sourceSignature: '',
     provenance: [],
     protectedBlocks: [],
@@ -252,7 +256,7 @@ export async function renameChapter(
   key: Uint8Array,
   personId: string,
   bookId: string,
-  args: { chapterId: string; title: string; brief?: string | undefined },
+  args: { chapterId: string; title: string; brief?: string | undefined; now?: Date },
 ): Promise<OutlineEditResult> {
   const title = args.title.trim();
   if (!title) return { ok: false, message: 'A chapter needs a title.' };
@@ -266,12 +270,17 @@ export async function renameChapter(
     await saveOutline(fs, key, personId, bookId, outline);
     const bc = await getChapter(fs, key, personId, bookId, args.chapterId);
     if (bc) {
-      await saveChapter(fs, key, personId, bookId, {
-        ...bc,
-        title,
-        // Only a re-worded brief changes what the chapter is SUPPOSED to say; a retitle doesn't.
-        ...(briefChanged && bc.markdown.trim() ? { status: 'stale' as const } : {}),
-      });
+      await saveChapter(fs, key, personId, bookId, { ...bc, title });
+      // Only a re-worded brief changes what the chapter is SUPPOSED to say; a retitle doesn't. It is filed
+      // as a PROPOSAL, not acted on (72 §4.4) — the author gets a one-click rewrite, never a surprise one.
+      if (briefChanged && bc.markdown.trim()) {
+        await recordAuthorDrift(fs, key, personId, bookId, {
+          chapterId: args.chapterId,
+          reason: 'briefChanged',
+          note: 'You changed what this chapter is meant to be about.',
+          now: args.now ?? new Date(),
+        });
+      }
     }
     return { ok: true };
   });
@@ -322,6 +331,7 @@ export async function splitChapter(
     secondTitle: string;
     firstBrief?: string | undefined;
     secondBrief?: string | undefined;
+    now?: Date;
   },
 ): Promise<OutlineEditResult> {
   const firstTitle = args.firstTitle.trim();
@@ -351,14 +361,18 @@ export async function splitChapter(
     await saveOutline(fs, key, personId, bookId, outline);
     const bc = await getChapter(fs, key, personId, bookId, args.chapterId);
     if (bc) {
-      await saveChapter(fs, key, personId, bookId, {
-        ...bc,
-        title: firstTitle,
-        // Stale ONLY when the brief narrowed: written prose now covers more than the chapter is meant to,
-        // so the next pass has something new to aim at. A title-only split changes nothing to rewrite
-        // against, and staling would provoke a metered rewrite that reproduces the same chapter (§16.1).
-        ...(narrowed && bc.markdown.trim() ? { status: 'stale' as const } : {}),
-      });
+      await saveChapter(fs, key, personId, bookId, { ...bc, title: firstTitle });
+      // A proposal ONLY when the brief narrowed: written prose now covers more than the chapter is meant to,
+      // so a rewrite has something new to aim at. A title-only split changes nothing to rewrite against
+      // (§16.1).
+      if (narrowed && bc.markdown.trim()) {
+        await recordAuthorDrift(fs, key, personId, bookId, {
+          chapterId: args.chapterId,
+          reason: 'briefChanged',
+          note: 'You narrowed this chapter — its prose still covers more than it is meant to.',
+          now: args.now ?? new Date(),
+        });
+      }
     }
     await saveChapter(
       fs,
@@ -385,7 +399,7 @@ export async function mergeChapters(
   key: Uint8Array,
   personId: string,
   bookId: string,
-  args: { chapterId: string; intoChapterId: string; title?: string | undefined },
+  args: { chapterId: string; intoChapterId: string; title?: string | undefined; now?: Date },
 ): Promise<OutlineEditResult> {
   if (args.chapterId === args.intoChapterId) {
     return { ok: false, message: 'Pick two different chapters to merge.' };
@@ -439,9 +453,17 @@ export async function mergeChapters(
       // The kept `previousMarkdown` described a pre-rewrite version of the TARGET alone, so diffing the
       // merged text against it would show the whole source chapter as an "edit". Drop it.
       previousMarkdown: undefined,
-      // Two chapters' prose stitched together isn't one chapter's writing yet.
-      ...(bothTexts.length > 0 ? { status: 'stale' as const } : {}),
     });
+    // Two chapters' prose stitched together isn't one chapter's writing yet — but that is a proposal, not a
+    // status (72 §4.4). Only when there is actually prose from both to reconcile.
+    if (bothTexts.length > 1) {
+      await recordAuthorDrift(fs, key, personId, bookId, {
+        chapterId: args.intoChapterId,
+        reason: 'merged',
+        note: 'Two chapters were stitched together — this hasn’t been written as one chapter yet.',
+        now: args.now ?? new Date(),
+      });
+    }
 
     // The source's MARKS anchor to prose that survives verbatim into the merged chapter (the same argument
     // that carries protected blocks + pins), so carry them over rather than deleting the person's comments

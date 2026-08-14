@@ -1,15 +1,20 @@
 import type { FileSystem } from '../host';
-import type { BookChapter } from '../schemas';
+import type { BookChapter, NewMaterialEntry, NewMaterialItem } from '../schemas';
 import { buildStoryCorpus, type StoryCorpus } from './storyCorpus';
-import { getExclusions, listChapters, saveChapter } from './storyService';
+import { recordNewMaterial } from './storyMaterial';
+import { getExclusions, listChapters } from './storyService';
 
 /**
- * The Your Story freshness engine (64-your-story §3.4/§5.4) — the DETERMINISTIC, no-AI half of the living book.
- * Each chapter carries a `sourceSignature`: a fingerprint of the CURRENT text of the sources it drew on. When a
- * cited source changes (an insight edited, a new fact added, a source deleted/muted), the signature no longer
- * matches and the chapter is flagged `stale` — cheap, so it can run on a launch/focus cadence (the AI rewrite
- * of a stale chapter is the metered, weekly-capped step, D2). New material that doesn't fit any chapter is a
- * structural proposal (D3), not a signature change.
+ * The book freshness engine (72 §5.4) — the DETERMINISTIC, no-AI half of the living book.
+ *
+ * Each chapter carries a `sourceSignature`: a fingerprint of the CURRENT text of the sources it drew on. When
+ * a cited source changes (an insight edited, a new fact added, a source deleted or muted), the signature no
+ * longer matches. It is cheap, so it runs on a launch/focus cadence.
+ *
+ * What changed in 72: the OUTPUT. It used to set `status: 'stale'`, which the refresh cadence then acted on by
+ * rewriting the chapter — so a person's book quietly re-wrote itself, capped at ten rewrites a week, and a
+ * 45-chapter book reached 34 of 34 stale with nothing converging. Now it names WHICH sources changed and WHAT
+ * they say, and files that as a proposal the author accepts or declines. Nothing is rewritten without them.
  */
 
 /** A tiny, stable, non-cryptographic string hash (djb2). A change detector for source content — not security. */
@@ -53,17 +58,44 @@ export function computeSourceSignature(
     .join('|');
 }
 
+/** Parse a stored signature back into its per-source hashes, so a diff can name WHICH sources changed
+ *  rather than only that something did. An empty or malformed signature yields an empty map (no claim). */
+function parseSignature(signature: string): Map<string, string> {
+  const out = new Map<string, string>();
+  if (signature.trim().length === 0) return out;
+  for (const part of signature.split('|')) {
+    const at = part.lastIndexOf(':');
+    if (at <= 0) continue;
+    out.set(part.slice(0, at), part.slice(at + 1));
+  }
+  return out;
+}
+
+/** How much of a changed source to quote back to the author — enough to judge it by, never the whole thing. */
+const EXCERPT_CHARS = 220;
+
+function excerpt(text: string): string {
+  const trimmed = text.trim().replace(/\s+/g, ' ');
+  return trimmed.length <= EXCERPT_CHARS
+    ? trimmed
+    : `${trimmed.slice(0, EXCERPT_CHARS).trimEnd()}…`;
+}
+
 /**
- * Flag every chapter whose cited sources have changed since it was written `stale` (§3.4). Builds the corpus
- * ONCE, recomputes each chapter's signature against it, and stales the ones that drifted. Never re-flags an
- * already-stale chapter, never disturbs one mid-generation, and never stales a chapter with no stored signature
- * (it was written before the freshness engine, or cited nothing). Returns how many it flagged.
+ * Find every chapter whose cited sources have changed since it was written, and file WHAT changed as a
+ * proposal (§4.4/§5.4). Builds the corpus ONCE and diffs each chapter's stored per-source hashes against it,
+ * so the entry can name the sources and quote them.
+ *
+ * Never disturbs a chapter mid-generation, never looks at one with no stored signature (written before the
+ * engine, or cited nothing specific), and never touches a chapter's status — drift is a proposal now, not a
+ * state. Returns how many chapters have new material waiting.
  */
-export async function markStaleChapters(
+export async function detectNewMaterial(
   fs: FileSystem,
   key: Uint8Array,
   personId: string,
   bookId: string,
+  now: Date,
 ): Promise<number> {
   const corpus = await buildStoryCorpus(
     fs,
@@ -72,14 +104,52 @@ export async function markStaleChapters(
     bookId,
     await getExclusions(fs, key, personId, bookId),
   );
-  let count = 0;
-  for (const chapter of await listChapters(fs, key, personId, bookId)) {
-    if (chapter.status === 'stale' || chapter.status === 'generating') continue;
-    if (chapter.sourceSignature === '') continue; // never stamped / cited nothing → nothing to diff
-    if (computeSourceSignature(corpus, chapter) !== chapter.sourceSignature) {
-      await saveChapter(fs, key, personId, bookId, { ...chapter, status: 'stale' });
-      count += 1;
-    }
+  // One source can emit SEVERAL corpus items (an insight's summary and each of its facts), and the signature
+  // hashes them together — so the diff knows the source changed but not which line. Join them, so the
+  // excerpt shows what the source now says rather than whichever line happened to come first (its summary,
+  // which is the one line least likely to be what changed).
+  const byId = new Map<
+    string,
+    { label: string; texts: string[]; ref: NewMaterialItem['sourceRef'] }
+  >();
+  for (const item of corpus.items) {
+    const found = byId.get(item.sourceRef.id);
+    if (found) found.texts.push(item.text);
+    else
+      byId.set(item.sourceRef.id, { label: item.label, texts: [item.text], ref: item.sourceRef });
   }
-  return count;
+
+  const entries: NewMaterialEntry[] = [];
+  for (const chapter of await listChapters(fs, key, personId, bookId)) {
+    if (chapter.status === 'generating') continue;
+    if (chapter.sourceSignature === '') continue; // never stamped / cited nothing → nothing to diff
+    const before = parseSignature(chapter.sourceSignature);
+    const after = parseSignature(computeSourceSignature(corpus, chapter));
+    const changed = [...after.entries()]
+      .filter(([id, hash]) => before.get(id) !== hash)
+      .map(([id]) => id);
+    if (changed.length === 0) continue;
+
+    const items: NewMaterialItem[] = [];
+    for (const id of changed) {
+      const source = byId.get(id);
+      // A source the chapter cited that is GONE from the corpus (deleted, muted, excluded) has nothing to
+      // quote — it still counts as drift, and the entry says so through its count rather than an item.
+      if (source)
+        items.push({
+          sourceRef: source.ref,
+          label: source.label,
+          excerpt: excerpt(source.texts.join(' · ')),
+        });
+    }
+    entries.push({
+      chapterId: chapter.id,
+      reason: 'newMaterial',
+      items,
+      detectedAt: now.toISOString(),
+    });
+  }
+
+  if (entries.length > 0) await recordNewMaterial(fs, key, personId, bookId, entries);
+  return entries.length;
 }

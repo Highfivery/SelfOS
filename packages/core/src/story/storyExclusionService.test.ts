@@ -3,6 +3,8 @@ import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import { savePerson } from '../people';
 import type { BookChapter, Person } from '../schemas';
+import { chaptersWithNewMaterial } from './storyMaterial';
+import { getNewMaterial } from './storyService';
 import { addExclusion, removeExclusion } from './storyExclusionService';
 import { getChapter, getExclusions, saveChapter } from './storyService';
 
@@ -65,8 +67,11 @@ describe('storyExclusionService (64 §3.3/§5.1)', () => {
     );
     expect(res.staled).toBe(1);
     expect(res.exclusions[0]).toMatchObject({ kind: 'topic', value: 'the divorce' });
-    // Only the mentioning chapter is flagged; the other is untouched.
-    expect((await getChapter(fs, key, 'me', 'b1', 'c1'))?.status).toBe('stale');
+    // Only the mentioning chapter is flagged — and as a PROPOSAL (72 §4.4), not a status: excluding
+    // something is an instruction about the future, and taking it out of written prose costs a metered
+    // pass, so the author decides when.
+    expect(await chaptersWithNewMaterial(fs, key, 'me', 'b1')).toEqual(['c1']);
+    expect((await getChapter(fs, key, 'me', 'b1', 'c1'))?.status).toBe('reviewed'); // prose untouched
     expect((await getChapter(fs, key, 'me', 'b1', 'c2'))?.status).toBe('reviewed');
   });
 
@@ -83,10 +88,10 @@ describe('storyExclusionService (64 §3.3/§5.1)', () => {
 
     const res = await addExclusion(fs, key, 'me', 'b1', { kind: 'person', value: 'angel' }, now);
     expect(res.staled).toBe(1);
-    expect((await getChapter(fs, key, 'me', 'b1', 'c1'))?.status).toBe('stale');
+    expect(await chaptersWithNewMaterial(fs, key, 'me', 'b1')).toEqual(['c1']);
   });
 
-  it('marks a chapter stale by a source exclusion via its provenance', async () => {
+  it('flags a chapter by a source exclusion via its provenance', async () => {
     const fs = memFileSystem();
     await saveChapter(
       fs,
@@ -101,18 +106,12 @@ describe('storyExclusionService (64 §3.3/§5.1)', () => {
     );
     const res = await addExclusion(fs, key, 'me', 'b1', { kind: 'source', value: 'd7' }, now);
     expect(res.staled).toBe(1);
-    expect((await getChapter(fs, key, 'me', 'b1', 'c1'))?.status).toBe('stale');
+    expect(await chaptersWithNewMaterial(fs, key, 'me', 'b1')).toEqual(['c1']);
   });
 
-  it('never re-flags an already-stale chapter or disturbs one mid-generation', async () => {
+  it('never disturbs a chapter mid-generation, and never files the same proposal twice', async () => {
     const fs = memFileSystem();
-    await saveChapter(
-      fs,
-      key,
-      'me',
-      'b1',
-      chapter({ id: 'c1', markdown: 'the topic', status: 'stale' }),
-    );
+    await saveChapter(fs, key, 'me', 'b1', chapter({ id: 'c1', markdown: 'the topic' }));
     await saveChapter(
       fs,
       key,
@@ -120,9 +119,13 @@ describe('storyExclusionService (64 §3.3/§5.1)', () => {
       'b1',
       chapter({ id: 'c2', markdown: 'the topic', status: 'generating' }),
     );
-    const res = await addExclusion(fs, key, 'me', 'b1', { kind: 'topic', value: 'the topic' }, now);
-    expect(res.staled).toBe(0);
+    await addExclusion(fs, key, 'me', 'b1', { kind: 'topic', value: 'the topic' }, now);
     expect((await getChapter(fs, key, 'me', 'b1', 'c2'))?.status).toBe('generating'); // untouched
+
+    // Excluding something else that c1 also contains refreshes its one entry rather than stacking a second.
+    await addExclusion(fs, key, 'me', 'b1', { kind: 'topic', value: 'topic' }, now);
+    const entries = (await getNewMaterial(fs, key, 'me', 'b1')).entries;
+    expect(entries.filter((e) => e.chapterId === 'c1')).toHaveLength(1);
   });
 
   it('matches on word boundaries — a short topic does not falsely stale a superstring', async () => {
@@ -176,7 +179,8 @@ describe('storyExclusionService (64 §3.3/§5.1)', () => {
     const after = await removeExclusion(fs, key, 'me', 'b1', id);
     expect(after).toEqual([]);
     expect(await getExclusions(fs, key, 'me', 'b1')).toEqual([]);
-    // The chapter it staled stays stale — removing the rule doesn't retroactively rewrite anything.
-    expect((await getChapter(fs, key, 'me', 'b1', 'c1'))?.status).toBe('stale');
+    // The proposal it filed stands — removing the rule doesn't retroactively rewrite anything, and the
+    // author may still want the passage out.
+    expect(await chaptersWithNewMaterial(fs, key, 'me', 'b1')).toEqual(['c1']);
   });
 });

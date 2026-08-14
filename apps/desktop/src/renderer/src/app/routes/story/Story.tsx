@@ -54,6 +54,7 @@ import type {
   StoryCompletenessStage,
   StoryPartCoverage,
   ContinuityFinding,
+  NewMaterialEntry,
   StoryDraftProgress,
   StoryPublishDiff,
   StoryReaderView,
@@ -1491,6 +1492,10 @@ function StudioLayout({
   const loadTodos = useStoryStore((s) => s.loadTodos);
   const exclusions = useStoryStore((s) => s.exclusions);
   const loadExclusions = useStoryStore((s) => s.loadExclusions);
+  const newMaterial = useStoryStore((s) => s.newMaterial);
+  const loadNewMaterial = useStoryStore((s) => s.loadNewMaterial);
+  const acceptMaterial = useStoryStore((s) => s.acceptMaterial);
+  const declineMaterial = useStoryStore((s) => s.declineMaterial);
   const progress = useStoryStore((s) => s.progress);
   const busy = useStoryStore((s) => s.chaptersGenerating);
   const imageUrls = useStoryStore((s) => s.imageUrls);
@@ -1526,7 +1531,16 @@ function StudioLayout({
     void loadTodos(bookId);
     void loadExclusions(bookId);
     void loadImages(bookId);
-  }, [bookId, loadProposals, loadCompleteness, loadTodos, loadExclusions, loadImages]);
+    void loadNewMaterial(bookId);
+  }, [
+    bookId,
+    loadProposals,
+    loadCompleteness,
+    loadTodos,
+    loadExclusions,
+    loadImages,
+    loadNewMaterial,
+  ]);
 
   // The crisis-quiet state (§8.2/§13.4): while the person's own signals show recurring distress, the
   // biographer's auto cadences pause host-side — SURFACE that instead of letting the pause read as broken.
@@ -1567,9 +1581,10 @@ function StudioLayout({
   // `stale` by `chapterShell`, so this used to report unwritten chapters as needing a refresh — Ben's book
   // said "34 chapters have new material" when 11 of them had never been written at all. Unwritten chapters
   // are already surfaced honestly by `pending` + the "Not yet written" cards.
-  const staleCount = chapters.filter(
-    (c) => c.status === 'stale' && c.markdown.trim().length > 0,
-  ).length;
+  // What the book has fallen out of step with (72 §4.4) — new material that could go in, and chapters the
+  // author's own edits left behind. Proposals, never a status: nothing is rewritten until they say so.
+  const drift = driftCards(newMaterial, chapters);
+  const staleCount = drift.length;
   const toReview = writtenInOrder.filter((c) => c.status === 'new' || c.status === 'updated');
   const openTodos = todos.filter((t) => t.status === 'open' || t.status === 'questionsSent');
   const firstWritten = writtenInOrder[0];
@@ -1760,6 +1775,8 @@ function StudioLayout({
       {/* ---- Needs you: pending decisions, gathered (hidden when caught up) ---- */}
       <NeedsYou
         proposals={proposals}
+        drift={drift}
+        busy={busy}
         toReviewCount={toReview.length}
         openTodoCount={openTodos.length}
         onReview={() => {
@@ -1772,6 +1789,12 @@ function StudioLayout({
           if (!r.ok && r.message) setError(r.message);
         }}
         onDismiss={(id) => void resolveProposal(bookId, id, 'dismiss')}
+        onWeaveIn={async (chapterId) => {
+          setError(null);
+          const r = await acceptMaterial(bookId, chapterId);
+          if (!r.ok && r.message) setError(r.message);
+        }}
+        onNotNow={(chapterId) => void declineMaterial(bookId, chapterId)}
       />
 
       {/* ---- Tabs ---- */}
@@ -2529,26 +2552,85 @@ function InterviewTab({
   );
 }
 
+/** One chapter's pending drift, gathered for the "Needs you" strip (72 §4.4). */
+interface DriftCard {
+  chapterId: string;
+  title: string;
+  /** What the person reads: how much new material, and/or what they changed. */
+  lines: string[];
+  /** Whether any of it is genuinely NEW MATERIAL (vs only the author's own changes) — the two read
+   *  differently: one is an offer, the other is a consequence of something they did. */
+  hasMaterial: boolean;
+}
+
+/**
+ * Group the drift entries by chapter into the cards the strip renders. Pure, so the wording is testable
+ * without a DOM. A chapter that has since been deleted from the outline drops out silently.
+ */
+export function driftCards(
+  entries: NewMaterialEntry[],
+  chapters: { id: string; title: string }[],
+): DriftCard[] {
+  const titleById = new Map(chapters.map((c) => [c.id, c.title]));
+  const byChapter = new Map<string, NewMaterialEntry[]>();
+  for (const entry of entries) {
+    const list = byChapter.get(entry.chapterId) ?? [];
+    list.push(entry);
+    byChapter.set(entry.chapterId, list);
+  }
+  const cards: DriftCard[] = [];
+  for (const [chapterId, list] of byChapter) {
+    const title = titleById.get(chapterId);
+    if (title === undefined) continue;
+    const lines: string[] = [];
+    let hasMaterial = false;
+    for (const entry of list) {
+      if (entry.reason === 'newMaterial') {
+        hasMaterial = true;
+        const n = entry.items.length;
+        lines.push(
+          n === 0
+            ? 'Something it draws on has changed.'
+            : `${n} new detail${n === 1 ? '' : 's'} could go in.`,
+        );
+      } else if (entry.note) {
+        lines.push(entry.note);
+      }
+    }
+    if (lines.length > 0) cards.push({ chapterId, title, lines, hasMaterial });
+  }
+  return cards;
+}
+
 /** The "Needs you" strip (§13.4) — one card per pending decision. Self-hides entirely when you're caught up
  *  (replaced by a calm "all caught up" line). */
 function NeedsYou({
   proposals,
+  drift,
   toReviewCount,
   openTodoCount,
   onReview,
   onOpenTodos,
   onApprove,
   onDismiss,
+  onWeaveIn,
+  onNotNow,
+  busy,
 }: {
   proposals: StructuralProposal[];
+  drift: DriftCard[];
   toReviewCount: number;
   openTodoCount: number;
   onReview: () => void;
   onOpenTodos: () => void;
   onApprove: (proposalId: string) => void | Promise<void>;
   onDismiss: (proposalId: string) => void;
+  onWeaveIn: (chapterId: string) => void | Promise<void>;
+  onNotNow: (chapterId: string) => void | Promise<void>;
+  busy: boolean;
 }): JSX.Element {
-  const nothing = proposals.length === 0 && toReviewCount === 0 && openTodoCount === 0;
+  const nothing =
+    proposals.length === 0 && drift.length === 0 && toReviewCount === 0 && openTodoCount === 0;
   if (nothing) {
     return (
       <div className={styles.caughtUp}>
@@ -2558,7 +2640,8 @@ function NeedsYou({
       </div>
     );
   }
-  const count = proposals.length + (toReviewCount > 0 ? 1 : 0) + (openTodoCount > 0 ? 1 : 0);
+  const count =
+    proposals.length + drift.length + (toReviewCount > 0 ? 1 : 0) + (openTodoCount > 0 ? 1 : 0);
   return (
     <div className={styles.needs}>
       <div className={styles.needsHead}>
@@ -2568,6 +2651,36 @@ function NeedsYou({
         </Text>
       </div>
       <div className={styles.needsGrid}>
+        {/* Drift proposals (72 §4.4) — what a chapter has fallen out of step with. Nothing is rewritten
+            until the author says so, and "Not now" means it stays quiet until something else changes. */}
+        {drift.map((d) => (
+          <div key={d.chapterId} className={styles.needCard}>
+            <span className={d.hasMaterial ? styles.needKind : styles.needKindWarn}>
+              {d.hasMaterial ? 'New material' : 'Out of step'}
+            </span>
+            <Text size="sm" className={styles.needTitle}>
+              {d.title}
+            </Text>
+            {d.lines.map((line) => (
+              <Text key={line} size="sm" tone="tertiary">
+                {line}
+              </Text>
+            ))}
+            <Inline gap={2}>
+              <Button variant="primary" disabled={busy} onClick={() => void onWeaveIn(d.chapterId)}>
+                {d.hasMaterial ? 'Weave these in' : 'Rewrite it'}
+              </Button>
+              <button
+                type="button"
+                className={styles.sourcesToggle}
+                aria-label={`Not now for ${d.title}`}
+                onClick={() => void onNotNow(d.chapterId)}
+              >
+                Not now
+              </button>
+            </Inline>
+          </div>
+        ))}
         {proposals.map((p) => (
           <div key={p.id} className={styles.needCard}>
             <span className={styles.needKindWarn}>Suggested change</span>
@@ -4202,17 +4315,11 @@ function ChapterRibbon({
       </div>
     );
   }
-  // new / updated / stale all lead with the ribbon (so a stale chapter keeps its status cue AND the spend-free
-  // "Looks good ✓" accept action — a `generating` chapter has no review action, so it shows nothing).
-  if (chapter.status !== 'new' && chapter.status !== 'updated' && chapter.status !== 'stale') {
-    return null;
-  }
-  const lead =
-    chapter.status === 'new'
-      ? 'New chapter'
-      : chapter.status === 'updated'
-        ? 'Rewritten from new material'
-        : 'New material to fold in';
+  // new / updated both lead with the ribbon + the spend-free "Looks good ✓" accept action. A `generating`
+  // chapter has no review action, so it shows nothing. Drift is no longer a status (72 §4.4) — it renders
+  // as its own proposal above the prose.
+  if (chapter.status !== 'new' && chapter.status !== 'updated') return null;
+  const lead = chapter.status === 'new' ? 'New chapter' : 'Rewritten from new material';
   return (
     <div className={styles.ribbon}>
       <div className={styles.ribbonRow}>

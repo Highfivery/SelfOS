@@ -682,22 +682,70 @@ describe('Story (64)', () => {
     expect(screen.queryByRole('button', { name: 'What changed' })).not.toBeInTheDocument();
   });
 
-  it('a STALE chapter still shows its status cue AND a spend-free "Looks good" review (§13.5)', async () => {
-    const staleBundle = writtenBundle('new');
-    staleBundle.chapters[0] = { ...staleBundle.chapters[0]!, status: 'stale' };
-    const storyReviewChapter = vi.fn(() => Promise.resolve(writtenBundle('reviewed')));
+  /**
+   * 72 §4.4 — drift is a PROPOSAL now, not a status. It renders in "Needs you" naming what could go in, and
+   * nothing is rewritten until the author presses the button.
+   */
+  it('new material shows as a proposal with a one-click rewrite, and "Not now" declines it', async () => {
+    const storyAcceptMaterial = vi.fn(() => Promise.resolve({ ok: true }));
+    const storyDeclineMaterial = vi.fn(() => Promise.resolve([]));
     installStoryBridge({
       storyBookTypes: () => Promise.resolve(BOOK_TYPES),
       storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
-      storyGet: () => Promise.resolve(staleBundle),
-      storyReviewChapter,
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+      storyNewMaterial: () =>
+        Promise.resolve([
+          {
+            chapterId: 'c1',
+            reason: 'newMaterial' as const,
+            items: [
+              {
+                sourceRef: { kind: 'insight' as const, id: 'i1' },
+                label: 'In a coaching session, you said',
+                excerpt: 'the winter was brutal',
+              },
+            ],
+            detectedAt: '2026-08-13T00:00:00.000Z',
+          },
+        ]),
+      storyAcceptMaterial,
+      storyDeclineMaterial,
     });
     renderStory();
-    await userEvent.click(await screen.findByRole('button', { name: /The Garage/ }));
-    // The stale cue is shown (not a blank ribbon) and the accept-as-is review action is present.
-    expect(await screen.findByText('New material to fold in')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Looks good' }));
-    expect(storyReviewChapter).toHaveBeenCalledWith({ bookId: 'b1', chapterId: 'c1' });
+
+    expect(await screen.findByText('New material')).toBeInTheDocument();
+    expect(screen.getByText('1 new detail could go in.')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Weave these in' }));
+    expect(storyAcceptMaterial).toHaveBeenCalledWith({ bookId: 'b1', chapterId: 'c1' });
+
+    await userEvent.click(screen.getByRole('button', { name: /Not now for/ }));
+    expect(storyDeclineMaterial).toHaveBeenCalledWith({ bookId: 'b1', chapterId: 'c1' });
+  });
+
+  it('an author-driven change reads as "Out of step", not as new material', async () => {
+    installStoryBridge({
+      storyBookTypes: () => Promise.resolve(BOOK_TYPES),
+      storyList: () => Promise.resolve([manifest({ status: 'ready' })]),
+      storyGet: () => Promise.resolve(writtenBundle('reviewed')),
+      storyNewMaterial: () =>
+        Promise.resolve([
+          {
+            chapterId: 'c1',
+            reason: 'briefChanged' as const,
+            items: [],
+            note: 'You changed what this chapter is meant to be about.',
+            detectedAt: '2026-08-13T00:00:00.000Z',
+          },
+        ]),
+    });
+    renderStory();
+
+    expect(await screen.findByText('Out of step')).toBeInTheDocument();
+    expect(
+      screen.getByText('You changed what this chapter is meant to be about.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rewrite it' })).toBeInTheDocument();
   });
 
   it('marks a paragraph for deletion — the suggestion strip + apply bar appear', async () => {

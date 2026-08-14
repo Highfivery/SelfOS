@@ -9355,7 +9355,11 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const res = await bridge.storyExclude({ bookId, kind: 'topic', value: 'warm oil' });
     expect(res.staled).toBe(1);
     expect(res.exclusions[0]).toMatchObject({ kind: 'topic', value: 'warm oil' });
-    expect(res.bundle.chapters.find((c) => c.id === chapterId)?.status).toBe('stale');
+    // The prose is untouched; what lands is a PROPOSAL the author acts on (72 §4.4).
+    expect(res.bundle.chapters.find((c) => c.id === chapterId)?.status).not.toBe('generating');
+    expect((await bridge.storyNewMaterial({ bookId })).map((e) => e.chapterId)).toEqual([
+      chapterId,
+    ]);
     expect((await bridge.storyExclusions({ bookId })).map((e) => e.value)).toEqual(['warm oil']);
 
     // Un-exclude removes the rule; the chapter stays as it is.
@@ -9602,9 +9606,11 @@ describe('createCoreBridge — Together (58) foundation', () => {
     if (!chapters.ok) throw new Error('chapters failed');
     const chapterId = chapters.bundle.chapters[0]!.id;
 
-    // Induce a stale chapter (a rewrite candidate) via an exclusion.
-    const excluded = await bridge.storyExclude({ bookId, kind: 'topic', value: 'warm oil' });
-    expect(excluded.bundle.chapters.find((c) => c.id === chapterId)?.status).toBe('stale');
+    // Induce drift (a rewrite candidate) via an exclusion.
+    await bridge.storyExclude({ bookId, kind: 'topic', value: 'warm oil' });
+    expect((await bridge.storyNewMaterial({ bookId })).map((e) => e.chapterId)).toEqual([
+      chapterId,
+    ]);
 
     // Seed a recurring-crisis signal (≥2 approved crisis flags in 14 days) on the person's OWN insights.
     const seedCrisis = (id: string): Promise<void> =>
@@ -9629,12 +9635,20 @@ describe('createCoreBridge — Together (58) foundation', () => {
     // The AUTO cadence must NOT spend during recurring distress — the stale chapter stays stale, nothing rewrites.
     const auto = await bridge.storyRefreshCheck({ bookId, auto: true });
     expect(auto.rewritten).toBe(0);
-    expect(auto.bundle?.chapters.find((c) => c.id === chapterId)?.status).toBe('stale');
+    // Detection is free, so it still ran — but nothing was spent and nothing was rewritten.
+    expect((await bridge.storyNewMaterial({ bookId })).length).toBeGreaterThan(0);
 
-    // A manual "Refresh now" is user-initiated (crisis is not computed) — it rewrites the stale chapter.
-    const manual = await bridge.storyRefreshCheck({ bookId, auto: false });
-    expect(manual.rewritten).toBeGreaterThan(0);
-    expect(manual.bundle?.chapters.find((c) => c.id === chapterId)?.status).not.toBe('stale');
+    // Accepting is the explicit act that spends — and it is the ONLY thing that rewrites (72 §3.6). The
+    // offline fake returns the same prose each pass, so the tell is the revision bump, not the text.
+    const before = auto.bundle?.chapters.find((c) => c.id === chapterId)?.revision ?? 0;
+    const accepted = await bridge.storyAcceptMaterial({ bookId, chapterId });
+    expect(accepted.ok).toBe(true);
+    const after = await bridge.storyGet({ bookId });
+    expect(after?.chapters.find((c) => c.id === chapterId)?.revision).toBeGreaterThan(before);
+    // The proposal clears once it's been woven in.
+    expect((await bridge.storyNewMaterial({ bookId })).map((e) => e.chapterId)).not.toContain(
+      chapterId,
+    );
   });
 
   it('story: the title workshop — N candidates + essence regen, gated + honest AI-off (§16.4)', async () => {
@@ -9884,9 +9898,9 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(approved.proposals.map((p) => p.id)).toEqual(['pr-prologue']); // only the other stays pending
     const titles = approved.bundle!.outline!.parts.flatMap((p) => p.chapters.map((c) => c.title));
     expect(titles).toContain('The Middle Years');
-    // The new chapter is un-written (stale) — drafted on the next refresh, not now.
+    // The new chapter is un-written — empty markdown is what says so (72 §4.4); drafted on the next refresh, not now.
     const shell = approved.bundle!.chapters.find((c) => c.title === 'The Middle Years');
-    expect(shell?.status).toBe('stale');
+    expect(shell?.status).toBe('new');
     expect(shell?.markdown).toBe('');
 
     // Dismiss the other → it leaves the pending list (kept stored for dedup, not shown).

@@ -1,6 +1,17 @@
 # 64 — Your Story (living biography & book projects)
 
-> **Status:** **Approved** — _last updated 2026-07-15_
+> **Status:** **SUPERSEDED by [72 — Books](72-books.md)** — _superseded 2026-08-13_
+>
+> Spec 72 generalizes this feature into eight kinds of book drawn from one corpus, rebuilds the prose
+> pipeline (plan → draft → critique → revise, plus a manuscript pass), replaces perpetual staleness
+> with a Living/Finished lifecycle, and retires this spec's private question engine onto the spec-71
+> ask-ledger substrate. **This document is retained as the historical build record**: §3–§19 describe
+> mechanics that spec 72 reuses largely unchanged (the markup layer, publishing and readers, export,
+> images, the immersive reader, the memory chat, the timeline studio, consent pseudonyms, continuity
+> and line-edit, quote mining, the cast register, manuscript metrics), so it stays the reference for
+> how those work. Where 64 and 72 disagree, **72 wins**.
+
+> **Original status:** **Approved** — _last updated 2026-07-15_
 >
 > Your Story turns everything SelfOS knows about a person into an ever-evolving, professionally
 > written **biography** — a real book, drafted by an AI biographer from the person's own data,

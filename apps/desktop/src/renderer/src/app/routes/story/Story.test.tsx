@@ -20,7 +20,8 @@ import type {
   StoryRevisionResult,
   StructuralProposal,
 } from '@shared/schemas';
-import { Story, buildAnchor, countApplicable } from './Story';
+import { Story } from './Story';
+import { buildAnchor, countApplicable } from './markupHelpers';
 import { useStoryStore } from '../../../stores/storyStore';
 import { useStoryMemoryStore } from '../../../stores/storyMemoryStore';
 import { useSessionStore } from '../../../stores/sessionStore';

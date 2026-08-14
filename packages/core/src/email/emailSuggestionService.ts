@@ -17,6 +17,7 @@ import { listGoals } from '../goals/goalService';
 import { getSynthesis } from '../coaching/coachingSynthesisService';
 import { stalestOpenGoal } from '../recommendations/providers';
 import { isNearDuplicate } from '../questionnaires/dedup';
+import { normalizeOptions } from '../questionnaires/questionnaireService';
 import { runClaude, type AiDeps } from '../questionnaires/aiCall';
 import { extractJsonObject } from '../ai/jsonSalvage';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
@@ -176,6 +177,10 @@ export interface EmailSuggestion {
   suggestionType: EmailSuggestionType;
   headline: string;
   body: string;
+  /** Tappable answers to `body` when it asks something (67 §3.3a / #459). Empty when it does not, and empty
+   *  when the model's options failed the shared shape rules — the email then links into the app instead of
+   *  offering buttons that cannot answer the question. */
+  options: string[];
   subjectKey?: string;
   partnerPersonId?: string;
   sharedSuggestionKey?: string;
@@ -249,9 +254,19 @@ export async function generateSuggestion(
     // intimacy email can never nudge toward an area they have already worked through.
     intimacy ? explicitFraming('explicit', [], { openGround: input.openGround }) : '',
     'You write ONE short, warm coaching suggestion to email a person, in their own SelfOS space. Return ' +
-      'ONLY a JSON object {"headline": string, "body": string}. The headline is a short subject line (≤ 8 ' +
-      'words). The body is 1–3 plain sentences — specific, kind, never clinical, never a re-phrasing of ' +
-      'anything in AVOID. No markdown, no lists, no links.',
+      'ONLY a JSON object {"headline": string, "body": string, "options": string[]}. The headline is a ' +
+      'short subject line (≤ 8 words). The body is 1–3 plain sentences — specific, kind, never clinical, ' +
+      'never a re-phrasing of anything in AVOID. No markdown, no lists, no links.',
+    // The email renders `options` as tappable buttons directly under the body, so they must ANSWER the body.
+    // Reported defect (#459): a question was emailed with generic engagement buttons ("I'm game / Maybe
+    // later / Not for me"), which read as "do you want to answer this?" and did not answer the question at
+    // all. Same rule as questionnaire generation (08 §32.8): options are direct, plausible answers to the
+    // exact prompt, distinct, mutually exclusive, and covering the honest range.
+    'If the body ASKS the person something, `options` must be 2–5 short answers to THAT question — direct, ' +
+      'plausible, distinct from each other, and covering the honest range (including an "it depends" or ' +
+      '"not sure yet" where that is a real answer). They are answers, NOT reactions: never "I\'m game", ' +
+      '"Maybe later", "Sounds good", or anything about whether they want to answer. If the body does NOT ' +
+      'ask a question, return an empty `options` array.',
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -302,10 +317,22 @@ export async function generateSuggestion(
     intimacy ? 700 : 500,
   );
   if (!result.ok) return null; // NO_KEY / BUDGET / refusal / error → no email
-  const parsed = extractJsonObject(result.text) as { headline?: unknown; body?: unknown } | null;
+  const parsed = extractJsonObject(result.text) as {
+    headline?: unknown;
+    body?: unknown;
+    options?: unknown;
+  } | null;
   const headline = typeof parsed?.headline === 'string' ? parsed.headline.trim() : '';
   const body = typeof parsed?.body === 'string' ? parsed.body.trim() : '';
   if (!headline || !body) return null; // a bad/empty parse → no email (scheduled family, no retry)
+  // Run the SAME shape rules as questionnaire generation (08 §32.8) — trim, drop blanks, reject
+  // case-insensitive duplicates, require at least two. An unusable set degrades to NO buttons rather than to
+  // buttons that cannot answer the question, which is the #459 failure. `normalizeOptions` is the single
+  // shared validator, so the email surface can no longer drift from the in-app one.
+  const rawOptions = Array.isArray(parsed?.options)
+    ? parsed.options.filter((o): o is string => typeof o === 'string')
+    : [];
+  const options = rawOptions.length > 0 ? (normalizeOptions(rawOptions) ?? []) : [];
 
   const dedupKey = `${headline} ${body}`;
   if (isNearDuplicate(dedupKey, input.avoid.texts)) return null; // a re-phrasing → skip
@@ -314,6 +341,7 @@ export async function generateSuggestion(
     family: input.family,
     suggestionType,
     headline,
+    options,
     body,
     ...(subjectKey ? { subjectKey } : {}),
     ...(input.partnerPersonId ? { partnerPersonId: input.partnerPersonId } : {}),

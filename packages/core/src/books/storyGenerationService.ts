@@ -374,6 +374,8 @@ export async function generateChapter(
     markdown: drafted.markdown,
     ...(plan ? { plan } : {}),
     system,
+    // So an invented-events book isn't marked down for inventing (72 §4.1).
+    truthMode: bookType.truthMode,
   });
 
   // Pass 4 — fix exactly what the critique found. The DRAFT stands on any failure: a revision that was cut

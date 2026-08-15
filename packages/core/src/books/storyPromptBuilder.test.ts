@@ -6,6 +6,7 @@ import type { BookChapter, BookOutline, ExclusionItem, MarkupMark } from '../sch
 import {
   buildBiographerSystem,
   buildChapterUserMessage,
+  buildCritiqueMessage,
   buildFoundationsUserMessage,
   buildRevisionUserMessage,
   renderCorpusForPrompt,
@@ -449,5 +450,82 @@ describe('a picture book is measured in pages, not chapters (72 §4.1)', () => {
     expect(sys).toContain('roughly 16–24 chapters');
     expect(sys).not.toContain('pages');
     expect(sys).not.toContain('AUDIENCE:');
+  });
+});
+
+/**
+ * Why an erotic book came out tame however explicit the register said to be. Two mechanical causes, both in
+ * the prompt: the shared craft block forbade inventing bodily detail and forbade lingering, and the editor
+ * pass then flagged whatever explicit detail survived as `inventedDetail` so the revise pass deleted it.
+ */
+describe('erotica is not written as a biography (72 §3.2)', () => {
+  const erotica = getBookType('erotica')!;
+  const sys = (): string =>
+    buildBiographerSystem(
+      erotica,
+      cfg({ style: 'raunchy', typeOptions: { tier: 'unfiltered' } }),
+      'Ben',
+    );
+
+  it('does not forbid the invention it is made of', () => {
+    // "Sacred carnality: … Where you lack it … NEVER invent it" is a rule for a TRUE life story. For a book
+    // whose own opening says the events are invented, it forbids the substance of the form.
+    expect(sys()).not.toMatch(/NEVER invent it/);
+    expect(sys()).toMatch(/INVENT it freely/);
+  });
+
+  it('does not tell it to stop dwelling on the thing it is about', () => {
+    // "never linger gratuitously" is for handling a painful memory with distance — the opposite instruction.
+    expect(sys()).not.toMatch(/linger gratuitously/);
+    expect(sys()).toMatch(/Lingering IS the form/);
+  });
+
+  it('says plainly to write the scene rather than around it', () => {
+    expect(sys()).toMatch(/not a book that fades out at the door/);
+  });
+
+  it('keeps the craft and the boundary that are still right', () => {
+    const s = sys();
+    expect(s).toMatch(/Make the reader SEE it/); // scene over summary survives
+    expect(s).toMatch(/NEVER NARRATE THE BOOK'S OWN CONSTRUCTION/); // meta-narration ban survives
+    expect(s).toMatch(/tapestry/); // the banned AI tells survive
+    expect(s).toMatch(/consenting adult/i);
+    expect(s).toMatch(/hard limit recorded anywhere/i);
+  });
+
+  it('a told-true book is untouched by any of it', () => {
+    const bio = buildBiographerSystem(getBookType('biography')!, cfg(), 'Ben');
+    expect(bio).toMatch(/NEVER invent it/);
+    expect(bio).toMatch(/linger gratuitously/);
+    expect(bio).not.toMatch(/INVENT it freely/);
+  });
+});
+
+describe('the editor does not mark a book down for inventing (72 §4.1)', () => {
+  const corpus = { personName: 'Ben', profile: [], items: [] } as never;
+  const chapter = { id: 'c1', title: 'The Hotel' } as never;
+
+  it('judges an invented-events book on the PERSON, not the detail', () => {
+    const msg = buildCritiqueMessage(corpus, {
+      chapter,
+      markdown: 'draft',
+      truthMode: 'fictionalized',
+    });
+    // The old rule flagged "sensory detail the source material does not support" as the second-worst
+    // defect — in a book made of invented sensory detail, that is every explicit line.
+    expect(msg).not.toMatch(/inventedDetail/);
+    expect(msg).toMatch(/inventedPerson/);
+    expect(msg).toMatch(/EVENTS here are invented by design and are never a defect/);
+  });
+
+  it('still holds a told-true book to the record', () => {
+    const msg = buildCritiqueMessage(corpus, { chapter, markdown: 'draft', truthMode: 'true' });
+    expect(msg).toMatch(/inventedDetail/);
+    expect(msg).not.toMatch(/inventedPerson/);
+  });
+
+  it('defaults to the strict rule when no mode is given', () => {
+    const msg = buildCritiqueMessage(corpus, { chapter, markdown: 'draft' });
+    expect(msg).toMatch(/inventedDetail/);
   });
 });

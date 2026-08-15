@@ -1,3 +1,4 @@
+import type { BookTruthMode } from './bookTypes';
 import { SAFETY } from '../conversations';
 import type {
   BookChapter,
@@ -428,9 +429,21 @@ export interface CritiqueFinding {
  */
 export function buildCritiqueMessage(
   corpus: StoryCorpus,
-  opts: { chapter: OutlineChapter; markdown: string; plan?: ChapterPlan },
+  opts: {
+    chapter: OutlineChapter;
+    markdown: string;
+    plan?: ChapterPlan;
+    /**
+     * A book that openly invents its events (72 §4.1) must NOT be judged for inventing detail — that is
+     * what it is for. Left unset, the editor flagged every made-up sensory detail in an erotica chapter as
+     * the second-most-serious defect, and the revise pass then surgically deleted exactly the material the
+     * book is made of. An explicit draft came back tame.
+     */
+    truthMode?: BookTruthMode;
+  },
 ): string {
   const { chapter, markdown, plan } = opts;
+  const invents = opts.truthMode === 'fictionalized';
   return [
     `You are the editor of ${corpus.personName || 'this person'}'s book, reading a draft chapter with a hard, honest eye. Name what is WRONG with it. Do NOT rewrite it — findings only.`,
     '',
@@ -442,14 +455,16 @@ export function buildCritiqueMessage(
     '',
     'Judge it against these, in this order of seriousness:',
     '1. metaNarration — ANY sentence that refers to the record, the material, the sources, the biographer, "this chapter", "this book", or what is or is not known. This is the worst defect: the reader must never be able to tell that a corpus or a writer was involved. A gap must read as a fact about a PERSON ("he never explained why"), never about your sources ("the record doesn\'t say").',
-    '2. inventedDetail — a specific fact, quote, date, place, or sensory detail the source material does not support. Quote it.',
+    invents
+      ? '2. inventedPerson — a moment where someone acts, speaks or wants in a way the material contradicts. The EVENTS here are invented by design and are never a defect; the PEOPLE are not. Quote it.'
+      : '2. inventedDetail — a specific fact, quote, date, place, or sensory detail the source material does not support. Quote it.',
     '3. summaryNotScene — a passage that TELLS a stretch of life instead of rendering a moment in it; or an opening that starts with theme, throat-clearing, or a birth-to-now sweep instead of a scene.',
     '4. repetition — something the plan says belongs to another chapter, or a phrase/image/beat repeated inside this one.',
     '5. aiTell — the flat, hedged, tri-colon, "it was not X, it was Y" register; a summarizing final paragraph that restates the chapter\'s meaning; any of the banned prose tells.',
     '6. voice — prose that stops sounding like this person and starts sounding like a narrator of anyone.',
     '',
     'Return ONE JSON object: { "verdict": "ship" | "revise", "findings": [ { "kind": one of the six names above, "quote": the exact offending text (a short span, verbatim from the draft), "fix": one line on what to do instead }, … ] }.',
-    'Return "ship" with an empty findings array when the chapter genuinely has none of these — do NOT invent a finding to look thorough. Report every metaNarration and inventedDetail you find; for the rest, report only what actually damages the chapter.',
+    `Return "ship" with an empty findings array when the chapter genuinely has none of these — do NOT invent a finding to look thorough. Report every metaNarration and ${invents ? 'inventedPerson' : 'inventedDetail'} you find; for the rest, report only what actually damages the chapter.`,
     'Return ONLY the JSON object — no prose, no markdown fences.',
   ].join('\n');
 }

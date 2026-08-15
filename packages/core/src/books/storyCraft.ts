@@ -9,6 +9,7 @@ import {
   type ChapterPlan,
   type CritiqueFinding,
 } from './storyPromptBuilder';
+import type { BookTruthMode } from './bookTypes';
 import type { StoryCorpus } from './storyCorpus';
 
 /**
@@ -55,6 +56,9 @@ const CritiqueKindSchema = z
   .enum([
     'metaNarration',
     'inventedDetail',
+    // The invented-events types report this instead (72 §4.1): their events are theirs to make up, so the
+    // defect is contradicting the PERSON, never inventing detail.
+    'inventedPerson',
     'summaryNotScene',
     'repetition',
     'aiTell',
@@ -140,12 +144,19 @@ export async function planChapter(
 export async function critiqueChapter(
   deps: AiDeps,
   corpus: StoryCorpus,
-  opts: { chapter: OutlineChapter; markdown: string; plan?: ChapterPlan; system: string },
+  opts: {
+    chapter: OutlineChapter;
+    markdown: string;
+    plan?: ChapterPlan;
+    system: string;
+    truthMode?: BookTruthMode;
+  },
 ): Promise<CritiqueFinding[]> {
   const user = buildCritiqueMessage(corpus, {
     chapter: opts.chapter,
     markdown: opts.markdown,
     ...(opts.plan ? { plan: opts.plan } : {}),
+    ...(opts.truthMode ? { truthMode: opts.truthMode } : {}),
   });
   const result = await runClaude(deps, opts.system, user, 'book.critique', CRITIQUE_MAX_TOKENS);
   if (!result.ok) return [];

@@ -65,12 +65,15 @@ the precedent for a two-person book), [00](00-architecture.md) (vault, IPC, secu
 - **Books about someone who is not in your household and shares nothing with you.** The corpus is the
   boundary; a type that needs outside research is out of scope.
 - **External (outside-household) sharing via the relay** — architecturally ready (64 §5.8), still a
-  later slice.
+  later slice. Note this is about someone outside the household READING a finished book. Outside-household
+  _contributing_ is a different question and was closed permanently (73 §2, 2026-08-15): the relationship
+  edge is what makes that consent model work, and a contributor outside the graph has no edge to lose.
 - **Audio narration, print-on-demand integration, a storefront.** A print-ready PDF, EPUB and DOCX
   already make manual publishing possible.
 - **Household contributions** (family-submitted questions and attributed quotes woven in) — the
   highest-value fast-follow after this spec, deliberately not bundled: it needs its own consent and
-  attribution model. **Built as [73](73-household-contributions.md)** (2026-08-14).
+  attribution model. **Built as [73](73-household-contributions.md)** (2026-08-14), and complete — its one
+  open direction (contributing from outside the household) is now a permanent non-goal.
 - **Migrating the two existing books to a new schema.** They regenerate in place (§7.9).
 - **Voice interview.** Text only; the turn model must not preclude it (CLAUDE.md §2).
 

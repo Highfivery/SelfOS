@@ -52,7 +52,7 @@ import { matrixRowKey } from '@selfos/core/schemas';
 import { saveGoal } from '@selfos/core/goals';
 import { listChallenges, recordCheckIn } from '@selfos/core/challenges';
 import { buildContext, getPerson, upsertRelationship } from '@selfos/core/people';
-import { buildStoryCorpus, corpusText, saveProposals } from '@selfos/core/story';
+import { buildStoryCorpus, corpusText, saveProposals } from '@selfos/core/books';
 import {
   captureJointChallengeFromMarker,
   captureSuggestionFromMarker,

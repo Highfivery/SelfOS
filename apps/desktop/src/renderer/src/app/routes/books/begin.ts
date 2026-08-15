@@ -1,5 +1,5 @@
 import type { BookConfig, BookTypeId, StoryCorpusStats } from '@selfos/core/schemas';
-import { getBookType } from '@selfos/core/story';
+import { getBookType } from '@selfos/core/books';
 
 /**
  * The "Drawn from" chips for the invitation (§13.3) — a deterministic, human read of how much material the

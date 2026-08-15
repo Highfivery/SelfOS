@@ -11,7 +11,7 @@ import {
 } from '../../../design-system/components';
 import { useStoryStore } from '../../../stores/storyStore';
 import styles from './Books.module.css';
-import { missingMatter } from '@selfos/core/story-matter';
+import { missingMatter } from '@selfos/core/books-matter';
 import { useEffect, useMemo, useState } from 'react';
 import type { BookMatter } from '@shared/schemas';
 

@@ -40,10 +40,14 @@
     "./profile": "./src/profile/index.ts",
     "./relay": "./src/relay/index.ts",
     "./updates": "./src/updates/index.ts",
-    "./story": "./src/story/index.ts",
-    "./story-diff": "./src/story/storyDiff.ts",
-    "./story-matter": "./src/story/storyMatter.ts",
-    "./story-metrics": "./src/story/manuscriptMetrics.ts"
+    "./books": "./src/books/index.ts",
+    "./books-diff": "./src/books/storyDiff.ts",
+    "./books-matter": "./src/books/storyMatter.ts",
+    "./books-metrics": "./src/books/manuscriptMetrics.ts",
+    "./story": "./src/storyCompat.ts",
+    "./story-diff": "./src/books/storyDiff.ts",
+    "./story-matter": "./src/books/storyMatter.ts",
+    "./story-metrics": "./src/books/manuscriptMetrics.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",

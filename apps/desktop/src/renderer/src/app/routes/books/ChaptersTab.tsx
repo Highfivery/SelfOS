@@ -11,7 +11,7 @@ import { useSessionStore } from '../../../stores/sessionStore';
 import { useStoryStore } from '../../../stores/storyStore';
 import { OutlineEditor } from './OutlineEditor';
 import styles from './Books.module.css';
-import { manuscriptMetrics } from '@selfos/core/story-metrics';
+import { manuscriptMetrics } from '@selfos/core/books-metrics';
 import { IMAGE_PRICING } from '@selfos/core/usage';
 import { useEffect, useState } from 'react';
 import type { ContinuityFinding, StoryBookBundle, StoryDraftProgress } from '@shared/schemas';

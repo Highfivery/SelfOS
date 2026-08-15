@@ -1,5 +1,5 @@
 import styles from './Books.module.css';
-import { wordDiff } from '@selfos/core/story-diff';
+import { wordDiff } from '@selfos/core/books-diff';
 import { useMemo } from 'react';
 
 /** The word-level "What changed" render — added words as <ins>, removed as <del>, in reading order (§13.5). */

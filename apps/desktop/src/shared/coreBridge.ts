@@ -628,7 +628,7 @@ import {
   suggestTitles,
   resolveBookOwnerRef,
   livePairRefs,
-} from '@selfos/core/story';
+} from '@selfos/core/books';
 import {
   clearSuggestion,
   deleteChallenge,

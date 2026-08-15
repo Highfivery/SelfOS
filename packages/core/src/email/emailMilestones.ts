@@ -3,7 +3,7 @@ import { effectiveGoalStatus } from '../schemas';
 import { listGoals } from '../goals/goalService';
 import { listConversations } from '../conversations/conversationService';
 import { listDreams } from '../dreams/dreamService';
-import { listBooks } from '../story/storyService';
+import { listBooks } from '../books/storyService';
 import { listInsightsForPerson } from '../insights/insightStore';
 import { computeStreak } from '../home/streak';
 import { aggregateCrisisSignal } from '../coaching/crisisSignal';

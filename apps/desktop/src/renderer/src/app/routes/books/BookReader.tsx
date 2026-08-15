@@ -1,7 +1,7 @@
 import { Button, Heading, Markdown, Text } from '../../../design-system/components';
 import { useSetting } from '../../../settings/useSetting';
 import styles from './Books.module.css';
-import { BOOK_BOUNDARY_LINE, colophonLines } from '@selfos/core/story-matter';
+import { BOOK_BOUNDARY_LINE, colophonLines } from '@selfos/core/books-matter';
 import { useEffect, useRef, useState } from 'react';
 import type { StoryReaderView } from '@shared/schemas';
 import { partLabel } from './chapterDisplay';

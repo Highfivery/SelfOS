@@ -4,7 +4,7 @@ import { countWords } from './storyText';
 /**
  * Manuscript metrics for Your Story (64-your-story §16.5, #301) — a deterministic, AI-free read of how long
  * the book is and whether it's balanced. Pure: no crypto, no I/O, no other story imports beyond the shared
- * `countWords`, so the renderer can import it through the lean `@selfos/core/story-metrics` subpath (the
+ * `countWords`, so the renderer can import it through the lean `@selfos/core/books-metrics` subpath (the
  * `story-diff` / `story-matter` precedent) without dragging in the crypto-laden story barrel.
  *
  * Counts come from the drafted `markdown` with inline emphasis stripped, so a chapter's count matches what a

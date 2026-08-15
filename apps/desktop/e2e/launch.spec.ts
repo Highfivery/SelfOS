@@ -88,7 +88,7 @@ import {
   getNewMaterial,
   listChapters,
   listMemories,
-} from '@selfos/core/story';
+} from '@selfos/core/books';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
 

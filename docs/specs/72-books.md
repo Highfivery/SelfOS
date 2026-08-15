@@ -733,3 +733,21 @@ Two items are **deliberately deferred** rather than open:
   directive was absent, `indexOf` returned -1, and the ordering assertion was trivially true. The
   every-style-has-a-preset invariant was also rewritten — `BookStyle` is now the UNION across types, so the
   rule is that every style is offered by SOME type and every offered style is a real one.
+- 2026-08-15 — **fix: an erotica book came out tame however explicit the register said to be** (reported).
+  Diagnosed by dumping the assembled prompt rather than assuming a model refusal — the cause was mechanical
+  and doubled. **(1) The doctrine contradicted itself.** Every type shared `CRAFT_PRINCIPLES`, which says
+  "Sacred carnality … NEVER invent it" — a rule for a TRUE life story that forbids the invented bodily
+  detail this type is made of — and erotica's `TRUTH_REIMAGINED` added "never linger gratuitously", written
+  for handling a painful memory with distance and exactly the wrong instruction for a book whose purpose is
+  to dwell. The rest of that block is biography craft (double perspective, earned hindsight, the insight a
+  chapter exists to reveal), all pulling toward literary contemplation. Erotica now has `EROTICA_CRAFT` +
+  `TRUTH_EROTICA`, keeping what is genuinely craft (scene over summary, real places, rhythm, rounded people)
+  and the meta-narration + banned-tells blocks, dropping the never-invent rule and the reflective
+  scaffolding. **(2) The editor stripped it back out.** The critique pass ranks `inventedDetail` — "sensory
+  detail the source material does not support" — as the second-worst defect, so for an invented-events book
+  it flagged every explicit line and the revise pass surgically deleted them: a machine for sanding an
+  explicit draft down to tame. `buildCritiqueMessage` is now truth-mode aware; a `fictionalized` type is
+  judged on `inventedPerson` (contradicting who someone IS) instead. Told-true types are byte-unchanged, and
+  an unset mode still defaults to the strict rule. Both fixes mutation-verified. **Lesson: the offline fakes
+  cannot surface this class at all — they return canned prose and a canned critique verdict, so the craft
+  loop looks healthy while it quietly removes the point of the book. Read the assembled prompt.**

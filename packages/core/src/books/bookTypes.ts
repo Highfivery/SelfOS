@@ -310,10 +310,13 @@ const FORBIDDEN_TELLS = `FORBIDDEN AI-PROSE TELLS (do not use)
 - Moves: "I learned that…" moralizing and lesson-stamped chapter endings ("Ultimately…", "Little did I know…", "It was in that moment that I realized…").`;
 
 /** Assemble a type's doctrine: its own opening, then the shared craft IP. */
-function composeDoctrine(opening: string, truth: string, extra: string[] = []): string {
-  return [opening, CRAFT_PRINCIPLES, truth, ...extra, NO_META_NARRATION, FORBIDDEN_TELLS].join(
-    '\n\n',
-  );
+function composeDoctrine(
+  opening: string,
+  truth: string,
+  extra: string[] = [],
+  craft: string = CRAFT_PRINCIPLES,
+): string {
+  return [opening, craft, truth, ...extra, NO_META_NARRATION, FORBIDDEN_TELLS].join('\n\n');
 }
 
 const BIOGRAPHY_OPENING = `You are a professional biographer writing a true, book-length life story about the subject, drawn ONLY from what is known about them. Your bar is award-winning narrative nonfiction. Follow these principles:`;
@@ -534,6 +537,39 @@ function tellsTrue(opening: string): string {
 function reimagines(opening: string, extra: string[] = []): string {
   return composeDoctrine(opening, TRUTH_REIMAGINED, extra);
 }
+
+/**
+ * Erotica's craft block. The shared `CRAFT_PRINCIPLES` are written for a TRUE life story and two of them
+ * directly contradict this type, which is why an erotic book came out tame however explicit the register
+ * said to be: "Sacred carnality … NEVER invent it" forbids the invented bodily detail this type is MADE of,
+ * and the biography's reflective apparatus (double perspective, earned hindsight, the insight a chapter
+ * exists to reveal) pulls every scene toward literary contemplation.
+ *
+ * What is kept is everything that is genuinely craft rather than biography: scene over summary, real places,
+ * specific detail, rhythm, rounded people. What is dropped is the never-invent rule and the reflective
+ * scaffolding. The meta-narration ban and the banned AI tells still apply — those are about prose quality,
+ * and they are as true here as anywhere.
+ */
+const EROTICA_CRAFT = `CRAFT
+- Make the reader SEE it. Every scene is rendered — bodies, place, what is done and said — never summarized. A chapter that narrates around the sex instead of writing it is the central defect of this form.
+- Write the whole encounter. Build, escalate, and stay in the moment through it; do not cut away, skip forward, or resolve early. Lingering IS the form — dwell on what the scene is about.
+- Sacred carnality: specific, sensory, bodily detail is the substance here. INVENT it freely — the events are yours to make up. What you may not invent is the person.
+- Desire has a shape: wanting, delay, permission, release. Give each piece its own build rather than starting at the peak.
+- Honor sense of place: a named, physically rendered room, hour and light. Place makes it real.
+- Round people, not props. Everyone present wants something and has their own way of speaking; a partner who exists only to be acted upon flattens the scene.
+- Deliberate rhythm: vary sentence length with the intensity; short lines carry heat, long ones carry build. Write prose that survives being read aloud.`;
+
+/**
+ * Erotica's truth contract. Identical to `TRUTH_REIMAGINED` except it drops "never linger gratuitously" —
+ * a rule for handling painful memories with distance, and precisely the wrong instruction for a book whose
+ * whole purpose is to dwell. The human-decency rules and the boundary are untouched.
+ */
+const TRUTH_EROTICA = `TRUTH & ETHICS
+- The EVENTS here are invented, and that is the point — you may write scenes, dialogue and detail that never happened. Do not pretend otherwise, and never present this book as a record of what occurred.
+- The PEOPLE are not invented. Their character, their voice, what they care about and the real relationships between them come from the material and must stay true. A person who would never say a thing must not say it here.
+- What they WANT is not invented either. The desire is the thing you are being faithful to; the story exists to carry it.
+- Everyone present is a rounded person with their own wanting — write them with fairness, never as a prop.
+- This is a wellness reflection, not a clinical assessment. Test or wellbeing data may inform characterization, but NEVER name instruments, scores, bands, or diagnoses, and never write in diagnostic language.`;
 
 /** A book about ONE bounded stretch of a life — the years in a city, an illness, a marriage. */
 export const MEMOIR_BOOK_TYPE: BookType = {
@@ -762,14 +798,16 @@ export const EROTICA_BOOK_TYPE: BookType = {
   id: 'erotica',
   label: 'Erotica',
   blurb: 'Explicit fiction, written from what you’ve told the app about your own desire. 18+.',
-  doctrine: reimagines(
-    `You are writing explicit erotic fiction for ${'${subject}'}, drawn from what they have told the app about their own desire. The events are invented; what they want is not. Write it as fiction — scenes, tension, a reason to keep reading — never as a report of anything that happened.`,
+  doctrine: composeDoctrine(
+    `You are writing explicit erotic fiction for ${'${subject}'}, drawn from what they have told the app about their own desire. The events are invented; what they want is not. Write it as fiction — scenes, tension, a reason to keep reading — never as a report of anything that happened. Write the sex on the page: this is not a book that fades out at the door.`,
+    TRUTH_EROTICA,
     [
       `THE BOUNDARY (absolute, and it overrides every other instruction here)
 - Everyone in this book is a consenting adult. Never a minor, never anyone presented as a minor, never real non-consent, never anything illegal.
 - Taboo material appears only as fantasy or roleplay between consenting adults who both know that is what it is.
 - A hard limit recorded anywhere in the material is a hard limit here. Never write it, however well it would fit.`,
     ],
+    EROTICA_CRAFT,
   ),
   structures: [
     {

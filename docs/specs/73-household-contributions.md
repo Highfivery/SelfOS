@@ -342,3 +342,17 @@ would need the relay and an identity model for a non-member (72 §2).
   flag, the material kind filter, and both halves of person-delete reaping. The first reaping mutation
   SURVIVED (an empty decisions file was left behind), which is why reaping now removes the file rather than
   writing an empty one — the residue an emptied file leaves is exactly what person-delete exists to clear.
+- 2026-08-14 — **code review fixes.** One **blocker**, found by probe: `runGapPass` REPLACES `lastGaps` with
+  its own model-derived output, and the decision's `gapId` stamp meant a wiped gap could never be re-minted —
+  so a routine gap pass destroyed an accepted question permanently and silently. Fixed twice over, because
+  the two failures are different: a pass now preserves gaps carrying a `contributionId` (they aren't the
+  model's to reconsider, and preserving them keeps the gap's IDENTITY, so a question already asked doesn't
+  quietly reset to unasked), and seeding is now keyed on "stamped AND the gap still exists", so any loss
+  self-heals on the next free read. Gaps are also **pruned** when a question stops being accepted — declined
+  after the fact, or withdrawn — which previously left the subject being offered a question that had been
+  taken back. Also: reaping now clears the OTHER direction (offerings addressed to a deleted author, which
+  otherwise sat "waiting for them to read it" about someone who no longer exists); the invite picker offers
+  only related people and says so when the bridge refuses, instead of a button that appears to do nothing;
+  the panel is hidden on a shared `ourStory` book, where every control could only no-op; and the untested
+  per-book scoping guard (a contributor invited to TWO of one author's books) is now pinned. Three more
+  mutations verified: replace-wholesale, stamp-only idempotency, and no-pruning each fail a test.

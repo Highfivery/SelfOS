@@ -26,7 +26,7 @@ interface ContributionState {
   busy: boolean;
   loadMine: () => Promise<void>;
   loadForBook: (bookId: string) => Promise<void>;
-  invite: (bookId: string, personId: string, note?: string) => Promise<void>;
+  invite: (bookId: string, personId: string, note?: string) => Promise<boolean>;
   revoke: (bookId: string, personId: string) => Promise<void>;
   submit: (input: {
     invitationId: string;
@@ -70,12 +70,15 @@ export const useContributionStore = create<ContributionState>((set, get) => ({
   invite: async (bookId, personId, note) => {
     set({ busy: true });
     try {
-      await window.selfos?.booksInviteContribution({
+      // The result matters: the bridge returns null when it refuses (unrelated, or the edge went), and a
+      // caller that discards it leaves the author staring at a button that appeared to do nothing.
+      const invited = await window.selfos?.booksInviteContribution({
         bookId,
         personId,
         ...(note?.trim() ? { note: note.trim() } : {}),
       });
       await get().loadForBook(bookId);
+      return Boolean(invited);
     } finally {
       set({ busy: false });
     }

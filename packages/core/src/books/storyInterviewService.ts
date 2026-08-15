@@ -342,10 +342,14 @@ export async function runGapPass(
   // copy would revert a photo answer saved during the pass. Same rule already noted below for `after`.
   const liveInterview =
     (await getInterviewState(deps.fs, deps.key, deps.personId, args.bookId)) ?? interview;
+  // A pass replaces the model's OWN gaps, never a question a household member asked and the author accepted
+  // (73 §3.4). Those aren't the model's to reconsider, and replacing them wholesale would silently destroy a
+  // real person's question — they lead, since a person asking beats anything inferred.
+  const asked = (liveInterview.lastGaps ?? []).filter((g) => g.contributionId);
   await saveInterviewState(deps.fs, deps.key, deps.personId, args.bookId, {
     ...liveInterview,
     frameworkCoverage: coverage,
-    lastGaps: gaps,
+    lastGaps: [...asked, ...gaps],
     lastPartCoverage: partCoverage,
     lastGapPassAt: deps.now.toISOString(),
   });
@@ -404,38 +408,60 @@ const ANSWERED_CHECKIN_STATUSES = new Set(['submitted', 'analyzed']);
  * the Inbox. A gap whose check-in was declined/expired falls back to `open` (askable again).
  */
 /**
- * Seed a gap for each accepted `question` contribution that hasn't become one yet (73 §3.4) — FREE, no AI.
- * Runs on the gaps read so the question a household member asked joins "what it wants next" without waiting
- * for the next metered gap pass. The decision is stamped with the gap id, so a second read mints nothing:
- * that stamp, not a text match, is what makes this idempotent. Withdrawing the question drops it from the
- * accepted list, so the stale gap ages out with the next pass rather than being force-deleted here.
+ * Reconcile the interview's gaps with the accepted `question` contributions (73 §3.4) — FREE, no AI.
+ *
+ * Runs on the gaps read so a question a household member asked joins "what it wants next" without waiting
+ * for the next metered pass. Two directions, and both matter:
+ *
+ * - **Seed** a gap for every accepted question that doesn't currently have one. The idempotency key is the
+ *   stamped `gapId` AND that gap still existing — not the stamp alone. That distinction is load-bearing:
+ *   `runGapPass` REPLACES `lastGaps` with its own model-derived output, so a stamp-only check would let a
+ *   routine pass destroy a contributor's question permanently, with the stamp guaranteeing it never came
+ *   back. It also makes a failed write self-heal on the next read rather than losing the question.
+ * - **Prune** a contribution-seeded gap whose question is no longer accepted (declined after the fact, or
+ *   withdrawn). Otherwise the subject keeps being offered — and can mint a real check-in from — a question
+ *   that was explicitly taken back.
+ *
+ * Gaps carrying no `contributionId` are the model's own and are never touched here.
  */
-async function seedContributionGaps(
+async function reconcileContributionGaps(
   fs: AiDeps['fs'],
   key: Uint8Array,
   personId: string,
   bookId: string,
 ): Promise<void> {
-  const pending = (await acceptedQuestionContributions(fs, key, personId, bookId)).filter(
-    (q) => !q.gapId,
-  );
-  if (pending.length === 0) return;
+  const accepted = await acceptedQuestionContributions(fs, key, personId, bookId);
   const interview = await getInterviewState(fs, key, personId, bookId);
-  const gaps: NonNullable<typeof interview.lastGaps> = [...(interview.lastGaps ?? [])];
-  for (const q of pending) {
-    const gap = {
+  const existing = interview.lastGaps ?? [];
+  const liveIds = new Set(existing.map((g) => g.id));
+  const acceptedIds = new Set(accepted.map((q) => q.id));
+
+  // Drop gaps whose question stopped being accepted; keep everything else as-is.
+  const kept = existing.filter((g) => !g.contributionId || acceptedIds.has(g.contributionId));
+  // Re-seed anything accepted whose gap is missing — never stamped, or stamped at a gap since replaced.
+  const missing = accepted.filter((q) => !q.gapId || !liveIds.has(q.gapId));
+  if (missing.length === 0 && kept.length === existing.length) return;
+
+  const gaps = [
+    ...kept,
+    ...missing.map((q) => ({
       id: uuid(),
       dimension: 'Asked by someone close to you',
       label: `${q.contributorName} wants to know`,
       focus: q.text,
       // Top priority: a real person asked this, which beats anything the model inferred.
       priority: 10,
-    };
-    gaps.push(gap);
-    await setContributionGapId(fs, key, personId, bookId, q.id, gap.id);
-  }
+      contributionId: q.id,
+    })),
+  ];
+  // Persist FIRST, then stamp. A stamp written before the gap is durable would point at a gap that does not
+  // exist — and while the re-seed above now recovers from that, the record should never claim otherwise.
   const live = await getInterviewState(fs, key, personId, bookId);
   await saveInterviewState(fs, key, personId, bookId, { ...live, lastGaps: gaps });
+  for (const q of missing) {
+    const gap = gaps.find((g) => g.contributionId === q.id);
+    if (gap) await setContributionGapId(fs, key, personId, bookId, q.id, gap.id);
+  }
 }
 
 export async function getStoryGaps(
@@ -444,7 +470,7 @@ export async function getStoryGaps(
   personId: string,
   bookId: string,
 ): Promise<StoryGapsView> {
-  await seedContributionGaps(fs, key, personId, bookId).catch(() => {});
+  await reconcileContributionGaps(fs, key, personId, bookId).catch(() => {});
   const interview = await getInterviewState(fs, key, personId, bookId);
   const outline = await getOutline(fs, key, personId, bookId);
   const chapters = await listChapters(fs, key, personId, bookId);

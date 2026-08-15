@@ -23,11 +23,13 @@ export function ContributionsPanel({ bookId }: { bookId: string }): JSX.Element 
   const revoke = useContributionStore((s) => s.revoke);
   const decide = useContributionStore((s) => s.decide);
   const household = usePeopleStore((s) => s.people);
+  const relationships = usePeopleStore((s) => s.relationships);
   const loadPeople = usePeopleStore((s) => s.load);
   const activePersonId = useSessionStore((s) => s.activePerson?.id);
 
   const [who, setWho] = useState('');
   const [note, setNote] = useState('');
+  const [refused, setRefused] = useState<string | null>(null);
 
   useEffect(() => {
     void loadForBook(bookId);
@@ -35,12 +37,24 @@ export function ContributionsPanel({ bookId }: { bookId: string }): JSX.Element 
   }, [bookId, loadForBook, loadPeople]);
 
   const open = useMemo(() => invites.filter((i) => !i.revokedAt), [invites]);
-  // Only people who aren't already invited, and never yourself. The bridge refuses anyone unrelated, so a
-  // stale list here can't widen anything — this is convenience, not the boundary.
+  // Only people you're actually RELATED to, never yourself, and not those already invited. The relationship
+  // is the standing grant (72 §5.8) and the bridge refuses anyone else — so offering an unrelated name here
+  // would be a control whose only outcome is a silent no-op.
+  const related = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of relationships) {
+      if (r.fromPersonId === activePersonId) ids.add(r.toPersonId);
+      if (r.toPersonId === activePersonId) ids.add(r.fromPersonId);
+    }
+    return ids;
+  }, [relationships, activePersonId]);
   const candidates = useMemo(
     () =>
-      household.filter((p) => p.id !== activePersonId && !open.some((i) => i.personId === p.id)),
-    [household, activePersonId, open],
+      household.filter(
+        (p) =>
+          p.id !== activePersonId && related.has(p.id) && !open.some((i) => i.personId === p.id),
+      ),
+    [household, activePersonId, related, open],
   );
   const nameOf = (id: string): string =>
     household.find((p) => p.id === id)?.displayName ?? 'Someone';
@@ -68,7 +82,11 @@ export function ContributionsPanel({ bookId }: { bookId: string }): JSX.Element 
           disabled={candidates.length === 0}
         >
           <option value="">
-            {candidates.length === 0 ? 'Everyone is already invited' : 'Choose someone…'}
+            {related.size === 0
+              ? 'Nobody to invite yet'
+              : candidates.length === 0
+                ? 'Everyone is already invited'
+                : 'Choose someone…'}
           </option>
           {candidates.map((p) => (
             <option key={p.id} value={p.id}>
@@ -86,7 +104,16 @@ export function ContributionsPanel({ bookId }: { bookId: string }): JSX.Element 
           variant="primary"
           disabled={!who || busy}
           onClick={() => {
-            void invite(bookId, who, note).then(() => {
+            setRefused(null);
+            void invite(bookId, who, note).then((ok) => {
+              // The bridge re-checks the relationship, so a refusal is possible even from a filtered list
+              // (the edge can go between render and click). Say so rather than appearing to do nothing.
+              if (!ok) {
+                setRefused(
+                  'That didn’t go through — check you’re still related to them under People.',
+                );
+                return;
+              }
               setWho('');
               setNote('');
             });
@@ -96,9 +123,19 @@ export function ContributionsPanel({ bookId }: { bookId: string }): JSX.Element 
         </Button>
       </div>
 
+      {refused ? (
+        <div role="alert">
+          <Text tone="secondary" size="sm">
+            {refused}
+          </Text>
+        </div>
+      ) : null}
+
       {open.length === 0 ? (
         <Text tone="secondary" size="sm">
-          This book isn’t open to anyone yet. Nobody can see that it exists.
+          {related.size === 0
+            ? 'Add someone under People and link them to you, then you can invite them here.'
+            : 'This book isn’t open to anyone yet. Nobody can see that it exists.'}
         </Text>
       ) : (
         <div className={styles.peopleList}>

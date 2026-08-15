@@ -305,8 +305,9 @@ export async function listMyContributions(
 
 /**
  * Everything sent to this author's book, for review. Reads each INVITED person's contributions — an
- * un-invited person's file is never even looked at, so a revoked invitation stops new material from
- * surfacing while leaving what was already accepted in place.
+ * un-invited person's file is never even looked at. Note `listContributionInvites` does NOT filter revoked
+ * invitations, deliberately: revoking stops NEW offerings (§7.2), but what someone already sent stays
+ * reviewable, so the author isn't left with a decision they can no longer make.
  */
 export async function listContributionsForBook(
   fs: FileSystem,
@@ -463,6 +464,14 @@ export async function reapContributionsForPerson(
   await fs.remove(contributionsDir(personId)).catch(() => {});
   for (const person of await listPeople(fs, key).catch(() => [])) {
     if (person.id === personId) continue;
+    // The other direction: what OTHER people offered to the deleted person's books. Their whole tree went
+    // with `deletePerson`, taking the decisions with it — so without this every contributor keeps an orphan
+    // that reads as "waiting for them to read it" about someone who no longer exists.
+    for (const c of await listContributionsBy(fs, key, person.id)) {
+      if (c.toPersonId === personId) {
+        await fs.remove(contributionPath(person.id, c.id)).catch(() => {});
+      }
+    }
     for (const bookId of await fs
       .list(`people/${pathSegment(person.id)}/story/books`)
       .catch(() => [])) {

@@ -88,6 +88,7 @@ import {
   getNewMaterial,
   listChapters,
   listMemories,
+  buildStoryCorpus,
 } from '@selfos/core/books';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
@@ -15915,8 +15916,9 @@ test('contributions (73): Ben opens his book to Angel, she adds a memory, he kee
     await w.setViewportSize({ width: 360, height: 900 });
     await expectNoInnerOverflow(w);
     await w.setViewportSize({ width: 1280, height: 900 });
-    await w.getByRole('button', { name: 'Accept, credit Angel' }).click();
-    await expect(w.getByText(/Angel · accepted/)).toBeVisible();
+    // Accept it WITHOUT naming her — the harder half of §3.4: her words become material, her name does not.
+    await w.getByRole('button', { name: 'Accept without naming them' }).click();
+    await expect(w.getByText(/Angel · accepted, not named/)).toBeVisible();
 
     // Decrypt-level: the acceptance is in HIS book, and her text is in HER own space — the two-writer
     // split (§4.3) is what makes "he decides" and "she can withdraw" both true.
@@ -15933,14 +15935,19 @@ test('contributions (73): Ben opens his book to Angel, she adds a memory, he kee
       key,
     )) as { decisions: { contributorId: string; status: string; attributed: boolean }[] };
     expect(decisions.decisions).toHaveLength(1);
-    expect(decisions.decisions[0]).toMatchObject({
-      contributorId: 'angel-1',
-      status: 'accepted',
-      attributed: true,
-    });
+    expect(decisions.decisions[0]).toMatchObject({ contributorId: 'angel-1', status: 'accepted' });
+    // Her words live in her vault space, not his — he never wrote her file.
+    expect(decisions.decisions[0]?.attributed).toBe(false);
     // Her words live in her vault space, not his — he never wrote her file.
     const hers = await fs.list('people/angel-1/story/contributions');
     expect(hers).toHaveLength(1);
+
+    // It really is material the biographer may draw on — and the label carries no name, because he chose
+    // to absorb it rather than credit her.
+    const corpus = await buildStoryCorpus(fs, key, 'owner-1', bookId);
+    const item = corpus.items.find((i) => i.sourceRef.kind === 'contribution');
+    expect(item?.text).toContain('rebuilt the porch');
+    expect(item?.label).not.toContain('Angel');
 
     // --- She takes it back, and it leaves his book ----------------------------------------------
     await switchTogetherPerson(w, 'Angel');
@@ -15950,7 +15957,8 @@ test('contributions (73): Ben opens his book to Angel, she adds a memory, he kee
       .getByRole('button', { name: 'View' })
       .click();
     await w.getByRole('button', { name: 'Take it back' }).click();
-    await expect(w.getByText('you took this back')).toBeVisible();
+    // The row leaves the actionable list and is summarised — it isn't something she can act on any more.
+    await expect(w.getByText('You took one thing back.')).toBeVisible();
 
     await switchTogetherPerson(w, 'Ben');
     await w.getByRole('link', { name: 'Books' }).click();
@@ -15962,6 +15970,9 @@ test('contributions (73): Ben opens his book to Angel, she adds a memory, he kee
     // Gone from his review list entirely — withdrawal is unconditional, even after he accepted it.
     await expect(w.getByText('He rebuilt the porch that whole summer, alone.')).toHaveCount(0);
     await expect(w.getByText(/invited · nothing offered yet/)).toBeVisible();
+    // …and out of the corpus, so a later rewrite cannot draw on it. Consent is ongoing, not a one-time yes.
+    const afterWithdrawal = await buildStoryCorpus(fs, key, 'owner-1', bookId);
+    expect(afterWithdrawal.items.some((i) => i.sourceRef.kind === 'contribution')).toBe(false);
   } finally {
     await app.close();
   }

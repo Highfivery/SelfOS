@@ -4938,6 +4938,10 @@ export const StoryGapSchema = z.object({
    *  open and re-proposable — so the biographer asked again about the thing you had just spent twenty
    *  minutes telling it. Additive-optional; `status` stays derived on read, never persisted. */
   memoryId: z.string().optional(),
+  /** The accepted `question` contribution this gap came from (73 §3.4). Marks the gap as NOT model-derived,
+   *  so a gap pass preserves it instead of replacing it with its own output, and so it can be pruned when
+   *  the contribution stops being accepted. Additive-optional. */
+  contributionId: z.string().optional(),
   status: z.enum(['open', 'asked', 'answered']).optional(),
 });
 /** Persisted per-part coverage (§13.6.4) for the life map. */

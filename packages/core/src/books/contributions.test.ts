@@ -427,3 +427,54 @@ describe('boundaries', () => {
     expect(await fs.list('people/angel/story/contributions')).toEqual([]);
   });
 });
+
+describe('scoping the author’s review list', () => {
+  /** The guard this pins: a contributor invited to TWO of the same author's books. Without the per-book
+   *  check, an offering to one would surface under the other — and the earlier test couldn't reach it,
+   *  because a book with no invitation returns early before the check ever runs. */
+  it('keeps two books of the same author separate for one contributor', async () => {
+    const fs = memFileSystem();
+    const first = await seed(fs);
+    const second = (
+      await createBook(fs, key, {
+        personId: 'ben',
+        type: 'biography',
+        title: 'Second',
+        config,
+        now,
+      })
+    ).id;
+    await inviteContribution(fs, key, 'ben', { bookId: first, personId: 'angel', now });
+    await inviteContribution(fs, key, 'ben', { bookId: second, personId: 'angel', now });
+
+    await submitContribution(fs, key, 'angel', {
+      authorPersonId: 'ben',
+      bookId: first,
+      kind: 'memory',
+      text: 'for the first book',
+      now,
+    });
+
+    expect((await listContributionsForBook(fs, key, 'ben', first)).map((c) => c.text)).toEqual([
+      'for the first book',
+    ]);
+    expect(await listContributionsForBook(fs, key, 'ben', second)).toEqual([]);
+  });
+
+  it('deleting an AUTHOR clears what others offered them, so nothing waits on a ghost (§7.4)', async () => {
+    const fs = memFileSystem();
+    const bookId = await seed(fs);
+    await invited(fs, bookId);
+    await submitContribution(fs, key, 'angel', {
+      authorPersonId: 'ben',
+      bookId,
+      kind: 'memory',
+      text: 'the porch',
+      now,
+    });
+    expect(await listMyContributions(fs, key, 'angel')).toHaveLength(1);
+
+    await reapContributionsForPerson(fs, key, 'ben');
+    expect(await listMyContributions(fs, key, 'angel')).toEqual([]);
+  });
+});

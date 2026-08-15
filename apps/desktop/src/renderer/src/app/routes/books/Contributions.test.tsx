@@ -8,6 +8,7 @@ import type {
   ContributionReview,
   ContributionView,
   Person,
+  Relationship,
 } from '@shared/schemas';
 import { ContributeRoute } from './ContributeRoute';
 import { ContributionsPanel } from './ContributionsPanel';
@@ -30,6 +31,16 @@ function person(id: string, displayName: string): Person {
 
 const ME = person('me', 'Ben');
 const ANGEL = person('angel', 'Angel');
+/** The relationship IS the standing grant (72 §5.8) — an unrelated household member is not invitable. */
+const PARTNER: Relationship = {
+  id: 'rel',
+  schemaVersion: 2,
+  fromPersonId: 'me',
+  toPersonId: 'angel',
+  type: 'partner',
+  createdAt: 'now',
+  updatedAt: 'now',
+};
 
 const invitation: ContributionInviteView = {
   id: 'inv-1',
@@ -162,11 +173,17 @@ describe('contributing to someone else’s book (73 §3.2)', () => {
 });
 
 describe('the author’s side (73 §3.1/§3.4)', () => {
-  function renderPanel(overrides: Parameters<typeof installMockBridge>[0] = {}): void {
+  function renderPanel(
+    overrides: Parameters<typeof installMockBridge>[0] = {},
+    relationships: Relationship[] = [PARTNER],
+  ): void {
     useSessionStore.setState({ activePerson: ME } as never);
-    usePeopleStore.setState({ people: [ME, ANGEL] } as never);
+    usePeopleStore.setState({ people: [ME, ANGEL], relationships } as never);
     installMockBridge({
       peopleList: () => Promise.resolve([ME, ANGEL]),
+      // The panel loads people itself, so the mock has to serve the edge — seeding the store alone is
+      // overwritten by that load.
+      relationshipsList: () => Promise.resolve(relationships),
       booksContributionInvites: () => Promise.resolve([]),
       booksBookContributions: () => Promise.resolve([]),
       ...overrides,
@@ -175,7 +192,16 @@ describe('the author’s side (73 §3.1/§3.4)', () => {
   }
 
   it('invites one related person, never yourself, and says nobody can see the book yet', async () => {
-    const invite = vi.fn((): Promise<ContributionInvite | null> => Promise.resolve(null));
+    const invite = vi.fn(
+      (): Promise<ContributionInvite> =>
+        Promise.resolve({
+          schemaVersion: 1,
+          id: 'inv-1',
+          personId: 'angel',
+          bookId: 'b1',
+          invitedAt: 'now',
+        }),
+    );
     renderPanel({ booksInviteContribution: invite });
 
     expect(await screen.findByText(/isn’t open to anyone yet/)).toBeInTheDocument();
@@ -193,6 +219,22 @@ describe('the author’s side (73 §3.1/§3.4)', () => {
         note: 'The Denver years?',
       }),
     );
+  });
+
+  it('only offers people you are actually related to', async () => {
+    // Angel is in the household but not linked to Ben — the bridge would refuse her, so she isn't offered.
+    renderPanel({}, []);
+    expect(await screen.findByText(/Add someone under People and link them/)).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Angel' })).not.toBeInTheDocument();
+  });
+
+  it('says so when an invite is refused instead of appearing to do nothing', async () => {
+    // The edge can go between render and click; the bridge re-checks and returns null.
+    renderPanel({ booksInviteContribution: () => Promise.resolve(null) });
+    await screen.findByText(/isn’t open to anyone yet/);
+    await userEvent.selectOptions(screen.getByLabelText('Who to invite'), 'angel');
+    await userEvent.click(screen.getByRole('button', { name: 'Invite' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/didn’t go through/);
   });
 
   function pendingPanel(decide: ReturnType<typeof vi.fn>): void {

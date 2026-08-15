@@ -68,6 +68,8 @@ export function ContributeRoute(): JSX.Element {
             <Button onClick={() => navigate('/')}>Back to SelfOS</Button>
           </Stack>
         </Card>
+        {/* Everything they've offered, not just this book's: with the invitation gone there is no book to
+            scope by, and the point of this screen is that taking things back still works. */}
         {mine.length > 0 ? <Offered mine={mine} busy={busy} onWithdraw={withdraw} /> : null}
       </Stack>
     );
@@ -145,11 +147,15 @@ function Offered({
   busy: boolean;
   onWithdraw: (id: string) => void | Promise<void>;
 }): JSX.Element {
+  // Withdrawn rows are kept out of the live list — they aren't actionable, and a page that only ever grows
+  // makes the things you CAN still take back harder to find. They're summarised below instead.
+  const live = mine.filter((c) => c.status !== 'withdrawn');
+  const withdrawn = mine.length - live.length;
   return (
     <Card>
       <Stack gap={3}>
         <Heading level={2}>What you’ve added</Heading>
-        {mine.map((c) => (
+        {live.map((c) => (
           <div key={c.id} className={styles.peopleRow}>
             <span className={styles.peopleWho}>
               <span className={styles.peopleName}>{c.text}</span>
@@ -167,6 +173,11 @@ function Offered({
             )}
           </div>
         ))}
+        {withdrawn > 0 ? (
+          <Text size="sm" tone="tertiary">
+            {withdrawn === 1 ? 'You took one thing back.' : `You took ${withdrawn} things back.`}
+          </Text>
+        ) : null}
         <Text size="sm" tone="tertiary">
           Taking something back removes it from what their book draws on. Writing they’ve already
           done isn’t rewritten.

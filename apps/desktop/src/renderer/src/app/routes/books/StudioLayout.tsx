@@ -115,12 +115,17 @@ export function StudioLayout({
 
   // What household members have offered and are waiting on (73 §3.4). Loaded here so the Needs-you strip
   // can count it without the People tab being open.
+  // Contributions are for a book ONE person owns (73 §2) — a shared `ourStory` is co-authorship, a
+  // different model, so nothing is read or offered for it.
+  const contributable = !bookTypeView?.sharedWithPartner;
   const contributionReviews = useContributionStore((s) => s.reviews);
   const loadContributions = useContributionStore((s) => s.loadForBook);
   useEffect(() => {
-    void loadContributions(bundle.manifest.id);
-  }, [bundle.manifest.id, loadContributions]);
-  const pendingContributions = contributionReviews.filter((c) => c.status === 'pending').length;
+    if (contributable) void loadContributions(bundle.manifest.id);
+  }, [contributable, bundle.manifest.id, loadContributions]);
+  const pendingContributions = contributable
+    ? contributionReviews.filter((c) => c.status === 'pending').length
+    : 0;
 
   const [error, setError] = useState<string | null>(null);
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
@@ -479,7 +484,11 @@ export function StudioLayout({
 
       {tab === 'timeline' ? <TimelinePanel bundle={bundle} /> : null}
       {tab === 'people' ? (
-        <PeopleTab bookId={bookId} castPolicy={bookTypeView?.castPolicy ?? 'realNames'} />
+        <PeopleTab
+          bookId={bookId}
+          castPolicy={bookTypeView?.castPolicy ?? 'realNames'}
+          contributable={!bookTypeView?.sharedWithPartner}
+        />
       ) : null}
 
       {tab === 'interview' ? (

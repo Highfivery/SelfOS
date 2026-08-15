@@ -1,6 +1,6 @@
 # 61 — Together follow-through (agreements + pulse on the dashboard)
 
-> **Status:** **Approved** — _last updated 2026-07-14_
+> **Status:** **Built** — _last updated 2026-08-14_ (built 2026-07-14, plus the 2026-07-15 completed-commitments follow-up)
 >
 > The "things to do" that come out of a Together wrap-up (the **agreements ledger**) and the couples
 > **Pulse check-in** are today buried — agreements only surface at the very bottom of one session's

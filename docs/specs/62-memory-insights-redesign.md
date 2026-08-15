@@ -1,6 +1,6 @@
 # 62 — Memory insights redesign (flatten, edit-in-place, obviously editable)
 
-> **Status:** **Approved** — _last updated 2026-07-14_
+> **Status:** **Built** — _last updated 2026-08-14_ (built 2026-07-14, plus the §13 follow-on 2026-07-17)
 >
 > The Memory page reads as "a bunch of text boxes that make the page very long, and it isn't clear you
 > can edit them" (user, 2026-07-14). This redesign flattens the tile → area → single-card drill-down into

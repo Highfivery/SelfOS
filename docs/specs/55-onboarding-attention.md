@@ -1,6 +1,6 @@
 # 55 — Onboarding attention (new & unfinished questions)
 
-> **Status:** Approved — _last updated 2026-07-07_
+> **Status:** **Built** — _last updated 2026-08-14_ (built 2026-07-07; closes #109)
 >
 > After a person finishes onboarding, the intake catalog keeps growing (app updates add questions and whole
 > sections). Today nothing tells them. This spec adds a gentle, dismissible **attention indicator** — a

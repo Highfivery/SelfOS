@@ -1,6 +1,6 @@
 # 35 — Unified in-app notification system
 
-> **Status:** **Approved** — _last updated 2026-06-22_
+> **Status:** **Built** — _last updated 2026-08-14_ (built 2026-06-23)
 >
 > SelfOS surfaces alerts ad-hoc today — a sync-conflict `Banner` in content, a "keep your profile
 > fresh" Home card, no signal at all when a questionnaire recipient responds, and (with spec 36) a

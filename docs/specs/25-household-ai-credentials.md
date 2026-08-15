@@ -1,6 +1,6 @@
 # 25 — Household AI credentials (owner shares one key, members inherit it)
 
-> **Status:** Draft · _last updated 2026-06-21_
+> **Status:** **Built** · _last updated 2026-08-14_ (built + shipped 2026-06-21/22; §5.6 auto-share is live in production)
 >
 > SelfOS's Claude (and OpenAI dream-image) API keys are **device-local** secrets today, so a second
 > household member who installs the app and points at the **same shared vault** has a synced

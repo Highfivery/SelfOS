@@ -15060,6 +15060,14 @@ test('story (72): choose a kind of book — its own questions, and the 18+ gate 
     await expect(w.getByRole('button', { name: 'Write my book' })).toBeDisabled();
     await w.getByRole('button', { name: 'I’m 18 or older' }).click();
     await expect(w.getByRole('radio', { name: 'Unfiltered' })).toBeVisible();
+    // Its OWN registers (§3.2) — not the biography's, which offered an erotic book "Journalistic:
+    // reportorial and evidence-led" and "Warm: dinner-table narration".
+    await expect(w.getByRole('radio', { name: 'Raunchy' })).toBeVisible();
+    await expect(w.getByRole('radio', { name: 'Slow burn' })).toBeVisible();
+    await expect(w.getByRole('radio', { name: 'Journalistic' })).toHaveCount(0);
+    await expect(w.getByRole('radio', { name: 'Warm' })).toHaveCount(0);
+    // Subject matter is a separate, optional control — never a style tile that picks it for you.
+    await expect(w.getByRole('textbox', { name: 'What this one explores' })).toBeVisible();
     // 360px: a six-card picker plus the type's own questions must still scroll vertically only (§12).
     await w.setViewportSize({ width: 360, height: 780 });
     expect(

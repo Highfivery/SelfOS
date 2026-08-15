@@ -718,3 +718,18 @@ Two items are **deliberately deferred** rather than open:
 - 2026-08-13 — created. Supersedes spec [64](64-your-story.md) (whose §3–§19 remain the historical
   build record). Written after a three-pass review of the whole feature and a decrypt-level measurement
   of the two real books in the vault; all owner decisions resolved before drafting.
+- 2026-08-15 — **erotica gets its own registers and a per-book focus** (owner). It borrowed the biography's
+  `stylePresets` AND `interview`, so an erotic book was offered "Journalistic — reportorial and evidence-led"
+  and asked the McAdams life-story questions. Seven registers written for it (Sensory, Slow burn, Raunchy,
+  Tender, Confessional, Cinematic, Literary), and an interview that asks about desire, dynamics and limits.
+  **Style stays VOICE and `tier` stays heat** — the tier directive already declares it governs the style, so
+  the two never compete. Deliberately NOT offered: "kinky" or "taboo" style tiles. Those name CONTENT, and a
+  one-tap tile would push material regardless of what the person's own recorded desire says, inverting the
+  type's premise. Subject matter comes from their own material plus an optional free-text `focus` (free
+  text, not a kink checklist — 71 §5.3 deleted exactly that fixed taxonomy). The focus governs subject even
+  where their material is silent, because it is their instruction for their own book, but it explicitly does
+  NOT relax the doctrine's boundary: a recorded hard limit stays out. **A test was passing vacuously and is
+  fixed:** the register-governs-style test used `style: 'warm'`, which erotica no longer offers, so the
+  directive was absent, `indexOf` returned -1, and the ordering assertion was trivially true. The
+  every-style-has-a-preset invariant was also rewritten — `BookStyle` is now the UNION across types, so the
+  rule is that every style is offered by SOME type and every offered style is a real one.

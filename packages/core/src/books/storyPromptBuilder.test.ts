@@ -203,19 +203,43 @@ describe('buildChapterUserMessage', () => {
    */
   it('states the erotica register AFTER the style directive, and says it governs it', () => {
     const erotica = getBookType('erotica')!;
+    // Uses a style erotica ACTUALLY offers. This read `style: 'warm'`, which erotica stopped offering when
+    // it got its own registers — so the directive was absent, `indexOf` returned -1, and the ordering
+    // assertion below was trivially true. A tender register is the right test anyway: it's the one most
+    // likely to soften the explicit register if the ordering were wrong.
     const sys = buildBiographerSystem(
       erotica,
-      cfg({ style: 'warm', typeOptions: { tier: 'unfiltered' } }),
+      cfg({ style: 'tender', typeOptions: { tier: 'unfiltered' } }),
       'Ben',
     );
     expect(sys).toMatch(/most explicit/i);
     expect(sys).toMatch(/GOVERNS the style and tone directives above/);
-    expect(sys.indexOf('GOVERNS the style')).toBeGreaterThan(
-      sys.indexOf('Warm, intimate register'),
-    );
+    const styleAt = sys.indexOf('Tender register');
+    expect(styleAt).toBeGreaterThan(-1); // the style directive is really there to be governed
+    expect(sys.indexOf('GOVERNS the style')).toBeGreaterThan(styleAt);
     // The boundary is never softened by the register.
     expect(sys).toMatch(/consenting adult/i);
     expect(sys).toMatch(/Never a minor/i);
+  });
+
+  /** The focus is the author's instruction for their OWN book, so it governs subject — but it must never
+   *  read as permission to cross a recorded limit, which is the one thing this type cannot bend. */
+  it('carries this book’s focus, and says plainly that it does not relax the boundary', () => {
+    const erotica = getBookType('erotica')!;
+    const sys = buildBiographerSystem(
+      erotica,
+      cfg({ typeOptions: { tier: 'explicit', focus: 'a long build in a hotel room' } }),
+      'Ben',
+    );
+    expect(sys).toMatch(/THIS BOOK'S FOCUS: a long build in a hotel room/);
+    expect(sys).toMatch(/does NOT relax the boundary/);
+    expect(sys).toMatch(/hard limit stays out/i);
+  });
+
+  it('says nothing about focus when none was given, so the book draws on everything', () => {
+    const erotica = getBookType('erotica')!;
+    const sys = buildBiographerSystem(erotica, cfg({ typeOptions: { tier: 'explicit' } }), 'Ben');
+    expect(sys).not.toMatch(/THIS BOOK'S FOCUS/);
   });
 
   it('an unanswered choice falls back to its first option rather than going silent', () => {

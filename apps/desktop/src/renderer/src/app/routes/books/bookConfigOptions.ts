@@ -30,6 +30,16 @@ export const STYLE_CHOICES: { value: Style; label: string; hint: string }[] = [
     hint: 'Scene-forward and dramatic; vivid set-pieces.',
   },
   { value: 'poetic', label: 'Poetic', hint: 'Lyrical and image-dense; heightened rhythm.' },
+  // Erotica's registers (72 §3.2) — offered only by that type, via its own `stylePresets`.
+  { value: 'sensory', label: 'Sensory', hint: 'Close on the body; touch, heat, breath.' },
+  { value: 'slowBurn', label: 'Slow burn', hint: 'Tension and delay; the wait is the point.' },
+  { value: 'raunchy', label: 'Raunchy', hint: 'Coarse and unapologetic; no euphemism.' },
+  { value: 'tender', label: 'Tender', hint: 'Affection and closeness carry the scene.' },
+  {
+    value: 'confessional',
+    label: 'Confessional',
+    hint: 'Told straight to the reader, unguarded.',
+  },
 ];
 export const LENGTH_OPTIONS: SegmentOption<Length>[] = [
   { value: 'concise', label: 'Concise' },

@@ -780,8 +780,182 @@ export const EROTICA_BOOK_TYPE: BookType = {
     },
     { id: 'arc', label: 'One story', description: 'A single narrative with a build across it.' },
   ],
-  stylePresets: BIOGRAPHY_BOOK_TYPE.stylePresets,
-  interview: BIOGRAPHY_BOOK_TYPE.interview,
+  // Erotica's OWN registers. It used to borrow the biography list, which offered "Journalistic:
+  // reportorial and evidence-led" and "Warm: dinner-table narration" for an erotic book. Each of these is a
+  // VOICE — the `tier` option below is what says how explicit the book is, and its directive explicitly
+  // governs whatever style is chosen, so the two never compete. Deliberately absent: a "kinky" or "taboo"
+  // style. Those name CONTENT, not voice; a one-tap tile would push material regardless of what the
+  // person's own recorded desire says, which inverts this type's whole premise. Subject matter comes from
+  // their own material plus the optional `focus` below.
+  stylePresets: [
+    {
+      id: 'sensory',
+      label: 'Sensory',
+      directive:
+        'Sensory register: stay close on the body and the senses — touch, heat, breath, texture. Sensation carries the scene; keep interiority short and physical.',
+      specimen: {
+        first:
+          'I felt the heat of him before the touch landed — the whole room narrowed to the inch of skin waiting for it.',
+        third:
+          'She felt the heat of him before the touch landed — the whole room narrowed to the inch of skin waiting for it.',
+      },
+    },
+    {
+      id: 'slowBurn',
+      label: 'Slow burn',
+      directive:
+        'Slow-burn register: tension and delay are the point. Draw out anticipation, let almost-happening do the work, and make the reader wait — but never coy, and never a fade to black.',
+      specimen: {
+        first:
+          'He did not touch me. He just stood close enough that I could feel him deciding, and let me stand there in it.',
+        third:
+          'He did not touch her. He just stood close enough that she could feel him deciding, and let her stand there in it.',
+      },
+    },
+    {
+      id: 'raunchy',
+      label: 'Raunchy',
+      directive:
+        'Raunchy register: coarse, bawdy and unapologetic. Blunt words for bodies and acts, short punchy lines, no euphemism and no politeness. This is DICTION — how explicit the content itself is remains the register directive below.',
+      specimen: {
+        first:
+          'He wanted me filthy about it, and I was — I told him exactly what to do, and he did it.',
+        third:
+          'He wanted her filthy about it, and she was — she told him exactly what to do, and he did it.',
+      },
+    },
+    {
+      id: 'tender',
+      label: 'Tender',
+      directive:
+        'Tender register: affection and intimacy carry the scene. Closeness, care and being known matter as much as the act — warm without turning chaste or sentimental.',
+      specimen: {
+        first:
+          'He said my name like it still surprised him, and stayed there a while after, his hand flat over my heart.',
+        third:
+          'He said her name like it still surprised him, and stayed there a while after, his hand flat over her heart.',
+      },
+    },
+    {
+      id: 'confessional',
+      label: 'Confessional',
+      directive:
+        'Confessional register: told directly to the reader, close and unguarded, as if admitting it. Speak plainly about wanting — the frankness is the intimacy.',
+      specimen: {
+        first:
+          'I should tell you what I actually wanted that night, because I have never said it out loud.',
+        third:
+          'She would tell you what she actually wanted that night — she had never said it out loud.',
+      },
+    },
+    {
+      id: 'cinematic',
+      label: 'Cinematic',
+      directive:
+        'Cinematic register: scene-forward and visual. Build set-pieces — the room, the light, who moves where — and let the camera stay in the moment rather than cutting away.',
+      specimen: {
+        first:
+          'The door closed. The lamp threw everything into halves of light, and I crossed the room before I could think better of it.',
+        third:
+          'The door closed. The lamp threw everything into halves of light, and she crossed the room before she could think better of it.',
+      },
+    },
+    {
+      id: 'literary',
+      label: 'Literary',
+      directive:
+        'Literary register: image-led prose with deliberate rhythm. Erotica written as literary fiction — precise, unhurried, never ornamental for its own sake.',
+      specimen: {
+        first:
+          'Wanting had made a stranger of me, and I went to him the way you go toward weather you have already decided not to outrun.',
+        third:
+          'Wanting had made a stranger of her, and she went to him the way you go toward weather you have already decided not to outrun.',
+      },
+    },
+  ],
+  // Its own interview, too. This also borrowed the biography's, so a book about desire asked the McAdams
+  // life-story questions — a high point, a low point that stayed with you.
+  interview: {
+    framing:
+      'You are gathering what this person actually wants, so fiction can be built from it. Ask plainly and without euphemism; nothing here is a report of anything that happened, and a hard limit is never something to talk them out of.',
+    scenes: [
+      {
+        key: 'charge',
+        label: 'What holds the charge',
+        prompt:
+          'What is the thing you keep coming back to? The specific version, not the category.',
+      },
+      {
+        key: 'firstWant',
+        label: 'When you knew',
+        prompt: 'When did you first realise you wanted that? What was happening?',
+      },
+      {
+        key: 'unsaid',
+        label: 'What goes unsaid',
+        prompt: 'Something you have wanted and never asked for out loud. What stopped you?',
+      },
+      {
+        key: 'dynamic',
+        label: 'How you like it to go',
+        prompt:
+          'Who leads, who follows, and how does that shift? Describe it the way it plays out.',
+      },
+      {
+        key: 'setting',
+        label: 'Where it happens',
+        prompt:
+          'A place that carries it — the room, the time of day, what it feels like to be there.',
+      },
+      {
+        key: 'limits',
+        label: 'Where the edges are',
+        prompt:
+          'What is off the table entirely? A hard no is a hard no, and it stays out of the book.',
+      },
+    ],
+    categories: [
+      {
+        key: 'desire',
+        label: 'What you want',
+        examplePrompts: [
+          'What would you ask for if there were no wrong answer?',
+          'Is it the act itself, or something about how it happens?',
+        ],
+      },
+      {
+        key: 'fantasy',
+        label: 'Fantasy & scenario',
+        examplePrompts: [
+          'A scenario you return to — set the scene for me.',
+          'Is it something you would want in life, or something that works because it is imagined?',
+        ],
+      },
+      {
+        key: 'body',
+        label: 'Body & sensation',
+        examplePrompts: [
+          'What does it actually feel like when it is good?',
+          'What do you notice first?',
+        ],
+      },
+      {
+        key: 'boundaries',
+        label: 'Limits',
+        examplePrompts: [
+          'What is a hard no?',
+          'Is there something that is a maybe — good in fantasy, not in life?',
+        ],
+      },
+    ],
+    deepeningLadder: [
+      'Set the scene — where is this happening?',
+      'What is the build? What happens before anything happens?',
+      'What does it feel like in the body — where, and how?',
+      'What is said out loud, and what is not?',
+      'What makes this one different from any other version of it?',
+    ],
+  },
   gates: { adult: true },
   summary: {
     drawsOn: 'what you’ve told it about desire',
@@ -810,6 +984,20 @@ export const EROTICA_BOOK_TYPE: BookType = {
           description: 'Genuinely explicit, a step back from unfiltered.',
         },
       ],
+    },
+    // What THIS book is about (owner decision, 2026-08-15). By default the subject matter comes from the
+    // person's own recorded desire — their rated inventory, their yes/no/maybe answers, the open ground in
+    // their topic map — which is what makes this type honest. This narrows or adds to that for one book.
+    //
+    // Free text, deliberately, not a checklist of kinks: 71 §5.3 deleted exactly that fixed taxonomy
+    // because filing a person's own desire under fourteen built-in families is the thing that stops it
+    // being theirs. Their words are the vocabulary.
+    {
+      id: 'focus',
+      label: 'What this one explores',
+      kind: 'text',
+      help: 'Optional. Leave it blank and this book draws on everything you’ve told SelfOS you want.',
+      placeholder: 'e.g. being watched; a long build in a hotel room; giving up control',
     },
   ],
   spineFor: (o) => (o['arc'] === 'arc' ? { kind: 'eras' } : { kind: 'vignettes' }),

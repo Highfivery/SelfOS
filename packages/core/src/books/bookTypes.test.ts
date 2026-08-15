@@ -57,11 +57,19 @@ describe('BookType registry (64)', () => {
     expect(defaults[0]?.id).toBe('chronicle');
   });
 
-  it('offers a style preset for every BookStyle, each with a directive', () => {
-    const presetIds = BIOGRAPHY_BOOK_TYPE.stylePresets.map((p) => p.id).sort();
-    expect(presetIds).toEqual([...BookStyleSchema.options].sort());
-    for (const preset of BIOGRAPHY_BOOK_TYPE.stylePresets) {
-      expect(preset.directive.length).toBeGreaterThan(0);
+  /**
+   * `BookStyle` is the UNION across every type; each type offers a subset via `stylePresets` (erotica's
+   * registers are not on offer for a biography, and vice versa). So the invariant is two-way: no type may
+   * offer a style the enum doesn't know, and no enum entry may be offered by nothing — a style nothing
+   * offers is dead, and a preset id outside the enum won't survive a config round-trip.
+   */
+  it('every style is offered by some type, and every offered style is a real BookStyle', () => {
+    const offered = new Set(listBookTypes().flatMap((t) => t.stylePresets.map((p) => p.id)));
+    expect([...offered].sort()).toEqual([...BookStyleSchema.options].sort());
+    for (const type of listBookTypes()) {
+      for (const preset of type.stylePresets) {
+        expect(preset.directive.length, `${type.id}/${preset.id}`).toBeGreaterThan(0);
+      }
     }
   });
 
@@ -308,6 +316,76 @@ describe('BookType registry (64)', () => {
           `${type.id} with ${JSON.stringify(answers)}`,
         ).toBe(type.spine.kind === 'pages');
       }
+    }
+  });
+});
+
+describe('erotica has its own registers (72 §3.2)', () => {
+  const erotica = getBookType('erotica')!;
+
+  it('offers voices written for it, and none of the biography’s', () => {
+    const ids = erotica.stylePresets.map((p) => p.id);
+    expect(ids).toEqual([
+      'sensory',
+      'slowBurn',
+      'raunchy',
+      'tender',
+      'confessional',
+      'cinematic',
+      'literary',
+    ]);
+    // The bug this replaced: it borrowed the biography list, so an erotic book was offered
+    // "Journalistic — reportorial and evidence-led" and "Warm — dinner-table narration".
+    expect(ids).not.toContain('journalistic');
+    expect(ids).not.toContain('warm');
+    expect(ids).not.toContain('plain');
+  });
+
+  /** Style is VOICE; how explicit the book is belongs to `tier`. Two dials for one outcome is the failure. */
+  it('keeps voice and heat as separate controls', () => {
+    const tier = erotica.options?.find((o) => o.id === 'tier');
+    expect(tier?.choices?.map((c) => c.value)).toEqual(['unfiltered', 'explicit']);
+    // No style promises a heat level — that would compete with the tier rather than being governed by it.
+    for (const preset of erotica.stylePresets) {
+      expect(preset.directive.toLowerCase()).not.toMatch(/\bmore explicit\b|\bless explicit\b/);
+    }
+  });
+
+  /** Kink and taboo name CONTENT. As a one-tap style they'd push material regardless of what the person's
+   *  own recorded desire says — the inverse of this type's premise. Subject matter comes from their
+   *  material plus the optional `focus`. */
+  it('offers no style that picks the subject matter for them', () => {
+    const ids = erotica.stylePresets.map((p) => p.id);
+    expect(ids).not.toContain('kinky');
+    expect(ids).not.toContain('taboo');
+    const focus = erotica.options?.find((o) => o.id === 'focus');
+    expect(focus?.kind).toBe('text'); // free text, not a fixed kink taxonomy (71 §5.3)
+    expect(focus?.required).toBeFalsy(); // blank = draw on everything they've said they want
+  });
+
+  it('every preset carries a directive and a specimen in both voices', () => {
+    for (const preset of erotica.stylePresets) {
+      expect(preset.directive.length, `${preset.id} directive`).toBeGreaterThan(20);
+      expect(preset.specimen.first.length, `${preset.id} first`).toBeGreaterThan(0);
+      expect(preset.specimen.third.length, `${preset.id} third`).toBeGreaterThan(0);
+      // The commission screen shows one or the other, so they must actually differ.
+      expect(preset.specimen.first).not.toBe(preset.specimen.third);
+    }
+  });
+
+  it('asks about desire, not a life story', () => {
+    // It borrowed the biography's interview too, so it asked for "a low point that stayed with you".
+    const keys = erotica.interview.scenes.map((s) => s.key);
+    expect(keys).not.toContain('lowPoint');
+    expect(keys).not.toContain('highPoint');
+    expect(keys).toContain('charge');
+    // A type whose doctrine makes hard limits absolute must actually ask what they are.
+    expect(keys).toContain('limits');
+  });
+
+  it('every style id is a real BookStyle', () => {
+    for (const preset of erotica.stylePresets) {
+      expect(BookStyleSchema.safeParse(preset.id).success, preset.id).toBe(true);
     }
   });
 });

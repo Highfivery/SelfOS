@@ -11,6 +11,7 @@ import {
   getPerson,
   listPeople,
   listRelationships,
+  ageFromBirthday,
   listRelatedPeople,
   profileLines,
   relationshipTypesFromSubjectToViewer,
@@ -130,6 +131,59 @@ async function safely<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
 /** Build the exclusion predicates once (§3.3). `person`/`source` are structural drops; `topic`/`passage` and
  *  the display NAME of each excluded person are text-avoidance phrases applied to both item text and profile
  *  lines, so an excluded person's own-material mentions are dropped too — not just cross-shared facts. */
+/**
+ * Relationships whose people never appear in an adult-gated book, whatever their recorded age (73/72 §8).
+ *
+ * Age alone is not enough: a birthday is optional, so an unknown age would silently fail OPEN — exactly the
+ * wrong direction here. These are the descendant and dependent relationships, excluded on the relationship
+ * itself so a missing birthday changes nothing. An adult child is excluded too, deliberately: nobody wants
+ * their grown son named in their erotica either.
+ */
+const NEVER_IN_AN_ADULT_BOOK: ReadonlySet<string> = new Set([
+  'child',
+  'stepChild',
+  'ward',
+  'grandchild',
+  'greatGrandchild',
+  'nieceNephew',
+]);
+
+/**
+ * The people an adult-gated book must never name (72 §8). Returns `person` exclusions, which the existing
+ * filter already applies in BOTH directions: their own records drop out, AND any item whose text mentions
+ * their display name drops out. That second half is what matters most — a child's name usually arrives
+ * inside the subject's own prose ("the summer Emma was born"), not as a record about them.
+ *
+ * Anyone under 18 by a recorded birthday is excluded regardless of relationship, so a minor who is not a
+ * descendant is covered too. This errs toward over-removal, which is the correct direction for this one.
+ */
+async function adultBookExclusions(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  now: Date,
+): Promise<ExclusionItem[]> {
+  const relationships = await safely(() => listRelationships(fs, key), []);
+  const people = await safely(() => listPeople(fs, key), []);
+  const out: ExclusionItem[] = [];
+  for (const related of await safely(() => listRelatedPeople(fs, key, personId), [])) {
+    const types = relationshipTypesFromSubjectToViewer(personId, related.id, relationships);
+    const birthday = people.find((p) => p.id === related.id)?.birthday;
+    const age = birthday ? ageFromBirthday(birthday, now) : null;
+    const isMinor = age !== null && age < 18;
+    const isDescendant = types.some((t) => NEVER_IN_AN_ADULT_BOOK.has(t));
+    if (isMinor || isDescendant) {
+      out.push({
+        kind: 'person',
+        value: related.id,
+        id: `auto-minor-${related.id}`,
+        createdAt: '',
+      });
+    }
+  }
+  return out;
+}
+
 function makeExclusionFilter(
   exclusions: ExclusionItem[],
   personNames: Map<string, string>,
@@ -211,7 +265,7 @@ async function buildSubjectCorpus(
   bookOwnerRef: string,
   bookId: string,
   exclusions: ExclusionItem[] = [],
-  opts: { excludeRestricted?: boolean } = {},
+  opts: { excludeRestricted?: boolean; now?: Date } = {},
 ): Promise<StoryCorpus> {
   const person = await getPerson(fs, key, personId);
   if (!person) return { personName: '', profile: [], items: [] };
@@ -219,7 +273,17 @@ async function buildSubjectCorpus(
   // Resolve every household person's display name so a `person` exclusion can also avoid their name in text.
   const people = await safely(() => listPeople(fs, key), []);
   const personNames = new Map(people.map((p) => [p.id, p.displayName]));
-  const { keepItem, keepProfileLine } = makeExclusionFilter(exclusions, personNames);
+  // An adult-gated book (erotica) never names the subject's children — structurally, not by asking the
+  // model nicely. These ride the SAME exclusion path the person's own choices use, so a child's name is
+  // avoided in text as well as dropped as a record.
+  const bookTypeForGate = await safely(
+    async () => getBookType((await getBook(fs, key, bookOwnerRef, bookId))?.type ?? ''),
+    undefined,
+  );
+  const effectiveExclusions = bookTypeForGate?.gates?.adult
+    ? [...exclusions, ...(await adultBookExclusions(fs, key, personId, opts.now ?? new Date()))]
+    : exclusions;
+  const { keepItem, keepProfileLine } = makeExclusionFilter(effectiveExclusions, personNames);
   const items: CorpusItem[] = [];
   // A book may be built from HAND-PICKED records rather than everything — a dream book made of five
   // particular dreams (72 §4.2). It narrows only the KIND the type lets you pick, so choosing five dreams

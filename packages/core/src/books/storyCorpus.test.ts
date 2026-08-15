@@ -21,8 +21,15 @@ import { appendMessage, createSession } from '../together/togetherService';
 import { createAssignment, saveQuestionnaire, saveResponse } from '../questionnaires';
 import { buildStoryCorpus, corpusText, getStoryCorpusStats } from './storyCorpus';
 import {
+  decideContribution,
+  inviteContribution,
+  submitContribution,
+  withdrawContribution,
+} from './contributions';
+import {
   addPhotoAnswer,
   addUploadedPhoto,
+  createBook,
   saveQuotes,
   setStoryImageAnalysis,
 } from './storyService';
@@ -977,5 +984,144 @@ describe('the shared "Our Story" corpus (72 §5.8)', () => {
     const solo = await buildStoryCorpus(fs, key, 'ben', 'book-1');
     expect(solo.personName).toBe('Ben');
     expect(corpusText(solo)).not.toContain('Angel took the night shift');
+  });
+});
+
+describe('accepted contributions reach the corpus (73 §3.4)', () => {
+  const now = new Date('2026-08-14T00:00:00.000Z');
+  const cfg = {
+    voice: 'third' as const,
+    style: 'warm' as const,
+    length: 'standard' as const,
+    autoRefresh: true,
+    typeOptions: {},
+    sourceIds: [],
+  };
+
+  async function invitedPair(fs: ReturnType<typeof fresh>): Promise<string> {
+    await savePerson(fs, key, person('ben', 'Ben'));
+    await savePerson(fs, key, person('angel', 'Angel'));
+    await saveRelationship(fs, key, {
+      id: 'rel-partner',
+      schemaVersion: 2,
+      fromPersonId: 'ben',
+      toPersonId: 'angel',
+      type: 'partner',
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    const book = await createBook(fs, key, {
+      personId: 'ben',
+      type: 'biography',
+      title: 'The Weight of Quiet',
+      config: cfg,
+      now,
+    });
+    await inviteContribution(fs, key, 'ben', { bookId: book.id, personId: 'angel', now });
+    return book.id;
+  }
+
+  async function offered(
+    fs: ReturnType<typeof fresh>,
+    bookId: string,
+    text: string,
+    kind: 'memory' | 'question' = 'memory',
+  ): Promise<string> {
+    const c = await submitContribution(fs, key, 'angel', {
+      authorPersonId: 'ben',
+      bookId,
+      kind,
+      text,
+      now,
+    });
+    return c!.id;
+  }
+
+  it('only once ACCEPTED — and it leaves again the moment she withdraws it', async () => {
+    const fs = fresh();
+    const bookId = await invitedPair(fs);
+    const id = await offered(fs, bookId, 'He rebuilt the porch that whole summer, alone.');
+
+    // Pending is not material: the author has not agreed to it yet.
+    expect(corpusText(await buildStoryCorpus(fs, key, 'ben', bookId))).not.toContain(
+      'rebuilt the porch',
+    );
+
+    await decideContribution(fs, key, 'ben', {
+      bookId,
+      contributionId: id,
+      status: 'accepted',
+      now,
+    });
+    const built = await buildStoryCorpus(fs, key, 'ben', bookId);
+    expect(corpusText(built)).toContain('rebuilt the porch');
+    // The attribution rides on the item LABEL, which is what the prompt builder renders beside the text.
+    expect(built.items.find((i) => i.sourceRef.kind === 'contribution')?.label).toBe(
+      'Angel remembers',
+    );
+
+    // Consent is ongoing: taking it back removes it from the very next build, with no author action.
+    await withdrawContribution(fs, key, 'angel', {
+      contributionId: id,
+      now: new Date('2026-08-15T00:00:00.000Z'),
+    });
+    expect(corpusText(await buildStoryCorpus(fs, key, 'ben', bookId))).not.toContain(
+      'rebuilt the porch',
+    );
+  });
+
+  it('an unattributed acceptance carries the words but not her name', async () => {
+    const fs = fresh();
+    const bookId = await invitedPair(fs);
+    const id = await offered(fs, bookId, 'He never once said he was tired.');
+    await decideContribution(fs, key, 'ben', {
+      bookId,
+      contributionId: id,
+      status: 'accepted',
+      attributed: false,
+      now,
+    });
+    const built = await buildStoryCorpus(fs, key, 'ben', bookId);
+    expect(corpusText(built)).toContain('never once said he was tired');
+    const item = built.items.find((i) => i.sourceRef.kind === 'contribution');
+    expect(item?.label).toBe('Someone close to them remembers');
+    expect(item?.label).not.toContain('Angel');
+  });
+
+  it('an accepted QUESTION steers the interview, never the prose', async () => {
+    const fs = fresh();
+    const bookId = await invitedPair(fs);
+    const id = await offered(fs, bookId, 'Ask him why he left that job.', 'question');
+    await decideContribution(fs, key, 'ben', {
+      bookId,
+      contributionId: id,
+      status: 'accepted',
+      now,
+    });
+    expect(corpusText(await buildStoryCorpus(fs, key, 'ben', bookId))).not.toContain(
+      'why he left that job',
+    );
+  });
+
+  it('never reaches a DIFFERENT book of the same author', async () => {
+    const fs = fresh();
+    const bookId = await invitedPair(fs);
+    const id = await offered(fs, bookId, 'He rebuilt the porch that whole summer, alone.');
+    await decideContribution(fs, key, 'ben', {
+      bookId,
+      contributionId: id,
+      status: 'accepted',
+      now,
+    });
+    const other = await createBook(fs, key, {
+      personId: 'ben',
+      type: 'biography',
+      title: 'Other',
+      config: cfg,
+      now,
+    });
+    expect(corpusText(await buildStoryCorpus(fs, key, 'ben', other.id))).not.toContain(
+      'rebuilt the porch',
+    );
   });
 });

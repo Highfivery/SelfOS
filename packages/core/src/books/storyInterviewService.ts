@@ -32,6 +32,7 @@ import {
   validateQuestionnaire,
 } from '../questionnaires/questionnaireService';
 import { getResponse } from '../questionnaires/responseService';
+import { acceptedQuestionContributions, setContributionGapId } from './contributions';
 import { isLiving } from './storyEditions';
 import { resolvePersonOptionNames } from './castRegister';
 import { getMemory } from './storyMemoryService';
@@ -402,12 +403,48 @@ const ANSWERED_CHECKIN_STATUSES = new Set(['submitted', 'analyzed']);
  * it's submitted. Derived on read (never persisted) so it stays correct even when the check-in is answered from
  * the Inbox. A gap whose check-in was declined/expired falls back to `open` (askable again).
  */
+/**
+ * Seed a gap for each accepted `question` contribution that hasn't become one yet (73 §3.4) — FREE, no AI.
+ * Runs on the gaps read so the question a household member asked joins "what it wants next" without waiting
+ * for the next metered gap pass. The decision is stamped with the gap id, so a second read mints nothing:
+ * that stamp, not a text match, is what makes this idempotent. Withdrawing the question drops it from the
+ * accepted list, so the stale gap ages out with the next pass rather than being force-deleted here.
+ */
+async function seedContributionGaps(
+  fs: AiDeps['fs'],
+  key: Uint8Array,
+  personId: string,
+  bookId: string,
+): Promise<void> {
+  const pending = (await acceptedQuestionContributions(fs, key, personId, bookId)).filter(
+    (q) => !q.gapId,
+  );
+  if (pending.length === 0) return;
+  const interview = await getInterviewState(fs, key, personId, bookId);
+  const gaps: NonNullable<typeof interview.lastGaps> = [...(interview.lastGaps ?? [])];
+  for (const q of pending) {
+    const gap = {
+      id: uuid(),
+      dimension: 'Asked by someone close to you',
+      label: `${q.contributorName} wants to know`,
+      focus: q.text,
+      // Top priority: a real person asked this, which beats anything the model inferred.
+      priority: 10,
+    };
+    gaps.push(gap);
+    await setContributionGapId(fs, key, personId, bookId, q.id, gap.id);
+  }
+  const live = await getInterviewState(fs, key, personId, bookId);
+  await saveInterviewState(fs, key, personId, bookId, { ...live, lastGaps: gaps });
+}
+
 export async function getStoryGaps(
   fs: AiDeps['fs'],
   key: Uint8Array,
   personId: string,
   bookId: string,
 ): Promise<StoryGapsView> {
+  await seedContributionGaps(fs, key, personId, bookId).catch(() => {});
   const interview = await getInterviewState(fs, key, personId, bookId);
   const outline = await getOutline(fs, key, personId, bookId);
   const chapters = await listChapters(fs, key, personId, bookId);

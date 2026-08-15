@@ -11,8 +11,10 @@ export function NeedsYou({
   drift,
   toReviewCount,
   openTodoCount,
+  contributionCount = 0,
   onReview,
   onOpenTodos,
+  onOpenContributions,
   onApprove,
   onDismiss,
   onWeaveIn,
@@ -25,8 +27,11 @@ export function NeedsYou({
   drift: DriftCard[];
   toReviewCount: number;
   openTodoCount: number;
+  /** Offerings from household members waiting on an accept/decline (73 §3.4). */
+  contributionCount?: number;
   onReview: () => void;
   onOpenTodos: () => void;
+  onOpenContributions?: () => void;
   onApprove: (proposalId: string) => void | Promise<void>;
   onDismiss: (proposalId: string) => void;
   onWeaveIn: (chapterId: string) => void | Promise<void>;
@@ -38,7 +43,11 @@ export function NeedsYou({
   busy: boolean;
 }): JSX.Element {
   const nothing =
-    proposals.length === 0 && drift.length === 0 && toReviewCount === 0 && openTodoCount === 0;
+    proposals.length === 0 &&
+    drift.length === 0 &&
+    toReviewCount === 0 &&
+    openTodoCount === 0 &&
+    contributionCount === 0;
   if (nothing) {
     return (
       <div className={styles.caughtUp}>
@@ -49,7 +58,11 @@ export function NeedsYou({
     );
   }
   const count =
-    proposals.length + drift.length + (toReviewCount > 0 ? 1 : 0) + (openTodoCount > 0 ? 1 : 0);
+    proposals.length +
+    drift.length +
+    (toReviewCount > 0 ? 1 : 0) +
+    (openTodoCount > 0 ? 1 : 0) +
+    (contributionCount > 0 ? 1 : 0);
   return (
     <div className={styles.needs}>
       <div className={styles.needsHead}>
@@ -126,6 +139,24 @@ export function NeedsYou({
             </Text>
             <Inline>
               <Button onClick={onReview}>Review ›</Button>
+            </Inline>
+          </div>
+        ) : null}
+        {contributionCount > 0 && onOpenContributions ? (
+          <div className={styles.needCard}>
+            <span className={styles.needKind}>From someone else</span>
+            <Text size="sm" className={styles.needTitle}>
+              {contributionCount === 1
+                ? 'Someone added something'
+                : `${contributionCount} things people added`}
+            </Text>
+            <Text size="sm" tone="tertiary">
+              Nothing goes into your book until you say so.
+            </Text>
+            <Inline>
+              <Button aria-label="Read what people added" onClick={onOpenContributions}>
+                Read {contributionCount === 1 ? 'it' : 'them'} ›
+              </Button>
             </Inline>
           </div>
         ) : null}

@@ -1,6 +1,6 @@
 # 73 — Household contributions
 
-> **Status:** **Draft** (awaiting approval) — _last updated 2026-08-14_
+> **Status:** **Approved** — _last updated 2026-08-14_
 >
 > A book is written from one person's own record, which means it can only ever know what that person
 > thought to say. This lets the people who were **there** add to it — a memory, a question worth asking, a
@@ -219,6 +219,7 @@ generation the author already pays for.
 | `books:inviteContribution`       | `{ bookId, personId, note? }`              | `ContributionInvite`   | Author only; person must be related            |
 | `books:revokeContributionInvite` | `{ bookId, personId }`                     | `ContributionInvite[]` | Accepted contributions survive                 |
 | `books:myInvitations`            | —                                          | `InvitationView[]`     | Contributor-side; author's name + note         |
+| `books:contributionInvites`      | `{ bookId }`                               | `ContributionInvite[]` | Author only; who the book is open to           |
 | `books:submitContribution`       | `{ invitationId, kind, text, chapterId? }` | `ContributionView`     | Re-checks live invite + edge                   |
 | `books:withdrawContribution`     | `{ contributionId }`                       | `ContributionView[]`   | Contributor only, any time                     |
 | `books:myContributions`          | —                                          | `ContributionView[]`   | Status only — never the book                   |

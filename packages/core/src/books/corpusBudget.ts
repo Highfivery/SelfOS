@@ -137,6 +137,9 @@ const FOUNDATIONS_PRIORITY: Record<StorySourceKind, number> = {
   // A verbatim line the person said, already author-approved — gold for a biography, so it survives a long life.
   quote: 8,
   memory: 8,
+  // Someone close to the subject wrote this ABOUT a specific moment, and the author accepted it — dated,
+  // scene-shaped, and deliberately offered, so it earns a memory's weight rather than an insight's.
+  contribution: 8,
   insight: 7,
   goal: 6,
   dream: 5,

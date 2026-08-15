@@ -190,6 +190,11 @@ import {
   type AgreementSummary,
   StoryCreateInputSchema,
   StoryAskGapInputSchema,
+  ContributionDecideSchema,
+  ContributionInviteInputSchema,
+  ContributionInviteRefSchema,
+  ContributionRefSchema,
+  ContributionSubmitSchema,
   StoryBookRefSchema,
   StorySetQuoteStatusInputSchema,
   StoryResolveContinuityInputSchema,
@@ -249,6 +254,10 @@ import {
   type StoryContinuityResult,
   type MarkupMark,
   type SharedBookSummary,
+  type ContributionInvite,
+  type ContributionInviteView,
+  type ContributionReview,
+  type ContributionView,
   type StoryBookBundle,
   type BookShelfEntry,
   type StoryBookTypeView,
@@ -579,6 +588,16 @@ import {
   publishBook,
   unpublishBook,
   reapReadReceiptsAbout,
+  decideContribution,
+  inviteContribution,
+  listContributionInvites,
+  listContributionsForBook,
+  listMyContributions,
+  listMyInvitations,
+  reapContributionsForPerson,
+  revokeContributionInvite,
+  submitContribution,
+  withdrawContribution,
   readBookBundle,
   readSharedBook,
   readOwnBook,
@@ -2532,6 +2551,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Reap story read receipts OTHER readers hold about the deleted author's books (§13.6.8 both directions;
       // the deleted person's own receipts went with `deletePerson`). Best-effort cleanup.
       await reapReadReceiptsAbout(ctx.fs, ctx.key, personId);
+      // Reap contributions in BOTH directions (73 §7.4) — what they offered to other people's books, and
+      // the invitations and accept/decline decisions those authors hold about them. Their own contribution
+      // folder went with `deletePerson`; this clears the residue that lives in someone else's space.
+      await reapContributionsForPerson(ctx.fs, ctx.key, personId);
     },
     relationshipsList: async (): Promise<Relationship[]> => {
       const ctx = await host.vaultAndKey();
@@ -7868,6 +7891,105 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         await ownerOf(ctx.fs, ctx.key, personId, bookId),
         bookId,
       );
+    },
+    // --- Household contributions (73) -------------------------------------------------------------------
+    // The trust boundary for all eight: `story.own` plus the ACTIVE person. The author ops pass
+    // `activePersonId` as the author, so they can only ever touch a book of their own; the contributor ops
+    // pass it as the contributor, so they can only touch their own offerings. Core re-checks the live
+    // invitation and relationship edge on every submit, so nothing here relies on what the UI showed.
+    booksInviteContribution: async (input): Promise<ContributionInvite | null> => {
+      const { bookId, personId: invitee, note } = ContributionInviteInputSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      const invite = await inviteContribution(ctx.fs, ctx.key, personId, {
+        bookId,
+        personId: invitee,
+        ...(note ? { note } : {}),
+        now: new Date(),
+      });
+      return invite;
+    },
+    booksRevokeContributionInvite: async (input): Promise<ContributionInvite[]> => {
+      const { bookId, personId: invitee } = ContributionInviteRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      await revokeContributionInvite(ctx.fs, ctx.key, personId, {
+        bookId,
+        personId: invitee,
+        now: new Date(),
+      });
+      return listContributionInvites(ctx.fs, ctx.key, personId, bookId);
+    },
+    booksMyInvitations: async (): Promise<ContributionInviteView[]> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      return listMyInvitations(ctx.fs, ctx.key, personId);
+    },
+    booksContributionInvites: async (input): Promise<ContributionInvite[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      return listContributionInvites(ctx.fs, ctx.key, personId, bookId);
+    },
+    booksSubmitContribution: async (input): Promise<ContributionView | null> => {
+      const { invitationId, kind, text, chapterId } = ContributionSubmitSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return null;
+      // Resolve the invitation from the ones actually open to THEM — an id for someone else's invitation
+      // simply isn't in this list, so it can't address a book they were never invited to (§8.2).
+      const invitations = await listMyInvitations(ctx.fs, ctx.key, personId);
+      const invite = invitations.find((i) => i.id === invitationId);
+      if (!invite) return null;
+      const created = await submitContribution(ctx.fs, ctx.key, personId, {
+        authorPersonId: invite.authorPersonId,
+        bookId: invite.bookId,
+        kind,
+        text,
+        ...(chapterId ? { chapterId } : {}),
+        now: new Date(),
+      });
+      if (!created) return null;
+      const mine = await listMyContributions(ctx.fs, ctx.key, personId);
+      return mine.find((c) => c.id === created.id) ?? null;
+    },
+    booksWithdrawContribution: async (input): Promise<ContributionView[]> => {
+      const { contributionId } = ContributionRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      await withdrawContribution(ctx.fs, ctx.key, personId, { contributionId, now: new Date() });
+      return listMyContributions(ctx.fs, ctx.key, personId);
+    },
+    booksMyContributions: async (): Promise<ContributionView[]> => {
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      return listMyContributions(ctx.fs, ctx.key, personId);
+    },
+    booksBookContributions: async (input): Promise<ContributionReview[]> => {
+      const { bookId } = StoryBookRefSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      return listContributionsForBook(ctx.fs, ctx.key, personId, bookId);
+    },
+    booksDecideContribution: async (input): Promise<ContributionReview[]> => {
+      const { bookId, contributionId, status, attributed } = ContributionDecideSchema.parse(input);
+      const ctx = await host.vaultAndKey();
+      const personId = ctx ? await activePersonId() : null;
+      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'story.own'))) return [];
+      return decideContribution(ctx.fs, ctx.key, personId, {
+        bookId,
+        contributionId,
+        status,
+        ...(attributed === undefined ? {} : { attributed }),
+        now: new Date(),
+      });
     },
     // The batch markup revision — the one AI call in the markup layer (§3.3.1/§5.3).
     booksApplyMarkup: async (input): Promise<StoryRevisionResult> => {

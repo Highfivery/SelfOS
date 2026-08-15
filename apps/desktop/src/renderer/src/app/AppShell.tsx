@@ -34,6 +34,7 @@ import { useDreamStore } from '../stores/dreamStore';
 import { useInsightStore } from '../stores/insightStore';
 import { useGoalStore } from '../stores/goalStore';
 import { useStoryStore } from '../stores/storyStore';
+import { useContributionStore } from '../stores/contributionStore';
 import { useStoryMemoryStore } from '../stores/storyMemoryStore';
 import { useCoverageStore } from '../stores/coverageStore';
 import { useChallengeStore } from '../stores/challengeStore';
@@ -178,6 +179,7 @@ export function AppShell(): JSX.Element {
     useTogetherStore.getState().reset(); // Together sessions are per-person (58 §5.3)
     useImagePrefsStore.getState().reset(); // image style/direction/toggle are per-person (image-settings amendment)
     useStoryStore.getState().reset(); // Your Story books are per-person (64 §5.7)
+    useContributionStore.getState().reset(); // both halves of contributions are per-person (73 §4)
     useStoryMemoryStore.getState().reset(); // "Share a memory" chats are per-person (64 §14)
     useCoverageStore.getState().reset(); // the "what SelfOS has explored" view is per-person (69 §3.4)
     void useNotificationStore.getState().load();

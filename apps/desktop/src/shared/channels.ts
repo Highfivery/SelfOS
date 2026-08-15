@@ -70,6 +70,11 @@ import type {
   StoryImageEntry,
   StoryImageResult,
   StoryPhotoAnalyzeResult,
+  ContributionInvite,
+  ContributionInviteView,
+  ContributionKind,
+  ContributionReview,
+  ContributionView,
   StoryPhotoAnswer,
   StoryPlacementSuggestResult,
   StoryInterviewCadenceResult,
@@ -550,6 +555,15 @@ export const IpcChannels = {
   booksSuggestPlacement: 'books:suggestPlacement',
   booksSetPlacement: 'books:setPlacement',
   booksRemovePlacement: 'books:removePlacement',
+  booksInviteContribution: 'books:inviteContribution',
+  booksRevokeContributionInvite: 'books:revokeContributionInvite',
+  booksMyInvitations: 'books:myInvitations',
+  booksContributionInvites: 'books:contributionInvites',
+  booksSubmitContribution: 'books:submitContribution',
+  booksWithdrawContribution: 'books:withdrawContribution',
+  booksMyContributions: 'books:myContributions',
+  booksBookContributions: 'books:bookContributions',
+  booksDecideContribution: 'books:decideContribution',
   coachingGetSynthesis: 'coaching:getSynthesis',
   coachingSynthesize: 'coaching:synthesize',
   relationshipsGetSynthesis: 'relationships:getSynthesis',
@@ -1738,6 +1752,46 @@ export interface SelfosBridge {
     chapterId: string;
     imageId: string;
   }): Promise<StoryBookBundle | null>;
+  /**
+   * Household contributions (73). All eight are gated `story.own` and active-person-scoped in the bridge:
+   * the author ops act only on the active person's own book, and the contributor ops only on their own
+   * offerings. No Claude call is added — a contribution is text a person wrote.
+   */
+  /** Invite one related person to contribute to a book. Author only; null when they aren't related. */
+  booksInviteContribution(input: {
+    bookId: string;
+    personId: string;
+    note?: string;
+  }): Promise<ContributionInvite | null>;
+  /** Stop further contributions from someone. Already-accepted material stays (§7.2). */
+  booksRevokeContributionInvite(input: {
+    bookId: string;
+    personId: string;
+  }): Promise<ContributionInvite[]>;
+  /** Books the active person is currently invited to contribute to — their entry point. */
+  booksMyInvitations(): Promise<ContributionInviteView[]>;
+  /** Who the author has opened one of their own books to (and who they've since closed it to). */
+  booksContributionInvites(input: { bookId: string }): Promise<ContributionInvite[]>;
+  /** Offer something. The live invitation + relationship edge are re-checked here, never trusted from the UI. */
+  booksSubmitContribution(input: {
+    invitationId: string;
+    kind: ContributionKind;
+    text: string;
+    chapterId?: string;
+  }): Promise<ContributionView | null>;
+  /** Take an offering back, at any status — the contributor's standing right (§3.3). */
+  booksWithdrawContribution(input: { contributionId: string }): Promise<ContributionView[]>;
+  /** What the active person has offered, and where each one stands. Never the book itself. */
+  booksMyContributions(): Promise<ContributionView[]>;
+  /** Contributions offered to the active person's own book, for review. Author only. */
+  booksBookContributions(input: { bookId: string }): Promise<ContributionReview[]>;
+  /** Accept or decline one. Accepting a `question` seeds an interview gap on the next gaps read. */
+  booksDecideContribution(input: {
+    bookId: string;
+    contributionId: string;
+    status: 'accepted' | 'declined';
+    attributed?: boolean;
+  }): Promise<ContributionReview[]>;
   /** The active person's cached cross-feature synthesis (40 §4.1), or null. No spend — a cached read. */
   coachingGetSynthesis(): Promise<CoachingSynthesis | null>;
   /**

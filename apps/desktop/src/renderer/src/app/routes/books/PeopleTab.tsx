@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Heading, Text, TextInput, Textarea } from '../../../design-system/components';
+import { ContributionsPanel } from './ContributionsPanel';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useStoryStore } from '../../../stores/storyStore';
 import styles from './Books.module.css';
@@ -185,6 +186,11 @@ export function PeopleTab({
           })}
         </div>
       )}
+
+      {/* The other half of "who is in this book": the people allowed to ADD to it (73 §3.1). It sits here
+          because both are about the same question — who else is involved — and the author shouldn't have to
+          learn a second place for it. */}
+      <ContributionsPanel bookId={bookId} />
     </div>
   );
 }

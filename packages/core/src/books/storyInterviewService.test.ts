@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import type { ClaudeClient, ClaudeUsage } from '../host';
 import { memFileSystem } from '../host/memFileSystem';
-import { savePerson } from '../people';
+import { savePerson, saveRelationship } from '../people';
 import { saveInsight } from '../insights';
 import {
   createAssignment,
@@ -23,6 +23,7 @@ import type {
   StoryFrameworkCoverage,
 } from '../schemas';
 import { recordUsage } from '../usage';
+import { decideContribution, inviteContribution, submitContribution } from './contributions';
 import {
   STORY_INTERVIEW_WEEKLY_CAP,
   askGap,
@@ -898,5 +899,77 @@ describe('listAnsweredStoryCheckIns (64 §13.6.5)', () => {
     const answered = await listAnsweredStoryCheckIns(fs, key, 'me', bookId);
     expect(answered).toHaveLength(1);
     expect(answered[0]?.wroteIntoChapterTitle).toBe('First Words');
+  });
+});
+
+describe('an accepted question becomes a gap (73 §3.4)', () => {
+  async function askedBy(
+    fs: ReturnType<typeof memFileSystem>,
+  ): Promise<{ bookId: string; id: string }> {
+    const bookId = await seedBook(fs);
+    await savePerson(fs, key, {
+      id: 'angel',
+      schemaVersion: 2,
+      displayName: 'Angel',
+      isSubject: true,
+      tags: [],
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    await saveRelationship(fs, key, {
+      id: 'rel',
+      schemaVersion: 2,
+      fromPersonId: 'me',
+      toPersonId: 'angel',
+      type: 'partner',
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    await inviteContribution(fs, key, 'me', { bookId, personId: 'angel', now });
+    const c = await submitContribution(fs, key, 'angel', {
+      authorPersonId: 'me',
+      bookId,
+      kind: 'question',
+      text: 'Why did he really leave that job in 1998?',
+      now,
+    });
+    return { bookId, id: c!.id };
+  }
+
+  it('joins what the book wants next, credited, and mints exactly once', async () => {
+    const fs = memFileSystem();
+    const { bookId, id } = await askedBy(fs);
+
+    // Pending: the author hasn't agreed, so it steers nothing.
+    expect((await getStoryGaps(fs, key, 'me', bookId)).gaps).toEqual([]);
+
+    await decideContribution(fs, key, 'me', {
+      bookId,
+      contributionId: id,
+      status: 'accepted',
+      now,
+    });
+    const first = await getStoryGaps(fs, key, 'me', bookId);
+    const seeded = first.gaps.filter((g) => g.focus.includes('leave that job'));
+    expect(seeded).toHaveLength(1);
+    expect(seeded[0]?.label).toBe('Angel wants to know');
+    expect(seeded[0]?.status).toBe('open'); // askable, like any other gap
+
+    // Reading again mints nothing more — the stamped decision, not a text match, is what stops it.
+    const second = await getStoryGaps(fs, key, 'me', bookId);
+    expect(second.gaps.filter((g) => g.focus.includes('leave that job'))).toHaveLength(1);
+    expect(second.gaps).toHaveLength(first.gaps.length);
+  });
+
+  it('a DECLINED question never steers the interview', async () => {
+    const fs = memFileSystem();
+    const { bookId, id } = await askedBy(fs);
+    await decideContribution(fs, key, 'me', {
+      bookId,
+      contributionId: id,
+      status: 'declined',
+      now,
+    });
+    expect((await getStoryGaps(fs, key, 'me', bookId)).gaps).toEqual([]);
   });
 });

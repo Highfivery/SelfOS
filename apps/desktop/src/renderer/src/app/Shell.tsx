@@ -21,6 +21,7 @@ import { Usage } from './routes/usage/Usage';
 import { Together } from './routes/together/Together';
 import { TogetherSession } from './routes/together/TogetherSession';
 import { Story } from './routes/books/Story';
+import { ContributeRoute } from './routes/books/ContributeRoute';
 import { SettingsScreen } from '../settings/SettingsScreen';
 import { RequireCapability } from './RequireCapability';
 import { useSettingsStore } from '../settings/settingsStore';
@@ -63,6 +64,10 @@ const GUARDED_ROUTES: { path: string; capability: CapabilityKey; element: JSX.El
   // Every link minted before the section was renamed — notifications, Home cards, a deep link
   // someone kept — still points at /story, so it redirects rather than 404s (72 §3.1).
   { path: 'story/*', capability: 'story.own', element: <Navigate to="/books" replace /> },
+  // Adding to someone ELSE's book (73 §3.2) — its own small surface, deliberately outside the Books
+  // chrome: this person isn't writing a book, and a Studio around them would imply an authorship they
+  // don't have. Gated `story.own` like the rest; the bridge re-checks the invitation and the edge.
+  { path: 'contribute/:invitationId', capability: 'story.own', element: <ContributeRoute /> },
   // Usage is reachable with `sessions.own`; it filters cost/the Everyone scope internally via
   // `budgets.manage` (02-app-shell §13.4) — that finer gating stays in the screen, not here.
   { path: 'usage', capability: 'sessions.own', element: <Usage /> },

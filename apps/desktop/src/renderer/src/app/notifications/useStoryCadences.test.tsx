@@ -65,18 +65,18 @@ describe('useStoryCadences (64 §18.5, #298 — living-book cadences run app-wid
     // infers concretely, so it stays assignable at the install site, and the param is used, satisfying lint).
     const refreshed: { bookId: string; auto?: boolean }[] = [];
     const interviewed: { bookId: string; auto?: boolean }[] = [];
-    const storyRefreshCheck = vi.fn((input: { bookId: string; auto?: boolean }) => {
+    const booksRefreshCheck = vi.fn((input: { bookId: string; auto?: boolean }) => {
       refreshed.push(input);
       return Promise.resolve({ staled: 0, rewritten: 0, bundle: null });
     });
-    const storyInterviewCheck = vi.fn((input: { bookId: string; auto?: boolean }) => {
+    const booksInterviewCheck = vi.fn((input: { bookId: string; auto?: boolean }) => {
       interviewed.push(input);
       return Promise.resolve({ outcome: 'throttled' as const });
     });
     installMockBridge({
-      storyList: () => Promise.resolve([book('b1', true), book('b2', false), book('b3', true)]),
-      storyRefreshCheck,
-      storyInterviewCheck,
+      booksList: () => Promise.resolve([book('b1', true), book('b2', false), book('b3', true)]),
+      booksRefreshCheck,
+      booksInterviewCheck,
     });
     asOwner();
     render(<Harness />);
@@ -92,12 +92,12 @@ describe('useStoryCadences (64 §18.5, #298 — living-book cadences run app-wid
   });
 
   it('does nothing for a person without story.own', async () => {
-    const storyRefreshCheck = vi.fn(() =>
+    const booksRefreshCheck = vi.fn(() =>
       Promise.resolve({ staled: 0, rewritten: 0, bundle: null }),
     );
     installMockBridge({
-      storyList: () => Promise.resolve([book('b1', true)]),
-      storyRefreshCheck,
+      booksList: () => Promise.resolve([book('b1', true)]),
+      booksRefreshCheck,
     });
     // A Guest role has no story.own.
     useSessionStore.setState({
@@ -110,6 +110,6 @@ describe('useStoryCadences (64 §18.5, #298 — living-book cadences run app-wid
     render(<Harness />);
     // Give any errant async a tick; the cadence must not fire.
     await new Promise((r) => setTimeout(r, 20));
-    expect(storyRefreshCheck).not.toHaveBeenCalled();
+    expect(booksRefreshCheck).not.toHaveBeenCalled();
   });
 });

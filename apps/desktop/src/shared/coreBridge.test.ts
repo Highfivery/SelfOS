@@ -140,7 +140,7 @@ function makeHost(): {
   intakeChunks: string[];
   togetherChunks: TogetherChunk[];
   memoryChunks: string[];
-  storyProgress: StoryDraftProgress[];
+  booksProgress: StoryDraftProgress[];
   imageProgress: ImageGenProgress[];
   device: () => DeviceState;
   deviceSettings: () => Record<string, unknown>;
@@ -166,7 +166,7 @@ function makeHost(): {
   const intakeChunks: string[] = [];
   const togetherChunks: TogetherChunk[] = [];
   const memoryChunks: string[] = [];
-  const storyProgress: StoryDraftProgress[] = [];
+  const booksProgress: StoryDraftProgress[] = [];
   const imageProgress: ImageGenProgress[] = [];
   const claude: ClaudeClient = {
     send: () => Promise.resolve('ok'),
@@ -587,7 +587,7 @@ function makeHost(): {
     saveImageFile: (name) => Promise.resolve(`/tmp/${name}`),
     printToPdf: (html) => Promise.resolve(new TextEncoder().encode(`%PDF-fake\n${html.length}`)),
     onVaultChanged: () => () => {},
-    emitStoryProgress: (p) => storyProgress.push(p),
+    emitStoryProgress: (p) => booksProgress.push(p),
     emitImageProgress: (p) => imageProgress.push(p),
     onStreamChunk: () => () => {},
     onStoryProgress: () => () => {},
@@ -601,7 +601,7 @@ function makeHost(): {
     intakeChunks,
     togetherChunks,
     memoryChunks,
-    storyProgress,
+    booksProgress,
     imageProgress,
     device: () => device,
     deviceSettings: () => deviceSettings,
@@ -8657,7 +8657,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
 
     // The registry crosses via IPC, each type carrying what the picker needs — its gate and the questions
     // it asks at commission (72 §4.1).
-    const types = await bridge.storyBookTypes();
+    const types = await bridge.booksBookTypes();
     expect(types.map((t) => t.id)).toContain('biography');
     expect(types.map((t) => t.id)).toContain('erotica');
     expect(types[0]?.structures.some((s) => s.isDefault)).toBe(true);
@@ -8673,7 +8673,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     // The 18+ gate is host-side (§8.4): an adult type can't be started without the acknowledgement, whatever
     // the picker showed.
     expect(
-      await bridge.storyCreate({
+      await bridge.booksCreate({
         type: 'erotica',
         title: 'Nope',
         config: {
@@ -8687,7 +8687,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
       }),
     ).toBeNull();
 
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -8703,7 +8703,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const bookId = book!.id;
 
     // Foundations pass (metered story.outline via the fake claude 'plan a biography of' branch).
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     expect(gen.ok).toBe(true);
     if (!gen.ok) return;
     expect(gen.bundle.manifest.essence).toContain('learning to speak');
@@ -8714,14 +8714,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(gen.bundle.timeline?.events[0]?.label).toBe('Born in Ohio');
 
     // Approve the (optionally edited) outline → the book moves to drafting.
-    const approved = await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const approved = await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
     expect(approved?.status).toBe('drafting');
-    expect((await bridge.storyGet({ bookId }))?.outline?.approved).toBe(true);
+    expect((await bridge.booksGet({ bookId }))?.outline?.approved).toBe(true);
 
-    expect((await bridge.storyList()).map((b) => b.id)).toEqual([bookId]);
-    await bridge.storyDelete({ bookId });
-    expect(await bridge.storyList()).toEqual([]);
-    expect(await bridge.storyGet({ bookId })).toBeNull();
+    expect((await bridge.booksList()).map((b) => b.id)).toEqual([bookId]);
+    await bridge.booksDelete({ bookId });
+    expect(await bridge.booksList()).toEqual([]);
+    expect(await bridge.booksGet({ bookId })).toBeNull();
   });
 
   it('books: the shelf counts each book, and a person without story.own gets nothing (72 §3.1)', async () => {
@@ -8729,9 +8729,9 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
 
-    expect(await bridge.storyShelf()).toEqual([]);
+    expect(await bridge.booksShelf()).toEqual([]);
 
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'Still Running',
       config: {
@@ -8744,12 +8744,12 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     expect(gen.ok).toBe(true);
     if (!gen.ok) return;
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
 
-    const shelf = await bridge.storyShelf();
+    const shelf = await bridge.booksShelf();
     expect(shelf).toHaveLength(1);
     // The outline says how many chapters the book means to have; nothing is written yet.
     expect(shelf[0]).toMatchObject({
@@ -8766,7 +8766,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
-    expect(await bridge.storyShelf()).toEqual([]);
+    expect(await bridge.booksShelf()).toEqual([]);
   });
 
   it('story: rewrite from scratch resets the book to a fresh pre-draft state, keeping the manifest (§13.6.6)', async () => {
@@ -8775,7 +8775,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
 
     // Draft the whole book so there's an essence, outline, and chapters to discard.
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -8788,12 +8788,12 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const drafted = await bridge.storyGenerateFullDraft({ bookId });
+    const drafted = await bridge.booksGenerateFullDraft({ bookId });
     if (!drafted.ok) throw new Error('draft failed');
     expect(drafted.bundle.chapters.length).toBeGreaterThanOrEqual(1);
 
     // Rewrite from scratch → a fresh pre-draft bundle: no chapters, no outline, no essence, status outlining.
-    const reset = await bridge.storyRewriteFromScratch({ bookId });
+    const reset = await bridge.booksRewriteFromScratch({ bookId });
     expect(reset?.manifest.status).toBe('outlining');
     expect(reset?.manifest.essence).toBeUndefined();
     expect(reset?.manifest.config.style).toBe('cinematic'); // config kept
@@ -8801,8 +8801,8 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(reset?.outline).toBeNull();
     expect(reset?.chapters).toEqual([]);
     // The book still lists (it was reset, not deleted) and re-drafts cleanly.
-    expect((await bridge.storyList()).map((b) => b.id)).toEqual([bookId]);
-    const redrafted = await bridge.storyGenerateFullDraft({ bookId });
+    expect((await bridge.booksList()).map((b) => b.id)).toEqual([bookId]);
+    const redrafted = await bridge.booksGenerateFullDraft({ bookId });
     expect(redrafted.ok).toBe(true);
     if (redrafted.ok) expect(redrafted.bundle.chapters.length).toBeGreaterThanOrEqual(1);
   });
@@ -8813,7 +8813,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
 
     // Blank title → the biographer names it; no outline-review gate — it drafts straight through.
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: '',
       config: {
@@ -8825,7 +8825,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
         sourceIds: [],
       },
     });
-    const res = await bridge.storyGenerateFullDraft({ bookId: book!.id });
+    const res = await bridge.booksGenerateFullDraft({ bookId: book!.id });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.bundle.outline?.approved).toBe(true); // auto-approved
@@ -8835,17 +8835,17 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(res.bundle.manifest.title).toBe('The Weight of Quiet'); // named by the biographer
 
     // Progress streamed: a reading phase → per-chapter writing → a terminal done, total = chapter count.
-    const phases = host.storyProgress.map((p) => p.phase);
+    const phases = host.booksProgress.map((p) => p.phase);
     expect(phases[0]).toBe('reading');
     expect(phases).toContain('writing');
     expect(phases.at(-1)).toBe('done');
-    const lastWriting = [...host.storyProgress].reverse().find((p) => p.phase === 'writing');
+    const lastWriting = [...host.booksProgress].reverse().find((p) => p.phase === 'writing');
     expect(lastWriting?.chaptersTotal).toBe(res.bundle.chapters.length);
   });
 
   it('story: create-and-draft streams an error + fails honestly when AI is off (§3.2)', async () => {
     const { bridge, host } = await freshOwner();
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'X',
       config: {
@@ -8857,11 +8857,11 @@ describe('createCoreBridge — Together (58) foundation', () => {
         sourceIds: [],
       },
     });
-    const res = await bridge.storyGenerateFullDraft({ bookId: book!.id });
+    const res = await bridge.booksGenerateFullDraft({ bookId: book!.id });
     expect(res.ok).toBe(false);
     if (res.ok) return;
     expect(res.reason).toBe('NO_KEY'); // no key set
-    expect(host.storyProgress.some((p) => p.phase === 'error')).toBe(true);
+    expect(host.booksProgress.some((p) => p.phase === 'error')).toBe(true);
   });
 
   it('story: a blank title lets the biographer name the book, then the person can rename it (§3.2)', async () => {
@@ -8870,7 +8870,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
 
     // Blank title → a placeholder + `titleAuto` so the foundations pass may name it.
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: '',
       config: {
@@ -8887,18 +8887,18 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const bookId = book!.id;
 
     // Foundations proposes a title from the content → applied because the title was still auto.
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     expect(gen.ok).toBe(true);
     if (!gen.ok) return;
     expect(gen.bundle.manifest.title).toBe('The Weight of Quiet');
 
     // The person renames it on review → their title is now their own (auto cleared).
-    const renamed = await bridge.storyUpdate({ bookId, title: 'A Machine and a Voice' });
+    const renamed = await bridge.booksUpdate({ bookId, title: 'A Machine and a Voice' });
     expect(renamed?.title).toBe('A Machine and a Voice');
     expect(renamed?.titleAuto ?? false).toBe(false);
 
     // "Start over" re-runs foundations → the person's chosen title is preserved, never re-proposed.
-    const again = await bridge.storyGenerateFoundations({ bookId });
+    const again = await bridge.booksGenerateFoundations({ bookId });
     expect(again.ok).toBe(true);
     if (!again.ok) return;
     expect(again.bundle.manifest.title).toBe('A Machine and a Voice');
@@ -8906,7 +8906,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
 
   it('story: foundations returns an honest failure when AI is off / no key', async () => {
     const { bridge } = await freshOwner();
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'X',
       config: {
@@ -8921,14 +8921,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const bookId = book!.id;
 
     // No key yet → NO_KEY.
-    const noKey = await bridge.storyGenerateFoundations({ bookId });
+    const noKey = await bridge.booksGenerateFoundations({ bookId });
     expect(noKey.ok).toBe(false);
     if (!noKey.ok) expect(noKey.reason).toBe('NO_KEY');
 
     // Key present but AI disabled → AI_OFF (points at Settings).
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: false, scope: 'vault' });
-    const aiOff = await bridge.storyGenerateFoundations({ bookId });
+    const aiOff = await bridge.booksGenerateFoundations({ bookId });
     expect(aiOff.ok).toBe(false);
     if (!aiOff.ok) expect(aiOff.reason).toBe('AI_OFF');
   });
@@ -8937,7 +8937,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -8950,13 +8950,13 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     expect(gen.ok).toBe(true);
     if (!gen.ok) return;
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
 
     // Write the chapters (one, per the fake foundations outline).
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     expect(chapters.ok).toBe(true);
     if (!chapters.ok) return;
     expect(chapters.generated).toBe(1);
@@ -8967,11 +8967,11 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(chapters.bundle.manifest.status).toBe('ready'); // fully drafted
 
     // Re-run writes nothing (idempotent).
-    const rerun = await bridge.storyGenerateChapters({ bookId });
+    const rerun = await bridge.booksGenerateChapters({ bookId });
     expect(rerun.ok && rerun.generated).toBe(0);
 
     // Mark it reviewed.
-    const reviewed = await bridge.storyReviewChapter({ bookId, chapterId: chapter.id });
+    const reviewed = await bridge.booksReviewChapter({ bookId, chapterId: chapter.id });
     expect(reviewed?.chapters[0]?.status).toBe('reviewed');
   });
 
@@ -8979,7 +8979,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -8992,15 +8992,15 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
     const chapterId = chapters.bundle.chapters[0]!.id;
 
     // Read the own book from the DRAFT head: the written chapter is there, with its status; no position yet.
-    const first = await bridge.storyReadOwnBook({ bookId });
+    const first = await bridge.booksReadOwnBook({ bookId });
     expect(first).not.toBeNull();
     expect(first!.view.chapters.map((c) => c.id)).toEqual([chapterId]);
     expect(first!.view.chapters[0]?.status).toBe('new'); // status crosses (owns their own data)
@@ -9008,19 +9008,19 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(first!.lastChapterId).toBeNull();
 
     // Remember a read position → it resumes on the next read (device-local, per-person).
-    await bridge.storySetReadPosition({ bookId, chapterId });
-    expect((await bridge.storyReadOwnBook({ bookId }))?.lastChapterId).toBe(chapterId);
+    await bridge.booksSetReadPosition({ bookId, chapterId });
+    expect((await bridge.booksReadOwnBook({ bookId }))?.lastChapterId).toBe(chapterId);
 
     // A stored position that no longer maps to a chapter resolves to null (never a dangling resume).
-    await bridge.storySetReadPosition({ bookId, chapterId: 'ghost-chapter' });
-    expect((await bridge.storyReadOwnBook({ bookId }))?.lastChapterId).toBeNull();
+    await bridge.booksSetReadPosition({ bookId, chapterId: 'ghost-chapter' });
+    expect((await bridge.booksReadOwnBook({ bookId }))?.lastChapterId).toBeNull();
   });
 
   it('story: chapter history — a rewrite archives the replaced prose, restore re-enforces protected words, Guest denied (§13.9)', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -9033,27 +9033,27 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
     const chapterId = chapters.bundle.chapters[0]!.id;
     const original = chapters.bundle.chapters[0]!.markdown;
 
     // A first draft has replaced nothing — no history yet (empty, never null).
-    expect(await bridge.storyChapterHistory({ bookId, chapterId })).toEqual({
+    expect(await bridge.booksChapterHistory({ bookId, chapterId })).toEqual({
       chapterId,
       versions: [],
     });
 
     // A rewrite archives the text it replaces (the real appendChapterVersion path, reason 'rewrite').
-    const rewrite = await bridge.storyRegenerateChapter({ bookId, chapterId });
+    const rewrite = await bridge.booksRegenerateChapter({ bookId, chapterId });
     expect(rewrite.ok).toBe(true);
 
     // The person then rewrites the first paragraph in their own words (instant edit → a protected block),
     // so the CURRENT text now differs from the archived version.
-    const edited = await bridge.storyEditPassage({
+    const edited = await bridge.booksEditPassage({
       bookId,
       chapterId,
       anchor: { paragraphId: 'p0' },
@@ -9062,13 +9062,13 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(edited?.chapters[0]?.markdown).toContain('I kept these exact words.');
 
     // The list is newest-first and carries the word count but NO prose (the heavy-payload rule §13.9).
-    const history = await bridge.storyChapterHistory({ bookId, chapterId });
+    const history = await bridge.booksChapterHistory({ bookId, chapterId });
     expect(history.versions.map((v) => v.reason)).toEqual(['rewrite']);
     expect(history.versions[0]!.words).toBe(original.trim().split(/\s+/).length);
     expect(history.versions[0]).not.toHaveProperty('markdown');
 
     // The full prose crosses IPC one version at a time.
-    const v1 = await bridge.storyChapterVersion({
+    const v1 = await bridge.booksChapterVersion({
       bookId,
       chapterId,
       revision: history.versions[0]!.revision,
@@ -9078,7 +9078,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     // Restore: the pre-restore text is archived first (reason 'restore' — restoring is itself undoable),
     // the chapter flips to the old prose, and the protected words added AFTER the version was archived are
     // re-enforced into it (the person's own words survive a restore too).
-    const restored = await bridge.storyRestoreChapterVersion({
+    const restored = await bridge.booksRestoreChapterVersion({
       bookId,
       chapterId,
       revision: v1!.revision,
@@ -9087,19 +9087,19 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(chapter?.markdown).toContain('cut pine'); // the old prose is back
     expect(chapter?.markdown).toContain('I kept these exact words.'); // protected words re-enforced
     expect(chapter?.status).toBe('updated'); // a restore flows through the normal review lane
-    const after = await bridge.storyChapterHistory({ bookId, chapterId });
+    const after = await bridge.booksChapterHistory({ bookId, chapterId });
     expect(after.versions.map((v) => v.reason)).toEqual(['restore', 'rewrite']); // newest first
 
     // A Guest (no story.own) gets empty/null from all three — the bridge is the trust boundary.
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
-    expect(await bridge.storyChapterHistory({ bookId, chapterId })).toEqual({
+    expect(await bridge.booksChapterHistory({ bookId, chapterId })).toEqual({
       chapterId,
       versions: [],
     });
-    expect(await bridge.storyChapterVersion({ bookId, chapterId, revision: 1 })).toBeNull();
-    expect(await bridge.storyRestoreChapterVersion({ bookId, chapterId, revision: 1 })).toBeNull();
+    expect(await bridge.booksChapterVersion({ bookId, chapterId, revision: 1 })).toBeNull();
+    expect(await bridge.booksRestoreChapterVersion({ bookId, chapterId, revision: 1 })).toBeNull();
   });
 
   it('story: readOwnBook + setReadPosition are denied for a person without story.own', async () => {
@@ -9107,10 +9107,10 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
-    expect(await bridge.storyReadOwnBook({ bookId: 'x' })).toBeNull();
+    expect(await bridge.booksReadOwnBook({ bookId: 'x' })).toBeNull();
     // A denied write is a no-op (the gate returns without touching device state).
-    await bridge.storySetReadPosition({ bookId: 'x', chapterId: 'c' });
-    expect(await bridge.storyReadOwnBook({ bookId: 'x' })).toBeNull();
+    await bridge.booksSetReadPosition({ bookId: 'x', chapterId: 'c' });
+    expect(await bridge.booksReadOwnBook({ bookId: 'x' })).toBeNull();
   });
 
   it('story: corpusStats is a gated, person-scoped no-AI read (§13.6.10)', async () => {
@@ -9118,7 +9118,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     // An owner with no material yet gets a valid zeroed shape. `sessions` counts the sessions they actually
     // SPOKE in — since 72 §5.2 their own words feed the writer directly, so it is real material now, not the
     // raw transcript count §15.2 removed for overstating.
-    expect(await bridge.storyCorpusStats()).toEqual({
+    expect(await bridge.booksCorpusStats()).toEqual({
       reflections: 0,
       dreams: 0,
       memories: 0,
@@ -9135,12 +9135,12 @@ describe('createCoreBridge — Together (58) foundation', () => {
       people: [],
       sensitivity: 'standard',
     });
-    expect((await bridge.storyCorpusStats()).dreams).toBe(1);
+    expect((await bridge.booksCorpusStats()).dreams).toBe(1);
     // A Guest (no story.own) gets zeros — the read is gated, and it's scoped to the active person's material.
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
-    expect(await bridge.storyCorpusStats()).toEqual({
+    expect(await bridge.booksCorpusStats()).toEqual({
       reflections: 0,
       dreams: 0,
       memories: 0,
@@ -9155,26 +9155,26 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
 
     // Open the biographer chat: it creates the memory and streams an opener (a chunk reaches the host).
-    const opened = await bridge.storyMemoryOpen({});
+    const opened = await bridge.booksMemoryOpen({});
     expect(opened).toBeTruthy();
     const memoryId = opened!.memory.id;
     expect(opened!.memory.status).toBe('gathering');
     expect(host.memoryChunks.length).toBeGreaterThan(0);
 
     // One chat turn appends a reply.
-    const turn = await bridge.storyMemoryTurn({ memoryId, text: 'I stood in the kitchen.' });
+    const turn = await bridge.booksMemoryTurn({ memoryId, text: 'I stood in the kitchen.' });
     expect(turn.ok).toBe(true);
 
     // Synthesize → the fake returns a valid memory JSON, so the memory becomes ready.
-    const synth = await bridge.storyMemorySynthesize({ memoryId });
+    const synth = await bridge.booksMemorySynthesize({ memoryId });
     expect(synth.ok).toBe(true);
     if (synth.ok) expect(synth.memory.status).toBe('ready');
 
     // Save → committed, feeds the coach, and shows in the collection.
-    const saved = await bridge.storyMemorySave({ memoryId });
+    const saved = await bridge.booksMemorySave({ memoryId });
     expect(saved.ok).toBe(true);
     if (saved.ok) expect(saved.memory.status).toBe('saved');
-    const list = await bridge.storyMemoryList();
+    const list = await bridge.booksMemoryList();
     expect(list.find((m) => m.id === memoryId)?.status).toBe('saved');
 
     // The saved memory reaches the biographer's corpus (decrypt-level, via the core builder).
@@ -9186,11 +9186,11 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
-    expect(await bridge.storyMemoryList()).toEqual([]);
-    expect(await bridge.storyMemoryGet({ memoryId })).toBeNull();
-    expect((await bridge.storyMemoryTurn({ memoryId, text: 'x' })).ok).toBe(false);
-    expect((await bridge.storyMemorySynthesize({ memoryId })).ok).toBe(false);
-    expect((await bridge.storyMemorySave({ memoryId })).ok).toBe(false);
+    expect(await bridge.booksMemoryList()).toEqual([]);
+    expect(await bridge.booksMemoryGet({ memoryId })).toBeNull();
+    expect((await bridge.booksMemoryTurn({ memoryId, text: 'x' })).ok).toBe(false);
+    expect((await bridge.booksMemorySynthesize({ memoryId })).ok).toBe(false);
+    expect((await bridge.booksMemorySave({ memoryId })).ok).toBe(false);
   });
 
   it('story: a SENSITIVE memory’s Insight is restricted, never partner-shared (§14)', async () => {
@@ -9198,13 +9198,13 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
 
-    const opened = await bridge.storyMemoryOpen({});
+    const opened = await bridge.booksMemoryOpen({});
     const memoryId = opened!.memory.id;
     // The transcript carries the fake's sensitive trigger, so the synthesis marks the memory sensitive.
-    await bridge.storyMemoryTurn({ memoryId, text: 'Something private. SENSITIVEMEMORY' });
-    const synth = await bridge.storyMemorySynthesize({ memoryId });
+    await bridge.booksMemoryTurn({ memoryId, text: 'Something private. SENSITIVEMEMORY' });
+    const synth = await bridge.booksMemorySynthesize({ memoryId });
     expect(synth.ok && synth.memory.sensitive).toBe(true);
-    const saved = await bridge.storyMemorySave({ memoryId });
+    const saved = await bridge.booksMemorySave({ memoryId });
     expect(saved.ok).toBe(true);
 
     // Decrypt the derived Insight: its facts are restricted (own-context only), never partner-shared.
@@ -9224,7 +9224,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -9237,15 +9237,15 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
     const chapterId = chapters.bundle.chapters[0]!.id;
 
     // Add a comment mark → it appears in the chapter's markup layer.
-    const marked = await bridge.storyMark({
+    const marked = await bridge.booksMark({
       bookId,
       chapterId,
       mark: {
@@ -9259,10 +9259,10 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     expect(marked.marks.map((m) => m.id)).toEqual(['m1']);
-    expect((await bridge.storyGetMarkup({ bookId, chapterId })).marks).toHaveLength(1);
+    expect((await bridge.booksGetMarkup({ bookId, chapterId })).marks).toHaveLength(1);
 
     // Instant inline edit → the chapter's prose changes and a protected block is recorded.
-    const edited = await bridge.storyEditPassage({
+    const edited = await bridge.booksEditPassage({
       bookId,
       chapterId,
       anchor: { paragraphId: 'p0', quote: 'warm oil' },
@@ -9273,7 +9273,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(editedChapter?.protectedBlocks[0]?.text).toBe('cold steel');
     // An orphaned edit is refused (null), not misapplied.
     expect(
-      await bridge.storyEditPassage({
+      await bridge.booksEditPassage({
         bookId,
         chapterId,
         anchor: { paragraphId: 'p0', quote: 'nonexistent span' },
@@ -9283,7 +9283,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
 
     // Apply the batch revision (the fake 'REVISING' branch) → fresh prose + the mark applied; protected words
     // survive.
-    const applied = await bridge.storyApplyMarkup({ bookId, chapterId });
+    const applied = await bridge.booksApplyMarkup({ bookId, chapterId });
     expect(applied.ok).toBe(true);
     if (!applied.ok) return;
     const revised = applied.bundle.chapters.find((c) => c.id === chapterId);
@@ -9295,7 +9295,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(revised?.previousMarkdown).toBeTruthy();
     expect(revised?.previousMarkdown).toContain('cold steel');
     // …and marking the chapter Reviewed resolves the diff (drops the retained prior text).
-    const reviewed = await bridge.storyReviewChapter({ bookId, chapterId });
+    const reviewed = await bridge.booksReviewChapter({ bookId, chapterId });
     const reviewedChapter = reviewed?.chapters.find((c) => c.id === chapterId);
     expect(reviewedChapter?.status).toBe('reviewed');
     expect(reviewedChapter?.previousMarkdown).toBeUndefined();
@@ -9305,7 +9305,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -9318,15 +9318,15 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
     const chapterId = chapters.bundle.chapters[0]!.id;
 
     // Ask the biographer a question about the first paragraph (a `question`-intent comment).
-    await bridge.storyMark({
+    await bridge.booksMark({
       bookId,
       chapterId,
       mark: {
@@ -9339,7 +9339,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
         createdAt: '2026-07-16',
       },
     });
-    const res = await bridge.storyAnswerQuestion({ bookId, chapterId, markId: 'q1' });
+    const res = await bridge.booksAnswerQuestion({ bookId, chapterId, markId: 'q1' });
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     const answered = res.markup.marks.find((m) => m.id === 'q1');
@@ -9347,7 +9347,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
       'coaching session',
     );
     // The answer is persisted on the mark (survives a re-read).
-    const persisted = (await bridge.storyGetMarkup({ bookId, chapterId })).marks.find(
+    const persisted = (await bridge.booksGetMarkup({ bookId, chapterId })).marks.find(
       (m) => m.id === 'q1',
     );
     expect(persisted?.kind === 'comment' ? persisted.answer : undefined).toBeTruthy();
@@ -9356,14 +9356,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
-    expect((await bridge.storyAnswerQuestion({ bookId, chapterId, markId: 'q1' })).ok).toBe(false);
+    expect((await bridge.booksAnswerQuestion({ bookId, chapterId, markId: 'q1' })).ok).toBe(false);
   });
 
   it('story: a questionsSent to-do self-heals to done once its check-in is answered (§3.7)', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -9376,14 +9376,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
     const chapterId = chapters.bundle.chapters[0]!.id;
 
-    const res = await bridge.storyTodoToQuestions({
+    const res = await bridge.booksTodoToQuestions({
       bookId,
       chapterId,
       focus: 'the winter he got sick',
@@ -9392,13 +9392,13 @@ describe('createCoreBridge — Together (58) foundation', () => {
     if (!res.ok) return;
     const todoId = res.markup.marks.find((m) => m.kind === 'todo')?.id;
     // Before the check-in is answered, the roll-up shows the to-do stuck as questionsSent (in "Needs you").
-    expect((await bridge.storyTodos({ bookId })).todos.find((t) => t.id === todoId)?.status).toBe(
+    expect((await bridge.booksTodos({ bookId })).todos.find((t) => t.id === todoId)?.status).toBe(
       'questionsSent',
     );
 
-    // Answer the self-send → storyTodos self-heals the to-do to done (it no longer sits in the count forever).
+    // Answer the self-send → booksTodos self-heals the to-do to done (it no longer sits in the count forever).
     await bridge.assignmentsSubmit({ assignmentId: res.assignmentId, answers: [] });
-    expect((await bridge.storyTodos({ bookId })).todos.find((t) => t.id === todoId)?.status).toBe(
+    expect((await bridge.booksTodos({ bookId })).todos.find((t) => t.id === todoId)?.status).toBe(
       'done',
     );
   });
@@ -9407,7 +9407,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -9420,14 +9420,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
     const chapterId = chapters.bundle.chapters[0]!.id;
 
-    const res = await bridge.storyTodoToQuestions({
+    const res = await bridge.booksTodoToQuestions({
       bookId,
       chapterId,
       focus: 'the winter he got sick',
@@ -9447,7 +9447,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
 
     // AI off → an honest AI_OFF, nothing minted.
     await bridge.setSetting({ key: 'ai.enabled', value: false, scope: 'vault' });
-    const off = await bridge.storyTodoToQuestions({ bookId, chapterId, focus: 'something else' });
+    const off = await bridge.booksTodoToQuestions({ bookId, chapterId, focus: 'something else' });
     expect(off.ok).toBe(false);
     if (!off.ok) expect(off.reason).toBe('AI_OFF');
   });
@@ -9456,7 +9456,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -9469,14 +9469,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
     const chapterId = chapters.bundle.chapters[0]!.id;
 
-    await bridge.storyMark({
+    await bridge.booksMark({
       bookId,
       chapterId,
       mark: {
@@ -9489,7 +9489,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     // The denormalized roll-up shows it.
-    let roll = await bridge.storyTodos({ bookId });
+    let roll = await bridge.booksTodos({ bookId });
     expect(roll.todos).toEqual([
       expect.objectContaining({
         id: 'r1',
@@ -9499,8 +9499,8 @@ describe('createCoreBridge — Together (58) foundation', () => {
       }),
     ]);
     // Mark it done → the roll-up reflects the new status.
-    await bridge.storyUpdateMark({ bookId, chapterId, markId: 'r1', patch: { status: 'done' } });
-    roll = await bridge.storyTodos({ bookId });
+    await bridge.booksUpdateMark({ bookId, chapterId, markId: 'r1', patch: { status: 'done' } });
+    roll = await bridge.booksTodos({ bookId });
     expect(roll.todos[0]?.status).toBe('done');
   });
 
@@ -9508,7 +9508,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -9521,26 +9521,26 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
     const chapterId = chapters.bundle.chapters[0]!.id; // prose mentions "warm oil"
 
-    const res = await bridge.storyExclude({ bookId, kind: 'topic', value: 'warm oil' });
+    const res = await bridge.booksExclude({ bookId, kind: 'topic', value: 'warm oil' });
     expect(res.staled).toBe(1);
     expect(res.exclusions[0]).toMatchObject({ kind: 'topic', value: 'warm oil' });
     // The prose is untouched; what lands is a PROPOSAL the author acts on (72 §4.4).
     expect(res.bundle.chapters.find((c) => c.id === chapterId)?.status).not.toBe('generating');
-    expect((await bridge.storyNewMaterial({ bookId })).map((e) => e.chapterId)).toEqual([
+    expect((await bridge.booksNewMaterial({ bookId })).map((e) => e.chapterId)).toEqual([
       chapterId,
     ]);
-    expect((await bridge.storyExclusions({ bookId })).map((e) => e.value)).toEqual(['warm oil']);
+    expect((await bridge.booksExclusions({ bookId })).map((e) => e.value)).toEqual(['warm oil']);
 
     // Un-exclude removes the rule; the chapter stays as it is.
-    expect(await bridge.storyUnexclude({ bookId, itemId: res.exclusions[0]!.id })).toEqual([]);
-    expect(await bridge.storyExclusions({ bookId })).toEqual([]);
+    expect(await bridge.booksUnexclude({ bookId, itemId: res.exclusions[0]!.id })).toEqual([]);
+    expect(await bridge.booksExclusions({ bookId })).toEqual([]);
   });
 
   it('story: quote mining — mine the subject’s own line, approve it, and it becomes a corpus source (§17.4)', async () => {
@@ -9552,7 +9552,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
       conversationId: 'q-conv',
       userText: 'I finally understood that I was allowed to want things.',
     });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'Quoted Book',
       config: {
@@ -9567,15 +9567,15 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const bookId = book!.id;
 
     // Empty queue → mine surfaces the line as a pending candidate.
-    expect(await bridge.storyQuoteCandidates({ bookId })).toEqual([]);
-    const mined = await bridge.storyMineQuotes({ bookId });
+    expect(await bridge.booksQuoteCandidates({ bookId })).toEqual([]);
+    const mined = await bridge.booksMineQuotes({ bookId });
     const candidate = mined.find((q) => q.text.includes('allowed to want things'));
     expect(candidate).toMatchObject({ status: 'pending', source: 'session' });
 
     // Before approval the quote is NOT citable; after approval it is a corpus source.
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    const updated = await bridge.storySetQuoteStatus({
+    const updated = await bridge.booksSetQuoteStatus({
       bookId,
       quoteId: candidate!.id,
       status: 'approved',
@@ -9583,7 +9583,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(updated.find((q) => q.id === candidate!.id)?.status).toBe('approved');
     // Re-reading the queue reflects the approval (persisted).
     expect(
-      (await bridge.storyQuoteCandidates({ bookId })).find((q) => q.id === candidate!.id)?.status,
+      (await bridge.booksQuoteCandidates({ bookId })).find((q) => q.id === candidate!.id)?.status,
     ).toBe('approved');
   });
 
@@ -9596,7 +9596,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
       toPersonId: angel.id,
       type: 'partner',
     });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'Cast Book',
       config: {
@@ -9608,21 +9608,21 @@ describe('createCoreBridge — Together (58) foundation', () => {
         sourceIds: [],
       },
     });
-    const register = await bridge.storyCastRegister({ bookId: book!.id });
+    const register = await bridge.booksCastRegister({ bookId: book!.id });
     expect(register.find((c) => c.name === 'Angel')).toMatchObject({ relationship: 'partner' });
 
     // A Guest (no story.own) gets nothing — the bridge is the trust boundary.
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
-    expect(await bridge.storyCastRegister({ bookId: book!.id })).toEqual([]);
+    expect(await bridge.booksCastRegister({ bookId: book!.id })).toEqual([]);
   });
 
   it('story: continuity check surfaces a finding + resolve removes it; line-edit polishes reversibly (§17.3)', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'Continuity Book',
       config: {
@@ -9635,27 +9635,27 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
     // A continuity check needs ≥2 written chapters — the fake outline has one, so add a second and write both.
     const partId = gen.bundle.outline!.parts[0]!.id;
-    await bridge.storyEditOutline({
+    await bridge.booksEditOutline({
       bookId,
       edit: { op: 'addChapter', partId, title: 'The Road', brief: 'Leaving home.' },
     });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
     const chapterId = chapters.bundle.chapters[0]!.id;
     const before = chapters.bundle.chapters[0]!.markdown;
     expect(chapters.bundle.chapters.filter((c) => c.markdown.trim().length > 0).length).toBe(2);
 
     // Continuity: the metered pass surfaces a pending finding; resolving it clears the list.
-    const check = await bridge.storyContinuityCheck({ bookId });
+    const check = await bridge.booksContinuityCheck({ bookId });
     expect(check.ok).toBe(true);
     expect(check.findings.length).toBeGreaterThanOrEqual(1);
-    expect(await bridge.storyContinuity({ bookId })).toHaveLength(check.findings.length);
-    const remaining = await bridge.storyResolveContinuity({
+    expect(await bridge.booksContinuity({ bookId })).toHaveLength(check.findings.length);
+    const remaining = await bridge.booksResolveContinuity({
       bookId,
       findingId: check.findings[0]!.id,
       action: 'resolve',
@@ -9663,13 +9663,13 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(remaining.find((f) => f.id === check.findings[0]!.id)).toBeUndefined();
 
     // Line-edit: the polish revises the chapter (status 'updated') and is archived to History (reversible).
-    const edit = await bridge.storyLineEdit({ bookId, chapterId });
+    const edit = await bridge.booksLineEdit({ bookId, chapterId });
     expect(edit.ok).toBe(true);
     if (!edit.ok) throw new Error('line edit failed');
     const polished = edit.bundle.chapters.find((c) => c.id === chapterId)!;
     expect(polished.markdown).not.toBe(before);
     expect(polished.status).toBe('updated');
-    const history = await bridge.storyChapterHistory({ bookId, chapterId });
+    const history = await bridge.booksChapterHistory({ bookId, chapterId });
     expect(history.versions.some((v) => v.reason === 'lineEdit')).toBe(true);
   });
 
@@ -9682,7 +9682,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
       toPersonId: angel.id,
       type: 'partner',
     });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'Consent Book',
       config: {
@@ -9695,10 +9695,10 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const register = await bridge.storyConsent({ bookId });
+    const register = await bridge.booksConsent({ bookId });
     expect(register.find((p) => p.name === 'Angel')).toMatchObject({ name: 'Angel' });
 
-    const after = await bridge.storySetConsent({
+    const after = await bridge.booksSetConsent({
       bookId,
       name: 'Angel',
       pseudonym: 'A.',
@@ -9711,8 +9711,8 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
-    expect(await bridge.storyConsent({ bookId })).toEqual([]);
-    expect(await bridge.storySetConsent({ bookId, name: 'Angel', pseudonym: 'A.' })).toEqual([]);
+    expect(await bridge.booksConsent({ bookId })).toEqual([]);
+    expect(await bridge.booksSetConsent({ bookId, name: 'Angel', pseudonym: 'A.' })).toEqual([]);
   });
 
   /**
@@ -9728,7 +9728,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
       toPersonId: kid.id,
       type: 'child',
     });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'childrens',
       title: 'Mira and the Fox',
       config: {
@@ -9743,9 +9743,9 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(book).not.toBeNull();
     const bookId = book!.id;
 
-    await bridge.storySetConsent({ bookId, name: 'Mira', sheet: 'Six, dark curls, red wellies' });
-    await bridge.storySetConsent({ bookId, name: 'Mira', pseudonym: 'M.' });
-    const after = await bridge.storyConsent({ bookId });
+    await bridge.booksSetConsent({ bookId, name: 'Mira', sheet: 'Six, dark curls, red wellies' });
+    await bridge.booksSetConsent({ bookId, name: 'Mira', pseudonym: 'M.' });
+    const after = await bridge.booksConsent({ bookId });
     // Renaming her for the book did NOT delete how she looks — the next page would redraw a stranger.
     expect(after.find((p) => p.name === 'Mira')).toMatchObject({
       sheet: 'Six, dark curls, red wellies',
@@ -9756,7 +9756,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
-    expect(await bridge.storySetConsent({ bookId, name: 'Mira', sheet: 'x' })).toEqual([]);
+    expect(await bridge.booksSetConsent({ bookId, name: 'Mira', sheet: 'x' })).toEqual([]);
   });
 
   /**
@@ -9785,7 +9785,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
       typeOptions: { partner: angel.id },
       sourceIds: [],
     };
-    const book = await bridge.storyCreate({ type: 'ourStory', title: 'Us', config });
+    const book = await bridge.booksCreate({ type: 'ourStory', title: 'Us', config });
     expect(book).not.toBeNull();
     const bookId = book!.id;
     // It belongs to the pair, and records who started it (only they may delete it).
@@ -9793,29 +9793,29 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(book!.commissionedBy).toBe(ben);
 
     // Ben sees it…
-    expect((await bridge.storyList()).map((b) => b.id)).toContain(bookId);
-    expect(await bridge.storyGet({ bookId })).not.toBeNull();
+    expect((await bridge.booksList()).map((b) => b.id)).toContain(bookId);
+    expect(await bridge.booksGet({ bookId })).not.toBeNull();
     // …and so does Angel, without it being on her own shelf root.
     await bridge.sessionSetActive({ personId: angel.id });
-    expect((await bridge.storyList()).map((b) => b.id)).toContain(bookId);
-    expect((await bridge.storyGet({ bookId }))?.manifest.title).toBe('Us');
-    expect((await bridge.storyShelf()).map((e) => e.id)).toContain(bookId);
+    expect((await bridge.booksList()).map((b) => b.id)).toContain(bookId);
+    expect((await bridge.booksGet({ bookId }))?.manifest.title).toBe('Us');
+    expect((await bridge.booksShelf()).map((e) => e.id)).toContain(bookId);
     // …and it is on the commissioner's shelf too (the E2E drives both sides through the real UI).
     await bridge.sessionSetActive({ personId: ben, pin: '1234' });
-    expect((await bridge.storyShelf()).map((e) => e.id)).toContain(bookId);
+    expect((await bridge.booksShelf()).map((e) => e.id)).toContain(bookId);
     await bridge.sessionSetActive({ personId: angel.id });
 
     // Cass is in the household and is nobody's partner — for them the book does not exist.
     await bridge.sessionSetActive({ personId: cass.id });
-    expect(await bridge.storyGet({ bookId })).toBeNull();
-    expect((await bridge.storyList()).map((b) => b.id)).not.toContain(bookId);
+    expect(await bridge.booksGet({ bookId })).toBeNull();
+    expect((await bridge.booksList()).map((b) => b.id)).not.toContain(bookId);
 
     // The edge IS the grant: remove it and the book re-gates for BOTH of them on the next read.
     await bridge.relationshipsDelete(edge.id);
     await bridge.sessionSetActive({ personId: angel.id });
-    expect(await bridge.storyGet({ bookId })).toBeNull();
+    expect(await bridge.booksGet({ bookId })).toBeNull();
     await bridge.sessionSetActive({ personId: ben, pin: '1234' });
-    expect(await bridge.storyGet({ bookId })).toBeNull();
+    expect(await bridge.booksGet({ bookId })).toBeNull();
   });
 
   it('books: a shared book cannot be commissioned with someone who is not a partner', async () => {
@@ -9830,10 +9830,10 @@ describe('createCoreBridge — Together (58) foundation', () => {
       sourceIds: [],
     };
     // No partner edge — the bridge refuses whatever the picker showed.
-    expect(await bridge.storyCreate({ type: 'ourStory', title: 'Us', config })).toBeNull();
+    expect(await bridge.booksCreate({ type: 'ourStory', title: 'Us', config })).toBeNull();
     // …and refuses a missing answer, or yourself.
     expect(
-      await bridge.storyCreate({
+      await bridge.booksCreate({
         type: 'ourStory',
         title: 'Us',
         config: { ...config, typeOptions: {} },
@@ -9850,7 +9850,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: angel.id, roleId: 'member', pin: null });
     await bridge.relationshipsSave({ fromPersonId: ben, toPersonId: angel.id, type: 'partner' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'ourStory',
       title: 'Us',
       config: {
@@ -9866,18 +9866,18 @@ describe('createCoreBridge — Together (58) foundation', () => {
 
     // Angel writes it too, but deleting is not hers to do.
     await bridge.sessionSetActive({ personId: angel.id });
-    await bridge.storyDelete({ bookId });
-    expect(await bridge.storyGet({ bookId })).not.toBeNull();
+    await bridge.booksDelete({ bookId });
+    expect(await bridge.booksGet({ bookId })).not.toBeNull();
 
     // Ben commissioned it, so he can.
     await bridge.sessionSetActive({ personId: ben, pin: '1234' });
-    await bridge.storyDelete({ bookId });
-    expect(await bridge.storyGet({ bookId })).toBeNull();
+    await bridge.booksDelete({ bookId });
+    expect(await bridge.booksGet({ bookId })).toBeNull();
   });
 
   it('books: the type picker carries each type’s cast policy and counting unit (72 §3.1/§4.1)', async () => {
     const { bridge } = await freshOwner();
-    const types = await bridge.storyBookTypes();
+    const types = await bridge.booksBookTypes();
     const childrens = types.find((t) => t.id === 'childrens');
     expect(childrens).toMatchObject({
       castPolicy: 'childrenAsHeroes',
@@ -9901,10 +9901,10 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
-    expect(await bridge.storyContinuity({ bookId: 'x' })).toEqual([]);
-    const check = await bridge.storyContinuityCheck({ bookId: 'x' });
+    expect(await bridge.booksContinuity({ bookId: 'x' })).toEqual([]);
+    const check = await bridge.booksContinuityCheck({ bookId: 'x' });
     expect(check.ok).toBe(false);
-    const edit = await bridge.storyLineEdit({ bookId: 'x', chapterId: 'c' });
+    const edit = await bridge.booksLineEdit({ bookId: 'x', chapterId: 'c' });
     expect(edit.ok).toBe(false);
   });
 
@@ -9913,10 +9913,10 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
-    expect(await bridge.storyQuoteCandidates({ bookId: 'x' })).toEqual([]);
-    expect(await bridge.storyMineQuotes({ bookId: 'x' })).toEqual([]);
+    expect(await bridge.booksQuoteCandidates({ bookId: 'x' })).toEqual([]);
+    expect(await bridge.booksMineQuotes({ bookId: 'x' })).toEqual([]);
     expect(
-      await bridge.storySetQuoteStatus({ bookId: 'x', quoteId: 'y', status: 'approved' }),
+      await bridge.booksSetQuoteStatus({ bookId: 'x', quoteId: 'y', status: 'approved' }),
     ).toEqual([]);
   });
 
@@ -9924,7 +9924,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -9937,13 +9937,13 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.booksGenerateChapters({ bookId });
 
     // Nothing has changed since the chapter was written → nothing stales, nothing rewrites; fresh bundle back.
-    const res = await bridge.storyRefreshCheck({ bookId, auto: false });
+    const res = await bridge.booksRefreshCheck({ bookId, auto: false });
     expect(res.staled).toBe(0);
     expect(res.rewritten).toBe(0);
     expect(res.bundle).not.toBeNull();
@@ -9953,7 +9953,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const { host, bridge, ownerId } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -9966,22 +9966,22 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.booksGenerateChapters({ bookId });
 
     // Not stamped yet.
     expect(host.device().storyRefreshCheckedAt?.[ownerId]).toBeUndefined();
     // An auto refresh runs + stamps the per-person daily-throttle marker.
-    await bridge.storyRefreshCheck({ bookId, auto: true });
+    await bridge.booksRefreshCheck({ bookId, auto: true });
     const stamp = host.device().storyRefreshCheckedAt?.[ownerId];
     expect(stamp).toBeTruthy();
     // A second auto refresh within the day is throttled (no-op) — the stamp is unchanged.
-    await bridge.storyRefreshCheck({ bookId, auto: true });
+    await bridge.booksRefreshCheck({ bookId, auto: true });
     expect(host.device().storyRefreshCheckedAt?.[ownerId]).toBe(stamp);
     // A manual "Refresh now" never touches the throttle stamp.
-    await bridge.storyRefreshCheck({ bookId, auto: false });
+    await bridge.booksRefreshCheck({ bookId, auto: false });
     expect(host.device().storyRefreshCheckedAt?.[ownerId]).toBe(stamp);
   });
 
@@ -9990,7 +9990,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
     const ctx = (await host.host.vaultAndKey())!;
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -10003,16 +10003,16 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
     const chapterId = chapters.bundle.chapters[0]!.id;
 
     // Induce drift (a rewrite candidate) via an exclusion.
-    await bridge.storyExclude({ bookId, kind: 'topic', value: 'warm oil' });
-    expect((await bridge.storyNewMaterial({ bookId })).map((e) => e.chapterId)).toEqual([
+    await bridge.booksExclude({ bookId, kind: 'topic', value: 'warm oil' });
+    expect((await bridge.booksNewMaterial({ bookId })).map((e) => e.chapterId)).toEqual([
       chapterId,
     ]);
 
@@ -10037,20 +10037,20 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await seedCrisis('x2');
 
     // The AUTO cadence must NOT spend during recurring distress — the stale chapter stays stale, nothing rewrites.
-    const auto = await bridge.storyRefreshCheck({ bookId, auto: true });
+    const auto = await bridge.booksRefreshCheck({ bookId, auto: true });
     expect(auto.rewritten).toBe(0);
     // Detection is free, so it still ran — but nothing was spent and nothing was rewritten.
-    expect((await bridge.storyNewMaterial({ bookId })).length).toBeGreaterThan(0);
+    expect((await bridge.booksNewMaterial({ bookId })).length).toBeGreaterThan(0);
 
     // Accepting is the explicit act that spends — and it is the ONLY thing that rewrites (72 §3.6). The
     // offline fake returns the same prose each pass, so the tell is the revision bump, not the text.
     const before = auto.bundle?.chapters.find((c) => c.id === chapterId)?.revision ?? 0;
-    const accepted = await bridge.storyAcceptMaterial({ bookId, chapterId });
+    const accepted = await bridge.booksAcceptMaterial({ bookId, chapterId });
     expect(accepted.ok).toBe(true);
-    const after = await bridge.storyGet({ bookId });
+    const after = await bridge.booksGet({ bookId });
     expect(after?.chapters.find((c) => c.id === chapterId)?.revision).toBeGreaterThan(before);
     // The proposal clears once it's been woven in.
-    expect((await bridge.storyNewMaterial({ bookId })).map((e) => e.chapterId)).not.toContain(
+    expect((await bridge.booksNewMaterial({ bookId })).map((e) => e.chapterId)).not.toContain(
       chapterId,
     );
   });
@@ -10059,7 +10059,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -10072,22 +10072,22 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    await bridge.storyGenerateFoundations({ bookId });
+    await bridge.booksGenerateFoundations({ bookId });
 
     // The fake claude returns a fixed candidate set for the "propose … titles" prompt.
-    const titles = await bridge.storySuggestTitles({ bookId });
+    const titles = await bridge.booksSuggestTitles({ bookId });
     expect(titles.ok).toBe(true);
     expect(titles.titles.length).toBeGreaterThan(0);
     expect(titles.titles).not.toContain('The Story of Ben'); // the current title is dropped
 
-    // Committing a candidate goes through storyUpdate, which clears titleAuto (never re-titled later).
-    await bridge.storyUpdate({ bookId, title: titles.titles[0]! });
-    const after = await bridge.storyGet({ bookId });
+    // Committing a candidate goes through booksUpdate, which clears titleAuto (never re-titled later).
+    await bridge.booksUpdate({ bookId, title: titles.titles[0]! });
+    const after = await bridge.booksGet({ bookId });
     expect(after!.manifest.title).toBe(titles.titles[0]);
     expect(after!.manifest.titleAuto).toBeFalsy();
 
     // Essence regen returns a line; committing it doesn't touch chapters.
-    const essence = await bridge.storyRegenerateEssence({ bookId });
+    const essence = await bridge.booksRegenerateEssence({ bookId });
     expect(essence.ok).toBe(true);
     expect(essence.essence).toBeTruthy();
   });
@@ -10097,7 +10097,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
-    const denied = await bridge.storySuggestTitles({ bookId: 'whatever' });
+    const denied = await bridge.booksSuggestTitles({ bookId: 'whatever' });
     expect(denied.ok).toBe(false);
     expect(denied.titles).toEqual([]);
   });
@@ -10106,7 +10106,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Dated Book',
       config: {
@@ -10119,13 +10119,13 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
 
     // The fake foundations proposes "Born in Ohio" at 1985. The person knows it was 1987.
     const generated = gen.bundle.timeline!.events[0]!;
     expect(generated.date).toBe('1985');
-    const fixed = await bridge.storyEditTimeline({
+    const fixed = await bridge.booksEditTimeline({
       bookId,
       edit: { op: 'update', eventId: generated.id, date: '1987' },
     });
@@ -10134,19 +10134,19 @@ describe('createCoreBridge — Together (58) foundation', () => {
 
     // A LATER pass re-proposes its own version — the correction must stand (the promise `userEdited`
     // has always encoded and nothing honoured until §16.2).
-    const again = await bridge.storyGenerateFoundations({ bookId });
+    const again = await bridge.booksGenerateFoundations({ bookId });
     if (!again.ok) throw new Error('second foundations failed');
     const born = again.bundle.timeline!.events.filter((e) => e.label === 'Born in Ohio');
     expect(born).toHaveLength(1);
     expect(born[0]!.date).toBe('1987');
 
     // Adding + removing round-trip, and a vanished moment degrades honestly.
-    const added = await bridge.storyEditTimeline({
+    const added = await bridge.booksEditTimeline({
       bookId,
       edit: { op: 'add', label: 'Moved west', approx: 'mid-90s' },
     });
     expect(added.timeline!.events.some((e) => e.label === 'Moved west')).toBe(true);
-    const ghost = await bridge.storyEditTimeline({
+    const ghost = await bridge.booksEditTimeline({
       bookId,
       edit: { op: 'remove', eventId: 'ghost' },
     });
@@ -10159,7 +10159,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
-    const denied = await bridge.storyEditTimeline({
+    const denied = await bridge.booksEditTimeline({
       bookId: 'whatever',
       edit: { op: 'add', label: 'Sneaky' },
     });
@@ -10171,7 +10171,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -10184,16 +10184,16 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.booksGenerateChapters({ bookId });
 
     // The fake foundations outline has ONE chapter; add a second BY HAND (exercising the new op) and draft
     // it, so the merge below has two chapters with real prose to preserve.
-    const seeded = await bridge.storyGet({ bookId });
+    const seeded = await bridge.booksGet({ bookId });
     const partId = seeded!.outline!.parts[0]!.id;
-    const added = await bridge.storyEditOutline({
+    const added = await bridge.booksEditOutline({
       bookId,
       edit: {
         op: 'addChapter',
@@ -10203,14 +10203,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     expect(added.ok).toBe(true);
-    await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksGenerateChapters({ bookId });
 
-    const before = await bridge.storyGet({ bookId });
+    const before = await bridge.booksGet({ bookId });
     const ids = before!.outline!.parts[0]!.chapters.map((c) => c.id);
     expect(ids.length).toBe(2);
 
     // Rename — mirrored onto the draft record, and the prose is NOT staled (no metered rewrite provoked).
-    const renamed = await bridge.storyEditOutline({
+    const renamed = await bridge.booksEditOutline({
       bookId,
       edit: { op: 'renameChapter', chapterId: ids[0]!, title: 'The Shed' },
     });
@@ -10218,7 +10218,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(renamed.bundle!.chapters.find((c) => c.id === ids[0])?.title).toBe('The Shed');
 
     // Reorder — the outline AND the chapter records agree afterwards.
-    const moved = await bridge.storyEditOutline({
+    const moved = await bridge.booksEditOutline({
       bookId,
       edit: { op: 'moveChapter', chapterId: ids[1]!, toPartId: partId, toIndex: 0 },
     });
@@ -10230,7 +10230,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const sourceText = moved.bundle!.chapters.find((c) => c.id === ids[0])?.markdown ?? '';
     const targetText = moved.bundle!.chapters.find((c) => c.id === ids[1])?.markdown ?? '';
     expect(sourceText.trim()).not.toBe('');
-    const merged = await bridge.storyEditOutline({
+    const merged = await bridge.booksEditOutline({
       bookId,
       edit: { op: 'mergeChapters', chapterId: ids[0]!, intoChapterId: ids[1]! },
     });
@@ -10241,7 +10241,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(merged.bundle!.chapters.some((c) => c.id === ids[0])).toBe(false);
 
     // A vanished id degrades honestly rather than throwing.
-    const ghost = await bridge.storyEditOutline({
+    const ghost = await bridge.booksEditOutline({
       bookId,
       edit: { op: 'deleteChapter', chapterId: 'ghost' },
     });
@@ -10254,7 +10254,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
-    const denied = await bridge.storyEditOutline({
+    const denied = await bridge.booksEditOutline({
       bookId: 'whatever',
       edit: { op: 'addPart', title: 'Sneaky' },
     });
@@ -10267,7 +10267,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
     const ctx = (await host.host.vaultAndKey())!;
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -10280,11 +10280,11 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    await bridge.storyGenerateChapters({ bookId });
-    const before = await bridge.storyGet({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.booksGenerateChapters({ bookId });
+    const before = await bridge.booksGet({ bookId });
     const partId = before!.outline!.parts[0]!.id;
     const chapterId = before!.outline!.parts[0]!.chapters[0]!.id;
 
@@ -10315,13 +10315,13 @@ describe('createCoreBridge — Together (58) foundation', () => {
     });
 
     // The panel lists both pending proposals.
-    expect((await bridge.storyProposals({ bookId })).map((p) => p.id).sort()).toEqual([
+    expect((await bridge.booksProposals({ bookId })).map((p) => p.id).sort()).toEqual([
       'pr-new',
       'pr-prologue',
     ]);
 
     // Approve the new-chapter proposal → it restructures the outline (a new un-written chapter appears).
-    const approved = await bridge.storyResolveProposal({
+    const approved = await bridge.booksResolveProposal({
       bookId,
       proposalId: 'pr-new',
       action: 'approve',
@@ -10336,13 +10336,13 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(shell?.markdown).toBe('');
 
     // Dismiss the other → it leaves the pending list (kept stored for dedup, not shown).
-    const dismissed = await bridge.storyResolveProposal({
+    const dismissed = await bridge.booksResolveProposal({
       bookId,
       proposalId: 'pr-prologue',
       action: 'dismiss',
     });
     expect(dismissed.ok).toBe(true);
-    expect(await bridge.storyProposals({ bookId })).toEqual([]);
+    expect(await bridge.booksProposals({ bookId })).toEqual([]);
   });
 
   it('story: the Home signal reports the book’s living state; false for no book or a Guest', async () => {
@@ -10352,9 +10352,9 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const ctx = (await host.host.vaultAndKey())!;
 
     // No book yet → hasBook:false (starting one is the nav's job, not a Home push).
-    expect(await bridge.storyHomeSignal()).toMatchObject({ hasBook: false });
+    expect(await bridge.booksHomeSignal()).toMatchObject({ hasBook: false });
 
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -10367,11 +10367,11 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
     // Chapters aren't written → they're all unwritten. Seed one pending proposal.
-    const before = await bridge.storyGet({ bookId });
+    const before = await bridge.booksGet({ bookId });
     const firstChapterId = before!.outline!.parts[0]!.chapters[0]!.id;
     await saveProposals(ctx.fs, ctx.key, ownerId, bookId, {
       schemaVersion: 1,
@@ -10387,7 +10387,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
       ],
     });
 
-    const sig = await bridge.storyHomeSignal();
+    const sig = await bridge.booksHomeSignal();
     expect(sig.hasBook).toBe(true);
     expect(sig.unwrittenChapters).toBeGreaterThan(0);
     expect(sig.pendingProposals).toBe(1);
@@ -10397,14 +10397,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
-    expect(await bridge.storyHomeSignal()).toMatchObject({ hasBook: false });
+    expect(await bridge.booksHomeSignal()).toMatchObject({ hasBook: false });
   });
 
   it('story: the interview cadence gap-passes + mints ≤1 check-in; completeness reflects it; Guest denied', async () => {
     const { bridge } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -10417,23 +10417,23 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    await bridge.booksGenerateChapters({ bookId });
 
     // Empty completeness before any gap pass.
-    expect(await bridge.storyCompleteness({ bookId })).toMatchObject({
+    expect(await bridge.booksCompleteness({ bookId })).toMatchObject({
       stage: 'beginning',
       covered: 0,
     });
 
     // A manual interview check runs the gap pass + mints one check-in into the Inbox.
-    const first = await bridge.storyInterviewCheck({ bookId });
+    const first = await bridge.booksInterviewCheck({ bookId });
     expect(first.outcome).toBe('minted');
     expect(first.assignmentId).toBeTruthy();
     // The gap pass persisted coverage → completeness climbed (chapters + highPoint = 2/12).
-    expect(await bridge.storyCompleteness({ bookId })).toMatchObject({
+    expect(await bridge.booksCompleteness({ bookId })).toMatchObject({
       covered: 2,
       stage: 'beginning',
     });
@@ -10441,21 +10441,21 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const inbox = await bridge.assignmentsInbox();
     expect(inbox.some((i) => i.assignmentId === first.assignmentId && i.fromSelf)).toBe(true);
     // A second check while it's open → nothing minted (≤1).
-    expect((await bridge.storyInterviewCheck({ bookId })).outcome).toBe('openCheckin');
+    expect((await bridge.booksInterviewCheck({ bookId })).outcome).toBe('openCheckin');
 
     // The persisted gaps + per-part coverage render on the Interview tab with NO AI (§13.6.3/§13.6.4).
-    const gapsView = await bridge.storyGaps({ bookId });
+    const gapsView = await bridge.booksGaps({ bookId });
     expect(gapsView.gaps.length).toBeGreaterThan(0);
     expect(gapsView.gaps[0]?.id.length).toBeGreaterThan(0);
     expect(gapsView.partCoverage.length).toBeGreaterThan(0);
     expect(gapsView.hasOpenCheckin).toBe(true);
     // "Ask me about this" is refused while a check-in is already open (the ≤1 rule, §13.6.5).
-    expect((await bridge.storyAskGap({ bookId, gapId: gapsView.gaps[0]!.id })).ok).toBe(false);
+    expect((await bridge.booksAskGap({ bookId, gapId: gapsView.gaps[0]!.id })).ok).toBe(false);
 
     // Answer the open check-in → it appears in the answered history (§13.6.5).
-    expect(await bridge.storyAnsweredCheckIns({ bookId })).toEqual([]);
+    expect(await bridge.booksAnsweredCheckIns({ bookId })).toEqual([]);
     await bridge.assignmentsSubmit({ assignmentId: first.assignmentId!, answers: [] });
-    const answered = await bridge.storyAnsweredCheckIns({ bookId });
+    const answered = await bridge.booksAnsweredCheckIns({ bookId });
     expect(answered).toHaveLength(1);
     expect(answered[0]?.assignmentId).toBe(first.assignmentId);
     expect(answered[0]?.title.length).toBeGreaterThan(0);
@@ -10464,13 +10464,13 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
-    expect(await bridge.storyCompleteness({ bookId })).toMatchObject({
+    expect(await bridge.booksCompleteness({ bookId })).toMatchObject({
       stage: 'beginning',
       covered: 0,
     });
-    expect((await bridge.storyInterviewCheck({ bookId })).outcome).toBe('noBook');
-    expect(await bridge.storyGaps({ bookId })).toMatchObject({ gaps: [], hasOpenCheckin: false });
-    expect(await bridge.storyAnsweredCheckIns({ bookId })).toEqual([]);
+    expect((await bridge.booksInterviewCheck({ bookId })).outcome).toBe('noBook');
+    expect(await bridge.booksGaps({ bookId })).toMatchObject({ gaps: [], hasOpenCheckin: false });
+    expect(await bridge.booksAnsweredCheckIns({ bookId })).toEqual([]);
   });
 
   it('story: markup + refresh ops are denied for a person without story.own', async () => {
@@ -10481,20 +10481,20 @@ describe('createCoreBridge — Together (58) foundation', () => {
     await bridge.sessionSetActive({ personId: guest.id });
 
     // Reads degrade to empty; there's no book to target, but the gate is what we're asserting.
-    expect((await bridge.storyGetMarkup({ bookId: 'x', chapterId: 'c' })).marks).toEqual([]);
-    expect((await bridge.storyTodos({ bookId: 'x' })).todos).toEqual([]);
-    expect(await bridge.storyProposals({ bookId: 'x' })).toEqual([]);
-    const applied = await bridge.storyApplyMarkup({ bookId: 'x', chapterId: 'c' });
+    expect((await bridge.booksGetMarkup({ bookId: 'x', chapterId: 'c' })).marks).toEqual([]);
+    expect((await bridge.booksTodos({ bookId: 'x' })).todos).toEqual([]);
+    expect(await bridge.booksProposals({ bookId: 'x' })).toEqual([]);
+    const applied = await bridge.booksApplyMarkup({ bookId: 'x', chapterId: 'c' });
     expect(applied.ok).toBe(false);
-    const resolved = await bridge.storyResolveProposal({
+    const resolved = await bridge.booksResolveProposal({
       bookId: 'x',
       proposalId: 'p',
       action: 'approve',
     });
     expect(resolved.ok).toBe(false);
-    const refreshed = await bridge.storyRefreshCheck({ bookId: 'x' });
+    const refreshed = await bridge.booksRefreshCheck({ bookId: 'x' });
     expect(refreshed).toEqual({ staled: 0, rewritten: 0, bundle: null });
-    expect(await bridge.storyRewriteFromScratch({ bookId: 'x' })).toBeNull();
+    expect(await bridge.booksRewriteFromScratch({ bookId: 'x' })).toBeNull();
   });
 
   it('story: publish → grant → a reader reads the published head; revoke re-gates at the next read (§3.5)', async () => {
@@ -10505,7 +10505,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const reader = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: reader.id, roleId: 'member', pin: null });
 
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -10518,27 +10518,27 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
     const chapterId = chapters.bundle.chapters[0]!.id;
 
     // Can't publish until a chapter is Reviewed (the gate).
-    expect((await bridge.storyPublish({ bookId })).ok).toBe(false);
-    await bridge.storyReviewChapter({ bookId, chapterId });
-    expect(await bridge.storyPublish({ bookId })).toMatchObject({ ok: true, publishedChapters: 1 });
+    expect((await bridge.booksPublish({ bookId })).ok).toBe(false);
+    await bridge.booksReviewChapter({ bookId, chapterId });
+    expect(await bridge.booksPublish({ bookId })).toMatchObject({ ok: true, publishedChapters: 1 });
 
     // Grant the reader (the picker's featured-note read works too — the prose mentions "warm oil", not "Angel").
-    expect(await bridge.storyReaderFeatured({ bookId, readerPersonId: reader.id })).toBe(false);
-    expect(await bridge.storyGrantReader({ bookId, readerPersonId: reader.id })).toEqual([
+    expect(await bridge.booksReaderFeatured({ bookId, readerPersonId: reader.id })).toBe(false);
+    expect(await bridge.booksGrantReader({ bookId, readerPersonId: reader.id })).toEqual([
       { personId: reader.id, displayName: 'Angel' },
     ]);
 
     // Switch to the reader → the book appears in "Shared with you" + reads the published head.
     await bridge.sessionSetActive({ personId: reader.id });
-    const shared = await bridge.storySharedBooks();
+    const shared = await bridge.booksSharedBooks();
     expect(shared).toHaveLength(1);
     expect(shared[0]).toMatchObject({
       authorName: 'Ben',
@@ -10547,35 +10547,35 @@ describe('createCoreBridge — Together (58) foundation', () => {
       neverOpened: true, // never opened yet → drives the one-time "shared with you" notification
       updated: true,
     });
-    const view = await bridge.storyReadShared({ authorPersonId: ownerId, bookId });
+    const view = await bridge.booksReadShared({ authorPersonId: ownerId, bookId });
     expect(view?.chapters.map((c) => c.id)).toEqual([chapterId]);
     expect(view?.manifest.noteOnBook).toContain('never invented');
 
     // Recording the open clears the read-progress cues (device-local, per-person) — the notification stops
     // and the "Updated" marker goes quiet until the author republishes (§3.6). It ALSO writes a vault read
     // RECEIPT (§13.6.8) so the AUTHOR can see the reader has read their book.
-    await bridge.storyMarkSharedRead({ authorPersonId: ownerId, bookId });
-    expect((await bridge.storySharedBooks())[0]).toMatchObject({
+    await bridge.booksMarkSharedRead({ authorPersonId: ownerId, bookId });
+    expect((await bridge.booksSharedBooks())[0]).toMatchObject({
       neverOpened: false,
       updated: false,
     });
 
     // Back on the author's account, the Sharing tab shows the reader's read state (§13.6.8).
     await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
-    expect((await bridge.storyReaders({ bookId }))[0]).toMatchObject({
+    expect((await bridge.booksReaders({ bookId }))[0]).toMatchObject({
       personId: reader.id,
       displayName: 'Angel',
       read: { upToDate: true },
     });
     // Republishing → the reader's receipt is now for an OLDER version (they haven't re-opened).
-    await bridge.storyPublish({ bookId });
-    expect((await bridge.storyReaders({ bookId }))[0]?.read).toMatchObject({ upToDate: false });
+    await bridge.booksPublish({ bookId });
+    expect((await bridge.booksReaders({ bookId }))[0]?.read).toMatchObject({ upToDate: false });
 
     // Author revokes → the reader loses access at the next read (no stale access).
-    await bridge.storyRevokeReader({ bookId, readerPersonId: reader.id });
+    await bridge.booksRevokeReader({ bookId, readerPersonId: reader.id });
     await bridge.sessionSetActive({ personId: reader.id });
-    expect(await bridge.storySharedBooks()).toEqual([]);
-    expect(await bridge.storyReadShared({ authorPersonId: ownerId, bookId })).toBeNull();
+    expect(await bridge.booksSharedBooks()).toEqual([]);
+    expect(await bridge.booksReadShared({ authorPersonId: ownerId, bookId })).toBeNull();
   });
 
   it('story: publish-diff + unpublish lifecycle — reader loses access, draft + grants survive (§18.2)', async () => {
@@ -10585,7 +10585,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const reader = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
     await bridge.accessSetAccount({ personId: reader.id, roleId: 'member', pin: null });
 
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -10598,59 +10598,59 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
     const chapterId = chapters.bundle.chapters[0]!.id;
 
     // Before any review: nothing to publish.
-    expect(await bridge.storyPublishDiff({ bookId })).toMatchObject({
+    expect(await bridge.booksPublishDiff({ bookId })).toMatchObject({
       everPublished: false,
       nothingToPublish: true,
       willShrink: false,
     });
 
-    await bridge.storyReviewChapter({ bookId, chapterId });
+    await bridge.booksReviewChapter({ bookId, chapterId });
     // Reviewed but not published → the chapter is an "add".
-    const beforePublish = await bridge.storyPublishDiff({ bookId });
+    const beforePublish = await bridge.booksPublishDiff({ bookId });
     expect(beforePublish.added.map((c) => c.id)).toEqual([chapterId]);
     expect(beforePublish.everPublished).toBe(false);
 
-    await bridge.storyPublish({ bookId });
-    await bridge.storyGrantReader({ bookId, readerPersonId: reader.id });
+    await bridge.booksPublish({ bookId });
+    await bridge.booksGrantReader({ bookId, readerPersonId: reader.id });
     // Published, no pending edits → a clean diff (nothing to gain/lose).
-    const afterPublish = await bridge.storyPublishDiff({ bookId });
+    const afterPublish = await bridge.booksPublishDiff({ bookId });
     expect(afterPublish).toMatchObject({ everPublished: true, willShrink: false });
     expect(afterPublish.added).toEqual([]);
     expect(afterPublish.unchanged.map((c) => c.id)).toEqual([chapterId]);
 
     // The reader can read.
     await bridge.sessionSetActive({ personId: reader.id });
-    expect(await bridge.storyReadShared({ authorPersonId: ownerId, bookId })).not.toBeNull();
+    expect(await bridge.booksReadShared({ authorPersonId: ownerId, bookId })).not.toBeNull();
 
     // Author unpublishes → the reader loses access immediately, but the grant + draft survive.
     await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
-    expect(await bridge.storyUnpublish({ bookId })).toEqual({ ok: true });
-    expect(await bridge.storyReaders({ bookId })).toHaveLength(1); // grant kept
+    expect(await bridge.booksUnpublish({ bookId })).toEqual({ ok: true });
+    expect(await bridge.booksReaders({ bookId })).toHaveLength(1); // grant kept
     await bridge.sessionSetActive({ personId: reader.id });
-    expect(await bridge.storySharedBooks()).toEqual([]);
-    expect(await bridge.storyReadShared({ authorPersonId: ownerId, bookId })).toBeNull();
+    expect(await bridge.booksSharedBooks()).toEqual([]);
+    expect(await bridge.booksReadShared({ authorPersonId: ownerId, bookId })).toBeNull();
 
     // Re-publish restores the same reader with no re-grant.
     await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
-    await bridge.storyPublish({ bookId });
+    await bridge.booksPublish({ bookId });
     await bridge.sessionSetActive({ personId: reader.id });
-    expect(await bridge.storyReadShared({ authorPersonId: ownerId, bookId })).not.toBeNull();
+    expect(await bridge.booksReadShared({ authorPersonId: ownerId, bookId })).not.toBeNull();
 
     // A person WITHOUT story.own can't diff or unpublish someone else's book (gated). The reader is currently
     // active; diffing their OWN (nonexistent) book id is empty, and unpublish is refused.
-    const diffAsReader = await bridge.storyPublishDiff({ bookId });
+    const diffAsReader = await bridge.booksPublishDiff({ bookId });
     expect(diffAsReader).toMatchObject({ everPublished: false, nothingToPublish: true });
-    expect((await bridge.storyUnpublish({ bookId })).ok).toBe(false);
+    expect((await bridge.booksUnpublish({ bookId })).ok).toBe(false);
     // …and the author's book is STILL published (the reader's unpublish was refused) — they can still read it.
-    expect(await bridge.storyReadShared({ authorPersonId: ownerId, bookId })).not.toBeNull();
+    expect(await bridge.booksReadShared({ authorPersonId: ownerId, bookId })).not.toBeNull();
   });
 
   it('story: exports the published book as a Markdown file outside the vault (§3.9)', async () => {
@@ -10662,7 +10662,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
       saved.push({ name, bytes });
       return Promise.resolve(`/exports/${name}`);
     };
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -10675,24 +10675,24 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
 
     // Not published yet → the PUBLISHED export is nothing…
-    expect(await bridge.storyExportMarkdown({ bookId })).toBeNull();
+    expect(await bridge.booksExportMarkdown({ bookId })).toBeNull();
     expect(saved).toHaveLength(0);
     // …but the DRAFT export works WITHOUT publishing (§13.6.1) — the live written chapters + honesty note.
-    const draftPath = await bridge.storyExportMarkdown({ bookId, head: 'draft' });
+    const draftPath = await bridge.booksExportMarkdown({ bookId, head: 'draft' });
     expect(draftPath).toBe('/exports/The-Story-of-Ben.md');
     expect(new TextDecoder().decode(saved[0]!.bytes)).toContain('# The Story of Ben');
     saved.length = 0;
 
-    await bridge.storyReviewChapter({ bookId, chapterId: chapters.bundle.chapters[0]!.id });
-    await bridge.storyPublish({ bookId });
-    const path = await bridge.storyExportMarkdown({ bookId });
+    await bridge.booksReviewChapter({ bookId, chapterId: chapters.bundle.chapters[0]!.id });
+    await bridge.booksPublish({ bookId });
+    const path = await bridge.booksExportMarkdown({ bookId });
     expect(path).toBe('/exports/The-Story-of-Ben.md');
     const md = new TextDecoder().decode(saved[0]!.bytes);
     expect(md).toContain('# The Story of Ben');
@@ -10712,7 +10712,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
       saved.push({ name, bytes, mime });
       return Promise.resolve(`/exports/${name}`);
     };
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -10725,19 +10725,19 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
 
     // Not published yet → nothing to export.
-    expect(await bridge.storyExportPdf({ bookId })).toBeNull();
+    expect(await bridge.booksExportPdf({ bookId })).toBeNull();
     expect(saved).toHaveLength(0);
 
-    await bridge.storyReviewChapter({ bookId, chapterId: chapters.bundle.chapters[0]!.id });
-    await bridge.storyPublish({ bookId });
-    const path = await bridge.storyExportPdf({ bookId });
+    await bridge.booksReviewChapter({ bookId, chapterId: chapters.bundle.chapters[0]!.id });
+    await bridge.booksPublish({ bookId });
+    const path = await bridge.booksExportPdf({ bookId });
     expect(path).toBe('/exports/The-Story-of-Ben.pdf');
     expect(saved[0]!.mime).toBe('application/pdf');
     // The test host's fake printToPdf echoes the rendered HTML length, so a non-trivial doc means we rendered.
@@ -10753,7 +10753,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
       saved.push({ name, bytes, mime });
       return Promise.resolve(`/exports/${name}`);
     };
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -10766,16 +10766,16 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
 
     // Not published yet → nothing to export.
-    expect(await bridge.storyExportEpub({ bookId })).toBeNull();
+    expect(await bridge.booksExportEpub({ bookId })).toBeNull();
     // …but the DRAFT export works without publishing (§13.6.1).
-    const draftPath = await bridge.storyExportEpub({ bookId, head: 'draft' });
+    const draftPath = await bridge.booksExportEpub({ bookId, head: 'draft' });
     expect(draftPath).toBe('/exports/The-Story-of-Ben.epub');
     expect(saved[0]!.mime).toBe('application/epub+zip');
     // A valid EPUB is a ZIP whose FIRST entry is a verbatim `mimetype` of `application/epub+zip`.
@@ -10793,7 +10793,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
       saved.push({ name, bytes, mime });
       return Promise.resolve(`/exports/${name}`);
     };
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -10806,14 +10806,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
 
-    expect(await bridge.storyExportDocx({ bookId })).toBeNull(); // not published yet
-    const draftPath = await bridge.storyExportDocx({ bookId, head: 'draft' });
+    expect(await bridge.booksExportDocx({ bookId })).toBeNull(); // not published yet
+    const draftPath = await bridge.booksExportDocx({ bookId, head: 'draft' });
     expect(draftPath).toBe('/exports/The-Story-of-Ben.docx');
     expect(saved[0]!.mime).toBe(
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -10828,7 +10828,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     const { bridge, host } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -10841,22 +10841,22 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
 
     // Consent off → refused, nothing created.
-    const off = await bridge.storyGenerateImage({ bookId, target: { kind: 'cover' } });
+    const off = await bridge.booksGenerateImage({ bookId, target: { kind: 'cover' } });
     expect(off.ok === false && off.reason).toBe('NO_CONSENT');
-    expect(await bridge.storyImages({ bookId })).toEqual([]);
+    expect(await bridge.booksImages({ bookId })).toEqual([]);
 
     // Turn on this person's Story image consent + the OpenAI key → a cover generates + is indexed + served.
     await bridge.imagesSetPrefs({ feature: 'story', patch: { enabled: true } });
     await bridge.secretSet({ id: OPENAI_API_KEY_ID, value: 'sk-openai' });
     host.imageProgress.length = 0; // ignore the consent-off call's terminal event
-    const made = await bridge.storyGenerateImage({ bookId, target: { kind: 'cover' } });
+    const made = await bridge.booksGenerateImage({ bookId, target: { kind: 'cover' } });
     expect(made.ok).toBe(true);
     if (!made.ok) throw new Error('generate failed');
     expect(made.image.kind).toBe('cover');
@@ -10865,29 +10865,29 @@ describe('createCoreBridge — Together (58) foundation', () => {
 
     // Realtime progress (CLAUDE.md §12): the generation streamed compose → render phase events for this
     // surface's id, so the renderer shows live status instead of a bare spinner.
-    const coverPhases = host.imageProgress.filter((p) => p.id === `story:${bookId}:cover`);
+    const coverPhases = host.imageProgress.filter((p) => p.id === `books:${bookId}:cover`);
     expect(coverPhases.map((p) => p.phase)).toEqual(['composing', 'rendering', 'done']);
 
-    const index = await bridge.storyImages({ bookId });
+    const index = await bridge.booksImages({ bookId });
     expect(index.map((i) => i.id)).toEqual([made.image.id]);
     // The book's manifest now points at the cover.
-    expect((await bridge.storyGet({ bookId }))?.manifest.coverImageId).toBe(made.image.id);
+    expect((await bridge.booksGet({ bookId }))?.manifest.coverImageId).toBe(made.image.id);
     // The bytes are served base64 (decrypted host-side); the pixels never travel through the generate result.
-    const served = await bridge.storyGetImage({ bookId, imageId: made.image.id });
+    const served = await bridge.booksGetImage({ bookId, imageId: made.image.id });
     expect(served?.mime).toBe('image/png');
     expect(served?.dataBase64.length).toBeGreaterThan(0);
 
     // Delete clears the cover pointer + the index.
-    await bridge.storyDeleteImage({ bookId, imageId: made.image.id });
-    expect(await bridge.storyImages({ bookId })).toEqual([]);
-    expect((await bridge.storyGet({ bookId }))?.manifest.coverImageId).toBeUndefined();
+    await bridge.booksDeleteImage({ bookId, imageId: made.image.id });
+    expect(await bridge.booksImages({ bookId })).toEqual([]);
+    expect((await bridge.booksGet({ bookId }))?.manifest.coverImageId).toBeUndefined();
   });
 
   it('story: uploads a photo (encrypted), captions + asks via vision, and persists the answer (§3.7)', async () => {
     const { bridge, host } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -10903,11 +10903,11 @@ describe('createCoreBridge — Together (58) foundation', () => {
 
     // Upload a tiny PNG (base64) → indexed `uploaded`, decrypts back.
     const dataBase64 = Buffer.from([137, 80, 78, 71, 1, 2, 3]).toString('base64');
-    const entry = await bridge.storyUploadPhoto({ bookId, mime: 'image/png', dataBase64 });
+    const entry = await bridge.booksUploadPhoto({ bookId, mime: 'image/png', dataBase64 });
     expect(entry?.kind).toBe('uploaded');
-    const images = await bridge.storyImages({ bookId });
+    const images = await bridge.booksImages({ bookId });
     expect(images.map((i) => i.id)).toEqual([entry!.id]);
-    const served = await bridge.storyGetImage({ bookId, imageId: entry!.id });
+    const served = await bridge.booksGetImage({ bookId, imageId: entry!.id });
     expect(served?.mime).toBe('image/png');
 
     // Vision analysis → caption stamped + questions returned.
@@ -10919,21 +10919,21 @@ describe('createCoreBridge — Together (58) foundation', () => {
           usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
         }),
     };
-    const analysis = await bridge.storyAnalyzePhoto({ bookId, imageId: entry!.id });
+    const analysis = await bridge.booksAnalyzePhoto({ bookId, imageId: entry!.id });
     expect(analysis.ok).toBe(true);
     if (!analysis.ok) throw new Error('analyze failed');
     expect(analysis.analysis.caption).toBe('A garage in winter');
     expect(analysis.analysis.questions).toHaveLength(2);
-    expect((await bridge.storyImages({ bookId }))[0]?.caption).toBe('A garage in winter');
+    expect((await bridge.booksImages({ bookId }))[0]?.caption).toBe('A garage in winter');
 
     // Answer a question → it persists to the interview corpus.
-    await bridge.storyAnswerPhoto({
+    await bridge.booksAnswerPhoto({
       bookId,
       imageId: entry!.id,
       question: 'Who took this?',
       answer: 'My father did.',
     });
-    const answers = await bridge.storyPhotoAnswers({ bookId });
+    const answers = await bridge.booksPhotoAnswers({ bookId });
     expect(answers).toEqual([
       expect.objectContaining({
         imageId: entry!.id,
@@ -10943,14 +10943,14 @@ describe('createCoreBridge — Together (58) foundation', () => {
     ]);
 
     // A crafted non-image mime is rejected at the trust boundary.
-    expect(await bridge.storyUploadPhoto({ bookId, mime: 'text/plain', dataBase64 })).toBeNull();
+    expect(await bridge.booksUploadPhoto({ bookId, mime: 'text/plain', dataBase64 })).toBeNull();
   });
 
   it('story: places an uploaded photo in a chapter via the AI-suggested anchor, then moves + removes it (§3.8)', async () => {
     const { bridge, host } = await freshOwner();
     await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
     await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -10963,15 +10963,15 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
     const chapterId = chapters.bundle.chapters[0]!.id;
 
     const dataBase64 = Buffer.from([137, 80, 78, 71, 9]).toString('base64');
-    const photo = await bridge.storyUploadPhoto({ bookId, mime: 'image/png', dataBase64 });
+    const photo = await bridge.booksUploadPhoto({ bookId, mime: 'image/png', dataBase64 });
 
     // The AI suggests a paragraph anchor.
     host.host.claude = {
@@ -10982,12 +10982,12 @@ describe('createCoreBridge — Together (58) foundation', () => {
           usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
         }),
     };
-    const suggested = await bridge.storySuggestPlacement({ bookId, chapterId, imageId: photo!.id });
+    const suggested = await bridge.booksSuggestPlacement({ bookId, chapterId, imageId: photo!.id });
     expect(suggested.ok).toBe(true);
     if (!suggested.ok) throw new Error('suggest failed');
 
     // Place it, then confirm it's on the chapter.
-    let bundle = await bridge.storySetPlacement({
+    let bundle = await bridge.booksSetPlacement({
       bookId,
       chapterId,
       imageId: photo!.id,
@@ -11000,7 +11000,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     ]);
 
     // Move it (same image → deduped, not doubled).
-    bundle = await bridge.storySetPlacement({
+    bundle = await bridge.booksSetPlacement({
       bookId,
       chapterId,
       imageId: photo!.id,
@@ -11011,7 +11011,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(chapter?.imagePlacements[0]?.afterAnchor).toBe('p0');
 
     // Remove it.
-    bundle = await bridge.storyRemovePlacement({ bookId, chapterId, imageId: photo!.id });
+    bundle = await bridge.booksRemovePlacement({ bookId, chapterId, imageId: photo!.id });
     chapter = bundle?.chapters.find((c) => c.id === chapterId);
     expect(chapter?.imagePlacements).toEqual([]);
   });
@@ -11027,7 +11027,7 @@ describe('createCoreBridge — Together (58) foundation', () => {
       saved.push({ name, bytes });
       return Promise.resolve(`/exports/${name}`);
     };
-    const book = await bridge.storyCreate({
+    const book = await bridge.booksCreate({
       type: 'biography',
       title: 'The Story of Ben',
       config: {
@@ -11040,18 +11040,18 @@ describe('createCoreBridge — Together (58) foundation', () => {
       },
     });
     const bookId = book!.id;
-    const gen = await bridge.storyGenerateFoundations({ bookId });
+    const gen = await bridge.booksGenerateFoundations({ bookId });
     if (!gen.ok) throw new Error('foundations failed');
-    await bridge.storyApproveOutline({ bookId, outline: gen.bundle.outline! });
-    const chapters = await bridge.storyGenerateChapters({ bookId });
+    await bridge.booksApproveOutline({ bookId, outline: gen.bundle.outline! });
+    const chapters = await bridge.booksGenerateChapters({ bookId });
     if (!chapters.ok) throw new Error('chapters failed');
-    await bridge.storyReviewChapter({ bookId, chapterId: chapters.bundle.chapters[0]!.id });
+    await bridge.booksReviewChapter({ bookId, chapterId: chapters.bundle.chapters[0]!.id });
 
     // Make a cover (the test host's fake image client returns a tiny PNG), then publish + export.
-    const cover = await bridge.storyGenerateImage({ bookId, target: { kind: 'cover' } });
+    const cover = await bridge.booksGenerateImage({ bookId, target: { kind: 'cover' } });
     if (!cover.ok) throw new Error('cover failed');
-    await bridge.storyPublish({ bookId });
-    await bridge.storyExportMarkdown({ bookId });
+    await bridge.booksPublish({ bookId });
+    await bridge.booksExportMarkdown({ bookId });
     const md = new TextDecoder().decode(saved.at(-1)!.bytes);
     expect(md).toContain('![Cover](data:image/png;base64,'); // the frozen cover is embedded inline
   });

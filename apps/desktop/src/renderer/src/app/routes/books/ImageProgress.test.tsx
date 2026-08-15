@@ -21,7 +21,7 @@ describe('ImageProgress (§12 — realtime AI-image progress)', () => {
       },
     });
 
-    render(<ImageProgress id="story:b1:cover" label="Creating your cover" />);
+    render(<ImageProgress id="books:b1:cover" label="Creating your cover" />);
 
     // Starts in the composing phase with a 0s timer.
     expect(screen.getByText(/Creating your cover — Composing the scene…/)).toBeInTheDocument();
@@ -37,9 +37,9 @@ describe('ImageProgress (§12 — realtime AI-image progress)', () => {
     expect(screen.getByText('1s elapsed')).toBeInTheDocument();
 
     // A render-phase event upgrades the label in realtime — only for THIS surface's id.
-    act(() => listener?.({ id: 'story:other:cover', phase: 'rendering' }));
+    act(() => listener?.({ id: 'books:other:cover', phase: 'rendering' }));
     expect(screen.getByText(/Composing the scene…/)).toBeInTheDocument(); // ignored (different id)
-    act(() => listener?.({ id: 'story:b1:cover', phase: 'rendering' }));
+    act(() => listener?.({ id: 'books:b1:cover', phase: 'rendering' }));
     expect(screen.getByText(/Creating your cover — Painting the image…/)).toBeInTheDocument();
   });
 

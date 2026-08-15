@@ -33,7 +33,7 @@ export function useStoryCadences(): void {
       if (now - lastAttempt.current < FOCUS_THROTTLE_MS) return;
       lastAttempt.current = now;
       void (async () => {
-        const books = (await window.selfos?.storyList()) ?? [];
+        const books = (await window.selfos?.booksList()) ?? [];
         if (cancelled || useSessionStore.getState().activePerson?.id !== activePersonId) return;
         for (const book of books) {
           if (!book.config.autoRefresh) continue;

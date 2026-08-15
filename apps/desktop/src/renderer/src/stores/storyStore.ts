@@ -359,14 +359,14 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   progress: null,
   load: async () => {
     const [bookTypes, books, shelf] = await Promise.all([
-      window.selfos?.storyBookTypes() ?? Promise.resolve([]),
-      window.selfos?.storyList() ?? Promise.resolve([]),
-      window.selfos?.storyShelf() ?? Promise.resolve([]),
+      window.selfos?.booksBookTypes() ?? Promise.resolve([]),
+      window.selfos?.booksList() ?? Promise.resolve([]),
+      window.selfos?.booksShelf() ?? Promise.resolve([]),
     ]);
     set({ bookTypes, books, shelf, loaded: true });
   },
   create: async (input) => {
-    const book = (await window.selfos?.storyCreate(input)) ?? null;
+    const book = (await window.selfos?.booksCreate(input)) ?? null;
     if (book) await get().load();
     return book;
   },
@@ -391,13 +391,13 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     return unsub ?? (() => {});
   },
   createAndDraft: async (input) => {
-    const book = (await window.selfos?.storyCreate(input)) ?? null;
+    const book = (await window.selfos?.booksCreate(input)) ?? null;
     if (!book) return { ok: false, message: 'Couldn’t start your story. Try again.' };
     await get().load();
     return get().draftBook(book.id);
   },
   rewriteFromScratch: async (bookId) => {
-    const reset = (await window.selfos?.storyRewriteFromScratch({ bookId })) ?? null;
+    const reset = (await window.selfos?.booksRewriteFromScratch({ bookId })) ?? null;
     if (!reset) return { ok: false, message: 'Couldn’t rewrite your book. Try again.' };
     set({ bundle: reset });
     return get().draftBook(bookId);
@@ -415,7 +415,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       },
     });
     try {
-      const result = (await window.selfos?.storyGenerateFullDraft({ bookId })) ?? NOT_AVAILABLE;
+      const result = (await window.selfos?.booksGenerateFullDraft({ bookId })) ?? NOT_AVAILABLE;
       if (result.ok) {
         set({ bundle: result.bundle });
         await get().load();
@@ -430,14 +430,14 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     }
   },
   open: async (bookId) => {
-    const bundle = (await window.selfos?.storyGet({ bookId })) ?? null;
+    const bundle = (await window.selfos?.booksGet({ bookId })) ?? null;
     set({ bundle });
     return bundle;
   },
   generateFoundations: async (bookId) => {
     set({ generating: true });
     try {
-      const result = (await window.selfos?.storyGenerateFoundations({ bookId })) ?? NOT_AVAILABLE;
+      const result = (await window.selfos?.booksGenerateFoundations({ bookId })) ?? NOT_AVAILABLE;
       if (result.ok) set({ bundle: result.bundle });
       await get().load();
       return result;
@@ -446,11 +446,11 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     }
   },
   saveOutline: async (bookId, outline) => {
-    await window.selfos?.storySaveOutline({ bookId, outline });
+    await window.selfos?.booksSaveOutline({ bookId, outline });
     await get().open(bookId);
   },
   approveOutline: async (bookId, outline) => {
-    const manifest = (await window.selfos?.storyApproveOutline({ bookId, outline })) ?? null;
+    const manifest = (await window.selfos?.booksApproveOutline({ bookId, outline })) ?? null;
     await get().open(bookId);
     await get().load();
     return manifest;
@@ -476,7 +476,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     });
     try {
       const result =
-        (await window.selfos?.storyGenerateChapters({ bookId })) ?? CHAPTERS_NOT_AVAILABLE;
+        (await window.selfos?.booksGenerateChapters({ bookId })) ?? CHAPTERS_NOT_AVAILABLE;
       if (result.ok) set({ bundle: result.bundle });
       await get().load();
       return result;
@@ -488,7 +488,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     set({ chaptersGenerating: true });
     try {
       const result =
-        (await window.selfos?.storyRegenerateChapter({ bookId, chapterId })) ??
+        (await window.selfos?.booksRegenerateChapter({ bookId, chapterId })) ??
         CHAPTERS_NOT_AVAILABLE;
       if (result.ok) set({ bundle: result.bundle });
       return result;
@@ -497,20 +497,20 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     }
   },
   reviewChapter: async (bookId, chapterId) => {
-    const bundle = (await window.selfos?.storyReviewChapter({ bookId, chapterId })) ?? null;
+    const bundle = (await window.selfos?.booksReviewChapter({ bookId, chapterId })) ?? null;
     if (bundle) set({ bundle });
     return bundle !== null;
   },
   chapterHistory: async (bookId, chapterId) =>
-    (await window.selfos?.storyChapterHistory({ bookId, chapterId })) ?? {
+    (await window.selfos?.booksChapterHistory({ bookId, chapterId })) ?? {
       chapterId,
       versions: [],
     },
   chapterVersion: async (bookId, chapterId, revision) =>
-    (await window.selfos?.storyChapterVersion({ bookId, chapterId, revision })) ?? null,
+    (await window.selfos?.booksChapterVersion({ bookId, chapterId, revision })) ?? null,
   restoreChapterVersion: async (bookId, chapterId, revision) => {
     const bundle =
-      (await window.selfos?.storyRestoreChapterVersion({ bookId, chapterId, revision })) ?? null;
+      (await window.selfos?.booksRestoreChapterVersion({ bookId, chapterId, revision })) ?? null;
     if (bundle) set({ bundle });
     return bundle !== null;
   },
@@ -519,14 +519,14 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     // actually staled/rewrote something (a throttled no-op must not churn the UI, matching insightStore.autoReconcile).
     if (opts?.auto) {
       const res =
-        (await window.selfos?.storyRefreshCheck({ bookId, auto: true })) ?? REFRESH_NOT_AVAILABLE;
+        (await window.selfos?.booksRefreshCheck({ bookId, auto: true })) ?? REFRESH_NOT_AVAILABLE;
       if (res.bundle && (res.rewritten > 0 || res.staled > 0)) set({ bundle: res.bundle });
       return res;
     }
     set({ chaptersGenerating: true });
     try {
       const res =
-        (await window.selfos?.storyRefreshCheck({ bookId, ...(opts ?? {}) })) ??
+        (await window.selfos?.booksRefreshCheck({ bookId, ...(opts ?? {}) })) ??
         REFRESH_NOT_AVAILABLE;
       if (res.bundle) set({ bundle: res.bundle });
       return res;
@@ -535,23 +535,23 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     }
   },
   loadMarkup: async (bookId, chapterId) => {
-    const markup = (await window.selfos?.storyGetMarkup({ bookId, chapterId })) ?? null;
+    const markup = (await window.selfos?.booksGetMarkup({ bookId, chapterId })) ?? null;
     // Guard a stale, late-resolving load (fast chapter A→B nav) from overwriting the newer chapter's markup —
     // the returned layer carries its own chapterId (display-only; the backend always applies the right one).
     if (!markup || markup.chapterId === chapterId) set({ markup });
   },
   clearMarkup: () => set({ markup: null }),
   addMark: async (bookId, chapterId, mark) => {
-    const markup = (await window.selfos?.storyMark({ bookId, chapterId, mark })) ?? null;
+    const markup = (await window.selfos?.booksMark({ bookId, chapterId, mark })) ?? null;
     if (markup) set({ markup });
   },
   updateMark: async (bookId, chapterId, markId, patch) => {
     const markup =
-      (await window.selfos?.storyUpdateMark({ bookId, chapterId, markId, patch })) ?? null;
+      (await window.selfos?.booksUpdateMark({ bookId, chapterId, markId, patch })) ?? null;
     if (markup) set({ markup });
   },
   removeMark: async (bookId, chapterId, markId) => {
-    const markup = (await window.selfos?.storyRemoveMark({ bookId, chapterId, markId })) ?? null;
+    const markup = (await window.selfos?.booksRemoveMark({ bookId, chapterId, markId })) ?? null;
     if (markup) set({ markup });
   },
   flagInsight: async (insightId) => {
@@ -561,7 +561,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     set({ chaptersGenerating: true });
     try {
       const result =
-        (await window.selfos?.storyApplyMarkup({ bookId, chapterId })) ?? REVISION_NOT_AVAILABLE;
+        (await window.selfos?.booksApplyMarkup({ bookId, chapterId })) ?? REVISION_NOT_AVAILABLE;
       if (result.ok) set({ bundle: result.bundle, markup: result.markup });
       return result;
     } finally {
@@ -570,25 +570,25 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   },
   editPassage: async (bookId, chapterId, anchor, newText) => {
     const bundle =
-      (await window.selfos?.storyEditPassage({ bookId, chapterId, anchor, newText })) ?? null;
+      (await window.selfos?.booksEditPassage({ bookId, chapterId, anchor, newText })) ?? null;
     if (bundle) set({ bundle });
     return bundle !== null;
   },
   pinQuote: async (bookId, chapterId, anchor, text) => {
     const bundle =
-      (await window.selfos?.storyPinQuote({ bookId, chapterId, anchor, text })) ?? null;
+      (await window.selfos?.booksPinQuote({ bookId, chapterId, anchor, text })) ?? null;
     if (bundle) set({ bundle });
     return bundle !== null;
   },
   loadTodos: async (bookId) => {
-    const roll = (await window.selfos?.storyTodos({ bookId })) ?? null;
+    const roll = (await window.selfos?.booksTodos({ bookId })) ?? null;
     set({ todos: roll?.todos ?? [] });
   },
   todoToQuestions: async (bookId, chapterId, focus, anchor) => {
     set({ chaptersGenerating: true });
     try {
       const res =
-        (await window.selfos?.storyTodoToQuestions({
+        (await window.selfos?.booksTodoToQuestions({
           bookId,
           chapterId,
           focus,
@@ -602,17 +602,17 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   },
   answerQuestion: async (bookId, chapterId, markId) => {
     const res =
-      (await window.selfos?.storyAnswerQuestion({ bookId, chapterId, markId })) ??
+      (await window.selfos?.booksAnswerQuestion({ bookId, chapterId, markId })) ??
       ANSWER_NOT_AVAILABLE;
     if (res.ok) set({ markup: res.markup });
     return res;
   },
   loadExclusions: async (bookId) => {
-    const exclusions = (await window.selfos?.storyExclusions({ bookId })) ?? [];
+    const exclusions = (await window.selfos?.booksExclusions({ bookId })) ?? [];
     set({ exclusions });
   },
   exclude: async (bookId, kind, value, note) => {
-    const res = await window.selfos?.storyExclude({
+    const res = await window.selfos?.booksExclude({
       bookId,
       kind,
       value,
@@ -623,20 +623,20 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     // Refresh the list, or the proposal sits in the vault invisibly until the next mount and the exclusion
     // reads as having done nothing.
     if ((res?.staled ?? 0) > 0) {
-      set({ newMaterial: (await window.selfos?.storyNewMaterial({ bookId })) ?? [] });
+      set({ newMaterial: (await window.selfos?.booksNewMaterial({ bookId })) ?? [] });
     }
     return res?.staled ?? 0;
   },
   unexclude: async (bookId, itemId) => {
-    const exclusions = (await window.selfos?.storyUnexclude({ bookId, itemId })) ?? [];
+    const exclusions = (await window.selfos?.booksUnexclude({ bookId, itemId })) ?? [];
     set({ exclusions });
   },
   loadProposals: async (bookId) => {
-    const proposals = (await window.selfos?.storyProposals({ bookId })) ?? [];
+    const proposals = (await window.selfos?.booksProposals({ bookId })) ?? [];
     set({ proposals });
   },
   editOutline: async (bookId, edit) => {
-    const res = (await window.selfos?.storyEditOutline({ bookId, edit })) ?? {
+    const res = (await window.selfos?.booksEditOutline({ bookId, edit })) ?? {
       ok: false,
       bundle: null,
     };
@@ -645,12 +645,12 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     // A re-worded brief, a narrowing split or a merge files a rewrite PROPOSAL against the chapter (72
     // §4.4). Refresh it here or the edit reads as having done nothing until the next mount.
     if (res.ok) {
-      set({ newMaterial: (await window.selfos?.storyNewMaterial({ bookId })) ?? [] });
+      set({ newMaterial: (await window.selfos?.booksNewMaterial({ bookId })) ?? [] });
     }
     return res;
   },
   editTimeline: async (bookId, edit) => {
-    const res = (await window.selfos?.storyEditTimeline({ bookId, edit })) ?? {
+    const res = (await window.selfos?.booksEditTimeline({ bookId, edit })) ?? {
       ok: false,
       timeline: null,
     };
@@ -660,7 +660,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     return res;
   },
   resolveProposal: async (bookId, proposalId, action) => {
-    const res = (await window.selfos?.storyResolveProposal({ bookId, proposalId, action })) ?? {
+    const res = (await window.selfos?.booksResolveProposal({ bookId, proposalId, action })) ?? {
       ok: false,
       proposals: [],
       bundle: null,
@@ -670,12 +670,12 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     return res;
   },
   loadNewMaterial: async (bookId) => {
-    set({ newMaterial: (await window.selfos?.storyNewMaterial({ bookId })) ?? [] });
+    set({ newMaterial: (await window.selfos?.booksNewMaterial({ bookId })) ?? [] });
   },
   acceptMaterial: async (bookId, chapterId) => {
     set({ chaptersGenerating: true });
     try {
-      const res = (await window.selfos?.storyAcceptMaterial({ bookId, chapterId })) ?? {
+      const res = (await window.selfos?.booksAcceptMaterial({ bookId, chapterId })) ?? {
         ok: false as const,
         reason: 'ERROR' as const,
         message: 'SelfOS isn’t ready yet.',
@@ -683,7 +683,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       // Only a successful rewrite clears the proposal, so a failed one can be tried again.
       if (res.ok) {
         await get().load();
-        set({ newMaterial: (await window.selfos?.storyNewMaterial({ bookId })) ?? [] });
+        set({ newMaterial: (await window.selfos?.booksNewMaterial({ bookId })) ?? [] });
       }
       return res;
     } finally {
@@ -691,7 +691,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     }
   },
   finishEdition: async (bookId) => {
-    const res = (await window.selfos?.storyFinishEdition({ bookId })) ?? {
+    const res = (await window.selfos?.booksFinishEdition({ bookId })) ?? {
       ok: false,
       message: 'SelfOS isn’t ready yet.',
       bundle: null,
@@ -700,19 +700,19 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     return res.ok ? { ok: true } : { ok: false, ...(res.message ? { message: res.message } : {}) };
   },
   reopenBook: async (bookId) => {
-    const bundle = await window.selfos?.storyReopenBook({ bookId });
+    const bundle = await window.selfos?.booksReopenBook({ bookId });
     if (bundle) set({ bundle });
   },
   declineMaterial: async (bookId, chapterId) => {
-    set({ newMaterial: (await window.selfos?.storyDeclineMaterial({ bookId, chapterId })) ?? [] });
+    set({ newMaterial: (await window.selfos?.booksDeclineMaterial({ bookId, chapterId })) ?? [] });
   },
   loadContinuity: async (bookId) => {
-    set({ continuity: (await window.selfos?.storyContinuity({ bookId })) ?? [] });
+    set({ continuity: (await window.selfos?.booksContinuity({ bookId })) ?? [] });
   },
   readManuscript: async (bookId) => {
     set({ chaptersGenerating: true });
     try {
-      const res = (await window.selfos?.storyManuscriptRead({ bookId })) ?? {
+      const res = (await window.selfos?.booksManuscriptRead({ bookId })) ?? {
         ok: false as const,
         findings: [],
         reason: 'ERROR' as const,
@@ -727,7 +727,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   checkContinuity: async (bookId) => {
     set({ chaptersGenerating: true });
     try {
-      const res = (await window.selfos?.storyContinuityCheck({ bookId })) ?? {
+      const res = (await window.selfos?.booksContinuityCheck({ bookId })) ?? {
         ok: false as const,
         findings: [],
         reason: 'ERROR' as const,
@@ -741,14 +741,14 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   },
   resolveContinuity: async (bookId, findingId, action) => {
     const findings =
-      (await window.selfos?.storyResolveContinuity({ bookId, findingId, action })) ?? [];
+      (await window.selfos?.booksResolveContinuity({ bookId, findingId, action })) ?? [];
     set({ continuity: findings });
   },
   lineEdit: async (bookId, chapterId) => {
     set({ chaptersGenerating: true });
     try {
       const result =
-        (await window.selfos?.storyLineEdit({ bookId, chapterId })) ?? REVISION_NOT_AVAILABLE;
+        (await window.selfos?.booksLineEdit({ bookId, chapterId })) ?? REVISION_NOT_AVAILABLE;
       if (result.ok) set({ bundle: result.bundle, markup: result.markup });
       return result;
     } finally {
@@ -756,17 +756,17 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     }
   },
   loadCorpusStats: async () => {
-    const corpusStats = (await window.selfos?.storyCorpusStats()) ?? null;
+    const corpusStats = (await window.selfos?.booksCorpusStats()) ?? null;
     set({ corpusStats });
   },
   loadCastRegister: async (bookId) => {
-    set({ castRegister: (await window.selfos?.storyCastRegister({ bookId })) ?? [] });
+    set({ castRegister: (await window.selfos?.booksCastRegister({ bookId })) ?? [] });
   },
   loadConsent: async (bookId) => {
-    set({ consent: (await window.selfos?.storyConsent({ bookId })) ?? [] });
+    set({ consent: (await window.selfos?.booksConsent({ bookId })) ?? [] });
   },
   setConsent: async (bookId, name, fields) => {
-    const next = await window.selfos?.storySetConsent({
+    const next = await window.selfos?.booksSetConsent({
       bookId,
       name,
       ...(fields.pseudonym !== undefined ? { pseudonym: fields.pseudonym } : {}),
@@ -775,11 +775,11 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     if (next) set({ consent: next });
   },
   loadCompleteness: async (bookId) => {
-    const completeness = (await window.selfos?.storyCompleteness({ bookId })) ?? null;
+    const completeness = (await window.selfos?.booksCompleteness({ bookId })) ?? null;
     set({ completeness });
   },
   runInterviewCheck: async (bookId, opts) => {
-    const res = (await window.selfos?.storyInterviewCheck({ bookId, ...(opts ?? {}) })) ?? {
+    const res = (await window.selfos?.booksInterviewCheck({ bookId, ...(opts ?? {}) })) ?? {
       outcome: 'noBook' as const,
     };
     // A run that actually gap-passed refreshed the coverage — adopt the new completeness.
@@ -790,11 +790,11 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   },
   gaps: null,
   loadGaps: async (bookId) => {
-    const gaps = (await window.selfos?.storyGaps({ bookId })) ?? null;
+    const gaps = (await window.selfos?.booksGaps({ bookId })) ?? null;
     set({ gaps });
   },
   askGap: async (bookId, gapId) => {
-    const res = (await window.selfos?.storyAskGap({ bookId, gapId })) ?? {
+    const res = (await window.selfos?.booksAskGap({ bookId, gapId })) ?? {
       ok: false as const,
       reason: 'ERROR' as const,
       message: 'SelfOS isn’t ready yet.',
@@ -804,42 +804,42 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   },
   answeredCheckIns: [],
   loadAnsweredCheckIns: async (bookId) => {
-    set({ answeredCheckIns: (await window.selfos?.storyAnsweredCheckIns({ bookId })) ?? [] });
+    set({ answeredCheckIns: (await window.selfos?.booksAnsweredCheckIns({ bookId })) ?? [] });
   },
   quotes: [],
   loadQuotes: async (bookId) => {
-    set({ quotes: (await window.selfos?.storyQuoteCandidates({ bookId })) ?? [] });
+    set({ quotes: (await window.selfos?.booksQuoteCandidates({ bookId })) ?? [] });
   },
   mineQuotes: async (bookId) => {
-    set({ quotes: (await window.selfos?.storyMineQuotes({ bookId })) ?? get().quotes });
+    set({ quotes: (await window.selfos?.booksMineQuotes({ bookId })) ?? get().quotes });
   },
   setQuoteStatus: async (bookId, quoteId, status) => {
-    const quotes = await window.selfos?.storySetQuoteStatus({ bookId, quoteId, status });
+    const quotes = await window.selfos?.booksSetQuoteStatus({ bookId, quoteId, status });
     if (quotes) set({ quotes });
   },
   suggestTitles: async (bookId) =>
-    (await window.selfos?.storySuggestTitles({ bookId })) ?? {
+    (await window.selfos?.booksSuggestTitles({ bookId })) ?? {
       ok: false,
       titles: [],
       message: 'Not available.',
     },
   regenerateEssence: async (bookId) =>
-    (await window.selfos?.storyRegenerateEssence({ bookId })) ?? {
+    (await window.selfos?.booksRegenerateEssence({ bookId })) ?? {
       ok: false,
       essence: null,
       message: 'Not available.',
     },
   update: async (bookId, patch) => {
-    await window.selfos?.storyUpdate({ bookId, ...patch });
+    await window.selfos?.booksUpdate({ bookId, ...patch });
     await get().open(bookId);
     await get().load();
   },
   loadReaders: async (bookId) => {
-    const readers = (await window.selfos?.storyReaders({ bookId })) ?? [];
+    const readers = (await window.selfos?.booksReaders({ bookId })) ?? [];
     set({ readers });
   },
   publish: async (bookId) => {
-    const res = (await window.selfos?.storyPublish({ bookId })) ?? {
+    const res = (await window.selfos?.booksPublish({ bookId })) ?? {
       ok: false as const,
       message: 'Not available.',
     };
@@ -847,7 +847,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     return res;
   },
   publishDiff: async (bookId) =>
-    (await window.selfos?.storyPublishDiff({ bookId })) ?? {
+    (await window.selfos?.booksPublishDiff({ bookId })) ?? {
       everPublished: false,
       added: [],
       removed: [],
@@ -857,7 +857,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       nothingToPublish: true,
     },
   unpublish: async (bookId) => {
-    const res = (await window.selfos?.storyUnpublish({ bookId })) ?? {
+    const res = (await window.selfos?.booksUnpublish({ bookId })) ?? {
       ok: false as const,
       message: 'Not available.',
     };
@@ -865,29 +865,29 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     return res;
   },
   grantReader: async (bookId, readerPersonId) => {
-    const readers = (await window.selfos?.storyGrantReader({ bookId, readerPersonId })) ?? [];
+    const readers = (await window.selfos?.booksGrantReader({ bookId, readerPersonId })) ?? [];
     set({ readers });
   },
   revokeReader: async (bookId, readerPersonId) => {
-    const readers = (await window.selfos?.storyRevokeReader({ bookId, readerPersonId })) ?? [];
+    const readers = (await window.selfos?.booksRevokeReader({ bookId, readerPersonId })) ?? [];
     set({ readers });
   },
   readerFeatured: async (bookId, readerPersonId) =>
-    (await window.selfos?.storyReaderFeatured({ bookId, readerPersonId })) ?? false,
+    (await window.selfos?.booksReaderFeatured({ bookId, readerPersonId })) ?? false,
   exportMarkdown: async (bookId, head) =>
-    (await window.selfos?.storyExportMarkdown({ bookId, head })) ?? null,
+    (await window.selfos?.booksExportMarkdown({ bookId, head })) ?? null,
   exportPdf: async (bookId, head) =>
-    (await window.selfos?.storyExportPdf({ bookId, head })) ?? null,
+    (await window.selfos?.booksExportPdf({ bookId, head })) ?? null,
   exportEpub: async (bookId, head) =>
-    (await window.selfos?.storyExportEpub({ bookId, head })) ?? null,
+    (await window.selfos?.booksExportEpub({ bookId, head })) ?? null,
   exportDocx: async (bookId, head) =>
-    (await window.selfos?.storyExportDocx({ bookId, head })) ?? null,
+    (await window.selfos?.booksExportDocx({ bookId, head })) ?? null,
   loadImages: async (bookId) => {
-    const images = (await window.selfos?.storyImages({ bookId })) ?? [];
+    const images = (await window.selfos?.booksImages({ bookId })) ?? [];
     set({ images });
   },
   generateImage: async (bookId, target) => {
-    const res = (await window.selfos?.storyGenerateImage({
+    const res = (await window.selfos?.booksGenerateImage({
       bookId,
       target,
     })) ?? { ok: false, reason: 'ERROR', message: 'SelfOS isn’t ready yet.' };
@@ -902,14 +902,14 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   getImageUrl: async (bookId, imageId) => {
     const cached = get().imageUrls[imageId];
     if (cached) return cached;
-    const image = await window.selfos?.storyGetImage({ bookId, imageId });
+    const image = await window.selfos?.booksGetImage({ bookId, imageId });
     if (!image) return null;
     const url = `data:${image.mime};base64,${image.dataBase64}`;
     set((s) => ({ imageUrls: { ...s.imageUrls, [imageId]: url } }));
     return url;
   },
   deleteImage: async (bookId, imageId) => {
-    await window.selfos?.storyDeleteImage({ bookId, imageId });
+    await window.selfos?.booksDeleteImage({ bookId, imageId });
     await get().loadImages(bookId);
     await get().open(bookId);
     set((s) => {
@@ -919,12 +919,12 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     });
   },
   loadPhotoAnswers: async (bookId) => {
-    const photoAnswers = (await window.selfos?.storyPhotoAnswers({ bookId })) ?? [];
+    const photoAnswers = (await window.selfos?.booksPhotoAnswers({ bookId })) ?? [];
     set({ photoAnswers });
   },
   uploadPhoto: async (bookId, mime, dataBase64, chapterId) => {
     const entry =
-      (await window.selfos?.storyUploadPhoto({
+      (await window.selfos?.booksUploadPhoto({
         bookId,
         mime,
         dataBase64,
@@ -934,7 +934,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     return entry;
   },
   analyzePhoto: async (bookId, imageId) => {
-    const res = (await window.selfos?.storyAnalyzePhoto({ bookId, imageId })) ?? {
+    const res = (await window.selfos?.booksAnalyzePhoto({ bookId, imageId })) ?? {
       ok: false as const,
       reason: 'ERROR' as const,
       message: 'SelfOS isn’t ready yet.',
@@ -943,18 +943,18 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     return res;
   },
   answerPhoto: async (bookId, imageId, question, answer) => {
-    await window.selfos?.storyAnswerPhoto({ bookId, imageId, question, answer });
+    await window.selfos?.booksAnswerPhoto({ bookId, imageId, question, answer });
     await get().loadPhotoAnswers(bookId);
   },
   suggestPlacement: async (bookId, chapterId, imageId) =>
-    (await window.selfos?.storySuggestPlacement({ bookId, chapterId, imageId })) ?? {
+    (await window.selfos?.booksSuggestPlacement({ bookId, chapterId, imageId })) ?? {
       ok: false as const,
       reason: 'ERROR',
       message: 'SelfOS isn’t ready yet.',
     },
   setPlacement: async (bookId, chapterId, imageId, afterAnchor, caption) => {
     const bundle =
-      (await window.selfos?.storySetPlacement({
+      (await window.selfos?.booksSetPlacement({
         bookId,
         chapterId,
         imageId,
@@ -965,37 +965,37 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   },
   removePlacement: async (bookId, chapterId, imageId) => {
     const bundle =
-      (await window.selfos?.storyRemovePlacement({ bookId, chapterId, imageId })) ?? null;
+      (await window.selfos?.booksRemovePlacement({ bookId, chapterId, imageId })) ?? null;
     if (bundle) set({ bundle });
   },
   loadSharedBooks: async () => {
-    const sharedBooks = (await window.selfos?.storySharedBooks()) ?? [];
+    const sharedBooks = (await window.selfos?.booksSharedBooks()) ?? [];
     set({ sharedBooks });
   },
   openSharedBook: async (authorPersonId, bookId) => {
-    const readerView = (await window.selfos?.storyReadShared({ authorPersonId, bookId })) ?? null;
+    const readerView = (await window.selfos?.booksReadShared({ authorPersonId, bookId })) ?? null;
     set({ readerView });
     if (readerView) {
       // Record the open (device-local read progress) so the one-time "shared with you" notification + the
       // "Updated" marker clear until the author republishes (§3.6).
-      await window.selfos?.storyMarkSharedRead({ authorPersonId, bookId });
+      await window.selfos?.booksMarkSharedRead({ authorPersonId, bookId });
       await get().loadSharedBooks();
     }
   },
   closeSharedBook: () => set({ readerView: null }),
   ownReader: null,
   openOwnBook: async (bookId) => {
-    const ownReader = (await window.selfos?.storyReadOwnBook({ bookId })) ?? null;
+    const ownReader = (await window.selfos?.booksReadOwnBook({ bookId })) ?? null;
     set({ ownReader });
   },
   clearOwnReader: () => set({ ownReader: null }),
   setReadPosition: (bookId, chapterId) => {
-    void window.selfos?.storySetReadPosition({ bookId, chapterId });
+    void window.selfos?.booksSetReadPosition({ bookId, chapterId });
     // Reflect it locally so a re-open of the reader resumes here without a round-trip.
     set((s) => (s.ownReader ? { ownReader: { ...s.ownReader, lastChapterId: chapterId } } : {}));
   },
   remove: async (bookId) => {
-    await window.selfos?.storyDelete({ bookId });
+    await window.selfos?.booksDelete({ bookId });
     set({ bundle: null });
     await get().load();
   },

@@ -100,7 +100,7 @@ export function CoverPanel({
           </Text>
         )}
         {generating ? (
-          <ImageProgress id={`story:${bookId}:cover`} label="Creating your cover" />
+          <ImageProgress id={`books:${bookId}:cover`} label="Creating your cover" />
         ) : null}
         {ready ? (
           <Stack gap={2}>

@@ -205,7 +205,7 @@ export function Home(): JSX.Element {
         if (!cancelled) setProfileSuggestions(s ?? []);
       }),
       // The living-book Home signal (64 §5.6) — host-side, no AI. `hasBook:false` for anyone without a book.
-      window.selfos?.storyHomeSignal().then((sig) => {
+      window.selfos?.booksHomeSignal().then((sig) => {
         if (!cancelled) setStoryHome(sig ?? null);
       }),
     ]).then(async () => {

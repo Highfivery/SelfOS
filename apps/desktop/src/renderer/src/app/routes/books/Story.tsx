@@ -143,7 +143,7 @@ export function Story(): JSX.Element {
             closeSharedBook();
           }}
           resolveImage={async (imageId) => {
-            const img = await window.selfos?.storyReadSharedImage({
+            const img = await window.selfos?.booksReadSharedImage({
               authorPersonId: readerView.authorPersonId,
               bookId: readerView.bookId,
               imageId,

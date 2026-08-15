@@ -740,7 +740,7 @@ export function ChapterReader({
           {imageError ? <Banner tone="danger">{imageError}</Banner> : null}
           {illustrating ? (
             <ImageProgress
-              id={`story:${bookId}:ch:${chapterId}`}
+              id={`books:${bookId}:ch:${chapterId}`}
               label="Illustrating this chapter"
             />
           ) : null}

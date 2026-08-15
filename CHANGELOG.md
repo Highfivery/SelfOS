@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.56.0](https://github.com/Highfivery/SelfOS/compare/v0.55.0...v0.56.0) (2026-08-15)
+
+
+### Features
+
+* **books:** erotica gets its own registers, its own interview, and a per-book focus ([#478](https://github.com/Highfivery/SelfOS/issues/478)) ([afac752](https://github.com/Highfivery/SelfOS/commit/afac75298856a7fffabca2be95b998da084743e8))
+
 ## [0.55.0](https://github.com/Highfivery/SelfOS/compare/v0.54.3...v0.55.0) (2026-08-15)
 
 

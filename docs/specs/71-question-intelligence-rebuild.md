@@ -196,9 +196,16 @@ draft — ~1,148 decrypt ops — because two of them feed consumers the ledger c
 (`gatherRecipientQuestionnaireTitles` → the gap-finder's avoid-list; `gatherRecipientPriorAnswersByAssignment`
 → Your Story's corpus, which needs whole answers, not gists). The two that existed only to feed the legacy
 coverage map — `gatherRecipientIntimacyAsks` and `gatherRecipientMaterialSignals` — went with it (2026-08-13).
-Removing the rest is a bounded follow-up gated on `ledgerAuthoritative`, not a rewrite —
-but it changes the de-dup inputs on the highest-volume path, so it wants the same real-vault verification pass
-that caught the defects in §1, and is deliberately not bundled with the steering fix.
+**Removing the rest was MEASURED AND DROPPED (2026-08-13) — do not pick it up again.** Timed on the heaviest
+real person in the vault, the remaining scans cost **179ms against a 2ms ledger read — and against a 10–30
+SECOND model call**, i.e. under 1% of the turn. The decrypt COUNT reads like debt and the wall-clock says it
+is noise. Removing them would change the de-dup inputs on the highest-volume path in the app, so the trade is
+a real regression risk for an unmeasurable gain. Two of them also feed consumers the ledger still cannot
+serve (`gatherRecipientQuestionnaireTitles` → the gap-finder's avoid-list;
+`gatherRecipientPriorAnswersByAssignment` → the book corpus, which needs whole answers, not gists).
+
+This paragraph previously described the removal as "a bounded follow-up", which is how it kept resurfacing as
+outstanding work after the decision had already been taken.
 
 The de-dup reference is rebuilt from **gists + per-topic counts** rather than raw prompts — the same
 history at roughly a tenth the tokens, e.g. `dirty-talk — asked 8×, last 2 Aug` on one line instead of

@@ -48,8 +48,12 @@ security).
 **Non-goals**
 
 - **Co-authored books** — that is `ourStory` (72 §5.8), a different model entirely.
-- **Contributions from outside the household.** The relay (72 §2) is a later slice for reading; contributing
-  from outside needs an identity model this does not have.
+- **Contributions from outside the household — permanently, not "later"** (owner decision, 2026-08-15).
+  Contributing is for people who share the vault and the relationship graph; the graph is what makes the
+  consent model work at all (the edge is the standing grant, §3.2), and someone outside it has no edge to
+  lose. Reaching further would mean an identity model for a non-member plus a relay round-trip for every
+  offer and withdrawal — a second, weaker consent path beside the one that already holds. The answer is no,
+  so nobody should propose it as a fast-follow.
 - **A discussion thread.** A contribution is a single offering with a single decision, not a conversation.
   If it needs discussion, that is what Together and the interview are for.
 - **Editing the author's prose.** A correction says what is wrong; it never rewrites a chapter directly.
@@ -322,8 +326,8 @@ _None blocking._ The four defining decisions were resolved with the owner on 202
 every contribution; attribution is the author's per-contribution choice (default named); all four kinds ship;
 the contributor sees status only and may withdraw at any time.
 
-One item is **deliberately deferred** rather than open: contributions from **outside the household**, which
-would need the relay and an identity model for a non-member (72 §2).
+**Nothing is deferred.** Contributions from outside the household were the one open direction; the owner
+closed it on 2026-08-15 (a permanent non-goal, §2), so this spec has no remaining slices.
 
 ## 12. Changelog
 
@@ -356,3 +360,7 @@ would need the relay and an identity model for a non-member (72 §2).
   the panel is hidden on a shared `ourStory` book, where every control could only no-op; and the untested
   per-book scoping guard (a contributor invited to TWO of one author's books) is now pinned. Three more
   mutations verified: replace-wholesale, stamp-only idempotency, and no-pruning each fail a test.
+- 2026-08-15 — **outside-household contributions are a permanent non-goal**, not a deferral (owner). The
+  relationship edge IS the consent model here; a contributor outside the graph has no edge to lose, so
+  supporting them would mean a second and weaker consent path beside the one that works. Spec 73 now has no
+  deferred slices.

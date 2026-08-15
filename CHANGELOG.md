@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.55.0](https://github.com/Highfivery/SelfOS/compare/v0.54.3...v0.55.0) (2026-08-15)
+
+
+### Features
+
+* **books:** a picture book starring your own children (72 §5.10 P6a) ([#465](https://github.com/Highfivery/SelfOS/issues/465)) ([7ec312d](https://github.com/Highfivery/SelfOS/commit/7ec312d5ca50455973992c8215e27857e75f5bb9))
+* **books:** one book, two authors — "Our Story" (72 §5.8, P6 complete) ([#468](https://github.com/Highfivery/SelfOS/issues/468)) ([b670655](https://github.com/Highfivery/SelfOS/commit/b6706553bc283f3857e5c0d39d6f187a21f42bde))
+* **books:** six tabs — the timeline and the people in it get their own (72 §3.5/§3.9) ([#462](https://github.com/Highfivery/SelfOS/issues/462)) ([3c96e4e](https://github.com/Highfivery/SelfOS/commit/3c96e4e0188f9a547b187ecca4f8974a06437664))
+* **books:** the lifecycle, the type model, and the interview (72 §5.10 P2–P4) ([#453](https://github.com/Highfivery/SelfOS/issues/453)) ([17f7c5c](https://github.com/Highfivery/SelfOS/commit/17f7c5c14c68951c0e55a7353e4044c99a607888))
+* **books:** the people who were there can add to your book (73) ([#476](https://github.com/Highfivery/SelfOS/issues/476)) ([acb0263](https://github.com/Highfivery/SelfOS/commit/acb0263bbbb99f958153ff8b921c72d3ae192ca7))
+* **books:** the shared-book spine for Our Story (72 §5.10 P6b1) ([#467](https://github.com/Highfivery/SelfOS/issues/467)) ([aeae994](https://github.com/Highfivery/SelfOS/commit/aeae994b75679a301019c99ed3fe270fe61a52bf))
+* **books:** the shelf is the front door, and the URL names the book (72 §5.10 P5b) ([#460](https://github.com/Highfivery/SelfOS/issues/460)) ([a53dfa4](https://github.com/Highfivery/SelfOS/commit/a53dfa4300e479849cde0f32c93720ac65fef1b6))
+* **books:** the timeline belongs to the life, and consent shrinks to a name (72 §3.8/§4.7) ([#464](https://github.com/Highfivery/SelfOS/issues/464)) ([2041d84](https://github.com/Highfivery/SelfOS/commit/2041d848b7f5f8bf3aedc3ef22a1ecf77750aa92))
+
+
+### Bug Fixes
+
+* **books:** a book id from the renderer can no longer escape the vault ([#466](https://github.com/Highfivery/SelfOS/issues/466)) ([415a96c](https://github.com/Highfivery/SelfOS/commit/415a96c3edaedbf99e45b69c6ddaae260a183746))
+* **email:** emailed questions carry answers, not engagement reactions ([#459](https://github.com/Highfivery/SelfOS/issues/459)) ([#461](https://github.com/Highfivery/SelfOS/issues/461)) ([3057000](https://github.com/Highfivery/SelfOS/commit/305700010d1aea9e9c20d17184b23e7ed6c96cb5))
+* **questionnaires:** never-asked ground gets a shelf life (71 §5.9) ([#457](https://github.com/Highfivery/SelfOS/issues/457)) ([d249fa2](https://github.com/Highfivery/SelfOS/commit/d249fa2c999d886aeb569fdd08b6a371b1184278))
+* **questionnaires:** pruning deleted the ground the planner had just named (71 §5.9) ([#456](https://github.com/Highfivery/SelfOS/issues/456)) ([661c745](https://github.com/Highfivery/SelfOS/commit/661c745d76b8fa229aa0f0e66edb5af05ac4fe6c))
+
 ## [0.54.3](https://github.com/Highfivery/SelfOS/compare/v0.54.2...v0.54.3) (2026-08-14)
 
 

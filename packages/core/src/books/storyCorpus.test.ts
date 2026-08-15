@@ -1125,3 +1125,110 @@ describe('accepted contributions reach the corpus (73 §3.4)', () => {
     );
   });
 });
+
+describe('an adult-gated book never names a child (72 §8)', () => {
+  const cfg = {
+    voice: 'third' as const,
+    style: 'raunchy' as const,
+    length: 'standard' as const,
+    autoRefresh: true,
+    typeOptions: { tier: 'unfiltered' },
+    sourceIds: [],
+  };
+
+  /** Ben, his partner Angel, his 9-year-old Emma, and his adult son Jack. */
+  async function family(fs: ReturnType<typeof fresh>): Promise<void> {
+    await savePerson(fs, key, person('ben', 'Ben'));
+    await savePerson(fs, key, person('angel', 'Angel'));
+    await savePerson(fs, key, { ...person('emma', 'Emma'), birthday: '2017-04-02' });
+    await savePerson(fs, key, { ...person('jack', 'Jack'), birthday: '1996-01-10' });
+    for (const [id, type] of [
+      ['angel', 'partner'],
+      ['emma', 'child'],
+      ['jack', 'child'],
+    ] as const) {
+      await saveRelationship(fs, key, {
+        id: `rel-${id}`,
+        schemaVersion: 2,
+        fromPersonId: 'ben',
+        toPersonId: id,
+        type,
+        createdAt: 'now',
+        updatedAt: 'now',
+      });
+    }
+  }
+
+  async function eroticaBook(fs: ReturnType<typeof fresh>): Promise<string> {
+    const book = await createBook(fs, key, {
+      personId: 'ben',
+      type: 'erotica',
+      title: 'After Hours',
+      config: cfg,
+      now: new Date('2026-08-15T00:00:00.000Z'),
+    });
+    return book.id;
+  }
+
+  it('drops a child’s name even when it arrives inside the subject’s OWN prose', async () => {
+    const fs = fresh();
+    await family(fs);
+    // The realistic case: the name is not a record ABOUT the child, it's a line in Ben's own material.
+    await saveInsight(
+      fs,
+      key,
+      insight('i-1', 'ben', { summary: 'The summer Emma was born, everything changed.' }),
+    );
+    await saveInsight(fs, key, insight('i-2', 'ben', { summary: 'Angel and I went to Lisbon.' }));
+
+    const text = corpusText(await buildStoryCorpus(fs, key, 'ben', await eroticaBook(fs)));
+    expect(text).not.toContain('Emma');
+    expect(text).toContain('Lisbon'); // the partner material is untouched
+  });
+
+  it('excludes an ADULT child too — a grown son has no place in it either', async () => {
+    const fs = fresh();
+    await family(fs);
+    await saveInsight(fs, key, insight('i-3', 'ben', { summary: 'Jack moved out last year.' }));
+    const text = corpusText(await buildStoryCorpus(fs, key, 'ben', await eroticaBook(fs)));
+    expect(text).not.toContain('Jack');
+  });
+
+  /** A birthday is optional, so keying only on age would fail OPEN for a child with none recorded. */
+  it('excludes a child with no recorded birthday at all', async () => {
+    const fs = fresh();
+    await savePerson(fs, key, person('ben', 'Ben'));
+    await savePerson(fs, key, person('kid', 'Rowan')); // no birthday
+    await saveRelationship(fs, key, {
+      id: 'rel-kid',
+      schemaVersion: 2,
+      fromPersonId: 'ben',
+      toPersonId: 'kid',
+      type: 'child',
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    await saveInsight(fs, key, insight('i-4', 'ben', { summary: 'Rowan started school.' }));
+    const text = corpusText(await buildStoryCorpus(fs, key, 'ben', await eroticaBook(fs)));
+    expect(text).not.toContain('Rowan');
+  });
+
+  it('leaves a told-true book completely alone', async () => {
+    const fs = fresh();
+    await family(fs);
+    await saveInsight(
+      fs,
+      key,
+      insight('i-5', 'ben', { summary: 'The summer Emma was born, everything changed.' }),
+    );
+    const bio = await createBook(fs, key, {
+      personId: 'ben',
+      type: 'biography',
+      title: 'A Life',
+      config: { ...cfg, style: 'warm' as never, typeOptions: {} },
+      now: new Date('2026-08-15T00:00:00.000Z'),
+    });
+    // A biography is exactly where his children belong.
+    expect(corpusText(await buildStoryCorpus(fs, key, 'ben', bio.id))).toContain('Emma');
+  });
+});

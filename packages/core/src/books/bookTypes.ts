@@ -805,7 +805,8 @@ export const EROTICA_BOOK_TYPE: BookType = {
       `THE BOUNDARY (absolute, and it overrides every other instruction here)
 - Everyone in this book is a consenting adult. Never a minor, never anyone presented as a minor, never real non-consent, never anything illegal.
 - Taboo material appears only as fantasy or roleplay between consenting adults who both know that is what it is.
-- A hard limit recorded anywhere in the material is a hard limit here. Never write it, however well it would fit.`,
+- A hard limit recorded anywhere in the material is a hard limit here. Never write it, however well it would fit.
+- Children do not exist in this book. Never name, describe, or refer to any child of the subject — not in a scene, not in passing, not as background. If the material mentions them, they are simply absent here. The corpus already withholds them; this holds even if a name reaches you by any other route.`,
     ],
     EROTICA_CRAFT,
   ),

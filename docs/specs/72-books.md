@@ -751,3 +751,16 @@ Two items are **deliberately deferred** rather than open:
   an unset mode still defaults to the strict rule. Both fixes mutation-verified. **Lesson: the offline fakes
   cannot surface this class at all — they return canned prose and a canned critique verdict, so the craft
   loop looks healthy while it quietly removes the point of the book. Read the assembled prompt.**
+- 2026-08-15 — **safety: an adult-gated book never names a child** (owner). Erotica draws on the person's
+  whole corpus, so a child could be named — usually not as a record ABOUT them but inside the subject's own
+  prose ("the summer Emma was born"). Fixed **structurally, not by asking the model**: an adult-gated type
+  auto-applies `person` exclusions for the subject's descendants, which rides the existing exclusion path
+  and therefore drops both their records AND any item whose text mentions their display name. Excluded on
+  the RELATIONSHIP (child, stepChild, ward, grandchild, greatGrandchild, nieceNephew) rather than on age,
+  because a birthday is optional and keying on age alone would fail OPEN for a child with none recorded;
+  anyone under 18 by a recorded birthday is excluded too, whatever the relationship. An ADULT child is
+  excluded deliberately — nobody wants their grown son named in their erotica. The doctrine gains a matching
+  absolute rule as a backstop for a name arriving by any other route. Told-true books are untouched: a
+  biography is exactly where a person's children belong. Both layers mutation-verified. **Lesson: the
+  dangerous path was not a record about the child — it was the child's name sitting inside the subject's own
+  material, which only the name-as-phrase half of the exclusion filter catches.**

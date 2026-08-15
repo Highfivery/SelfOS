@@ -1,6 +1,6 @@
 # 73 — Household contributions
 
-> **Status:** **Draft** (awaiting approval) — _last updated 2026-08-14_
+> **Status:** **Built** — _last updated 2026-08-14_
 >
 > A book is written from one person's own record, which means it can only ever know what that person
 > thought to say. This lets the people who were **there** add to it — a memory, a question worth asking, a
@@ -196,14 +196,16 @@ New core module **`packages/core/src/books/contributions.ts`**:
   standing grant, so removing it stops contribution immediately with nothing to clean up.
 - `listContributionsForBook` (author-side) — joins §4.2 files from each invited contributor with §4.3
   decisions, deriving status. Skips withdrawn.
-- `acceptContribution` / `declineContribution` (author-side, writes §4.3 only).
+- `decideContribution` (author-side, writes §4.3 only) — one call for accept and decline, since both are
+  the same write with a different status, and re-deciding is how "take it back out" works.
 
-**Corpus** (`bookCorpus.ts`): accepted, non-withdrawn memories and quotes enter as `contribution` items,
+**Corpus** (`storyCorpus.ts`): accepted, non-withdrawn memories and quotes enter as `contribution` items,
 carrying the contributor's display name **only when `attributed`**. Excluded like any other source by the
 exclusions filter.
 
-**Interview** (`bookInterviewService.ts`): an accepted `question` seeds a gap, stamped with its
-`contributionId` so the answer can credit it and so it is minted once.
+**Interview** (`storyInterviewService.ts`): an accepted `question` seeds a gap on the FREE gaps read — no
+waiting for the next metered pass — and the decision is stamped with the resulting `gapId`, which is what
+makes it mint exactly once (the stamp, not a text match).
 
 **Renderer:** `ContributeRoute` (`/contribute/<invitationId>` — its own small surface, no Books chrome), the
 **Needs you** review list, the People-tab invite control and per-person count.
@@ -219,6 +221,7 @@ generation the author already pays for.
 | `books:inviteContribution`       | `{ bookId, personId, note? }`              | `ContributionInvite`   | Author only; person must be related            |
 | `books:revokeContributionInvite` | `{ bookId, personId }`                     | `ContributionInvite[]` | Accepted contributions survive                 |
 | `books:myInvitations`            | —                                          | `InvitationView[]`     | Contributor-side; author's name + note         |
+| `books:contributionInvites`      | `{ bookId }`                               | `ContributionInvite[]` | Author only; who the book is open to           |
 | `books:submitContribution`       | `{ invitationId, kind, text, chapterId? }` | `ContributionView`     | Re-checks live invite + edge                   |
 | `books:withdrawContribution`     | `{ contributionId }`                       | `ContributionView[]`   | Contributor only, any time                     |
 | `books:myContributions`          | —                                          | `ContributionView[]`   | Status only — never the book                   |
@@ -326,3 +329,30 @@ would need the relay and an identity model for a non-member (72 §2).
 
 - 2026-08-14 — created. Written after spec 72 completed; realises 72 §2's named "highest-value fast-follow".
   The four consent/attribution decisions were resolved with the owner before drafting.
+- 2026-08-14 — **BUILT** (`feat/contributions-core`). Core `books/contributions.ts` (the two-writer split,
+  the live invite + edge re-gate, derived status, accepted material, both-directions reaping), the corpus
+  `contribution` source kind, free gap-seeding for an accepted `question`, 9 IPC channels (a
+  `books:contributionInvites` read was added to the §6 table — the People tab has to show who the book is
+  already open to), the contributor's `/contribute/:invitationId` route, the author's People-tab panel, a
+  Needs-you card and two notification kinds. Gate green: typecheck, lint, format, **2144 core + 13 relay +
+  1596 desktop** unit, 20 books E2E (incl. the two-persona invite → offer → accept → withdraw walk,
+  decrypt-asserted at the file level), visual QA at desktop + 360px. **Eight guards were mutation-tested** —
+  each protection was removed in turn and the matching test verified to fail: the live-edge re-check, the
+  revoke check, the invite gate, the correction read-access gate, the withdrawal filter, the attribution
+  flag, the material kind filter, and both halves of person-delete reaping. The first reaping mutation
+  SURVIVED (an empty decisions file was left behind), which is why reaping now removes the file rather than
+  writing an empty one — the residue an emptied file leaves is exactly what person-delete exists to clear.
+- 2026-08-14 — **code review fixes.** One **blocker**, found by probe: `runGapPass` REPLACES `lastGaps` with
+  its own model-derived output, and the decision's `gapId` stamp meant a wiped gap could never be re-minted —
+  so a routine gap pass destroyed an accepted question permanently and silently. Fixed twice over, because
+  the two failures are different: a pass now preserves gaps carrying a `contributionId` (they aren't the
+  model's to reconsider, and preserving them keeps the gap's IDENTITY, so a question already asked doesn't
+  quietly reset to unasked), and seeding is now keyed on "stamped AND the gap still exists", so any loss
+  self-heals on the next free read. Gaps are also **pruned** when a question stops being accepted — declined
+  after the fact, or withdrawn — which previously left the subject being offered a question that had been
+  taken back. Also: reaping now clears the OTHER direction (offerings addressed to a deleted author, which
+  otherwise sat "waiting for them to read it" about someone who no longer exists); the invite picker offers
+  only related people and says so when the bridge refuses, instead of a button that appears to do nothing;
+  the panel is hidden on a shared `ourStory` book, where every control could only no-op; and the untested
+  per-book scoping guard (a contributor invited to TWO of one author's books) is now pinned. Three more
+  mutations verified: replace-wholesale, stamp-only idempotency, and no-pruning each fail a test.

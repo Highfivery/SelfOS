@@ -28,6 +28,7 @@ import { DangerZone } from './DangerZone';
 import { InterviewTab } from './InterviewTab';
 import { MatterEditor } from './MatterEditor';
 import { NeedsYou } from './NeedsYou';
+import { useContributionStore } from '../../../stores/contributionStore';
 import { ShareReadersPanel } from './ShareReadersPanel';
 import { SharedWithYou } from './SharedWithYou';
 import { StorySettingsPanel } from './StorySettingsPanel';
@@ -111,6 +112,20 @@ export function StudioLayout({
       t === 'chapters' ? `/books/${bundle.manifest.id}` : `/books/${bundle.manifest.id}/${t}`,
     );
   };
+
+  // What household members have offered and are waiting on (73 §3.4). Loaded here so the Needs-you strip
+  // can count it without the People tab being open.
+  // Contributions are for a book ONE person owns (73 §2) — a shared `ourStory` is co-authorship, a
+  // different model, so nothing is read or offered for it.
+  const contributable = !bookTypeView?.sharedWithPartner;
+  const contributionReviews = useContributionStore((s) => s.reviews);
+  const loadContributions = useContributionStore((s) => s.loadForBook);
+  useEffect(() => {
+    if (contributable) void loadContributions(bundle.manifest.id);
+  }, [contributable, bundle.manifest.id, loadContributions]);
+  const pendingContributions = contributable
+    ? contributionReviews.filter((c) => c.status === 'pending').length
+    : 0;
 
   const [error, setError] = useState<string | null>(null);
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
@@ -415,6 +430,8 @@ export function StudioLayout({
         busy={busy}
         toReviewCount={toReview.length}
         openTodoCount={openTodos.length}
+        contributionCount={pendingContributions}
+        onOpenContributions={() => goTab('people')}
         onReview={() => {
           if (toReview[0]) onOpenChapter(toReview[0].id);
         }}
@@ -467,7 +484,11 @@ export function StudioLayout({
 
       {tab === 'timeline' ? <TimelinePanel bundle={bundle} /> : null}
       {tab === 'people' ? (
-        <PeopleTab bookId={bookId} castPolicy={bookTypeView?.castPolicy ?? 'realNames'} />
+        <PeopleTab
+          bookId={bookId}
+          castPolicy={bookTypeView?.castPolicy ?? 'realNames'}
+          contributable={!bookTypeView?.sharedWithPartner}
+        />
       ) : null}
 
       {tab === 'interview' ? (

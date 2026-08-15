@@ -88,6 +88,7 @@ import {
   getNewMaterial,
   listChapters,
   listMemories,
+  buildStoryCorpus,
 } from '@selfos/core/books';
 
 const MAIN = join(__dirname, '..', 'out', 'main', 'index.js');
@@ -15846,5 +15847,133 @@ test('story (64): resume an unfinished memory later — pick up where you left o
     await app.close();
     await rm(userData, { recursive: true, force: true });
     await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('contributions (73): Ben opens his book to Angel, she adds a memory, he keeps it — and she can take it back', async () => {
+  test.setTimeout(120_000);
+  const { userData, vault } = await seedTogetherReady();
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: e2eEnv(),
+  });
+  try {
+    const w = await app.firstWindow();
+
+    // --- Ben writes a book and opens it to Angel -------------------------------------------------
+    await openFirstBook(w);
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('The Weight of Quiet');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
+
+    await w.getByRole('tab', { name: 'People' }).click();
+    // Nobody can see the book exists until he says so (§8.2).
+    await expect(w.getByText(/isn’t open to anyone yet/)).toBeVisible();
+    await w.getByLabel('Who to invite').selectOption({ label: 'Angel' });
+    await w
+      .getByLabel('What to ask them about')
+      .fill('Anything you remember about the Denver years?');
+    await w.getByRole('button', { name: 'Invite' }).click();
+    await expect(w.getByText(/invited · nothing offered yet/)).toBeVisible();
+
+    // --- Angel is told, and adds a memory --------------------------------------------------------
+    await switchTogetherPerson(w, 'Angel');
+    // The invitation reaches her as a notification, and its action opens her contribute page.
+    await w.getByRole('button', { name: /notifications/i }).click();
+    await w
+      .getByRole('menuitem', { name: /Ben asked you to add to their book/ })
+      .getByRole('button', { name: 'View' })
+      .click();
+    await expect(w.getByText(/Anything you remember about the Denver years/)).toBeVisible();
+    // She is never shown the book itself — only what she was asked.
+    await expect(w.getByText('The Weight of Quiet')).toHaveCount(0);
+
+    await w
+      .getByLabel('What you want to add')
+      .fill('He rebuilt the porch that whole summer, alone.');
+    await w.getByRole('button', { name: /Send it to Ben/ }).click();
+    await expect(w.getByRole('status')).toContainText('Sent');
+    await expect(w.getByText('waiting for them to read it')).toBeVisible();
+    await w.setViewportSize({ width: 360, height: 900 });
+    await expectNoInnerOverflow(w);
+    await w.setViewportSize({ width: 1280, height: 900 });
+
+    // --- Ben reviews it, keeps it, and it becomes material -------------------------------------
+    await switchTogetherPerson(w, 'Ben');
+    await w.getByRole('link', { name: 'Books' }).click();
+    await w
+      .getByRole('button', { name: /The Weight of Quiet/ })
+      .first()
+      .click();
+    // It surfaces in "Needs you" without him going looking for it.
+    // Scoped to the Needs-you strip: the notification toast says something very similar, and an
+    // unscoped text match would pass on the toast while the card was missing.
+    await w.getByRole('button', { name: 'Read what people added' }).click();
+    await expect(w.getByText('He rebuilt the porch that whole summer, alone.')).toBeVisible();
+    // §12 at the author's review surface too, where the accept row carries the longest labels.
+    await w.setViewportSize({ width: 360, height: 900 });
+    await expectNoInnerOverflow(w);
+    await w.setViewportSize({ width: 1280, height: 900 });
+    // Accept it WITHOUT naming her — the harder half of §3.4: her words become material, her name does not.
+    await w.getByRole('button', { name: 'Accept without naming them' }).click();
+    await expect(w.getByText(/Angel · accepted, not named/)).toBeVisible();
+
+    // Decrypt-level: the acceptance is in HIS book, and her text is in HER own space — the two-writer
+    // split (§4.3) is what makes "he decides" and "she can withdraw" both true.
+    const fs = createNodeFileSystem(vault);
+    const key = await loadMasterKey(createNodeSecretStore(userData, passthrough));
+    if (!key) throw new Error('master key missing');
+    const bookIds = (await fs.list('people/owner-1/story/books')).filter(
+      (n) => !n.endsWith('.enc'),
+    );
+    const bookId = bookIds[0]!;
+    const decisions = (await readEncryptedJson(
+      fs,
+      `people/owner-1/story/books/${bookId}/contributionDecisions.enc`,
+      key,
+    )) as { decisions: { contributorId: string; status: string; attributed: boolean }[] };
+    expect(decisions.decisions).toHaveLength(1);
+    expect(decisions.decisions[0]).toMatchObject({ contributorId: 'angel-1', status: 'accepted' });
+    // Her words live in her vault space, not his — he never wrote her file.
+    expect(decisions.decisions[0]?.attributed).toBe(false);
+    // Her words live in her vault space, not his — he never wrote her file.
+    const hers = await fs.list('people/angel-1/story/contributions');
+    expect(hers).toHaveLength(1);
+
+    // It really is material the biographer may draw on — and the label carries no name, because he chose
+    // to absorb it rather than credit her.
+    const corpus = await buildStoryCorpus(fs, key, 'owner-1', bookId);
+    const item = corpus.items.find((i) => i.sourceRef.kind === 'contribution');
+    expect(item?.text).toContain('rebuilt the porch');
+    expect(item?.label).not.toContain('Angel');
+
+    // --- She takes it back, and it leaves his book ----------------------------------------------
+    await switchTogetherPerson(w, 'Angel');
+    await w.getByRole('button', { name: /notifications/i }).click();
+    await w
+      .getByRole('menuitem', { name: /Ben asked you to add to their book/ })
+      .getByRole('button', { name: 'View' })
+      .click();
+    await w.getByRole('button', { name: 'Take it back' }).click();
+    // The row leaves the actionable list and is summarised — it isn't something she can act on any more.
+    await expect(w.getByText('You took one thing back.')).toBeVisible();
+
+    await switchTogetherPerson(w, 'Ben');
+    await w.getByRole('link', { name: 'Books' }).click();
+    await w
+      .getByRole('button', { name: /The Weight of Quiet/ })
+      .first()
+      .click();
+    await w.getByRole('tab', { name: 'People' }).click();
+    // Gone from his review list entirely — withdrawal is unconditional, even after he accepted it.
+    await expect(w.getByText('He rebuilt the porch that whole summer, alone.')).toHaveCount(0);
+    await expect(w.getByText(/invited · nothing offered yet/)).toBeVisible();
+    // …and out of the corpus, so a later rewrite cannot draw on it. Consent is ongoing, not a one-time yes.
+    const afterWithdrawal = await buildStoryCorpus(fs, key, 'owner-1', bookId);
+    expect(afterWithdrawal.items.some((i) => i.sourceRef.kind === 'contribution')).toBe(false);
+  } finally {
+    await app.close();
   }
 });

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Heading, Text, TextInput, Textarea } from '../../../design-system/components';
+import { ContributionsPanel } from './ContributionsPanel';
 import { usePeopleStore } from '../../../stores/peopleStore';
 import { useStoryStore } from '../../../stores/storyStore';
 import styles from './Books.module.css';
@@ -24,9 +25,13 @@ import styles from './Books.module.css';
 export function PeopleTab({
   bookId,
   castPolicy,
+  contributable = true,
 }: {
   bookId: string;
   castPolicy: 'realNames' | 'renamed' | 'childrenAsHeroes';
+  /** False for a shared `ourStory` book (73 §2): contributions belong to a book ONE person owns, so the
+   *  invite panel would render controls that can only ever no-op. */
+  contributable?: boolean;
 }): JSX.Element {
   const people = useStoryStore((s) => s.consent);
   const loadConsent = useStoryStore((s) => s.loadConsent);
@@ -185,6 +190,11 @@ export function PeopleTab({
           })}
         </div>
       )}
+
+      {/* The other half of "who is in this book": the people allowed to ADD to it (73 §3.1). It sits here
+          because both are about the same question — who else is involved — and the author shouldn't have to
+          learn a second place for it. */}
+      {contributable ? <ContributionsPanel bookId={bookId} /> : null}
     </div>
   );
 }

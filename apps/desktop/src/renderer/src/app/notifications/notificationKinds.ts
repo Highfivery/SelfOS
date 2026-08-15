@@ -7,6 +7,7 @@ import {
   Clock,
   Download,
   Flag,
+  Handshake,
   Heart,
   Lock,
   MessageCircle,
@@ -109,6 +110,10 @@ export const NOTIFICATION_KIND_DEFS: Record<NotificationKind, KindDef> = {
   // runs app-wide, so this surfaces globally, not only on /story. onIncrease by count: dismissing never re-nags
   // unless ANOTHER arrives; answering some (a lower count) never re-pops it (the auto-checkin-ready precedent).
   'story-checkin': { icon: BookOpen, severity: 'info', resurfaces: onIncrease },
+  // Someone opened a book to you (73 §3.1) — an invitation, so it resurfaces only when another arrives.
+  'contribution-invited': { icon: Handshake, severity: 'info', resurfaces: onIncrease },
+  // Something is waiting for the author to accept or decline (73 §3.4).
+  'contribution-received': { icon: Handshake, severity: 'info', resurfaces: onIncrease },
 };
 
 /** The icon for a kind (used by the bell rows + toasts). */

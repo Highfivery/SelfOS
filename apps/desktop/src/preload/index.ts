@@ -366,6 +366,21 @@ const bridge: SelfosBridge = {
   booksSuggestPlacement: (input) => ipcRenderer.invoke(IpcChannels.booksSuggestPlacement, input),
   booksSetPlacement: (input) => ipcRenderer.invoke(IpcChannels.booksSetPlacement, input),
   booksRemovePlacement: (input) => ipcRenderer.invoke(IpcChannels.booksRemovePlacement, input),
+  booksInviteContribution: (input) =>
+    ipcRenderer.invoke(IpcChannels.booksInviteContribution, input),
+  booksRevokeContributionInvite: (input) =>
+    ipcRenderer.invoke(IpcChannels.booksRevokeContributionInvite, input),
+  booksMyInvitations: () => ipcRenderer.invoke(IpcChannels.booksMyInvitations),
+  booksContributionInvites: (input) =>
+    ipcRenderer.invoke(IpcChannels.booksContributionInvites, input),
+  booksSubmitContribution: (input) =>
+    ipcRenderer.invoke(IpcChannels.booksSubmitContribution, input),
+  booksWithdrawContribution: (input) =>
+    ipcRenderer.invoke(IpcChannels.booksWithdrawContribution, input),
+  booksMyContributions: () => ipcRenderer.invoke(IpcChannels.booksMyContributions),
+  booksBookContributions: (input) => ipcRenderer.invoke(IpcChannels.booksBookContributions, input),
+  booksDecideContribution: (input) =>
+    ipcRenderer.invoke(IpcChannels.booksDecideContribution, input),
   relationshipsGetSynthesis: (input) =>
     ipcRenderer.invoke(IpcChannels.relationshipsGetSynthesis, input),
   relationshipsSynthesize: (input) =>

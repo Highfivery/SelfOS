@@ -2621,4 +2621,56 @@
     grid-template-columns: 1fr;
     gap: var(--space-2);
   }
+  /* Once the row stacks, a trailing action would otherwise stretch the full width with its label floating
+     in the middle. Text inputs (the pseudonym field) still want the full width, so this targets buttons. */
+  .peopleRow > button {
+    justify-self: start;
+  }
+}
+
+/* --- Household contributions (73) ------------------------------------------------------------------ */
+
+/* The author's invite row: pick a person, say what you're asking about, send. Collapses to a stack on a
+   phone so neither control is squeezed to a word per line (§12). */
+.contributeInvite {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: end;
+}
+@media (max-width: 767px) {
+  .contributeInvite {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+}
+
+.contributeReview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Accept / accept-anonymously / decline. They wrap rather than shrink, because the accept labels carry a
+   name and a fixed row would truncate exactly the word that makes the choice legible. */
+.contributeActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+/* The contributor's standalone page — a reading width, since it is one card and a short list, not a
+   workspace. This is a centred dialog-like surface, not a route container (§12). */
+.contributePage {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4);
+  width: 100%;
+}
+
+.contributeAsk {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  color: var(--color-text);
 }

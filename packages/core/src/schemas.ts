@@ -72,6 +72,8 @@ export const NOTIFICATION_KINDS = [
   'auto-checkin-incoming', // 63 §3.3a — someone set up recurring check-ins for you (fires once per new sender)
   'story-shared', // 64-your-story §3.6 — someone shared their Story book with you (fires once, on first share)
   'story-checkin', // 64-your-story §18.5 — your biographer has an interview check-in (a "gap" prompt) waiting
+  'contribution-invited', // 73 §3.1 — someone asked you to add what you remember to their book
+  'contribution-received', // 73 §3.3 — someone sent something for your book to consider
 ] as const;
 export const NotificationKindSchema = z.enum(NOTIFICATION_KINDS);
 export type NotificationKind = z.infer<typeof NotificationKindSchema>;
@@ -4369,6 +4371,11 @@ export const StorySourceKindSchema = z.enum([
   // from 156-character distilled facts. Own data only — a partner's words and every private aside are
   // structurally absent (58 §3.8), and a Together PREP thread is confidential scratch, never read.
   'transcript',
+  // Something a household member offered about the subject and the AUTHOR accepted (73). Never their own
+  // record — it is a memory or a quote a related person wrote, invited and reviewed, and it stays material
+  // only while both sides still consent: an accepted contribution the contributor withdraws leaves the
+  // corpus on the next build.
+  'contribution',
 ]);
 export type StorySourceKind = z.infer<typeof StorySourceKindSchema>;
 export const StorySourceRefSchema = z.object({
@@ -4750,6 +4757,124 @@ export type ExclusionList = z.infer<typeof ExclusionListSchema>;
 
 /** Where a mined quote came from — the subject's OWN coaching session or their OWN Together lines (a
  *  partner's line is never mined). */
+// --- Household contributions (73) ---------------------------------------------------------------------------
+
+/**
+ * What one household member can offer to another person's book (73 §3.2). Each kind reaches the book by a
+ * DIFFERENT route, which is the whole reason the kind is modelled rather than inferred:
+ *
+ * - `memory` / `quote` — the text itself becomes corpus material once accepted.
+ * - `question` — the question NEVER reaches the prose; it seeds an interview gap and the SUBJECT'S ANSWER is
+ *   what the book draws on.
+ * - `correction` — a note the author resolves by hand; it never edits a chapter automatically.
+ */
+export const ContributionKindSchema = z.enum(['memory', 'question', 'correction', 'quote']);
+export type ContributionKind = z.infer<typeof ContributionKindSchema>;
+
+/**
+ * An author's standing invitation for one person to contribute to one book (73 §4.1). Contributing is
+ * invite-only: there is no browsing to someone's book and adding to it, and nothing else in the app tells a
+ * person a book exists (§8.2). One writer — the author — so it never needs a conflict rule.
+ */
+export const ContributionInviteSchema = z.object({
+  schemaVersion: z.literal(1),
+  /** Stable across a re-invite, so a link the contributor already holds keeps working. */
+  id: z.string().min(1),
+  personId: z.string().min(1),
+  bookId: z.string().min(1),
+  /** The author's line of context ("anything you remember about the Denver years?"). */
+  note: z.string().max(500).optional(),
+  invitedAt: z.string(),
+  /** Revoked ⇒ no NEW contributions; already-accepted ones stay (they are the author's material by then). */
+  revokedAt: z.string().optional(),
+});
+export type ContributionInvite = z.infer<typeof ContributionInviteSchema>;
+
+/**
+ * One offering, written by the CONTRIBUTOR in their own vault space (73 §4.2).
+ *
+ * The author never writes this file and the contributor never writes the author's decision file (§4.3).
+ * That split is what lets "the author decides" and "the contributor may withdraw at any time" both be true
+ * without two writers on one record — the 58 §4 one-writer rule, which every other mutable file here follows.
+ */
+export const ContributionSchema = z.object({
+  schemaVersion: z.literal(1),
+  id: z.string().min(1),
+  /** The subject — the person whose book this is for. */
+  toPersonId: z.string().min(1),
+  bookId: z.string().min(1),
+  kind: ContributionKindSchema,
+  text: z.string().min(1).max(4000),
+  /** `correction` only — the chapter it is about, when they were reading one. */
+  chapterId: z.string().optional(),
+  createdAt: z.string(),
+  /** Set by the contributor. Hides it everywhere immediately and drops it from the corpus. */
+  withdrawnAt: z.string().optional(),
+});
+export type Contribution = z.infer<typeof ContributionSchema>;
+
+/** The author's decision on one contribution (73 §4.3) — the only thing the author writes. */
+export const ContributionDecisionSchema = z.object({
+  contributionId: z.string().min(1),
+  /** Denormalized so a decision resolves without a cross-person read. */
+  contributorId: z.string().min(1),
+  status: z.enum(['accepted', 'declined']),
+  /** Accepted `memory`/`quote` only: may the prose name them? Default true — a second voice is usually the
+   *  point, but the author can absorb it as ordinary material instead (owner decision, 2026-08-14). */
+  attributed: z.boolean().default(true),
+  decidedAt: z.string(),
+  /** Set when an accepted `question` became an interview gap, so it is minted exactly once. */
+  gapId: z.string().optional(),
+});
+export type ContributionDecision = z.infer<typeof ContributionDecisionSchema>;
+
+export const ContributionDecisionListSchema = z.object({
+  schemaVersion: z.literal(1),
+  decisions: z.array(ContributionDecisionSchema).default([]),
+});
+export type ContributionDecisionList = z.infer<typeof ContributionDecisionListSchema>;
+
+/**
+ * What a contribution's state IS, derived from the two files rather than stored (73 §4.3) — so the two
+ * writers can never disagree about it.
+ */
+export const ContributionStatusSchema = z.enum(['pending', 'accepted', 'declined', 'withdrawn']);
+export type ContributionStatus = z.infer<typeof ContributionStatusSchema>;
+
+/** Crypto-free view: what a CONTRIBUTOR sees about their own offering (73 §6) — never the book. */
+export interface ContributionView {
+  id: string;
+  bookId: string;
+  kind: ContributionKind;
+  text: string;
+  status: ContributionStatus;
+  createdAt: string;
+}
+
+/** Crypto-free view: what the AUTHOR reviews (73 §3.3). */
+export interface ContributionReview {
+  id: string;
+  contributorId: string;
+  contributorName: string;
+  kind: ContributionKind;
+  text: string;
+  chapterId?: string;
+  status: ContributionStatus;
+  attributed?: boolean;
+  createdAt: string;
+}
+
+/** Crypto-free view: an invitation as the CONTRIBUTOR sees it — the author's name and their note, no book. */
+export interface ContributionInviteView {
+  id: string;
+  bookId: string;
+  authorPersonId: string;
+  authorName: string;
+  note?: string;
+  /** Whether this book is shared with them — `correction` is only offered when it is (§3.2). */
+  canRead: boolean;
+}
+
 export const QuoteSourceSchema = z.enum(['session', 'together']);
 export type QuoteSource = z.infer<typeof QuoteSourceSchema>;
 
@@ -4813,6 +4938,10 @@ export const StoryGapSchema = z.object({
    *  open and re-proposable — so the biographer asked again about the thing you had just spent twenty
    *  minutes telling it. Additive-optional; `status` stays derived on read, never persisted. */
   memoryId: z.string().optional(),
+  /** The accepted `question` contribution this gap came from (73 §3.4). Marks the gap as NOT model-derived,
+   *  so a gap pass preserves it instead of replacing it with its own output, and so it can be pruned when
+   *  the contribution stops being accepted. Additive-optional. */
+  contributionId: z.string().optional(),
   status: z.enum(['open', 'asked', 'answered']).optional(),
 });
 /** Persisted per-part coverage (§13.6.4) for the life map. */
@@ -5275,6 +5404,35 @@ export type StoryCreateInput = z.infer<typeof StoryCreateInputSchema>;
 /** A bare book reference (get / generate / delete). */
 export const StoryBookRefSchema = z.object({ bookId: z.string().min(1) });
 export type StoryBookRef = z.infer<typeof StoryBookRefSchema>;
+
+// --- Household contributions: the renderer-facing inputs (73 §6) --------------------------------------
+/** `books:inviteContribution` — open one book to one related person. */
+export const ContributionInviteInputSchema = z.object({
+  bookId: z.string().min(1),
+  personId: z.string().min(1),
+  note: z.string().max(500).optional(),
+});
+/** `books:revokeContributionInvite` — close it again. */
+export const ContributionInviteRefSchema = z.object({
+  bookId: z.string().min(1),
+  personId: z.string().min(1),
+});
+/** `books:submitContribution` — the invitation is the address, so no book id is accepted from the caller. */
+export const ContributionSubmitSchema = z.object({
+  invitationId: z.string().min(1),
+  kind: ContributionKindSchema,
+  text: z.string().min(1).max(4000),
+  chapterId: z.string().min(1).optional(),
+});
+/** `books:withdrawContribution` — the contributor's standing right, at any status. */
+export const ContributionRefSchema = z.object({ contributionId: z.string().min(1) });
+/** `books:decideContribution` — the author's accept/decline, plus whether to credit them. */
+export const ContributionDecideSchema = z.object({
+  bookId: z.string().min(1),
+  contributionId: z.string().min(1),
+  status: z.enum(['accepted', 'declined']),
+  attributed: z.boolean().optional(),
+});
 
 /** `story:setQuoteStatus` — approve/reject a mined quote candidate (§17.4). */
 export const StorySetQuoteStatusInputSchema = z.object({

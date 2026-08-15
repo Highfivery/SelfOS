@@ -548,6 +548,15 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.booksSuggestPlacement, bridge.booksSuggestPlacement);
   handle(IpcChannels.booksSetPlacement, bridge.booksSetPlacement);
   handle(IpcChannels.booksRemovePlacement, bridge.booksRemovePlacement);
+  handle(IpcChannels.booksInviteContribution, bridge.booksInviteContribution);
+  handle(IpcChannels.booksRevokeContributionInvite, bridge.booksRevokeContributionInvite);
+  handle(IpcChannels.booksMyInvitations, bridge.booksMyInvitations);
+  handle(IpcChannels.booksContributionInvites, bridge.booksContributionInvites);
+  handle(IpcChannels.booksSubmitContribution, bridge.booksSubmitContribution);
+  handle(IpcChannels.booksWithdrawContribution, bridge.booksWithdrawContribution);
+  handle(IpcChannels.booksMyContributions, bridge.booksMyContributions);
+  handle(IpcChannels.booksBookContributions, bridge.booksBookContributions);
+  handle(IpcChannels.booksDecideContribution, bridge.booksDecideContribution);
   handle(IpcChannels.booksReadSharedImage, bridge.booksReadSharedImage);
   handle(IpcChannels.relationshipsGetSynthesis, bridge.relationshipsGetSynthesis);
   handle(IpcChannels.relationshipsSynthesize, bridge.relationshipsSynthesize);

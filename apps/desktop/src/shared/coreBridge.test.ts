@@ -11056,3 +11056,194 @@ describe('createCoreBridge — Together (58) foundation', () => {
     expect(md).toContain('![Cover](data:image/png;base64,'); // the frozen cover is embedded inline
   });
 });
+
+describe('household contributions (73)', () => {
+  /** Ben writes a book, Angel is his partner, and he opens it to her. Both are real signed-in people. */
+  async function household(): Promise<{
+    bridge: ReturnType<typeof createCoreBridge>;
+    ownerId: string;
+    angelId: string;
+    bookId: string;
+  }> {
+    const { bridge, ownerId } = await freshOwner();
+    await bridge.secretSet({ id: ANTHROPIC_API_KEY_ID, value: 'sk-story' });
+    await bridge.setSetting({ key: 'ai.enabled', value: true, scope: 'vault' });
+    const angel = await bridge.peopleSave({ displayName: 'Angel', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: angel.id, roleId: 'member', pin: null });
+    await bridge.relationshipsSave({
+      fromPersonId: ownerId,
+      toPersonId: angel.id,
+      type: 'partner',
+    });
+    const book = await bridge.booksCreate({
+      type: 'biography',
+      title: 'The Weight of Quiet',
+      config: {
+        voice: 'third',
+        style: 'warm',
+        length: 'standard',
+        autoRefresh: true,
+        typeOptions: {},
+        sourceIds: [],
+      },
+    });
+    return { bridge, ownerId, angelId: angel.id, bookId: book!.id };
+  }
+
+  it('invite → she offers → he accepts, each side scoped to their own half', async () => {
+    const { bridge, ownerId, angelId, bookId } = await household();
+
+    // Before the invitation she is related to him and can see no book of his at all (§8.2).
+    await bridge.sessionSetActive({ personId: angelId });
+    expect(await bridge.booksMyInvitations()).toEqual([]);
+
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    expect(
+      await bridge.booksInviteContribution({
+        bookId,
+        personId: angelId,
+        note: 'The Denver years?',
+      }),
+    ).not.toBeNull();
+
+    await bridge.sessionSetActive({ personId: angelId });
+    const invitations = await bridge.booksMyInvitations();
+    expect(invitations).toHaveLength(1);
+    expect(invitations[0]).toMatchObject({ authorName: 'Ben', note: 'The Denver years?' });
+
+    const offered = await bridge.booksSubmitContribution({
+      invitationId: invitations[0]!.id,
+      kind: 'memory',
+      text: 'He rebuilt the porch that whole summer, alone.',
+    });
+    expect(offered?.status).toBe('pending');
+
+    // The author reviews it; she is named on it, and it is his book's list, not hers.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    const review = await bridge.booksBookContributions({ bookId });
+    expect(review).toHaveLength(1);
+    expect(review[0]).toMatchObject({ contributorName: 'Angel', status: 'pending' });
+
+    const decided = await bridge.booksDecideContribution({
+      bookId,
+      contributionId: review[0]!.id,
+      status: 'accepted',
+    });
+    expect(decided[0]?.status).toBe('accepted');
+
+    // She sees the new status on her own record — and never the book behind it.
+    await bridge.sessionSetActive({ personId: angelId });
+    const mine = await bridge.booksMyContributions();
+    expect(mine[0]?.status).toBe('accepted');
+    expect(JSON.stringify(mine)).not.toContain('The Weight of Quiet');
+  });
+
+  it('she can take it back after acceptance, and it leaves his review list too', async () => {
+    const { bridge, ownerId, angelId, bookId } = await household();
+    await bridge.booksInviteContribution({ bookId, personId: angelId });
+
+    await bridge.sessionSetActive({ personId: angelId });
+    const invitationId = (await bridge.booksMyInvitations())[0]!.id;
+    const offered = await bridge.booksSubmitContribution({
+      invitationId,
+      kind: 'memory',
+      text: 'He rebuilt the porch that whole summer, alone.',
+    });
+
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    await bridge.booksDecideContribution({
+      bookId,
+      contributionId: offered!.id,
+      status: 'accepted',
+    });
+
+    await bridge.sessionSetActive({ personId: angelId });
+    // Her own list keeps it, plainly marked — she should see what she took back.
+    const after = await bridge.booksWithdrawContribution({ contributionId: offered!.id });
+    expect(after[0]?.status).toBe('withdrawn');
+
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    expect(await bridge.booksBookContributions({ bookId })).toEqual([]);
+  });
+
+  it('the bridge is the boundary: she cannot review or decide on his book, and a Guest gets nothing', async () => {
+    const { bridge, ownerId, angelId, bookId } = await household();
+    await bridge.booksInviteContribution({ bookId, personId: angelId });
+    await bridge.sessionSetActive({ personId: angelId });
+    const invitationId = (await bridge.booksMyInvitations())[0]!.id;
+    const offered = await bridge.booksSubmitContribution({
+      invitationId,
+      kind: 'memory',
+      text: 'the porch',
+    });
+
+    // Asking for HIS book's contributions while signed in as her scopes to HER own books — she has none.
+    expect(await bridge.booksBookContributions({ bookId })).toEqual([]);
+    // And she cannot accept her own offering into his book: the decision is scoped to her, so it no-ops.
+    await bridge.booksDecideContribution({
+      bookId,
+      contributionId: offered!.id,
+      status: 'accepted',
+    });
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    expect((await bridge.booksBookContributions({ bookId }))[0]?.status).toBe('pending');
+
+    // A Guest has no story.own, so every contribution op is empty.
+    const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+    await bridge.sessionSetActive({ personId: guest.id });
+    expect(await bridge.booksMyInvitations()).toEqual([]);
+    expect(await bridge.booksMyContributions()).toEqual([]);
+    expect(await bridge.booksBookContributions({ bookId })).toEqual([]);
+    expect(await bridge.booksInviteContribution({ bookId, personId: angelId })).toBeNull();
+  });
+
+  it('an invitation id belonging to someone else addresses nothing (§8.2)', async () => {
+    const { bridge, ownerId, angelId, bookId } = await household();
+    await bridge.booksInviteContribution({ bookId, personId: angelId });
+    await bridge.sessionSetActive({ personId: angelId });
+    const invitationId = (await bridge.booksMyInvitations())[0]!.id;
+
+    // A third person, related to Ben but never invited to this book, replays her invitation id.
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    const cass = await bridge.peopleSave({ displayName: 'Cass', isSubject: true, tags: [] });
+    await bridge.accessSetAccount({ personId: cass.id, roleId: 'member', pin: null });
+    await bridge.relationshipsSave({ fromPersonId: ownerId, toPersonId: cass.id, type: 'friend' });
+    await bridge.sessionSetActive({ personId: cass.id });
+    expect(
+      await bridge.booksSubmitContribution({ invitationId, kind: 'memory', text: 'not mine' }),
+    ).toBeNull();
+
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    expect(await bridge.booksBookContributions({ bookId })).toEqual([]);
+  });
+
+  it('revoking stops new offerings but keeps what was already accepted (§7.2)', async () => {
+    const { bridge, ownerId, angelId, bookId } = await household();
+    await bridge.booksInviteContribution({ bookId, personId: angelId });
+    await bridge.sessionSetActive({ personId: angelId });
+    const invitationId = (await bridge.booksMyInvitations())[0]!.id;
+    const first = await bridge.booksSubmitContribution({
+      invitationId,
+      kind: 'memory',
+      text: 'the porch',
+    });
+
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    await bridge.booksDecideContribution({
+      bookId,
+      contributionId: first!.id,
+      status: 'accepted',
+    });
+    await bridge.booksRevokeContributionInvite({ bookId, personId: angelId });
+
+    await bridge.sessionSetActive({ personId: angelId });
+    expect(await bridge.booksMyInvitations()).toEqual([]);
+    expect(
+      await bridge.booksSubmitContribution({ invitationId, kind: 'memory', text: 'something new' }),
+    ).toBeNull();
+
+    await bridge.sessionSetActive({ personId: ownerId, pin: '1234' });
+    expect((await bridge.booksBookContributions({ bookId }))[0]?.status).toBe('accepted');
+  });
+});

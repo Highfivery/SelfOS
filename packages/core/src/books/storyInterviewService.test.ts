@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import type { ClaudeClient, ClaudeUsage } from '../host';
 import { memFileSystem } from '../host/memFileSystem';
-import { savePerson } from '../people';
+import { savePerson, saveRelationship } from '../people';
 import { saveInsight } from '../insights';
 import {
   createAssignment,
@@ -24,6 +24,12 @@ import type {
 } from '../schemas';
 import { recordUsage } from '../usage';
 import {
+  decideContribution,
+  inviteContribution,
+  submitContribution,
+  withdrawContribution,
+} from './contributions';
+import {
   STORY_INTERVIEW_WEEKLY_CAP,
   askGap,
   computePartCoverage,
@@ -44,6 +50,7 @@ import {
   approveOutline,
   createBook,
   getInterviewState,
+  saveInterviewState,
   getTodos,
   saveChapter,
 } from './storyService';
@@ -898,5 +905,158 @@ describe('listAnsweredStoryCheckIns (64 §13.6.5)', () => {
     const answered = await listAnsweredStoryCheckIns(fs, key, 'me', bookId);
     expect(answered).toHaveLength(1);
     expect(answered[0]?.wroteIntoChapterTitle).toBe('First Words');
+  });
+});
+
+describe('an accepted question becomes a gap (73 §3.4)', () => {
+  async function askedBy(
+    fs: ReturnType<typeof memFileSystem>,
+  ): Promise<{ bookId: string; id: string }> {
+    const bookId = await seedBook(fs);
+    await savePerson(fs, key, {
+      id: 'angel',
+      schemaVersion: 2,
+      displayName: 'Angel',
+      isSubject: true,
+      tags: [],
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    await saveRelationship(fs, key, {
+      id: 'rel',
+      schemaVersion: 2,
+      fromPersonId: 'me',
+      toPersonId: 'angel',
+      type: 'partner',
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    await inviteContribution(fs, key, 'me', { bookId, personId: 'angel', now });
+    const c = await submitContribution(fs, key, 'angel', {
+      authorPersonId: 'me',
+      bookId,
+      kind: 'question',
+      text: 'Why did he really leave that job in 1998?',
+      now,
+    });
+    return { bookId, id: c!.id };
+  }
+
+  it('joins what the book wants next, credited, and mints exactly once', async () => {
+    const fs = memFileSystem();
+    const { bookId, id } = await askedBy(fs);
+
+    // Pending: the author hasn't agreed, so it steers nothing.
+    expect((await getStoryGaps(fs, key, 'me', bookId)).gaps).toEqual([]);
+
+    await decideContribution(fs, key, 'me', {
+      bookId,
+      contributionId: id,
+      status: 'accepted',
+      now,
+    });
+    const first = await getStoryGaps(fs, key, 'me', bookId);
+    const seeded = first.gaps.filter((g) => g.focus.includes('leave that job'));
+    expect(seeded).toHaveLength(1);
+    expect(seeded[0]?.label).toBe('Angel wants to know');
+    expect(seeded[0]?.status).toBe('open'); // askable, like any other gap
+
+    // Reading again mints nothing more — the stamped decision, not a text match, is what stops it.
+    const second = await getStoryGaps(fs, key, 'me', bookId);
+    expect(second.gaps.filter((g) => g.focus.includes('leave that job'))).toHaveLength(1);
+    expect(second.gaps).toHaveLength(first.gaps.length);
+  });
+
+  /** The bug this guards: a pass REPLACES lastGaps with its own output, and the decision stamp meant the
+   *  question could never be re-minted — so a routine pass destroyed a contributor's question forever. */
+  it('survives a gap pass, which is the model reconsidering ITS gaps, not a person’s question', async () => {
+    const fs = memFileSystem();
+    const { bookId, id } = await askedBy(fs);
+    await decideContribution(fs, key, 'me', {
+      bookId,
+      contributionId: id,
+      status: 'accepted',
+      now,
+    });
+    await getStoryGaps(fs, key, 'me', bookId);
+
+    const before = (await getStoryGaps(fs, key, 'me', bookId)).gaps[0]!;
+    // Ask it, so the gap now carries a real check-in — the thing a re-seed would silently lose.
+    await askGap(deps(fs, fakeClient(validQuestions)), { bookId, gapId: before.id });
+
+    await runGapPass(deps(fs, fakeClient(gapJson)), { bookId });
+    const after = await getStoryGaps(fs, key, 'me', bookId);
+    // Both survive: hers leads (a real person asked), and the model's own gaps are still there.
+    expect(after.gaps.some((g) => g.focus.includes('kitchen smell'))).toBe(true);
+    const hers = after.gaps.filter((g) => g.focus.includes('leave that job'));
+    expect(hers).toHaveLength(1);
+    // The SAME gap, not a fresh one — it kept the check-in it minted. Re-seeding would produce a new id
+    // with no assignment, quietly resetting an already-asked question to unasked.
+    expect(hers[0]?.id).toBe(before.id);
+    expect(hers[0]?.status).toBe('asked');
+  });
+
+  it('is re-seeded if its gap goes missing, so a lost write can’t swallow the question', async () => {
+    const fs = memFileSystem();
+    const { bookId, id } = await askedBy(fs);
+    await decideContribution(fs, key, 'me', {
+      bookId,
+      contributionId: id,
+      status: 'accepted',
+      now,
+    });
+    await getStoryGaps(fs, key, 'me', bookId);
+
+    // Simulate the gap vanishing while the decision still claims one (a failed write, or older data).
+    const state = await getInterviewState(fs, key, 'me', bookId);
+    await saveInterviewState(fs, key, 'me', bookId, { ...state, lastGaps: [] });
+    const after = await getStoryGaps(fs, key, 'me', bookId);
+    expect(after.gaps.filter((g) => g.focus.includes('leave that job'))).toHaveLength(1);
+  });
+
+  it('is pruned once the author takes it back out — a declined question stops being offered', async () => {
+    const fs = memFileSystem();
+    const { bookId, id } = await askedBy(fs);
+    await decideContribution(fs, key, 'me', {
+      bookId,
+      contributionId: id,
+      status: 'accepted',
+      now,
+    });
+    expect((await getStoryGaps(fs, key, 'me', bookId)).gaps).toHaveLength(1);
+
+    await decideContribution(fs, key, 'me', {
+      bookId,
+      contributionId: id,
+      status: 'declined',
+      now,
+    });
+    expect((await getStoryGaps(fs, key, 'me', bookId)).gaps).toEqual([]);
+  });
+
+  it('is pruned when the contributor withdraws it, not left waiting to be asked', async () => {
+    const fs = memFileSystem();
+    const { bookId, id } = await askedBy(fs);
+    await decideContribution(fs, key, 'me', {
+      bookId,
+      contributionId: id,
+      status: 'accepted',
+      now,
+    });
+    expect((await getStoryGaps(fs, key, 'me', bookId)).gaps).toHaveLength(1);
+    await withdrawContribution(fs, key, 'angel', { contributionId: id, now });
+    expect((await getStoryGaps(fs, key, 'me', bookId)).gaps).toEqual([]);
+  });
+
+  it('a DECLINED question never steers the interview', async () => {
+    const fs = memFileSystem();
+    const { bookId, id } = await askedBy(fs);
+    await decideContribution(fs, key, 'me', {
+      bookId,
+      contributionId: id,
+      status: 'declined',
+      now,
+    });
+    expect((await getStoryGaps(fs, key, 'me', bookId)).gaps).toEqual([]);
   });
 });

@@ -27,6 +27,7 @@ import {
   type StoryPhotoAnswer,
   type StorySourceRef,
 } from '../schemas';
+import { acceptedContributionMaterial } from './contributions';
 import { pairMembers } from './pairBooks';
 import { getBookType } from './bookTypes';
 import { getBook, getPhotoAnswers, getQuotes, getStoryImageIndex } from './storyService';
@@ -499,6 +500,29 @@ async function buildSubjectCorpus(
       text,
       ...(quote.messageTs ? { date: quote.messageTs } : {}),
     });
+  }
+
+  // 7.6) Accepted contributions (73 §3.4) — what a household member offered about this person and the
+  //      author ACCEPTED. Book-scoped, so this reads the author's own decisions; a contribution stays
+  //      material only while both sides consent, so a withdrawn one is gone from the very next build.
+  //      Solo books only — `ourStory` is co-authorship, a different model (73 §2), and the condition is
+  //      structurally false for a pair book because its owner ref is not a person.
+  if (bookOwnerRef === personId) {
+    for (const contribution of await safely(
+      () => acceptedContributionMaterial(fs, key, personId, bookId),
+      [],
+    )) {
+      add({
+        sourceRef: { kind: 'contribution', id: contribution.id, at: contribution.createdAt },
+        // The label carries the attribution decision: named when the author chose to credit them,
+        // anonymous when they chose to absorb it as ordinary material (73 §3.4).
+        label: contribution.contributorName
+          ? `${contribution.contributorName} remembers`
+          : 'Someone close to them remembers',
+        text: contribution.text,
+        date: contribution.createdAt,
+      });
+    }
   }
 
   // 8) Other people as characters — ONLY the facts they SHARE to this viewer (§5.1). The single gate

@@ -115,10 +115,16 @@ origin/main`) so history stays linear and the release manifest never carries a s
 6. **ALWAYS enable auto-merge immediately** — `gh pr merge <n> --squash --auto` — so the PR lands itself the
    moment CI is green. **Never leave a green PR sitting** for the user to merge by hand (2026-08-14, after
    PRs sat open and a stacked one picked up a conflict while it waited). One clean commit lands on `main` —
-   never a direct push, never a local merge, never a merge into a parent branch. Notes: the repo has
-   `allow_auto_merge` on, and **without it `--auto` silently merges IMMEDIATELY** rather than waiting (check
-   `gh pr view <n> --json autoMergeRequest`); **omit `--delete-branch` in a worktree** or `gh` tries to check
-   out `main` locally and fails.
+   never a direct push, never a local merge, never a merge into a parent branch.
+
+   **`--auto` only WAITS when something is REQUIRED.** GitHub queues an auto-merge only while a PR is
+   blocked; with nothing required, every PR is instantly mergeable and `--auto` merges on the spot. Two
+   settings make it real, both now in place: repo `allow_auto_merge: true`, **and** a `main` ruleset
+   requiring the **`Lint · Typecheck · Test`** check (plus deletion + force-push protection, admin bypass).
+   Always confirm it actually queued — `gh pr view <n> --json autoMergeRequest` returns `null` when it just
+   merged instead. And **omit `--delete-branch` in a worktree** or `gh` tries to check out `main` locally
+   and fails.
+
 7. **Offer to release** (the **`release`** skill): once the slice is on `main`, ask the user
    _"Tag & publish vX.Y.Z now, or batch with the next change?"_ Releasing = **merging the open
    release-please PR** (which auto-bumps the version, writes `CHANGELOG.md`, tags `vX.Y.Z`, and builds +
@@ -476,11 +482,16 @@ A running log of durable decisions and feedback captured into the project config
   ALWAYS auto-merge after they go green."_ Captured into §6 step 6 — every PR now gets
   `gh pr merge <n> --squash --auto` **immediately after it is opened**, so it lands itself the moment checks
   pass. A green PR left open is pure latency, and on a stacked chain it actively rots: #468 conflicted
-  against #467 only because #467 sat unmerged while work continued on top of it. **Two traps found doing
-  it:** (1) the repo had `allow_auto_merge: false`, and with it off `--auto` does NOT wait — it silently
-  merges IMMEDIATELY (that is how #468 landed the second the flag was passed); enabled it via
-  `gh api -X PATCH repos/Highfivery/SelfOS -f allow_auto_merge=true`, and verify a PR actually queued with
-  `gh pr view <n> --json autoMergeRequest` (null = it didn't take). (2) `--delete-branch` makes `gh` try to
+  against #467 only because #467 sat unmerged while work continued on top of it. **The real mechanism, found by
+  measuring rather than assuming:** `--auto` only WAITS while a PR is BLOCKED by something. `main` had no
+  branch protection and no rulesets, so no status check was _required_, so every PR was instantly mergeable
+  and `--auto` merged on the spot — twice (#468, #469). Both happened to land green, but they merged before
+  their checks finished, which is exactly what the rule exists to prevent. `allow_auto_merge: true` is
+  necessary and NOT sufficient. Fixed by adding a `main` ruleset requiring **`Lint · Typecheck · Test`**
+  (+ deletion / force-push protection, admin bypass) — which is also the SERVER-side enforcement of
+  PR-only `main` that the 2026-06-22 client-side `pre-push` hook was only ever a workaround for: that note
+  said protection needs GitHub Pro, which was true of a PRIVATE repo, and this one is public now. Always
+  verify with `gh pr view <n> --json autoMergeRequest` (null = it merged instead of queuing). (2) `--delete-branch` makes `gh` try to
   check out `main` locally, which fails in a worktree (`'main' is already used by worktree at …`) — omit it.
   **Also learned resolving the conflict:** rebasing a stacked branch after its parent squash-merges replays
   the parent's commits and conflicts against the squash — cherry-pick your own commit onto fresh `main`

@@ -1,6 +1,8 @@
 # 60 — Home dashboard redesign (Hybrid: bento + AI companion + cross-feature feed)
 
-> **Status:** Slices 1 + 2 MERGED (#187) · Slice 3 (polish) in progress · _last updated 2026-07-14_
+> **Status:** **Built** — slices 1 + 2 merged (#187) plus four follow-ups and the Challenge bento card;
+> slice 3 was always _optional_ polish, and its one concrete item (the Together pulse ring + desire
+> alignment) has since shipped. Nothing outstanding. — _last updated 2026-08-14_
 >
 > A **complete redesign of the Home dashboard** now that the app's breadth is built (sessions, dreams,
 > Together, questionnaires, memory, tests, wellbeing, challenges, goals, sharing). Home becomes a **highly
@@ -600,9 +602,10 @@ complete flows through the rendered UI, not bridge calls (CLAUDE.md §7). E2E is
   "check in on Home" pointer a dead end), so the inline quick actions are restored for the not-due state.
   The no-duplicate-CTA rule is preserved by the card hiding its action row once due.]** Placed in the left bento between Memory and Sharing. RTL-covered
   (active/self-hide/check-in-due), matching the Slice-1 home-card pattern (SharingCard/TogetherHomeCard are
-  RTL-covered, not separately E2E-seeded). **Deferred (a smaller follow-up):** the Together **pulse ring +
-  desire alignment** on `TogetherHomeCard` — it needs an async per-partner `togetherPulse` read (the store
-  doesn't wrap it yet), so it's left for a focused follow-up rather than bundled here.
+  RTL-covered, not separately E2E-seeded). **Since BUILT** (confirmed 2026-08-14): the Together **pulse ring + desire
+  alignment** on `TogetherHomeCard` — the async per-partner `togetherPulse` read is wired, the Connection
+  ring and the consent-gated desire read both render, and it is RTL-covered. It shipped in a later slice;
+  this note said "deferred" long after the fact.
 - 2026-07-14 — Slices 1 + 2 **MERGED** to `main` as **#187** (squash `7f45fdd`), CI green.
 - 2026-07-14 — **Slice 2 BUILT** (the daily reflection cadence + its setting + milestone badges — the one new
   spend), on the same branch. The auto-cadence already existed (spec-40 `useCoachingSynthesis` → the bridge's

@@ -98,7 +98,7 @@ export function AppShell(): JSX.Element {
   // sessions waiting on you (invitations + your-turn), derived over your projection.
   const canTogether = useSessionStore((s) => s.can('together.own'));
   const canOwnStory = useSessionStore((s) => s.can('story.own'));
-  const storyProgress = useStoryStore((s) => s.progress);
+  const booksProgress = useStoryStore((s) => s.progress);
   const togetherHasPartner = useTogetherStore((s) => s.hasPartner);
   const togetherSessions = useTogetherStore((s) => s.sessions);
   const canDoIntake = useSessionStore((s) => s.can('intake.own'));
@@ -462,9 +462,9 @@ export function AppShell(): JSX.Element {
                 to="/books"
                 className={navClass}
                 aria-label={
-                  storyProgress
-                    ? storyProgress.phase === 'writing' && storyProgress.chaptersTotal > 0
-                      ? `Books, writing chapter ${Math.min(storyProgress.chaptersDone + 1, storyProgress.chaptersTotal)} of ${storyProgress.chaptersTotal}`
+                  booksProgress
+                    ? booksProgress.phase === 'writing' && booksProgress.chaptersTotal > 0
+                      ? `Books, writing chapter ${Math.min(booksProgress.chaptersDone + 1, booksProgress.chaptersTotal)} of ${booksProgress.chaptersTotal}`
                       : 'Books, writing'
                     : 'Books'
                 }
@@ -473,11 +473,11 @@ export function AppShell(): JSX.Element {
               >
                 <BookOpen size={18} aria-hidden="true" />
                 <span className={styles.label}>Books</span>
-                {storyProgress ? (
+                {booksProgress ? (
                   <span className={styles.navWriting} aria-hidden="true">
                     <span className={styles.navWritingDot} />
-                    {storyProgress.phase === 'writing' && storyProgress.chaptersTotal > 0
-                      ? `${storyProgress.chaptersDone}/${storyProgress.chaptersTotal}`
+                    {booksProgress.phase === 'writing' && booksProgress.chaptersTotal > 0
+                      ? `${booksProgress.chaptersDone}/${booksProgress.chaptersTotal}`
                       : '…'}
                   </span>
                 ) : null}

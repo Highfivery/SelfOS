@@ -145,7 +145,7 @@ export function registerIpcHandlers(): void {
     },
     emitStoryProgress: (progress) => {
       if (storySender && !storySender.isDestroyed()) {
-        storySender.send(IpcChannels.storyProgress, progress);
+        storySender.send(IpcChannels.booksProgress, progress);
       }
     },
     emitImageProgress: (progress) => {
@@ -427,109 +427,109 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.autoCheckinsSentActivity, bridge.autoCheckinsSentActivity);
   handle(IpcChannels.autoCheckinsGetBlocks, bridge.autoCheckinsGetBlocks);
   handle(IpcChannels.autoCheckinsSetBlock, bridge.autoCheckinsSetBlock);
-  handle(IpcChannels.storyBookTypes, bridge.storyBookTypes);
-  handle(IpcChannels.storyList, bridge.storyList);
-  handle(IpcChannels.storyShelf, bridge.storyShelf);
-  handle(IpcChannels.storyCreate, bridge.storyCreate);
-  handle(IpcChannels.storyGet, bridge.storyGet);
-  handle(IpcChannels.storyGenerateFoundations, bridge.storyGenerateFoundations);
-  handle(IpcChannels.storySaveOutline, bridge.storySaveOutline);
-  handle(IpcChannels.storyApproveOutline, bridge.storyApproveOutline);
-  handle(IpcChannels.storyUpdate, bridge.storyUpdate);
-  handle(IpcChannels.storyDelete, bridge.storyDelete);
-  handle(IpcChannels.storyRewriteFromScratch, bridge.storyRewriteFromScratch);
-  // storyGenerateChapters streams per-chapter progress via emitStoryProgress → IPC event (like the full
+  handle(IpcChannels.booksBookTypes, bridge.booksBookTypes);
+  handle(IpcChannels.booksList, bridge.booksList);
+  handle(IpcChannels.booksShelf, bridge.booksShelf);
+  handle(IpcChannels.booksCreate, bridge.booksCreate);
+  handle(IpcChannels.booksGet, bridge.booksGet);
+  handle(IpcChannels.booksGenerateFoundations, bridge.booksGenerateFoundations);
+  handle(IpcChannels.booksSaveOutline, bridge.booksSaveOutline);
+  handle(IpcChannels.booksApproveOutline, bridge.booksApproveOutline);
+  handle(IpcChannels.booksUpdate, bridge.booksUpdate);
+  handle(IpcChannels.booksDelete, bridge.booksDelete);
+  handle(IpcChannels.booksRewriteFromScratch, bridge.booksRewriteFromScratch);
+  // booksGenerateChapters streams per-chapter progress via emitStoryProgress → IPC event (like the full
   // draft, 64 §3.2). Bound for the whole run so progress keeps reaching the renderer across navigation.
-  ipcMain.handle(IpcChannels.storyGenerateChapters, async (event, raw: unknown) => {
+  ipcMain.handle(IpcChannels.booksGenerateChapters, async (event, raw: unknown) => {
     storySender = event.sender;
     try {
-      return await bridge.storyGenerateChapters(raw as { bookId: string });
+      return await bridge.booksGenerateChapters(raw as { bookId: string });
     } finally {
       storySender = undefined;
     }
   });
-  handle(IpcChannels.storyRegenerateChapter, bridge.storyRegenerateChapter);
-  handle(IpcChannels.storyReviewChapter, bridge.storyReviewChapter);
-  handle(IpcChannels.storyChapterHistory, bridge.storyChapterHistory);
-  handle(IpcChannels.storyChapterVersion, bridge.storyChapterVersion);
-  handle(IpcChannels.storyRestoreChapterVersion, bridge.storyRestoreChapterVersion);
-  handle(IpcChannels.storyGetMarkup, bridge.storyGetMarkup);
-  handle(IpcChannels.storyMark, bridge.storyMark);
-  handle(IpcChannels.storyUpdateMark, bridge.storyUpdateMark);
-  handle(IpcChannels.storyRemoveMark, bridge.storyRemoveMark);
-  handle(IpcChannels.storyApplyMarkup, bridge.storyApplyMarkup);
-  handle(IpcChannels.storyEditPassage, bridge.storyEditPassage);
-  handle(IpcChannels.storyPinQuote, bridge.storyPinQuote);
-  handle(IpcChannels.storyTodos, bridge.storyTodos);
-  handle(IpcChannels.storyExclusions, bridge.storyExclusions);
-  handle(IpcChannels.storyExclude, bridge.storyExclude);
-  handle(IpcChannels.storyUnexclude, bridge.storyUnexclude);
-  handle(IpcChannels.storyQuoteCandidates, bridge.storyQuoteCandidates);
-  handle(IpcChannels.storyMineQuotes, bridge.storyMineQuotes);
-  handle(IpcChannels.storySetQuoteStatus, bridge.storySetQuoteStatus);
-  handle(IpcChannels.storyTodoToQuestions, bridge.storyTodoToQuestions);
-  handle(IpcChannels.storyAnswerQuestion, bridge.storyAnswerQuestion);
-  handle(IpcChannels.storyRefreshCheck, bridge.storyRefreshCheck);
-  handle(IpcChannels.storyProposals, bridge.storyProposals);
-  handle(IpcChannels.storyResolveProposal, bridge.storyResolveProposal);
-  handle(IpcChannels.storyContinuityCheck, bridge.storyContinuityCheck);
-  handle(IpcChannels.storyManuscriptRead, bridge.storyManuscriptRead);
-  handle(IpcChannels.storyNewMaterial, bridge.storyNewMaterial);
-  handle(IpcChannels.storyFinishEdition, bridge.storyFinishEdition);
-  handle(IpcChannels.storyReopenBook, bridge.storyReopenBook);
-  handle(IpcChannels.storyAcceptMaterial, bridge.storyAcceptMaterial);
-  handle(IpcChannels.storyDeclineMaterial, bridge.storyDeclineMaterial);
-  handle(IpcChannels.storyContinuity, bridge.storyContinuity);
-  handle(IpcChannels.storyResolveContinuity, bridge.storyResolveContinuity);
-  handle(IpcChannels.storyLineEdit, bridge.storyLineEdit);
-  handle(IpcChannels.storyEditOutline, bridge.storyEditOutline);
-  handle(IpcChannels.storyEditTimeline, bridge.storyEditTimeline);
-  handle(IpcChannels.storySuggestTitles, bridge.storySuggestTitles);
-  handle(IpcChannels.storyRegenerateEssence, bridge.storyRegenerateEssence);
-  handle(IpcChannels.storyHomeSignal, bridge.storyHomeSignal);
-  handle(IpcChannels.storyCorpusStats, bridge.storyCorpusStats);
-  handle(IpcChannels.storyCastRegister, bridge.storyCastRegister);
-  handle(IpcChannels.storyConsent, bridge.storyConsent);
-  handle(IpcChannels.storySetConsent, bridge.storySetConsent);
-  handle(IpcChannels.storyCompleteness, bridge.storyCompleteness);
-  handle(IpcChannels.storyInterviewCheck, bridge.storyInterviewCheck);
-  handle(IpcChannels.storyGaps, bridge.storyGaps);
-  handle(IpcChannels.storyAskGap, bridge.storyAskGap);
-  handle(IpcChannels.storyAnsweredCheckIns, bridge.storyAnsweredCheckIns);
-  handle(IpcChannels.storyPublish, bridge.storyPublish);
-  handle(IpcChannels.storyPublishDiff, bridge.storyPublishDiff);
-  handle(IpcChannels.storyUnpublish, bridge.storyUnpublish);
-  handle(IpcChannels.storyReaders, bridge.storyReaders);
-  handle(IpcChannels.storyGrantReader, bridge.storyGrantReader);
-  handle(IpcChannels.storyRevokeReader, bridge.storyRevokeReader);
-  handle(IpcChannels.storyReaderFeatured, bridge.storyReaderFeatured);
-  handle(IpcChannels.storySharedBooks, bridge.storySharedBooks);
-  handle(IpcChannels.storyReadShared, bridge.storyReadShared);
-  handle(IpcChannels.storyReadOwnBook, bridge.storyReadOwnBook);
-  handle(IpcChannels.storySetReadPosition, bridge.storySetReadPosition);
-  handle(IpcChannels.storyMarkSharedRead, bridge.storyMarkSharedRead);
-  // storyGenerateFullDraft streams per-chapter progress back to the invoking window via emitStoryProgress →
+  handle(IpcChannels.booksRegenerateChapter, bridge.booksRegenerateChapter);
+  handle(IpcChannels.booksReviewChapter, bridge.booksReviewChapter);
+  handle(IpcChannels.booksChapterHistory, bridge.booksChapterHistory);
+  handle(IpcChannels.booksChapterVersion, bridge.booksChapterVersion);
+  handle(IpcChannels.booksRestoreChapterVersion, bridge.booksRestoreChapterVersion);
+  handle(IpcChannels.booksGetMarkup, bridge.booksGetMarkup);
+  handle(IpcChannels.booksMark, bridge.booksMark);
+  handle(IpcChannels.booksUpdateMark, bridge.booksUpdateMark);
+  handle(IpcChannels.booksRemoveMark, bridge.booksRemoveMark);
+  handle(IpcChannels.booksApplyMarkup, bridge.booksApplyMarkup);
+  handle(IpcChannels.booksEditPassage, bridge.booksEditPassage);
+  handle(IpcChannels.booksPinQuote, bridge.booksPinQuote);
+  handle(IpcChannels.booksTodos, bridge.booksTodos);
+  handle(IpcChannels.booksExclusions, bridge.booksExclusions);
+  handle(IpcChannels.booksExclude, bridge.booksExclude);
+  handle(IpcChannels.booksUnexclude, bridge.booksUnexclude);
+  handle(IpcChannels.booksQuoteCandidates, bridge.booksQuoteCandidates);
+  handle(IpcChannels.booksMineQuotes, bridge.booksMineQuotes);
+  handle(IpcChannels.booksSetQuoteStatus, bridge.booksSetQuoteStatus);
+  handle(IpcChannels.booksTodoToQuestions, bridge.booksTodoToQuestions);
+  handle(IpcChannels.booksAnswerQuestion, bridge.booksAnswerQuestion);
+  handle(IpcChannels.booksRefreshCheck, bridge.booksRefreshCheck);
+  handle(IpcChannels.booksProposals, bridge.booksProposals);
+  handle(IpcChannels.booksResolveProposal, bridge.booksResolveProposal);
+  handle(IpcChannels.booksContinuityCheck, bridge.booksContinuityCheck);
+  handle(IpcChannels.booksManuscriptRead, bridge.booksManuscriptRead);
+  handle(IpcChannels.booksNewMaterial, bridge.booksNewMaterial);
+  handle(IpcChannels.booksFinishEdition, bridge.booksFinishEdition);
+  handle(IpcChannels.booksReopenBook, bridge.booksReopenBook);
+  handle(IpcChannels.booksAcceptMaterial, bridge.booksAcceptMaterial);
+  handle(IpcChannels.booksDeclineMaterial, bridge.booksDeclineMaterial);
+  handle(IpcChannels.booksContinuity, bridge.booksContinuity);
+  handle(IpcChannels.booksResolveContinuity, bridge.booksResolveContinuity);
+  handle(IpcChannels.booksLineEdit, bridge.booksLineEdit);
+  handle(IpcChannels.booksEditOutline, bridge.booksEditOutline);
+  handle(IpcChannels.booksEditTimeline, bridge.booksEditTimeline);
+  handle(IpcChannels.booksSuggestTitles, bridge.booksSuggestTitles);
+  handle(IpcChannels.booksRegenerateEssence, bridge.booksRegenerateEssence);
+  handle(IpcChannels.booksHomeSignal, bridge.booksHomeSignal);
+  handle(IpcChannels.booksCorpusStats, bridge.booksCorpusStats);
+  handle(IpcChannels.booksCastRegister, bridge.booksCastRegister);
+  handle(IpcChannels.booksConsent, bridge.booksConsent);
+  handle(IpcChannels.booksSetConsent, bridge.booksSetConsent);
+  handle(IpcChannels.booksCompleteness, bridge.booksCompleteness);
+  handle(IpcChannels.booksInterviewCheck, bridge.booksInterviewCheck);
+  handle(IpcChannels.booksGaps, bridge.booksGaps);
+  handle(IpcChannels.booksAskGap, bridge.booksAskGap);
+  handle(IpcChannels.booksAnsweredCheckIns, bridge.booksAnsweredCheckIns);
+  handle(IpcChannels.booksPublish, bridge.booksPublish);
+  handle(IpcChannels.booksPublishDiff, bridge.booksPublishDiff);
+  handle(IpcChannels.booksUnpublish, bridge.booksUnpublish);
+  handle(IpcChannels.booksReaders, bridge.booksReaders);
+  handle(IpcChannels.booksGrantReader, bridge.booksGrantReader);
+  handle(IpcChannels.booksRevokeReader, bridge.booksRevokeReader);
+  handle(IpcChannels.booksReaderFeatured, bridge.booksReaderFeatured);
+  handle(IpcChannels.booksSharedBooks, bridge.booksSharedBooks);
+  handle(IpcChannels.booksReadShared, bridge.booksReadShared);
+  handle(IpcChannels.booksReadOwnBook, bridge.booksReadOwnBook);
+  handle(IpcChannels.booksSetReadPosition, bridge.booksSetReadPosition);
+  handle(IpcChannels.booksMarkSharedRead, bridge.booksMarkSharedRead);
+  // booksGenerateFullDraft streams per-chapter progress back to the invoking window via emitStoryProgress →
   // IPC event. Bound for the whole draft (not per-turn) so progress keeps reaching the renderer even after it
   // navigates away — the draft runs in main regardless (64 §3.2). Reset when the draft resolves.
-  ipcMain.handle(IpcChannels.storyGenerateFullDraft, async (event, raw: unknown) => {
+  ipcMain.handle(IpcChannels.booksGenerateFullDraft, async (event, raw: unknown) => {
     storySender = event.sender;
     try {
-      return await bridge.storyGenerateFullDraft(raw as { bookId: string });
+      return await bridge.booksGenerateFullDraft(raw as { bookId: string });
     } finally {
       storySender = undefined;
     }
   });
-  handle(IpcChannels.storyExportMarkdown, bridge.storyExportMarkdown);
-  handle(IpcChannels.storyExportPdf, bridge.storyExportPdf);
-  handle(IpcChannels.storyExportEpub, bridge.storyExportEpub);
-  handle(IpcChannels.storyExportDocx, bridge.storyExportDocx);
-  handle(IpcChannels.storyImages, bridge.storyImages);
-  // storyGenerateImage streams compose→render phase progress via emitImageProgress → IPC event, so the
+  handle(IpcChannels.booksExportMarkdown, bridge.booksExportMarkdown);
+  handle(IpcChannels.booksExportPdf, bridge.booksExportPdf);
+  handle(IpcChannels.booksExportEpub, bridge.booksExportEpub);
+  handle(IpcChannels.booksExportDocx, bridge.booksExportDocx);
+  handle(IpcChannels.booksImages, bridge.booksImages);
+  // booksGenerateImage streams compose→render phase progress via emitImageProgress → IPC event, so the
   // cover / illustration surface shows realtime status. Bound for the whole generation, reset when it resolves.
-  ipcMain.handle(IpcChannels.storyGenerateImage, async (event, raw: unknown) => {
+  ipcMain.handle(IpcChannels.booksGenerateImage, async (event, raw: unknown) => {
     imageSender = event.sender;
     try {
-      return await bridge.storyGenerateImage(
+      return await bridge.booksGenerateImage(
         raw as {
           bookId: string;
           target: { kind: 'cover' } | { kind: 'illustration'; chapterId: string };
@@ -539,16 +539,16 @@ export function registerIpcHandlers(): void {
       imageSender = undefined;
     }
   });
-  handle(IpcChannels.storyGetImage, bridge.storyGetImage);
-  handle(IpcChannels.storyDeleteImage, bridge.storyDeleteImage);
-  handle(IpcChannels.storyUploadPhoto, bridge.storyUploadPhoto);
-  handle(IpcChannels.storyAnalyzePhoto, bridge.storyAnalyzePhoto);
-  handle(IpcChannels.storyAnswerPhoto, bridge.storyAnswerPhoto);
-  handle(IpcChannels.storyPhotoAnswers, bridge.storyPhotoAnswers);
-  handle(IpcChannels.storySuggestPlacement, bridge.storySuggestPlacement);
-  handle(IpcChannels.storySetPlacement, bridge.storySetPlacement);
-  handle(IpcChannels.storyRemovePlacement, bridge.storyRemovePlacement);
-  handle(IpcChannels.storyReadSharedImage, bridge.storyReadSharedImage);
+  handle(IpcChannels.booksGetImage, bridge.booksGetImage);
+  handle(IpcChannels.booksDeleteImage, bridge.booksDeleteImage);
+  handle(IpcChannels.booksUploadPhoto, bridge.booksUploadPhoto);
+  handle(IpcChannels.booksAnalyzePhoto, bridge.booksAnalyzePhoto);
+  handle(IpcChannels.booksAnswerPhoto, bridge.booksAnswerPhoto);
+  handle(IpcChannels.booksPhotoAnswers, bridge.booksPhotoAnswers);
+  handle(IpcChannels.booksSuggestPlacement, bridge.booksSuggestPlacement);
+  handle(IpcChannels.booksSetPlacement, bridge.booksSetPlacement);
+  handle(IpcChannels.booksRemovePlacement, bridge.booksRemovePlacement);
+  handle(IpcChannels.booksReadSharedImage, bridge.booksReadSharedImage);
   handle(IpcChannels.relationshipsGetSynthesis, bridge.relationshipsGetSynthesis);
   handle(IpcChannels.relationshipsSynthesize, bridge.relationshipsSynthesize);
   handle(IpcChannels.challengesStart, bridge.challengesStart);
@@ -815,48 +815,48 @@ export function registerIpcHandlers(): void {
   // "Share a memory" (§14) — the biographer interview chat streams on its own sink (never the Sessions/
   // Dreams/Intake streams). Same per-turn sender bind + reset. Open/turn/retry/regenerate stream; rewind
   // writes only; the non-streaming ops (list/get/synthesize/save/delete/attachments) register via `handle`.
-  ipcMain.handle(IpcChannels.storyMemoryOpen, async (event, raw: unknown) => {
+  ipcMain.handle(IpcChannels.booksMemoryOpen, async (event, raw: unknown) => {
     const release = bindStream('memory', event.sender);
     try {
-      return await bridge.storyMemoryOpen(raw as never);
+      return await bridge.booksMemoryOpen(raw as never);
     } finally {
       release();
     }
   });
-  ipcMain.handle(IpcChannels.storyMemoryTurn, async (event, raw: unknown) => {
+  ipcMain.handle(IpcChannels.booksMemoryTurn, async (event, raw: unknown) => {
     const release = bindStream('memory', event.sender);
     try {
-      return await bridge.storyMemoryTurn(raw as never);
+      return await bridge.booksMemoryTurn(raw as never);
     } finally {
       release();
     }
   });
-  ipcMain.handle(IpcChannels.storyMemoryRetry, async (event, raw: unknown) => {
+  ipcMain.handle(IpcChannels.booksMemoryRetry, async (event, raw: unknown) => {
     const release = bindStream('memory', event.sender);
     try {
-      return await bridge.storyMemoryRetry(raw as never);
+      return await bridge.booksMemoryRetry(raw as never);
     } finally {
       release();
     }
   });
-  ipcMain.handle(IpcChannels.storyMemoryRewind, async (_event, raw: unknown) =>
-    bridge.storyMemoryRewind(raw as never),
+  ipcMain.handle(IpcChannels.booksMemoryRewind, async (_event, raw: unknown) =>
+    bridge.booksMemoryRewind(raw as never),
   );
-  ipcMain.handle(IpcChannels.storyMemoryRegenerate, async (event, raw: unknown) => {
+  ipcMain.handle(IpcChannels.booksMemoryRegenerate, async (event, raw: unknown) => {
     const release = bindStream('memory', event.sender);
     try {
-      return await bridge.storyMemoryRegenerate(raw as never);
+      return await bridge.booksMemoryRegenerate(raw as never);
     } finally {
       release();
     }
   });
-  handle(IpcChannels.storyMemoryList, bridge.storyMemoryList);
-  handle(IpcChannels.storyMemoryGet, bridge.storyMemoryGet);
-  handle(IpcChannels.storyMemorySynthesize, bridge.storyMemorySynthesize);
-  handle(IpcChannels.storyMemorySave, bridge.storyMemorySave);
-  handle(IpcChannels.storyMemoryDelete, bridge.storyMemoryDelete);
-  handle(IpcChannels.storyMemoryStoreAttachment, bridge.storyMemoryStoreAttachment);
-  handle(IpcChannels.storyMemoryGetAttachment, bridge.storyMemoryGetAttachment);
+  handle(IpcChannels.booksMemoryList, bridge.booksMemoryList);
+  handle(IpcChannels.booksMemoryGet, bridge.booksMemoryGet);
+  handle(IpcChannels.booksMemorySynthesize, bridge.booksMemorySynthesize);
+  handle(IpcChannels.booksMemorySave, bridge.booksMemorySave);
+  handle(IpcChannels.booksMemoryDelete, bridge.booksMemoryDelete);
+  handle(IpcChannels.booksMemoryStoreAttachment, bridge.booksMemoryStoreAttachment);
+  handle(IpcChannels.booksMemoryGetAttachment, bridge.booksMemoryGetAttachment);
 
   // intakeRunTurn streams the interviewer reply on its own channel (kept separate from chat/dreams). Same
   // per-turn sender binding + reset as chatStream (18-personal-onboarding §6).

@@ -479,6 +479,12 @@ mostly making declared-but-inert slots actually do something:
 All channels stay gated `story.own` and active-person-scoped in the bridge (the trust boundary); keys
 stay host-side. The ~70 existing `story:*` channels are renamed `books:*` with the same shapes.
 
+**As built.** 102 channels (not ~70), renamed along with their `SelfosBridge` method names
+(`storyList` → `booksList`) and the image-progress surface keys, so nothing in the seam still says "story".
+The **capability stays `story.own`** — renaming it would need a role-config migration in every existing
+vault for no user-visible gain. The core module moved `story/` → `books/` behind a compatibility barrel
+(`@selfos/core/story*` still resolves for one release); the file names inside it are unchanged.
+
 **New**
 
 | Channel                                        | Request                     | Response                               | Notes                                                           |
@@ -680,6 +686,9 @@ Two items are **deliberately deferred** rather than open:
 
 ## 12. Changelog
 
+- 2026-08-14 — **Renamed `story:*` → `books:*`** — 102 channels, their bridge method names and the
+  image-progress surface keys, plus the core module `story/` → `books/` behind a compatibility barrel.
+  Mechanical, no behaviour change; the capability stays `story.own` (no role-config migration).
 - 2026-08-14 — **P6b2 built — SPEC 72 IS COMPLETE.** The `ourStory` type, the commission partner picker
   (live edges only, re-checked at create), the shelf and workspace on both partners' sides, the
   commissioner-only delete, and the "Shared with <name>" signal. 81 bridge storage call sites moved to the

@@ -478,6 +478,21 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-14 — **Refactor (the Books rename: `story:*` → `books:*`; SPEC 72 §5/§6; on
+  `chore/books-rename`).** Purely mechanical, kept out of every feature diff as the owner asked. Two commits:
+  the core module `packages/core/src/story/` → `books/` behind a **compatibility barrel** (`@selfos/core/story*`
+  still resolves for one release, so the move isn't a move PLUS a hundred import edits in one diff, and an
+  in-flight branch still builds while it rebases); then the seam — **102 channels** (not the spec's ~70),
+  their `SelfosBridge` method names (`storyList` → `booksList`), and the image-progress **surface keys**
+  (`story:<bookId>:cover`), which are an internal bridge↔renderer contract and had to move in lockstep or
+  progress silently stops. **The capability stays `story.own`** — renaming it would need a role-config
+  migration in every existing vault for no user-visible gain. **The trap:** the 102 bridge method names are
+  drawn from the channel map, and two of them (`storyPublish`, `storyContinuity`) are ALSO core FILE names —
+  so running the rename across `packages/` rewrote core's own import paths and broke the module. Scope a
+  bridge-identifier rename to `apps/` only, and check the target names for collisions first (I did:
+  `books*` had none). Gate green: typecheck (4 pkgs), lint, format, **2123 core + 1583 desktop + 13 relay**
+  unit, **210 E2E** — the E2E is what actually proves a channel rename, since it drives the real IPC.
+
 - 2026-08-14 — **Feedback (ALWAYS auto-merge a PR once CI is green; durable).** The owner: _"make sure to
   ALWAYS auto-merge after they go green."_ Captured into §6 step 6 — every PR now gets
   `gh pr merge <n> --squash --auto` **immediately after it is opened**, so it lands itself the moment checks

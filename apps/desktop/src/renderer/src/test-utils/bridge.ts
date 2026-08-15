@@ -445,41 +445,41 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     autoCheckinsSentActivity: () => Promise.resolve({}),
     autoCheckinsGetBlocks: () => Promise.resolve({ schemaVersion: 1, blockedSenders: [] }),
     autoCheckinsSetBlock: () => Promise.resolve({ schemaVersion: 1, blockedSenders: [] }),
-    storyBookTypes: () => Promise.resolve([]),
-    storyList: () => Promise.resolve([]),
-    storyShelf: () => Promise.resolve([]),
-    storyCreate: () => Promise.resolve(null),
-    storyGet: () => Promise.resolve(null),
-    storyGenerateFoundations: () =>
+    booksBookTypes: () => Promise.resolve([]),
+    booksList: () => Promise.resolve([]),
+    booksShelf: () => Promise.resolve([]),
+    booksCreate: () => Promise.resolve(null),
+    booksGet: () => Promise.resolve(null),
+    booksGenerateFoundations: () =>
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
-    storySaveOutline: () => Promise.resolve(null),
-    storyApproveOutline: () => Promise.resolve(null),
-    storyUpdate: () => Promise.resolve(null),
-    storyDelete: () => Promise.resolve(),
-    storyRewriteFromScratch: () => Promise.resolve(null),
-    storyGenerateChapters: () =>
+    booksSaveOutline: () => Promise.resolve(null),
+    booksApproveOutline: () => Promise.resolve(null),
+    booksUpdate: () => Promise.resolve(null),
+    booksDelete: () => Promise.resolve(),
+    booksRewriteFromScratch: () => Promise.resolve(null),
+    booksGenerateChapters: () =>
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
-    storyRegenerateChapter: () =>
+    booksRegenerateChapter: () =>
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
-    storyReviewChapter: () => Promise.resolve(null),
-    storyChapterHistory: (input: { chapterId: string }) =>
+    booksReviewChapter: () => Promise.resolve(null),
+    booksChapterHistory: (input: { chapterId: string }) =>
       Promise.resolve({ chapterId: input.chapterId, versions: [] }),
-    storyChapterVersion: () => Promise.resolve(null),
-    storyRestoreChapterVersion: () => Promise.resolve(null),
-    storyGetMarkup: (input) =>
+    booksChapterVersion: () => Promise.resolve(null),
+    booksRestoreChapterVersion: () => Promise.resolve(null),
+    booksGetMarkup: (input) =>
       Promise.resolve({ schemaVersion: 1, chapterId: input.chapterId, marks: [] }),
-    storyMark: (input) =>
+    booksMark: (input) =>
       Promise.resolve({ schemaVersion: 1, chapterId: input.chapterId, marks: [input.mark] }),
-    storyUpdateMark: () => Promise.resolve(null),
-    storyRemoveMark: (input) =>
+    booksUpdateMark: () => Promise.resolve(null),
+    booksRemoveMark: (input) =>
       Promise.resolve({ schemaVersion: 1, chapterId: input.chapterId, marks: [] }),
-    storyApplyMarkup: () =>
+    booksApplyMarkup: () =>
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
-    storyEditPassage: () => Promise.resolve(null),
-    storyPinQuote: () => Promise.resolve(null),
-    storyTodos: () => Promise.resolve({ schemaVersion: 1, todos: [] }),
-    storyExclusions: () => Promise.resolve([]),
-    storyExclude: (input) =>
+    booksEditPassage: () => Promise.resolve(null),
+    booksPinQuote: () => Promise.resolve(null),
+    booksTodos: () => Promise.resolve({ schemaVersion: 1, todos: [] }),
+    booksExclusions: () => Promise.resolve([]),
+    booksExclude: (input) =>
       Promise.resolve({
         exclusions: [{ id: 'x1', kind: input.kind, value: input.value, createdAt: 'now' }],
         bundle: {
@@ -509,52 +509,52 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         },
         staled: 0,
       }),
-    storyUnexclude: () => Promise.resolve([]),
-    storyQuoteCandidates: () => Promise.resolve([]),
-    storyMineQuotes: () => Promise.resolve([]),
-    storySetQuoteStatus: () => Promise.resolve([]),
-    storyTodoToQuestions: () =>
+    booksUnexclude: () => Promise.resolve([]),
+    booksQuoteCandidates: () => Promise.resolve([]),
+    booksMineQuotes: () => Promise.resolve([]),
+    booksSetQuoteStatus: () => Promise.resolve([]),
+    booksTodoToQuestions: () =>
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
-    storyAnswerQuestion: () =>
+    booksAnswerQuestion: () =>
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
-    storyMemoryList: () => Promise.resolve([]),
-    storyMemoryGet: () => Promise.resolve(null),
-    storyMemoryOpen: () => Promise.resolve(null),
-    storyMemoryTurn: () =>
+    booksMemoryList: () => Promise.resolve([]),
+    booksMemoryGet: () => Promise.resolve(null),
+    booksMemoryOpen: () => Promise.resolve(null),
+    booksMemoryTurn: () =>
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
-    storyMemoryRetry: () =>
+    booksMemoryRetry: () =>
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
-    storyMemoryRewind: () => Promise.resolve({ ok: false, reason: 'NOT_FOUND' as const }),
-    storyMemoryRegenerate: () =>
+    booksMemoryRewind: () => Promise.resolve({ ok: false, reason: 'NOT_FOUND' as const }),
+    booksMemoryRegenerate: () =>
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
-    storyMemorySynthesize: () =>
+    booksMemorySynthesize: () =>
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
-    storyMemorySave: () =>
+    booksMemorySave: () =>
       Promise.resolve({ ok: false, reason: 'ERROR', message: 'Not available.' }),
-    storyMemoryDelete: () => Promise.resolve(),
-    storyMemoryStoreAttachment: () =>
+    booksMemoryDelete: () => Promise.resolve(),
+    booksMemoryStoreAttachment: () =>
       Promise.resolve({ ok: false as const, reason: 'UNSUPPORTED' as const, message: 'x' }),
-    storyMemoryGetAttachment: () => Promise.resolve(null),
+    booksMemoryGetAttachment: () => Promise.resolve(null),
     onMemoryChunk: () => () => {},
-    storyRefreshCheck: () => Promise.resolve({ staled: 0, rewritten: 0, bundle: null }),
-    storyProposals: () => Promise.resolve([]),
-    storyEditOutline: () => Promise.resolve({ ok: true, bundle: null }),
-    storySuggestTitles: () => Promise.resolve({ ok: true, titles: [] }),
-    storyRegenerateEssence: () => Promise.resolve({ ok: true, essence: null }),
-    storyEditTimeline: () => Promise.resolve({ ok: true, timeline: null }),
-    storyResolveProposal: () => Promise.resolve({ ok: true, proposals: [], bundle: null }),
-    storyContinuityCheck: () => Promise.resolve({ ok: true, findings: [] }),
-    storyManuscriptRead: () => Promise.resolve({ ok: true, findings: [] }),
-    storyNewMaterial: () => Promise.resolve([]),
-    storyFinishEdition: () => Promise.resolve({ ok: true, bundle: null }),
-    storyReopenBook: () => Promise.resolve(null),
-    storyAcceptMaterial: () => Promise.resolve({ ok: true }),
-    storyDeclineMaterial: () => Promise.resolve([]),
-    storyContinuity: () => Promise.resolve([]),
-    storyResolveContinuity: () => Promise.resolve([]),
-    storyLineEdit: () =>
+    booksRefreshCheck: () => Promise.resolve({ staled: 0, rewritten: 0, bundle: null }),
+    booksProposals: () => Promise.resolve([]),
+    booksEditOutline: () => Promise.resolve({ ok: true, bundle: null }),
+    booksSuggestTitles: () => Promise.resolve({ ok: true, titles: [] }),
+    booksRegenerateEssence: () => Promise.resolve({ ok: true, essence: null }),
+    booksEditTimeline: () => Promise.resolve({ ok: true, timeline: null }),
+    booksResolveProposal: () => Promise.resolve({ ok: true, proposals: [], bundle: null }),
+    booksContinuityCheck: () => Promise.resolve({ ok: true, findings: [] }),
+    booksManuscriptRead: () => Promise.resolve({ ok: true, findings: [] }),
+    booksNewMaterial: () => Promise.resolve([]),
+    booksFinishEdition: () => Promise.resolve({ ok: true, bundle: null }),
+    booksReopenBook: () => Promise.resolve(null),
+    booksAcceptMaterial: () => Promise.resolve({ ok: true }),
+    booksDeclineMaterial: () => Promise.resolve([]),
+    booksContinuity: () => Promise.resolve([]),
+    booksResolveContinuity: () => Promise.resolve([]),
+    booksLineEdit: () =>
       Promise.resolve({ ok: false as const, reason: 'ERROR' as const, message: 'not in test' }),
-    storyHomeSignal: () =>
+    booksHomeSignal: () =>
       Promise.resolve({
         hasBook: false,
         staleChapters: 0,
@@ -562,20 +562,20 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         unwrittenChapters: 0,
         signature: '',
       }),
-    storyCorpusStats: () =>
+    booksCorpusStats: () =>
       Promise.resolve({ reflections: 0, dreams: 0, memories: 0, answers: 0, sessions: 0 }),
-    storyCastRegister: () => Promise.resolve([]),
-    storyConsent: () => Promise.resolve([]),
-    storySetConsent: () => Promise.resolve([]),
-    storyCompleteness: () =>
+    booksCastRegister: () => Promise.resolve([]),
+    booksConsent: () => Promise.resolve([]),
+    booksSetConsent: () => Promise.resolve([]),
+    booksCompleteness: () =>
       Promise.resolve({ stage: 'beginning' as const, ratio: 0, covered: 0, total: 12 }),
-    storyInterviewCheck: () => Promise.resolve({ outcome: 'noBook' as const }),
-    storyGaps: () => Promise.resolve({ gaps: [], partCoverage: [], hasOpenCheckin: false }),
-    storyAskGap: () =>
+    booksInterviewCheck: () => Promise.resolve({ outcome: 'noBook' as const }),
+    booksGaps: () => Promise.resolve({ gaps: [], partCoverage: [], hasOpenCheckin: false }),
+    booksAskGap: () =>
       Promise.resolve({ ok: false as const, reason: 'ERROR' as const, message: 'x' }),
-    storyAnsweredCheckIns: () => Promise.resolve([]),
-    storyPublish: () => Promise.resolve({ ok: false as const, message: 'Not available.' }),
-    storyPublishDiff: () =>
+    booksAnsweredCheckIns: () => Promise.resolve([]),
+    booksPublish: () => Promise.resolve({ ok: false as const, message: 'Not available.' }),
+    booksPublishDiff: () =>
       Promise.resolve({
         everPublished: false,
         added: [],
@@ -585,35 +585,35 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
         willShrink: false,
         nothingToPublish: true,
       }),
-    storyUnpublish: () => Promise.resolve({ ok: true as const }),
-    storyReaders: () => Promise.resolve([]),
-    storyGrantReader: () => Promise.resolve([]),
-    storyRevokeReader: () => Promise.resolve([]),
-    storyReaderFeatured: () => Promise.resolve(false),
-    storySharedBooks: () => Promise.resolve([]),
-    storyReadShared: () => Promise.resolve(null),
-    storyReadOwnBook: () => Promise.resolve(null),
-    storySetReadPosition: () => Promise.resolve(),
-    storyMarkSharedRead: () => Promise.resolve(),
-    storyGenerateFullDraft: () => Promise.resolve({ ok: false, reason: 'ERROR', message: '' }),
+    booksUnpublish: () => Promise.resolve({ ok: true as const }),
+    booksReaders: () => Promise.resolve([]),
+    booksGrantReader: () => Promise.resolve([]),
+    booksRevokeReader: () => Promise.resolve([]),
+    booksReaderFeatured: () => Promise.resolve(false),
+    booksSharedBooks: () => Promise.resolve([]),
+    booksReadShared: () => Promise.resolve(null),
+    booksReadOwnBook: () => Promise.resolve(null),
+    booksSetReadPosition: () => Promise.resolve(),
+    booksMarkSharedRead: () => Promise.resolve(),
+    booksGenerateFullDraft: () => Promise.resolve({ ok: false, reason: 'ERROR', message: '' }),
     onStoryProgress: () => () => {},
     onImageProgress: () => () => {},
-    storyReadSharedImage: () => Promise.resolve(null),
-    storyExportMarkdown: () => Promise.resolve(null),
-    storyExportPdf: () => Promise.resolve(null),
-    storyExportEpub: () => Promise.resolve(null),
-    storyExportDocx: () => Promise.resolve(null),
-    storyImages: () => Promise.resolve([]),
-    storyGenerateImage: () => Promise.resolve({ ok: false, reason: 'NO_CONSENT', message: 'off' }),
-    storyGetImage: () => Promise.resolve(null),
-    storyDeleteImage: () => Promise.resolve(),
-    storyUploadPhoto: () => Promise.resolve(null),
-    storyAnalyzePhoto: () => Promise.resolve({ ok: false, reason: 'NO_KEY', message: 'off' }),
-    storyAnswerPhoto: () => Promise.resolve(),
-    storyPhotoAnswers: () => Promise.resolve([]),
-    storySuggestPlacement: () => Promise.resolve({ ok: true, afterAnchor: 'p0' }),
-    storySetPlacement: () => Promise.resolve(null),
-    storyRemovePlacement: () => Promise.resolve(null),
+    booksReadSharedImage: () => Promise.resolve(null),
+    booksExportMarkdown: () => Promise.resolve(null),
+    booksExportPdf: () => Promise.resolve(null),
+    booksExportEpub: () => Promise.resolve(null),
+    booksExportDocx: () => Promise.resolve(null),
+    booksImages: () => Promise.resolve([]),
+    booksGenerateImage: () => Promise.resolve({ ok: false, reason: 'NO_CONSENT', message: 'off' }),
+    booksGetImage: () => Promise.resolve(null),
+    booksDeleteImage: () => Promise.resolve(),
+    booksUploadPhoto: () => Promise.resolve(null),
+    booksAnalyzePhoto: () => Promise.resolve({ ok: false, reason: 'NO_KEY', message: 'off' }),
+    booksAnswerPhoto: () => Promise.resolve(),
+    booksPhotoAnswers: () => Promise.resolve([]),
+    booksSuggestPlacement: () => Promise.resolve({ ok: true, afterAnchor: 'p0' }),
+    booksSetPlacement: () => Promise.resolve(null),
+    booksRemovePlacement: () => Promise.resolve(null),
     relationshipsGetSynthesis: () => Promise.resolve(null),
     relationshipsSynthesize: () =>
       Promise.resolve({ ok: false, reason: 'EMPTY', message: 'Nothing yet.' }),

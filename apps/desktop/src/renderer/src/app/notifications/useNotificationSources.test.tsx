@@ -509,7 +509,7 @@ describe('useNotificationSources — story-shared (64 §3.6)', () => {
   });
 
   it('surfaces a one-time notification for a NEVER-opened shared book, keyed per book', async () => {
-    installMockBridge({ storySharedBooks: () => Promise.resolve([sharedBook()]) });
+    installMockBridge({ booksSharedBooks: () => Promise.resolve([sharedBook()]) });
     asOwner();
     await useNotificationStore.getState().load();
     render(<Harness />);
@@ -526,7 +526,7 @@ describe('useNotificationSources — story-shared (64 §3.6)', () => {
   it('does NOT notify once the book has been opened (updated marker only, never re-notifies)', async () => {
     // Opened before, but the author republished (updated) — the quiet marker shows on /story, no bell.
     installMockBridge({
-      storySharedBooks: () => Promise.resolve([sharedBook({ neverOpened: false, updated: true })]),
+      booksSharedBooks: () => Promise.resolve([sharedBook({ neverOpened: false, updated: true })]),
     });
     asOwner();
     await useNotificationStore.getState().load();

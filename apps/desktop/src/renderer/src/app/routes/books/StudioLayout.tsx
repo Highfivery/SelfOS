@@ -16,7 +16,7 @@ import { useStoryStore } from '../../../stores/storyStore';
 import { aiUnavailableMessage } from '../../AiUnavailableNotice';
 import styles from './Books.module.css';
 import { aggregateCrisisSignal } from '@selfos/core/coaching';
-import { manuscriptMetrics } from '@selfos/core/story-metrics';
+import { manuscriptMetrics } from '@selfos/core/books-metrics';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { BookManifest, StoryBookBundle } from '@shared/schemas';

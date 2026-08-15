@@ -33,7 +33,7 @@ const TitleDraftSchema = z.object({
 });
 
 // Service-internal outcome unions (distinct from the flat IPC `StoryTitlesResult`/`StoryEssenceResult` in
-// schemas.ts — the bridge destructures these into those). Named apart so a stray `@selfos/core/story` import
+// schemas.ts — the bridge destructures these into those). Named apart so a stray `@selfos/core/books` import
 // can't silently pick up a different shape than the IPC one.
 export type SuggestTitlesOutcome =
   | { ok: true; titles: string[] }

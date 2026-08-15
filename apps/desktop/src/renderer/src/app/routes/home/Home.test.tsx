@@ -306,7 +306,7 @@ describe('Home — the "For you" engine', () => {
     installMockBridge({
       // Some activity so the person isn't "new" (which suppresses all "For you" pushes).
       conversationsList: () => Promise.resolve([meta('c1', 'A past talk', 'complete')]),
-      storyHomeSignal: () =>
+      booksHomeSignal: () =>
         Promise.resolve({
           hasBook: true,
           staleChapters: 1,
@@ -317,7 +317,7 @@ describe('Home — the "For you" engine', () => {
     });
     renderHome();
     // Proves the capability snapshot includes `story.own` (else the provider is filtered — the spec-52 lesson);
-    // findByText polls until the async storyHomeSignal resolves + the card renders.
+    // findByText polls until the async booksHomeSignal resolves + the card renders.
     expect(await screen.findByText(/new material to weave in/i)).toBeInTheDocument();
     expect(forYouRegion()).not.toBeNull();
   });

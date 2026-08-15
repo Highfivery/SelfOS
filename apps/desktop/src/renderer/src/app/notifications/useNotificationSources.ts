@@ -121,7 +121,7 @@ export function useNotificationSources(conflicts: string[]): void {
             : Promise.resolve(null),
           window.selfos?.autoCheckinsIncomingStreams() ?? Promise.resolve([]),
           canStory
-            ? (window.selfos?.storySharedBooks() ?? Promise.resolve([]))
+            ? (window.selfos?.booksSharedBooks() ?? Promise.resolve([]))
             : Promise.resolve([]),
         ]);
       if (!active || useSessionStore.getState().activePerson?.id !== activePersonId) return;

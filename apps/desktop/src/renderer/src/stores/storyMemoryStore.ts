@@ -105,20 +105,20 @@ export const useStoryMemoryStore = create<StoryMemoryState>((set, get) => ({
     // Always settle `memoriesLoaded` — a rejected read (decrypt/transport) must degrade to the empty state,
     // never leave the collection blank forever behind its not-yet-loaded gate.
     try {
-      const memories = (await window.selfos?.storyMemoryList()) ?? [];
+      const memories = (await window.selfos?.booksMemoryList()) ?? [];
       set({ memories, memoriesLoaded: true });
     } catch {
       set({ memories: [], memoriesLoaded: true });
     }
   },
   deleteMemory: async (memoryId) => {
-    await window.selfos?.storyMemoryDelete({ memoryId });
+    await window.selfos?.booksMemoryDelete({ memoryId });
     await get().loadMemories();
   },
   open: async (memoryId) => {
     const seq = ++openSeq;
     set({ ...CHAT_EMPTY, memoryId, opening: true });
-    const detail = await window.selfos?.storyMemoryOpen({ memoryId });
+    const detail = await window.selfos?.booksMemoryOpen({ memoryId });
     if (seq !== openSeq) return; // superseded by a newer open
     if (detail) {
       set({
@@ -139,7 +139,7 @@ export const useStoryMemoryStore = create<StoryMemoryState>((set, get) => ({
     const seq = ++openSeq;
     set({ ...CHAT_EMPTY, opening: true });
     // `bookId` decides whose interviewer speaks; `gapId` is what saving this memory closes (72 §5.5).
-    const detail = await window.selfos?.storyMemoryOpen({
+    const detail = await window.selfos?.booksMemoryOpen({
       ...(opts?.seedFocus ? { seedFocus: opts.seedFocus } : {}),
       ...(opts?.bookId ? { bookId: opts.bookId } : {}),
       ...(opts?.gapId ? { gapId: opts.gapId } : {}),
@@ -170,7 +170,7 @@ export const useStoryMemoryStore = create<StoryMemoryState>((set, get) => ({
     const urls: Record<string, string> = {};
     let storeError: string | null = null;
     for (const pending of attachments) {
-      const stored = await window.selfos?.storyMemoryStoreAttachment({
+      const stored = await window.selfos?.booksMemoryStoreAttachment({
         memoryId,
         dataBase64: pending.base64,
         mime: pending.mime,
@@ -204,7 +204,7 @@ export const useStoryMemoryStore = create<StoryMemoryState>((set, get) => ({
       sending: true,
       error: storeError,
     }));
-    const result = await window.selfos?.storyMemoryTurn({
+    const result = await window.selfos?.booksMemoryTurn({
       memoryId,
       text: trimmed,
       ...(refs.length > 0 ? { attachments: refs } : {}),
@@ -228,7 +228,7 @@ export const useStoryMemoryStore = create<StoryMemoryState>((set, get) => ({
     if (!memoryId || get().sending) return;
     // Re-generates a reply for the transcript as it already stands — the person's message is never duplicated.
     set({ streaming: '', sending: true, error: null });
-    const result = await window.selfos?.storyMemoryRetry({ memoryId });
+    const result = await window.selfos?.booksMemoryRetry({ memoryId });
     if (result?.ok) {
       set((s) => ({
         messages: result.conversation.messages,
@@ -245,7 +245,7 @@ export const useStoryMemoryStore = create<StoryMemoryState>((set, get) => ({
     const { memoryId, messages, sending } = get();
     const target = messages[index];
     if (!memoryId || sending || !target) return;
-    const result = await window.selfos?.storyMemoryRewind({
+    const result = await window.selfos?.booksMemoryRewind({
       memoryId,
       index,
       expect: { role: target.role, ts: target.ts },
@@ -266,7 +266,7 @@ export const useStoryMemoryStore = create<StoryMemoryState>((set, get) => ({
     const target = messages[index];
     if (!memoryId || sending || !target) return;
     set({ streaming: '', sending: true, error: null });
-    const result = await window.selfos?.storyMemoryRegenerate({
+    const result = await window.selfos?.booksMemoryRegenerate({
       memoryId,
       index,
       expect: { role: target.role, ts: target.ts },
@@ -287,7 +287,7 @@ export const useStoryMemoryStore = create<StoryMemoryState>((set, get) => ({
     const memoryId = get().memoryId;
     if (!memoryId || get().synthesizing) return false;
     set({ synthesizing: true, error: null });
-    const result = await window.selfos?.storyMemorySynthesize({ memoryId });
+    const result = await window.selfos?.booksMemorySynthesize({ memoryId });
     if (result?.ok) {
       set({ memory: result.memory, synthesizing: false, ready: true });
       await useBudgetStore.getState().refresh();
@@ -303,7 +303,7 @@ export const useStoryMemoryStore = create<StoryMemoryState>((set, get) => ({
     const memoryId = get().memoryId;
     if (!memoryId || get().saving) return false;
     set({ saving: true, error: null });
-    const result = await window.selfos?.storyMemorySave({
+    const result = await window.selfos?.booksMemorySave({
       memoryId,
       ...(edits ? { edits } : {}),
     });
@@ -322,7 +322,7 @@ export const useStoryMemoryStore = create<StoryMemoryState>((set, get) => ({
     if (get().attachmentUrls[ref.id]) return;
     const memoryId = get().memoryId;
     if (!memoryId) return;
-    const got = await window.selfos?.storyMemoryGetAttachment({
+    const got = await window.selfos?.booksMemoryGetAttachment({
       memoryId,
       path: ref.path,
       mime: ref.mime,

@@ -20,7 +20,7 @@ import type { Length, Style, Voice } from './bookConfigOptions';
 /**
  * Story settings (§3.8/§13.4) — the Settings tab's Writing + Images groups, where the person configures THIS
  * book: its writing (voice, tone, length, auto-refresh) and its own image look (style + direction, independent
- * of the app-wide dream-image style). All persist to `BookConfig` via `storyUpdate`; writing changes steer
+ * of the app-wide dream-image style). All persist to `BookConfig` via `booksUpdate`; writing changes steer
  * FUTURE rewrites (existing chapters keep their text until re-drafted/refreshed). A `draft` mirror avoids a
  * stale-closure lost update across quick successive changes; the notes textarea persists on blur.
  */

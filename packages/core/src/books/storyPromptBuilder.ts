@@ -125,6 +125,16 @@ function optionDirectives(
     );
   }
 
+  // What this particular book explores (72 §3.2, owner decision 2026-08-15). The author asking for ground
+  // in their OWN book is an explicit instruction, so it governs subject matter even where their recorded
+  // material is silent on it — but a hard limit is untouchable, and the doctrine's boundary already says so
+  // absolutely. That ordering is the whole reason this is a focus and not a licence.
+  if (opt('focus').trim()) {
+    out.push(
+      `THIS BOOK'S FOCUS: ${opt('focus').trim()}. Build the book around this. Draw on everything else you know about what they want to make it specific and theirs — but this is the ground it explores, and it takes precedence over material that points elsewhere. It does NOT relax the boundary in your doctrine: a recorded hard limit stays out, however well it would fit this focus.`,
+    );
+  }
+
   // The explicit register, per book (owner decision, 2026-08-13). It mirrors the questionnaire tiers the
   // person already set their expectations by, and it GOVERNS the style preset: a warm or literary register
   // must not dilute it back into the tasteful version.

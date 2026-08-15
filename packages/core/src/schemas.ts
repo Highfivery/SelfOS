@@ -4142,6 +4142,15 @@ export const BookStyleSchema = z.enum([
   'reflective',
   'cinematic',
   'poetic',
+  // Erotica's own registers (72 §3.2). A type offers a SUBSET via `stylePresets`, so these never appear on
+  // a biography — and the generic seven never appear on erotica, where "journalistic: reportorial and
+  // evidence-led" was actively wrong. Every one of these is about VOICE: how explicit the book is belongs
+  // to the separate `tier` option, which governs style rather than competing with it.
+  'sensory',
+  'slowBurn',
+  'raunchy',
+  'tender',
+  'confessional',
 ]);
 export type BookStyle = z.infer<typeof BookStyleSchema>;
 export const BookLengthSchema = z.enum(['concise', 'standard', 'full']);

@@ -1,6 +1,6 @@
 # 69 — Questionnaire Intelligence — the adaptive, evolving generation engine
 
-> **Status:** Approved · _last updated 2026-08-07_
+> **Status:** **Built** · _last updated 2026-08-14_ (complete per its own changelog; live-model prompt tuning remains an owner task — it needs a real API key)
 >
 > A per-person **Personalization Profile** and a single **generation engine** that make SelfOS's AI
 > questionnaires genuinely smart, dynamic, and evolving: they learn what a person doesn't want asked

@@ -1,6 +1,6 @@
 # 72 — Books (many kinds of book, one life)
 
-> **Status:** **Approved** — _last updated 2026-08-13_
+> **Status:** **Built — COMPLETE** (all eight types, P1–P6 + the `books:*` rename) — _last updated 2026-08-14_
 >
 > SelfOS writes books from what it knows about you. Spec [64](64-your-story.md) built one — a living
 > biography — on a `BookType` registry designed for more. This spec generalizes that foundation into

@@ -1,6 +1,6 @@
 # 65 — Questionnaires & Memory: review queue, per-item insight cards, humanized trends
 
-> **Status:** **Approved** — _last updated 2026-07-17_
+> **Status:** **Built** — _last updated 2026-08-14_ (all four slices built 2026-07-17, plus a 2026-07-18 follow-up)
 >
 > **Decisions (2026-07-17, user):** the review queue goes **straight to "all caught up"** after the last item —
 > **no** separate "here's what you shared" recap (sharing is already confirmed per-item at each Keep & save).

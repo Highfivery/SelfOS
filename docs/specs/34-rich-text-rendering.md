@@ -1,6 +1,6 @@
 # 34 — AI rich-text rendering
 
-> **Status:** **Approved** — _last updated 2026-06-22_
+> **Status:** **Built** — _last updated 2026-08-14_ (built 2026-06-23)
 >
 > SelfOS renders every AI-generated string as a plain text node, so the Markdown the model naturally
 > writes (`**bold**`, `*italic*`, `-`/`1.` lists, `###` headings, `---` rules, `> quotes`,

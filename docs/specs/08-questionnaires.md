@@ -3054,7 +3054,7 @@ All four §21.1 decisions are the user's explicit choices (an interactive mockup
 
 ## 22. 2026-07-13 amendment — sensitivity tiers that actually differ + explicit Scenario — BUILT
 
-> **Status:** Draft (awaiting approval). Motivated by the owner's report that "when Intimacy is selected with a
+> **Status:** **Built** (2026-07-14). Motivated by the owner's report that "when Intimacy is selected with a
 > Sensitivity like Unfiltered, the questions & scenarios it produces aren't very unfiltered. In general the
 > Sensitivity levels don't produce specific questions to those levels." The owner confirmed the tame output was
 > seen across **Intimacy + Unfiltered**, **Intimacy + Explicit**, AND **Scenario + Explicit/Unfiltered**.

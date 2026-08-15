@@ -70,7 +70,7 @@ the precedent for a two-person book), [00](00-architecture.md) (vault, IPC, secu
   already make manual publishing possible.
 - **Household contributions** (family-submitted questions and attributed quotes woven in) — the
   highest-value fast-follow after this spec, deliberately not bundled: it needs its own consent and
-  attribution model. A future spec, not this one.
+  attribution model. **Now specced as [73](73-household-contributions.md)** (2026-08-14).
 - **Migrating the two existing books to a new schema.** They regenerate in place (§7.9).
 - **Voice interview.** Text only; the turn model must not preclude it (CLAUDE.md §2).
 

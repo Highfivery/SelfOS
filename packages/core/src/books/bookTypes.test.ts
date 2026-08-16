@@ -422,3 +422,36 @@ describe('the explicit ladder shows what it produces (72 §3.2)', () => {
     expect(tier?.choices?.[0]?.value).toBe('unfiltered');
   });
 });
+
+/**
+ * A sample that reads tamer than its own label is how a register stops meaning anything: the card promises
+ * "no euphemism" and then demonstrates euphemism. Specimens are UI-only (they never reach the model), so
+ * nothing else catches this — the card just quietly misrepresents what the book will do.
+ */
+describe('the explicit registers demonstrate themselves (72 §3.2)', () => {
+  const erotica = getBookType('erotica')!;
+  const specimen = (id: string): string =>
+    erotica.stylePresets.find((p) => p.id === id)?.specimen.third ?? '';
+
+  it('shows plain anatomical language on the registers that promise it', () => {
+    const explicit = ['raunchy', 'filthyTalk', 'hardcore'].map(specimen).join(' ').toLowerCase();
+    expect(explicit).toMatch(/cock|pussy|tits|dripping/);
+  });
+
+  it('keeps the quiet registers quiet — they promise something else', () => {
+    const quiet = ['tender', 'aching', 'slowBurn', 'literary']
+      .map(specimen)
+      .join(' ')
+      .toLowerCase();
+    expect(quiet).not.toMatch(/\bcock\b|\bpussy\b|\btits\b/);
+  });
+
+  it('shows the most explicit rung of the ladder as actually explicit', () => {
+    const tier = erotica.options?.find((o) => o.id === 'tier');
+    const unfiltered = tier?.choices?.find((c) => c.value === 'unfiltered')?.example ?? '';
+    const suggestive = tier?.choices?.find((c) => c.value === 'suggestive')?.example ?? '';
+    expect(unfiltered.toLowerCase()).toMatch(/cock|pussy/);
+    // …while the rung that stops at the door demonstrates stopping at the door.
+    expect(suggestive.toLowerCase()).not.toMatch(/cock|pussy/);
+  });
+});

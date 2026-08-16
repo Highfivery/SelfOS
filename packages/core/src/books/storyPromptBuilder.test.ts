@@ -637,3 +637,35 @@ describe('every rung of the explicit ladder reaches the model (72 §3.2)', () =>
     }
   });
 });
+
+/**
+ * "Name acts and bodies plainly" is satisfiable with "his hardness, her heat" — technically plain, still
+ * euphemism, and exactly how an explicit register gets quietly diluted. The directive names the vocabulary.
+ */
+describe('the explicit rungs name the vocabulary (72 §3.2)', () => {
+  const erotica = getBookType('erotica')!;
+  const at = (tier: string): string =>
+    buildBiographerSystem(erotica, cfg({ style: 'raunchy', typeOptions: { tier } }), 'Ben');
+
+  it('says which words, on both explicit rungs', () => {
+    for (const tier of ['unfiltered', 'explicit']) {
+      expect(at(tier)).toMatch(/cock, pussy, clit/);
+      expect(at(tier)).toMatch(/wet, dripping, hard, throbbing/);
+    }
+  });
+
+  it('bans the euphemisms that dilute it, by name', () => {
+    const sys = at('unfiltered');
+    for (const banned of ['manhood', 'member', 'core', 'entrance', 'folds']) {
+      expect(sys).toContain(banned);
+    }
+    expect(sys).toMatch(/supermarket romance/);
+  });
+
+  it('leaves the quiet rungs alone — vocabulary follows HEAT, not style', () => {
+    // Raunchy + Suggestive must stay coherent: coarse in tone, with the act still off the page.
+    for (const tier of ['sensual', 'suggestive']) {
+      expect(at(tier)).not.toMatch(/cock, pussy, clit/);
+    }
+  });
+});

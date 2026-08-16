@@ -862,9 +862,9 @@ export const EROTICA_BOOK_TYPE: BookType = {
         'Raunchy register: coarse, bawdy and unapologetic. Blunt words for bodies and acts, short punchy lines, no euphemism and no politeness. This is DICTION — how explicit the content itself is remains the register directive below.',
       specimen: {
         first:
-          'He wanted me filthy about it, and I was — I told him exactly what to do, and he did it.',
+          'I was dripping before he got my knickers off, and he told me so, and I told him to shut up and get on with it.',
         third:
-          'He wanted her filthy about it, and she was — she told him exactly what to do, and he did it.',
+          'She was dripping before he got her knickers off, and he told her so, and she told him to shut up and get on with it.',
       },
     },
     {
@@ -897,8 +897,9 @@ export const EROTICA_BOOK_TYPE: BookType = {
       directive:
         'Dialogue-forward register: what they SAY to each other carries the scene. Real, dirty, specific talk — instructions, demands, filth said out loud, answers given. Narration serves the dialogue rather than the other way round.',
       specimen: {
-        first: '“Say it,” he told me. So I said it, and then I said worse.',
-        third: '“Say it,” he told her. So she said it, and then she said worse.',
+        first: '“Tell me what you want.” So I told him — his cock, my mouth, and no talking after.',
+        third:
+          '“Tell me what you want.” So she told him — his cock, her mouth, and no talking after.',
       },
     },
     {
@@ -929,8 +930,10 @@ export const EROTICA_BOOK_TYPE: BookType = {
       directive:
         'Hardcore register: all act, no interiority. Continuous, anatomical, blow-by-blow — name every part and every act plainly and keep the camera on it. No cutting away, no reflection, no lingering on feelings; escalation is the structure. This is about FOCUS, not permission — how graphic the book may be is the register directive below.',
       specimen: {
-        first: 'He had me on the edge of the bed before the door shut, and did not stop to ask.',
-        third: 'He had her on the edge of the bed before the door shut, and did not stop to ask.',
+        first:
+          'He bent me over the edge of the bed and pushed his cock into me in one stroke, and did not stop to ask.',
+        third:
+          'He bent her over the edge of the bed and pushed his cock into her in one stroke, and did not stop to ask.',
       },
     },
     {
@@ -1066,7 +1069,7 @@ export const EROTICA_BOOK_TYPE: BookType = {
           label: 'Unfiltered',
           description: 'Graphic from the first line. Nothing withheld, softened or cut away.',
           example:
-            'He had her against the door before they made it to the bed, and neither of them cared who heard.',
+            'He had her against the door with his cock inside her before they made it to the bed, and neither of them cared who heard.',
         },
         {
           value: 'explicit',
@@ -1074,7 +1077,7 @@ export const EROTICA_BOOK_TYPE: BookType = {
           description:
             'Acts and bodies named plainly — real sexual detail, a step back from unfiltered.',
           example:
-            'He had her out of the dress before the bed, his mouth everywhere she wanted it.',
+            'He had her out of the dress before the bed, his mouth on her tits and his hand between her legs.',
         },
         {
           value: 'sensual',

@@ -158,7 +158,7 @@ function optionDirectives(
   // must not dilute it back into the tasteful version.
   if (opt('tier') === 'unfiltered') {
     out.push(
-      'REGISTER: write this at its most explicit. Frank, specific, graphic sexual writing from the first page — name acts and bodies plainly. This GOVERNS the style and tone directives above: never soften it into the tasteful, fade-to-black, or merely sensual version. The boundary in your doctrine still holds absolutely.',
+      'REGISTER: write this at its most explicit. Frank, specific, graphic sexual writing from the first page. Use the plain anatomical words a person actually uses in bed — cock, pussy, clit, tits, ass, cum — and write what bodies do in the same register: wet, dripping, hard, throbbing, swollen. BANNED, because they are how this register gets quietly diluted: manhood, member, arousal, sex (as a noun for a body part), core, heat, entrance, bud, folds, essence, desire (as a stand-in for the act), and any phrase that names a body part by what it is near rather than what it is. If a sentence could appear in a supermarket romance, rewrite it. This GOVERNS the style and tone directives above: never soften it into the tasteful, fade-to-black, or merely sensual version. The boundary in your doctrine still holds absolutely.',
     );
   } else if (opt('tier') === 'sensual') {
     out.push(
@@ -170,7 +170,7 @@ function optionDirectives(
     );
   } else if (opt('tier') === 'explicit') {
     out.push(
-      'REGISTER: write this explicitly — real sexual detail, plainly named, a step back from the most graphic register. This GOVERNS the style and tone directives above: do not dilute it into the merely suggestive. The boundary in your doctrine still holds absolutely.',
+      'REGISTER: write this explicitly — real sexual detail, a step back from the most graphic register but never coy about what is happening. Use the plain anatomical words a person actually uses in bed — cock, pussy, clit, tits, ass, cum — and write what bodies do in the same register: wet, dripping, hard, throbbing, swollen. BANNED, because they are how this register gets quietly diluted: manhood, member, arousal, sex (as a noun for a body part), core, heat, entrance, bud, folds, essence, desire (as a stand-in for the act), and any phrase that names a body part by what it is near rather than what it is. If a sentence could appear in a supermarket romance, rewrite it. This GOVERNS the style and tone directives above: do not dilute it into the merely suggestive. The boundary in your doctrine still holds absolutely.',
     );
   }
 

@@ -15066,6 +15066,9 @@ test('story (72): choose a kind of book — its own questions, and the 18+ gate 
       await expect(w.getByRole('radio', { name: rung })).toBeVisible();
     }
     await expect(w.getByText(/rest of the night belonged to nobody else/)).toBeVisible();
+    // The most explicit rung SHOWS that it is explicit — a sample that reads tamer than its own label is
+    // how the ladder stopped meaning anything.
+    await expect(w.getByText(/with his cock inside her/)).toBeVisible();
     // Its OWN registers (§3.2) — not the biography's, which offered an erotic book "Journalistic:
     // reportorial and evidence-led" and "Warm: dinner-table narration".
     await expect(w.getByRole('checkbox', { name: 'Raunchy' })).toBeVisible();
@@ -15078,7 +15081,7 @@ test('story (72): choose a kind of book — its own questions, and the 18+ gate 
     await expect(w.getByRole('checkbox', { name: 'Slow burn' })).toBeChecked();
     // Each register shows a line of what it reads like, at the chosen voice (§3.2). "Filthy talk" opens
     // with dialogue, which is why the sample carries no wrapping quote marks of its own.
-    await expect(w.getByText(/“Say it,” he told her/)).toBeVisible();
+    await expect(w.getByText(/“Tell me what you want\.”/)).toBeVisible();
     await expect(w.getByRole('checkbox', { name: 'Filthy talk' })).toBeChecked();
     // Subject matter is a separate, optional control — never a style tile that picks it for you.
     await expect(w.getByRole('textbox', { name: 'What this one explores' })).toBeVisible();

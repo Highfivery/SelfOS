@@ -161,3 +161,17 @@ describe('the erotic lexicon (74 §4.4)', () => {
     expect(await fs.list('people')).toEqual([]);
   });
 });
+
+describe('boundary matching (74 §5.7)', () => {
+  it('matches a WORD boundary literally and a THEME boundary by its content words', () => {
+    let lex = addBoundary(emptyLexicon('p1', NOW), { text: 'whore', kind: 'word' }, NOW);
+    lex = addBoundary(lex, { text: 'anything about being used', kind: 'theme' }, NOW);
+    // Literal.
+    expect(violatesBoundary(lex, 'you filthy whore')).toBe(true);
+    // Themed — no substring in common, which is exactly why a substring check isn't enough on its own.
+    expect(violatesBoundary(lex, 'I love using you')).toBe(true);
+    expect(violatesBoundary(lex, 'use me')).toBe(true);
+    // …and it doesn't swallow everything: an unrelated line passes.
+    expect(violatesBoundary(lex, 'good girl, just like that')).toBe(false);
+  });
+});

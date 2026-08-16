@@ -259,12 +259,85 @@ export function suppressedTexts(lexicon: EroticLexicon): string[] {
   return [...new Set([...fromEntries, ...fromBoundaries])];
 }
 
-/** Whether a candidate line touches a boundary — a whole-word/substring check over the suppression list. */
+/** Words that carry no meaning for a theme match. */
+const STOPWORDS = new Set([
+  'a',
+  'an',
+  'the',
+  'of',
+  'to',
+  'in',
+  'on',
+  'for',
+  'and',
+  'or',
+  'is',
+  'it',
+  'be',
+  'being',
+  'been',
+  'me',
+  'my',
+  'you',
+  'your',
+  'i',
+  'am',
+  'that',
+  'this',
+  'with',
+  'any',
+  'about',
+  'anything',
+  'as',
+]);
+
+/** A crude stem so "used" / "using" / "use" match. Deliberately simple — this is a safety net, not NLP. */
+function stem(word: string): string {
+  const w = word.toLowerCase();
+  // The thresholds matter: "used" (4) and "using" (5) must land on the SAME stem or a themed boundary like
+  // "anything about being used" misses "I love using you", which is exactly the case this exists for.
+  const dropE = (x: string): string => (x.endsWith('e') && x.length > 2 ? x.slice(0, -1) : x);
+  // Suffix first, then a trailing "e", so use / used / using all land on the same stem. Without the second
+  // step "used" → "us" and "use" → "use", and a themed boundary misses half the lines it exists to catch.
+  if (w.endsWith('ing') && w.length > 4) return dropE(w.slice(0, -3));
+  if (w.endsWith('ed') && w.length > 3) return dropE(w.slice(0, -2));
+  if (w.endsWith('es') && w.length > 3) return dropE(w.slice(0, -2));
+  if (w.endsWith('s') && w.length > 3) return dropE(w.slice(0, -1));
+  return dropE(w);
+}
+
+function contentStems(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9']+/)
+    .filter((word) => word !== '' && !STOPWORDS.has(word))
+    .map(stem);
+}
+
+/**
+ * Whether a candidate line touches a boundary. Two different checks, because the two kinds of boundary are
+ * different things:
+ *
+ * - a **`word`** boundary is a literal — the exact word or phrase they ruled out — so it is a substring match.
+ * - a **`theme`** boundary ("anything about being used") is a described idea, which no substring can catch:
+ *   "I love using you" contains none of it. So a theme matches when every one of its content words appears in
+ *   the candidate, crudely stemmed, which catches the obvious cases without pretending to be semantic.
+ *
+ * This is the SECOND line of defence. The first is the prompt, which carries every boundary as a hard negative
+ * constraint; a theme that slips past both is why the person can always edit their profile.
+ */
 export function violatesBoundary(lexicon: EroticLexicon, candidate: string): boolean {
   const text = candidate.toLowerCase();
-  return suppressedTexts(lexicon).some((banned) => {
+  const stems = new Set(contentStems(candidate));
+  const literal = suppressedTexts(lexicon).some((banned) => {
     const needle = banned.trim().toLowerCase();
     return needle !== '' && text.includes(needle);
+  });
+  if (literal) return true;
+  return lexicon.boundaries.some((boundary) => {
+    if (boundary.kind !== 'theme') return false;
+    const needed = contentStems(boundary.text);
+    return needed.length > 0 && needed.every((word) => stems.has(word));
   });
 }
 

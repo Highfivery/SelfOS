@@ -871,3 +871,17 @@ Two items are **deliberately deferred** rather than open:
   the wrong place to surface adult content to someone who has not asked for it, and that is asserted. The
   first cut looked like a bar chart (evenly spaced blocks with gaps), so the spines now touch, vary in
   height, and the last one leans — books left standing, not data.
+- 2026-08-16 — **fix: a fictionalized book read like a transcript of the vault** (reported: "it borrows from
+  it directly with no external creativity"). The doctrine said the events are invented — and then, at the
+  moment of writing, the chapter instruction said _"Draw ONLY on the source material above — if a detail you
+  need is missing, write around it rather than inventing it"_ to EVERY type. Same class as the craft-block
+  bug one layer down: a biography rule handed to a book that is not one, and this one arrives with the pen.
+  `sourceUseDirective(truthMode)` now tells a fictionalized book that the material says WHO these people are
+  and is _not a script_ — invent the events, scenes, dialogue and places; a chapter that reads like a
+  retelling has failed. **The PLAN pass had it too** ("if the material only supports a general fact, that is
+  not a scene… leave it out"), so the literalness was decided a pass before the prose existed; it now tells
+  an invented-events book to INVENT its scenes. **And per-paragraph source citation is itself a pull toward
+  literalness** — a fictionalized book is now told most of its paragraphs will cite nothing, and never to
+  reach for a source just to have one. Told-true books are byte-unchanged, an absent mode defaults to the
+  record, and all three are mutation-verified. **Lesson: the doctrine granting permission to invent is worth
+  nothing if the instruction at the point of writing forbids it — check every layer that speaks last.**

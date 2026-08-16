@@ -50,6 +50,11 @@ export const USAGE_TYPE_LABELS: Record<string, string> = {
   'book.critique': 'Your Story — chapter critique',
   'book.revise': 'Your Story — chapter revision',
   'book.manuscript': 'Your Story — manuscript read',
+  // 74 — the adaptive tests. The bank + the scoring are FREE; only these four phases spend.
+  'test.adaptive.lines': 'Dirty talk — lines to react to',
+  'test.adaptive.probe': 'Dirty talk — follow-up question',
+  'test.adaptive.scenario': 'Dirty talk — scenario',
+  'test.adaptive.synthesize': 'Dirty talk — your profile',
 };
 
 export function usageTypeLabel(type: string): string {

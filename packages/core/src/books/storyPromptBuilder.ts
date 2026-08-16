@@ -57,6 +57,20 @@ function styleDirective(config: BookConfig, bookType: BookType): string {
  * book must be told it may invent, or the doctrine's "never invent" silently applies and a children's story
  * comes out as a diary entry.
  */
+/**
+ * How the writer may use the material, stated at the moment of WRITING (72 §4.1).
+ *
+ * The chapter instruction used to say "Draw ONLY on the source material above — if a detail you need is
+ * missing, write around it rather than inventing it" to EVERY type. That is a biography rule, and handing it
+ * to an erotica or children's writer contradicts its own doctrine at the exact point it picks up the pen —
+ * so the prose came out as a transcript of the vault with nothing invented around it.
+ */
+function sourceUseDirective(mode: BookType['truthMode']): string {
+  return mode === 'fictionalized'
+    ? 'The material above tells you WHO these people are — how they speak, what they want, what they are like with each other. It is not a script and not a list of things that must appear. Invent the events, the scenes, the dialogue, the places and the details freely; borrow from the material only what makes the people real. A chapter that reads like a retelling of the source has failed: take one true thing and build something that never happened around it.'
+    : 'Draw ONLY on the source material above — if a detail you need is missing, write around it rather than inventing it.';
+}
+
 function truthDirective(mode: BookType['truthMode']): string {
   return mode === 'fictionalized'
     ? 'TRUTH: this book is openly IMAGINED. You may invent events, scenes, dialogue and detail — that is what it is for. What you may NOT invent is the person: their character, their voice, what they actually feel and care about, and the real relationships they are in must all stay true to the material. Invent the story; never misrepresent the human being.'
@@ -355,9 +369,12 @@ export function buildChapterUserMessage(
      *  draft is meant to deliver. Absent when the plan pass failed or was skipped; the drafter then works
      *  from the brief alone, exactly as it did before the loop existed. */
     plan?: ChapterPlan;
+    /** Whether this type may invent (72 §4.1). Absent behaves as told-true — the safe default. */
+    truthMode?: BookTruthMode;
   },
 ): string {
   const { chapter, outline, essence, preserve, plan } = opts;
+  const truthMode = opts.truthMode ?? 'true';
   const toc = outline.parts
     .flatMap((part) => part.chapters.map((c) => ({ part: part.title, c })))
     .map(({ part, c }) => `  ${c.id === chapter.id ? '▶ ' : '  '}${part} — ${c.title}: ${c.brief}`)
@@ -385,8 +402,10 @@ export function buildChapterUserMessage(
     '',
     POINTER_TO_SOURCES,
     '',
-    'Write the chapter as Markdown prose (short paragraphs; you may use *italics*; no headings, no lists, no tables). Open on a rendered scene, not a summary. Draw ONLY on the source material above — if a detail you need is missing, write around it rather than inventing it.',
-    'At the END of each paragraph, cite the [sN] sources you drew on for it as `[[SRC:sN,sN]]` (use the exact tags above; omit the marker for a paragraph that draws on nothing specific). Do not cite sources you did not use.',
+    `Write the chapter as Markdown prose (short paragraphs; you may use *italics*; no headings, no lists, no tables). Open on a rendered scene, not a summary. ${sourceUseDirective(truthMode)}`,
+    truthMode === 'fictionalized'
+      ? 'At the END of a paragraph that genuinely drew on a specific source, cite it as `[[SRC:sN,sN]]` (exact tags above). Most paragraphs in an invented story will cite nothing, and that is correct — never reach for a source just to have one to cite.'
+      : 'At the END of each paragraph, cite the [sN] sources you drew on for it as `[[SRC:sN,sN]]` (use the exact tags above; omit the marker for a paragraph that draws on nothing specific). Do not cite sources you did not use.',
     'Return ONLY the chapter prose with its inline [[SRC:…]] markers — no title heading, no preamble.',
   );
   return parts.join('\n');
@@ -420,9 +439,16 @@ export interface ChapterPlan {
  */
 export function buildChapterPlanMessage(
   corpus: StoryCorpus,
-  opts: { chapter: OutlineChapter; outline: BookOutline; essence?: string },
+  opts: {
+    chapter: OutlineChapter;
+    outline: BookOutline;
+    essence?: string;
+    /** Whether this type may invent (72 §4.1). Absent behaves as told-true. */
+    truthMode?: BookTruthMode;
+  },
 ): string {
   const { chapter, outline, essence } = opts;
+  const invents = opts.truthMode === 'fictionalized';
   const neighbours = outline.parts
     .flatMap((part) => part.chapters.map((c) => ({ part: part.title, c })))
     .filter(({ c }) => c.id !== chapter.id)
@@ -444,7 +470,9 @@ export function buildChapterPlanMessage(
     'Return ONE JSON object with exactly these keys:',
     '- "thread": one sentence naming the single thing this chapter is about — the through-line every scene serves. Not a topic ("his childhood"); a claim about a person ("he learned that being useful was how you got to stay").',
     '- "opening": the concrete moment the chapter opens on — a place, a time of day, someone doing something. Never a summary, never a statement of theme, never a throat-clear.',
-    '- "scenes": 3–6 scenes in the order they should appear, each { "title": a few words, "beat": one sentence on what actually HAPPENS and what it turns on, "sources": ["sN", …] the exact source tags it draws on }. A scene is a moment with a place and people in it — if the material only supports a general fact, that is not a scene; find the moment inside it or leave it out.',
+    invents
+      ? '- "scenes": 3–6 scenes in the order they should appear, each { "title": a few words, "beat": one sentence on what actually HAPPENS and what it turns on, "sources": ["sN", …] any source tags that inform it, often none }. INVENT these scenes. The material tells you who these people are and what they want; the events are yours to make up. A scene that merely retells something in the material is the failure mode here — take what is true about the people and put them somewhere that never happened.'
+      : '- "scenes": 3–6 scenes in the order they should appear, each { "title": a few words, "beat": one sentence on what actually HAPPENS and what it turns on, "sources": ["sN", …] the exact source tags it draws on }. A scene is a moment with a place and people in it — if the material only supports a general fact, that is not a scene; find the moment inside it or leave it out.',
     '- "avoid": short lines naming what the neighbouring chapters carry that this one must NOT re-tell.',
     'Plan only what the source material can actually support — never invent a scene to fill the shape.',
     'Return ONLY the JSON object — no prose, no markdown fences.',

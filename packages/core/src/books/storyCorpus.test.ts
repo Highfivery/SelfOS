@@ -1232,3 +1232,84 @@ describe('an adult-gated book never names a child (72 §8)', () => {
     expect(corpusText(await buildStoryCorpus(fs, key, 'ben', bio.id))).toContain('Emma');
   });
 });
+
+/**
+ * The reported failure, after the first pass shipped: children's names STILL appeared. Names live in two
+ * places and the first fix only covered one. The onboarding intake has a `children` roster — name, gender,
+ * date of birth — and someone who filled that in has almost certainly not ALSO created a Person record with
+ * a `child` edge for each kid. That roster is a raw intake answer, the richest single corpus source, so the
+ * names went straight in while the graph-based exclusion found nobody to exclude.
+ */
+describe('a child named only in the intake roster is still excluded (72 §8)', () => {
+  const cfg = {
+    voice: 'third' as const,
+    style: 'hardcore' as const,
+    length: 'standard' as const,
+    autoRefresh: true,
+    typeOptions: { tier: 'unfiltered' },
+    sourceIds: [],
+  };
+
+  async function withRosterChild(fs: ReturnType<typeof fresh>): Promise<string> {
+    await savePerson(fs, key, person('ben', 'Ben'));
+    // NO Person record and NO relationship for the child — only the onboarding roster, which is how most
+    // people's kids are actually recorded.
+    await writeEncryptedJson(
+      fs,
+      'people/ben/intake/session.enc',
+      {
+        id: 'intake-ben',
+        schemaVersion: 1,
+        personId: 'ben',
+        status: 'complete',
+        startedAt: 'now',
+        updatedAt: 'now',
+        sections: [
+          {
+            id: 'lifeNow',
+            status: 'complete',
+            restricted: false,
+            messages: [],
+            answers: {
+              parentalStatus: 'Have young kids',
+              children: [{ name: 'Emma', gender: 'Girl', dob: '2017-04-02' }],
+            },
+          },
+        ],
+      },
+      key,
+    );
+    await saveInsight(
+      fs,
+      key,
+      insight('i-1', 'ben', { summary: 'The summer Emma was born, everything changed.' }),
+    );
+    const book = await createBook(fs, key, {
+      personId: 'ben',
+      type: 'erotica',
+      title: 'After Hours',
+      config: cfg,
+      now: new Date('2026-08-16T00:00:00.000Z'),
+    });
+    return book.id;
+  }
+
+  it('keeps her name out of an erotica corpus entirely', async () => {
+    const fs = fresh();
+    const bookId = await withRosterChild(fs);
+    expect(corpusText(await buildStoryCorpus(fs, key, 'ben', bookId))).not.toContain('Emma');
+  });
+
+  it('leaves a biography alone — the roster is exactly what a life story is made of', async () => {
+    const fs = fresh();
+    await withRosterChild(fs);
+    const bio = await createBook(fs, key, {
+      personId: 'ben',
+      type: 'biography',
+      title: 'A Life',
+      config: { ...cfg, style: 'warm' as never, typeOptions: {} },
+      now: new Date('2026-08-16T00:00:00.000Z'),
+    });
+    expect(corpusText(await buildStoryCorpus(fs, key, 'ben', bio.id))).toContain('Emma');
+  });
+});

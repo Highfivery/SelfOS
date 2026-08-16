@@ -821,3 +821,19 @@ Two items are **deliberately deferred** rather than open:
   they never reach the model, so nothing else could catch it and the card just misrepresented the book.
   Rewritten for Raunchy, Filthy talk, Hardcore and the two explicit rungs; the quiet registers stay quiet,
   pinned by a test in both directions. Mutation-verified.
+- 2026-08-16 — **fix: children's names STILL reached erotica, and the register was being drowned** (both
+  reported). Two causes, found by tracing rather than assuming. **(1) Names live in TWO places.** The first
+  pass excluded the subject's descendants from the relationship GRAPH — but the onboarding intake has a
+  `children` roster (name, gender, DOB), and someone who filled that in has almost certainly not ALSO created
+  a Person record with a `child` edge per kid. That roster is a raw intake answer — §5.1's richest single
+  source — so the names went straight into the corpus while the graph-based exclusion found nobody to
+  exclude. The roster names are now emitted as `topic` exclusions, which the filter already treats as text to
+  avoid, so a name is dropped wherever it appears including inside the subject's own prose. **(2) The
+  register was buried.** `buildBiographerSystem` states the explicit register and then appends up to ~40,000
+  tokens of corpus after it, because the corpus must sit last for `cache_control` to make it cheap. That is
+  08 §24.9 exactly — when several steering blocks append to one prompt, the LAST one wins regardless of which
+  is authoritative. A short `closingDirective` now restates the chosen rung AFTER the material, drawing the
+  distinction that matters: the corpus is WHAT the book is about and does not change HOW it is written.
+  Told-true books add nothing. Both mutation-verified. **Lesson: "exclude the children" is not one lookup —
+  it is every place a child's name is recorded, and the graph is the one people are least likely to have
+  filled in.**

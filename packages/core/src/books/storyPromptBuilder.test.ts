@@ -669,3 +669,41 @@ describe('the explicit rungs name the vocabulary (72 §3.2)', () => {
     }
   });
 });
+
+/**
+ * The register was stated, and then up to ~40,000 tokens of corpus followed it — the corpus sits last
+ * because that is where `cache_control` makes it cheap. So the governing instruction ended up buried, which
+ * is 08 §24.9 exactly: when several steering blocks append to one prompt, the LAST one wins.
+ */
+describe('the register gets the last word (72 §5.2)', () => {
+  const erotica = getBookType('erotica')!;
+  const withCorpus = (tier: string): string =>
+    buildBiographerSystem(
+      erotica,
+      cfg({ style: 'hardcore', typeOptions: { tier } }),
+      'Ben',
+      'SOURCE MATERIAL\n' + 'a long corpus line. '.repeat(200),
+    );
+
+  it('restates how to write AFTER the material, not only before it', () => {
+    const sys = withCorpus('unfiltered');
+    const corpusAt = sys.indexOf('SOURCE MATERIAL');
+    const lastWordAt = sys.indexOf('LAST WORD');
+    expect(corpusAt).toBeGreaterThan(-1);
+    expect(lastWordAt).toBeGreaterThan(corpusAt);
+    expect(sys).toMatch(/no euphemism and nothing cut away/);
+    // The distinction that keeps the corpus from being read as a register.
+    expect(sys).toMatch(/WHAT this book is about\. It does not change HOW it is written/);
+  });
+
+  it('restates the rung that was actually chosen', () => {
+    expect(withCorpus('suggestive')).toMatch(/with the act off the page/);
+    expect(withCorpus('suggestive')).not.toMatch(/at its most explicit/);
+    expect(withCorpus('sensual')).toMatch(/sensation rather than anatomy/);
+  });
+
+  it('says nothing extra for a book with no register to govern', () => {
+    const bio = buildBiographerSystem(BIOGRAPHY_BOOK_TYPE, cfg(), 'Ben', 'SOURCE MATERIAL');
+    expect(bio).not.toMatch(/LAST WORD/);
+  });
+});

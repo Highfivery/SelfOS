@@ -837,3 +837,16 @@ Two items are **deliberately deferred** rather than open:
   Told-true books add nothing. Both mutation-verified. **Lesson: "exclude the children" is not one lookup —
   it is every place a child's name is recorded, and the graph is the one people are least likely to have
   filled in.**
+- 2026-08-16 — **fix: naming the words was not enough — the softer twin has to be forbidden** (reported with
+  examples: "breast" where the register calls for tits, "he got hard" where it calls for the change itself,
+  "Finger me" where the dialogue should be as filthy as the narration). Three additions to the two explicit
+  rungs. **(1) Substitution PAIRS, not a word list** — tits NEVER breasts, cock/dick NEVER manhood or
+  erection, pussy/cunt NEVER sex or core or folds, ass NEVER bottom, cum NEVER release or climax, fuck NEVER
+  make love. Listing the word to use while leaving its softer twin unforbidden leaves the twin sitting right
+  there, and the model reliably picks it. **(2) A ban on SUMMARISING a physical change** — "he got hard" is a
+  summary, and the reported line is quoted in the directive as the banned example, with what to write
+  instead. **(3) Dialogue is held to the narration's register**, with the reported "Finger me" named. The
+  substitutions also ride the `closingDirective`, so they survive to the last thing the model reads. The
+  quiet rungs are untouched, asserted in both directions. All mutation-verified. **Lesson: a vocabulary
+  instruction that only says what TO use is half an instruction — the register degrades through the synonym
+  you did not forbid, so state it as pairs.**

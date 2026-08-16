@@ -649,14 +649,14 @@ describe('the explicit rungs name the vocabulary (72 §3.2)', () => {
 
   it('says which words, on both explicit rungs', () => {
     for (const tier of ['unfiltered', 'explicit']) {
-      expect(at(tier)).toMatch(/cock, pussy, clit/);
-      expect(at(tier)).toMatch(/wet, dripping, hard, throbbing/);
+      expect(at(tier)).toMatch(/tits, NEVER breasts/);
+      expect(at(tier)).toMatch(/wet, soaked, dripping, throbbing/);
     }
   });
 
   it('bans the euphemisms that dilute it, by name', () => {
     const sys = at('unfiltered');
-    for (const banned of ['manhood', 'member', 'core', 'entrance', 'folds']) {
+    for (const banned of ['manhood', 'erection', 'core', 'entrance', 'folds', 'backside']) {
       expect(sys).toContain(banned);
     }
     expect(sys).toMatch(/supermarket romance/);
@@ -665,7 +665,7 @@ describe('the explicit rungs name the vocabulary (72 §3.2)', () => {
   it('leaves the quiet rungs alone — vocabulary follows HEAT, not style', () => {
     // Raunchy + Suggestive must stay coherent: coarse in tone, with the act still off the page.
     for (const tier of ['sensual', 'suggestive']) {
-      expect(at(tier)).not.toMatch(/cock, pussy, clit/);
+      expect(at(tier)).not.toMatch(/tits, NEVER breasts/);
     }
   });
 });
@@ -691,7 +691,7 @@ describe('the register gets the last word (72 §5.2)', () => {
     const lastWordAt = sys.indexOf('LAST WORD');
     expect(corpusAt).toBeGreaterThan(-1);
     expect(lastWordAt).toBeGreaterThan(corpusAt);
-    expect(sys).toMatch(/no euphemism and nothing cut away/);
+    expect(sys).toMatch(/tits not breasts/);
     // The distinction that keeps the corpus from being read as a register.
     expect(sys).toMatch(/WHAT this book is about\. It does not change HOW it is written/);
   });
@@ -705,5 +705,57 @@ describe('the register gets the last word (72 §5.2)', () => {
   it('says nothing extra for a book with no register to govern', () => {
     const bio = buildBiographerSystem(BIOGRAPHY_BOOK_TYPE, cfg(), 'Ben', 'SOURCE MATERIAL');
     expect(bio).not.toMatch(/LAST WORD/);
+  });
+});
+
+/**
+ * Reported after the vocabulary landed: the prose still said "breast" and "he got hard". Naming a word
+ * without forbidding its softer twin leaves the twin sitting there, and "he got hard" is a SUMMARY of a
+ * physical change where the register calls for the change itself.
+ */
+describe('the explicit register forbids the softer twin (72 §3.2)', () => {
+  const erotica = getBookType('erotica')!;
+  const at = (tier: string): string =>
+    buildBiographerSystem(
+      erotica,
+      cfg({ style: 'hardcore', typeOptions: { tier } }),
+      'Ben',
+      'CORPUS',
+    );
+
+  it('states the substitutions as pairs, not just a word list', () => {
+    const sys = at('unfiltered');
+    expect(sys).toMatch(/tits, NEVER breasts/);
+    expect(sys).toMatch(/cock or dick, NEVER manhood/);
+    expect(sys).toMatch(/pussy or cunt, NEVER sex, core/);
+    expect(sys).toMatch(/fuck, NEVER make love/);
+  });
+
+  it('bans summarising a physical change, with the reported example named', () => {
+    const sys = at('unfiltered');
+    expect(sys).toMatch(/never SUMMARISE a change in a body/);
+    expect(sys).toMatch(/“He got hard” is a summary and is banned/);
+    expect(sys).toMatch(/stiffening, thickening, throbbing/);
+  });
+
+  it('holds the dialogue to the same register as the narration', () => {
+    expect(at('unfiltered')).toMatch(/what they say out loud is as filthy as the narration/);
+    expect(at('unfiltered')).toMatch(/Not “Finger me” but what she actually wants, named/);
+  });
+
+  /** The closing directive is the LAST thing read, so the substitutions have to survive to the end. */
+  it('carries the substitutions into the last word too', () => {
+    const sys = at('unfiltered');
+    const last = sys.slice(sys.indexOf('LAST WORD'));
+    expect(last).toMatch(/tits not breasts/);
+    expect(last).toMatch(/cock not manhood/);
+    expect(last).toMatch(/rather than summarised/);
+  });
+
+  it('leaves the quiet rungs out of it entirely', () => {
+    for (const tier of ['sensual', 'suggestive']) {
+      expect(at(tier)).not.toMatch(/tits, NEVER breasts/);
+      expect(at(tier)).not.toMatch(/tits not breasts/);
+    }
   });
 });

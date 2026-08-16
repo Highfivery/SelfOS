@@ -809,3 +809,15 @@ Two items are **deliberately deferred** rather than open:
   Length, so the card sample is small and clamped to two lines (§12 density) with the rail still showing the
   chosen one in full. The rail's specimen gained an `aria-label` because the same text now appears twice —
   an unscoped assertion could no longer tell whether the RAIL had re-rendered.
+- 2026-08-16 — **the explicit registers name their vocabulary** (owner: the quotes are not adhered to). Two
+  separate problems behind one report. **(1) The directives gestured.** "Name acts and bodies plainly" is
+  satisfiable with "his hardness, her heat" — technically plain, still euphemism, and precisely how an
+  explicit register gets quietly diluted. The `unfiltered` and `explicit` tier directives now NAME the
+  vocabulary and BAN the euphemisms by name (manhood, member, core, entrance, folds…), the same fix pattern
+  08 §24.9 used when it stopped gesturing at "edgier" content and named it. Vocabulary hangs on the TIER,
+  not the style, so Raunchy + Suggestive stays coherent — coarse in tone with the act still off the page.
+  **(2) The samples under-promised.** Raunchy's specimen read "He wanted her filthy about it" on a card that
+  promises no euphemism, so the card demonstrated the opposite of its own label. Specimens are UI-only —
+  they never reach the model, so nothing else could catch it and the card just misrepresented the book.
+  Rewritten for Raunchy, Filthy talk, Hardcore and the two explicit rungs; the quiet registers stay quiet,
+  pinned by a test in both directions. Mutation-verified.

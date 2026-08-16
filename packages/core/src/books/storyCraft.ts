@@ -100,12 +100,20 @@ const MAX_CRITIQUE_FINDINGS = 12;
 export async function planChapter(
   deps: AiDeps,
   corpus: StoryCorpus,
-  opts: { chapter: OutlineChapter; outline: BookOutline; essence?: string; system: string },
+  opts: {
+    chapter: OutlineChapter;
+    outline: BookOutline;
+    essence?: string;
+    system: string;
+    truthMode?: BookTruthMode;
+  },
 ): Promise<ChapterPlan | null> {
   const user = buildChapterPlanMessage(corpus, {
     chapter: opts.chapter,
     outline: opts.outline,
     ...(opts.essence ? { essence: opts.essence } : {}),
+    // So an invented-events book plans invented scenes rather than a retelling (72 §4.1).
+    ...(opts.truthMode ? { truthMode: opts.truthMode } : {}),
   });
   const result = await runClaude(deps, opts.system, user, 'book.plan', PLAN_MAX_TOKENS);
   if (!result.ok) return null;

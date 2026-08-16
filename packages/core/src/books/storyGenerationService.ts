@@ -333,6 +333,7 @@ export async function generateChapter(
   // exactly as it did before the loop existed.
   args.onPhase?.('planning');
   const plan = await planChapter(deps, slice, {
+    truthMode: bookType.truthMode,
     chapter: target,
     outline,
     ...(book.essence ? { essence: book.essence } : {}),
@@ -345,6 +346,8 @@ export async function generateChapter(
     ...(book.essence ? { essence: book.essence } : {}),
     ...(preserve.length > 0 ? { preserve } : {}),
     ...(plan ? { plan } : {}),
+    // So an invented-events book isn't told to draw ONLY on the record at the moment it starts writing.
+    truthMode: bookType.truthMode,
   });
 
   // Pass 2 — the draft. The only load-bearing pass: everything before and after it is an improvement that

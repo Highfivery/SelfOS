@@ -6,6 +6,7 @@ import type { BookChapter, BookOutline, ExclusionItem, MarkupMark } from '../sch
 import {
   buildBiographerSystem,
   buildChapterUserMessage,
+  buildChapterPlanMessage,
   buildCritiqueMessage,
   buildFoundationsUserMessage,
   buildRevisionUserMessage,
@@ -757,5 +758,62 @@ describe('the explicit register forbids the softer twin (72 §3.2)', () => {
       expect(at(tier)).not.toMatch(/tits, NEVER breasts/);
       expect(at(tier)).not.toMatch(/tits not breasts/);
     }
+  });
+});
+
+/**
+ * Reported: a fictionalized book read like a transcript of the vault with nothing invented around it. The
+ * doctrine said the events are invented — and then the chapter instruction, at the moment of writing, said
+ * "Draw ONLY on the source material above … rather than inventing it" to EVERY type. Same class as the
+ * craft-block bug: a biography rule handed to a book that is not one.
+ */
+describe('a fictionalized book is told to invent, at the moment it writes (72 §4.1)', () => {
+  const corpus = { personName: 'Ben', profile: [], items: [] } as never;
+  const chapter = { id: 'c1', title: 'The Hotel', brief: 'b', order: 0, lifeAreas: [] } as never;
+  const outline = { schemaVersion: 1, approved: true, parts: [] } as never;
+
+  const chapterMsg = (truthMode: 'true' | 'fictionalized'): string =>
+    buildChapterUserMessage(corpus, { chapter, outline, truthMode });
+
+  it('tells an invented-events book to build something that never happened', () => {
+    const msg = chapterMsg('fictionalized');
+    expect(msg).not.toMatch(/Draw ONLY on the source material/);
+    expect(msg).toMatch(/It is not a script/);
+    expect(msg).toMatch(/Invent the events, the scenes, the dialogue/);
+    expect(msg).toMatch(/reads like a retelling of the source has failed/);
+  });
+
+  it('still holds a told-true book to the record', () => {
+    const msg = chapterMsg('true');
+    expect(msg).toMatch(/Draw ONLY on the source material/);
+    expect(msg).not.toMatch(/Invent the events/);
+  });
+
+  it('defaults to the record when no mode is given', () => {
+    expect(buildChapterUserMessage(corpus, { chapter, outline })).toMatch(
+      /Draw ONLY on the source/,
+    );
+  });
+
+  /** Per-paragraph source citation is itself a pull toward literalness in a book that invents. */
+  it('stops a fictionalized book reaching for a source just to cite one', () => {
+    expect(chapterMsg('fictionalized')).toMatch(
+      /Most paragraphs in an invented story will cite nothing/,
+    );
+    expect(chapterMsg('true')).toMatch(/cite the \[sN\] sources you drew on for it/);
+  });
+
+  it('plans invented scenes rather than a retelling', () => {
+    const invented = buildChapterPlanMessage(corpus, {
+      chapter,
+      outline,
+      truthMode: 'fictionalized',
+    });
+    expect(invented).toMatch(/INVENT these scenes/);
+    expect(invented).toMatch(/put them somewhere that never happened/);
+    // The told-true plan keeps its "no scene without material" rule.
+    const told = buildChapterPlanMessage(corpus, { chapter, outline });
+    expect(told).toMatch(/if the material only supports a general fact, that is not a scene/);
+    expect(told).not.toMatch(/INVENT these scenes/);
   });
 });

@@ -125,7 +125,15 @@ origin/main`) so history stays linear and the release manifest never carries a s
    merged instead. And **omit `--delete-branch` in a worktree** or `gh` tries to check out `main` locally
    and fails.
 
-7. **Offer to release** (the **`release`** skill): once the slice is on `main`, ask the user
+7. **Leave the working tree TESTABLE, and say so unprompted.** The owner verifies on his own machine — that
+   is the only place the live model, the real vault and the API key exist, so his checkout IS the
+   verification step. End every slice with the tree on a branch containing BOTH the new work and everything
+   already merged (`git rev-list --count HEAD..origin/main` must be `0` — a branch cut before a sibling PR
+   merged is silently missing it), **verify it by grepping for each fix rather than assuming**, and state the
+   branch + what to restart. **`pnpm dev` needs a FULL restart for anything in `packages/core`** (it is
+   bundled into the main process; a hot reload leaves main serving the old code). Twice the owner tested
+   stale code and reported an already-fixed bug.
+8. **Offer to release** (the **`release`** skill): once the slice is on `main`, ask the user
    _"Tag & publish vX.Y.Z now, or batch with the next change?"_ Releasing = **merging the open
    release-please PR** (which auto-bumps the version, writes `CHANGELOG.md`, tags `vX.Y.Z`, and builds +
    publishes the `.dmg`). **Never hand-bump a version or hand-tag** — release-please owns it (spec

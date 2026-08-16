@@ -1151,6 +1151,10 @@ const AdaptiveRoundSchema = AdaptiveRefSchema.extend({
 });
 const AdaptiveBankPassSchema = AdaptiveRefSchema.extend({
   marks: z.record(z.string(), z.enum(['love', 'never', 'notYet'])),
+  // Bounded: an autosave sends a small delta, and the closing call sends the whole pass. Neither is unbounded,
+  // and a renderer that sends a million keys is a bug, not a use case.
+  cleared: z.array(z.string().min(1)).max(2000).optional(),
+  autosave: z.boolean().optional(),
 });
 const AdaptiveSplitSchema = AdaptiveRefSchema.extend({
   splits: z.record(
@@ -1160,6 +1164,7 @@ const AdaptiveSplitSchema = AdaptiveRefSchema.extend({
       say: z.number().min(0).max(4).optional(),
     }),
   ),
+  autosave: z.boolean().optional(),
 });
 const AdaptiveScenarioInputSchema = AdaptiveRefSchema.extend({
   context: z.enum(ADAPTIVE_CONTEXTS),
@@ -4121,6 +4126,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       await startAdaptiveTake(gate.ctx.fs, gate.ctx.key, gate.def, gate.personId, new Date());
       return adaptiveState(gate);
     },
+    // NOTE: an autosave returns the full state like any other call, even though the renderer discards it.
+    // `null` is how EVERY handler here reports a refused gate, so it has to stay the only falsy return —
+    // a cheaper ack would make "refused" and "saved" indistinguishable, and the renderer would show
+    // "Saved" over a write that never happened.
     testsAdaptiveBank: async (input): Promise<AdaptiveStateView | null> => {
       const parsed = AdaptiveBankPassSchema.parse(input);
       const gate = await adaptiveGate(parsed.testId);
@@ -4129,7 +4138,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         gate.ctx.fs,
         gate.ctx.key,
         gate.def,
-        { personId: gate.personId, resultId: parsed.resultId, marks: parsed.marks },
+        {
+          personId: gate.personId,
+          resultId: parsed.resultId,
+          marks: parsed.marks,
+          ...(parsed.cleared ? { cleared: parsed.cleared } : {}),
+          ...(parsed.autosave ? { autosave: true } : {}),
+        },
         new Date(),
       );
       return adaptiveState(gate);
@@ -4150,7 +4165,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       await recordSplitPass(
         gate.ctx.fs,
         gate.ctx.key,
-        { personId: gate.personId, resultId: parsed.resultId, splits },
+        {
+          personId: gate.personId,
+          resultId: parsed.resultId,
+          splits,
+          ...(parsed.autosave ? { autosave: true } : {}),
+        },
         new Date(),
       );
       return adaptiveState(gate);

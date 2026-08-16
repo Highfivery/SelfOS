@@ -50,6 +50,28 @@ function Progress({ phase, startedAt }: { phase: string; startedAt: number }): J
 }
 
 /**
+ * The autosave's only visible trace. Deliberately quiet and never blocking — a tap stays instant, and this
+ * catches up behind it. It is the affordance that makes "close it whenever" believable, so it says "Saved",
+ * not a spinner.
+ */
+function SaveState({
+  state,
+}: {
+  state: 'idle' | 'saving' | 'saved' | 'unsaved';
+}): JSX.Element | null {
+  if (state === 'idle') return null;
+  const label =
+    state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved' : 'Not saved yet — retrying';
+  return (
+    <span role="status" aria-live="polite">
+      <Text as="span" size="sm" tone={state === 'unsaved' ? 'secondary' : 'tertiary'}>
+        {label}
+      </Text>
+    </span>
+  );
+}
+
+/**
  * 74 §3.2 — taking the Dirty Talk test.
  *
  * Pass 1 walks the WHOLE bank and they mark only what lands (🔥 / ✗ / ~); pass 2 asks the hear/say split on
@@ -67,8 +89,23 @@ export function AdaptiveTake(): JSX.Element {
   const reset = useAdaptiveTestStore((s) => s.reset);
   useEffect(() => {
     void load(testId);
-    return () => reset();
+    return () => {
+      // Navigating away inside the debounce window would otherwise drop the last few taps — the one moment
+      // the person is most likely to be leaving mid-pass.
+      void useAdaptiveTestStore.getState().flush(testId);
+      reset();
+    };
   }, [load, reset, testId]);
+
+  // Quitting or backgrounding the app inside the 700ms debounce would otherwise drop the last taps. The
+  // unmount cleanup does not fire on a window close, so this is the only thing covering that path.
+  useEffect(() => {
+    const onHide = (): void => {
+      if (document.visibilityState === 'hidden') void useAdaptiveTestStore.getState().flush(testId);
+    };
+    document.addEventListener('visibilitychange', onHide);
+    return () => document.removeEventListener('visibilitychange', onHide);
+  }, [testId]);
 
   // Each AI phase starts itself once on entry — otherwise the person lands on an empty screen and has to ask
   // for the thing they just said yes to. Guarded per phase, so a degraded phase (which moves the take on)
@@ -152,8 +189,15 @@ export function AdaptiveTake(): JSX.Element {
                 AI allowance
               </Text>
               {store.state.draft ? (
-                <Banner tone="info">You have a take in progress — this picks it up.</Banner>
-              ) : null}
+                <Banner tone="info">
+                  You have a take in progress — this picks it up exactly where you stopped, with
+                  everything you already marked.
+                </Banner>
+              ) : (
+                <Text size="sm" tone="tertiary">
+                  It saves as you go, so you can stop anywhere and come back.
+                </Text>
+              )}
               <div>
                 <Button variant="primary" onClick={() => void store.start(testId)}>
                   {store.state.draft ? 'Pick up where you left off' : 'Begin'}
@@ -172,9 +216,18 @@ export function AdaptiveTake(): JSX.Element {
                 you cringe, <strong>✗</strong> if it&rsquo;s a no. A <strong>✗</strong> is a
                 boundary: nothing in SelfOS will suggest it again.
               </Text>
-              <Text size="sm" tone="tertiary">
-                {marked.length} marked
-              </Text>
+              <Banner tone="info" role="none">
+                <strong>Every tap saves itself.</strong> There&rsquo;s no finishing this in one go
+                &mdash; mark what you feel like marking and close it whenever; it picks up exactly
+                here, with everything you already marked. Move on when you&rsquo;ve had enough of
+                this list.
+              </Banner>
+              <div className={take.statusRow}>
+                <Text size="sm" tone="tertiary">
+                  {marked.length} marked
+                </Text>
+                <SaveState state={store.saveState} />
+              </div>
               {bank.families.map((family) => (
                 <Card key={family.id} className={adaptive.family}>
                   <Heading level={3}>{family.label}</Heading>
@@ -188,11 +241,24 @@ export function AdaptiveTake(): JSX.Element {
                       .filter((entry) => entry.family === family.id)
                       .map((entry) => {
                         const mark = store.marks[entry.key];
-                        // A hard no already on record is shown as settled, not re-offered as a fresh choice
-                        // (74 §3.5) — it lifts only from the report.
-                        const locked = store.state?.lexicon.entries.some(
-                          (e) => e.key === entry.key && e.state === 'never',
-                        );
+                        // A hard no from an EARLIER take is shown as settled, not re-offered as a fresh choice
+                        // (74 §3.5) — it lifts only from the report. One tapped in this sitting stays
+                        // editable: autosave writes it immediately, and a mis-tap must not be permanent.
+                        // Settled = a boundary from an EARLIER take. One made in THIS take stays editable,
+                        // whether it was tapped a minute ago (`touched`) or in a previous sitting of the same
+                        // take (its lexicon entry carries this take's `source`) — core allows both, and a
+                        // stricter UI would strand a mis-tap noticed tomorrow with no way to fix it.
+                        const mineThisTake =
+                          store.touched.includes(entry.key) ||
+                          store.state?.lexicon.entries.some(
+                            (e) =>
+                              e.key === entry.key && e.source === `test:${store.state?.draft?.id}`,
+                          );
+                        const locked =
+                          !mineThisTake &&
+                          store.state?.lexicon.entries.some(
+                            (e) => e.key === entry.key && e.state === 'never',
+                          );
                         if (locked) {
                           return (
                             <li key={entry.key} className={adaptive.row}>
@@ -252,6 +318,12 @@ export function AdaptiveTake(): JSX.Element {
                 Only the ones you marked. What you love to <em>hear</em> and what you can get out of
                 your own mouth are usually different — that gap is the most useful thing here.
               </Text>
+              <div className={take.statusRow}>
+                <Text size="sm" tone="tertiary">
+                  Saved as you go — leave any of these blank and come back to them.
+                </Text>
+                <SaveState state={store.saveState} />
+              </div>
               {marked.map((key) => {
                 const entry = bank.entries.find((e) => e.key === key);
                 if (!entry || store.marks[key] === 'never') return null;

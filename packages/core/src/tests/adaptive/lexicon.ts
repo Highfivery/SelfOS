@@ -112,10 +112,24 @@ export function applyBankMarks(
     // A boundary is unliftable by ANY mark — not just by `love`. Downgrading it to `notYet` used to leave the
     // word in `derivedWantsToSay`, which puts it in their own coach prompt as a GOAL two lines under "never
     // use this", and in a partner-shared Insight fact. A `never` lifts only through `clearState`.
+    //
+    // LOAD-BEARING BEYOND THIS FUNCTION: because this `continue` runs BEFORE the write below, a boundary
+    // entry can never be re-stamped with a newer take's `source` — which is the only reason `clearMarks`'s
+    // source scoping cannot be walked around by re-marking a hard no and then clearing it. Deleting this
+    // line silently unlocks un-marking someone else's settled boundary too.
     if (existing?.state === 'never') continue;
     const base = existing ?? toLexiconEntry(spec as BankEntry, source);
     if (mark === 'love') {
-      byKey.set(key, { ...base, hear: LOVE_SEED, say: LOVE_SEED, state: undefined, source });
+      // Seed ONLY when there is nothing to preserve. Re-sending the whole pass (which closing it does) would
+      // otherwise reset a hear:4/say:1 split back to 3/3 — and quitting between the two passes, which the
+      // autosave copy actively encourages, is exactly when that lands and never gets repaired.
+      const seeded = base.hear === 0 && base.say === 0;
+      byKey.set(key, {
+        ...base,
+        ...(seeded ? { hear: LOVE_SEED, say: LOVE_SEED } : {}),
+        state: undefined,
+        source,
+      });
     } else {
       byKey.set(key, { ...base, hear: 0, say: 0, state: mark, source });
       if (mark === 'never') {
@@ -194,6 +208,47 @@ export function clearState(lexicon: EroticLexicon, key: string, now: Date): Erot
       target.state === 'never'
         ? lexicon.boundaries.filter((b) => !sameBoundary(b.text, target.text))
         : lexicon.boundaries,
+    updatedAt: now.toISOString(),
+  };
+}
+
+/**
+ * Undo bank marks — the other half of autosaving a pass (74 §3.4).
+ *
+ * Once every tap persists the moment it lands, a mis-tap is written to the lexicon before the person can look
+ * at it. Without this an accidental ✗ would be a permanent boundary they never meant, and an accidental 🔥
+ * would keep seeding their own coach. So un-marking has to reach the store too: it clears the state, zeroes
+ * the ratings the mark seeded, and drops the boundary a `never` created.
+ *
+ * This is NOT the §3.2 "a boundary lifts only by an explicit act" escape hatch being widened — un-marking IS
+ * that explicit act, by the same person, in the same sitting, on a mark they just made.
+ *
+ * **`source` is what makes that true, not the UI.** Every mark records the take that made it
+ * (`test:<resultId>`), and un-marking is scoped to the CURRENT take's marks. So a boundary set in an earlier
+ * take cannot be cleared through this path even if the renderer asks for it — which matters, because the
+ * renderer is not the trust boundary: without this, one crafted `cleared` key would lift a hard no that §3.2
+ * promises only the report can lift. A wrong or missing `source` clears nothing.
+ */
+export function clearMarks(
+  lexicon: EroticLexicon,
+  keys: readonly string[],
+  now: Date,
+  source: string,
+): EroticLexicon {
+  if (keys.length === 0) return lexicon;
+  const wanted = new Set(keys);
+  const clearable = (entry: LexiconEntry): boolean =>
+    wanted.has(entry.key) && entry.source === source;
+  const dropped = lexicon.entries.filter((entry) => clearable(entry) && entry.state === 'never');
+  if (!lexicon.entries.some(clearable)) return lexicon;
+  return {
+    ...lexicon,
+    entries: lexicon.entries.map((entry) =>
+      clearable(entry) ? { ...entry, state: undefined, hear: 0, say: 0 } : entry,
+    ),
+    boundaries: lexicon.boundaries.filter(
+      (b) => !dropped.some((entry) => sameBoundary(b.text, entry.text)),
+    ),
     updatedAt: now.toISOString(),
   };
 }

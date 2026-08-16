@@ -21,6 +21,123 @@ export type TakePhase = 'intro' | 'bank' | 'split' | 'lines' | 'probe' | 'scenar
 
 export type BankMark = 'love' | 'never' | 'notYet';
 
+/** Long enough that a fast run of taps is one write; short enough that closing the app loses nothing real. */
+const AUTOSAVE_DELAY_MS = 700;
+
+/**
+ * The autosave's pending work, held OUTSIDE the store: a debounce timer and the delta since the last flush.
+ * Keeping it out of zustand means a tap re-renders the one row it changed, not the whole ~1,100-entry grid.
+ */
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let dirtyMarks = new Set<string>();
+let dirtyCleared = new Set<string>();
+let dirtySplits = new Set<string>();
+
+/** Serializes the writes — see `flush`. */
+let inFlight: Promise<void> = Promise.resolve();
+/**
+ * Bumped by every `reset()`. A flush that started before a person switch (or before the take was left) must
+ * NOT put its work back into the pending sets afterwards: those keys belong to the previous person's take,
+ * and the next flush would carry them into whoever is active now.
+ */
+let generation = 0;
+/** Un-marks made anywhere in this take, so the closing call can carry them (an absent key undoes nothing). */
+let clearedThisTake = new Set<string>();
+
+function resetPending(): void {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
+  generation += 1;
+  // Start a fresh chain. The old one may still be waiting on a call that never settles (a wedged IPC), and
+  // every later save queues behind it — so a single hung write would silently stop autosaving for good.
+  inFlight = Promise.resolve();
+  dirtyMarks = new Set();
+  dirtyCleared = new Set();
+  dirtySplits = new Set();
+  clearedThisTake = new Set();
+}
+
+type Get = () => AdaptiveTestState;
+type Set_ = (patch: Partial<AdaptiveTestState>) => void;
+
+/**
+ * One flush. Split out of the store so `flush` can queue calls to it without re-entering the store action.
+ *
+ * Every bridge handler returns `null` when its gate refuses (`tests.own` revoked, the 18+ ack withdrawn, an
+ * unknown test id) — which is NOT a throw, so treating "no exception" as success would show "Saved" over a
+ * write that never happened. That is the worst possible lie for this feature, so `null` is a failure.
+ */
+async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
+  const mine = generation;
+  const { state, marks, splits } = get();
+  const resultId = state?.draft?.id;
+  const marksDelta: Record<string, BankMark> = {};
+  for (const key of dirtyMarks) {
+    const mark = marks[key];
+    if (mark) marksDelta[key] = mark;
+  }
+  const cleared = [...dirtyCleared];
+  const splitsDelta: Record<string, { hear?: number; say?: number }> = {};
+  for (const key of dirtySplits) {
+    const value = splits[key];
+    if (value) splitsDelta[key] = value;
+  }
+  const nothing =
+    Object.keys(marksDelta).length === 0 &&
+    cleared.length === 0 &&
+    Object.keys(splitsDelta).length === 0;
+  if (nothing) {
+    set({ saveState: 'saved' });
+    return;
+  }
+  if (!resultId) {
+    // Work pending with nowhere to put it — say so rather than going quiet, which reads as saved.
+    set({ saveState: 'unsaved' });
+    return;
+  }
+  // Drained BEFORE the await: a tap during the write belongs to the next flush, not this one.
+  dirtyMarks = new Set();
+  dirtyCleared = new Set();
+  dirtySplits = new Set();
+  let ok = true;
+  try {
+    if (Object.keys(marksDelta).length > 0 || cleared.length > 0) {
+      const res = await window.selfos?.testsAdaptiveBank({
+        testId,
+        resultId,
+        marks: marksDelta,
+        cleared,
+        autosave: true,
+      });
+      ok = res !== null && res !== undefined;
+    }
+    if (ok && Object.keys(splitsDelta).length > 0) {
+      const res = await window.selfos?.testsAdaptiveSplit({
+        testId,
+        resultId,
+        splits: splitsDelta,
+        autosave: true,
+      });
+      ok = res !== null && res !== undefined;
+    }
+  } catch {
+    ok = false;
+  }
+  // The store was reset while this was in flight (a person switch, or the take was left). Its keys are the
+  // OTHER person's now — drop them rather than re-queueing them into the next person's pending set.
+  if (mine !== generation) return;
+  if (ok) {
+    set({ saveState: 'saved' });
+    return;
+  }
+  for (const key of Object.keys(marksDelta)) dirtyMarks.add(key);
+  for (const key of cleared) dirtyCleared.add(key);
+  for (const key of Object.keys(splitsDelta)) dirtySplits.add(key);
+  set({ saveState: 'unsaved', error: "Couldn't save that just now — it'll retry." });
+}
+
 interface AdaptiveTestState {
   bank: AdaptiveBankView | null;
   state: AdaptiveStateView | null;
@@ -31,6 +148,19 @@ interface AdaptiveTestState {
   error: string | null;
 
   phase: TakePhase;
+  /** Which test is open — the debounced flush fires long after the tap, so it can't close over an argument. */
+  activeTestId: string;
+  /**
+   * Autosave state, for the "Saved" line — never a blocking spinner (a tap must stay instant). `unsaved` is
+   * deliberately distinct from `idle`: work that could not be written must never look like nothing happened.
+   */
+  saveState: 'idle' | 'saving' | 'saved' | 'unsaved';
+  /**
+   * Keys marked in THIS sitting. A `never` autosaves the instant it is tapped, which would otherwise make the
+   * row read "off the table" and lock a mis-tap in place before they could look at it (74 §3.5's settled-
+   * boundary display is for marks from EARLIER takes). These stay editable until the take ends.
+   */
+  touched: string[];
   marks: Record<string, BankMark>;
   splits: Record<string, { hear?: number; say?: number }>;
   lines: string[];
@@ -45,6 +175,8 @@ interface AdaptiveTestState {
   load(testId: string): Promise<void>;
   start(testId: string): Promise<void>;
   mark(key: string, mark: BankMark | null): void;
+  /** Write whatever is pending right now — on leaving the take, and before closing a pass. */
+  flush(testId: string): Promise<void>;
   submitBank(testId: string): Promise<void>;
   setSplit(key: string, direction: 'hear' | 'say', value: number): void;
   submitSplit(testId: string): Promise<void>;
@@ -70,6 +202,9 @@ const EMPTY = {
   progress: null,
   error: null,
   phase: 'intro' as TakePhase,
+  activeTestId: '',
+  saveState: 'idle' as 'idle' | 'saving' | 'saved' | 'unsaved',
+  touched: [] as string[],
   marks: {},
   splits: {},
   lines: [],
@@ -80,13 +215,34 @@ const EMPTY = {
   scenario: null,
 };
 
+/**
+ * Where a resumed take picks up (74 §3.4). Without this, coming back after two sittings drops you at the top
+ * of a ~1,100-entry bank you already walked — which would make "leave whenever, you'll pick up here" a lie.
+ *
+ * A stamped turn means that phase CLOSED, so `bank` → split and `split` → lines. The AI phases are many-turned
+ * and advance themselves, so they resume where they are.
+ */
+export function resumePhase(turns: readonly { phase: string }[] | undefined): TakePhase {
+  const seen = new Set((turns ?? []).map((turn) => turn.phase));
+  if (seen.has('scenario')) return 'scenario';
+  if (seen.has('probe')) return 'probe';
+  if (seen.has('lines')) return 'lines';
+  if (seen.has('split')) return 'lines';
+  if (seen.has('bank')) return 'split';
+  return 'bank';
+}
+
 export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => ({
   ...EMPTY,
 
-  reset: () => set({ ...EMPTY }),
+  reset: () => {
+    resetPending();
+    set({ ...EMPTY });
+  },
   setPhase: (phase) => set({ phase }),
 
   load: async (testId) => {
+    set({ activeTestId: testId });
     const [bank, state] = await Promise.all([
       window.selfos?.testsBank({ testId }) ?? Promise.resolve(null),
       window.selfos?.testsAdaptiveState({ testId }) ?? Promise.resolve(null),
@@ -106,48 +262,94 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => ({
   },
 
   start: async (testId) => {
-    set({ busy: true, error: null });
+    set({ busy: true, error: null, activeTestId: testId });
     const state = await (window.selfos?.testsAdaptiveStart({ testId }) ?? Promise.resolve(null));
-    set({ state, busy: false, phase: 'bank' });
+    set({ state, busy: false, phase: resumePhase(state?.draft?.turns) });
   },
 
-  mark: (key, mark) =>
+  mark: (key, mark) => {
     set((prev) => {
-      // A hard no already on record is not re-markable here — it lifts only through the report's explicit
-      // "changed my mind" (74 §3.2). The engine refuses it too; this stops the UI implying otherwise.
-      const locked = prev.state?.lexicon.entries.some(
-        (entry) => entry.key === key && entry.state === 'never',
-      );
+      // A hard no from an EARLIER take is not re-markable here — it lifts only through the report's explicit
+      // "changed my mind" (74 §3.2). One made in this sitting stays editable, or autosave would set it in
+      // stone the instant it was tapped.
+      const locked =
+        !prev.touched.includes(key) &&
+        prev.state?.lexicon.entries.some((entry) => entry.key === key && entry.state === 'never');
       if (locked) return prev;
       const marks = { ...prev.marks };
-      if (mark === null) delete marks[key];
-      else marks[key] = mark;
-      return { marks };
-    }),
+      if (mark === null) {
+        delete marks[key];
+        dirtyMarks.delete(key);
+        dirtyCleared.add(key);
+        clearedThisTake.add(key);
+      } else {
+        marks[key] = mark;
+        dirtyCleared.delete(key);
+        clearedThisTake.delete(key);
+        dirtyMarks.add(key);
+      }
+      return {
+        marks,
+        saveState: 'saving',
+        touched: prev.touched.includes(key) ? prev.touched : [...prev.touched, key],
+      };
+    });
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => void get().flush(get().activeTestId), AUTOSAVE_DELAY_MS);
+  },
+
+  /**
+   * Persist the delta. Autosave never touches `phase` and never re-reads `state.lexicon` into the store: a
+   * refresh mid-pass would re-lock rows they are still working on, and the grid would jump under their hands.
+   */
+  flush: async (testId) => {
+    // Chain, never overlap. The debounce guarantees one TIMER, not one flush: on a round trip slower than the
+    // delay (iCloud, a big lexicon), flush B would read the lexicon before flush A's write landed and silently
+    // drop A's delta — `recordBankPass` is read-modify-write over one file and IPC handlers are not serialized.
+    // A lost mark is precisely the promise this feature makes, so the writes queue.
+    inFlight = inFlight.then(() => runFlush(testId, get, set)).catch(() => undefined);
+    await inFlight;
+  },
 
   submitBank: async (testId) => {
     const { state, marks } = get();
     const resultId = state?.draft?.id;
     if (!resultId) return;
     set({ busy: true });
-    const next = await (window.selfos?.testsAdaptiveBank({ testId, resultId, marks }) ??
-      Promise.resolve(null));
-    set({ state: next ?? state, busy: false, phase: 'split' });
+    await get().flush(testId);
+    // The closing call sends the WHOLE pass, not the delta — cheap, and it makes the stamped turn an honest
+    // record of what the pass ended up being.
+    // It carries the take's un-marks too: an un-marked key is simply ABSENT from `marks`, and absence undoes
+    // nothing — so without this a lost or failed un-mark leaves the stale mark on record forever, and if it
+    // was a `never`, a boundary they took back stays settled.
+    const next = await (window.selfos?.testsAdaptiveBank({
+      testId,
+      resultId,
+      marks,
+      cleared: [...clearedThisTake],
+    }) ?? Promise.resolve(null));
+    set({ state: next ?? state, busy: false, phase: 'split', saveState: 'saved' });
   },
 
-  setSplit: (key, direction, value) =>
+  setSplit: (key, direction, value) => {
     set((prev) => ({
       splits: { ...prev.splits, [key]: { ...prev.splits[key], [direction]: value } },
-    })),
+      saveState: 'saving',
+    }));
+    dirtySplits.add(key);
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => void get().flush(get().activeTestId), AUTOSAVE_DELAY_MS);
+  },
 
   submitSplit: async (testId) => {
     const { state, splits } = get();
     const resultId = state?.draft?.id;
     if (!resultId) return;
     set({ busy: true });
+    await get().flush(testId);
     const next = await (window.selfos?.testsAdaptiveSplit({ testId, resultId, splits }) ??
       Promise.resolve(null));
-    set({ state: next ?? state, busy: false, phase: 'lines' });
+    set({ state: next ?? state, busy: false, phase: 'lines', saveState: 'saved' });
   },
 
   loadLines: async (testId, round) => {

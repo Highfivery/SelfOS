@@ -2399,17 +2399,25 @@ export interface SelfosBridge {
   testsAdaptiveState(input: { testId: string }): Promise<AdaptiveStateView | null>;
   /** Start (or resume) a take. Free — no AI, no budget. */
   testsAdaptiveStart(input: { testId: string }): Promise<AdaptiveStateView | null>;
-  /** Pass 1 — mark what lands across the whole bank. Free. */
+  /**
+   * Pass 1 — mark what lands across the whole bank. Free.
+   *
+   * Called on a debounce as they tap (`autosave: true`, marks + `cleared` as a delta) and once more when they
+   * move on (`autosave` absent), which is what closes the pass. `cleared` un-does a mark they took back.
+   */
   testsAdaptiveBank(input: {
     testId: string;
     resultId: string;
     marks: Record<string, 'love' | 'never' | 'notYet'>;
+    cleared?: string[];
+    autosave?: boolean;
   }): Promise<AdaptiveStateView | null>;
-  /** Pass 2 — the hear/say split on what pass 1 marked. Free. */
+  /** Pass 2 — the hear/say split on what pass 1 marked. Free; autosaved the same way. */
   testsAdaptiveSplit(input: {
     testId: string;
     resultId: string;
     splits: Record<string, { hear?: number; say?: number }>;
+    autosave?: boolean;
   }): Promise<AdaptiveStateView | null>;
   /** Generate a round of lines to react to. Metered `test.adaptive.lines`; degrades rather than failing. */
   testsAdaptiveLines(input: {

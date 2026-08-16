@@ -340,3 +340,59 @@ describe('a page-counted book gets the page count it commissioned', () => {
     expect(countPages(res.outline)).toBe(40);
   });
 });
+
+/**
+ * `single` means ONE chapter (72 §3.2). Same reasoning as the page cap above: stated only in the prompt, the
+ * count is a request with nothing behind it, and a model that returns a twelve-chapter outline would simply
+ * produce a twelve-chapter book.
+ */
+describe('a one-chapter book gets one chapter', () => {
+  const BIO = getBookType('biography')!;
+  const manyChapters = JSON.stringify({
+    title: 'After Hours',
+    essence: 'One night.',
+    timeline: [],
+    outline: {
+      parts: [
+        {
+          title: 'One',
+          chapters: Array.from({ length: 6 }, (_, i) => ({ title: `Ch ${i + 1}`, brief: 'b' })),
+        },
+        {
+          title: 'Two',
+          chapters: Array.from({ length: 6 }, (_, i) => ({ title: `Ch ${7 + i}`, brief: 'b' })),
+        },
+      ],
+    },
+  });
+  const count = (outline: { parts: { chapters: unknown[] }[] }): number =>
+    outline.parts.reduce((n, p) => n + p.chapters.length, 0);
+
+  it('caps a book-length reply at a single chapter', async () => {
+    const fs = memFileSystem();
+    await subject(fs);
+    const res = await generateFoundations(deps(fs, fakeClient(manyChapters), 'sk-test'), {
+      bookId: 'book-1',
+      bookType: BIO,
+      config: BookConfigSchema.parse({ length: 'single' }),
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(count(res.outline)).toBe(1);
+    // The now-empty second part is dropped, not left as a heading with nothing under it.
+    expect(res.outline.parts).toHaveLength(1);
+  });
+
+  it('does not cap any other length', async () => {
+    const fs = memFileSystem();
+    await subject(fs);
+    const res = await generateFoundations(deps(fs, fakeClient(manyChapters), 'sk-test'), {
+      bookId: 'book-1',
+      bookType: BIO,
+      config: BookConfigSchema.parse({ length: 'concise' }),
+    });
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(count(res.outline)).toBe(12);
+  });
+});

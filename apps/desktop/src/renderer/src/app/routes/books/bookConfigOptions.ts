@@ -42,12 +42,18 @@ export const STYLE_CHOICES: { value: Style; label: string; hint: string }[] = [
   },
 ];
 export const LENGTH_OPTIONS: SegmentOption<Length>[] = [
+  { value: 'single', label: 'One chapter' },
   { value: 'concise', label: 'Concise' },
   { value: 'standard', label: 'Standard' },
   { value: 'full', label: 'Full' },
 ];
 // The commission (§13.3) renders length as three cards with reading-terms sublabels.
 export const LENGTH_CARDS: { value: Length; label: string; sub: string }[] = [
+  {
+    value: 'single',
+    label: 'One chapter',
+    sub: 'A single piece, complete in itself — a short story, not a book.',
+  },
   { value: 'concise', label: 'Concise', sub: 'A short read — a handful of focused chapters.' },
   { value: 'standard', label: 'Standard', sub: 'A full evening — a dozen or so chapters.' },
   { value: 'full', label: 'Full', sub: 'The whole story — as many chapters as it takes.' },

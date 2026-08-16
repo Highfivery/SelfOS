@@ -175,7 +175,11 @@ export async function generateFoundations(
     opts.bookType,
     resolveTypeOptions(opts.bookType, opts.config.typeOptions),
   );
-  const pageCap = spine.kind === 'pages' ? spine.count : Infinity;
+  // The same enforcement, for the same reason: a count stated only in the prompt is a request with nothing
+  // behind it. `single` means ONE chapter, so an outline that comes back as a twelve-chapter book is capped
+  // here rather than shipped as one.
+  const pageCap =
+    spine.kind === 'pages' ? spine.count : opts.config.length === 'single' ? 1 : Infinity;
   let taken = 0;
   const outline: BookOutline = {
     schemaVersion: 1,

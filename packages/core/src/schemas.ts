@@ -4153,7 +4153,10 @@ export const BookStyleSchema = z.enum([
   'confessional',
 ]);
 export type BookStyle = z.infer<typeof BookStyleSchema>;
-export const BookLengthSchema = z.enum(['concise', 'standard', 'full']);
+// `single` is one chapter, complete in itself — a short story rather than a book (72 §3.2). It is a real
+// length rather than a book type because everything else about the book is unchanged: the same types, the
+// same registers, the same craft. Only the extent differs.
+export const BookLengthSchema = z.enum(['single', 'concise', 'standard', 'full']);
 export type BookLength = z.infer<typeof BookLengthSchema>;
 
 /** Per-book generation config (64 §3.2). Voice/style/length steer the Biographer; `autoRefresh` gates the

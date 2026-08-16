@@ -14,6 +14,7 @@ import { useImagePrefsStore } from '../../../stores/imagePrefsStore';
 import { useStoryStore } from '../../../stores/storyStore';
 import { useEffect, useState } from 'react';
 import type { BookConfig } from '@shared/schemas';
+import { resolveBookStyles } from '@shared/schemas';
 import { LENGTH_OPTIONS, stylesForType, VOICE_OPTIONS } from './bookConfigOptions';
 import type { Length, Style, Voice } from './bookConfigOptions';
 
@@ -62,6 +63,10 @@ export function StorySettingsPanel({
 
   const styleChoices = stylesForType(stylePresets);
   const styleHint = styleChoices.find((s) => s.value === draft.style)?.hint ?? '';
+  // A book commissioned with combined registers says so, rather than showing only the first one.
+  const combined = resolveBookStyles(draft)
+    .map((id) => styleChoices.find((s) => s.value === id))
+    .filter((s): s is (typeof styleChoices)[number] => Boolean(s));
   // Show what images will actually use: this book's own style, or your per-person story style until one is chosen.
   const effectiveImageStyle = draft.imageStyle ?? storyPrefsStyle ?? '';
 
@@ -94,7 +99,10 @@ export function StorySettingsPanel({
               <Select
                 {...p}
                 value={draft.style}
-                onChange={(e) => saveField({ style: e.target.value as Style })}
+                // Picking one here REPLACES a combined set (72 §3.2). Without clearing `styles` the stale
+                // list would keep winning and the change would silently do nothing — the worst outcome for
+                // a control whose whole job is to change the tone.
+                onChange={(e) => saveField({ style: e.target.value as Style, styles: [] })}
               >
                 {styleChoices.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -104,7 +112,12 @@ export function StorySettingsPanel({
               </Select>
             )}
           </Field>
-          {styleHint ? (
+          {combined.length > 1 ? (
+            <Text size="sm" tone="secondary">
+              Written in {combined.map((c) => c.label).join(' + ')}. Choosing one above replaces all
+              of them.
+            </Text>
+          ) : styleHint ? (
             <Text size="sm" tone="secondary">
               {styleHint}
             </Text>

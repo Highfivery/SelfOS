@@ -888,6 +888,48 @@ export const EROTICA_BOOK_TYPE: BookType = {
       },
     },
     {
+      id: 'filthyTalk',
+      label: 'Filthy talk',
+      directive:
+        'Dialogue-forward register: what they SAY to each other carries the scene. Real, dirty, specific talk — instructions, demands, filth said out loud, answers given. Narration serves the dialogue rather than the other way round.',
+      specimen: {
+        first: '“Say it,” he told me. So I said it, and then I said worse.',
+        third: '“Say it,” he told her. So she said it, and then she said worse.',
+      },
+    },
+    {
+      id: 'playful',
+      label: 'Playful',
+      directive:
+        'Playful register: teasing, funny, delighted. Sex that is FUN — banter, daring each other, laughing mid-act. Keep it light without turning coy; playful is not a synonym for tame.',
+      specimen: {
+        first: 'I told him he had about ten seconds. He used nine of them just grinning at me.',
+        third: 'She told him he had about ten seconds. He used nine of them just grinning at her.',
+      },
+    },
+    {
+      id: 'aching',
+      label: 'Aching',
+      directive:
+        'Aching register: longing that is not satisfied. Want as a physical fact — proximity without permission, the thing not asked for, the wanting itself as the subject. Never resolve it early to be kind.',
+      specimen: {
+        first:
+          'He was close enough to touch for an hour, and I did not, and that was the whole night.',
+        third:
+          'He was close enough to touch for an hour, and she did not, and that was the whole night.',
+      },
+    },
+    {
+      id: 'hardcore',
+      label: 'Hardcore',
+      directive:
+        'Hardcore register: all act, no interiority. Continuous, anatomical, blow-by-blow — name every part and every act plainly and keep the camera on it. No cutting away, no reflection, no lingering on feelings; escalation is the structure. This is about FOCUS, not permission — how graphic the book may be is the register directive below.',
+      specimen: {
+        first: 'He had me on the edge of the bed before the door shut, and did not stop to ask.',
+        third: 'He had her on the edge of the bed before the door shut, and did not stop to ask.',
+      },
+    },
+    {
       id: 'cinematic',
       label: 'Cinematic',
       directive:

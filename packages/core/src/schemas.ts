@@ -4151,6 +4151,13 @@ export const BookStyleSchema = z.enum([
   'raunchy',
   'tender',
   'confessional',
+  'filthyTalk',
+  'playful',
+  'aching',
+  // "All act, no interiority" — the porn register. This is a CRAFT choice (what the prose spends its words
+  // on), not a heat level: how graphic the book is remains the `tier` option, which governs whatever style
+  // is chosen. Pair it with `unfiltered` for the most explicit result.
+  'hardcore',
 ]);
 export type BookStyle = z.infer<typeof BookStyleSchema>;
 // `single` is one chapter, complete in itself — a short story rather than a book (72 §3.2). It is a real
@@ -4162,8 +4169,27 @@ export type BookLength = z.infer<typeof BookLengthSchema>;
 /** Per-book generation config (64 §3.2). Voice/style/length steer the Biographer; `autoRefresh` gates the
  *  hybrid living-book cadence (§3.4). Defaults are the owner-approved defaults (third person, warm, full —
  *  a biography reads at published-book length by default, still selectable in setup). */
+/**
+ * The styles a book is written in (72 §3.2). `style` is the primary one and has always been required;
+ * `styles` is the additive list that lets registers COMBINE — "Slow burn + Filthy talk" says something
+ * neither says alone, and composing beats a grid of near-duplicate tiles as the list grows.
+ *
+ * Additive-optional, so every existing book keeps working untouched: absent `styles` means the single
+ * `style` it was commissioned with. Capped at three — past that the directives average into mush.
+ */
+export const MAX_BOOK_STYLES = 3;
+
+/** The styles a book is actually written in — the combinable list where present, else the single `style`. */
+export function resolveBookStyles(config: {
+  style: BookStyle;
+  styles?: BookStyle[] | undefined;
+}): BookStyle[] {
+  return config.styles && config.styles.length > 0 ? config.styles : [config.style];
+}
+
 export const BookConfigSchema = z.object({
   voice: BookVoiceSchema.default('third'),
+  styles: z.array(BookStyleSchema).max(MAX_BOOK_STYLES).optional(),
   style: BookStyleSchema.default('warm'),
   length: BookLengthSchema.default('full'),
   autoRefresh: z.boolean().default(true),

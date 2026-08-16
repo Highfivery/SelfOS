@@ -604,3 +604,36 @@ describe('registers combine (72 §3.2)', () => {
     expect(sys.indexOf('GOVERNS the style')).toBeGreaterThan(sys.indexOf('Hardcore register'));
   });
 });
+
+describe('every rung of the explicit ladder reaches the model (72 §3.2)', () => {
+  const erotica = getBookType('erotica')!;
+  const at = (tier: string): string =>
+    buildBiographerSystem(erotica, cfg({ style: 'sensory', typeOptions: { tier } }), 'Ben');
+
+  it('states a distinct register for each', () => {
+    expect(at('unfiltered')).toMatch(/most explicit/i);
+    expect(at('explicit')).toMatch(/real sexual detail/i);
+    expect(at('sensual')).toMatch(/SENSATION rather than anatomy/);
+    expect(at('suggestive')).toMatch(/stop at the door/);
+  });
+
+  /** The two new rungs are quieter, which is exactly when a style could swamp them (08 §24.9). */
+  it('keeps governing the style even at the quiet end', () => {
+    for (const tier of ['sensual', 'suggestive']) {
+      expect(at(tier)).toMatch(/GOVERNS the style and tone directives above/);
+    }
+  });
+
+  /** "Suggestive" must not read as permission to be coy — that is the failure it would otherwise cause. */
+  it('says the quietest rung is a choice, not shyness', () => {
+    expect(at('suggestive')).toMatch(/deliberate choice, NOT shyness/);
+    expect(at('sensual')).toMatch(/Nothing fades to black/);
+  });
+
+  it('never lets a rung soften the boundary', () => {
+    for (const tier of ['unfiltered', 'explicit', 'sensual', 'suggestive']) {
+      expect(at(tier)).toMatch(/consenting adult/i);
+      expect(at(tier)).toMatch(/Children do not exist in this book/);
+    }
+  });
+});

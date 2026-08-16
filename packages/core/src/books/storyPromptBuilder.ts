@@ -160,6 +160,14 @@ function optionDirectives(
     out.push(
       'REGISTER: write this at its most explicit. Frank, specific, graphic sexual writing from the first page — name acts and bodies plainly. This GOVERNS the style and tone directives above: never soften it into the tasteful, fade-to-black, or merely sensual version. The boundary in your doctrine still holds absolutely.',
     );
+  } else if (opt('tier') === 'sensual') {
+    out.push(
+      'REGISTER: write the sex on the page, but in SENSATION rather than anatomy — heat, weight, breath, what it does to them. Nothing fades to black and nothing is skipped; the difference is vocabulary, not coverage. This GOVERNS the style and tone directives above. The boundary in your doctrine still holds absolutely.',
+    );
+  } else if (opt('tier') === 'suggestive') {
+    out.push(
+      'REGISTER: write the charge and the wanting, and stop at the door. The build, the tension and the aftermath are yours; the act itself happens off the page. This is a deliberate choice, NOT shyness — write the desire frankly right up to the line. This GOVERNS the style and tone directives above.',
+    );
   } else if (opt('tier') === 'explicit') {
     out.push(
       'REGISTER: write this explicitly — real sexual detail, plainly named, a step back from the most graphic register. This GOVERNS the style and tone directives above: do not dilute it into the merely suggestive. The boundary in your doctrine still holds absolutely.',

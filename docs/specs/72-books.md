@@ -786,3 +786,16 @@ Two items are **deliberately deferred** rather than open:
   "Cinematic" for a biography silently produced "Warm + Cinematic". An untouched default is not a choice —
   the first pick now replaces it, and only later picks combine. Changing the tone in Settings clears the
   combined set, or the stale list would keep winning and the control would appear to do nothing.
+- 2026-08-16 — **the explicit ladder shows what it produces, and gains two rungs** (owner: "a bit
+  confusing"). Two choices described only by their ORDER — "genuinely explicit, a step back from unfiltered"
+  — tell you where a rung sits but never what you are choosing between. Each rung now carries an `example`:
+  one line of the prose it actually produces, the SAME moment written at each register, rendered in the book
+  serif so it reads as a sample rather than more interface copy. `BookTypeOption.choices` gains the field,
+  through the view type and the bridge projection. The ladder expands from two rungs to four — **Unfiltered
+  · Explicit · Sensual · Suggestive** — still ordered most-explicit-first because the first entry is the
+  default. The two new registers are worded against their own failure mode: `sensual` says "nothing fades to
+  black … the difference is vocabulary, not coverage", and `suggestive` says stopping at the door is "a
+  deliberate choice, NOT shyness" — without which the quiet end reads as licence to be coy, which is the tame
+  prose this whole run has been chasing. Both new rungs still carry the GOVERNS-the-style clause (08 §24.9)
+  and neither softens the boundary; a test asserts every rung keeps the consenting-adults and no-children
+  rules. Mutation-verified.

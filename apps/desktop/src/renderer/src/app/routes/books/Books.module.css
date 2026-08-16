@@ -172,6 +172,16 @@
   font-size: var(--text-xs);
   color: var(--color-text-secondary);
 }
+/* One line of the prose a choice actually produces (72 §3.2). Set in the book serif so it reads as a
+   sample of writing rather than more interface copy — the whole point is to show, not describe. */
+.choiceExample {
+  margin-top: var(--space-2);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  line-height: 1.45;
+}
 @media (max-width: 767px) {
   .invitation,
   .commission {

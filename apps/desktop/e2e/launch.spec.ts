@@ -15060,6 +15060,12 @@ test('story (72): choose a kind of book — its own questions, and the 18+ gate 
     await expect(w.getByRole('button', { name: 'Write my book' })).toBeDisabled();
     await w.getByRole('button', { name: 'I’m 18 or older' }).click();
     await expect(w.getByRole('radio', { name: 'Unfiltered' })).toBeVisible();
+    // Four rungs, each showing a line of what it actually reads like (§3.2) — "a step back from
+    // unfiltered" told you the order, never what you were choosing between.
+    for (const rung of ['Unfiltered', 'Explicit', 'Sensual', 'Suggestive']) {
+      await expect(w.getByRole('radio', { name: rung })).toBeVisible();
+    }
+    await expect(w.getByText(/rest of the night belonged to nobody else/)).toBeVisible();
     // Its OWN registers (§3.2) — not the biography's, which offered an erotic book "Journalistic:
     // reportorial and evidence-led" and "Warm: dinner-table narration".
     await expect(w.getByRole('checkbox', { name: 'Raunchy' })).toBeVisible();

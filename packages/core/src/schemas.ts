@@ -5420,7 +5420,9 @@ export interface StoryBookTypeView {
     label: string;
     help?: string;
     kind: 'choice' | 'text' | 'person';
-    choices?: { value: string; label: string; description?: string }[];
+    /** `example` is one line of the prose this choice actually produces — for a register ladder, the order
+     *  is not the same as knowing what you're choosing between. */
+    choices?: { value: string; label: string; description?: string; example?: string }[];
     /** For `person` — several may be named (a picture book can star two siblings). */
     multiple?: boolean;
     placeholder?: string;

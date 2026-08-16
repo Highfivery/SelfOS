@@ -348,7 +348,12 @@ describe('erotica has its own registers (72 §3.2)', () => {
   /** Style is VOICE; how explicit the book is belongs to `tier`. Two dials for one outcome is the failure. */
   it('keeps voice and heat as separate controls', () => {
     const tier = erotica.options?.find((o) => o.id === 'tier');
-    expect(tier?.choices?.map((c) => c.value)).toEqual(['unfiltered', 'explicit']);
+    expect(tier?.choices?.map((c) => c.value)).toEqual([
+      'unfiltered',
+      'explicit',
+      'sensual',
+      'suggestive',
+    ]);
     // No style promises a heat level — that would compete with the tier rather than being governed by it.
     for (const preset of erotica.stylePresets) {
       expect(preset.directive.toLowerCase()).not.toMatch(/\bmore explicit\b|\bless explicit\b/);
@@ -391,5 +396,29 @@ describe('erotica has its own registers (72 §3.2)', () => {
     for (const preset of erotica.stylePresets) {
       expect(BookStyleSchema.safeParse(preset.id).success, preset.id).toBe(true);
     }
+  });
+});
+
+describe('the explicit ladder shows what it produces (72 §3.2)', () => {
+  const tier = getBookType('erotica')!.options?.find((o) => o.id === 'tier');
+
+  it('gives every rung a description AND a sample line', () => {
+    // A description alone tells you the ORDER — "a step back from unfiltered" — but not what you are
+    // choosing between, which is what made these confusing.
+    for (const choice of tier?.choices ?? []) {
+      expect(choice.description?.trim().length, `${choice.value} description`).toBeGreaterThan(0);
+      expect(choice.example?.trim().length, `${choice.value} example`).toBeGreaterThan(0);
+    }
+  });
+
+  it('samples the same moment at each rung, so the difference is the register', () => {
+    const examples = (tier?.choices ?? []).map((c) => c.example ?? '');
+    expect(new Set(examples).size).toBe(examples.length); // four distinct lines, not one reused
+    // Every rung is the same scene — a door, a bed, the two of them — so what changes is how it's told.
+    for (const e of examples) expect(e.length).toBeGreaterThan(40);
+  });
+
+  it('is ordered most-explicit first, since the first entry is the default', () => {
+    expect(tier?.choices?.[0]?.value).toBe('unfiltered');
   });
 });

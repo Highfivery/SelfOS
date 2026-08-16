@@ -272,6 +272,13 @@ export function buildBiographerSystem(
    * failure this exists to prevent.
    */
   personNames: Record<string, string> = {},
+  /**
+   * 74 §5.8 — the subject's OWN erotic vocabulary, when they have mapped it and this book is adult-gated.
+   * Additive by design: it is appended AFTER the register directives it refines, and refines only the WORDS,
+   * never the intensity — `optionDirectives` still decides how explicit the book is. Absent ⇒ the prompt is
+   * byte-unchanged, which is what keeps this from colliding with the register work it sits on top of.
+   */
+  lexiconBlock?: string,
 ): string {
   const name = subjectName.trim() || 'the subject';
   const typeOptions = resolveTypeOptions(bookType, config.typeOptions);
@@ -292,6 +299,16 @@ export function buildBiographerSystem(
     // ends up buried, which is the 08 §24.9 failure exactly: when several steering blocks append to one
     // prompt, the LAST one wins regardless of which is authoritative. Restated here, after the material, so
     // the thing the model reads last is how to write rather than what to write about.
+    // Their own words, last but one — after the register that governs intensity, before the closing
+    // directive that outranks everything. A book written in the vocabulary they actually use is the whole
+    // point of having mapped it (74 §5.8).
+    ...(lexiconBlock && lexiconBlock.trim().length > 0 && bookType.gates?.adult === true
+      ? [
+          `THEIR OWN VOCABULARY — this book is for them, so write it in the words they actually use. This ` +
+            `REFINES the register above; it never softens it, and it never overrides how explicit the book ` +
+            `is.\n${lexiconBlock}`,
+        ]
+      : []),
     ...closingDirective(bookType, typeOptions),
   ]
     .filter((part) => part.trim().length > 0)

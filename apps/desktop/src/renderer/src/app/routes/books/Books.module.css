@@ -2341,6 +2341,11 @@
 .shelfNew {
   display: flex;
   flex-direction: column;
+  /* A <button> carries a UA `align-items: center`, which beats the flex default of stretch — so the cover
+     sized itself to its own content (the title text) instead of filling the card. The visible symptom was a
+     shelf of mismatched covers whose width tracked the LENGTH OF THE TITLE: "Proximity" got a small one,
+     "The One Who Drives the Ship" got one three times the size. */
+  align-items: stretch;
   gap: var(--space-2);
   background: none;
   border: none;
@@ -2357,6 +2362,7 @@
   outline-offset: 4px;
 }
 .shelfCover {
+  width: 100%; /* belt and braces with the stretch above: never size a cover from its title */
   aspect-ratio: 5 / 7.4;
   border-radius: 3px 8px 8px 3px;
   box-shadow:

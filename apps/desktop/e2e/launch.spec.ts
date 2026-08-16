@@ -11124,7 +11124,7 @@ test('self-assessments (50): take ECR-R → profile bars → retake adds a trend
   try {
     const w = await app.firstWindow();
     // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
-    await w.getByRole('link', { name: 'You', exact: true }).click();
+    await w.getByRole('link', { name: 'Tests', exact: true }).click();
     await expect(w.getByRole('heading', { name: /how you see yourself/i })).toBeVisible();
 
     // Take the Attachment (ECR-R) test through the rendered UI — its catalog card's "Take" button.
@@ -11166,7 +11166,7 @@ test('self-assessments (50): take ECR-R → profile bars → retake adds a trend
     // 95 — back on the hub, the taken test drops out of "Available tests": Attachment lives ONLY under
     // "Your profiles" (with Retake), never a second time as a catalog "Take" card.
     // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
-    await w.getByRole('link', { name: 'You', exact: true }).click();
+    await w.getByRole('link', { name: 'Tests', exact: true }).click();
     await expect(w.getByRole('heading', { name: /how you see yourself/i })).toBeVisible();
     const profiles = w.locator('section', {
       has: w.getByRole('heading', { name: 'Your profiles' }),
@@ -11215,7 +11215,7 @@ test('self-assessments (50): the kink test is 18+-gated; a result writes partner
   try {
     const w = await app.firstWindow();
     // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
-    await w.getByRole('link', { name: 'You', exact: true }).click();
+    await w.getByRole('link', { name: 'Tests', exact: true }).click();
 
     // The Intimacy & sexuality group is 18+-gated — the cards are withheld until acknowledged.
     await expect(w.getByText(/These are 18\+/)).toBeVisible();
@@ -11289,7 +11289,7 @@ test('wellbeing (51): mood check-in → GENTLE range + help line; AI-off narrate
   try {
     const w = await app.firstWindow();
     // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
-    await w.getByRole('link', { name: 'You', exact: true }).click();
+    await w.getByRole('link', { name: 'Tests', exact: true }).click();
 
     // The wellbeing group is distinct and NOT 18+-gated; it invites a "Check in", not "Take".
     await expect(w.getByRole('heading', { name: 'Reflections & check-ins' })).toBeVisible();
@@ -11403,7 +11403,7 @@ test('wellbeing (51): PHQ-9 item 9 surfaces crisis resources MID-check-in; the f
   try {
     const w = await app.firstWindow();
     // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
-    await w.getByRole('link', { name: 'You', exact: true }).click();
+    await w.getByRole('link', { name: 'Tests', exact: true }).click();
     await w.getByRole('heading', { name: 'Mood check-in' }).scrollIntoViewIfNeeded();
     await w
       .locator(
@@ -16051,6 +16051,119 @@ test('story (72): every book on the shelf gets the same cover, whatever its titl
     await expect(newTile).toContainText(/children’s/i);
     // The 18+ type is never advertised on an empty tile.
     await expect(newTile).not.toContainText(/erotica/i);
+  } finally {
+    await app.close();
+  }
+});
+
+test('74: the Dirty Talk take — mark, split, complete, and the boundary holds everywhere', async () => {
+  // The bank renders ~1,100 entries (3 buttons each) and the §12 guard walks every element on the page, so
+  // this walk is legitimately slower than a typical one.
+  test.setTimeout(180_000);
+  const { userData, vault } = await seedReadyVault();
+  const key = (await loadMasterKey(createNodeSecretStore(userData, passthrough)))!;
+  const fs = createNodeFileSystem(vault);
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+
+    // The hub is Tests now, and the 18+ group is gated until acknowledged (the bridge withholds it).
+    await w.getByRole('link', { name: 'Tests' }).click();
+    await expect(w.getByRole('heading', { name: /you — how you see yourself/i })).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'Dirty talk' })).toHaveCount(0);
+    await w.getByRole('button', { name: /I.m 18 or older/i }).click();
+
+    // An adaptive card says what it is, and never a question count it doesn't have.
+    const card = w.getByRole('heading', { name: 'Dirty talk' });
+    await expect(card).toBeVisible();
+    await expect(w.getByText(/adapts as you go/i).first()).toBeVisible();
+    await w.getByRole('button', { name: 'Start' }).click();
+
+    // The intro tells them the steer exists BEFORE they produce any material (74 §8.4).
+    await expect(w.getByText(/it can quietly shape what their coach suggests/i)).toBeVisible();
+    await expect(w.getByText(/never tells them what you said/i)).toBeVisible();
+    await w.screenshot({ path: 'e2e-artifacts/74-dirty-talk-intro.png' });
+    await w.getByRole('button', { name: 'Begin' }).click();
+
+    // Pass 1: the whole bank, marking only what lands. The boundary rule is said in plain words.
+    await expect(w.getByRole('heading', { name: /what lands\?/i })).toBeVisible();
+    await expect(w.getByText(/nothing in SelfOS will suggest it again/i)).toBeVisible();
+    await w.getByRole('button', { name: 'good girl — love it', exact: true }).first().click();
+    await w.getByRole('button', { name: 'mine — love it', exact: true }).first().click();
+    await w.getByRole('button', { name: 'whore — never', exact: true }).first().click();
+    await expect(w.getByText('3 marked')).toBeVisible();
+
+    // The §12 guard runs against the DENSEST surface — the bank grid, mid-mark.
+    await w.setViewportSize({ width: 360, height: 900 });
+    await expectNoInnerOverflow(w);
+    await w.screenshot({ path: 'e2e-artifacts/74-bank-360.png' });
+    await w.setViewportSize({ width: 1280, height: 900 });
+
+    await w.getByRole('button', { name: /Next — how you want them/i }).click();
+
+    // Pass 2 asks the split only for what was marked, and never for the one they ruled out.
+    await expect(w.getByRole('heading', { name: /hearing it, or saying it\?/i })).toBeVisible();
+    await w.getByRole('button', { name: 'good girl — hear 4 of 4', exact: true }).first().click();
+    await w.getByRole('button', { name: 'good girl — say 0 of 4', exact: true }).first().click();
+    await expect(w.getByRole('button', { name: 'whore — hear 4 of 4', exact: true })).toHaveCount(
+      0,
+    );
+    await w.getByRole('button', { name: 'Next', exact: true }).click();
+
+    // AI is off in this vault, so every AI phase degrades — and the take still COMPLETES (74 §7).
+    await w.getByRole('button', { name: /show me my profile/i }).click();
+    await w.getByRole('button', { name: 'Read it' }).click();
+
+    // The report renders from the deterministic scores, honestly labelled as the short version.
+    await expect(w.getByText(/didn.t come through this time/i)).toBeVisible();
+    await expect(w.getByText('Being claimed')).toBeVisible();
+    await expect(w.getByText(/Off the table/i)).toBeVisible();
+    await w.screenshot({ path: 'e2e-artifacts/74-report.png' });
+
+    // Decrypt the vault: the lexicon is encrypted, carries the boundary, and the derived Insight NEVER does.
+    const readEnc = async (path: string): Promise<Record<string, unknown> | null> => {
+      const bytes = await fs.read(path);
+      if (!bytes) return null;
+      return JSON.parse(Buffer.from(bytes).toString('utf8')) as Record<string, unknown>;
+    };
+    const lexRaw = await fs.read('people/owner-1/tests/lexicon.enc');
+    expect(Buffer.from(lexRaw!).toString('utf8')).not.toContain('good girl'); // encrypted at rest
+    const lexicon = (await readEncryptedJson(fs, 'people/owner-1/tests/lexicon.enc', key)) as {
+      boundaries: { text: string }[];
+      entries: { key: string; state?: string }[];
+    };
+    expect(lexicon.boundaries.map((b) => b.text)).toEqual(['whore']);
+    expect(lexicon.entries.find((e) => e.key === 'names-degrading:whore')?.state).toBe('never');
+
+    // The Insight feeds the coach — and carries no boundary (suppression is structural, 74 §5.5).
+    const insightNames = await fs.list('people/owner-1/insights');
+    let found = false;
+    for (const name of insightNames) {
+      const insight = await readEncryptedJson(fs, `people/owner-1/insights/${name}`, key);
+      const json = JSON.stringify(insight);
+      if (json.includes('dirty-talk')) {
+        found = true;
+        expect(json).not.toContain('whore');
+        expect(json).toContain('Intimacy');
+      }
+    }
+    expect(found).toBe(true);
+    void readEnc;
+
+    // The ask ledger now says this ground was worked through, so questionnaires stop mining it (74 §5.6).
+    const ledger = (await readEncryptedJson(
+      fs,
+      'people/owner-1/questionnaires/askLedger.enc',
+      key,
+    )) as { entries: { topicIds: string[] }[] };
+    expect(ledger.entries.some((e) => e.topicIds.includes('Intimacy:dirty-talk'))).toBe(true);
+
+    // The old hub path still resolves — deep links and bookmarks keep working after the rename.
+    await w.evaluate(() => {
+      window.location.hash = '#/you';
+    });
+    await expect(w.getByRole('heading', { name: /you — how you see yourself/i })).toBeVisible();
   } finally {
     await app.close();
   }

@@ -67,7 +67,7 @@ export function TestTake(): JSX.Element {
     setBusy(true);
     const result = await take_(testId, answers as Record<string, unknown>);
     setBusy(false);
-    if (result) navigate(`/you/${testId}`);
+    if (result) navigate(`/tests/${testId}`);
   };
 
   if (loadError) {
@@ -76,7 +76,7 @@ export function TestTake(): JSX.Element {
         <div className={styles.inner}>
           <Stack gap={4}>
             <Banner tone="warning">That assessment isn’t available.</Banner>
-            <Button variant="secondary" onClick={() => navigate('/you')}>
+            <Button variant="secondary" onClick={() => navigate('/tests')}>
               ← Back to You
             </Button>
           </Stack>
@@ -99,7 +99,7 @@ export function TestTake(): JSX.Element {
     <div className={styles.page}>
       <div className={styles.inner}>
         <Stack gap={4}>
-          <button type="button" className={take.back} onClick={() => navigate('/you')}>
+          <button type="button" className={take.back} onClick={() => navigate('/tests')}>
             ← You
           </button>
 
@@ -176,7 +176,7 @@ export function TestTake(): JSX.Element {
                   {form.wellbeing ? 'See my check-in' : 'See my result'}
                 </Button>
                 {form.wellbeing ? (
-                  <Button variant="ghost" onClick={() => navigate('/you')}>
+                  <Button variant="ghost" onClick={() => navigate('/tests')}>
                     Stop check-in
                   </Button>
                 ) : null}

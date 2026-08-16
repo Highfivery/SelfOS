@@ -5,3 +5,4 @@ export * from './wellbeingCrisis';
 export * from './testService';
 export * from './testNarrative';
 export * from './testContextProvider';
+export * from './adaptive';

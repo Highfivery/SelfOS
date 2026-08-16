@@ -486,6 +486,41 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-16 — \*\*Build (adaptive tests — the "Tests" hub + the Dirty Talk profile; SPEC 74 written, approved
+  - BUILT; on `feat/adaptive-tests-spec`, in a WORKTREE off origin/main).** A SECOND test kind. Every spec-50/51
+    instrument is a fixed item list scored by pure arithmetic; this adds an **adaptive** kind where the AI writes
+    the items as it goes and a synthesis turns the take into a structured profile. Dirty Talk is instrument #1;
+    **Fantasy and Sex Sessions are a definition file each**, which is why it is an engine. **Nineteen owner
+    decisions asked one at a time before any code** (§11), the load-bearing ones: build the ENGINE not a bespoke
+    test; **coexist + seed** with the five surfaces that already touch dirty talk **but saturate the topic** so
+    the questionnaire planner stops mining it; the partner path is a **silent steer** carrying **her own written
+    words verbatim** (an INFORMED privacy override, §8.4 — never attributed, but she will recognise them, and the
+    take's intro says so before she produces any material); **hard nos suppress with or without any sharing**;
+    three results share **one lexicon** so a boundary is global; the hub renames to **Tests** (wellbeing keeps
+    "check-in" — spec 51 forbids calling a PHQ-9 a test); a **`never` / `not yet` split** (cringe and shutdown are
+    different, and only one is coachable); **per-context** register scoring; **nothing gated** (no tier ceiling, no
+    family opt-in — a private two-person household); a **two-pass bank** (~1,100 entries marked by what lands, then
+    the hear/say split on just those — ~40 taps, not ~1,000); **uncapped, confidence-based** depth; and the
+    **erotica book wired in the same slice**, additive-only, rebased immediately before, as the last commit.
+    **The structural reason it is a second kind:** `TestForm` ships fixed items, `testsGet` returns them up front,
+    `itemCount` derives from them, and `TestResult` stored answers with **no record of what was asked** — meaningless
+    for generated items. So the result persists every turn, and a **FIXED dimensional spine** keeps trends honest
+    (an AI-named dimension per take would leave the chart rendering and meaning nothing). Gate green: typecheck (4
+    pkgs), lint, format, **2,272 core + 1,610 desktop** unit, +1 decrypt-level E2E. **Four defects the build
+    surfaced, each fixed:** `testsResults` resolved ids against the deterministic catalog only, so an adaptive id
+    **skipped the 18+ gate**; `testsAcknowledgeAdult` built its OWN catalog list, so the adaptive instruments
+    **vanished the moment someone acknowledged** (caught by the E2E, not a unit test — both now share one
+    assembly); a **themed** boundary cannot be enforced by substring at all ("anything about being used" shares
+    nothing with "I love using you"), so themes match on stemmed content words with use/used/using landing on one
+    stem; and **visual QA caught the report calling an unmarked dimension "not their thing 0%"** — unrated is not a
+    no, so a no-signal dimension now reads `nothing yet` and is listed rather than charted. **Lessons: (1) when a
+    new id joins an existing catalog, grep every handler that resolves ids — the gate lives in whichever lookup
+    the handler happens to use, and one that only knows the old catalog silently fails open. (2) A second
+    hand-built copy of a list WILL drift from the first; the ack handler and the list handler now share one
+    function. (3) A substring check is not a boundary check when the boundary is an IDEA rather than a word.
+    (4) The honesty rules bite hardest at the render layer: the scoring was right and the SCREEN still said
+    something about her she never said.\*\*
+
 - 2026-08-14 — **Refactor (the Books rename: `story:*` → `books:*`; SPEC 72 §5/§6; on
   `chore/books-rename`).** Purely mechanical, kept out of every feature diff as the owner asked. Two commits:
   the core module `packages/core/src/story/` → `books/` behind a **compatibility barrel** (`@selfos/core/story*`

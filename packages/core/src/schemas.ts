@@ -1049,6 +1049,209 @@ export const TestSubscaleScoreSchema = z.object({
 export type TestSubscaleScore = z.infer<typeof TestSubscaleScoreSchema>;
 
 /**
+ * 74-adaptive-tests §4 — the ADAPTIVE test kind. Where a spec-50 instrument ships a fixed item list scored by
+ * pure arithmetic, an adaptive instrument writes its items as it goes and synthesizes a structured profile.
+ * These schemas are additive: nothing here changes how a deterministic result parses.
+ */
+
+/** One item an adaptive take put in front of the person. Generated items are persisted WITH the answer. */
+export const AdaptiveItemSchema = z.object({
+  id: z.string().min(1),
+  /** Which probe pack produced it (`bank` | `lines` | `probe` | `scenario`), for grouping + synthesis. */
+  pack: z.string().min(1),
+  /** What was actually asked/shown. */
+  text: z.string(),
+  /** A pack's options where it had any (line reactions, scenario choices). */
+  options: z.array(z.string()).catch([]).default([]),
+});
+export type AdaptiveItem = z.infer<typeof AdaptiveItemSchema>;
+
+/** One turn of an adaptive take: the item, the answer, when. Order is the array's order. */
+export const AdaptiveTurnSchema = z.object({
+  phase: z.string().min(1),
+  item: AdaptiveItemSchema,
+  answer: z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.array(z.string()),
+    z.record(z.string(), z.number()),
+  ]),
+  at: z.string(),
+});
+export type AdaptiveTurn = z.infer<typeof AdaptiveTurnSchema>;
+
+/**
+ * How one entry landed. THREE negative states, not one (74 §3.2, owner decision): `never` is a permanent
+ * boundary — suppressed everywhere, never re-offered, and never requiring a reason; `notYet` is "makes me
+ * cringe / I'd feel like an idiot", revisitable and the raw material for the practice + shame sessions.
+ * Absent ⇒ simply unrated, which is NEVER read as a no (74 §7).
+ */
+export const LexiconStateSchema = z.enum(['never', 'notYet']);
+export type LexiconState = z.infer<typeof LexiconStateSchema>;
+
+/** 0 = nothing · 1 fine · 2 like it · 3 love it · 4 that one does it. */
+export const LexiconRatingSchema = z.number().int().min(0).max(4);
+
+/** One rated word or phrase. `hear` and `say` are separate because they diverge wildly — the gap between
+ *  them is the most useful thing the test finds (74 §3.2). */
+export const LexiconEntrySchema = z.object({
+  key: z.string().min(1),
+  text: z.string().min(1),
+  kind: z.enum(['word', 'phrase']),
+  family: z.string().min(1),
+  tier: z.number().int().min(1).max(5),
+  hear: LexiconRatingSchema.catch(0).default(0),
+  say: LexiconRatingSchema.catch(0).default(0),
+  state: LexiconStateSchema.optional(),
+  /** Their own write-in rather than a bank entry. */
+  custom: z.boolean().optional(),
+  /** Which take or edit last wrote this entry. */
+  source: z.string().optional(),
+});
+export type LexiconEntry = z.infer<typeof LexiconEntrySchema>;
+
+/** A GLOBAL boundary — written by any adaptive intimacy test, honored by every consumer, unioned on merge so
+ *  a sync conflict can never lose one (74 §7). A `reason` is never required and never requested (74 §8.2). */
+export const LexiconBoundarySchema = z.object({
+  text: z.string().min(1),
+  kind: z.enum(['word', 'theme']),
+  reason: z.string().optional(),
+  at: z.string(),
+});
+export type LexiconBoundary = z.infer<typeof LexiconBoundarySchema>;
+
+/** The per-take synthesis. The living merge across takes is the `EroticLexicon`. */
+export const AdaptiveProfileSchema = z.object({
+  /** Normalized 0..1 per register (praise · claiming · command · narration · degradation · begging …). */
+  registers: z.record(z.string(), z.number()).catch({}).default({}),
+  /** Per context (buildUp · during · edge · after · sexting · phone) — heat + an optional note. */
+  contexts: z
+    .record(z.string(), z.object({ heat: z.number(), note: z.string().optional() }))
+    .catch({})
+    .default({}),
+  /** Their own words for what they're into. */
+  themes: z.array(z.string()).catch([]).default([]),
+  /** The GOAL list — things they want to be able to say and can't yet. The coachable material. */
+  wantsToSay: z.array(z.string()).catch([]).default([]),
+  /** How it should be said ("low, close, certain. not loud."). */
+  voice: z.string().optional(),
+});
+export type AdaptiveProfile = z.infer<typeof AdaptiveProfileSchema>;
+
+/**
+ * The shared erotic lexicon — ONE per person, written by every adaptive intimacy test (Dirty Talk today;
+ * Fantasy and Sex Sessions next) and read by every explicit surface. Three results, one lexicon (74 §1.3),
+ * so no test re-asks another's ground and a boundary recorded in one constrains all of them.
+ */
+export const EroticLexiconSchema = z.object({
+  schemaVersion: z.number().int().positive(),
+  personId: z.string().min(1),
+  entries: z.array(LexiconEntrySchema).catch([]).default([]),
+  registers: z.record(z.string(), z.number()).catch({}).default({}),
+  contexts: z
+    .record(z.string(), z.object({ heat: z.number(), note: z.string().optional() }))
+    .catch({})
+    .default({}),
+  themes: z.array(z.string()).catch([]).default([]),
+  wantsToSay: z.array(z.string()).catch([]).default([]),
+  voice: z.string().optional(),
+  boundaries: z.array(LexiconBoundarySchema).catch([]).default([]),
+  updatedAt: z.string(),
+});
+export type EroticLexicon = z.infer<typeof EroticLexiconSchema>;
+
+/**
+ * 74 §6 — the crypto-free VIEW types the adaptive-test IPC returns. They live here (not in `tests/adaptive`)
+ * for the same reason `AccessView` does: `channels.ts` imports them, and the renderer/preload must never pull
+ * the crypto-bearing module in behind them.
+ */
+
+/** The band a spine dimension carries when NOTHING was marked for it. Not a zero: unrated is not a no, so
+ *  the report says so rather than charting a confident 0% (74 §3.3). Lives here, crypto-free, because the
+ *  renderer needs it and importing it from `tests` drags the engine in behind it. */
+export const NO_SIGNAL_BAND = 'nothing yet';
+
+export interface AdaptiveBankFamilyView {
+  id: string;
+  label: string;
+  kind: 'word' | 'phrase';
+  note?: string;
+}
+
+export interface AdaptiveBankEntryView {
+  key: string;
+  text: string;
+  kind: 'word' | 'phrase';
+  family: string;
+  tier: number;
+  directions: readonly ('hear' | 'say')[];
+}
+
+export interface AdaptiveBankView {
+  testId: string;
+  families: AdaptiveBankFamilyView[];
+  entries: AdaptiveBankEntryView[];
+}
+
+/** Everything the take screen + the report need in one read. */
+export interface AdaptiveStateView {
+  testId: string;
+  title: string;
+  blurb: string;
+  framing: string;
+  estimatedMinutes: number;
+  /** An in-flight take to resume, if any. */
+  draft: TestResult | null;
+  /** The newest COMPLETE take — the report + the trends. */
+  latest: TestResult | null;
+  /** Every dated take, newest first. */
+  history: TestResult[];
+  /** Their own lexicon — always fully visible to them (74 §8.4). */
+  lexicon: EroticLexicon;
+  /** How much the bank has left genuinely unresolved; 0 means the probes are done. */
+  ambiguitiesLeft: number;
+  /** Whether the profile is stale enough to invite a retake (74 §11). */
+  staleForRetake: boolean;
+  /** Admin-only (`budgets.manage`, redacted at the bridge — the 06 rule). */
+  costUsd?: number;
+}
+
+export interface AdaptivePhaseView {
+  ok: boolean;
+  lines?: string[];
+  degraded: boolean;
+  message?: string;
+}
+
+export interface AdaptiveProbeView {
+  ok: boolean;
+  question?: string;
+  /** The AMBIGUITY this question is resolving. The renderer stamps it as the turn's item id, which is what
+   *  lets the next call know it has been asked — without it the same ambiguity is returned forever and the
+   *  take can never reach synthesis (while billing a call per tap). */
+  ambiguityId?: string;
+  /** Nothing left ambiguous — the probes are finished. */
+  done: boolean;
+  degraded: boolean;
+}
+
+export interface AdaptiveScenarioView {
+  ok: boolean;
+  context: string;
+  scene?: string;
+  options?: string[];
+  degraded: boolean;
+}
+
+/** The edits a person may make to their own lexicon (74 §3.4). */
+export type AdaptiveLexiconEdit =
+  | { kind: 'rate'; key: string; hear?: number; say?: number }
+  | { kind: 'setState'; key: string; state: 'never' | 'notYet' | null }
+  | { kind: 'addWord'; text: string; family: string; wordKind: 'word' | 'phrase' }
+  | { kind: 'addBoundary'; text: string; boundaryKind: 'word' | 'theme' };
+
+/**
  * One taking of a self-assessment ("Test"), per-person + encrypted at `people/<id>/tests/<result-id>.enc`
  * (50-self-assessments §4.3). A retake is a NEW file (`reTakeOf` set) + a new trend point; prior results are
  * kept (never overwritten) so trends are honest. `answers.value` reuses the questionnaire `Answer.value`
@@ -1077,11 +1280,33 @@ export const TestResultSchema = z.object({
   reTakeOf: z.string().optional(), // prior TestResult id → the longitudinal chain (trends)
   insightId: z.string().optional(), // the derived Insight this result produced (source: 'test')
   crisisFlag: z.boolean().optional(), // a heuristic answer-level flag → lead with resources (§8.2)
+
+  // --- 74-adaptive-tests additions. ADDITIVE-OPTIONAL, so an existing deterministic result parses
+  // unchanged and needs no migration: absent `kind` means 'deterministic' (`testResultKind`). An adaptive
+  // take's ITEMS are written per take, so the turns (item AND answer) are persisted here — without them a
+  // generated item's answer is meaningless later, and a retake can't tell what it already asked (74 §4.3).
+  kind: z.enum(['deterministic', 'adaptive']).optional(),
+  /** Adaptive only — a take is resumable across sittings, so it exists as a draft before it is complete. */
+  status: z.enum(['draft', 'complete']).optional(),
+  turns: z.array(AdaptiveTurnSchema).optional(),
+  /** The structured synthesis for THIS take (the living merge across takes is the `EroticLexicon`). */
+  profile: AdaptiveProfileSchema.optional(),
+  /** The prose report shown to the person. */
+  narrative: z.string().optional(),
+  /** What this take actually cost. Admin-only at the seam (the 06 budgets.manage redaction). */
+  costUsd: z.number().optional(),
+
   takenAt: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 export type TestResult = z.infer<typeof TestResultSchema>;
+
+/** A result's kind, defaulting an absent (pre-74) value to `'deterministic'` — the one place that decision
+ *  is made, so no consumer has to remember the default. */
+export function testResultKind(result: Pick<TestResult, 'kind'>): 'deterministic' | 'adaptive' {
+  return result.kind ?? 'deterministic';
+}
 
 /** A goal is "stale" past its `due`, or (no `due`) after this many days untouched (39 §11 Q4). */
 export const STALE_AFTER_DAYS = 21;

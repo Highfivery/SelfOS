@@ -430,14 +430,14 @@ export function AppShell(): JSX.Element {
             ) : null}
             {canTakeTests ? (
               <NavLink
-                to="/you"
+                to="/tests"
                 className={navClass}
-                aria-label="You"
-                title={tip('You')}
+                aria-label="Tests"
+                title={tip('Tests')}
                 onClick={closeDrawer}
               >
                 <Compass size={18} aria-hidden="true" />
-                <span className={styles.label}>You</span>
+                <span className={styles.label}>Tests</span>
               </NavLink>
             ) : null}
             {canTogether && togetherHasPartner ? (

@@ -457,7 +457,16 @@ import {
 } from '@selfos/core/together';
 import { sniffImageMime } from '@selfos/core/media';
 import { readImagePrefs, readFeatureImagePrefs, setFeatureImagePrefs } from '@selfos/core/images';
-import type { FeatureImagePrefs } from '@selfos/core/schemas';
+import type {
+  FeatureImagePrefs,
+  AdaptiveBankView,
+  AdaptivePhaseView,
+  AdaptiveProbeView,
+  AdaptiveProfile,
+  AdaptiveScenarioView,
+  AdaptiveStateView,
+  EroticLexicon,
+} from '@selfos/core/schemas';
 import {
   backfillPartnerSharing,
   deleteInsight,
@@ -848,6 +857,33 @@ import {
   type TestForm,
   type TestNarrateResponse,
   type TestSummary,
+  // 74 — the adaptive engine.
+  ADAPTIVE_CONTEXTS,
+  DIRTY_TALK,
+  DIRTY_TALK_BANK,
+  abandonAdaptiveTake,
+  addBoundary,
+  addCustomEntry,
+  applyBankMarks,
+  applyDirections,
+  clearState,
+  completeAdaptiveTake,
+  deleteAllAdaptiveResults,
+  getAdaptiveResult,
+  listAdaptiveResults,
+  openAmbiguities,
+  readsAsDistress,
+  readLexicon,
+  recordBankPass,
+  recordSplitPass,
+  runLinesPhase,
+  runProbePhase,
+  runScenarioPhase,
+  runSynthesis,
+  stampTurn,
+  startAdaptiveTake,
+  writeLexicon,
+  type AdaptiveTestDefinition,
 } from '@selfos/core/tests';
 import {
   acceptSuggestion,
@@ -1059,12 +1095,106 @@ const ChatConversationIdSchema = z.object({ conversationId: z.string().min(1) })
 const StartGuidedSchema = z.object({ guideId: z.string().min(1) });
 // Self-assessments (50). The answer value mirrors the questionnaire `Answer.value` union; `scoreTest` is
 // total (clamps/omits bad cells) so loose validation is safe — we only need a record of answered questions.
+/** The adaptive catalog — one instrument today; Fantasy and Sex Sessions join it here (74 §1.2). */
+const ADAPTIVE_TESTS: readonly AdaptiveTestDefinition[] = [DIRTY_TALK];
+function getAdaptiveTest(testId: string): AdaptiveTestDefinition | undefined {
+  return ADAPTIVE_TESTS.find((test) => test.id === testId);
+}
+
+/**
+ * The hub's catalog: the deterministic instruments plus the adaptive ones, filtered by the same 18+ ack.
+ * ONE assembly, used by both `testsList` and `testsAcknowledgeAdult`, so the two can never disagree about
+ * what exists. An adaptive instrument has no fixed item list, so `itemCount` is its bank's size and
+ * `estimatedMinutes` is an estimate — the card says "adapts as you go" rather than a question count.
+ */
+function testCatalogFor(adultAcknowledged: boolean): TestSummary[] {
+  const adaptive: TestSummary[] = ADAPTIVE_TESTS.filter(
+    (def) => adultAcknowledged || !def.adult,
+  ).map((def) => ({
+    id: def.id,
+    kind: 'adaptive' as const,
+    group: def.group,
+    title: def.title,
+    instrument: def.instrument,
+    blurb: def.blurb,
+    framing: def.framing,
+    estimatedMinutes: def.estimatedMinutes,
+    itemCount: def.bank.entries.length,
+    adult: def.adult,
+    sensitive: def.sensitive,
+    subscales: def.spine.map((dimension) => ({
+      key: dimension.key,
+      label: dimension.label,
+      signed: false,
+    })),
+    wellbeing: false,
+  }));
+  return [...listTestSummaries(adultAcknowledged), ...adaptive];
+}
+
+/** A backstop on the probe loop — not a depth cap; the ambiguity rule should always converge first. */
+const MAX_ADAPTIVE_PROBES = 12;
+
 const TestIdSchema = z.object({ testId: z.string().min(1) });
 const TestResultRefSchema = z.object({ testId: z.string().min(1), resultId: z.string().min(1) });
 const TestTakeSchema = z.object({
   testId: z.string().min(1),
   answers: z.record(z.string(), z.unknown()),
 });
+// 74 — the adaptive-test inputs. Validated HERE, at the trust boundary; the renderer is never it.
+const AdaptiveRefSchema = z.object({
+  testId: z.string().min(1),
+  resultId: z.string().min(1),
+});
+const AdaptiveRoundSchema = AdaptiveRefSchema.extend({
+  round: z.number().int().min(1).max(20),
+});
+const AdaptiveBankPassSchema = AdaptiveRefSchema.extend({
+  marks: z.record(z.string(), z.enum(['love', 'never', 'notYet'])),
+});
+const AdaptiveSplitSchema = AdaptiveRefSchema.extend({
+  splits: z.record(
+    z.string(),
+    z.object({
+      hear: z.number().min(0).max(4).optional(),
+      say: z.number().min(0).max(4).optional(),
+    }),
+  ),
+});
+const AdaptiveScenarioInputSchema = AdaptiveRefSchema.extend({
+  context: z.enum(ADAPTIVE_CONTEXTS),
+});
+const AdaptiveTurnInputSchema = AdaptiveRefSchema.extend({
+  phase: z.string().min(1),
+  itemId: z.string().min(1),
+  text: z.string(),
+  answer: z.union([z.string(), z.number(), z.array(z.string()), z.record(z.string(), z.number())]),
+});
+const AdaptiveLexiconEditSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('rate'),
+    key: z.string().min(1),
+    hear: z.number().min(0).max(4).optional(),
+    say: z.number().min(0).max(4).optional(),
+  }),
+  z.object({
+    kind: z.literal('setState'),
+    key: z.string().min(1),
+    state: z.enum(['never', 'notYet']).nullable(),
+  }),
+  z.object({
+    kind: z.literal('addWord'),
+    text: z.string().min(1).max(200),
+    family: z.string().min(1),
+    wordKind: z.enum(['word', 'phrase']),
+  }),
+  z.object({
+    kind: z.literal('addBoundary'),
+    text: z.string().min(1).max(200),
+    boundaryKind: z.enum(['word', 'theme']),
+  }),
+]);
+
 const SessionSetStatusSchema = z.object({
   conversationId: z.string().min(1),
   status: SessionStatusSchema,
@@ -2023,6 +2153,76 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       models: BOOK_TASK_MODELS,
       personId,
       now: new Date(),
+    };
+  };
+
+  /**
+   * 74 §6 — the ONE gate every adaptive handler goes through: `tests.own`, the active person, and (for a
+   * sensitive instrument) the shared 18+ ack. Enforced here rather than in the UI, so a hand-crafted IPC call
+   * is refused exactly like a hidden button would be.
+   */
+  const adaptiveGate = async (
+    testId: string,
+  ): Promise<{
+    ctx: { fs: FileSystem; key: Uint8Array };
+    personId: string;
+    def: AdaptiveTestDefinition;
+  } | null> => {
+    const ctx = await host.vaultAndKey();
+    const personId = ctx ? await activePersonId() : null;
+    if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'tests.own'))) return null;
+    const def = getAdaptiveTest(testId);
+    if (!def) return null;
+    if (
+      def.adult &&
+      (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged !== true
+    ) {
+      return null;
+    }
+    return { ctx, personId, def };
+  };
+
+  /** How long before a profile is stale enough to invite a fresh look (74 §11). */
+  const PROFILE_STALE_DAYS = 90;
+
+  /** The one read the take screen + the report share. `costUsd` is admin-only, redacted here (06). */
+  const adaptiveState = async (gate: {
+    ctx: { fs: FileSystem; key: Uint8Array };
+    personId: string;
+    def: AdaptiveTestDefinition;
+  }): Promise<AdaptiveStateView> => {
+    const { fs, key } = gate.ctx;
+    const history = await listAdaptiveResults(fs, key, gate.personId, gate.def.id);
+    const draft = history.find((result) => result.status === 'draft') ?? null;
+    const latest = history.find((result) => result.status !== 'draft') ?? null;
+    const lexicon = await readLexicon(fs, key, gate.personId);
+    const showCost = await activePersonCan(fs, key, 'budgets.manage');
+    // The $ boundary is the BRIDGE, not the UI (the durable 06 rule). `TestResult` now carries `costUsd`, so
+    // redacting only the view's own field would ship the figure inside `draft`/`latest`/`history`.
+    const strip = (result: TestResult | null): TestResult | null => {
+      if (!result || showCost) return result;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { costUsd, ...rest } = result;
+      return rest;
+    };
+    const ageDays = latest
+      ? (Date.now() - new Date(latest.takenAt).getTime()) / (24 * 60 * 60 * 1000)
+      : 0;
+    return {
+      testId: gate.def.id,
+      title: gate.def.title,
+      blurb: gate.def.blurb,
+      framing: gate.def.framing,
+      estimatedMinutes: gate.def.estimatedMinutes,
+      draft: strip(draft),
+      latest: strip(latest),
+      history: history
+        .filter((result) => result.status !== 'draft')
+        .map((result) => strip(result)!),
+      lexicon,
+      ambiguitiesLeft: openAmbiguities(lexicon).length,
+      staleForRetake: latest !== null && ageDays >= PROFILE_STALE_DAYS,
+      ...(showCost && latest?.costUsd !== undefined ? { costUsd: latest.costUsd } : {}),
     };
   };
 
@@ -3729,7 +3929,30 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         return { tests: [], adultAcknowledged: false };
       }
       const ack = (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
-      return { tests: listTestSummaries(ack), adultAcknowledged: ack };
+      // 74 — the adaptive instruments sit in the same hub, filtered by the same ack. They have no fixed item
+      // list, so `itemCount` is the bank's size and `estimatedMinutes` is an estimate, not a count.
+      const adaptive: TestSummary[] = ADAPTIVE_TESTS.filter((def) => ack || !def.adult).map(
+        (def) => ({
+          id: def.id,
+          kind: 'adaptive' as const,
+          group: def.group,
+          title: def.title,
+          instrument: def.instrument,
+          blurb: def.blurb,
+          framing: def.framing,
+          estimatedMinutes: def.estimatedMinutes,
+          itemCount: def.bank.entries.length,
+          adult: def.adult,
+          sensitive: def.sensitive,
+          subscales: def.spine.map((dimension) => ({
+            key: dimension.key,
+            label: dimension.label,
+            signed: false,
+          })),
+          wellbeing: false,
+        }),
+      );
+      return { tests: [...listTestSummaries(ack), ...adaptive], adultAcknowledged: ack };
     },
     testsGet: async (input): Promise<TestForm | null> => {
       const { testId } = TestIdSchema.parse(input);
@@ -3774,14 +3997,21 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'tests.own'))) return [];
-      const def = getTest(testId);
+      // 74: an adaptive id resolves against the adaptive catalog, or its results would skip the 18+ gate.
+      const def = getTest(testId) ?? getAdaptiveTest(testId);
       if (
         def?.adult &&
         (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged !== true
       ) {
         return [];
       }
-      return listResults(ctx.fs, ctx.key, personId, testId);
+      const results = await listResults(ctx.fs, ctx.key, personId, testId);
+      if (await activePersonCan(ctx.fs, ctx.key, 'budgets.manage')) return results;
+      return results.map((result) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { costUsd, ...rest } = result;
+        return rest;
+      });
     },
     testsNarrate: async (input): Promise<TestNarrateResponse> => {
       const { testId, resultId } = TestResultRefSchema.parse(input);
@@ -3833,7 +4063,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         return { tests: [], adultAcknowledged: false };
       }
       await acknowledgeAdult(ctx.fs, ctx.key, personId);
-      return { tests: listTestSummaries(true), adultAcknowledged: true };
+      // The SAME assembly as `testsList` — building a second list here is how the adaptive instruments went
+      // missing from the hub the moment someone acknowledged (caught by the E2E, not by a unit test).
+      return { tests: testCatalogFor(true), adultAcknowledged: true };
     },
     testsDeleteResult: async (input): Promise<TestResult[]> => {
       const { testId, resultId } = TestResultRefSchema.parse(input);
@@ -3851,6 +4083,265 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'tests.own'))) return;
       await deleteAllResults(ctx.fs, ctx.key, personId, testId);
+    },
+    // --- Adaptive tests (74 §6). Same trust boundary as every other tests handler: `tests.own` +
+    // active-person scope + the 18+ ack, all re-checked HERE rather than in the UI. The bank and the scoring
+    // are free; only the four `adaptive*` AI phases spend, and each is budget-gated inside `runClaude`. ---
+    testsBank: async (input): Promise<AdaptiveBankView | null> => {
+      const { testId } = TestIdSchema.parse(input);
+      const gate = await adaptiveGate(testId);
+      if (!gate) return null;
+      return {
+        testId,
+        families: gate.def.bank.families.map((family) => ({
+          id: family.id,
+          label: family.label,
+          kind: family.kind,
+          ...(family.note !== undefined ? { note: family.note } : {}),
+        })),
+        entries: gate.def.bank.entries.map((entry) => ({
+          key: entry.key,
+          text: entry.text,
+          kind: entry.kind,
+          family: entry.family,
+          tier: entry.tier,
+          directions: entry.directions,
+        })),
+      };
+    },
+    testsAdaptiveState: async (input): Promise<AdaptiveStateView | null> => {
+      const { testId } = TestIdSchema.parse(input);
+      const gate = await adaptiveGate(testId);
+      return gate ? adaptiveState(gate) : null;
+    },
+    testsAdaptiveStart: async (input): Promise<AdaptiveStateView | null> => {
+      const { testId } = TestIdSchema.parse(input);
+      const gate = await adaptiveGate(testId);
+      if (!gate) return null;
+      await startAdaptiveTake(gate.ctx.fs, gate.ctx.key, gate.def, gate.personId, new Date());
+      return adaptiveState(gate);
+    },
+    testsAdaptiveBank: async (input): Promise<AdaptiveStateView | null> => {
+      const parsed = AdaptiveBankPassSchema.parse(input);
+      const gate = await adaptiveGate(parsed.testId);
+      if (!gate) return null;
+      await recordBankPass(
+        gate.ctx.fs,
+        gate.ctx.key,
+        gate.def,
+        { personId: gate.personId, resultId: parsed.resultId, marks: parsed.marks },
+        new Date(),
+      );
+      return adaptiveState(gate);
+    },
+    testsAdaptiveSplit: async (input): Promise<AdaptiveStateView | null> => {
+      const parsed = AdaptiveSplitSchema.parse(input);
+      const gate = await adaptiveGate(parsed.testId);
+      if (!gate) return null;
+      // `exactOptionalPropertyTypes`: Zod's `.optional()` yields `| undefined`, which is not the same type as
+      // an absent key — rebuild the map with only the keys that were actually sent.
+      const splits: Record<string, { hear?: number; say?: number }> = {};
+      for (const [key, value] of Object.entries(parsed.splits)) {
+        splits[key] = {
+          ...(value.hear !== undefined ? { hear: value.hear } : {}),
+          ...(value.say !== undefined ? { say: value.say } : {}),
+        };
+      }
+      await recordSplitPass(
+        gate.ctx.fs,
+        gate.ctx.key,
+        { personId: gate.personId, resultId: parsed.resultId, splits },
+        new Date(),
+      );
+      return adaptiveState(gate);
+    },
+    testsAdaptiveLines: async (input): Promise<AdaptivePhaseView> => {
+      const parsed = AdaptiveRoundSchema.parse(input);
+      const gate = await adaptiveGate(parsed.testId);
+      if (!gate) return { ok: false, degraded: true, message: 'Not available.' };
+      const deps = await aiDeps('tests.own');
+      if (!deps)
+        return { ok: false, degraded: true, message: 'Turn on AI in Settings to use this.' };
+      const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
+      const out = await runLinesPhase(deps, lexicon, parsed.round);
+      return {
+        ok: out.ok,
+        ...(out.value ? { lines: out.value } : {}),
+        degraded: out.degraded,
+      };
+    },
+    testsAdaptiveProbe: async (input): Promise<AdaptiveProbeView> => {
+      const parsed = AdaptiveRefSchema.parse(input);
+      const gate = await adaptiveGate(parsed.testId);
+      if (!gate) return { ok: false, done: true, degraded: true };
+      const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
+      const asked = new Set(
+        (
+          (await getAdaptiveResult(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId))
+            ?.turns ?? []
+        )
+          .filter((turn) => turn.phase === 'probe')
+          .map((turn) => turn.item.id),
+      );
+      // The confidence rule: probe while the DATA leaves something unresolved, and stop when it doesn't.
+      // `asked` is keyed on the AMBIGUITY id (returned below and stamped by the renderer) rather than on the
+      // model's prose, or the same ambiguity comes back forever and the take never finishes.
+      const next = openAmbiguities(lexicon).find((ambiguity) => !asked.has(ambiguity.id));
+      // A ceiling as well as the rule: a data-driven loop should converge, and if it ever doesn't, a person
+      // must not be billed a call per tap to find out (74 §5.3 — a backstop, not a depth cap).
+      if (!next || asked.size >= MAX_ADAPTIVE_PROBES) {
+        return { ok: true, done: true, degraded: false };
+      }
+      const deps = await aiDeps('tests.own');
+      if (!deps) return { ok: false, done: false, degraded: true };
+      const out = await runProbePhase(deps, lexicon, next);
+      return {
+        ok: out.ok,
+        ...(out.value ? { question: out.value } : {}),
+        ambiguityId: next.id,
+        done: false,
+        degraded: out.degraded,
+      };
+    },
+    testsAdaptiveScenario: async (input): Promise<AdaptiveScenarioView> => {
+      const parsed = AdaptiveScenarioInputSchema.parse(input);
+      const gate = await adaptiveGate(parsed.testId);
+      if (!gate) return { ok: false, context: parsed.context, degraded: true };
+      const deps = await aiDeps('tests.own');
+      if (!deps) return { ok: false, context: parsed.context, degraded: true };
+      const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
+      const out = await runScenarioPhase(deps, lexicon, parsed.context);
+      return {
+        ok: out.ok,
+        context: parsed.context,
+        ...(out.value ? { scene: out.value.scene, options: out.value.options } : {}),
+        degraded: out.degraded,
+      };
+    },
+    testsAdaptiveTurn: async (input): Promise<void> => {
+      const parsed = AdaptiveTurnInputSchema.parse(input);
+      const gate = await adaptiveGate(parsed.testId);
+      if (!gate) return;
+      await stampTurn(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, {
+        phase: parsed.phase,
+        item: { id: parsed.itemId, pack: parsed.phase, text: parsed.text, options: [] },
+        answer: parsed.answer,
+        at: new Date().toISOString(),
+      });
+    },
+    testsAdaptiveSynthesize: async (input): Promise<AdaptiveStateView | null> => {
+      const parsed = AdaptiveRefSchema.parse(input);
+      const gate = await adaptiveGate(parsed.testId);
+      if (!gate) return null;
+      const { fs, key } = gate.ctx;
+      const draft = await getAdaptiveResult(fs, key, gate.personId, parsed.resultId);
+      const lexicon = await readLexicon(fs, key, gate.personId);
+      const deps = await aiDeps('tests.own');
+      let synthesized: { profile?: AdaptiveProfile; narrative?: string; costUsd: number } = {
+        costUsd: 0,
+      };
+      if (deps) {
+        // §8.4's carve-out, enforced in code rather than asked of the model: a turn that reads as a
+        // real-world disclosure never enters the erotic synthesis, so nothing derived from it can reach the
+        // profile — or, through the profile, a partner's prompt.
+        const transcript = (draft?.turns ?? [])
+          .filter((turn) => !(typeof turn.answer === 'string' && readsAsDistress(turn.answer)))
+          .map((turn) => `${turn.phase}: ${turn.item.text} → ${JSON.stringify(turn.answer)}`)
+          .join('\n');
+        const out = await runSynthesis(deps, lexicon, transcript);
+        if (out.value) {
+          synthesized = {
+            profile: out.value.profile,
+            narrative: out.value.narrative,
+            costUsd: out.costUsd,
+          };
+        }
+      }
+      // A degraded synthesis still COMPLETES the take — the deterministic profile is honest on its own.
+      await completeAdaptiveTake(
+        fs,
+        key,
+        gate.def,
+        {
+          personId: gate.personId,
+          resultId: parsed.resultId,
+          ...(synthesized.profile ? { profile: synthesized.profile } : {}),
+          ...(synthesized.narrative ? { narrative: synthesized.narrative } : {}),
+          costUsd: synthesized.costUsd,
+        },
+        new Date(),
+      );
+      return adaptiveState(gate);
+    },
+    testsAdaptiveDeleteAll: async (input): Promise<AdaptiveStateView | null> => {
+      const { testId } = TestIdSchema.parse(input);
+      const gate = await adaptiveGate(testId);
+      if (!gate) return null;
+      await deleteAllAdaptiveResults(
+        gate.ctx.fs,
+        gate.ctx.key,
+        gate.def,
+        gate.personId,
+        new Date(),
+      );
+      return adaptiveState(gate);
+    },
+    testsAdaptiveAbandon: async (input): Promise<void> => {
+      const parsed = AdaptiveRefSchema.parse(input);
+      const gate = await adaptiveGate(parsed.testId);
+      if (!gate) return;
+      await abandonAdaptiveTake(gate.ctx.fs, gate.personId, parsed.resultId);
+    },
+    testsLexicon: async (): Promise<EroticLexicon | null> => {
+      // The SAME gate as every other adaptive handler, the 18+ ack included (§6) — these two checked only
+      // `tests.own`, which failed open relative to "18+-withheld in the bridge".
+      const gate = await adaptiveGate(DIRTY_TALK.id);
+      if (!gate) return null;
+      // Their OWN data is always fully visible to them (74 §8.4) — the relevance gate governs what reaches a
+      // PROMPT, never what a person can read about themselves.
+      return readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
+    },
+    testsLexiconEdit: async (input): Promise<EroticLexicon | null> => {
+      const edit = AdaptiveLexiconEditSchema.parse(input);
+      const gate = await adaptiveGate(DIRTY_TALK.id);
+      if (!gate) return null;
+      const ctx = gate.ctx;
+      const personId = gate.personId;
+      const now = new Date();
+      let lexicon = await readLexicon(ctx.fs, ctx.key, personId, now);
+      switch (edit.kind) {
+        case 'rate':
+          lexicon = applyDirections(
+            lexicon,
+            {
+              [edit.key]: {
+                ...(edit.hear !== undefined ? { hear: edit.hear } : {}),
+                ...(edit.say !== undefined ? { say: edit.say } : {}),
+              },
+            },
+            now,
+          );
+          break;
+        case 'setState':
+          lexicon =
+            edit.state === null
+              ? clearState(lexicon, edit.key, now)
+              : applyBankMarks(lexicon, DIRTY_TALK_BANK, { [edit.key]: edit.state }, 'edit', now);
+          break;
+        case 'addWord':
+          lexicon = addCustomEntry(
+            lexicon,
+            { text: edit.text, family: edit.family, kind: edit.wordKind },
+            'edit',
+            now,
+          );
+          break;
+        case 'addBoundary':
+          lexicon = addBoundary(lexicon, { text: edit.text, kind: edit.boundaryKind }, now);
+          break;
+      }
+      await writeLexicon(ctx.fs, ctx.key, lexicon);
+      return lexicon;
     },
     usageSessionCosts: async (): Promise<Record<string, SessionCost>> => {
       const ctx = await host.vaultAndKey();

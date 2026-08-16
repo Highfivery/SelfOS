@@ -19,6 +19,9 @@ import {
 import { getBookType, resolveSpine, resolveTypeOptions, type BookType } from './bookTypes';
 import { resolvePersonOptionNames } from './castRegister';
 import { CHAPTER_CORPUS_TOKEN_BUDGET, budgetCorpus, sliceCorpusForChapter } from './corpusBudget';
+import type { FileSystem } from '../host';
+import { readLexicon } from '../tests/adaptive/lexicon';
+import { buildOwnLexiconBlock } from '../tests/adaptive/steer';
 import { buildStoryCorpus, type CorpusItem, type StoryCorpus } from './storyCorpus';
 import { critiqueChapter, planChapter, reviseChapter } from './storyCraft';
 import { computeSourceSignature } from './storyFreshness';
@@ -128,6 +131,24 @@ export type FoundationsResult =
  * files. Ids and order are minted here (never trusted from the model). Works even on a thin corpus (§7): the
  * outline just proposes fewer, broader chapters.
  */
+/**
+ * 74 §5.8 — the subject's own erotic vocabulary for an ADULT-GATED book, or `undefined`.
+ *
+ * Deliberately narrow: only an adult-gated type gets it, only the person's own lexicon is read, and an absent
+ * or empty lexicon returns nothing so the prompt is byte-unchanged. A pair-owned book (`ownerRef` is a
+ * pairKey, not a person) simply has no lexicon to read, which is the correct answer rather than a special case.
+ */
+async function subjectLexiconBlock(
+  fs: FileSystem,
+  key: Uint8Array,
+  bookType: BookType,
+  personId: string,
+): Promise<string | undefined> {
+  if (bookType.gates?.adult !== true) return undefined;
+  const block = buildOwnLexiconBlock(await readLexicon(fs, key, personId));
+  return block === '' ? undefined : block;
+}
+
 export async function generateFoundations(
   deps: AiDeps,
   opts: { bookId: string; bookType: BookType; config: BookConfig; exclusions?: ExclusionItem[] },
@@ -326,6 +347,8 @@ export async function generateChapter(
     corpus.personName,
     renderTaggedCorpus(slice, tagged),
     await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
+    // 74 §5.8 — their own vocabulary, for an adult-gated book. Additive: absent ⇒ the prompt is unchanged.
+    await subjectLexiconBlock(deps.fs, deps.key, bookType, deps.personId),
   );
 
   // Pass 1 of the craft loop (72 §5.3) — decide what this chapter IS before writing a word. Optional by
@@ -648,6 +671,7 @@ export async function applyMarkup(
     corpus.personName,
     undefined,
     await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
+    await subjectLexiconBlock(deps.fs, deps.key, bookType, deps.personId),
   );
   const user = buildRevisionUserMessage(source, tagged, {
     chapter: existing,

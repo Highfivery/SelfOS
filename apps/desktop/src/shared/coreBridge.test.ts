@@ -7579,6 +7579,102 @@ describe('update awareness (36)', () => {
       expect(await bridge.testsGet({ testId: 'ecr-r' })).toBeNull();
       expect(await bridge.testsTake({ testId: 'ecr-r', answers: {} })).toBeNull();
     });
+
+    describe('adaptive tests — Dirty Talk (74 §6)', () => {
+      it('withholds the whole adaptive surface until the 18+ ack, then runs a take end to end', async () => {
+        const { bridge, ownerId, host } = await freshOwner();
+
+        // Every adaptive entry point is withheld in the BRIDGE, not the UI (74 §6).
+        expect(await bridge.testsBank({ testId: 'dirty-talk' })).toBeNull();
+        expect(await bridge.testsAdaptiveState({ testId: 'dirty-talk' })).toBeNull();
+        expect(await bridge.testsAdaptiveStart({ testId: 'dirty-talk' })).toBeNull();
+
+        await bridge.testsAcknowledgeAdult();
+
+        const bank = await bridge.testsBank({ testId: 'dirty-talk' });
+        expect(bank?.entries.length).toBeGreaterThan(600);
+        expect(bank?.families.length).toBeGreaterThanOrEqual(36);
+
+        const started = await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
+        const resultId = started?.draft?.id;
+        expect(resultId).toBeTruthy();
+
+        // Pass 1 — mark what lands. Free: no AI, no budget.
+        const marked = await bridge.testsAdaptiveBank({
+          testId: 'dirty-talk',
+          resultId: resultId!,
+          marks: {
+            'names-power:good-girl': 'love',
+            'claiming:mine': 'love',
+            'names-degrading:whore': 'never',
+          },
+        });
+        expect(marked?.lexicon.boundaries.map((b) => b.text)).toEqual(['whore']);
+
+        // Pass 2 — the hear/say split.
+        await bridge.testsAdaptiveSplit({
+          testId: 'dirty-talk',
+          resultId: resultId!,
+          splits: { 'names-power:good-girl': { hear: 4, say: 0 } },
+        });
+
+        // Synthesize + complete. AI is off in this host, so it degrades — and STILL completes.
+        const done = await bridge.testsAdaptiveSynthesize({
+          testId: 'dirty-talk',
+          resultId: resultId!,
+        });
+        expect(done?.latest?.status).toBe('complete');
+        expect(done?.draft).toBeNull();
+
+        // The lexicon is encrypted on disk, and the derived Insight feeds the taker's OWN intimacy context.
+        const { fs, key } = (await host.host.vaultAndKey())!;
+        const raw = await fs.read(`people/${ownerId}/tests/lexicon.enc`);
+        expect(new TextDecoder().decode(raw!)).not.toContain('good girl');
+        const insights = await listInsightsForPerson(fs, key, ownerId);
+        const insight = insights.find((i) => i.provenance?.testId === 'dirty-talk');
+        expect(insight?.facts.every((f) => f.lifeArea === 'Intimacy')).toBe(true);
+        // A boundary is NEVER written into the Insight — suppression is structural (74 §5.5).
+        expect(JSON.stringify(insight)).not.toContain('whore');
+      });
+
+      it('always shows a person ALL of their own lexicon, and lets them edit it', async () => {
+        const { bridge } = await freshOwner();
+        await bridge.testsAcknowledgeAdult();
+        const started = await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
+        await bridge.testsAdaptiveBank({
+          testId: 'dirty-talk',
+          resultId: started!.draft!.id,
+          marks: { 'names-degrading:whore': 'never' },
+        });
+
+        expect((await bridge.testsLexicon())?.boundaries).toHaveLength(1);
+        // Only an explicit act by the person lifts a boundary (74 §3.2).
+        const cleared = await bridge.testsLexiconEdit({
+          kind: 'setState',
+          key: 'names-degrading:whore',
+          state: null,
+        });
+        expect(cleared?.boundaries).toHaveLength(0);
+        // Their own word, in their own words.
+        const added = await bridge.testsLexiconEdit({
+          kind: 'addWord',
+          text: 'wreck me',
+          family: 'demands-receiving',
+          wordKind: 'phrase',
+        });
+        expect(added?.entries.some((e) => e.text === 'wreck me')).toBe(true);
+      });
+
+      it('denies the adaptive surface to a person without tests.own (Guest)', async () => {
+        const { bridge } = await freshOwner();
+        const guest = await bridge.peopleSave({ displayName: 'Guest', isSubject: false, tags: [] });
+        await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
+        await bridge.sessionSetActive({ personId: guest.id });
+        expect(await bridge.testsBank({ testId: 'dirty-talk' })).toBeNull();
+        expect(await bridge.testsAdaptiveStart({ testId: 'dirty-talk' })).toBeNull();
+        expect(await bridge.testsLexicon()).toBeNull();
+      });
+    });
   });
 });
 

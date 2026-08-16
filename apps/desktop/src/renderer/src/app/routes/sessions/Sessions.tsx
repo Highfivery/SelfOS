@@ -105,12 +105,19 @@ export function Sessions(): JSX.Element {
   // Deep-link from Memory's provenance link (20-memory-dashboard §3.3): open the referenced session.
   const location = useLocation();
   useEffect(() => {
-    const focus = (location.state as { focusConversationId?: string } | null)?.focusConversationId;
-    if (focus) {
-      void open(focus);
+    const state = location.state as { focusConversationId?: string; startGuideId?: string } | null;
+    if (state?.focusConversationId) {
+      void open(state.focusConversationId);
+      setView('thread');
+      return;
+    }
+    // 74 §3.5 — the report's "Practise this" starts the guided session directly, with the goal seeded in the
+    // composer, so it never opens by asking what they already told us.
+    if (state?.startGuideId) {
+      void startGuided(state.startGuideId);
       setView('thread');
     }
-  }, [location.state, open]);
+  }, [location.state, open, startGuided]);
   const startNew = (): void => {
     newConversation();
     setView('thread');

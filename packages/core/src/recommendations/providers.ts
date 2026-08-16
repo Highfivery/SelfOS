@@ -335,6 +335,40 @@ const intimacyExercise: RecommendationProvider = {
 };
 
 /**
+ * 74 §11 — a gentle invitation to refresh the Dirty Talk profile once it has gone stale.
+ *
+ * 90 days on purpose: it is the same horizon `DORMANT_DAYS` uses for "when do we reconsider this ground", so
+ * the model has ONE answer for that question. It follows the wellbeing check-in's rules exactly (51 §8) — a
+ * soft invitation, dismissible, NEVER escalating, never a schedule — and it never fires for someone who has
+ * never taken it. 18+-gated, so it can't appear for anyone who hasn't opted into adult content.
+ */
+const PROFILE_STALE_DAYS = 90;
+
+const dirtyTalkRetake: RecommendationProvider = {
+  id: 'dirty-talk-retake',
+  domain: 'intimacy',
+  capabilityGate: 'tests.own',
+  adultGate: true,
+  relevance: (s): RecommendationCandidate | null => {
+    const taken = (s.testResults ?? []).find((r) => r.id === 'dirty-talk');
+    if (!taken) return null;
+    const days = (Date.now() - new Date(taken.takenAt).getTime()) / (24 * 60 * 60 * 1000);
+    if (!Number.isFinite(days) || days < PROFILE_STALE_DAYS) return null;
+    return {
+      id: 'dirty-talk-retake',
+      label: 'Worth a fresh look?',
+      reason:
+        'What you want changes. Your dirty-talk profile is a few months old now — only if it\u2019d be useful.',
+      route: '/tests/dirty-talk/take',
+      score: 30,
+      // Keyed on the take it is nudging about, so a dismissal never re-nags the SAME stale profile but a
+      // fresh take (then 90 days later) can surface again. Never an escalating schedule.
+      dismissKey: `dirty-talk-retake:${taken.takenAt}`,
+    };
+  },
+};
+
+/**
  * Together (58 §3.12): a pending invitation to answer, an active session where it's the viewer's turn, or a
  * pair gone quiet >14 days since their last completed session. Capability-gated (`together.own`) + only
  * relevant with a live partner edge (the summaries the nudge derives from only exist with one). Relational
@@ -480,6 +514,8 @@ export const BUILT_IN_RECOMMENDATION_PROVIDERS: readonly RecommendationProvider[
   takeATest,
   wellbeingCheckin,
   intimacyExercise,
+  // 74 §11: the dirty-talk profile goes stale at 90 days and invites a fresh look, once, gently.
+  dirtyTalkRetake,
   // Together (58 §3.12): couples-session presence on Home.
   togetherSession,
   // Together follow-through (spec 61): the inline Pulse check-in callout.

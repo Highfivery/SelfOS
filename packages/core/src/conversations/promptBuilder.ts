@@ -55,6 +55,10 @@ export async function buildSystemPrompt(
   // 52-challenge-sessions §8.3 — the per-person 18+ ack. The challenge-coach's EXPLICIT sexual register is
   // appended ONLY when this is true; un-acked, the addendum's gated stance steers away from sexual content.
   adultAllowed?: boolean,
+  // 74 §5.8 — the erotic lexicon. `lexicon` is the person's OWN language; `partnerSteer`/`partnerSuppression`
+  // are their partner's, assembled by the host (which owns the relationship + both acks). All three are
+  // appended AFTER context so the boundary always leads, and only when the 18+ ack is held.
+  lexiconBlocks?: { own?: string; partnerSteer?: string; partnerSuppression?: string },
 ): Promise<string> {
   const exercise = guideId ? getExercise(guideId) : undefined;
   // A guided session foregrounds its group's life-areas in the (pinned) portrait selection (28 §4.4); a
@@ -87,6 +91,15 @@ export async function buildSystemPrompt(
     const raise = goalRaiseInstruction(goalRaise);
     if (raise) parts.push(raise);
   }
+  // 74 §5.8 — their own erotic language, then (silently) what lands for their partner, then their
+  // partner's hard nos as a negative constraint. The suppression runs even with no steer: it can only
+  // ever PREVENT a suggestion, which needs no consent (74 §8.4).
+  if (adultAllowed && lexiconBlocks) {
+    if (lexiconBlocks.own) parts.push(lexiconBlocks.own);
+    if (lexiconBlocks.partnerSteer) parts.push(lexiconBlocks.partnerSteer);
+    if (lexiconBlocks.partnerSuppression) parts.push(lexiconBlocks.partnerSuppression);
+  }
+
   parts.push(FORMATTING);
   return parts.filter(Boolean).join('\n\n');
 }

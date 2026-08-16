@@ -144,3 +144,32 @@ describe('Slice-B recommendation providers (50/51/48)', () => {
     });
   });
 });
+
+describe('dirty-talk retake (74 §11)', () => {
+  const provider = BUILT_IN_RECOMMENDATION_PROVIDERS.find((p) => p.id === 'dirty-talk-retake')!;
+  // Built the way Home builds it: `instrument` is the publisher, `id` is the test (74 — matching on
+  // `instrument` is why this provider could never fire).
+  const takenDaysAgo = (days: number) => ({
+    id: 'dirty-talk',
+    instrument: 'SelfOS',
+    group: 'intimacy',
+    takenAt: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
+  });
+
+  it('never fires for someone who has never taken it', () => {
+    expect(provider.relevance(state({ testResults: [] }))).toBeNull();
+  });
+
+  it('stays quiet inside the 90-day window, then invites once', () => {
+    expect(provider.relevance(state({ testResults: [takenDaysAgo(30)] }))).toBeNull();
+    const due = provider.relevance(state({ testResults: [takenDaysAgo(120)] }));
+    expect(due?.route).toBe('/tests/dirty-talk/take');
+    // Keyed on the take, so a dismissal never re-nags the same stale profile.
+    expect(due?.dismissKey).toContain('dirty-talk-retake:');
+  });
+
+  it('is 18+-gated, so it can never surface for someone who has not opted in', () => {
+    expect(provider.adultGate).toBe(true);
+    expect(provider.capabilityGate).toBe('tests.own');
+  });
+});

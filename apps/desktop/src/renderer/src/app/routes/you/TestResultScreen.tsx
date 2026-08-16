@@ -25,7 +25,7 @@ function formatDate(iso: string): string {
 }
 
 /**
- * 50-self-assessments §3.3 — the result profile screen (`/you/:testId`). A non-diagnostic preamble, the
+ * 50-self-assessments §3.3 — the result profile screen (`/tests/:testId`). A non-diagnostic preamble, the
  * subscale bars, optional retake trends (per-subscale `TrendLine`), an OPTIONAL user-triggered AI narrative
  * (metered; the deterministic profile always renders without it), a history of prior dated results, and
  * Manage (Retake / Delete). The crisis footer + not-medical line are present throughout (§8).
@@ -81,13 +81,13 @@ export function TestResultScreen(): JSX.Element {
       <div className={styles.page}>
         <div className={styles.inner}>
           <Stack gap={4}>
-            <button type="button" className={result.back} onClick={() => navigate('/you')}>
+            <button type="button" className={result.back} onClick={() => navigate('/tests')}>
               ← You
             </button>
             <Heading level={1}>{test.title}</Heading>
             <Banner tone="info">You haven’t taken this yet.</Banner>
             <div>
-              <Button variant="primary" onClick={() => navigate(`/you/${testId}/take`)}>
+              <Button variant="primary" onClick={() => navigate(`/tests/${testId}/take`)}>
                 Take it
               </Button>
             </div>
@@ -117,7 +117,7 @@ export function TestResultScreen(): JSX.Element {
     <div className={styles.page}>
       <div className={styles.inner}>
         <Stack gap={5}>
-          <button type="button" className={result.back} onClick={() => navigate('/you')}>
+          <button type="button" className={result.back} onClick={() => navigate('/tests')}>
             ← You
           </button>
 
@@ -257,7 +257,7 @@ export function TestResultScreen(): JSX.Element {
           ) : null}
 
           <section className={result.manage}>
-            <Button variant="primary" onClick={() => navigate(`/you/${testId}/take`)}>
+            <Button variant="primary" onClick={() => navigate(`/tests/${testId}/take`)}>
               {test.wellbeing ? 'Check in again' : 'Retake'}
             </Button>
             <Button
@@ -275,7 +275,7 @@ export function TestResultScreen(): JSX.Element {
                 variant="danger"
                 onClick={() => {
                   void deleteAll(testId);
-                  navigate('/you');
+                  navigate('/tests');
                 }}
               >
                 Confirm — delete all

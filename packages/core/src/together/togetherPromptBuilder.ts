@@ -3,6 +3,7 @@ import type { ContextTopic, TogetherSession } from '../schemas';
 import { buildContext, getPerson } from '../people';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { buildPartnerWishGuidance } from '../questionnaires/partnerWishes';
+import { buildCouplesLexiconBlock } from '../tests/adaptive/steer';
 import { buildGroundingPack } from './groundingPack';
 import { listStates } from './togetherService';
 import { getTogetherGuide, togetherGuideLifeAreas } from './togetherCatalog';
@@ -255,6 +256,15 @@ export async function buildTogetherSystemPrompt(
     if (guide.kind === 'structured' && guide.steps && guide.steps.length > 0) {
       parts.push(buildStepInstruction(guide.steps));
     }
+  }
+
+  // 74 §5.8 — the language that lands for this pair, MERGED and NAME-FREE. Both partners read this
+  // conversation, so a per-partner block with a name in front of it is one person's file read aloud (their
+  // goal list included, which is the shame material). The block carries the UNION of both hard-no lists, so a
+  // limit either of them has drawn is never suggested to either.
+  if (options.allAdultAcked) {
+    const couples = await buildCouplesLexiconBlock(fs, key, session.participantIds);
+    if (couples) parts.push(couples);
   }
 
   // The explicit register (Phase F) — appended ONLY when BOTH partners have acknowledged adult content

@@ -80,10 +80,10 @@ function ProfileCard({ test, results }: { test: TestSummary; results: TestResult
           </Text>
         ) : null}
         <div className={styles.cardActions}>
-          <Button variant="secondary" onClick={() => navigate(`/you/${test.id}`)}>
+          <Button variant="secondary" onClick={() => navigate(`/tests/${test.id}`)}>
             Open
           </Button>
-          <Button variant="ghost" onClick={() => navigate(`/you/${test.id}/take`)}>
+          <Button variant="ghost" onClick={() => navigate(`/tests/${test.id}/take`)}>
             {test.wellbeing ? 'Check in again' : 'Retake'}
           </Button>
         </div>
@@ -106,14 +106,16 @@ function CatalogCard({ test }: { test: TestSummary }): JSX.Element {
           {test.blurb}
         </Text>
         <Text size="sm" tone="secondary">
-          {test.itemCount} questions · about {test.estimatedMinutes} min
+          {test.kind === 'adaptive'
+            ? `About ${test.estimatedMinutes} min · adapts as you go`
+            : `${test.itemCount} questions · about ${test.estimatedMinutes} min`}
         </Text>
         <Text size="sm" tone="tertiary" className={styles.framing}>
           {test.framing}
         </Text>
         <div className={styles.cardActions}>
-          <Button variant="primary" onClick={() => navigate(`/you/${test.id}/take`)}>
-            {test.wellbeing ? 'Check in' : 'Take'}
+          <Button variant="primary" onClick={() => navigate(`/tests/${test.id}/take`)}>
+            {test.wellbeing ? 'Check in' : test.kind === 'adaptive' ? 'Start' : 'Take'}
           </Button>
         </div>
       </Stack>

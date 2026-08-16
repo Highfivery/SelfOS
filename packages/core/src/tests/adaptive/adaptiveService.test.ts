@@ -1,0 +1,210 @@
+import { describe, expect, it } from 'vitest';
+
+import { memFileSystem } from '../../host/memFileSystem';
+import { readLedger } from '../../questionnaires/askLedger';
+import { listAllInsights, summarizeForContext } from '../../insights/insightStore';
+import { readLexicon } from './lexicon';
+import { DIRTY_TALK } from './instruments/dirtyTalk';
+import {
+  abandonAdaptiveTake,
+  completeAdaptiveTake,
+  deleteAdaptiveResult,
+  latestCompleteResult,
+  listAdaptiveResults,
+  openDraft,
+  recordBankPass,
+  recordSplitPass,
+  startAdaptiveTake,
+} from './adaptiveService';
+
+const NOW = new Date('2026-08-16T12:00:00.000Z');
+const LATER = new Date('2026-11-20T12:00:00.000Z');
+const KEY = new Uint8Array(32).fill(9);
+const P = 'angel';
+
+const GOOD_GIRL = 'names-power:good-girl';
+const MINE = 'claiming:mine';
+const WHORE = 'names-degrading:whore';
+const CUNT = 'anatomy-her:cunt';
+
+async function fullTake(fs = memFileSystem(), now = NOW) {
+  const draft = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, now);
+  await recordBankPass(
+    fs,
+    KEY,
+    DIRTY_TALK,
+    {
+      personId: P,
+      resultId: draft.id,
+      marks: { [GOOD_GIRL]: 'love', [MINE]: 'love', [WHORE]: 'never', [CUNT]: 'notYet' },
+    },
+    now,
+  );
+  await recordSplitPass(
+    fs,
+    KEY,
+    {
+      personId: P,
+      resultId: draft.id,
+      splits: { [GOOD_GIRL]: { hear: 4, say: 0 }, [MINE]: { hear: 4, say: 3 } },
+    },
+    now,
+  );
+  const result = await completeAdaptiveTake(
+    fs,
+    KEY,
+    DIRTY_TALK,
+    {
+      personId: P,
+      resultId: draft.id,
+      profile: {
+        registers: { claiming: 0.9, degradation: 0.1 },
+        contexts: { during: { heat: 0.9 }, buildUp: { heat: 0.4, note: 'teasing only' } },
+        themes: ['being claimed, not degraded'],
+        wantsToSay: [],
+        voice: 'low, close, certain. not loud.',
+      },
+      narrative: 'You want to be claimed, not degraded.',
+      costUsd: 0.21,
+    },
+    now,
+  );
+  return { fs, draft, result };
+}
+
+describe('the adaptive take (74 §5)', () => {
+  it('runs the whole deterministic path with no AI: bank → split → a scored, complete result', async () => {
+    const { result } = await fullTake();
+    expect(result?.status).toBe('complete');
+    expect(result?.kind).toBe('adaptive');
+    // Scored on the FIXED spine, so a retake compares.
+    const byKey = new Map((result?.scores ?? []).map((s) => [s.key, s.normalized]));
+    expect(byKey.get('dirtytalk.claiming')).toBeGreaterThan(0.7);
+    expect(byKey.get('dirtytalk.degradation')).toBe(0);
+    // Loves hearing it, can't say it → the say-confidence gap is real and low.
+    expect(byKey.get('dirtytalk.say-confidence')).toBeLessThan(0.5);
+  });
+
+  it('persists what was ASKED, not just what came back', async () => {
+    const { result } = await fullTake();
+    expect(result?.turns?.map((turn) => turn.phase)).toEqual(['bank', 'split']);
+    expect(result?.turns?.[0]?.item.text).toMatch(/entries across \d+ families/);
+  });
+
+  it('is resumable — a second start returns the SAME draft rather than a second take', async () => {
+    const fs = memFileSystem();
+    const first = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, NOW);
+    const second = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, NOW);
+    expect(second.id).toBe(first.id);
+    expect((await openDraft(fs, KEY, P, DIRTY_TALK.id))?.id).toBe(first.id);
+  });
+
+  it('abandons a draft cleanly — nothing scored, nothing left behind', async () => {
+    const fs = memFileSystem();
+    const draft = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, NOW);
+    await abandonAdaptiveTake(fs, P, draft.id);
+    expect(await listAdaptiveResults(fs, KEY, P, DIRTY_TALK.id)).toEqual([]);
+  });
+
+  it('writes an Insight that feeds the taker’s own INTIMACY context and nothing else', async () => {
+    const { fs } = await fullTake();
+    const insights = await listAllInsights(fs, KEY);
+    expect(insights).toHaveLength(1);
+    const insight = insights[0]!;
+    expect(insight.source).toBe('test');
+    expect(insight.facts.every((fact) => fact.lifeArea === 'Intimacy')).toBe(true);
+
+    const intimate = await summarizeForContext(fs, KEY, P, [], { lifeAreas: ['Intimacy'] });
+    expect(intimate).toContain('good girl');
+    // The same profile must NOT surface in a money conversation — the 50 §5.4 relevance gate.
+    const money = await summarizeForContext(fs, KEY, P, [], { lifeAreas: ['Money'] });
+    expect(money).not.toContain('good girl');
+  });
+
+  it('never writes a BOUNDARY into the Insight — suppression is structural, not a prompt line', async () => {
+    const { fs } = await fullTake();
+    const insight = (await listAllInsights(fs, KEY))[0]!;
+    const text = JSON.stringify(insight);
+    expect(text).not.toContain('whore');
+    // …but the lexicon still carries it, which is what every consumer suppresses on.
+    expect((await readLexicon(fs, KEY, P, NOW)).boundaries.map((b) => b.text)).toEqual(['whore']);
+  });
+
+  it('carries the hear/say GAP into the Insight as a goal the practice session can run on', async () => {
+    const { fs } = await fullTake();
+    const insight = (await listAllInsights(fs, KEY))[0]!;
+    const goal = insight.facts.find((fact) => fact.id.endsWith(':wants-to-say'));
+    expect(goal?.text).toContain('good girl'); // loves hearing it, rated 0 to say
+    expect(goal?.text).toContain('cunt'); // marked notYet — "I'd feel like an idiot"
+  });
+
+  it('marks the ground worked-through so the questionnaire planner stops mining it (74 §5.6)', async () => {
+    const { fs, result } = await fullTake();
+    const ledger = await readLedger(fs, KEY, P);
+    expect(ledger.entries.length).toBeGreaterThanOrEqual(3);
+    expect(ledger.entries.every((e) => e.topicIds.includes('Intimacy:dirty-talk'))).toBe(true);
+    expect(ledger.entries.every((e) => e.outcome === 'rich')).toBe(true);
+    // Idempotent: completing the same take again must not double-count the ground.
+    await completeAdaptiveTake(fs, KEY, DIRTY_TALK, { personId: P, resultId: result!.id }, NOW);
+    expect((await readLedger(fs, KEY, P)).entries).toHaveLength(ledger.entries.length);
+  });
+
+  it('a retake keeps the prior result, adds a trend point, and UPDATES the one Insight', async () => {
+    const { fs, result } = await fullTake();
+    const second = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, LATER);
+    expect(second.reTakeOf).toBe(result!.id);
+    expect(second.insightId).toBe(result!.insightId);
+    await completeAdaptiveTake(fs, KEY, DIRTY_TALK, { personId: P, resultId: second.id }, LATER);
+    expect(await listAdaptiveResults(fs, KEY, P, DIRTY_TALK.id)).toHaveLength(2);
+    expect(await listAllInsights(fs, KEY)).toHaveLength(1);
+    expect((await latestCompleteResult(fs, KEY, P, DIRTY_TALK.id))?.id).toBe(second.id);
+  });
+
+  it('a retake NEVER re-offers a hard no', async () => {
+    const { fs } = await fullTake();
+    const second = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, LATER);
+    // Even if the UI somehow marked it loved on the retake, the boundary holds.
+    const lexicon = await recordBankPass(
+      fs,
+      KEY,
+      DIRTY_TALK,
+      { personId: P, resultId: second.id, marks: { [WHORE]: 'love' } },
+      LATER,
+    );
+    expect(lexicon.entries.find((e) => e.key === WHORE)?.state).toBe('never');
+  });
+
+  it('deleting the last take removes the Insight; deleting one of two re-derives it', async () => {
+    const { fs, result } = await fullTake();
+    const second = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, LATER);
+    await completeAdaptiveTake(fs, KEY, DIRTY_TALK, { personId: P, resultId: second.id }, LATER);
+
+    await deleteAdaptiveResult(fs, KEY, DIRTY_TALK, P, second.id, LATER);
+    expect(await listAllInsights(fs, KEY)).toHaveLength(1); // re-derived from the survivor
+    await deleteAdaptiveResult(fs, KEY, DIRTY_TALK, P, result!.id, LATER);
+    expect(await listAllInsights(fs, KEY)).toHaveLength(0);
+  });
+
+  it('completes honestly with NO AI phases at all — a thinner profile, not a failed take', async () => {
+    const fs = memFileSystem();
+    const draft = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, NOW);
+    await recordBankPass(
+      fs,
+      KEY,
+      DIRTY_TALK,
+      { personId: P, resultId: draft.id, marks: { [MINE]: 'love' } },
+      NOW,
+    );
+    const result = await completeAdaptiveTake(
+      fs,
+      KEY,
+      DIRTY_TALK,
+      { personId: P, resultId: draft.id },
+      NOW,
+    );
+    expect(result?.status).toBe('complete');
+    expect(result?.narrative).toBeUndefined();
+    expect(result?.scores.length).toBe(DIRTY_TALK.spine.length);
+    expect(await listAllInsights(fs, KEY)).toHaveLength(1);
+  });
+});

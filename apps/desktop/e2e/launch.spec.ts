@@ -13728,9 +13728,9 @@ test('story (64): setup names the book, outline rename, chapters + sources, mark
     // three registers; a live preview rail shows how the biographer will sound; the title is optional (Create is
     // enabled with it blank); Full is the default length.
     await expect(w.getByText('How your biographer will sound')).toBeVisible();
-    const styleGroup = w.getByRole('radiogroup', { name: 'Style' });
-    expect(await styleGroup.getByRole('radio').count()).toBeGreaterThan(3);
-    await w.getByRole('radio', { name: 'Cinematic' }).click();
+    const styleGroup = w.getByRole('group', { name: 'Style' });
+    expect(await styleGroup.getByRole('checkbox').count()).toBeGreaterThan(3);
+    await w.getByRole('checkbox', { name: 'Cinematic' }).click();
     // ~360px: the commission (form + preview rail + card galleries) stacks with no horizontal overflow (§12).
     await w.setViewportSize({ width: 360, height: 900 });
     const commissionOffenders = await w.evaluate(() => {
@@ -15062,10 +15062,15 @@ test('story (72): choose a kind of book — its own questions, and the 18+ gate 
     await expect(w.getByRole('radio', { name: 'Unfiltered' })).toBeVisible();
     // Its OWN registers (§3.2) — not the biography's, which offered an erotic book "Journalistic:
     // reportorial and evidence-led" and "Warm: dinner-table narration".
-    await expect(w.getByRole('radio', { name: 'Raunchy' })).toBeVisible();
-    await expect(w.getByRole('radio', { name: 'Slow burn' })).toBeVisible();
-    await expect(w.getByRole('radio', { name: 'Journalistic' })).toHaveCount(0);
-    await expect(w.getByRole('radio', { name: 'Warm' })).toHaveCount(0);
+    await expect(w.getByRole('checkbox', { name: 'Raunchy' })).toBeVisible();
+    await expect(w.getByRole('checkbox', { name: 'Slow burn' })).toBeVisible();
+    await expect(w.getByRole('checkbox', { name: 'Journalistic' })).toHaveCount(0);
+    await expect(w.getByRole('checkbox', { name: 'Warm' })).toHaveCount(0);
+    // Registers COMBINE (72 §3.2): pick a second and both stay chosen, capped at three.
+    await w.getByRole('checkbox', { name: 'Slow burn' }).click();
+    await w.getByRole('checkbox', { name: 'Filthy talk' }).click();
+    await expect(w.getByRole('checkbox', { name: 'Slow burn' })).toBeChecked();
+    await expect(w.getByRole('checkbox', { name: 'Filthy talk' })).toBeChecked();
     // Subject matter is a separate, optional control — never a style tile that picks it for you.
     await expect(w.getByRole('textbox', { name: 'What this one explores' })).toBeVisible();
     // 360px: a six-card picker plus the type's own questions must still scroll vertically only (§12).

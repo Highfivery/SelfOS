@@ -331,6 +331,10 @@ describe('erotica has its own registers (72 §3.2)', () => {
       'raunchy',
       'tender',
       'confessional',
+      'filthyTalk',
+      'playful',
+      'aching',
+      'hardcore',
       'cinematic',
       'literary',
     ]);

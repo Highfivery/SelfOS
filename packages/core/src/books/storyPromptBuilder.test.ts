@@ -557,3 +557,50 @@ describe('a one-chapter book (72 §3.2)', () => {
     expect(sys).not.toMatch(/ONE chapter and no more/);
   });
 });
+
+describe('registers combine (72 §3.2)', () => {
+  const erotica = getBookType('erotica')!;
+
+  it('states every chosen register and says to hold them at once', () => {
+    const sys = buildBiographerSystem(
+      erotica,
+      cfg({ style: 'slowBurn', styles: ['slowBurn', 'filthyTalk'], typeOptions: {} }),
+      'Ben',
+    );
+    expect(sys).toMatch(/Slow-burn register/);
+    expect(sys).toMatch(/Dialogue-forward register/);
+    // Without this a model reads a list of registers as a menu and picks one.
+    expect(sys).toMatch(/ALL 2 of these registers at once/);
+    expect(sys).toMatch(/hold both in the same scene rather than averaging/);
+  });
+
+  it('a single register reads exactly as it did before combining existed', () => {
+    const one = buildBiographerSystem(erotica, cfg({ style: 'raunchy' }), 'Ben');
+    expect(one).toMatch(/Raunchy register/);
+    expect(one).not.toMatch(/registers at once/);
+    // A one-item list is the same thing as no list.
+    const listOfOne = buildBiographerSystem(
+      erotica,
+      cfg({ style: 'raunchy', styles: ['raunchy'] }),
+      'Ben',
+    );
+    expect(listOfOne).toBe(one);
+  });
+
+  it('falls back to the single style for a book commissioned before combining', () => {
+    const sys = buildBiographerSystem(erotica, cfg({ style: 'tender' }), 'Ben');
+    expect(sys).toMatch(/Tender register/);
+  });
+
+  it('the porn register is FOCUS, and the tier still governs how graphic it may be', () => {
+    const sys = buildBiographerSystem(
+      erotica,
+      cfg({ style: 'hardcore', typeOptions: { tier: 'unfiltered' } }),
+      'Ben',
+    );
+    expect(sys).toMatch(/all act, no interiority/i);
+    expect(sys).toMatch(/about FOCUS, not permission/);
+    // The register directive still comes last and still claims authority over the style.
+    expect(sys.indexOf('GOVERNS the style')).toBeGreaterThan(sys.indexOf('Hardcore register'));
+  });
+});

@@ -387,7 +387,8 @@ describe('Story (64)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Begin your book' }));
     await pickKind();
     // A new style register is offered in the Style card gallery.
-    expect(await screen.findByRole('radio', { name: 'Cinematic' })).toBeInTheDocument();
+    // Style cards are checkboxes — registers COMBINE, up to three (72 §3.2).
+    expect(await screen.findByRole('checkbox', { name: 'Cinematic' })).toBeInTheDocument();
     // The Create button is enabled with NO title typed — blank means the AI names it.
     const create = screen.getByRole('button', { name: 'Write my book' });
     expect(create).toBeEnabled();
@@ -439,7 +440,7 @@ describe('Story (64)', () => {
     expect(screen.getByText('How your biographer will sound')).toBeInTheDocument();
     expect(await screen.findByText(/porch light on/)).toBeInTheDocument();
     // Picking the Cinematic style card re-renders the specimen.
-    await userEvent.click(screen.getByRole('radio', { name: 'Cinematic' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Cinematic' }));
     expect(await screen.findByText(/Rain on the windshield/)).toBeInTheDocument();
     expect(screen.queryByText(/porch light on/)).not.toBeInTheDocument();
   });

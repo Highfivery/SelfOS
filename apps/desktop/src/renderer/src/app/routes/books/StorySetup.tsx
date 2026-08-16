@@ -10,6 +10,7 @@ import {
   Text,
   TextInput,
 } from '../../../design-system/components';
+import { MAX_BOOK_STYLES } from '@shared/schemas';
 import { useDreamStore } from '../../../stores/dreamStore';
 import { useGuidanceStore } from '../../../stores/guidanceStore';
 import { livePartnerEdge } from '@selfos/core/people';
@@ -89,6 +90,35 @@ export function StorySetup({
   const effectiveStyle = styleChoices.some((c) => c.value === style)
     ? style
     : (styleChoices[0]?.value ?? 'warm');
+  // Registers COMBINE (72 §3.2): pick up to three and the book is written in all of them. `style` stays the
+  // primary (first picked) so a book commissioned here still reads correctly everywhere that shows one.
+  const [extraStyles, setExtraStyles] = useState<Style[]>([]);
+  // A pre-selected default is NOT a choice. Without this, the first card someone clicks ADDS to the default
+  // and they quietly get two registers when they meant one — "Warm + Cinematic" for a biography.
+  const [pickedStyle, setPickedStyle] = useState(false);
+  const chosenStyles = [effectiveStyle, ...extraStyles.filter((v) => v !== effectiveStyle)];
+  const toggleStyle = (value: Style): void => {
+    if (!pickedStyle) {
+      setPickedStyle(true);
+      setStyle(value);
+      setExtraStyles([]);
+      return;
+    }
+    if (value === effectiveStyle) {
+      // Deselecting the primary promotes the next pick, so there is always at least one.
+      const next = extraStyles.filter((v) => v !== value);
+      if (next.length === 0) return;
+      setStyle(next[0] as Style);
+      setExtraStyles(next.slice(1));
+      return;
+    }
+    if (extraStyles.includes(value)) {
+      setExtraStyles(extraStyles.filter((v) => v !== value));
+      return;
+    }
+    if (chosenStyles.length >= MAX_BOOK_STYLES) return;
+    setExtraStyles([...extraStyles, value]);
+  };
 
   // "How your biographer will sound" — the specimen re-renders per style × voice (§13.3).
   const specimen = specimenFor(typeId, { style: effectiveStyle, voice });
@@ -270,17 +300,20 @@ export function StorySetup({
               />
             </Labeled>
             <Labeled label="Style">
-              <div className={styles.styleGallery} role="radiogroup" aria-label="Style">
+              <div className={styles.styleGallery} role="group" aria-label="Style">
                 {styleChoices.map((s) => (
                   <button
                     key={s.value}
                     type="button"
-                    role="radio"
-                    aria-checked={effectiveStyle === s.value}
+                    role="checkbox"
+                    aria-checked={chosenStyles.includes(s.value)}
                     aria-label={s.label}
                     aria-describedby={`style-hint-${s.value}`}
-                    className={`${styles.styleCard} ${effectiveStyle === s.value ? styles.styleCardOn : ''}`}
-                    onClick={() => setStyle(s.value)}
+                    disabled={
+                      !chosenStyles.includes(s.value) && chosenStyles.length >= MAX_BOOK_STYLES
+                    }
+                    className={`${styles.styleCard} ${chosenStyles.includes(s.value) ? styles.styleCardOn : ''}`}
+                    onClick={() => toggleStyle(s.value)}
                   >
                     <span className={styles.styleCardName}>{s.label}</span>
                     <span id={`style-hint-${s.value}`} className={styles.styleCardHint}>
@@ -346,6 +379,9 @@ export function StorySetup({
                 voice,
                 // The register actually shown as chosen — never one this type doesn't offer.
                 style: effectiveStyle,
+                // Only when more than one was picked, so a single-register book stays byte-identical to
+                // what it was before registers could combine.
+                ...(chosenStyles.length > 1 ? { styles: chosenStyles } : {}),
                 length,
                 autoRefresh: true,
                 typeOptions: Object.fromEntries(options.map((o) => [o.id, answered(o.id)])),

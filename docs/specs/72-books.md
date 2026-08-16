@@ -771,3 +771,18 @@ Two items are **deliberately deferred** rather than open:
   existing page-cap: a count stated only in the prompt is a request with nothing behind it, so an outline
   that comes back twelve chapters long is capped at one rather than shipped as a book. A type that states
   its own extent (a picture book's `pages` spine) still wins. Cap mutation-verified.
+- 2026-08-16 — **registers combine, and four more for erotica** (owner). `BookConfig` gains additive-optional
+  `styles` (cap 3) alongside the existing required `style`, which stays the primary — so every book
+  commissioned before this reads exactly as it did, and `resolveBookStyles` is the one place that decides.
+  Combining beats a growing grid of near-duplicate tiles: "Slow burn + Filthy talk" says something neither
+  says alone. When more than one is chosen the prompt states them together with an explicit blend
+  instruction and tells the writer to HOLD contradictory pairs in one scene rather than averaging them —
+  without that a model reads a list of registers as a menu and picks one. New erotica-only registers:
+  **Filthy talk** (dialogue-forward), **Playful** (teasing, funny — the one emotional register the set
+  lacked), **Aching** (longing unsatisfied, as distinct from Tender's fulfilled closeness) and **Hardcore**
+  (all act, no interiority — the porn register). Hardcore is deliberately a FOCUS choice, not a heat level:
+  how graphic a book may be remains `tier`, whose directive still governs the styles. **A real UX defect the
+  E2E caught:** with a style pre-selected, the first card someone clicked ADDED to the default, so picking
+  "Cinematic" for a biography silently produced "Warm + Cinematic". An untouched default is not a choice —
+  the first pick now replaces it, and only later picks combine. Changing the tone in Settings clears the
+  combined set, or the stale list would keep winning and the control would appear to do nothing.

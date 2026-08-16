@@ -1,4 +1,5 @@
 import type { BookTruthMode } from './bookTypes';
+import { resolveBookStyles } from '../schemas';
 import { SAFETY } from '../conversations';
 import type {
   BookChapter,
@@ -29,9 +30,25 @@ function voiceDirective(voice: BookConfig['voice'], name: string): string {
     : `Narrative voice: write in the THIRD person about ${name} (by name and by "he/she/they" as fits). You are the biographer — never "I".`;
 }
 
-function styleDirective(style: BookConfig['style'], bookType: BookType): string {
-  const preset = bookType.stylePresets.find((p) => p.id === style);
-  return preset ? preset.directive : '';
+/**
+ * The style directives, in the order chosen. Registers COMBINE (72 §3.2) — "Slow burn + Filthy talk" is a
+ * real request neither says alone — so when more than one is picked they are stated together with an
+ * explicit blend instruction. Without that a model reads a list of registers as a menu and picks one.
+ *
+ * Falls back to the single `style` for every book commissioned before combining existed.
+ */
+function styleDirective(config: BookConfig, bookType: BookType): string {
+  const chosen = resolveBookStyles(config);
+  const directives = chosen
+    .map((id) => bookType.stylePresets.find((p) => p.id === id)?.directive ?? '')
+    .filter((d) => d.length > 0);
+  if (directives.length === 0) return '';
+  if (directives.length === 1) return directives[0] ?? '';
+  return [
+    `Write in ALL ${directives.length} of these registers at once — they combine, they are not alternatives, and a chapter that honours only one of them has missed the brief:`,
+    ...directives.map((d) => `- ${d}`),
+    'Where two of them pull against each other, hold both in the same scene rather than averaging them into something neutral.',
+  ].join('\n');
 }
 
 /**
@@ -218,7 +235,7 @@ export function buildBiographerSystem(
     bookType.doctrine,
     truthDirective(bookType.truthMode),
     voiceDirective(config.voice, name),
-    styleDirective(config.style, bookType),
+    styleDirective(config, bookType),
     lengthDirective(config.length, resolveSpine(bookType, typeOptions)),
     audienceDirective(bookType.audience),
     // AFTER the style directives, because a per-book answer (the explicit register especially) has to be

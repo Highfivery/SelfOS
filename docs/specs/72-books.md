@@ -799,3 +799,13 @@ Two items are **deliberately deferred** rather than open:
   prose this whole run has been chasing. Both new rungs still carry the GOVERNS-the-style clause (08 §24.9)
   and neither softens the boundary; a test asserts every rung keeps the consenting-adults and no-children
   rules. Mutation-verified.
+- 2026-08-16 — **every register shows a line of what it reads like** (owner). The specimens already existed;
+  only the SELECTED one was visible, in the preview rail — so choosing between eleven registers meant
+  clicking each in turn. Each card now carries its own sample at the chosen voice, which matters more now
+  that registers combine and the comparison is the point. Two things the screenshot caught that the tests
+  could not: the samples were wrapped in quote marks, and several specimens open with dialogue — "Filthy
+  talk" rendered as `““Say it,” …`; the wrapping is gone, since the serif italic already reads as a sample.
+  And eleven unclamped quotes turned the gallery into a wall of prose you had to scroll past to reach
+  Length, so the card sample is small and clamped to two lines (§12 density) with the rail still showing the
+  chosen one in full. The rail's specimen gained an `aria-label` because the same text now appears twice —
+  an unscoped assertion could no longer tell whether the RAIL had re-rendered.

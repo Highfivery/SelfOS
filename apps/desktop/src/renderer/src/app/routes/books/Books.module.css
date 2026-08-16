@@ -132,6 +132,21 @@
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: var(--space-2);
 }
+/* The sample line on a STYLE card. Clamped and set small on purpose: eleven registers each carrying an
+   unclamped quote turns the gallery into a wall of prose you have to scroll past to reach Length (§12
+   density). Two lines is enough to hear the register; the rail below shows the chosen one in full. */
+.styleCardSample {
+  margin-top: var(--space-1);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--color-text-tertiary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .lengthCards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

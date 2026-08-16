@@ -15076,6 +15076,9 @@ test('story (72): choose a kind of book — its own questions, and the 18+ gate 
     await w.getByRole('checkbox', { name: 'Slow burn' }).click();
     await w.getByRole('checkbox', { name: 'Filthy talk' }).click();
     await expect(w.getByRole('checkbox', { name: 'Slow burn' })).toBeChecked();
+    // Each register shows a line of what it reads like, at the chosen voice (§3.2). "Filthy talk" opens
+    // with dialogue, which is why the sample carries no wrapping quote marks of its own.
+    await expect(w.getByText(/“Say it,” he told her/)).toBeVisible();
     await expect(w.getByRole('checkbox', { name: 'Filthy talk' })).toBeChecked();
     // Subject matter is a separate, optional control — never a style tile that picks it for you.
     await expect(w.getByRole('textbox', { name: 'What this one explores' })).toBeVisible();

@@ -40,6 +40,10 @@ export const STYLE_CHOICES: { value: Style; label: string; hint: string }[] = [
     label: 'Confessional',
     hint: 'Told straight to the reader, unguarded.',
   },
+  { value: 'filthyTalk', label: 'Filthy talk', hint: 'Carried by what’s said out loud.' },
+  { value: 'playful', label: 'Playful', hint: 'Teasing and funny; sex that’s fun.' },
+  { value: 'aching', label: 'Aching', hint: 'Longing that isn’t satisfied.' },
+  { value: 'hardcore', label: 'Hardcore', hint: 'All act, no plot; nothing cut away.' },
 ];
 export const LENGTH_OPTIONS: SegmentOption<Length>[] = [
   { value: 'single', label: 'One chapter' },

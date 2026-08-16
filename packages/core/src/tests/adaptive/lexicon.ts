@@ -1,0 +1,298 @@
+import type { FileSystem } from '../../host';
+import { isSafeSegment } from '../../pathSafety';
+import {
+  EroticLexiconSchema,
+  type EroticLexicon,
+  type LexiconBoundary,
+  type LexiconEntry,
+  type LexiconState,
+} from '../../schemas';
+import { readEncryptedJson, writeEncryptedJson } from '../../vault';
+import { bankEntry, toLexiconEntry, type Bank } from './bank';
+
+/**
+ * 74-adaptive-tests §4.4 — the shared **erotic lexicon**: ONE per person, written by every adaptive intimacy
+ * test (Dirty Talk today; Fantasy and Sex Sessions next) and read by every explicit surface in the app.
+ *
+ * Three results, one lexicon (74 §1.3, owner decision), so no test re-asks another's ground and — the
+ * load-bearing part — **a boundary recorded in one constrains all of them, and every consumer**.
+ *
+ * Two rules this module exists to make unbreakable:
+ *
+ * 1. **A `never` is permanent.** Nothing merges it away, no retake re-offers it, and only an explicit act by
+ *    the person themselves clears it (`clearState`). A merge that could silently downgrade a hard no would be
+ *    the worst bug this feature could have.
+ * 2. **Boundaries UNION on merge.** Two devices editing the same lexicon resolve last-write-wins on ratings,
+ *    but their boundary lists are combined — a sync conflict can never lose a hard no (74 §7).
+ */
+
+const SCHEMA_VERSION = 1;
+
+export function lexiconPath(personId: string): string {
+  return `people/${personId}/tests/lexicon.enc`;
+}
+
+export function emptyLexicon(personId: string, now: Date): EroticLexicon {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    personId,
+    entries: [],
+    registers: {},
+    contexts: {},
+    themes: [],
+    wantsToSay: [],
+    boundaries: [],
+    updatedAt: now.toISOString(),
+  };
+}
+
+/**
+ * Read a person's lexicon, deriving an empty one when absent. A corrupt doc degrades to empty rather than
+ * throwing out of the session/questionnaire that depends on it — the app then behaves exactly as it did
+ * before this spec (no lexicon signal) instead of dead-ending (74 §7).
+ */
+export async function readLexicon(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  now: Date = new Date(),
+): Promise<EroticLexicon> {
+  if (!isSafeSegment(personId)) return emptyLexicon(personId, now);
+  try {
+    const raw = await readEncryptedJson(fs, lexiconPath(personId), key);
+    if (!raw) return emptyLexicon(personId, now);
+    const parsed = EroticLexiconSchema.safeParse(raw);
+    return parsed.success ? parsed.data : emptyLexicon(personId, now);
+  } catch {
+    return emptyLexicon(personId, now);
+  }
+}
+
+export async function writeLexicon(
+  fs: FileSystem,
+  key: Uint8Array,
+  lexicon: EroticLexicon,
+): Promise<void> {
+  if (!isSafeSegment(lexicon.personId)) return;
+  await writeEncryptedJson(fs, lexiconPath(lexicon.personId), lexicon, key);
+}
+
+/** How one entry landed in pass 1 of the bank (74 §3.2): loved it, a boundary, or a cringe. */
+export type BankMark = 'love' | 'never' | 'notYet';
+
+/** Pass 1 — the whole bank, marking only what lands. Everything untouched stays genuinely unrated. */
+export interface BankMarks {
+  [entryKey: string]: BankMark;
+}
+
+/** The rating a `love` mark seeds before pass 2 splits it into hear/say. */
+const LOVE_SEED = 3;
+
+/**
+ * Apply pass-1 marks onto a lexicon (pure). An entry marked `love` is seeded at {@link LOVE_SEED} in BOTH
+ * directions and refined in pass 2; `never`/`notYet` set the state and zero the ratings, and a `never`
+ * additionally records a global {@link LexiconBoundary}.
+ *
+ * An unknown key (not in the bank) is skipped rather than inventing an entry — a custom write-in comes in
+ * through {@link addCustomEntry}, which knows its text.
+ */
+export function applyBankMarks(
+  lexicon: EroticLexicon,
+  bank: Bank,
+  marks: BankMarks,
+  source: string,
+  now: Date,
+): EroticLexicon {
+  const byKey = new Map(lexicon.entries.map((entry) => [entry.key, entry]));
+  const boundaries = [...lexicon.boundaries];
+  for (const [key, mark] of Object.entries(marks)) {
+    const spec = bankEntry(bank, key);
+    const existing = byKey.get(key);
+    if (!spec && !existing) continue;
+    const base = existing ?? toLexiconEntry(spec!, source);
+    if (mark === 'love') {
+      // Clearing a prior `never` is NEVER implicit — a boundary only lifts through `clearState`.
+      if (existing?.state === 'never') continue;
+      byKey.set(key, { ...base, hear: LOVE_SEED, say: LOVE_SEED, state: undefined, source });
+    } else {
+      byKey.set(key, { ...base, hear: 0, say: 0, state: mark, source });
+      if (mark === 'never') {
+        // A bank boundary is a LITERAL text to suppress, whether it is one word or a whole phrase; `theme`
+        // is reserved for a described boundary a probe named ("anything about being used").
+        boundaries.push({ text: base.text, kind: 'word', at: now.toISOString() });
+      }
+    }
+  }
+  return {
+    ...lexicon,
+    entries: [...byKey.values()],
+    boundaries: dedupeBoundaries(boundaries),
+    updatedAt: now.toISOString(),
+  };
+}
+
+/** Pass 2 — the hear/say split, applied only to entries pass 1 marked. */
+export function applyDirections(
+  lexicon: EroticLexicon,
+  splits: Record<string, { hear?: number; say?: number }>,
+  now: Date,
+): EroticLexicon {
+  const clamp = (n: number): number => (n < 0 ? 0 : n > 4 ? 4 : Math.round(n));
+  const entries = lexicon.entries.map((entry) => {
+    const split = splits[entry.key];
+    // A boundary is never re-rated by the split pass.
+    if (!split || entry.state === 'never') return entry;
+    return {
+      ...entry,
+      ...(split.hear !== undefined ? { hear: clamp(split.hear) } : {}),
+      ...(split.say !== undefined ? { say: clamp(split.say) } : {}),
+    };
+  });
+  return { ...lexicon, entries, updatedAt: now.toISOString() };
+}
+
+/** Add one of their own words. Custom entries carry `custom: true` and a `custom:` key namespace. */
+export function addCustomEntry(
+  lexicon: EroticLexicon,
+  input: { text: string; family: string; kind: 'word' | 'phrase'; tier?: 1 | 2 | 3 | 4 | 5 },
+  source: string,
+  now: Date,
+): EroticLexicon {
+  const text = input.text.trim();
+  if (text === '') return lexicon;
+  const key = `custom:${input.family}:${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  if (lexicon.entries.some((entry) => entry.key === key)) return lexicon;
+  const entry: LexiconEntry = {
+    key,
+    text,
+    kind: input.kind,
+    family: input.family,
+    tier: input.tier ?? 3,
+    hear: 0,
+    say: 0,
+    custom: true,
+    source,
+  };
+  return { ...lexicon, entries: [...lexicon.entries, entry], updatedAt: now.toISOString() };
+}
+
+/**
+ * The ONLY way a boundary lifts: an explicit act by the person themselves (74 §3.2/§8.2). Clearing a `never`
+ * drops its global boundary too, so the suppression stops with it.
+ */
+export function clearState(lexicon: EroticLexicon, key: string, now: Date): EroticLexicon {
+  const target = lexicon.entries.find((entry) => entry.key === key);
+  if (!target) return lexicon;
+  return {
+    ...lexicon,
+    entries: lexicon.entries.map((entry) =>
+      entry.key === key ? { ...entry, state: undefined } : entry,
+    ),
+    boundaries:
+      target.state === 'never'
+        ? lexicon.boundaries.filter((b) => !sameBoundary(b.text, target.text))
+        : lexicon.boundaries,
+    updatedAt: now.toISOString(),
+  };
+}
+
+/** Record a boundary that isn't a bank entry (a theme named in a probe: "anything about being used"). */
+export function addBoundary(
+  lexicon: EroticLexicon,
+  boundary: Omit<LexiconBoundary, 'at'>,
+  now: Date,
+): EroticLexicon {
+  return {
+    ...lexicon,
+    boundaries: dedupeBoundaries([...lexicon.boundaries, { ...boundary, at: now.toISOString() }]),
+    updatedAt: now.toISOString(),
+  };
+}
+
+function sameBoundary(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+function dedupeBoundaries(boundaries: readonly LexiconBoundary[]): LexiconBoundary[] {
+  const seen = new Map<string, LexiconBoundary>();
+  for (const boundary of boundaries) {
+    const key = boundary.text.trim().toLowerCase();
+    // Keep the FIRST recording of a boundary — its original date is the honest one.
+    if (!seen.has(key)) seen.set(key, boundary);
+  }
+  return [...seen.values()];
+}
+
+/**
+ * Merge two lexicons (pure) — the sync-conflict + retake path. Ratings resolve last-write-wins by
+ * `updatedAt`, but **a `never` on EITHER side wins** and **boundaries UNION**, so no merge can lose a hard no.
+ */
+export function mergeLexicons(a: EroticLexicon, b: EroticLexicon): EroticLexicon {
+  const [older, newer] = a.updatedAt <= b.updatedAt ? [a, b] : [b, a];
+  const byKey = new Map(older.entries.map((entry) => [entry.key, entry]));
+  for (const entry of newer.entries) {
+    const prior = byKey.get(entry.key);
+    // A hard no from either side survives the merge, whichever side is newer.
+    const state: LexiconState | undefined =
+      prior?.state === 'never' || entry.state === 'never' ? 'never' : entry.state;
+    byKey.set(entry.key, {
+      ...entry,
+      ...(state ? { state } : {}),
+      ...(state === 'never' ? { hear: 0, say: 0 } : {}),
+    });
+  }
+  return {
+    ...newer,
+    entries: [...byKey.values()],
+    boundaries: dedupeBoundaries([...older.boundaries, ...newer.boundaries]),
+    themes: [...new Set([...older.themes, ...newer.themes])],
+    wantsToSay: [...new Set([...older.wantsToSay, ...newer.wantsToSay])],
+  };
+}
+
+/** Every text a consumer must never produce for this person — the suppression list (74 §5.7/§8.4). */
+export function suppressedTexts(lexicon: EroticLexicon): string[] {
+  const fromEntries = lexicon.entries
+    .filter((entry) => entry.state === 'never')
+    .map((entry) => entry.text);
+  const fromBoundaries = lexicon.boundaries.map((boundary) => boundary.text);
+  return [...new Set([...fromEntries, ...fromBoundaries])];
+}
+
+/** Whether a candidate line touches a boundary — a whole-word/substring check over the suppression list. */
+export function violatesBoundary(lexicon: EroticLexicon, candidate: string): boolean {
+  const text = candidate.toLowerCase();
+  return suppressedTexts(lexicon).some((banned) => {
+    const needle = banned.trim().toLowerCase();
+    return needle !== '' && text.includes(needle);
+  });
+}
+
+/** The entries they love, strongest first, optionally in one direction. Never includes a boundary. */
+export function lovedEntries(
+  lexicon: EroticLexicon,
+  direction: 'hear' | 'say' | 'either' = 'either',
+): LexiconEntry[] {
+  const value = (entry: LexiconEntry): number =>
+    direction === 'hear'
+      ? entry.hear
+      : direction === 'say'
+        ? entry.say
+        : Math.max(entry.hear, entry.say);
+  return lexicon.entries
+    .filter((entry) => entry.state === undefined && value(entry) >= 3)
+    .sort((x, y) => value(y) - value(x));
+}
+
+/**
+ * The GOAL list, derived rather than asked: things they clearly want to HEAR (or that landed) but rate low to
+ * SAY. That gap is the coachable material the practice session runs on (74 §3.3). A `notYet` entry is included
+ * regardless of its ratings — "I'd feel like an idiot" is exactly this.
+ */
+export function derivedWantsToSay(lexicon: EroticLexicon): string[] {
+  const gap = lexicon.entries
+    .filter((entry) => entry.state !== 'never')
+    .filter((entry) => entry.state === 'notYet' || (entry.hear >= 3 && entry.say <= 1))
+    .map((entry) => entry.text);
+  return [...new Set([...gap, ...lexicon.wantsToSay])];
+}

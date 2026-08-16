@@ -596,7 +596,7 @@ inner scroller — the word-bank grid collapses to one word per row at phone wid
   **never escalating**, never a schedule, and it never fires for someone who has never taken it. A retake merges
   forward and never re-offers a `never`.
 - **A "tonight" dial.** Desire moves with mood; a single stored profile is a snapshot. Worth a lightweight
-  "tonight I want ___" that temporarily biases the register? _Recommendation: not v1 — see how the profile lands._
+  "tonight I want _\_\_" that temporarily biases the register? \_Recommendation: not v1 — see how the profile lands._
 
 ## 12. Changelog
 

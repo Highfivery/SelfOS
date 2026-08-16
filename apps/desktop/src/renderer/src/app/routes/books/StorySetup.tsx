@@ -181,6 +181,10 @@ export function StorySetup({
                           {c.description ? (
                             <span className={styles.styleCardHint}>{c.description}</span>
                           ) : null}
+                          {/* One line of what this choice actually reads like (72 §3.2). */}
+                          {c.example ? (
+                            <span className={styles.choiceExample}>“{c.example}”</span>
+                          ) : null}
                         </button>
                       ))}
                     </div>

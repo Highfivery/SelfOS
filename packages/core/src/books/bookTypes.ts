@@ -159,8 +159,12 @@ export interface BookTypeOption {
   label: string;
   help?: string;
   kind: 'choice' | 'text' | 'person';
-  /** For `choice` — the first entry is the default. */
-  choices?: { value: string; label: string; description?: string }[];
+  /**
+   * For `choice` — the first entry is the default. `example` is one line of the prose that choice actually
+   * produces: for a register ladder, a description alone ("a step back from unfiltered") tells you the
+   * ORDER but not what you are choosing between, which is what made the explicit tiers confusing.
+   */
+  choices?: { value: string; label: string; description?: string; example?: string }[];
   /** For `person` — several may be named (a picture book can star two siblings). Stored comma-separated. */
   multiple?: boolean;
   placeholder?: string;
@@ -1053,16 +1057,38 @@ export const EROTICA_BOOK_TYPE: BookType = {
       label: 'How explicit',
       kind: 'choice',
       help: 'The same registers your intimacy questionnaires use.',
+      // One ladder, four rungs, ordered most-explicit first (the first entry is the default). Each carries
+      // the SAME moment written at that register, because side by side is the only way the difference is
+      // legible — "a step back from unfiltered" says where a rung sits, never what it reads like.
       choices: [
         {
           value: 'unfiltered',
           label: 'Unfiltered',
-          description: 'Frank and specific throughout, from the first line — no tasteful dilution.',
+          description: 'Graphic from the first line. Nothing withheld, softened or cut away.',
+          example:
+            'He had her against the door before they made it to the bed, and neither of them cared who heard.',
         },
         {
           value: 'explicit',
           label: 'Explicit',
-          description: 'Genuinely explicit, a step back from unfiltered.',
+          description:
+            'Acts and bodies named plainly — real sexual detail, a step back from unfiltered.',
+          example:
+            'He had her out of the dress before the bed, his mouth everywhere she wanted it.',
+        },
+        {
+          value: 'sensual',
+          label: 'Sensual',
+          description: 'The whole night is on the page, written in sensation rather than anatomy.',
+          example:
+            'His hands found the small of her back, and everything after was heat and breath and the shape of him.',
+        },
+        {
+          value: 'suggestive',
+          label: 'Suggestive',
+          description: 'Charged and wanting, but the door closes. Tension without the act.',
+          example:
+            'He kicked the door shut behind them, and the rest of the night belonged to nobody else.',
         },
       ],
     },

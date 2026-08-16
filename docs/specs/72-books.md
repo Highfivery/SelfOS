@@ -850,3 +850,15 @@ Two items are **deliberately deferred** rather than open:
   quiet rungs are untouched, asserted in both directions. All mutation-verified. **Lesson: a vocabulary
   instruction that only says what TO use is half an instruction — the register degrades through the synonym
   you did not forbid, so state it as pairs.**
+- 2026-08-16 — **fix: the shelf sized each cover to its TITLE** (reported: "something wrong with the
+  layout"). Diagnosed by MEASURING the rendered cards, not by reading the CSS — which looked correct: equal
+  `1fr` grid columns and a fixed `aspect-ratio` on the cover. The measurement showed identical cards
+  (241×389) holding covers of 111×164 and 107×158, differing by exactly the length of the book's title.
+  Cause: `.shelfItem` is a `<button>`, and a button's UA stylesheet sets `align-items: center`, which beats
+  the flex default of stretch — so the cover sized to its own content (the title span) instead of filling
+  the card. A short title got a small book and a long one got a book three times the size. Fixed with an
+  explicit `align-items: stretch` plus `width: 100%` on the cover. Guarded by an E2E that commissions two
+  books with very different title lengths and asserts each cover equals its card's width AND that the two
+  match — verified to fail without the fix (52px against an expected 236px). **Lesson: correct-looking CSS
+  is not evidence — a `<button>` used as a flex container does not behave like a `<div>`, and only measuring
+  the rendered box shows it.**

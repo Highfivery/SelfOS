@@ -16002,3 +16002,47 @@ test('contributions (73): Ben opens his book to Angel, she adds a memory, he kee
     await app.close();
   }
 });
+
+test('story (72): every book on the shelf gets the same cover, whatever its title is called', async () => {
+  test.setTimeout(120_000);
+  const { userData } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-e2e');
+  const app = await electron.launch({ args: [`--user-data-dir=${userData}`, MAIN], env: e2eEnv() });
+  try {
+    const w = await app.firstWindow();
+    // Two books whose titles are very different lengths — the thing the covers used to size themselves to.
+    await openFirstBook(w);
+    await w.getByRole('button', { name: 'Begin your book' }).click();
+    await w.getByRole('button', { name: /^Biography/ }).click();
+    await w.getByRole('textbox', { name: 'Title' }).fill('Ash');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
+    await w.getByRole('button', { name: /All books/ }).click();
+    await w
+      .getByRole('button', { name: /Start a new book/ })
+      .first()
+      .click();
+    await w.getByRole('button', { name: /^Biography/ }).click();
+    await w
+      .getByRole('textbox', { name: 'Title' })
+      .fill('The One Who Drives the Ship Through the Long Winter');
+    await w.getByRole('button', { name: 'Write my book' }).click();
+    await expect(w.getByRole('button', { name: /The Garage/ })).toBeVisible();
+    await w.getByRole('button', { name: /All books/ }).click();
+
+    // A <button> carries a UA `align-items: center`, which beat the flex stretch — so each cover sized to
+    // its own TITLE TEXT and the shelf came out a jumble of different-sized books.
+    const covers = await w.evaluate(() =>
+      Array.from(document.querySelectorAll('[class*="shelfItem"]')).map((el) => {
+        const item = el.getBoundingClientRect();
+        const cover = el.querySelector('[class*="shelfCover"]')!.getBoundingClientRect();
+        return { itemW: Math.round(item.width), coverW: Math.round(cover.width) };
+      }),
+    );
+    expect(covers.length).toBe(2);
+    for (const c of covers) expect(c.coverW).toBe(c.itemW); // fills its card, never its title
+    expect(covers[0]!.coverW).toBe(covers[1]!.coverW); // and every book is the same size
+  } finally {
+    await app.close();
+  }
+});

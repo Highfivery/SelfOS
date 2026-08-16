@@ -63,10 +63,10 @@ export function provenanceTarget(insight: Insight): ProvenanceTarget {
     };
   }
   if (insight.source === 'test') {
-    // A self-assessment result deep-links to its result profile (50 §4.4) — the You hub reads `/you/:testId`.
+    // A self-assessment result deep-links to its result profile (50 §4.4) — the You hub reads `/tests/:testId`.
     return {
       label,
-      to: insight.provenance.testId ? `/you/${insight.provenance.testId}` : '/you',
+      to: insight.provenance.testId ? `/tests/${insight.provenance.testId}` : '/tests',
       source: { kind: 'other' },
     };
   }

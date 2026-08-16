@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { AppShell } from './AppShell';
 import { Home } from './routes/home/Home';
 import { Sessions } from './routes/sessions/Sessions';
@@ -14,6 +14,14 @@ import { DreamPatterns } from './routes/dreams/DreamPatterns';
 import { You } from './routes/you/You';
 import { TestTake } from './routes/you/TestTake';
 import { TestResultScreen } from './routes/you/TestResultScreen';
+import { AdaptiveTake } from './routes/you/AdaptiveTake';
+import { AdaptiveReport } from './routes/you/AdaptiveReport';
+
+/** 74 §3.1 — keep every `/you/:testId` deep link working after the hub became `/tests`. */
+function LegacyTestRedirect({ take }: { take?: boolean }): JSX.Element {
+  const { testId = '' } = useParams();
+  return <Navigate to={`/tests/${testId}${take ? '/take' : ''}`} replace />;
+}
 import { Onboarding } from './routes/onboarding/Onboarding';
 import { People } from './routes/people/People';
 import { Roles } from './routes/roles/Roles';
@@ -48,9 +56,16 @@ const GUARDED_ROUTES: { path: string; capability: CapabilityKey; element: JSX.El
   { path: 'sharing/*', capability: 'memory.own', element: <SharingAndRelationships /> },
   { path: 'dreams', capability: 'dreams.own', element: <Dreams /> },
   { path: 'dreams/patterns', capability: 'dreams.own', element: <DreamPatterns /> },
-  { path: 'you', capability: 'tests.own', element: <You /> },
-  { path: 'you/:testId/take', capability: 'tests.own', element: <TestTake /> },
-  { path: 'you/:testId', capability: 'tests.own', element: <TestResultScreen /> },
+  // 74 §3.1 — the hub is "Tests" now. `/you*` still resolves (deep links, bookmarks, the wellbeing
+  // recommendation route) by redirecting, so nothing that pointed at the old path breaks.
+  { path: 'tests', capability: 'tests.own', element: <You /> },
+  { path: 'tests/dirty-talk/take', capability: 'tests.own', element: <AdaptiveTake /> },
+  { path: 'tests/dirty-talk', capability: 'tests.own', element: <AdaptiveReport /> },
+  { path: 'tests/:testId/take', capability: 'tests.own', element: <TestTake /> },
+  { path: 'tests/:testId', capability: 'tests.own', element: <TestResultScreen /> },
+  { path: 'you', capability: 'tests.own', element: <Navigate to="/tests" replace /> },
+  { path: 'you/:testId/take', capability: 'tests.own', element: <LegacyTestRedirect take /> },
+  { path: 'you/:testId', capability: 'tests.own', element: <LegacyTestRedirect /> },
   { path: 'people', capability: 'people.manage', element: <People /> },
   { path: 'roles', capability: 'roles.manage', element: <Roles /> },
   // Together (58 §5.3): gated by `together.own`; the finer live-partner-edge gating is enforced in the

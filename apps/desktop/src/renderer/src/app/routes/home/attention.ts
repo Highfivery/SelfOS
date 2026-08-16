@@ -214,7 +214,7 @@ export function needsAttention(input: AttentionInput): AttentionItem[] {
           kind: 'check-in',
           label: 'Check in on how you’re doing',
           detail: `It’s been ${days} days since your last check-in`,
-          route: '/you/phq9/take',
+          route: '/tests/phq9/take',
           nudge: true,
         });
       }

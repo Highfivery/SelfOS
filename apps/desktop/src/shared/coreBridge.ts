@@ -3883,7 +3883,30 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         return { tests: [], adultAcknowledged: false };
       }
       const ack = (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged === true;
-      return { tests: listTestSummaries(ack), adultAcknowledged: ack };
+      // 74 — the adaptive instruments sit in the same hub, filtered by the same ack. They have no fixed item
+      // list, so `itemCount` is the bank's size and `estimatedMinutes` is an estimate, not a count.
+      const adaptive: TestSummary[] = ADAPTIVE_TESTS.filter((def) => ack || !def.adult).map(
+        (def) => ({
+          id: def.id,
+          kind: 'adaptive' as const,
+          group: def.group,
+          title: def.title,
+          instrument: def.instrument,
+          blurb: def.blurb,
+          framing: def.framing,
+          estimatedMinutes: def.estimatedMinutes,
+          itemCount: def.bank.entries.length,
+          adult: def.adult,
+          sensitive: def.sensitive,
+          subscales: def.spine.map((dimension) => ({
+            key: dimension.key,
+            label: dimension.label,
+            signed: false,
+          })),
+          wellbeing: false,
+        }),
+      );
+      return { tests: [...listTestSummaries(ack), ...adaptive], adultAcknowledged: ack };
     },
     testsGet: async (input): Promise<TestForm | null> => {
       const { testId } = TestIdSchema.parse(input);
@@ -3928,7 +3951,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const ctx = await host.vaultAndKey();
       const personId = ctx ? await activePersonId() : null;
       if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'tests.own'))) return [];
-      const def = getTest(testId);
+      // 74: an adaptive id resolves against the adaptive catalog, or its results would skip the 18+ gate.
+      const def = getTest(testId) ?? getAdaptiveTest(testId);
       if (
         def?.adult &&
         (await getGuidancePrefs(ctx.fs, ctx.key, personId)).adultAcknowledged !== true

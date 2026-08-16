@@ -121,6 +121,8 @@ export interface SubscaleMeta {
 /** Crypto-free display metadata for the catalog (what `tests:list` returns; the renderer never sees scoring). */
 export interface TestSummary {
   id: string;
+  /** 74 — which engine runs it. Absent ⇒ `'deterministic'` (every spec-50/51 instrument). */
+  kind?: 'deterministic' | 'adaptive';
   group: TestGroupId;
   title: string;
   instrument: string;

@@ -74,7 +74,7 @@ export function YouCard(): JSX.Element | null {
           <Heading level={2} className={styles.sectionTitle}>
             <UserRound size={16} aria-hidden="true" /> You
           </Heading>
-          <button type="button" className={styles.cardLink} onClick={() => navigate('/you')}>
+          <button type="button" className={styles.cardLink} onClick={() => navigate('/tests')}>
             Explore
           </button>
         </div>
@@ -112,7 +112,7 @@ export function YouCard(): JSX.Element | null {
                   key={t.id}
                   type="button"
                   className={styles.youChip}
-                  onClick={() => navigate(`/you/${t.id}/take`)}
+                  onClick={() => navigate(`/tests/${t.id}/take`)}
                 >
                   <Sparkles size={13} aria-hidden="true" /> {t.title}
                 </button>

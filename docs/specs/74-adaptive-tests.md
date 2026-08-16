@@ -1,6 +1,6 @@
 # 74 — Adaptive tests & the erotic lexicon ("Dirty Talk")
 
-> **Status:** Draft — _last updated 2026-08-16_ (brainstormed + 10 owner decisions locked before any code)
+> **Status:** Built — _last updated 2026-08-16_ (on `feat/adaptive-tests-spec`; all 19 decisions resolved; PR pending)
 >
 > A **second kind of test**. Every instrument in [`50`](50-self-assessments.md)/[`51`](51-wellbeing-neurodivergence-reflections.md)
 > is a fixed item list scored by pure arithmetic. This adds an **adaptive** kind: the AI writes the items as it
@@ -599,6 +599,42 @@ inner scroller — the word-bank grid collapses to one word per row at phone wid
   "tonight I want _\_\_" that temporarily biases the register? \_Recommendation: not v1 — see how the profile lands._
 
 ## 12. Changelog
+
+- 2026-08-16 — **BUILT** on `feat/adaptive-tests-spec`, in a worktree off `origin/main` (the books session
+  holds the shared checkout). Eight slices:
+  **(1) the core** — `TestResult` widened ADDITIVELY with `kind`/`status`/`turns`/`profile`/`narrative`
+  (absent `kind` ⇒ `'deterministic'` via `testResultKind`, so **no migration**); the bank type + builder; the
+  Dirty Talk bank (~1,100 entries, 36 families, tiers 1–5, family-scoped stable slugs); the shared
+  `EroticLexicon` (a `never` is permanent — no mark, split, merge or retake lifts it — and boundaries UNION
+  on merge); the FIXED spine.
+  **(2) the take** — start/resume/abandon, the two passes, `completeAdaptiveTake` (scores → result → Insight →
+  saturation), and the ask-ledger write-back so the questionnaire planner stops mining `Intimacy:dirty-talk`.
+  **(3) the adaptive half** — lines / probes / scenarios / synthesis, uncapped and confidence-based, with
+  `openAmbiguities` as a DETERMINISTIC stop rule (the loop terminates on data, never on the model's opinion of
+  its own certainty) plus the budget and a non-binding runaway backstop.
+  **(4) the seam** — 13 channels behind ONE gate (`tests.own` + active person + the 18+ ack), view types in
+  the crypto-free `schemas` so the sandboxed preload stays type-only.
+  **(5) the renderer** — `/you` → `/tests` with redirects, the two-pass take, the report, live phase progress.
+  **(6) the consumers** — own-words block, the silent partner steer, the unconditional suppression, Together,
+  and the 90-day retake nudge.
+  **(7) the erotica book** — additive-only, rebased immediately before, last commit.
+  **(8) E2E + docs.**
+  Gate green: typecheck (4 packages), lint, format, **2,272 core + 1,610 desktop** unit, and a decrypt-level
+  E2E (ack → mark → split → complete with AI off → the report → the lexicon, the Insight and the ask ledger on
+  disk → the `/you` redirect) with the §12 guard run against the bank grid mid-mark.
+  **Four defects the build itself surfaced:** `testsResults` resolved ids against the deterministic catalog
+  only, so an adaptive id skipped the 18+ gate; `testsAcknowledgeAdult` built its OWN catalog list, so the
+  adaptive instruments vanished the moment someone acknowledged (caught by the E2E, not a unit test — both now
+  share one `testCatalogFor`); a themed boundary could not be enforced by substring matching at all
+  ("anything about being used" shares nothing with "I love using you"), so themes match on stemmed content
+  words; and **visual QA caught the report calling an unmarked dimension "not their thing 0%"**, which tells
+  someone something about themselves they never said — a no-signal dimension now reads `nothing yet` and is
+  listed rather than charted.
+  **As-built deviations from the draft:** `TestResult` is widened additively rather than made a discriminated
+  union (far less invasive, and every existing consumer keeps its type); the AI phases start themselves on
+  entry rather than waiting for a tap (otherwise the person lands on an empty screen after saying yes); and
+  the steer carries everything EXCEPT crisis/trauma-flagged text, which is a safety rule rather than a privacy
+  preference and is stated as such in §8.4.
 
 - 2026-08-16 — created (Draft). Ten owner decisions locked in the brainstorm before drafting: build the adaptive
   ENGINE (not a bespoke test); coexist + seed with the five existing surfaces **but** saturate the topic; the

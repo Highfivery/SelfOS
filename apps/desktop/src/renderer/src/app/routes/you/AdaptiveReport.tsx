@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import type { LexiconEntry } from '@shared/schemas';
+import { NO_SIGNAL_BAND } from '@selfos/core/tests';
 import {
   Banner,
   Button,
@@ -150,16 +151,30 @@ export function AdaptiveReport(): JSX.Element {
             <section>
               <Heading level={2}>The shape of it</Heading>
               <Stack gap={2}>
-                {latest.scores.map((score) => (
-                  <SubscaleBar
-                    key={score.key}
-                    label={SPINE_LABELS[score.key] ?? score.key}
-                    normalized={score.normalized}
-                    {...(score.band !== undefined ? { band: score.band } : {})}
-                    signed={false}
-                  />
-                ))}
+                {/* A dimension with no signal is LISTED, not charted: a 0% bar next to "not their thing"
+                    would tell them something about themselves they never actually said (74 §3.3). */}
+                {latest.scores
+                  .filter((score) => score.band !== NO_SIGNAL_BAND)
+                  .map((score) => (
+                    <SubscaleBar
+                      key={score.key}
+                      label={SPINE_LABELS[score.key] ?? score.key}
+                      normalized={score.normalized}
+                      {...(score.band !== undefined ? { band: score.band } : {})}
+                      signed={false}
+                    />
+                  ))}
               </Stack>
+              {latest.scores.some((score) => score.band === NO_SIGNAL_BAND) ? (
+                <Text size="sm" tone="tertiary">
+                  Not covered this time:{' '}
+                  {latest.scores
+                    .filter((score) => score.band === NO_SIGNAL_BAND)
+                    .map((score) => SPINE_LABELS[score.key] ?? score.key)
+                    .join(' · ')}
+                  .
+                </Text>
+              ) : null}
             </section>
           ) : null}
 

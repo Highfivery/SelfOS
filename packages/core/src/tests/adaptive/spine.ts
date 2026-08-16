@@ -94,6 +94,14 @@ export const DIRTY_TALK_SPINE: readonly SpineDimension[] = [
   },
 ];
 
+/**
+ * A dimension nothing was marked for. NOT the same as a zero: the bank is worked by marking only what lands,
+ * so silence means "not asked about", and rendering it as "not their thing 0%" would tell them something
+ * about themselves they never said (found in visual QA, and the same honesty rule as never showing a topic
+ * as "done").
+ */
+export const NO_SIGNAL_BAND = 'nothing yet';
+
 const BANDS: { upTo: number; label: string }[] = [
   { upTo: 0.2, label: 'not their thing' },
   { upTo: 0.4, label: 'a little' },
@@ -128,13 +136,16 @@ function value(entry: LexiconEntry, direction: SpineDimension['direction']): num
  * counted as zero — the bank is worked by marking only what lands (74 §3.2), so "unrated" means "not marked",
  * never "not interested", and counting it as a zero would drag every dimension toward the floor.
  */
-function meanOf(entries: LexiconEntry[], direction: SpineDimension['direction']): number {
+function meanOf(
+  entries: LexiconEntry[],
+  direction: SpineDimension['direction'],
+): { value: number; signal: boolean } {
   const marked = entries.filter(
     (entry) => entry.state !== undefined || entry.hear > 0 || entry.say > 0,
   );
-  if (marked.length === 0) return 0;
+  if (marked.length === 0) return { value: 0, signal: false };
   const total = marked.reduce((sum, entry) => sum + value(entry, direction), 0);
-  return total / marked.length;
+  return { value: total / marked.length, signal: true };
 }
 
 /** How far up the tiers their appetite actually reaches — the mean tier of what they LOVED, on 1..5. */
@@ -174,20 +185,32 @@ export function scoreSpine(
     if (list) list.push(entry);
     else byFamily.set(entry.family, [entry]);
   }
+  // Whether the take produced ANY signal at all — the two derived dimensions (explicitness, say-confidence)
+  // read the whole lexicon rather than one family, so they share the take's own emptiness.
+  const anyMarked = lexicon.entries.some(
+    (entry) => entry.state !== undefined || entry.hear > 0 || entry.say > 0,
+  );
   return spine.map((dimension) => {
     let normalized: number;
-    if (dimension.key === 'dirtytalk.explicitness') normalized = explicitness(lexicon);
-    else if (dimension.key === 'dirtytalk.say-confidence') normalized = sayConfidence(lexicon);
-    else {
+    let signal: boolean;
+    if (dimension.key === 'dirtytalk.explicitness') {
+      normalized = explicitness(lexicon);
+      signal = anyMarked;
+    } else if (dimension.key === 'dirtytalk.say-confidence') {
+      normalized = sayConfidence(lexicon);
+      signal = lexicon.entries.some((entry) => entry.state !== 'never' && entry.hear >= 3);
+    } else {
       const entries = dimension.families.flatMap((family) => byFamily.get(family) ?? []);
-      normalized = meanOf(entries, dimension.direction);
+      const mean = meanOf(entries, dimension.direction);
+      normalized = mean.value;
+      signal = mean.signal;
     }
     const clamped = normalized < 0 ? 0 : normalized > 1 ? 1 : normalized;
     return {
       key: dimension.key,
       raw: round4(clamped),
       normalized: round4(clamped),
-      band: band(round4(clamped)),
+      band: signal ? band(round4(clamped)) : NO_SIGNAL_BAND,
     };
   });
 }

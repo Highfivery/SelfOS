@@ -1099,6 +1099,37 @@ function getAdaptiveTest(testId: string): AdaptiveTestDefinition | undefined {
   return ADAPTIVE_TESTS.find((test) => test.id === testId);
 }
 
+/**
+ * The hub's catalog: the deterministic instruments plus the adaptive ones, filtered by the same 18+ ack.
+ * ONE assembly, used by both `testsList` and `testsAcknowledgeAdult`, so the two can never disagree about
+ * what exists. An adaptive instrument has no fixed item list, so `itemCount` is its bank's size and
+ * `estimatedMinutes` is an estimate — the card says "adapts as you go" rather than a question count.
+ */
+function testCatalogFor(adultAcknowledged: boolean): TestSummary[] {
+  const adaptive: TestSummary[] = ADAPTIVE_TESTS.filter(
+    (def) => adultAcknowledged || !def.adult,
+  ).map((def) => ({
+    id: def.id,
+    kind: 'adaptive' as const,
+    group: def.group,
+    title: def.title,
+    instrument: def.instrument,
+    blurb: def.blurb,
+    framing: def.framing,
+    estimatedMinutes: def.estimatedMinutes,
+    itemCount: def.bank.entries.length,
+    adult: def.adult,
+    sensitive: def.sensitive,
+    subscales: def.spine.map((dimension) => ({
+      key: dimension.key,
+      label: dimension.label,
+      signed: false,
+    })),
+    wellbeing: false,
+  }));
+  return [...listTestSummaries(adultAcknowledged), ...adaptive];
+}
+
 const TestIdSchema = z.object({ testId: z.string().min(1) });
 const TestResultRefSchema = z.object({ testId: z.string().min(1), resultId: z.string().min(1) });
 const TestTakeSchema = z.object({
@@ -4011,7 +4042,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         return { tests: [], adultAcknowledged: false };
       }
       await acknowledgeAdult(ctx.fs, ctx.key, personId);
-      return { tests: listTestSummaries(true), adultAcknowledged: true };
+      // The SAME assembly as `testsList` — building a second list here is how the adaptive instruments went
+      // missing from the hub the moment someone acknowledged (caught by the E2E, not by a unit test).
+      return { tests: testCatalogFor(true), adultAcknowledged: true };
     },
     testsDeleteResult: async (input): Promise<TestResult[]> => {
       const { testId, resultId } = TestResultRefSchema.parse(input);

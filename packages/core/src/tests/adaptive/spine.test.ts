@@ -102,3 +102,32 @@ describe('the spine (74 §4.2)', () => {
     }
   });
 });
+
+describe('honesty (74 §3.3)', () => {
+  it('says "nothing yet" for a dimension nothing was marked for — never "not their thing"', () => {
+    const lex = applyBankMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK_BANK,
+      { 'praise-her:good-girl': 'love' },
+      'take:1',
+      NOW,
+    );
+    const scores = new Map(scoreSpine(lex).map((s) => [s.key, s.band]));
+    // Praise was actually marked, so it reads as a real result…
+    expect(scores.get('dirtytalk.praise')).not.toBe('nothing yet');
+    // …while degradation, which they were never asked about in this take, says so.
+    expect(scores.get('dirtytalk.degradation')).toBe('nothing yet');
+  });
+
+  it('reads a marked-as-NEVER dimension as a genuine zero, not as silence', () => {
+    const lex = applyBankMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK_BANK,
+      { 'names-degrading:whore': 'never' },
+      'take:1',
+      NOW,
+    );
+    const scores = new Map(scoreSpine(lex).map((s) => [s.key, s.band]));
+    expect(scores.get('dirtytalk.degradation')).toBe('not their thing');
+  });
+});

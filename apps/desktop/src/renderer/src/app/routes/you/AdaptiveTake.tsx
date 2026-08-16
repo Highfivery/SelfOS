@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import {
@@ -69,6 +69,22 @@ export function AdaptiveTake(): JSX.Element {
     void load(testId);
     return () => reset();
   }, [load, reset, testId]);
+
+  // Each AI phase starts itself once on entry — otherwise the person lands on an empty screen and has to ask
+  // for the thing they just said yes to. Guarded per phase, so a degraded phase (which moves the take on)
+  // can never loop back into itself.
+  const started = useRef<Record<string, boolean>>({});
+  const { phase: currentPhase, busy } = store;
+  useEffect(() => {
+    if (busy || started.current[currentPhase]) return;
+    if (currentPhase === 'lines') {
+      started.current['lines'] = true;
+      void useAdaptiveTestStore.getState().loadLines(testId, 1);
+    } else if (currentPhase === 'probe') {
+      started.current['probe'] = true;
+      void useAdaptiveTestStore.getState().nextProbe(testId);
+    }
+  }, [currentPhase, busy, testId]);
 
   const bank = store.bank;
   const marked = useMemo(() => Object.keys(store.marks), [store.marks]);

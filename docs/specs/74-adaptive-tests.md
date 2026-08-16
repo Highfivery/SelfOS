@@ -93,6 +93,8 @@ partner's suggestions.
   second provider.
 - **Fantasy and Sex Sessions themselves** — this spec builds the engine and one instrument; each later
   instrument is its own slice (and its own §11 decisions).
+- **Gating the content.** No tier ceiling, no family opt-in, nothing hidden (§3.2). The 18+ ack and the hard
+  limits (§8.1) are the only things standing in front of any of it.
 - **Anything outside consensual adults.** Unchanged from every intimacy surface (§8).
 
 ## 3. UX & flows
@@ -440,16 +442,16 @@ like any other ask, so the planner treats the ground as worked-through and moves
 
 ### 5.8 Consumers
 
-| Consumer                        | Seam                                                                                                                                                                 |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Solo sessions + guided intimacy | The lexicon block appended after PERSONA/SAFETY/context, gated on the 18+ ack                                                                                        |
-| `dirty-talk-practice`           | Opens on the `wantsToSay` goal; the practice material is their own list                                                                                              |
-| Questionnaire generation        | `explicitFraming` gains an optional vocabulary block — the tier still governs intensity, but the WORDS become theirs                                                 |
-| Challenges                      | Drawn from `wantsToSay`/`likes`, never from `boundaries`                                                                                                             |
-| Intimacy email                  | Same block, same gating (§11 Q3)                                                                                                                                     |
-| Together                        | Both partners' lexicons when both acked; the mismatch is nameable                                                                                                    |
-| **Erotica book**                | The `filthyTalk` register and the vocabulary substitution lists become person-tuned. **Deferred to its own slice** — that file is under active development elsewhere |
-| Partner's coach                 | §5.7, plus the **unconditional suppression**: a `boundaries` entry can never appear in a suggestion to their partner, with or without any steer                      |
+| Consumer                        | Seam                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Solo sessions + guided intimacy | The lexicon block appended after PERSONA/SAFETY/context, gated on the 18+ ack                                                                                                                                                                                                                                                             |
+| `dirty-talk-practice`           | Opens on the `wantsToSay` goal; the practice material is their own list                                                                                                                                                                                                                                                                   |
+| Questionnaire generation        | `explicitFraming` gains an optional vocabulary block — the tier still governs intensity, but the WORDS become theirs                                                                                                                                                                                                                      |
+| Challenges                      | Drawn from `wantsToSay`/`likes`, never from `boundaries`                                                                                                                                                                                                                                                                                  |
+| Intimacy email                  | **Yes** (owner decision) — the E-int family may send a specific line in their register instead of a generic nudge, behind its existing double opt-in                                                                                                                                                                                      |
+| Together                        | Both partners' lexicons when both acked. The coach **may NAME a mismatch out loud** (owner decision) — "one of you wants to be told, the other has been asking permission" — framed as an observation about the pattern between them, never as one partner's file read aloud, and never attributing a specific word to a specific person  |
+| **Erotica book**                | The `filthyTalk` register + the vocabulary substitution lists become person-tuned. **Same slice** (owner decision) — landed as the LAST commit, rebased immediately before, and purely ADDITIVE (a lexicon block appended after the existing register directives, never an edit of them) so it cannot clobber the register work in flight |
+| Partner's coach                 | §5.7, plus the **unconditional suppression**: a `boundaries` entry can never appear in a suggestion to their partner, with or without any steer                                                                                                                                                                                           |
 
 ## 6. IPC / API contracts
 
@@ -512,18 +514,28 @@ and the report leads with resources.
 The profile is `lifeArea:'Intimacy'`, so by default it is own-context, intimacy-topic-only, digest-excluded and
 Together-excluded.
 
-**The owner has knowingly overridden this for the partner steer.** Recorded plainly: the steer may use the
-partner's **own written words verbatim** in suggestions to their partner. It is never attributed — but _those are
-her words, and she will recognise them_. The first time he uses two of her phrases in one night she can
-reasonably infer the app told him. This is a disclosure by inference, it was chosen deliberately, and §3.2's
-intro tells the person the steer exists **before** they produce any material. What it may **not** do is name the
-source, quote a boundary reason, or surface a free-text probe answer (§5.7).
+**The owner has knowingly overridden this for the partner steer, twice.** Recorded plainly rather than buried:
+
+1. The steer may use the partner's **own written words verbatim** in suggestions to their partner. It is never
+   attributed — but _those are her words, and she will recognise them_. The first time he uses two of her phrases
+   in one night she can reasonably infer the app told him. That is a disclosure by inference; it was chosen
+   deliberately, and §3.2's intro tells the person the steer exists **before** they produce any material.
+2. **Everything** travels — including boundary **reasons** and free-text **probe answers**, which can carry
+   history that has nothing to do with what she wants said in bed. Also chosen deliberately.
+
+**The one thing that does not travel is a safety rule, not a privacy preference:** text that tripped the
+trauma/crisis path never enters an erotic-suggestion prompt. §8 forbids treating a disclosure as erotic material
+anywhere in SelfOS; this spec does not carve an exception.
 
 The suppression runs the other way unconditionally: a partner's coach can never suggest a word she has marked
 `never`, with or without any steer.
 
-**Never** tell a person an owner/admin can read this (the durable rule). Break-glass reveal of verbatim lines is
-**not** offered (§11 Q2).
+**Your own data is always fully visible to you** (owner decision): your profile, every answer, every turn of
+every take, with no relevance gate applied to your own screens — the gate governs what reaches a PROMPT, never
+what you can read about yourself. There is **no cross-person reveal**: the Owner cannot read another person's
+profile, because unlike a restricted intake fact there is no household-safety case for it and the steer already
+carries everything useful to a partner's coach. **Never** tell a person an owner/admin can read this (the
+durable rule).
 
 ### 8.5 This artifact is different
 
@@ -558,19 +570,28 @@ inner scroller — the word-bank grid collapses to one word per row at phone wid
 
 ## 11. Open questions
 
-1. **Steer bound.** Confirm §5.7's recommendation: only loves/likes/lines/themes/voice/contexts travel; boundary
-   **reasons** and free-text **probe answers** never do. _Recommendation: adopt._
-2. **Break-glass.** Should an Owner ever be able to reveal verbatim lines? _Recommendation: no — unlike restricted
-   intake facts, there is no safety case for it._
-3. **Intimacy email.** May the lexicon reach an E-int suggestion email ("a line to try tonight")? Delightful or
-   horrifying depending on the person. _Recommendation: yes, behind the existing intimacy-email opt-in._
-4. **Erotica book.** Confirm the book consumes the lexicon in a **later slice** (that file is under active
-   development elsewhere). _Recommendation: yes, deferred._
-5. **Word-bank size.** ~90 words across 11 families is ~5 minutes of tapping. Trim to ~60 core + AI additions?
-6. **Anatomy variants** — resolve from intake anatomy answers (reusing `activityRows`), or ask inside the take?
-   _Recommendation: resolve, fall back to asking when intake is empty._
-7. **Together.** Should a couples session be able to NAME the mismatch ("one of you wants to be told, the other
-   has been asking permission")? That is the highest-value couples intervention here — and the most exposing.
+### Resolved (2026-08-16 — asked one at a time, before drafting the build)
+
+1. **Taboo fantasy (F18)** → **ships in v1**, and **nothing is gated at all** — no tier ceiling, no family
+   opt-in. Private two-person household of consenting adults. The roleplay framing + hard limits stay (§8.1).
+2. **Pacing** → a **two-pass bank**: pass 1 marks only what lands (🔥 / ✗ / ~), pass 2 asks the hear/say split on
+   what was marked. ~500 entries without ~1,000 taps.
+3. **Steer bound** → **everything travels**, incl. boundary reasons + probe answers. Sole exception: crisis /
+   trauma-flagged text (a safety rule, §8.4).
+4. **Together** → the couples coach **may name a mismatch out loud**, framed as the pattern between them.
+5. **Intimacy email** → **yes**, behind its existing double opt-in.
+6. **Erotica book** → wired in the **same slice**, as the last commit, additive-only (§5.8).
+7. **Anatomy variants** → **resolved from intake** via `activityRows`; asked in-take only when intake is empty.
+8. **Break-glass** → **no cross-person reveal**; a person always sees ALL of their own data (§8.4).
+9. **Depth** → **uncapped, confidence-based**. The budget still gates every call, plus a non-binding runaway
+   backstop (§5.3).
+
+### Still open
+
+- **Retake cadence.** Nothing schedules a retake today. Does the profile go stale and prompt one, or is it
+  purely manual? _Recommendation: manual, with a gentle Home nudge after ~6 months._
+- **A "tonight" dial.** Desire moves with mood; a single stored profile is a snapshot. Worth a lightweight
+  "tonight I want ___" that temporarily biases the register? _Recommendation: not v1 — see how the profile lands._
 
 ## 12. Changelog
 
@@ -579,120 +600,181 @@ inner scroller — the word-bank grid collapses to one word per row at phone wid
   partner path is a **silent steer** carrying **her own words verbatim** (informed privacy override, §8.4); hard
   nos **always suppress**; three results sharing **one lexicon**; the hub renames to **Tests** with wellbeing
   keeping its own nouns; a `never`/`not yet` split; and **per-context** register scoring.
+- 2026-08-16 — nine further decisions, asked one at a time (§11): F18 ships and **nothing is gated**; a
+  **two-pass** bank; **everything** travels in the steer except crisis-flagged text; Together **may name a
+  mismatch**; the lexicon **may reach the intimacy email**; the **erotica book is wired in the same slice**
+  (last commit, additive-only); anatomy **resolved from intake**; **no cross-person reveal** but a person sees
+  **all** of their own data; and the adaptive half is **uncapped, confidence-based** (budget still gates every
+  call). The bank grew to ~500 entries across 24 families on the owner's instruction — more explicit, more
+  vulgar, tame → extreme.
 
 ---
 
 ## 13. Appendix — the bank (draft content)
 
 The source of truth is `@selfos/core/tests/adaptive/instruments/dirtyTalkBank.ts` — the spec-49 shape
-(`{ key, text, kind, family, tier, directions }`) so it can be grouped, tier-gated and rendered exactly like the
-activity matrix. **Boundary, as everywhere:** consensual adults only; taboo strictly as **pre-agreed
-fantasy/roleplay** between adults who both know that's what it is; never minors, never real non-consent, never
-illegal acts — enforced by the content + the model, never a keyword filter. Nothing here is shown unless the
-person opened its family and their ceiling reaches its tier.
+(`{ key, text, kind, family, tier, directions }`) so it groups, orders and renders exactly like the activity
+matrix. **~500 entries across 24 families**, tier **1 (tame) → 5 (extreme)**, words AND the phrases people
+actually say. **Nothing is gated** (§3.2): every family is visible from the start.
+
+**Boundary (unchanged, and the only thing standing in front of any of it):** consensual adults; taboo strictly
+as **pre-agreed, safeworded roleplay** between adults who both know that's what it is; never minors, never real
+non-consent, never illegal acts — carried by the content + the model, never a keyword filter.
+
+Anatomy inside a phrase is resolved per person from the intake answers (`activityRows`), so _"pound my pussy" /
+"pound my ass" /_ a neutral form render as appropriate.
 
 **F1 · Anatomy — her body**
-_t1_ down there, between your legs, your body, your chest — _t2_ pussy, tits, ass, nipples, clit, thighs, mouth,
-throat, breasts, bum — _t3_ cunt, asshole, hole, that ass, those tits, your lips — _t4_ your tight little ass,
-that greedy cunt, your slick cunt
+_t1_ down there · between your legs · your body · your chest · your curves — _t2_ pussy · tits · ass · nipples ·
+clit · thighs · mouth · throat · breasts · bum · lips — _t3_ cunt · asshole · hole · that ass · those tits ·
+your slit · your opening — _t4_ your tight little ass · that greedy cunt · your slick cunt · your fuckhole ·
+your dripping hole · your puffy lips · your swollen clit — _t5_ your used cunt · your gaping hole
 
 **F2 · Anatomy — his body**
-_t1_ your body, down there — _t2_ cock, dick, balls — _t3_ that cock, your hard cock, your load, precum — _t4_
-fat cock, thick cock, every inch of you
+_t1_ your body · down there · your hands · your arms — _t2_ cock · dick · balls · your mouth · your fingers —
+_t3_ that cock · your hard cock · your load · precum · your shaft · your tip · your cum — _t4_ fat cock · thick
+cock · every inch · that big fucking cock · your heavy balls — _t5_ that cock that ruins me
 
 **F3 · State & sensation**
-_t1_ warm, close, breathless, shaking — _t2_ wet, hard, aching, sensitive, tight, needy — _t3_ soaked, dripping,
-throbbing, swollen, clenching, twitching, pulsing, slick — _t4_ gushing, stretched, full, sloppy, leaking, raw,
-sore, ruined — _t5_ wrecked, destroyed
+_t1_ warm · close · breathless · shaking · trembling · tingling — _t2_ wet · hard · aching · sensitive · tight ·
+needy · desperate · swollen — _t3_ soaked · dripping · throbbing · clenching · twitching · pulsing · slick ·
+quivering · slippery · rock hard · leaking — _t4_ gushing · stretched · full · sloppy · raw · sore · ruined ·
+overflowing · creaming · dripping down my thighs · so full I can't breathe — _t5_ wrecked · destroyed · used up ·
+fucked out · gaping
 
 **F4 · Names — affectionate**
-_t1_ baby, babe, beautiful, gorgeous, sweetheart, honey, love, my love, angel, darling — _t2_ pretty girl,
-handsome, my girl, my boy, good one
+_t1_ baby · babe · beautiful · gorgeous · sweetheart · honey · love · my love · angel · darling — _t2_ pretty
+girl · handsome · my girl · my boy · sweet thing · beautiful girl
 
 **F5 · Names — power & role**
-_t2_ good girl, good boy — _t3_ sir, ma'am, mistress, daddy, mommy, princess, kitten, pet, babygirl, boy —
-_t4_ master, owner, my property, my toy, plaything
+_t2_ good girl · good boy — _t3_ sir · ma'am · mistress · daddy · mommy · princess · kitten · pet · babygirl ·
+boy · goddess · queen — _t4_ master · owner · my property · my toy · plaything · doll
 
-**F6 · Names — degrading** _(never shown unopened)_
-_t3_ naughty girl, dirty girl, bad girl — _t4_ slut, my slut, little slut, whore, bitch, filthy thing — _t5_
-cockslut, cumslut, cumdump, fucktoy, hole, pathetic little slut, worthless
+**F6 · Names — degrading**
+_t3_ naughty girl · dirty girl · bad girl · filthy little thing · greedy girl — _t4_ slut · my slut · little
+slut · whore · bitch · brat · dirty whore · needy slut · cock hungry — _t5_ cockslut · cumslut · cumdump ·
+fucktoy · fuckdoll · hole · pathetic little slut · worthless · my filthy whore · dumb slut · desperate little
+whore
 
 **F7 · Claiming & possession**
-_t2_ mine, you're mine, my girl — _t3_ you belong to me, nobody else gets this, say you're mine, say it — _t4_
-I own this pussy, this is mine, mine to use, you're my property, every part of you is mine — _t5_ _(roleplay)_
-"you don't get to say no to me", "I'll do what I like with you"
+_t2_ mine · you're mine · my girl · my boy — _t3_ you belong to me · nobody else gets this · say you're mine ·
+who do you belong to · say it — _t4_ I own this pussy · this cunt is mine · mine to use · you're my property ·
+every hole is mine · say my name when you come · this ass is mine — _t5_ _(roleplay)_ you don't get to say no to
+me · I'll do what I like with you · you're mine to ruin
 
 **F8 · Praise & worship**
-_t1_ you're beautiful, you feel amazing, I love how you feel, you're perfect — _t2_ good girl, that's it, just
-like that, you're doing so well, you feel incredible, god you're gorgeous — _t3_ you take it so well, look how
-well you're taking it, you were made for this, I love how you taste, you're so good at that, look at you — _t4_
-you take my cock so well, that's my good little slut, perfect fucking pussy, you were made to take this
+_t1_ you're beautiful · you feel amazing · I love how you feel · you're perfect — _t2_ good girl · that's it ·
+just like that · you're doing so well · you feel incredible · god you're gorgeous — _t3_ you take it so well ·
+look how well you're taking it · you were made for this · I love how you taste · you're so good at that · that's
+my girl · you're so fucking tight — _t4_ you take my cock so well · that's my good little slut · perfect fucking
+pussy · you were made to take this · such a good girl for me · god you suck cock so well · your cunt was made
+for me — _t5_ best fucking pussy I've ever had · you were built to be fucked
 
-**F9 · Degradation & humiliation** _(never shown unopened)_
-_t3_ you love this, don't you, look at the state of you, you're such a mess — _t4_ dirty little slut, filthy
-girl, look how wet you get for me, you're leaking everywhere, beg like the slut you are, you're pathetic when
-you want it — _t5_ you're just a hole, you exist for this, you'd take anything, wouldn't you, say you're my
-whore, thank me for it, look at yourself
+**F9 · Degradation & humiliation**
+_t3_ you love this, don't you · look at the state of you · you're such a mess · you can't help yourself — _t4_
+dirty little slut · filthy girl · look how wet you get for me · you're leaking everywhere · beg like the slut
+you are · you're pathetic when you want it · is that all it takes · look at you drooling for it — _t5_ you're
+just a hole · you exist for this · you'd take anything, wouldn't you · say you're my whore · thank me for it ·
+look at yourself · you're nothing but a hole to fuck · dumb little slut · you love being used, don't you
 
 **F10 · Commands — general**
-_t1_ come here, kiss me, closer, slower, look at me — _t2_ don't move, stay still, open your mouth, spread your
-legs, hands above your head, turn around, bend over, on your knees, take it off, touch yourself — _t3_ open
-wider, arch your back, don't look away, say my name, take it, don't stop, keep going, be quiet, don't make a
-sound, let me hear you — _t4_ crawl, hold your legs open, keep them open, take it all, don't you dare stop,
-ask me nicely, hands behind your back — _t5_ gag on it, choke on it, hold your breath, count them, don't spill a
-drop
+_t1_ come here · kiss me · closer · slower · look at me — _t2_ don't move · stay still · open your mouth ·
+spread your legs · hands above your head · turn around · bend over · on your knees · take it off · touch
+yourself — _t3_ open wider · arch your back · don't look away · say my name · take it · don't stop · keep going ·
+be quiet · don't make a sound · let me hear you · show me · touch yourself for me — _t4_ crawl · hold your legs
+open · keep them open · take it all · don't you dare stop · ask me nicely · hands behind your back · eyes on me ·
+spread that ass · hold your ankles — _t5_ gag on it · choke on it · hold your breath · count them · don't spill a
+drop · present yourself · beg for my cock · keep your mouth open
 
 **F11 · Commands — orgasm control**
-_t2_ come for me, let go, don't hold back — _t3_ not yet, hold it, don't come yet, wait, ask me first, come now,
-that's it, come — _t4_ don't come until I say, you'll come when I tell you, again, one more, ask permission,
-you can come — _t5_ _(roleplay)_ you don't get to come tonight, hold it or else
+_t2_ come for me · let go · don't hold back — _t3_ not yet · hold it · don't come yet · wait · ask me first ·
+come now · that's it, come — _t4_ don't come until I say · you'll come when I tell you · again · one more · ask
+permission · you can come now · good girl, come · come on my cock — _t5_ _(roleplay)_ you don't get to come
+tonight · hold it or you'll be punished · you'll come when I'm done with you
 
 **F12 · Demands — the receiving voice**
-_t1_ touch me, kiss me, closer, don't stop — _t2_ fuck me, harder, deeper, slower, right there, just like that,
-I want you inside me, I need you, more — _t3_ fuck me harder, pound me, **pound my pussy**, fuck me from behind,
-ride me, suck my clit, lick my pussy, finger me, use your mouth, put it in, give it to me, don't be gentle —
-_t4_ **fuck me in the ass**, **finger my asshole**, **choke me**, pull my hair, spank me, slap my tits, hold me
-down, spit in my mouth, come inside me, come on my face, come on my tits, use me, make me beg, ruin me, breed me,
-fill me up — _t5_ wreck my pussy, choke me harder, treat me like your whore, use every hole, _(pre-agreed CNC,
-safeworded)_ don't stop even if I say so
+_t1_ touch me · kiss me · closer · don't stop — _t2_ fuck me · harder · deeper · slower · right there · just like
+that · I want you inside me · I need you · more — _t3_ fuck me harder · pound me · **pound my pussy** · fuck me
+from behind · ride me · suck my clit · lick my pussy · eat me · finger me · use your mouth · put it in · give it
+to me · don't be gentle · get in me · rub my clit — _t4_ **fuck me in the ass** · **finger my asshole** ·
+**choke me** · pull my hair · spank me · slap my tits · hold me down · spit in my mouth · come inside me · come
+on my face · come on my tits · use me · make me beg · ruin me · breed me · fill me up · grab my throat · fuck my
+throat · stretch me open — _t5_ wreck my pussy · choke me harder · treat me like your whore · use every hole ·
+make me take it · fuck me till I can't walk · destroy me · use me like a toy · _(pre-agreed CNC, safeworded)_
+don't stop even if I say so
 
 **F13 · Demands — the giving voice**
-_t2_ come here, let me taste you, I want to watch, take it off — _t3_ **suck that cock**, suck my cock, get on
-your knees, ride me, sit on my face, open your mouth, take it, look at me while you take it, say my name, tell me
-who owns this — _t4_ swallow it, take it all, deeper, gag on it, beg for it, tell me what you are, hold still
-while I use you, arch for me — _t5_ _(roleplay)_ you'll take what I give you
+_t2_ come here · let me taste you · I want to watch · take it off · sit on me — _t3_ **suck that cock** · suck my
+cock · get on your knees · ride me · sit on my face · open your mouth · take it · look at me while you take it ·
+say my name · tell me who owns this · spread them · bounce on it — _t4_ swallow it · take it all · deeper · gag
+on it · beg for it · tell me what you are · hold still while I use you · arch for me · give me that ass · choke
+on my cock · take my load — _t5_ _(roleplay)_ you'll take what I give you · open up, I'm not done
 
 **F14 · Narration & feedback**
-_t1_ that feels amazing, I love this, you feel so good — _t2_ you're so wet, you're so hard, you're so tight,
-**you're so big**, god you fill me, I can feel you — _t3_ **I can feel you throb**, I can feel you clenching,
-you're dripping down my hand, listen to how wet you are, look how hard you make me, I'm going to come, I've been
-hard all day, I can still taste you — _t4_ your cunt is soaking, I can feel you tightening around my cock,
-you're leaking all over me, I'm going to fill you, watch it go in, look at you taking every inch
+_t1_ that feels amazing · I love this · you feel so good — _t2_ you're so wet · you're so hard · you're so tight ·
+**you're so big** · god you fill me · I can feel you — _t3_ **I can feel you throb** · I can feel you clenching ·
+you're dripping down my hand · listen to how wet you are · look how hard you make me · I'm going to come · I've
+been hard all day · I can still taste you · you're shaking — _t4_ your cunt is soaking · I can feel you
+tightening around my cock · you're leaking all over me · I'm going to fill you · watch it go in · look at you
+taking every inch · you're so fucking wet for me · your pussy is gripping me — _t5_ listen to that · you're
+making such a mess · I can feel your cunt begging for it
 
 **F15 · Begging & permission**
-_t2_ please, I need it, please don't stop — _t3_ please fuck me, can I come, may I come, please let me, I need
-you inside me — _t4_ please sir, please let me come, I'll be good, I'll do anything, please use me, may I touch
-myself — _t5_ thank you, thank you for letting me
+_t2_ please · I need it · please don't stop — _t3_ please fuck me · can I come · may I come · please let me · I
+need you inside me · I'm so close — _t4_ please sir · please let me come · I'll be good · I'll do anything ·
+please use me · may I touch myself · please fill me — _t5_ thank you · thank you for letting me · thank you for
+using me · please, I'll be your good little slut
 
 **F16 · Sexting & anticipation**
-_t1_ thinking about you, can't wait to see you, I miss you — _t2_ I've been thinking about last night, what are
-you wearing, I want you tonight, come home — _t3_ I'm so hard thinking about you, I'm wet just typing this, tell
-me what you'd do to me, send me one, I've been thinking about your mouth all day — _t4_ I've been thinking about
-your cunt all day, I'm going to ruin you tonight, I want you on your knees when I get home, I'm fucking you the
-second you walk in
+_t1_ thinking about you · can't wait to see you · I miss you — _t2_ I've been thinking about last night · what
+are you wearing · I want you tonight · come home — _t3_ I'm so hard thinking about you · I'm wet just typing
+this · tell me what you'd do to me · send me one · I've been thinking about your mouth all day · I'm touching
+myself — _t4_ I've been thinking about your cunt all day · I'm going to ruin you tonight · I want you on your
+knees when I get home · I'm fucking you the second you walk in · don't touch yourself until I'm home · I want you
+dripping before I get there — _t5_ I'm going to use every hole tonight · you'd better be ready for me
 
 **F17 · Aftercare & tenderness**
-_t1_ come here, I've got you, that was perfect, you did so well, I love you, stay right there — _t2_ good girl,
-you were so good, are you okay, let me hold you, I'm proud of you, I've got you
+_t1_ come here · I've got you · that was perfect · you did so well · I love you · stay right there — _t2_ good
+girl · you were so good · are you okay · let me hold you · I'm proud of you · you're safe · you took that so well
 
-**F18 · Taboo fantasy & roleplay** _(t5, never shown unopened; every entry is **pre-agreed roleplay between
-adults**, safeworded, and framed as such in the UI and in every prompt)_
-CNC / ravishment lines _("you don't get a choice", "I'm not asking", "take it")_ · stranger _("you don't even
-know my name")_ · boss/employee · teacher/student _(adults)_ · doctor/patient · cheating roleplay _("does he know
-you're here", "tell me what he does to you")_ · cuckold / hotwife _("tell me what he did to you", "did you let
-him finish")_ · breeding _("I'm going to breed you", "you're going to take it")_ · primal _("run", "I'll catch
-you")_ · age-gap _(adults)_ · service/objectification _("you're furniture tonight")_
+**F18 · Taboo fantasy & roleplay** _(t5 — every entry is **pre-agreed, safeworded roleplay between adults**, and
+labelled as roleplay in the UI and in every prompt)_
+CNC / ravishment _("you don't get a choice", "I'm not asking", "take it")_ · stranger _("you don't even know my
+name")_ · boss/employee · teacher/student _(adults)_ · doctor/patient · cheating roleplay _("does he know you're
+here", "tell me what he does to you")_ · cuckold / hotwife _("tell me what he did to you", "did you let him
+finish")_ · breeding _("I'm going to breed you", "you're going to take it")_ · primal _("run", "I'll catch
+you")_ · age-gap _(adults)_ · objectification _("you're furniture tonight")_ · "caught in the act" · sex-worker
+roleplay · being shared _(fantasy)_
 
-**F19 · Delivery & voice** _(not words — how they're said; rated the same way)_
-whispered · in my ear · low and slow · growled · commanding · breathless · loud · filthy but smiling ·
-silent, just sounds · narrating the whole time · a single word at the right moment
+**F19 · Delivery & voice** _(not words — how they're said)_
+whispered · in my ear · low and slow · growled · commanding · breathless · loud · filthy but smiling · silent,
+just sounds · narrating the whole time · a single word at the right moment · saying my name · moaning · telling
+me what you're about to do before you do it
+
+**F20 · Oral — the words for it**
+_t2_ suck me · lick me · use your mouth · taste me · kiss me there — _t3_ eat my pussy · suck my cock · lick my
+clit · suck it · put it in your mouth · sit on my face · lick me clean · get it wet — _t4_ deepthroat it · gag on
+it · choke on my cock · take it all the way · fuck my face · face-fuck me · swallow it · don't spill it · look at
+me while you suck it · worship it — _t5_ use my throat · make me gag · leave me drooling
+
+**F21 · Anal — the words for it**
+_t2_ touch me there · play with my ass — _t3_ finger my ass · finger my asshole · lick my ass · rim me · put a
+finger in — _t4_ fuck my ass · take my ass · in my ass · stretch my ass · plug me · pound my ass — _t5_ ruin my
+ass · both holes · use my ass like a pussy
+
+**F22 · Cum & finishing**
+_t2_ come for me · I'm close · I'm going to come — _t3_ come inside me · come with me · I want to feel you come ·
+make me come · finish in me — _t4_ fill me up · come on my face · come on my tits · come in my mouth · swallow
+it · come all over me · breed me · paint me · give me your load · don't pull out — _t5_ make a mess of me · I
+want to be dripping with it · put it back in after
+
+**F23 · Impact, restraint & pain** _(verbal)_
+_t2_ harder · pull my hair · hold me down — _t3_ spank me · slap my ass · grab my throat · pin me · bite me ·
+scratch me · squeeze — _t4_ choke me · slap my tits · slap my face · mark me · leave a bruise · tie me up · hold
+my wrists · harder, I can take it — _t5_ choke me harder · hurt me a little · make it sting · don't be careful
+with me
+
+**F24 · Being watched / shared** _(verbal; the fantasy-framed sibling of F18)_
+_t3_ I want to watch you · watch me · look at us · imagine someone seeing this — _t4_ would you let them watch ·
+tell me what he did · I want to watch someone else make you come _(fantasy)_ — _t5_ _(roleplay)_ tell me how he
+fucked you · I want to see you take someone else

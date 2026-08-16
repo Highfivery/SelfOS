@@ -1,4 +1,9 @@
-import type { EroticLexicon, LexiconEntry, TestSubscaleScore } from '../../schemas';
+import {
+  NO_SIGNAL_BAND,
+  type EroticLexicon,
+  type LexiconEntry,
+  type TestSubscaleScore,
+} from '../../schemas';
 
 /**
  * 74-adaptive-tests §4.2 — the **spine**: the FIXED set of scored dimensions an adaptive instrument maps onto.
@@ -93,14 +98,6 @@ export const DIRTY_TALK_SPINE: readonly SpineDimension[] = [
     families: [],
   },
 ];
-
-/**
- * A dimension nothing was marked for. NOT the same as a zero: the bank is worked by marking only what lands,
- * so silence means "not asked about", and rendering it as "not their thing 0%" would tell them something
- * about themselves they never said (found in visual QA, and the same honesty rule as never showing a topic
- * as "done").
- */
-export const NO_SIGNAL_BAND = 'nothing yet';
 
 const BANDS: { upTo: number; label: string }[] = [
   { upTo: 0.2, label: 'not their thing' },

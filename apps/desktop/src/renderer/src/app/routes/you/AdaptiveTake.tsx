@@ -188,6 +188,19 @@ export function AdaptiveTake(): JSX.Element {
                       .filter((entry) => entry.family === family.id)
                       .map((entry) => {
                         const mark = store.marks[entry.key];
+                        // A hard no already on record is shown as settled, not re-offered as a fresh choice
+                        // (74 §3.5) — it lifts only from the report.
+                        const locked = store.state?.lexicon.entries.some(
+                          (e) => e.key === entry.key && e.state === 'never',
+                        );
+                        if (locked) {
+                          return (
+                            <li key={entry.key} className={adaptive.row}>
+                              <span className={adaptive.entryText}>{entry.text}</span>
+                              <span className={adaptive.lockedMark}>✗ off the table</span>
+                            </li>
+                          );
+                        }
                         return (
                           <li key={entry.key} className={adaptive.row}>
                             <span className={adaptive.entryText}>{entry.text}</span>
@@ -353,7 +366,7 @@ export function AdaptiveTake(): JSX.Element {
                     >
                       Answer
                     </Button>
-                    <Button variant="ghost" onClick={() => void store.nextProbe(testId)}>
+                    <Button variant="ghost" onClick={() => void store.skipProbe(testId)}>
                       Skip this
                     </Button>
                   </div>

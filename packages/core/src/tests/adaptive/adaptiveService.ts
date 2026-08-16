@@ -1,5 +1,6 @@
 import type { FileSystem } from '../../host';
 import { uuid } from '../../id';
+import { isSafeSegment } from '../../pathSafety';
 import { deleteInsight, getInsight, saveInsight } from '../../insights';
 import {
   TestResultSchema,
@@ -19,6 +20,7 @@ import {
   writeLexicon,
   type BankMarks,
 } from './lexicon';
+import { takeCarriesDistress } from './distress';
 import { recordTakeSaturation } from './saturation';
 import { scoreSpine } from './spine';
 import type { AdaptiveTestDefinition } from './types';
@@ -43,12 +45,21 @@ const INSIGHT_SCHEMA_VERSION = 1;
 function testsDir(personId: string): string {
   return `people/${personId}/tests`;
 }
-function resultPath(personId: string, resultId: string): string {
+
+/**
+ * A result path, with BOTH segments checked. `fs.remove` is recursive and `join` NORMALISES `..` rather than
+ * refusing it, so a crafted `resultId` from the renderer could otherwise delete another person's lexicon or
+ * the vault's recovery file. Returns null for anything unsafe; every caller treats that as "not found".
+ */
+function resultPath(personId: string, resultId: string): string | null {
+  if (!isSafeSegment(personId) || !isSafeSegment(resultId)) return null;
   return `${testsDir(personId)}/${resultId}.enc`;
 }
 
 async function saveResult(fs: FileSystem, key: Uint8Array, result: TestResult): Promise<void> {
-  await writeEncryptedJson(fs, resultPath(result.subjectPersonId, result.id), result, key);
+  const path = resultPath(result.subjectPersonId, result.id);
+  if (!path) return;
+  await writeEncryptedJson(fs, path, result, key);
 }
 
 export async function getAdaptiveResult(
@@ -57,7 +68,9 @@ export async function getAdaptiveResult(
   personId: string,
   resultId: string,
 ): Promise<TestResult | null> {
-  const raw = await readEncryptedJson(fs, resultPath(personId, resultId), key);
+  const path = resultPath(personId, resultId);
+  if (!path) return null;
+  const raw = await readEncryptedJson(fs, path, key);
   if (!raw) return null;
   const parsed = TestResultSchema.safeParse(raw);
   if (!parsed.success) return null;
@@ -153,7 +166,8 @@ export async function abandonAdaptiveTake(
   personId: string,
   resultId: string,
 ): Promise<void> {
-  await fs.remove(resultPath(personId, resultId));
+  const path = resultPath(personId, resultId);
+  if (path) await fs.remove(path);
 }
 
 /**
@@ -264,9 +278,13 @@ export async function completeAdaptiveTake(
   await writeLexicon(fs, key, lexicon);
 
   const at = now.toISOString();
+  // §8.3 — a disclosure anywhere in the take flags the result, so the report leads with resources and the
+  // flag feeds `aggregateCrisisSignal` like any other (40 §3.5).
+  const crisisFlag = takeCarriesDistress(draft.turns);
   const result: TestResult = {
     ...draft,
     status: 'complete',
+    ...(crisisFlag ? { crisisFlag: true } : {}),
     scores: scoreSpine(lexicon, def.spine),
     ...(input.profile ? { profile: input.profile } : {}),
     ...(input.narrative ? { narrative: input.narrative } : {}),
@@ -318,10 +336,13 @@ async function buildAdaptiveInsight(
     facts.push({
       id: `${insightId}:${id}`,
       text,
-      // 54: test results default-share with the PARTNER relationship type; the Intimacy life-area keeps the
-      // relevance gate on, so they surface only in intimacy contexts and never in a topic-free digest.
+      // OWN-CONTEXT ONLY, unlike the other test results (54's partner default). Two reasons, both specific to
+      // this instrument: the facts are VERBATIM sexual language rather than a trait score, and the
+      // cross-shared path is NOT topic-gated — a partner-shared fact reaches their prompt in a session about
+      // work. The partner path for this profile is the silent steer (§5.7), which is gated, unattributed and
+      // re-checked on every call; `restricted` keeps the raw vocabulary out of every other route.
       shareable: false,
-      shareableTypes: ['partner'],
+      restricted: true,
       lifeArea: def.lifeArea,
     });
   };
@@ -353,10 +374,48 @@ async function buildAdaptiveInsight(
     confidence: 'high', // they told us directly, word by word
     categories: [def.lifeArea],
     approved: true,
+    ...(result.crisisFlag ? { crisisFlag: true } : {}),
     provenance: { testId: def.id, testResultId: result.id, at: result.takenAt },
     createdAt: existing?.createdAt ?? fallbackCreatedAt,
     updatedAt: result.takenAt,
   };
+}
+
+/**
+ * Delete EVERY take of an adaptive test — results, the derived Insight, and the lexicon entries this
+ * instrument wrote (§8.5: "deletion has to be real here"). Boundaries are kept: a hard no outlives the take
+ * that recorded it, because deleting a profile must never quietly re-open something they ruled out.
+ */
+export async function deleteAllAdaptiveResults(
+  fs: FileSystem,
+  key: Uint8Array,
+  def: AdaptiveTestDefinition,
+  personId: string,
+  now: Date,
+): Promise<void> {
+  const all = await listAdaptiveResults(fs, key, personId, def.id);
+  const takeIds = new Set(all.map((result) => `test:${result.id}`));
+  for (const result of all) {
+    const path = resultPath(personId, result.id);
+    if (path) await fs.remove(path);
+  }
+  const insightId = all.find((result) => result.insightId)?.insightId;
+  if (insightId) await deleteInsight(fs, personId, insightId);
+
+  const lexicon = await readLexicon(fs, key, personId, now);
+  await writeLexicon(fs, key, {
+    ...lexicon,
+    // Only what THIS instrument's takes wrote. A shared lexicon means another test's entries are not ours to
+    // delete — and a boundary is nobody's to delete but theirs.
+    entries: lexicon.entries.filter(
+      (entry) => entry.state === 'never' || !(entry.source && takeIds.has(entry.source)),
+    ),
+    registers: {},
+    contexts: {},
+    themes: [],
+    wantsToSay: [],
+    updatedAt: now.toISOString(),
+  });
 }
 
 /**
@@ -376,7 +435,9 @@ export async function deleteAdaptiveResult(
 ): Promise<void> {
   const all = await listAdaptiveResults(fs, key, personId, def.id);
   const target = all.find((result) => result.id === resultId);
-  await fs.remove(resultPath(personId, resultId));
+  const path = resultPath(personId, resultId);
+  if (!path) return;
+  await fs.remove(path);
   const remaining = all.filter((result) => result.id !== resultId && result.status !== 'draft');
   if (remaining.length === 0) {
     if (target?.insightId) await deleteInsight(fs, personId, target.insightId);

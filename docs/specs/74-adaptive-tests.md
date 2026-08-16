@@ -162,10 +162,9 @@ Three mechanisms, all existing precedents:
 3. **Skip is free** at family and entry level, and an unrated entry is simply omitted from the scoring mean —
    never treated as a no (the `scoreSubscale` "unanswered → omit" rule).
 
-A free write-in per family ("your words — anything we missed"). One **dialect** question up front (`cunt` is
-affectionate in Glasgow and a hard stop in Ohio — asked, never assumed). Anatomy words and the anatomy inside
-phrases are resolved per person the way `activityRows.ts` resolves the oral rows, from the intake anatomy
-answers where present (_"pound my pussy"_ / _"pound my ass"_ / a neutral form when unknown).
+A free write-in per family ("your words — anything we missed"). **As built:** both anatomical forms ship as
+entries and everyone sees both, marking what applies; per-person resolution via `activityRows` (and the dialect
+question) are later refinements rather than shipped behaviour.
 
 Each entry declares its sensible **directions** — most demands are `both` (she says _"fuck me harder"_, he hears
 it), a few are one-way (_"good girl"_ is rarely a thing you say about yourself) — so the grid never asks a
@@ -576,8 +575,9 @@ inner scroller — the word-bank grid collapses to one word per row at phone wid
    opt-in. Private two-person household of consenting adults. The roleplay framing + hard limits stay (§8.1).
 2. **Pacing** → a **two-pass bank**: pass 1 marks only what lands (🔥 / ✗ / ~), pass 2 asks the hear/say split on
    what was marked. ~500 entries without ~1,000 taps.
-3. **Steer bound** → **everything travels**, incl. boundary reasons + probe answers. Sole exception: crisis /
-   trauma-flagged text (a safety rule, §8.4).
+3. **Steer bound** → **everything travels**. Sole exception: crisis / trauma-flagged text (a safety rule,
+   §8.4). As built it emits the DERIVED vocabulary + themes rather than raw probe text, and never a boundary
+   reason — the suppression needs the boundary itself, not the why.
 4. **Together** → the couples coach **may name a mismatch out loud**, framed as the pattern between them.
 5. **Intimacy email** → **yes**, behind its existing double opt-in.
 6. **Erotica book** → wired in the **same slice**, as the last commit, additive-only (§5.8).

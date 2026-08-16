@@ -252,6 +252,9 @@ export function Home(): JSX.Element {
   const takenTests = testCatalog
     .filter((t) => (resultsByTest[t.id]?.length ?? 0) > 0)
     .map((t) => ({
+      // The TEST id as well as the publisher: an adaptive instrument's `instrument` is "SelfOS", so a
+      // provider keyed on it can never fire (74 §11).
+      id: t.id,
       instrument: t.instrument,
       group: t.group,
       takenAt: resultsByTest[t.id]?.[0]?.takenAt ?? '',

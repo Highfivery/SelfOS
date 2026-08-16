@@ -175,3 +175,28 @@ describe('boundary matching (74 §5.7)', () => {
     expect(violatesBoundary(lex, 'good girl, just like that')).toBe(false);
   });
 });
+
+describe('a hard no is unliftable (74 §3.2 — the invariant the feature rests on)', () => {
+  it('cannot be downgraded by ANY mark, not just by love', () => {
+    const lex = seeded();
+    for (const mark of ['love', 'notYet'] as const) {
+      const after = applyBankMarks(lex, DIRTY_TALK_BANK, { [WHORE]: mark }, 'take:2', LATER);
+      expect(after.entries.find((e) => e.key === WHORE)?.state).toBe('never');
+      expect(suppressedTexts(after)).toContain('whore');
+    }
+  });
+
+  it('never appears in the goal list, however it was marked', () => {
+    // The path that used to leak: never → notYet put the word in `wantsToSay`, which reaches their own coach
+    // prompt as something to PRACTISE, two lines under "never use this".
+    const downgraded = applyBankMarks(seeded(), DIRTY_TALK_BANK, { [WHORE]: 'notYet' }, 'e', LATER);
+    expect(derivedWantsToSay(downgraded)).not.toContain('whore');
+  });
+
+  it('matches a literal boundary on word boundaries, so a short word cannot suppress everything', () => {
+    const lex = addBoundary(emptyLexicon('p1', NOW), { text: 'ass', kind: 'word' }, NOW);
+    expect(violatesBoundary(lex, 'that ass')).toBe(true);
+    expect(violatesBoundary(lex, 'pass me the water')).toBe(false);
+    expect(violatesBoundary(lex, 'a class act')).toBe(false);
+  });
+});

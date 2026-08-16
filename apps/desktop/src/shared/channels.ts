@@ -730,6 +730,7 @@ export const IpcChannels = {
   testsAdaptiveAbandon: 'tests:adaptiveAbandon',
   testsLexicon: 'tests:lexicon',
   testsLexiconEdit: 'tests:lexiconEdit',
+  testsAdaptiveDeleteAll: 'tests:adaptiveDeleteAll',
   profileSuggestions: 'profile:suggestions',
   profileAcceptSuggestion: 'profile:acceptSuggestion',
   profileDismissSuggestion: 'profile:dismissSuggestion',
@@ -2444,6 +2445,9 @@ export interface SelfosBridge {
   testsLexicon(): Promise<EroticLexicon | null>;
   /** Edit the lexicon: re-rate an entry, clear a boundary, add their own word, record a themed boundary. */
   testsLexiconEdit(input: AdaptiveLexiconEdit): Promise<EroticLexicon | null>;
+  /** Delete every take + the derived Insight + this instrument's lexicon entries. Boundaries are KEPT — a
+   *  hard no outlives the profile that recorded it (74 §8.5). */
+  testsAdaptiveDeleteAll(input: { testId: string }): Promise<AdaptiveStateView | null>;
   // --- Self-maintaining profile (18-personal-onboarding §15) — own-scoped, gated `intake.own` ---
   /** The active person's pending profile-update suggestions (stale answers noticed by analysis, §15). */
   profileSuggestions(): Promise<ProfileUpdateSuggestion[]>;

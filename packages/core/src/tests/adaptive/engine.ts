@@ -22,7 +22,11 @@ import { suppressedTexts, violatesBoundary } from './lexicon';
  *   the bank answered still completes with an honest, thinner profile (74 §7).
  */
 
-/** Not a depth cap — a guard against a loop that never converges. It should never bind in practice. */
+/**
+ * Not a depth cap — a guard against a loop that never converges. The probe loop's real bound is the ambiguity
+ * rule (which is data-driven and finite); this is the ceiling the bridge applies on top of it, exported here
+ * so the number lives beside the loop it guards.
+ */
 export const MAX_ADAPTIVE_CALLS_BACKSTOP = 40;
 
 /** How many lines one reaction round offers. */
@@ -363,7 +367,11 @@ Return ONLY {"narrative": string, "registers": object, "contexts": object, "them
         contexts: data.contexts,
         themes: data.themes.filter((t) => !violatesBoundary(lexicon, t)),
         wantsToSay: data.wantsToSay.filter((t) => !violatesBoundary(lexicon, t)),
-        ...(data.voice !== undefined ? { voice: data.voice } : {}),
+        // The voice line reaches BOTH the own block and the partner steer, so it goes through the same
+        // filter as everything else the model wrote.
+        ...(data.voice !== undefined && !violatesBoundary(lexicon, data.voice)
+          ? { voice: data.voice }
+          : {}),
       },
     },
     degraded: narrative === '',

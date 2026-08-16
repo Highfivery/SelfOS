@@ -34,6 +34,9 @@ import { buildSystemPrompt } from './promptBuilder';
 import { WRAP_UP_INSTRUCTION, WRAP_UP_MARKER } from './wrapUp';
 import { getExercise } from './guidedCatalog';
 import { CHALLENGE_COACH_ID } from './challengeCoach';
+
+/** Guided groups whose sessions are intimate enough for the erotic lexicon to be in scope (74 §5.8). */
+const INTIMACY_GUIDE_GROUPS: ReadonlySet<string> = new Set(['intimacy']);
 import { parseChallengeMarker, parseLatestStep, stripCoachMarkers } from './guidedSteps';
 import { TOPIC_MODEL, classifyTopic, topicShifted } from './topicClassifier';
 import { streamWithContinuation } from './streamWithContinuation';
@@ -304,7 +307,14 @@ async function generateCoachReply(
         partnerSuppression?: string;
       }
     | undefined;
-  if (adultAcked) {
+  // Topic-gated as well as ack-gated. A grief or money session has no business carrying someone's loved-phrase
+  // list — it is a token tax, and it is the likeliest way the silent steer becomes visible (a non-sequitur
+  // suggestion in an unrelated conversation). Same shape as the sensitive-insight relevance gate.
+  const intimateTopic =
+    conversation.guideId !== undefined
+      ? INTIMACY_GUIDE_GROUPS.has(getExercise(conversation.guideId)?.group ?? '')
+      : (topicOverride?.lifeAreas ?? []).includes('Intimacy');
+  if (adultAcked && intimateTopic) {
     const own = buildOwnLexiconBlock(await readLexicon(fs, key, personId));
     const partnerId = await livePartnerOf(fs, key, personId);
     let partnerSteer = '';

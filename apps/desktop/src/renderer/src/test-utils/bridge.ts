@@ -239,6 +239,7 @@ export function installMockBridge(overrides: Partial<SelfosBridge> = {}): Selfos
     testsAdaptiveAbandon: () => Promise.resolve(),
     testsLexicon: () => Promise.resolve(null),
     testsLexiconEdit: () => Promise.resolve(null),
+    testsAdaptiveDeleteAll: () => Promise.resolve(null),
     usageSessionCosts: () => Promise.resolve({}),
     questionnairesList: () => Promise.resolve([]),
     questionnairesSendStates: () => Promise.resolve({}),

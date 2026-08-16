@@ -19,7 +19,7 @@ export const DIRTY_TALK: AdaptiveTestDefinition = {
   blurb:
     'What you want said to you, what you want to say, and the words that do nothing for you — mapped properly.',
   framing:
-    'A map of what you like said, not a verdict on you — and it stays private to you. Consensual adults only.',
+    'A map of what you like said, not a verdict on you. Nobody else reads it. Consensual adults only.',
   estimatedMinutes: 15,
   version: 1,
   adult: true,

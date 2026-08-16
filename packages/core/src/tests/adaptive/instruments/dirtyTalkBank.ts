@@ -15,8 +15,10 @@ import { bankFamily, buildBank, type Bank, type BankFamily } from '../bank';
  * diverge wildly, and that gap is the single most useful thing this test finds (74 §3.2) — a `say` rating well
  * under its `hear` rating is what produces the `wantsToSay` goal list the practice session runs on.
  *
- * Anatomy inside a phrase is resolved per person at render time from the intake answers (46 `activityRows`),
- * so "stretch my pussy" / "stretch my ass" / a neutral form appear as appropriate.
+ * Anatomy is carried by the ENTRIES rather than resolved per person: the bank ships both forms ("stretch my
+ * pussy" and "stretch my ass", giving and receiving) and everyone sees both, marking what applies. Per-person
+ * resolution the way 46's `activityRows` does it for the onboarding matrix is a later refinement — stated here
+ * rather than claimed, because an unverified claim in a comment is worse than none (CLAUDE.md §12).
  */
 
 const word = (id: string, label: string, note?: string): BankFamily => ({

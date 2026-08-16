@@ -1167,6 +1167,11 @@ export type EroticLexicon = z.infer<typeof EroticLexiconSchema>;
  * the crypto-bearing module in behind them.
  */
 
+/** The band a spine dimension carries when NOTHING was marked for it. Not a zero: unrated is not a no, so
+ *  the report says so rather than charting a confident 0% (74 §3.3). Lives here, crypto-free, because the
+ *  renderer needs it and importing it from `tests` drags the engine in behind it. */
+export const NO_SIGNAL_BAND = 'nothing yet';
+
 export interface AdaptiveBankFamilyView {
   id: string;
   label: string;
@@ -1222,6 +1227,10 @@ export interface AdaptivePhaseView {
 export interface AdaptiveProbeView {
   ok: boolean;
   question?: string;
+  /** The AMBIGUITY this question is resolving. The renderer stamps it as the turn's item id, which is what
+   *  lets the next call know it has been asked — without it the same ambiguity is returned forever and the
+   *  take can never reach synthesis (while billing a call per tap). */
+  ambiguityId?: string;
   /** Nothing left ambiguous — the probes are finished. */
   done: boolean;
   degraded: boolean;

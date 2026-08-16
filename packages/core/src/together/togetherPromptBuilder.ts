@@ -3,8 +3,7 @@ import type { ContextTopic, TogetherSession } from '../schemas';
 import { buildContext, getPerson } from '../people';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { buildPartnerWishGuidance } from '../questionnaires/partnerWishes';
-import { readLexicon } from '../tests/adaptive/lexicon';
-import { buildOwnLexiconBlock } from '../tests/adaptive/steer';
+import { buildCouplesLexiconBlock } from '../tests/adaptive/steer';
 import { buildGroundingPack } from './groundingPack';
 import { listStates } from './togetherService';
 import { getTogetherGuide, togetherGuideLifeAreas } from './togetherCatalog';
@@ -259,14 +258,13 @@ export async function buildTogetherSystemPrompt(
     }
   }
 
-  // 74 §5.8 — each partner's own erotic language, folded in when BOTH have acked. Their own words, so the
-  // couples coach can speak in the register that actually lands for each of them rather than a generic one.
-  // Boundaries ride along inside the block: a hard no from either partner is never suggested to either.
+  // 74 §5.8 — the language that lands for this pair, MERGED and NAME-FREE. Both partners read this
+  // conversation, so a per-partner block with a name in front of it is one person's file read aloud (their
+  // goal list included, which is the shame material). The block carries the UNION of both hard-no lists, so a
+  // limit either of them has drawn is never suggested to either.
   if (options.allAdultAcked) {
-    for (const pid of session.participantIds) {
-      const block = buildOwnLexiconBlock(await readLexicon(fs, key, pid));
-      if (block) parts.push(`${nameOf(pid)} — ${block}`);
-    }
+    const couples = await buildCouplesLexiconBlock(fs, key, session.participantIds);
+    if (couples) parts.push(couples);
   }
 
   // The explicit register (Phase F) — appended ONLY when BOTH partners have acknowledged adult content

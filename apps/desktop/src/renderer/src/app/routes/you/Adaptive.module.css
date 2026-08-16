@@ -148,3 +148,11 @@
 .chipNever {
   background: var(--color-danger-subtle-bg);
 }
+
+/* A boundary already on record: settled, not re-offered (74 §3.5). */
+.lockedMark {
+  flex: none;
+  font-size: 0.8rem;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}

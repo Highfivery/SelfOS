@@ -868,9 +868,11 @@ import {
   applyDirections,
   clearState,
   completeAdaptiveTake,
+  deleteAllAdaptiveResults,
   getAdaptiveResult,
   listAdaptiveResults,
   openAmbiguities,
+  readsAsDistress,
   readLexicon,
   recordBankPass,
   recordSplitPass,
@@ -1129,6 +1131,9 @@ function testCatalogFor(adultAcknowledged: boolean): TestSummary[] {
   }));
   return [...listTestSummaries(adultAcknowledged), ...adaptive];
 }
+
+/** A backstop on the probe loop — not a depth cap; the ambiguity rule should always converge first. */
+const MAX_ADAPTIVE_PROBES = 12;
 
 const TestIdSchema = z.object({ testId: z.string().min(1) });
 const TestResultRefSchema = z.object({ testId: z.string().min(1), resultId: z.string().min(1) });
@@ -2192,6 +2197,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     const latest = history.find((result) => result.status !== 'draft') ?? null;
     const lexicon = await readLexicon(fs, key, gate.personId);
     const showCost = await activePersonCan(fs, key, 'budgets.manage');
+    // The $ boundary is the BRIDGE, not the UI (the durable 06 rule). `TestResult` now carries `costUsd`, so
+    // redacting only the view's own field would ship the figure inside `draft`/`latest`/`history`.
+    const strip = (result: TestResult | null): TestResult | null => {
+      if (!result || showCost) return result;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { costUsd, ...rest } = result;
+      return rest;
+    };
     const ageDays = latest
       ? (Date.now() - new Date(latest.takenAt).getTime()) / (24 * 60 * 60 * 1000)
       : 0;
@@ -2201,9 +2214,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       blurb: gate.def.blurb,
       framing: gate.def.framing,
       estimatedMinutes: gate.def.estimatedMinutes,
-      draft,
-      latest,
-      history: history.filter((result) => result.status !== 'draft'),
+      draft: strip(draft),
+      latest: strip(latest),
+      history: history
+        .filter((result) => result.status !== 'draft')
+        .map((result) => strip(result)!),
       lexicon,
       ambiguitiesLeft: openAmbiguities(lexicon).length,
       staleForRetake: latest !== null && ageDays >= PROFILE_STALE_DAYS,
@@ -3990,7 +4005,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       ) {
         return [];
       }
-      return listResults(ctx.fs, ctx.key, personId, testId);
+      const results = await listResults(ctx.fs, ctx.key, personId, testId);
+      if (await activePersonCan(ctx.fs, ctx.key, 'budgets.manage')) return results;
+      return results.map((result) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { costUsd, ...rest } = result;
+        return rest;
+      });
     },
     testsNarrate: async (input): Promise<TestNarrateResponse> => {
       const { testId, resultId } = TestResultRefSchema.parse(input);
@@ -4163,14 +4184,21 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           .map((turn) => turn.item.id),
       );
       // The confidence rule: probe while the DATA leaves something unresolved, and stop when it doesn't.
+      // `asked` is keyed on the AMBIGUITY id (returned below and stamped by the renderer) rather than on the
+      // model's prose, or the same ambiguity comes back forever and the take never finishes.
       const next = openAmbiguities(lexicon).find((ambiguity) => !asked.has(ambiguity.id));
-      if (!next) return { ok: true, done: true, degraded: false };
+      // A ceiling as well as the rule: a data-driven loop should converge, and if it ever doesn't, a person
+      // must not be billed a call per tap to find out (74 §5.3 — a backstop, not a depth cap).
+      if (!next || asked.size >= MAX_ADAPTIVE_PROBES) {
+        return { ok: true, done: true, degraded: false };
+      }
       const deps = await aiDeps('tests.own');
       if (!deps) return { ok: false, done: false, degraded: true };
       const out = await runProbePhase(deps, lexicon, next);
       return {
         ok: out.ok,
         ...(out.value ? { question: out.value } : {}),
+        ambiguityId: next.id,
         done: false,
         degraded: out.degraded,
       };
@@ -4213,7 +4241,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         costUsd: 0,
       };
       if (deps) {
+        // §8.4's carve-out, enforced in code rather than asked of the model: a turn that reads as a
+        // real-world disclosure never enters the erotic synthesis, so nothing derived from it can reach the
+        // profile — or, through the profile, a partner's prompt.
         const transcript = (draft?.turns ?? [])
+          .filter((turn) => !(typeof turn.answer === 'string' && readsAsDistress(turn.answer)))
           .map((turn) => `${turn.phase}: ${turn.item.text} → ${JSON.stringify(turn.answer)}`)
           .join('\n');
         const out = await runSynthesis(deps, lexicon, transcript);
@@ -4241,6 +4273,19 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       );
       return adaptiveState(gate);
     },
+    testsAdaptiveDeleteAll: async (input): Promise<AdaptiveStateView | null> => {
+      const { testId } = TestIdSchema.parse(input);
+      const gate = await adaptiveGate(testId);
+      if (!gate) return null;
+      await deleteAllAdaptiveResults(
+        gate.ctx.fs,
+        gate.ctx.key,
+        gate.def,
+        gate.personId,
+        new Date(),
+      );
+      return adaptiveState(gate);
+    },
     testsAdaptiveAbandon: async (input): Promise<void> => {
       const parsed = AdaptiveRefSchema.parse(input);
       const gate = await adaptiveGate(parsed.testId);
@@ -4248,18 +4293,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       await abandonAdaptiveTake(gate.ctx.fs, gate.personId, parsed.resultId);
     },
     testsLexicon: async (): Promise<EroticLexicon | null> => {
-      const ctx = await host.vaultAndKey();
-      const personId = ctx ? await activePersonId() : null;
-      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'tests.own'))) return null;
+      // The SAME gate as every other adaptive handler, the 18+ ack included (§6) — these two checked only
+      // `tests.own`, which failed open relative to "18+-withheld in the bridge".
+      const gate = await adaptiveGate(DIRTY_TALK.id);
+      if (!gate) return null;
       // Their OWN data is always fully visible to them (74 §8.4) — the relevance gate governs what reaches a
       // PROMPT, never what a person can read about themselves.
-      return readLexicon(ctx.fs, ctx.key, personId);
+      return readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
     },
     testsLexiconEdit: async (input): Promise<EroticLexicon | null> => {
       const edit = AdaptiveLexiconEditSchema.parse(input);
-      const ctx = await host.vaultAndKey();
-      const personId = ctx ? await activePersonId() : null;
-      if (!ctx || !personId || !(await activePersonCan(ctx.fs, ctx.key, 'tests.own'))) return null;
+      const gate = await adaptiveGate(DIRTY_TALK.id);
+      if (!gate) return null;
+      const ctx = gate.ctx;
+      const personId = gate.personId;
       const now = new Date();
       let lexicon = await readLexicon(ctx.fs, ctx.key, personId, now);
       switch (edit.kind) {

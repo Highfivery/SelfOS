@@ -75,6 +75,42 @@ export function buildOwnLexiconBlock(lexicon: EroticLexicon): string {
 }
 
 /**
+ * The COUPLES block (74 §5.8): what lands for the two of them, merged and **name-free**.
+ *
+ * Deliberately not `buildOwnLexiconBlock` per partner with a name in front of it. That prompt's output is read
+ * by BOTH of them, so a named block is one partner's file read aloud — including the goal list, which is the
+ * shame material. This emits the shared vocabulary with no owner attached, the union of both hard-no lists,
+ * and the same never-attribute clause the solo steer carries.
+ */
+export async function buildCouplesLexiconBlock(
+  fs: FileSystem,
+  key: Uint8Array,
+  personIds: readonly string[],
+): Promise<string> {
+  const lexicons = await Promise.all(personIds.map((id) => readLexicon(fs, key, id)));
+  const loved = [
+    ...new Set(lexicons.flatMap((lex) => lovedEntries(lex, 'hear').map((entry) => entry.text))),
+  ];
+  const banned = [...new Set(lexicons.flatMap((lex) => suppressedTexts(lex)))];
+  if (loved.length === 0 && banned.length === 0) return '';
+
+  const parts = [
+    'LANGUAGE THAT LANDS IN THIS RELATIONSHIP — draw on it as your own, never as a report. NEVER say which of' +
+      ' them likes what, never attribute a word or a preference to one of them, and never mention a test, a' +
+      ' profile, or that you know anything about either of them.',
+  ];
+  if (loved.length > 0)
+    parts.push(`Words and lines that land: ${loved.slice(0, CAP).join(' · ')}.`);
+  if (banned.length > 0) {
+    parts.push(
+      `NEVER use any of these, for either of them, in any form — and never say that you are avoiding` +
+        ` anything: ${banned.join(' · ')}.`,
+    );
+  }
+  return parts.join('\n');
+}
+
+/**
  * The SILENT partner steer. Reads the PARTNER's lexicon and returns guidance for the requester's coach, so a
  * suggestion lands in language their partner actually wants — without ever saying where it came from.
  *

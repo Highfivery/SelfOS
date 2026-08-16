@@ -8,7 +8,7 @@ import {
   type LexiconState,
 } from '../../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../../vault';
-import { bankEntry, toLexiconEntry, type Bank } from './bank';
+import { bankEntry, toLexiconEntry, type Bank, type BankEntry } from './bank';
 
 /**
  * 74-adaptive-tests §4.4 — the shared **erotic lexicon**: ONE per person, written by every adaptive intimacy
@@ -109,10 +109,12 @@ export function applyBankMarks(
     const spec = bankEntry(bank, key);
     const existing = byKey.get(key);
     if (!spec && !existing) continue;
-    const base = existing ?? toLexiconEntry(spec!, source);
+    // A boundary is unliftable by ANY mark — not just by `love`. Downgrading it to `notYet` used to leave the
+    // word in `derivedWantsToSay`, which puts it in their own coach prompt as a GOAL two lines under "never
+    // use this", and in a partner-shared Insight fact. A `never` lifts only through `clearState`.
+    if (existing?.state === 'never') continue;
+    const base = existing ?? toLexiconEntry(spec as BankEntry, source);
     if (mark === 'love') {
-      // Clearing a prior `never` is NEVER implicit — a boundary only lifts through `clearState`.
-      if (existing?.state === 'never') continue;
       byKey.set(key, { ...base, hear: LOVE_SEED, say: LOVE_SEED, state: undefined, source });
     } else {
       byKey.set(key, { ...base, hear: 0, say: 0, state: mark, source });
@@ -331,7 +333,10 @@ export function violatesBoundary(lexicon: EroticLexicon, candidate: string): boo
   const stems = new Set(contentStems(candidate));
   const literal = suppressedTexts(lexicon).some((banned) => {
     const needle = banned.trim().toLowerCase();
-    return needle !== '' && text.includes(needle);
+    if (needle === '') return false;
+    // Word-boundaried, or a short banned word suppresses every line containing it ("ass" → "pass", "class").
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(text);
   });
   if (literal) return true;
   return lexicon.boundaries.some((boundary) => {
@@ -367,5 +372,9 @@ export function derivedWantsToSay(lexicon: EroticLexicon): string[] {
     .filter((entry) => entry.state !== 'never')
     .filter((entry) => entry.state === 'notYet' || (entry.hear >= 3 && entry.say <= 1))
     .map((entry) => entry.text);
-  return [...new Set([...gap, ...lexicon.wantsToSay])];
+  // Belt and braces on top of the mark guard: a goal is something to PRACTISE, so a suppressed text can
+  // never appear here — it would read as encouragement to say the one thing they ruled out.
+  return [...new Set([...gap, ...lexicon.wantsToSay])].filter(
+    (text) => !violatesBoundary(lexicon, text),
+  );
 }

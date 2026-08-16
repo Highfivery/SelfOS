@@ -36,6 +36,9 @@ interface AdaptiveTestState {
   lines: string[];
   lineReactions: Record<string, 'love' | 'meh' | 'no'>;
   probeQuestion: string | null;
+  /** The ambiguity the current question resolves — stamped as the turn's item id so the engine knows it has
+   *  been asked (without it the same ambiguity is returned forever). */
+  probeAmbiguityId: string | null;
   probeAnswer: string;
   scenario: { context: string; scene: string; options: string[] } | null;
 
@@ -49,6 +52,7 @@ interface AdaptiveTestState {
   reactToLine(testId: string, line: string, reaction: 'love' | 'meh' | 'no'): Promise<void>;
   nextProbe(testId: string): Promise<void>;
   answerProbe(testId: string): Promise<void>;
+  skipProbe(testId: string): Promise<void>;
   loadScenario(testId: string, context: string): Promise<void>;
   answerScenario(testId: string, option: string): Promise<void>;
   synthesize(testId: string): Promise<void>;
@@ -71,6 +75,7 @@ const EMPTY = {
   lines: [],
   lineReactions: {},
   probeQuestion: null,
+  probeAmbiguityId: null,
   probeAnswer: '',
   scenario: null,
 };
@@ -86,7 +91,18 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => ({
       window.selfos?.testsBank({ testId }) ?? Promise.resolve(null),
       window.selfos?.testsAdaptiveState({ testId }) ?? Promise.resolve(null),
     ]);
-    set({ bank, state, loaded: true });
+    // Seed from what they have already said (74 §3.5/§8.2). Without this a retake presents every hard no
+    // again, unmarked — the one thing the boundary rule promises will never happen — and "pick up where you
+    // left off" drops back to an empty grid.
+    const marks: Record<string, BankMark> = {};
+    const splits: Record<string, { hear?: number; say?: number }> = {};
+    for (const entry of state?.lexicon.entries ?? []) {
+      if (entry.state === 'never') marks[entry.key] = 'never';
+      else if (entry.state === 'notYet') marks[entry.key] = 'notYet';
+      else if (entry.hear > 0 || entry.say > 0) marks[entry.key] = 'love';
+      if (entry.hear > 0 || entry.say > 0) splits[entry.key] = { hear: entry.hear, say: entry.say };
+    }
+    set({ bank, state, loaded: true, marks, splits });
   },
 
   start: async (testId) => {
@@ -97,6 +113,12 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => ({
 
   mark: (key, mark) =>
     set((prev) => {
+      // A hard no already on record is not re-markable here — it lifts only through the report's explicit
+      // "changed my mind" (74 §3.2). The engine refuses it too; this stops the UI implying otherwise.
+      const locked = prev.state?.lexicon.entries.some(
+        (entry) => entry.key === key && entry.state === 'never',
+      );
+      if (locked) return prev;
       const marks = { ...prev.marks };
       if (mark === null) delete marks[key];
       else marks[key] = mark;
@@ -167,6 +189,7 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => ({
       Promise.resolve(fallback));
     set({
       probeQuestion: out.question ?? null,
+      probeAmbiguityId: out.ambiguityId ?? null,
       probeAnswer: '',
       busy: false,
       progress: null,
@@ -175,17 +198,35 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => ({
   },
 
   answerProbe: async (testId) => {
-    const { state, probeQuestion, probeAnswer } = get();
+    const { state, probeQuestion, probeAmbiguityId, probeAnswer } = get();
     const resultId = state?.draft?.id;
     if (!resultId || !probeQuestion) return;
     await window.selfos?.testsAdaptiveTurn({
       testId,
       resultId,
       phase: 'probe',
-      itemId: probeQuestion.slice(0, 60),
+      // The ambiguity id, NOT the model's prose — this is what marks it answered.
+      itemId: probeAmbiguityId ?? probeQuestion.slice(0, 60),
       text: probeQuestion,
       answer: probeAnswer,
     });
+    await get().nextProbe(testId);
+  },
+
+  /** Skipping still RECORDS the ambiguity as asked — otherwise "skip this" hands back the same question. */
+  skipProbe: async (testId) => {
+    const { state, probeQuestion, probeAmbiguityId } = get();
+    const resultId = state?.draft?.id;
+    if (resultId && probeQuestion) {
+      await window.selfos?.testsAdaptiveTurn({
+        testId,
+        resultId,
+        phase: 'probe',
+        itemId: probeAmbiguityId ?? probeQuestion.slice(0, 60),
+        text: probeQuestion,
+        answer: '',
+      });
+    }
     await get().nextProbe(testId);
   },
 

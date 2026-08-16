@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Lock } from 'lucide-react';
-import type { LexiconEntry } from '@shared/schemas';
-import { NO_SIGNAL_BAND } from '@selfos/core/tests';
+import { NO_SIGNAL_BAND, type LexiconEntry } from '@shared/schemas';
+
 import {
   Banner,
   Button,
@@ -65,6 +65,12 @@ export function AdaptiveReport(): JSX.Element {
   const loaded = useAdaptiveTestStore((s) => s.loaded);
   const load = useAdaptiveTestStore((s) => s.load);
   const editLexicon = useAdaptiveTestStore((s) => s.editLexicon);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const onDelete = async (): Promise<void> => {
+    const next = await window.selfos?.testsAdaptiveDeleteAll({ testId });
+    setConfirmingDelete(false);
+    if (next) useAdaptiveTestStore.setState({ state: next });
+  };
 
   useEffect(() => {
     void load(testId);
@@ -116,14 +122,30 @@ export function AdaptiveReport(): JSX.Element {
             <span className={styles.eyebrow}>
               SelfOS
               <span className={styles.privateTag}>
-                <Lock size={11} aria-hidden="true" /> private — only you
+                <Lock size={11} aria-hidden="true" /> yours
               </span>
             </span>
             <Heading level={1}>{state.title}</Heading>
             <Text size="sm" tone="tertiary" className={styles.framing}>
               {state.framing}
             </Text>
+            {/* The same disclosure the take's intro carries — the report is the screen they come BACK to, so
+                it must not quietly contradict it with a "private, only you" badge (74 §8.4). */}
+            <Text size="sm" tone="tertiary">
+              Nobody else reads this. It shapes how SelfOS talks to you — and, if you have a partner
+              here, it quietly shapes what their coach suggests to them, without ever telling them
+              what you said.
+            </Text>
           </header>
+
+          {/* §8.3 — a take that carried a disclosure leads with support, before anything erotic. */}
+          {latest?.crisisFlag ? (
+            <Banner tone="warning" role="alert">
+              Something you wrote here sounds like it was hard, and bigger than a preference. Please
+              reach out to someone who can help — the resources below are there for you, and this
+              profile can wait.
+            </Banner>
+          ) : null}
 
           {!latest ? (
             <Stack gap={3}>
@@ -200,7 +222,21 @@ export function AdaptiveReport(): JSX.Element {
                   </Text>
                   <Chips entries={notYet} />
                   <div className={take.footer}>
-                    <Button variant="secondary" onClick={() => navigate('/sessions')}>
+                    <Button
+                      variant="secondary"
+                      onClick={() =>
+                        // Straight into the guided practice session with the goal already loaded — the whole
+                        // point of deriving `wantsToSay` is that it stops asking what they want to say (§3.5).
+                        navigate('/sessions', {
+                          state: {
+                            startGuideId: 'dirty-talk-practice',
+                            seedText: `I want to be able to say: ${notYet
+                              .map((e) => e.text)
+                              .join(', ')}.`,
+                          },
+                        })
+                      }
+                    >
                       Practise this
                     </Button>
                   </div>
@@ -240,7 +276,29 @@ export function AdaptiveReport(): JSX.Element {
             <Button variant="secondary" onClick={() => navigate(`/tests/${testId}/take`)}>
               {latest ? 'Take it again' : 'Take it'}
             </Button>
+            {latest ? (
+              confirmingDelete ? (
+                <>
+                  <Button variant="danger" onClick={() => void onDelete()}>
+                    Delete it all
+                  </Button>
+                  <Button variant="ghost" onClick={() => setConfirmingDelete(false)}>
+                    Keep it
+                  </Button>
+                </>
+              ) : (
+                <Button variant="ghost" onClick={() => setConfirmingDelete(true)}>
+                  Delete this profile
+                </Button>
+              )
+            ) : null}
           </div>
+          {confirmingDelete ? (
+            <Text size="sm" tone="secondary">
+              This removes every take, the profile, and the words you rated — everywhere in SelfOS.
+              Anything you marked <strong>off the table</strong> stays off the table.
+            </Text>
+          ) : null}
 
           <CrisisFooter />
         </Stack>

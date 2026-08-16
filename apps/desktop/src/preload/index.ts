@@ -153,6 +153,7 @@ const bridge: SelfosBridge = {
   testsAdaptiveAbandon: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveAbandon, input),
   testsLexicon: () => ipcRenderer.invoke(IpcChannels.testsLexicon),
   testsLexiconEdit: (input) => ipcRenderer.invoke(IpcChannels.testsLexiconEdit, input),
+  testsAdaptiveDeleteAll: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveDeleteAll, input),
   usageSessionCosts: () => ipcRenderer.invoke(IpcChannels.usageSessionCosts),
   questionnairesList: () => ipcRenderer.invoke(IpcChannels.questionnairesList),
   questionnairesSendStates: () => ipcRenderer.invoke(IpcChannels.questionnairesSendStates),

@@ -352,6 +352,7 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.testsAdaptiveAbandon, bridge.testsAdaptiveAbandon);
   handle(IpcChannels.testsLexicon, bridge.testsLexicon);
   handle(IpcChannels.testsLexiconEdit, bridge.testsLexiconEdit);
+  handle(IpcChannels.testsAdaptiveDeleteAll, bridge.testsAdaptiveDeleteAll);
   handle(IpcChannels.usageSessionCosts, bridge.usageSessionCosts);
   handle(IpcChannels.questionnairesList, bridge.questionnairesList);
   handle(IpcChannels.questionnairesSendStates, bridge.questionnairesSendStates);

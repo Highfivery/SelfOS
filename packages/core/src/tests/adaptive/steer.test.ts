@@ -96,3 +96,18 @@ describe('the lexicon steer (74 §5.7/§8.4)', () => {
     expect(await buildSuppressionBlock(fs, KEY, ben, ben)).toBe('');
   });
 });
+
+describe('the couples block (74 §5.8)', () => {
+  it('is NAME-FREE and never attributes a preference to one partner', async () => {
+    const { fs, ben, angel } = await seedPair();
+    const { buildCouplesLexiconBlock } = await import('./steer');
+    const block = await buildCouplesLexiconBlock(fs, KEY, [ben, angel]);
+    // Both partners READ this conversation, so a named block is one person's file read aloud.
+    expect(block).not.toMatch(/Angel|Ben/);
+    expect(block).toContain('NEVER say which of them likes what');
+    // The union of both hard-no lists rides along — a limit either drew is never suggested to either.
+    expect(block).toContain('whore');
+    // …and the goal list (the shame material) never appears in the shared room at all.
+    expect(block).not.toMatch(/freezes|PRACTISE/);
+  });
+});

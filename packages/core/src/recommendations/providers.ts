@@ -350,7 +350,7 @@ const dirtyTalkRetake: RecommendationProvider = {
   capabilityGate: 'tests.own',
   adultGate: true,
   relevance: (s): RecommendationCandidate | null => {
-    const taken = (s.testResults ?? []).find((r) => r.instrument === 'dirty-talk');
+    const taken = (s.testResults ?? []).find((r) => r.id === 'dirty-talk');
     if (!taken) return null;
     const days = (Date.now() - new Date(taken.takenAt).getTime()) / (24 * 60 * 60 * 1000);
     if (!Number.isFinite(days) || days < PROFILE_STALE_DAYS) return null;

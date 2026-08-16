@@ -147,8 +147,11 @@ describe('Slice-B recommendation providers (50/51/48)', () => {
 
 describe('dirty-talk retake (74 §11)', () => {
   const provider = BUILT_IN_RECOMMENDATION_PROVIDERS.find((p) => p.id === 'dirty-talk-retake')!;
+  // Built the way Home builds it: `instrument` is the publisher, `id` is the test (74 — matching on
+  // `instrument` is why this provider could never fire).
   const takenDaysAgo = (days: number) => ({
-    instrument: 'dirty-talk',
+    id: 'dirty-talk',
+    instrument: 'SelfOS',
     group: 'intimacy',
     takenAt: new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString(),
   });

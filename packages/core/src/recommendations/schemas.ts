@@ -111,7 +111,9 @@ export interface PersonRecommendationState {
   /** The active person's taken self-assessments (50) — instrument + `group` + when. Drives `take-a-test`
    *  (no personality/relationships test taken yet → invite a first one) and `intimacy-exercise` (an
    *  intimacy-group test taken = the person has engaged intimacy, so a guided exercise is "for them"). */
-  testResults?: { instrument: string; group: string; takenAt: string }[];
+  /** `id` is the TEST id (74 — an adaptive instrument's `instrument` is the publisher, "SelfOS", so a
+   *  provider that matched on it could never fire). Optional so existing callers keep type-checking. */
+  testResults?: { id?: string; instrument: string; group: string; takenAt: string }[];
   /** A mood/anxiety check-in is overdue on the gentle ~14-day window (51 §3.4) — a soft invitation, NEVER a
    *  schedule and NEVER escalating; absent/false ⇒ no nudge. The provider it feeds is not 18+-gated. */
   wellbeingCheckinDue?: boolean;

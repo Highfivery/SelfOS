@@ -588,8 +588,13 @@ inner scroller — the word-bank grid collapses to one word per row at phone wid
 
 ### Still open
 
-- **Retake cadence.** Nothing schedules a retake today. Does the profile go stale and prompt one, or is it
-  purely manual? _Recommendation: manual, with a gentle Home nudge after ~6 months._
+- ~~Retake cadence~~ → **RESOLVED (owner): the profile goes stale and prompts a retake.** After
+  **`PROFILE_STALE_DAYS = 90`** the Tests hub card reads "worth a fresh look?" and a `dirty-talk-retake`
+  recommendation provider surfaces one gentle Home invitation. 90 days on purpose — the same horizon
+  `DORMANT_DAYS` uses for "when do we reconsider this ground", so the model has ONE answer for that question
+  (spec 71 §5.9). It follows the wellbeing check-in's rules exactly (§8): a soft invitation, dismissible,
+  **never escalating**, never a schedule, and it never fires for someone who has never taken it. A retake merges
+  forward and never re-offers a `never`.
 - **A "tonight" dial.** Desire moves with mood; a single stored profile is a snapshot. Worth a lightweight
   "tonight I want ___" that temporarily biases the register? _Recommendation: not v1 — see how the profile lands._
 
@@ -614,7 +619,7 @@ inner scroller — the word-bank grid collapses to one word per row at phone wid
 
 The source of truth is `@selfos/core/tests/adaptive/instruments/dirtyTalkBank.ts` — the spec-49 shape
 (`{ key, text, kind, family, tier, directions }`) so it groups, orders and renders exactly like the activity
-matrix. **~500 entries across 24 families**, tier **1 (tame) → 5 (extreme)**, words AND the phrases people
+matrix. **~700 entries across 31 families**, tier **1 (tame) → 5 (extreme)**, words AND the phrases people
 actually say. **Nothing is gated** (§3.2): every family is visible from the start.
 
 **Boundary (unchanged, and the only thing standing in front of any of it):** consensual adults; taboo strictly
@@ -625,156 +630,217 @@ Anatomy inside a phrase is resolved per person from the intake answers (`activit
 "pound my ass" /_ a neutral form render as appropriate.
 
 **F1 · Anatomy — her body**
-_t1_ down there · between your legs · your body · your chest · your curves — _t2_ pussy · tits · ass · nipples ·
-clit · thighs · mouth · throat · breasts · bum · lips — _t3_ cunt · asshole · hole · that ass · those tits ·
-your slit · your opening — _t4_ your tight little ass · that greedy cunt · your slick cunt · your fuckhole ·
-your dripping hole · your puffy lips · your swollen clit — _t5_ your used cunt · your gaping hole
+_t1_ down there · between your legs · your body · your chest · your curves · your waist · your hips — _t2_ pussy ·
+tits · ass · nipples · clit · thighs · mouth · throat · breasts · bum · lips · collarbone — _t3_ cunt · asshole ·
+hole · that ass · those tits · your slit · your opening · your cunt lips · your tight cunt — _t4_ your tight
+little ass · that greedy cunt · your slick cunt · your fuckhole · your dripping hole · your puffy lips · your
+swollen clit · that soaking cunt · your perfect tits · those hard nipples — _t5_ your used cunt · your gaping
+hole · your used little hole
 
 **F2 · Anatomy — his body**
-_t1_ your body · down there · your hands · your arms — _t2_ cock · dick · balls · your mouth · your fingers —
-_t3_ that cock · your hard cock · your load · precum · your shaft · your tip · your cum — _t4_ fat cock · thick
-cock · every inch · that big fucking cock · your heavy balls — _t5_ that cock that ruins me
+_t1_ your body · down there · your hands · your arms · your chest · your thighs — _t2_ cock · dick · balls · your
+mouth · your fingers — _t3_ that cock · your hard cock · your load · precum · your shaft · your tip · your cum ·
+your thick cock · your tip leaking — _t4_ fat cock · thick cock · every inch · that big fucking cock · your heavy
+balls · your veiny cock · your cock stretching me — _t5_ that cock that ruins me · that cock owns me
 
 **F3 · State & sensation**
 _t1_ warm · close · breathless · shaking · trembling · tingling — _t2_ wet · hard · aching · sensitive · tight ·
-needy · desperate · swollen — _t3_ soaked · dripping · throbbing · clenching · twitching · pulsing · slick ·
-quivering · slippery · rock hard · leaking — _t4_ gushing · stretched · full · sloppy · raw · sore · ruined ·
-overflowing · creaming · dripping down my thighs · so full I can't breathe — _t5_ wrecked · destroyed · used up ·
-fucked out · gaping
+needy · desperate · swollen · tender · buzzing — _t3_ soaked · dripping · throbbing · clenching · twitching ·
+pulsing · slick · quivering · slippery · rock hard · leaking · dripping wet · so hard it hurts · soaking
+through — _t4_ gushing · stretched · full · sloppy · raw · sore · ruined · overflowing · creaming · dripping down
+my thighs · so full I can't breathe · stuffed · split open · drenched — _t5_ wrecked · destroyed · used up ·
+fucked out · gaping · numb · spent
 
 **F4 · Names — affectionate**
-_t1_ baby · babe · beautiful · gorgeous · sweetheart · honey · love · my love · angel · darling — _t2_ pretty
-girl · handsome · my girl · my boy · sweet thing · beautiful girl
+_t1_ baby · babe · beautiful · gorgeous · sweetheart · honey · love · my love · angel · darling · my girl · my
+everything — _t2_ pretty girl · handsome · my boy · sweet thing · beautiful girl · gorgeous girl
 
 **F5 · Names — power & role**
-_t2_ good girl · good boy — _t3_ sir · ma'am · mistress · daddy · mommy · princess · kitten · pet · babygirl ·
-boy · goddess · queen — _t4_ master · owner · my property · my toy · plaything · doll
+_t2_ good girl · good boy · little one — _t3_ sir · ma'am · mistress · daddy · mommy · princess · kitten · pet ·
+babygirl · boy · goddess · queen · my king · bunny — _t4_ master · owner · my property · my toy · plaything ·
+doll · my pet · my good girl
 
 **F6 · Names — degrading**
-_t3_ naughty girl · dirty girl · bad girl · filthy little thing · greedy girl — _t4_ slut · my slut · little
-slut · whore · bitch · brat · dirty whore · needy slut · cock hungry — _t5_ cockslut · cumslut · cumdump ·
-fucktoy · fuckdoll · hole · pathetic little slut · worthless · my filthy whore · dumb slut · desperate little
-whore
+_t3_ naughty girl · dirty girl · bad girl · filthy little thing · greedy girl · little tease · cocktease — _t4_
+slut · my slut · little slut · whore · bitch · brat · dirty whore · needy slut · cock hungry · filthy slut —
+_t5_ cockslut · cumslut · cumdump · fucktoy · fuckdoll · hole · pathetic little slut · worthless · my filthy
+whore · dumb slut · desperate little whore · breeding slut · anal slut · pathetic whore
 
 **F7 · Claiming & possession**
-_t2_ mine · you're mine · my girl · my boy — _t3_ you belong to me · nobody else gets this · say you're mine ·
-who do you belong to · say it — _t4_ I own this pussy · this cunt is mine · mine to use · you're my property ·
-every hole is mine · say my name when you come · this ass is mine — _t5_ _(roleplay)_ you don't get to say no to
-me · I'll do what I like with you · you're mine to ruin
+_t2_ mine · you're mine · my girl · my boy · all mine — _t3_ you belong to me · nobody else gets this · say
+you're mine · who do you belong to · say it · you're mine tonight — _t4_ I own this pussy · this cunt is mine ·
+mine to use · you're my property · every hole is mine · say my name when you come · this ass is mine · nobody
+else touches this · this mouth is mine — _t5_ _(roleplay)_ you don't get to say no to me · I'll do what I like
+with you · you're mine to ruin · I own every part of you
 
-**F8 · Praise & worship**
-_t1_ you're beautiful · you feel amazing · I love how you feel · you're perfect — _t2_ good girl · that's it ·
-just like that · you're doing so well · you feel incredible · god you're gorgeous — _t3_ you take it so well ·
-look how well you're taking it · you were made for this · I love how you taste · you're so good at that · that's
-my girl · you're so fucking tight — _t4_ you take my cock so well · that's my good little slut · perfect fucking
-pussy · you were made to take this · such a good girl for me · god you suck cock so well · your cunt was made
-for me — _t5_ best fucking pussy I've ever had · you were built to be fucked
+**F8 · Praise & worship — her**
+_t1_ you're beautiful · you feel amazing · I love how you feel · you're perfect · you're amazing — _t2_ good
+girl · that's it · just like that · you're doing so well · you feel incredible · god you're gorgeous · so good —
+_t3_ you take it so well · look how well you're taking it · you were made for this · I love how you taste ·
+you're so good at that · that's my girl · you're so fucking tight · you're so beautiful when you come · I love
+watching you — _t4_ you take my cock so well · that's my good little slut · perfect fucking pussy · you were made
+to take this · such a good girl for me · god you suck cock so well · your cunt was made for me · your mouth was
+made for my cock · you take it like a good girl · you're perfect when you beg — _t5_ best fucking pussy I've ever
+had · you were built to be fucked
 
 **F9 · Degradation & humiliation**
 _t3_ you love this, don't you · look at the state of you · you're such a mess · you can't help yourself — _t4_
-dirty little slut · filthy girl · look how wet you get for me · you're leaking everywhere · beg like the slut
-you are · you're pathetic when you want it · is that all it takes · look at you drooling for it — _t5_ you're
-just a hole · you exist for this · you'd take anything, wouldn't you · say you're my whore · thank me for it ·
-look at yourself · you're nothing but a hole to fuck · dumb little slut · you love being used, don't you
+dirty little slut · filthy girl · look how wet you get for me · you're leaking everywhere · beg like the slut you
+are · you're pathetic when you want it · is that all it takes · look at you drooling for it · you're so easy ·
+look how desperate you are — _t5_ you're just a hole · you exist for this · you'd take anything, wouldn't you ·
+say you're my whore · thank me for it · look at yourself · you're nothing but a hole to fuck · dumb little slut ·
+you love being used, don't you · you're a mess and you love it · beg properly
 
 **F10 · Commands — general**
-_t1_ come here · kiss me · closer · slower · look at me — _t2_ don't move · stay still · open your mouth ·
-spread your legs · hands above your head · turn around · bend over · on your knees · take it off · touch
-yourself — _t3_ open wider · arch your back · don't look away · say my name · take it · don't stop · keep going ·
-be quiet · don't make a sound · let me hear you · show me · touch yourself for me — _t4_ crawl · hold your legs
-open · keep them open · take it all · don't you dare stop · ask me nicely · hands behind your back · eyes on me ·
-spread that ass · hold your ankles — _t5_ gag on it · choke on it · hold your breath · count them · don't spill a
-drop · present yourself · beg for my cock · keep your mouth open
+_t1_ come here · kiss me · closer · slower · look at me — _t2_ don't move · stay still · open your mouth · spread
+your legs · hands above your head · turn around · bend over · on your knees · take it off · touch yourself · get
+on the bed — _t3_ open wider · arch your back · don't look away · say my name · take it · don't stop · keep
+going · be quiet · don't make a sound · let me hear you · show me · touch yourself for me · hold still · put your
+hands here · spread wider — _t4_ crawl · hold your legs open · keep them open · take it all · don't you dare
+stop · ask me nicely · hands behind your back · eyes on me · spread that ass · hold your ankles · bend over
+further · keep still while I finish — _t5_ gag on it · choke on it · hold your breath · count them · don't spill
+a drop · present yourself · beg for my cock · keep your mouth open · open your throat
 
 **F11 · Commands — orgasm control**
 _t2_ come for me · let go · don't hold back — _t3_ not yet · hold it · don't come yet · wait · ask me first ·
-come now · that's it, come — _t4_ don't come until I say · you'll come when I tell you · again · one more · ask
-permission · you can come now · good girl, come · come on my cock — _t5_ _(roleplay)_ you don't get to come
-tonight · hold it or you'll be punished · you'll come when I'm done with you
+come now · that's it, come · slow down · edge for me — _t4_ don't come until I say · you'll come when I tell
+you · again · one more · ask permission · you can come now · good girl, come · come on my cock · hold it for me ·
+you're not done · again, right now — _t5_ _(roleplay)_ you don't get to come tonight · hold it or you'll be
+punished · you'll come when I'm done with you · you'll come until I say stop
 
 **F12 · Demands — the receiving voice**
-_t1_ touch me · kiss me · closer · don't stop — _t2_ fuck me · harder · deeper · slower · right there · just like
-that · I want you inside me · I need you · more — _t3_ fuck me harder · pound me · **pound my pussy** · fuck me
-from behind · ride me · suck my clit · lick my pussy · eat me · finger me · use your mouth · put it in · give it
-to me · don't be gentle · get in me · rub my clit — _t4_ **fuck me in the ass** · **finger my asshole** ·
-**choke me** · pull my hair · spank me · slap my tits · hold me down · spit in my mouth · come inside me · come
-on my face · come on my tits · use me · make me beg · ruin me · breed me · fill me up · grab my throat · fuck my
-throat · stretch me open — _t5_ wreck my pussy · choke me harder · treat me like your whore · use every hole ·
-make me take it · fuck me till I can't walk · destroy me · use me like a toy · _(pre-agreed CNC, safeworded)_
-don't stop even if I say so
+_t1_ touch me · kiss me · closer · don't stop · keep going — _t2_ fuck me · harder · deeper · slower · right
+there · just like that · I want you inside me · I need you · more · kiss me there — _t3_ fuck me harder · pound
+me · **pound my pussy** · fuck me from behind · ride me · suck my clit · lick my pussy · eat me · finger me · use
+your mouth · put it in · give it to me · don't be gentle · get in me · rub my clit · fuck me slow · grind on me ·
+go deeper · hit that spot — _t4_ **fuck me in the ass** · **finger my asshole** · **choke me** · pull my hair ·
+spank me · slap my tits · hold me down · spit in my mouth · come inside me · come on my face · come on my tits ·
+use me · make me beg · ruin me · breed me · fill me up · grab my throat · fuck my throat · stretch me open ·
+finger me while you fuck me · hold my hips · bend me over · take me from behind · fuck me harder than that —
+_t5_ wreck my pussy · choke me harder · treat me like your whore · use every hole · make me take it · fuck me
+till I can't walk · destroy me · use me like a toy · split me open · I want to feel it tomorrow · _(pre-agreed
+CNC, safeworded)_ don't stop even if I say so
 
 **F13 · Demands — the giving voice**
 _t2_ come here · let me taste you · I want to watch · take it off · sit on me — _t3_ **suck that cock** · suck my
 cock · get on your knees · ride me · sit on my face · open your mouth · take it · look at me while you take it ·
-say my name · tell me who owns this · spread them · bounce on it — _t4_ swallow it · take it all · deeper · gag
-on it · beg for it · tell me what you are · hold still while I use you · arch for me · give me that ass · choke
-on my cock · take my load — _t5_ _(roleplay)_ you'll take what I give you · open up, I'm not done
+say my name · tell me who owns this · spread them · bounce on it · play with yourself for me · put on a show —
+_t4_ swallow it · take it all · deeper · gag on it · beg for it · tell me what you are · hold still while I use
+you · arch for me · give me that ass · choke on my cock · take my load · open wider · take it deeper · hold it
+there · look up at me — _t5_ _(roleplay)_ you'll take what I give you · open up, I'm not done
 
 **F14 · Narration & feedback**
 _t1_ that feels amazing · I love this · you feel so good — _t2_ you're so wet · you're so hard · you're so tight ·
-**you're so big** · god you fill me · I can feel you — _t3_ **I can feel you throb** · I can feel you clenching ·
-you're dripping down my hand · listen to how wet you are · look how hard you make me · I'm going to come · I've
-been hard all day · I can still taste you · you're shaking — _t4_ your cunt is soaking · I can feel you
-tightening around my cock · you're leaking all over me · I'm going to fill you · watch it go in · look at you
-taking every inch · you're so fucking wet for me · your pussy is gripping me — _t5_ listen to that · you're
-making such a mess · I can feel your cunt begging for it
+**you're so big** · god you fill me · I can feel you · you feel incredible — _t3_ **I can feel you throb** · I can
+feel you clenching · you're dripping down my hand · listen to how wet you are · look how hard you make me · I'm
+going to come · I've been hard all day · I can still taste you · you're shaking · you're squeezing me · I can
+hear how wet you are — _t4_ your cunt is soaking · I can feel you tightening around my cock · you're leaking all
+over me · I'm going to fill you · watch it go in · look at you taking every inch · you're so fucking wet for me ·
+your pussy is gripping me · you're taking it so deep · your ass is so tight — _t5_ listen to that · you're making
+such a mess · I can feel your cunt begging for it · you're gushing
 
 **F15 · Begging & permission**
-_t2_ please · I need it · please don't stop — _t3_ please fuck me · can I come · may I come · please let me · I
-need you inside me · I'm so close — _t4_ please sir · please let me come · I'll be good · I'll do anything ·
-please use me · may I touch myself · please fill me — _t5_ thank you · thank you for letting me · thank you for
-using me · please, I'll be your good little slut
+_t2_ please · I need it · please don't stop · I want it — _t3_ please fuck me · can I come · may I come · please
+let me · I need you inside me · I'm so close · please, more — _t4_ please sir · please let me come · I'll be
+good · I'll do anything · please use me · may I touch myself · please fill me · I need to come — _t5_ thank you ·
+thank you for letting me · thank you for using me · please, I'll be your good little slut · I'm begging you
 
 **F16 · Sexting & anticipation**
 _t1_ thinking about you · can't wait to see you · I miss you — _t2_ I've been thinking about last night · what
-are you wearing · I want you tonight · come home — _t3_ I'm so hard thinking about you · I'm wet just typing
-this · tell me what you'd do to me · send me one · I've been thinking about your mouth all day · I'm touching
-myself — _t4_ I've been thinking about your cunt all day · I'm going to ruin you tonight · I want you on your
-knees when I get home · I'm fucking you the second you walk in · don't touch yourself until I'm home · I want you
-dripping before I get there — _t5_ I'm going to use every hole tonight · you'd better be ready for me
+are you wearing · I want you tonight · come home · are you alone — _t3_ I'm so hard thinking about you · I'm wet
+just typing this · tell me what you'd do to me · send me one · I've been thinking about your mouth all day · I'm
+touching myself · describe it — _t4_ I've been thinking about your cunt all day · I'm going to ruin you tonight ·
+I want you on your knees when I get home · I'm fucking you the second you walk in · don't touch yourself until
+I'm home · I want you dripping before I get there · I'm going to have you the second you're through the door —
+_t5_ I'm going to use every hole tonight · you'd better be ready for me
 
 **F17 · Aftercare & tenderness**
-_t1_ come here · I've got you · that was perfect · you did so well · I love you · stay right there — _t2_ good
-girl · you were so good · are you okay · let me hold you · I'm proud of you · you're safe · you took that so well
+_t1_ come here · I've got you · that was perfect · you did so well · I love you · stay right there · you're
+incredible · thank you — _t2_ good girl · you were so good · are you okay · let me hold you · I'm proud of you ·
+you're safe · you took that so well · let me clean you up
 
-**F18 · Taboo fantasy & roleplay** _(t5 — every entry is **pre-agreed, safeworded roleplay between adults**, and
-labelled as roleplay in the UI and in every prompt)_
+**F18 · Taboo fantasy & roleplay** _(t5 — every entry pre-agreed, safeworded roleplay between adults, labelled as
+roleplay in the UI and in every prompt)_
 CNC / ravishment _("you don't get a choice", "I'm not asking", "take it")_ · stranger _("you don't even know my
 name")_ · boss/employee · teacher/student _(adults)_ · doctor/patient · cheating roleplay _("does he know you're
-here", "tell me what he does to you")_ · cuckold / hotwife _("tell me what he did to you", "did you let him
-finish")_ · breeding _("I'm going to breed you", "you're going to take it")_ · primal _("run", "I'll catch
-you")_ · age-gap _(adults)_ · objectification _("you're furniture tonight")_ · "caught in the act" · sex-worker
-roleplay · being shared _(fantasy)_
+here", "we shouldn't be doing this")_ · cuckold / hotwife _("tell me what he did to you", "did you let him
+finish")_ · breeding _("I'm going to breed you", "you're going to take it")_ · primal _("run", "I'll catch you",
+"found you")_ · age-gap _(adults)_ · objectification _("you're furniture tonight")_ · caught in the act _("you
+shouldn't be here")_ · sex-worker roleplay · being shared
 
-**F19 · Delivery & voice** _(not words — how they're said)_
+**F19 · Delivery & voice** _(how it's said, not what)_
 whispered · in my ear · low and slow · growled · commanding · breathless · loud · filthy but smiling · silent,
 just sounds · narrating the whole time · a single word at the right moment · saying my name · moaning · telling
-me what you're about to do before you do it
+me what you're about to do before you do it · through gritted teeth · laughing · right against my ear · loud
+enough that they'd hear
 
-**F20 · Oral — the words for it**
-_t2_ suck me · lick me · use your mouth · taste me · kiss me there — _t3_ eat my pussy · suck my cock · lick my
-clit · suck it · put it in your mouth · sit on my face · lick me clean · get it wet — _t4_ deepthroat it · gag on
-it · choke on my cock · take it all the way · fuck my face · face-fuck me · swallow it · don't spill it · look at
-me while you suck it · worship it — _t5_ use my throat · make me gag · leave me drooling
+**F20 · Oral**
+_t2_ suck me · lick me · use your mouth · taste me · kiss me there · kiss it — _t3_ eat my pussy · suck my cock ·
+lick my clit · suck it · put it in your mouth · sit on my face · lick me clean · get it wet · lick it slowly ·
+swallow me — _t4_ deepthroat it · gag on it · choke on my cock · take it all the way · fuck my face · face-fuck
+me · swallow it · don't spill it · look at me while you suck it · worship it · don't stop until I come in your
+mouth · hold it in your mouth — _t5_ use my throat · make me gag · leave me drooling
 
-**F21 · Anal — the words for it**
+**F21 · Anal**
 _t2_ touch me there · play with my ass — _t3_ finger my ass · finger my asshole · lick my ass · rim me · put a
-finger in — _t4_ fuck my ass · take my ass · in my ass · stretch my ass · plug me · pound my ass — _t5_ ruin my
-ass · both holes · use my ass like a pussy
+finger in · slowly · work it in — _t4_ fuck my ass · take my ass · in my ass · stretch my ass · plug me · pound
+my ass · all the way · take it deeper — _t5_ ruin my ass · both holes · use my ass like a pussy
 
 **F22 · Cum & finishing**
 _t2_ come for me · I'm close · I'm going to come — _t3_ come inside me · come with me · I want to feel you come ·
-make me come · finish in me — _t4_ fill me up · come on my face · come on my tits · come in my mouth · swallow
-it · come all over me · breed me · paint me · give me your load · don't pull out — _t5_ make a mess of me · I
-want to be dripping with it · put it back in after
+make me come · finish in me · inside me · where do you want it — _t4_ fill me up · come on my face · come on my
+tits · come in my mouth · swallow it · come all over me · breed me · paint me · give me your load · don't pull
+out · on my back · in my throat · let me taste it — _t5_ make a mess of me · I want to be dripping with it · put
+it back in after · fill both
 
 **F23 · Impact, restraint & pain** _(verbal)_
 _t2_ harder · pull my hair · hold me down — _t3_ spank me · slap my ass · grab my throat · pin me · bite me ·
-scratch me · squeeze — _t4_ choke me · slap my tits · slap my face · mark me · leave a bruise · tie me up · hold
-my wrists · harder, I can take it — _t5_ choke me harder · hurt me a little · make it sting · don't be careful
-with me
+scratch me · squeeze · harder than that · again — _t4_ choke me · slap my tits · slap my face · mark me · leave a
+bruise · tie me up · hold my wrists · harder, I can take it · hold me down while you do it · choke me while you
+fuck me — _t5_ choke me harder · hurt me a little · make it sting · don't be careful with me
 
-**F24 · Being watched / shared** _(verbal; the fantasy-framed sibling of F18)_
-_t3_ I want to watch you · watch me · look at us · imagine someone seeing this — _t4_ would you let them watch ·
-tell me what he did · I want to watch someone else make you come _(fantasy)_ — _t5_ _(roleplay)_ tell me how he
-fucked you · I want to see you take someone else
+**F24 · Being watched / shared** _(verbal)_
+_t3_ I want to watch you · watch me · look at us · imagine someone seeing this · tell me a fantasy — _t4_ would
+you let them watch · tell me what he did · I want to watch someone else make you come _(fantasy)_ · what if
+someone walked in — _t5_ _(roleplay)_ tell me how he fucked you · I want to see you take someone else
+
+**F25 · Praise & worship — him** _(the missing half of F8: most banks only praise her)_
+_t1_ you feel so good · I love your hands · I love your mouth — _t2_ you're so hard for me · you feel huge · I
+love your cock · you're so good at that — _t3_ you fuck me so well · nobody fills me like you · you're so big · I
+love how you use me · you know exactly what you're doing · god, that cock — _t4_ your cock ruins me · you fuck me
+better than anyone · you make me forget my name · you fill me completely · I love how you take what you want —
+_t5_ I'd let you do anything to me
+
+**F26 · Toys & objects**
+_t2_ use it on me · get the toy · use your fingers and it — _t3_ fuck me with it · hold it there · turn it up ·
+put it inside me · use it while you watch — _t4_ both at once · put the plug in · leave it in · make me come with
+it while you watch · fuck me with it until I beg — _t5_ don't stop till the toy's done with me
+
+**F27 · Public & risk**
+_t2_ be quiet · someone might hear · not here — _t3_ they'll hear us · right here · don't stop, someone's
+coming · keep your voice down · quick, before they're back — _t4_ hold still, don't make a sound · take it right
+here · nobody knows what you're doing · under the table · in the car — _t5_ let them hear
+
+**F28 · Teasing & denial**
+_t2_ not yet · you want it, don't you · patience — _t3_ ask me nicely · say please · you'll get it when I
+decide · look how badly you want it · almost · I could keep you like this all night — _t4_ beg me · maybe I'll
+let you · not until you've earned it · you'll wait · ask again, properly — _t5_ I could stop right now · you'll
+take what I decide to give you
+
+**F29 · Consent & check-ins** _(the language that makes the rest safe to want — rated the same way, because for
+a lot of people being asked IS part of it, and for others it breaks the spell)_
+_t1_ is this okay · you okay · too much? · more? · do you like that — _t2_ tell me if it's too much · you can stop
+me · colour? · green / amber / red · say the word and I stop · we can stop any time — _t3_ do you want more ·
+harder? · can I · do you want me to stop · is this still good · tell me what you need — _t4_ you did so well, are
+you alright · was that too far · come back to me
+
+**F30 · Comparisons & ego**
+_t2_ nobody does that like you — _t3_ nobody fucks me like you · I've never come like that · you're the best I've
+had · no one's ever made me feel like this — _t4_ you ruined me for anyone else · I don't want anyone else · I've
+never done that with anyone else · you're the biggest I've had
+
+**F31 · The morning after / next day**
+_t1_ I'm still thinking about last night · last night was incredible — _t2_ I'm still sore · I can still feel
+you · I woke up wanting you · I didn't sleep — _t3_ I'm sore in the best way · I could still taste you this
+morning · I've been thinking about it all morning — _t4_ I want it again before work · I'm still dripping from
+last night · I can still feel where you were

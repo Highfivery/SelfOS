@@ -529,3 +529,31 @@ describe('the editor does not mark a book down for inventing (72 §4.1)', () => 
     expect(msg).toMatch(/inventedDetail/);
   });
 });
+
+describe('a one-chapter book (72 §3.2)', () => {
+  it('asks for a single complete piece, not an excerpt of a longer book', () => {
+    const sys = buildBiographerSystem(BIOGRAPHY_BOOK_TYPE, cfg({ length: 'single' }), 'Ben');
+    expect(sys).toMatch(/ONE chapter and no more/);
+    expect(sys).toMatch(/complete in itself/);
+    expect(sys).toMatch(/do not outline a book around it/i);
+  });
+
+  it('leaves the other lengths exactly as they were', () => {
+    const s = (length: 'concise' | 'standard' | 'full'): string =>
+      buildBiographerSystem(BIOGRAPHY_BOOK_TYPE, cfg({ length }), 'Ben');
+    expect(s('concise')).toMatch(/roughly 6–10 chapters/);
+    expect(s('standard')).toMatch(/roughly 10–18 chapters/);
+    expect(s('full')).toMatch(/roughly 16–24 chapters/);
+    for (const l of ['concise', 'standard', 'full'] as const) {
+      expect(s(l)).not.toMatch(/ONE chapter and no more/);
+    }
+  });
+
+  /** A picture book states an exact page count, which must keep winning over any length choice. */
+  it('does not override a type that sets its own extent', () => {
+    const childrens = getBookType('childrens')!;
+    const sys = buildBiographerSystem(childrens, cfg({ length: 'single' }), 'Ben');
+    expect(sys).toMatch(/exactly \d+ pages/);
+    expect(sys).not.toMatch(/ONE chapter and no more/);
+  });
+});

@@ -172,6 +172,8 @@ function lengthDirective(length: BookConfig['length'], spine?: BookSpine): strin
     return `Length: exactly ${spine.count} pages, each about ${spine.wordsPerPage} words — a page, not a chapter. This governs the length: never write a page at chapter length.`;
   }
   switch (length) {
+    case 'single':
+      return 'Length: ONE chapter and no more — a single piece of roughly 2,500–5,000 words, complete in itself, with its own beginning and end. Do not split it into parts, do not outline a book around it, and do not leave it feeling like an excerpt of something longer.';
     case 'concise':
       return 'Length: a concise book — roughly 6–10 chapters, each short (about 900–1,500 words).';
     case 'full':

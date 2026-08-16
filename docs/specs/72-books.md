@@ -764,3 +764,10 @@ Two items are **deliberately deferred** rather than open:
   biography is exactly where a person's children belong. Both layers mutation-verified. **Lesson: the
   dangerous path was not a record about the child — it was the child's name sitting inside the subject's own
   material, which only the name-as-phrase half of the exclusion filter catches.**
+- 2026-08-16 — **a one-chapter length** (owner). `BookLength` gains `single`: one chapter, complete in
+  itself — a short story rather than a book. A LENGTH rather than a book type, because everything else is
+  unchanged (same types, same registers, same craft); only the extent differs, so it works for an erotica
+  piece, a single memoir chapter or a one-shot portrait alike. Enforced **structurally** by extending the
+  existing page-cap: a count stated only in the prompt is a request with nothing behind it, so an outline
+  that comes back twelve chapters long is capped at one rather than shipped as a book. A type that states
+  its own extent (a picture book's `pages` spine) still wins. Cap mutation-verified.

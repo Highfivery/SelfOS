@@ -18,6 +18,13 @@ import {
   saveConversation,
 } from './conversationService';
 import { regenerateIndexFor, type MessageStamp } from './rewindService';
+import { readLexicon } from '../tests/adaptive/lexicon';
+import {
+  buildOwnLexiconBlock,
+  buildPartnerSteer,
+  buildSuppressionBlock,
+  livePartnerOf,
+} from '../tests/adaptive/steer';
 import { getGuidancePrefs } from './guidanceService';
 // Import the specific file (not the `../challenges` barrel) so loading `conversations` never pulls
 // `challengeSuggestService`, which imports `conversations/promptBuilder` — keeping the one runtime edge
@@ -281,13 +288,43 @@ async function generateCoachReply(
   // 52 §8.3 — the challenge-coach's EXPLICIT sexual register is gated on the per-person 18+ ack. Read it ONLY
   // for a challenge-coach session (so an un-acked person who steers toward sex is redirected, not engaged); a
   // single cheap read, scoped to challenge sessions, keeps the ack enforcement in core (not just the bridge).
-  const adultAllowed =
-    conversation.guideId === CHALLENGE_COACH_ID
-      ? (await getGuidancePrefs(fs, key, personId)).adultAcknowledged === true
-      : false;
+  // 74 §5.8 widened this read to EVERY session: the erotic lexicon is gated on the same per-person ack, and
+  // the coach can only speak in someone's own language if it may read it at all.
+  // The ack is passed straight through: the challenge register stays gated on `guideId === CHALLENGE_COACH_ID`
+  // INSIDE `buildSystemPrompt`, so a non-challenge session can never pick it up.
+  const adultAcked = (await getGuidancePrefs(fs, key, personId)).adultAcknowledged === true;
+
+  // The lexicon blocks (74 §5.8). Their OWN language, then — silently — what lands for their partner, then
+  // their partner's hard nos as a negative constraint. The suppression is assembled even when the steer isn't,
+  // because it can only ever PREVENT a suggestion.
+  let lexiconBlocks:
+    | {
+        own?: string;
+        partnerSteer?: string;
+        partnerSuppression?: string;
+      }
+    | undefined;
+  if (adultAcked) {
+    const own = buildOwnLexiconBlock(await readLexicon(fs, key, personId));
+    const partnerId = await livePartnerOf(fs, key, personId);
+    let partnerSteer = '';
+    let partnerSuppression = '';
+    if (partnerId) {
+      const partnerAcked = (await getGuidancePrefs(fs, key, partnerId)).adultAcknowledged === true;
+      partnerSteer = await buildPartnerSteer(fs, key, personId, partnerId, partnerAcked);
+      partnerSuppression = await buildSuppressionBlock(fs, key, personId, partnerId);
+    }
+    if (own || partnerSteer || partnerSuppression) {
+      lexiconBlocks = {
+        ...(own ? { own } : {}),
+        ...(partnerSteer ? { partnerSteer } : {}),
+        ...(partnerSuppression ? { partnerSuppression } : {}),
+      };
+    }
+  }
   // The wrap-up instruction teaches the coach the private completion-marker convention; the guided
   // addendum (if `guideId` is set) steers the turn after persona+safety+context (16 §5).
-  const system = `${await buildSystemPrompt(fs, key, personId, conversation.guideId, deps.depthAsk, topicOverride, deps.goalRaise, adultAllowed)}\n\n${WRAP_UP_INSTRUCTION}`;
+  const system = `${await buildSystemPrompt(fs, key, personId, conversation.guideId, deps.depthAsk, topicOverride, deps.goalRaise, adultAcked, lexiconBlocks)}\n\n${WRAP_UP_INSTRUCTION}`;
   // 45 §6.1 — re-read any attached images host-side and assemble vision content blocks for this turn (and for
   // every earlier attached message still in history, since Claude is stateless).
   const claudeMessages = await buildClaudeMessages(fs, key, conversation.messages);

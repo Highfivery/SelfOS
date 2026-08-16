@@ -3,6 +3,8 @@ import type { ContextTopic, TogetherSession } from '../schemas';
 import { buildContext, getPerson } from '../people';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { buildPartnerWishGuidance } from '../questionnaires/partnerWishes';
+import { readLexicon } from '../tests/adaptive/lexicon';
+import { buildOwnLexiconBlock } from '../tests/adaptive/steer';
 import { buildGroundingPack } from './groundingPack';
 import { listStates } from './togetherService';
 import { getTogetherGuide, togetherGuideLifeAreas } from './togetherCatalog';
@@ -254,6 +256,16 @@ export async function buildTogetherSystemPrompt(
     parts.push(guide.systemPromptAddendum);
     if (guide.kind === 'structured' && guide.steps && guide.steps.length > 0) {
       parts.push(buildStepInstruction(guide.steps));
+    }
+  }
+
+  // 74 §5.8 — each partner's own erotic language, folded in when BOTH have acked. Their own words, so the
+  // couples coach can speak in the register that actually lands for each of them rather than a generic one.
+  // Boundaries ride along inside the block: a hard no from either partner is never suggested to either.
+  if (options.allAdultAcked) {
+    for (const pid of session.participantIds) {
+      const block = buildOwnLexiconBlock(await readLexicon(fs, key, pid));
+      if (block) parts.push(`${nameOf(pid)} — ${block}`);
     }
   }
 

@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.57.0](https://github.com/Highfivery/SelfOS/compare/v0.56.0...v0.57.0) (2026-08-16)
+
+
+### Features
+
+* **books:** a one-chapter length — a short story, not a book ([#483](https://github.com/Highfivery/SelfOS/issues/483)) ([a94ec9d](https://github.com/Highfivery/SelfOS/commit/a94ec9d658d867d4cffe61b80cc3b2a0c1ba9a7f))
+* **books:** every register shows a line of what it reads like ([#487](https://github.com/Highfivery/SelfOS/issues/487)) ([b2a1d6b](https://github.com/Highfivery/SelfOS/commit/b2a1d6b545386928deff0dc8ad171449e75b0092))
+* **books:** registers combine, plus four more for erotica ([#484](https://github.com/Highfivery/SelfOS/issues/484)) ([7649484](https://github.com/Highfivery/SelfOS/commit/76494840932c76821b37aabdb047d0bb1baa7bff))
+* **books:** the explicit ladder shows what it produces, and gains two rungs ([#486](https://github.com/Highfivery/SelfOS/issues/486)) ([2e2aec9](https://github.com/Highfivery/SelfOS/commit/2e2aec9f0c04cacae568c00c74de2a8eed2bc586))
+* **books:** the new-book tile says what a book could be ([#492](https://github.com/Highfivery/SelfOS/issues/492)) ([f115600](https://github.com/Highfivery/SelfOS/commit/f115600c4d04e15636d28ab226b5378d6f60f28b))
+
+
+### Bug Fixes
+
+* **books:** an erotica book never names the subject's children ([#482](https://github.com/Highfivery/SelfOS/issues/482)) ([c447392](https://github.com/Highfivery/SelfOS/commit/c44739277fdf1d4588492282ad73844b7757ce49))
+* **books:** an erotica book was written as a biography, then edited back to tame ([#480](https://github.com/Highfivery/SelfOS/issues/480)) ([1f16641](https://github.com/Highfivery/SelfOS/commit/1f1664133ea226a75372e67ca3c2b9ce881d01e0))
+* **books:** children named only in the intake roster, and a register drowned by the corpus ([#489](https://github.com/Highfivery/SelfOS/issues/489)) ([364d50c](https://github.com/Highfivery/SelfOS/commit/364d50ce879aef804db609b6f0824857bfab5b2b))
+* **books:** naming the words was not enough — forbid the softer twin ([#490](https://github.com/Highfivery/SelfOS/issues/490)) ([ebc2f67](https://github.com/Highfivery/SelfOS/commit/ebc2f6722553eddd891e8c0de42b3c0ac316ffb9))
+* **books:** the explicit registers name their vocabulary instead of gesturing at it ([#488](https://github.com/Highfivery/SelfOS/issues/488)) ([4ba1fcc](https://github.com/Highfivery/SelfOS/commit/4ba1fccd115252eb5f34737661abd4bc6c71af91))
+* **books:** the four new registers shipped without their one-line hint ([#485](https://github.com/Highfivery/SelfOS/issues/485)) ([a18db81](https://github.com/Highfivery/SelfOS/commit/a18db81f599f5f1b631ad64c9e4040da5ce39a16))
+* **books:** the shelf sized every cover to the length of its title ([#491](https://github.com/Highfivery/SelfOS/issues/491)) ([96b261a](https://github.com/Highfivery/SelfOS/commit/96b261a52c584b011fca50d7615d01da85d816e3))
+
 ## [0.56.0](https://github.com/Highfivery/SelfOS/compare/v0.55.0...v0.56.0) (2026-08-15)
 
 

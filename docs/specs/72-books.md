@@ -862,3 +862,12 @@ Two items are **deliberately deferred** rather than open:
   match — verified to fail without the fix (52px against an expected 236px). **Lesson: correct-looking CSS
   is not evidence — a `<button>` used as a flex container does not behave like a `<div>`, and only measuring
   the rendered box shows it.**
+- 2026-08-16 — **the new-book tile says what a book could BE** (owner-requested; mockup of three directions
+  shown, owner picked the quiet "mini shelf"). A bare `+` said a book was possible without ever saying what
+  KIND, on the one surface whose entire job is to invite you into the picker. The tile now shows three
+  unwritten spines, a count and three example types. **Both the count and the examples are DERIVED from the
+  type registry** — a renamed or retired type changes the line with it, and the count can never drift from
+  the picker it opens. The 18+ type is deliberately excluded from the examples: an empty tile on a shelf is
+  the wrong place to surface adult content to someone who has not asked for it, and that is asserted. The
+  first cut looked like a bar chart (evenly spaced blocks with gaps), so the spines now touch, vary in
+  height, and the last one leans — books left standing, not data.

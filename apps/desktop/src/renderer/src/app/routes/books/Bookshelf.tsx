@@ -50,6 +50,17 @@ export function Bookshelf({
   const bookTypes = useStoryStore((s) => s.bookTypes);
   const typeLabel = (id: string): string => bookTypes.find((t) => t.id === id)?.label ?? 'Book';
   const words = shelf.reduce((n, b) => n + b.words, 0);
+  // Derived, never hard-coded: a registered type that is renamed or retired changes this line with it, and
+  // the count can't drift from the picker the tile is inviting you into.
+  const kindCount = bookTypes.length;
+  // A few concrete examples of what a book can BE — the tile's whole job. Drawn from the registry by id and
+  // filtered to what actually exists, and deliberately not the 18+ type: an empty tile on a shelf is the
+  // wrong place to surface adult content to someone who has not asked for it.
+  const examples = ['biography', 'yearInReview', 'childrens', 'dreamBook']
+    .map((id) => bookTypes.find((t) => t.id === id)?.label.toLowerCase())
+    .filter((label): label is string => Boolean(label))
+    .slice(0, 3)
+    .join(' · ');
 
   // Covers are decrypted one at a time behind the vault, so they arrive after the shelf renders. Until then
   // (and for a book with no cover at all) the card shows its painted fallback — never an empty rectangle.
@@ -129,8 +140,18 @@ export function Bookshelf({
         })}
 
         <button type="button" className={styles.shelfNew} onClick={onNew}>
-          <span className={styles.shelfNewPlus} aria-hidden="true">
-            +
+          {/* Three unwritten spines rather than a plus: on a shelf, the invitation should look like books
+              you haven't made yet. Decorative — the button's label already says what clicking does. */}
+          <span className={styles.shelfNewCard} aria-hidden="true">
+            <span className={styles.shelfNewArt}>
+              <span className={styles.shelfNewSpine} />
+              <span className={styles.shelfNewSpine} />
+              <span className={styles.shelfNewSpine} />
+            </span>
+            <span className={styles.shelfNewPitch}>
+              {kindCount > 1 ? `${kindCount} kinds of book` : 'A book from your story'}
+            </span>
+            {examples ? <span className={styles.shelfNewExamples}>{examples}</span> : null}
           </span>
           <span className={styles.shelfNewLabel}>Start a new book</span>
         </button>

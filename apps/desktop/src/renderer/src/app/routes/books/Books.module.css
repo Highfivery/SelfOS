@@ -2361,6 +2361,65 @@
   outline: 2px solid var(--color-accent);
   outline-offset: 4px;
 }
+.shelfNewArt {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  /* Spines touch, the way books on a shelf do. A gap between them reads as a bar chart — which is exactly
+     what the first cut looked like. */
+  gap: 2px;
+  height: 30%;
+  min-height: 84px;
+  margin-bottom: var(--space-4);
+}
+/* Three unwritten books, leaning. The heights are deliberately uneven — a matched trio reads as a chart. */
+.shelfNewSpine {
+  /* Tall and narrow, like a spine seen edge-on — a squat block is a bar, not a book. */
+  width: 15px;
+  border-radius: 1px 2px 2px 1px;
+  background: linear-gradient(155deg, #33475a 0%, #4f7388 100%);
+  opacity: 0.5;
+  transition: opacity var(--motion-fast) ease;
+}
+.shelfNewSpine:nth-child(1) {
+  height: 82%;
+}
+.shelfNewSpine:nth-child(2) {
+  height: 100%;
+  width: 17px;
+  background: linear-gradient(155deg, #4f7388 0%, #c9a26b 100%);
+}
+.shelfNewSpine:nth-child(3) {
+  height: 74%;
+  /* The last one leans, so the trio reads as books left standing rather than a chart. */
+  transform: rotate(7deg);
+  transform-origin: bottom left;
+  margin-left: 3px;
+  background: linear-gradient(155deg, #8aa4b4 0%, #cfc3b0 100%);
+}
+.shelfNew:hover .shelfNewSpine {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shelfNewSpine {
+    transition: none;
+  }
+}
+.shelfNewPitch {
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+  color: var(--color-text-heading);
+  text-align: center;
+  line-height: 1.3;
+}
+.shelfNewExamples {
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  text-align: center;
+  line-height: 1.45;
+  margin-top: var(--space-1);
+  padding: 0 var(--space-2);
+}
 .shelfCover {
   width: 100%; /* belt and braces with the stretch above: never size a cover from its title */
   aspect-ratio: 5 / 7.4;
@@ -2444,18 +2503,20 @@
   background: var(--color-surface-alt);
   border: 1px solid var(--color-border);
 }
-.shelfNew .shelfNewPlus {
-  /* Match the cover it sits beside — a small square reads as a stray icon, not a place to start a book. */
+.shelfNew .shelfNewCard {
+  /* Matches the cover it sits beside — a small square reads as a stray icon, not a place to start a book.
+     It shows three unwritten spines and what a book can BE, because a bare + says a book is possible
+     without ever saying what kind. */
   width: 100%;
   aspect-ratio: 5 / 7.4;
   border: 2px dashed var(--color-border-strong);
   border-radius: var(--radius-md);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: 1.6rem;
-  font-weight: 300;
-  color: var(--color-text-muted);
+  padding: var(--space-4) var(--space-3);
+  background: var(--color-surface-alt);
 }
 .shelfNewLabel {
   font-weight: 500;

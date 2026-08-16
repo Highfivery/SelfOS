@@ -209,6 +209,28 @@ function lengthDirective(length: BookConfig['length'], spine?: BookSpine): strin
 }
 
 /**
+ * The last word in the prompt (72 §5.2). Only the per-book register needs restating — style and voice are
+ * stable across a book, but the explicit register is the one instruction a long corpus reliably drowns.
+ */
+function closingDirective(bookType: BookType, options: Record<string, string>): string[] {
+  const tier = options['tier'] ?? '';
+  if (!bookType.gates?.adult || !tier) return [];
+  const how: Record<string, string> = {
+    unfiltered:
+      'at its most explicit — frank, graphic, plainly named acts and bodies, no euphemism and nothing cut away',
+    explicit: 'explicitly — real sexual detail, plainly named, never coy about what is happening',
+    sensual:
+      'in sensation rather than anatomy — nothing fades to black, the difference is vocabulary',
+    suggestive: 'with the act off the page — the charge and the wanting, deliberately, not shyly',
+  };
+  const line = how[tier];
+  if (!line) return [];
+  return [
+    `LAST WORD, and it outranks everything above it: the material you have just read is WHAT this book is about. It does not change HOW it is written. Write ${line}. Hold the registers you were given. The boundary in your doctrine still holds absolutely.`,
+  ];
+}
+
+/**
  * The shared Biographer system prompt (§5.2): SAFETY boundary + the book type's doctrine + banned-prose
  * contract + the voice/style/length directives. Pure — no I/O, no cost.
  */
@@ -250,6 +272,12 @@ export function buildBiographerSystem(
     // able to govern them — the tier-swamped-by-warmth failure from 08 §24.9.
     ...optionDirectives(bookType, typeOptions, personNames),
     ...(corpusBlock && corpusBlock.trim().length > 0 ? [corpusBlock] : []),
+    // The register is stated above, and then up to ~40,000 tokens of source material follow it — the corpus
+    // has to sit last because that is where `cache_control` makes it cheap. So the governing instruction
+    // ends up buried, which is the 08 §24.9 failure exactly: when several steering blocks append to one
+    // prompt, the LAST one wins regardless of which is authoritative. Restated here, after the material, so
+    // the thing the model reads last is how to write rather than what to write about.
+    ...closingDirective(bookType, typeOptions),
   ]
     .filter((part) => part.trim().length > 0)
     .join('\n\n');

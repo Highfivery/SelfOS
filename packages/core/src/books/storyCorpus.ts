@@ -163,9 +163,33 @@ async function adultBookExclusions(
   personId: string,
   now: Date,
 ): Promise<ExclusionItem[]> {
+  const out: ExclusionItem[] = [];
+
+  // Children's names live in TWO places, and the relationship graph is only one of them. The onboarding
+  // intake has a `children` roster — name, gender, date of birth — and a person who filled that in has
+  // almost certainly NOT also created a Person record with a `child` edge for each kid. That roster is a raw
+  // intake answer, which §5.1 calls the richest single source, so the names went straight into the corpus
+  // while the graph-based exclusion below found nobody to exclude.
+  //
+  // These are emitted as `topic` exclusions, whose values the filter already treats as text to avoid — so a
+  // name is dropped wherever it appears, including inside the subject's own prose ("the summer Emma was
+  // born"), which is exactly where it shows up.
+  const intake = await safely(() => getIntakeSession(fs, key, personId), null);
+  for (const section of intake?.sections ?? []) {
+    const roster = section.answers?.['children'];
+    if (!Array.isArray(roster)) continue;
+    for (const row of roster) {
+      const name =
+        typeof row === 'object' && row && 'name' in row ? String(row.name ?? '').trim() : '';
+      // The phrase filter needs 2+ chars; a one-letter name would blank the book rather than protect a child.
+      if (name.length >= 2) {
+        out.push({ kind: 'topic', value: name, id: `auto-child-${name}`, createdAt: '' });
+      }
+    }
+  }
+
   const relationships = await safely(() => listRelationships(fs, key), []);
   const people = await safely(() => listPeople(fs, key), []);
-  const out: ExclusionItem[] = [];
   for (const related of await safely(() => listRelatedPeople(fs, key, personId), [])) {
     const types = relationshipTypesFromSubjectToViewer(personId, related.id, relationships);
     const birthday = people.find((p) => p.id === related.id)?.birthday;

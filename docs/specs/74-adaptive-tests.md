@@ -240,6 +240,39 @@ Every part of the lexicon is editable in place: add a word, move one between sta
 the prose. It is _their vocabulary_; an AI reading of it is a draft. Edits write straight to the `EroticLexicon`
 (not the result — the result is the dated record of what they answered on the day).
 
+#### Autosave — the take is never a form you have to finish
+
+**Every tap persists on its own** (a ~700ms debounce, so a run of taps is one write). Nothing about a take
+waits for a Next button, and there is no "finish it in one sitting" — the bank alone is ~1,100 entries, so
+treating it as a form to complete would be the wrong shape twice over: it would lose a long pass to a crash,
+and it would tell someone they have to keep going when the honest answer is that partial marks are already
+useful. The take says so on screen: _every tap saves itself · move on whenever · come back for the rest_.
+
+Three things this rule drags in, each of which is a defect if skipped:
+
+- **Un-marking has to reach the store.** Once a tap is written before it can be reconsidered, a mis-tapped ✗
+  would be a permanent boundary they never meant. So the pass sends `cleared` alongside `marks`, and
+  `clearMarks` reverses the state, the seeded ratings, and the boundary. This is not §3.2's "a boundary lifts
+  only by an explicit act" being widened — un-marking **is** that act, by the same person, on a mark made in
+  **this take**.
+
+  That scope is **structural, not a UI convention**, because the renderer is not the trust boundary: every
+  mark records its take (`source: test:<resultId>`), un-marking only touches entries carrying the CURRENT
+  take's source, and the take must still be the open draft. A crafted `cleared` naming an earlier take's
+  boundary — or replaying a completed take's id, which the renderer holds in `history` — clears nothing.
+  It cannot be walked around by re-marking a hard no first either, because `applyBankMarks` skips a `never`
+  entry **before** the write, so a boundary can never be re-stamped with a newer source.
+
+- **A boundary made in THIS take stays editable.** §3.5 renders a `never` from an earlier take as settled and
+  un-offerable. Applied to a mark made seconds ago it would freeze a mis-tap in place — and scoping the
+  exemption to the current _sitting_ rather than the current _take_ would strand a mis-tap noticed tomorrow
+  with no way to fix it until the take completes, on a feature whose whole point is coming back tomorrow.
+- **An autosave does not stamp a turn.** `turns` is the record of what was actually _asked_; a turn per tap
+  would put ~1,100 of them in one result and make that record worthless. Only closing a pass stamps.
+
+Resuming picks up at the furthest phase reached (`resumePhase`), not at the top of the bank — otherwise the
+promise on screen is a lie the second time they open it.
+
 ### 3.5 Retakes, deletion, and the practice handoff
 
 Retake = a new dated result + a trend point; the lexicon is **merged forward**, and a `✗ never` is never

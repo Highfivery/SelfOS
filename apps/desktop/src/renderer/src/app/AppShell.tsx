@@ -39,6 +39,7 @@ import { useStoryMemoryStore } from '../stores/storyMemoryStore';
 import { useCoverageStore } from '../stores/coverageStore';
 import { useChallengeStore } from '../stores/challengeStore';
 import { useTestStore } from '../stores/testStore';
+import { useAdaptiveTestStore } from '../stores/adaptiveTestStore';
 import { useDreamAnalysisStore } from '../stores/dreamAnalysisStore';
 import { useDreamPatternStore } from '../stores/dreamPatternStore';
 import { useResultsStore } from '../stores/resultsStore';
@@ -172,6 +173,11 @@ export function AppShell(): JSX.Element {
     useGoalStore.getState().reset(); // tracked goals are per-person (39-living-memory §5.4)
     useChallengeStore.getState().reset(); // challenges + cached suggestion are per-person (52 §5.5)
     useTestStore.getState().reset(); // self-assessments are per-person (50 §5.6)
+    // The adaptive take AND its pending autosave are per-person (74 §3.4). Switching person is an in-app
+    // modal — the take stays MOUNTED — and the flush resolves `personId` at call time, so without this a
+    // debounced tap lands in the vault of whoever is active 700ms later: one person's explicit vocabulary,
+    // and a permanent boundary, written into another member's lexicon with no action from either of them.
+    useAdaptiveTestStore.getState().reset();
     useSynthesisStore.getState().reset(); // the cached cross-feature synthesis is per-person (40 §5.3)
     useAutoCheckinStore.getState().reset(); // auto check-ins config + run state is per-person (63 §5.2)
     useNotificationStore.getState().reset(); // notifications are per-person, device-local (35 §4)

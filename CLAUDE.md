@@ -486,6 +486,47 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-16 — **Fix (the adaptive take autosaves every tap, and says so; owner-requested; SPEC 74 §3.4; on
+  `fix/adaptive-autosave`).** The owner, right after the 74 merge: _"since there are so many to select, it should
+  autosave when they click on option"_ and _"make it clear to the user that's the case so they know they can come
+  back anytime to complete and they can move forward if they want to continue and come back later to answer more,
+  etc, should be flexible."_ **The gap was real:** `mark()`/`setSplit()` only touched renderer state, and nothing
+  persisted until Continue — so a ~1,100-entry pass lived entirely in memory, and quitting mid-pass lost all of
+  it. Now each tap schedules a **700ms-debounced delta flush** (pending work held OUTSIDE zustand, so a tap
+  re-renders one row rather than the whole grid), plus a flush on unmount and before each pass closes. **The
+  three things autosave DRAGS IN, each a defect if skipped:** (1) **un-marking must reach the store** — once a tap
+  is written before it can be reconsidered, a mis-tapped ✗ would be a permanent boundary they never meant, so the
+  payload carries `cleared` and a new pure `clearMarks` reverses the state, the seeded ratings AND the boundary
+  (this is not §3.2's "a boundary lifts only by an explicit act" being widened — un-marking IS that act, same
+  person, same sitting, on a mark they just made); (2) **a boundary made in THIS sitting stays editable** — §3.5
+  renders an earlier take's `never` as settled and un-offerable, which applied to a mark made seconds ago would
+  freeze a mis-tap, so a `touched` list exempts this sitting's keys; (3) **an autosave stamps NO turn** — `turns`
+  is the record of what was actually asked, and a turn per tap would put ~1,100 in one result and make it
+  worthless. Resume now lands at the **furthest phase reached** (`resumePhase`) instead of the top of the bank —
+  otherwise the on-screen promise is a lie the second time they open it. Copy: a lead notice ("every tap saves
+  itself · move on whenever · come back for the rest") + a quiet **Saved** indicator. **Design-system:** `Banner`
+  gained `role="none"` — a live region announces CHANGE, so standing instructions in one are both screen-reader
+  noise and a magnet for any `getByRole('status')` hunting the real one (it hijacked the take's progress
+  indicator, which is how it surfaced). Gate green: typecheck (4 pkgs), lint, format, **2284 core + 13 relay +
+  1617 desktop** unit, the 74 E2E. **Every new guard verified to FAIL when reverted** — neutering `clearMarks`
+  fails 3 core tests, dropping the autosave/stamp split fails 1, and neutering the debounce fails the E2E on the
+  decrypted vault. **The code review then found six more, one a blocker:** `useAdaptiveTestStore` was missing
+  from AppShell's per-person reset (a pre-existing omission — but switching person is an in-app MODAL, so the
+  take stays mounted, and the 700ms timer turned it into an unattended write of one person's explicit
+  vocabulary, and a permanent boundary, into another member's vault). Fixed, and the CLASS is now pinned:
+  a new `personScopedStores` test fails when any store that can `reset()` is neither wired into that effect
+  nor named as deliberately household/app-scoped — the list had never been guarded, which is why
+  `resultsStore` was missed in 2026-07-10 and this one in 2026-08-16. Also fixed: un-marking is scoped by
+  `source` **and** to the open draft, so a crafted `cleared` can't lift an earlier take's boundary (I found
+  that one before the review, it found the completed-take variant); flushes are **chained**, since the
+  debounce guarantees one TIMER not one write and an overlapping read-modify-write silently drops a mark;
+  a refused write (`null`, how every handler reports a closed gate — not a throw) is a **failure**, not a
+  "Saved"; a flush that resolves after a reset no longer re-queues the previous person's keys; the closing
+  call carries the take's un-marks (absence undoes nothing); and closing the pass no longer resets a
+  hear:4/say:1 split back to the love seed. **Lesson: "autosave it" is never just a debounce — persisting a choice BEFORE the person can
+  reconsider it turns every accidental tap into committed state, so the undo path has to reach storage in the
+  same change, and any UI that renders settled/locked state must exempt what was decided seconds ago.**
+
 - 2026-08-16 — \*\*Build (adaptive tests — the "Tests" hub + the Dirty Talk profile; SPEC 74 written, approved
   - BUILT; on `feat/adaptive-tests-spec`, in a WORKTREE off origin/main).** A SECOND test kind. Every spec-50/51
     instrument is a fixed item list scored by pure arithmetic; this adds an **adaptive** kind where the AI writes

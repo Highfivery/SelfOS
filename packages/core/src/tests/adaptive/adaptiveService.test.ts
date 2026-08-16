@@ -174,6 +174,138 @@ describe('the adaptive take (74 §5)', () => {
     expect(lexicon.entries.find((e) => e.key === WHORE)?.state).toBe('never');
   });
 
+  // --- 74 §3.4 — autosaving the passes ---
+
+  it('an AUTOSAVE persists the marks but does not stamp a turn (or a pass costs ~1,100 of them)', async () => {
+    const fs = memFileSystem();
+    const draft = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, NOW);
+    const lexicon = await recordBankPass(
+      fs,
+      KEY,
+      DIRTY_TALK,
+      { personId: P, resultId: draft.id, marks: { [GOOD_GIRL]: 'love' }, autosave: true },
+      NOW,
+    );
+    // Written — that is the whole point: closing the app here loses nothing.
+    expect(lexicon.entries.find((e) => e.key === GOOD_GIRL)?.hear).toBeGreaterThan(0);
+    expect((await openDraft(fs, KEY, P, DIRTY_TALK.id))?.turns ?? []).toHaveLength(0);
+
+    // Closing the pass is what records that it happened.
+    await recordBankPass(
+      fs,
+      KEY,
+      DIRTY_TALK,
+      { personId: P, resultId: draft.id, marks: { [GOOD_GIRL]: 'love' } },
+      NOW,
+    );
+    expect((await openDraft(fs, KEY, P, DIRTY_TALK.id))?.turns ?? []).toHaveLength(1);
+  });
+
+  it('un-marking a mis-tapped ✗ takes the boundary back — autosave must not make it permanent', async () => {
+    const fs = memFileSystem();
+    const draft = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, NOW);
+    const marked = await recordBankPass(
+      fs,
+      KEY,
+      DIRTY_TALK,
+      { personId: P, resultId: draft.id, marks: { [CUNT]: 'never' }, autosave: true },
+      NOW,
+    );
+    expect(marked.boundaries.some((b) => b.text.includes('cunt'))).toBe(true);
+
+    const undone = await recordBankPass(
+      fs,
+      KEY,
+      DIRTY_TALK,
+      { personId: P, resultId: draft.id, marks: {}, cleared: [CUNT], autosave: true },
+      NOW,
+    );
+    expect(undone.boundaries.some((b) => b.text.includes('cunt'))).toBe(false);
+    expect(undone.entries.find((e) => e.key === CUNT)?.state).toBeUndefined();
+  });
+
+  it('CANNOT clear a boundary from an EARLIER take, however the un-mark is crafted (74 §3.2)', async () => {
+    // The renderer is not the trust boundary: a `cleared` key it should never send must still bounce.
+    const { fs } = await fullTake(); // sets `whore` → never, in take #1
+    const second = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, LATER);
+    const lexicon = await recordBankPass(
+      fs,
+      KEY,
+      DIRTY_TALK,
+      { personId: P, resultId: second.id, marks: {}, cleared: [WHORE], autosave: true },
+      LATER,
+    );
+    expect(lexicon.entries.find((e) => e.key === WHORE)?.state).toBe('never');
+    expect(lexicon.boundaries.map((b) => b.text)).toContain('whore');
+  });
+
+  it('refuses an un-mark aimed at a COMPLETED take, even with a matching source', async () => {
+    // Result ids reach the renderer in `adaptiveState().history`, so "pass the old id" is a reachable string.
+    const { fs, result } = await fullTake();
+    await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, LATER);
+    const lexicon = await recordBankPass(
+      fs,
+      KEY,
+      DIRTY_TALK,
+      { personId: P, resultId: result!.id, marks: {}, cleared: [WHORE], autosave: true },
+      LATER,
+    );
+    expect(lexicon.entries.find((e) => e.key === WHORE)?.state).toBe('never');
+    expect(lexicon.boundaries.map((b) => b.text)).toContain('whore');
+  });
+
+  it('closing the bank pass does NOT reset a split rating back to the love seed', async () => {
+    // Re-sending the whole pass is what closing does; quitting between the two passes is now encouraged, so
+    // a clobber here would silently flatten a real hear/say gap.
+    const fs = memFileSystem();
+    const draft = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, NOW);
+    await recordBankPass(
+      fs,
+      KEY,
+      DIRTY_TALK,
+      { personId: P, resultId: draft.id, marks: { [GOOD_GIRL]: 'love' }, autosave: true },
+      NOW,
+    );
+    await recordSplitPass(
+      fs,
+      KEY,
+      { personId: P, resultId: draft.id, splits: { [GOOD_GIRL]: { hear: 4, say: 1 } } },
+      NOW,
+    );
+    const closed = await recordBankPass(
+      fs,
+      KEY,
+      DIRTY_TALK,
+      { personId: P, resultId: draft.id, marks: { [GOOD_GIRL]: 'love' } },
+      NOW,
+    );
+    const entry = closed.entries.find((e) => e.key === GOOD_GIRL);
+    expect(entry?.hear).toBe(4);
+    expect(entry?.say).toBe(1);
+  });
+
+  it('un-marking a 🔥 clears the ratings it seeded, not just the state', async () => {
+    const fs = memFileSystem();
+    const draft = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, NOW);
+    await recordBankPass(
+      fs,
+      KEY,
+      DIRTY_TALK,
+      { personId: P, resultId: draft.id, marks: { [MINE]: 'love' }, autosave: true },
+      NOW,
+    );
+    const undone = await recordBankPass(
+      fs,
+      KEY,
+      DIRTY_TALK,
+      { personId: P, resultId: draft.id, marks: {}, cleared: [MINE], autosave: true },
+      NOW,
+    );
+    const entry = undone.entries.find((e) => e.key === MINE);
+    expect(entry?.hear).toBe(0);
+    expect(entry?.say).toBe(0);
+  });
+
   it('deleting the last take removes the Insight; deleting one of two re-derives it', async () => {
     const { fs, result } = await fullTake();
     const second = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, LATER);

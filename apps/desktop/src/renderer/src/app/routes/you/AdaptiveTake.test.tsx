@@ -192,6 +192,92 @@ describe('AdaptiveTake (74 §3.2)', () => {
     expect(await screen.findByText(/good girl, just like that/)).toBeInTheDocument();
   });
 
+  // --- 74 §3.4 — every tap saves itself ---
+
+  it('autosaves each mark without waiting for Next, and says so', async () => {
+    const bankPass = vi.fn(() => Promise.resolve(state({ draft: DRAFT })));
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state()),
+      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveBank: bankPass as never,
+    });
+    renderTake();
+    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    expect(screen.getByText(/Every tap saves itself/i)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'good girl — love it' }));
+    // No Next click anywhere in this test — the write happens on its own.
+    await waitFor(() =>
+      expect(bankPass).toHaveBeenCalledWith(
+        expect.objectContaining({
+          marks: { 'names-power:good-girl': 'love' },
+          autosave: true,
+        }),
+      ),
+    );
+    expect(await screen.findByText('Saved')).toBeInTheDocument();
+  });
+
+  it('takes back a mis-tapped ✗ — an autosaved boundary must stay editable in the same sitting', async () => {
+    const bankPass = vi.fn(() => Promise.resolve(state({ draft: DRAFT })));
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state()),
+      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveBank: bankPass as never,
+    });
+    renderTake();
+    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+
+    const never = screen.getByRole('button', { name: 'run (primal) — never' });
+    await userEvent.click(never);
+    await waitFor(() => expect(bankPass).toHaveBeenCalled());
+    // Still a live control, not the settled "off the table" row a PRIOR take's boundary renders as.
+    expect(screen.getByRole('button', { name: 'run (primal) — never' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'run (primal) — never' }));
+    await waitFor(() =>
+      expect(bankPass).toHaveBeenLastCalledWith(
+        expect.objectContaining({ cleared: ['taboo:run-primal'], autosave: true }),
+      ),
+    );
+    expect(screen.getByText('0 marked')).toBeInTheDocument();
+  });
+
+  it('a boundary from an EARLIER take is still settled, not re-offered', async () => {
+    const withBoundary = state({
+      draft: DRAFT,
+      lexicon: {
+        ...state().lexicon,
+        entries: [
+          {
+            key: 'taboo:run-primal',
+            text: 'run (primal)',
+            kind: 'phrase',
+            family: 'taboo',
+            tier: 5,
+            hear: 0,
+            say: 0,
+            state: 'never' as const,
+            source: 'test:r0',
+          },
+        ],
+      },
+    });
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(withBoundary),
+      testsAdaptiveStart: () => Promise.resolve(withBoundary),
+    });
+    renderTake();
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Pick up where you left off/i }),
+    );
+    expect(await screen.findByText(/off the table/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'run (primal) — never' })).not.toBeInTheDocument();
+  });
+
   it('moves on rather than dead-ending when an AI phase degrades (74 §7)', async () => {
     installMockBridge({
       testsBank: () => Promise.resolve(BANK),

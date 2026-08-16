@@ -13,6 +13,7 @@ import { readEncryptedJson, writeEncryptedJson } from '../../vault';
 import {
   applyBankMarks,
   applyDirections,
+  clearMarks,
   derivedWantsToSay,
   lovedEntries,
   mergeLexicons,
@@ -178,12 +179,33 @@ export async function recordBankPass(
   fs: FileSystem,
   key: Uint8Array,
   def: AdaptiveTestDefinition,
-  input: { personId: string; resultId: string; marks: BankMarks },
+  input: {
+    personId: string;
+    resultId: string;
+    marks: BankMarks;
+    /** Marks the person took back — un-marked in the same sitting (74 §3.4). */
+    cleared?: readonly string[];
+    /**
+     * An AUTOSAVE, not the end of the pass. The lexicon is written either way — that is the point, so nothing
+     * is lost — but only completing the pass stamps a turn. A turn per tap would put ~1,100 of them in the
+     * result and make `turns` useless as a record of what was actually asked.
+     */
+    autosave?: boolean;
+  },
   now: Date,
 ): Promise<EroticLexicon> {
   const lexicon = await readLexicon(fs, key, input.personId, now);
-  const next = applyBankMarks(lexicon, def.bank, input.marks, `test:${input.resultId}`, now);
+  const source = `test:${input.resultId}`;
+  const marked = applyBankMarks(lexicon, def.bank, input.marks, source, now);
+  // Un-marking is scoped to THIS take's own marks, and only while the take is still OPEN. Without the draft
+  // check, `source` scoping is only as strong as a renderer-supplied string: passing a COMPLETED take's id
+  // makes `source` match its entries and lifts a boundary that take settled. Result ids are handed to the
+  // renderer in `adaptiveState().history`, so that is a reachable string, not a hypothetical one (74 §3.2).
+  const draft = await openDraft(fs, key, input.personId, def.id);
+  const clearable = draft?.id === input.resultId ? (input.cleared ?? []) : [];
+  const next = clearMarks(marked, clearable, now, source);
   await writeLexicon(fs, key, next);
+  if (input.autosave) return next;
   await stampTurn(fs, key, input.personId, input.resultId, {
     phase: 'bank',
     item: {
@@ -206,12 +228,15 @@ export async function recordSplitPass(
     personId: string;
     resultId: string;
     splits: Record<string, { hear?: number; say?: number }>;
+    /** As above — an autosave persists the ratings but does not close the pass. */
+    autosave?: boolean;
   },
   now: Date,
 ): Promise<EroticLexicon> {
   const lexicon = await readLexicon(fs, key, input.personId, now);
   const next = applyDirections(lexicon, input.splits, now);
   await writeLexicon(fs, key, next);
+  if (input.autosave) return next;
   await stampTurn(fs, key, input.personId, input.resultId, {
     phase: 'split',
     item: { id: 'split', pack: 'bank', text: 'hear / say split', options: [] },

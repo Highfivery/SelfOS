@@ -16094,6 +16094,41 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     await w.getByRole('button', { name: 'whore — never', exact: true }).first().click();
     await expect(w.getByText('3 marked')).toBeVisible();
 
+    // 74 §3.4 — every tap saves itself. Nothing below clicks Next, so the only thing that can have written
+    // this is the autosave; the vault is the assertion, not the screen.
+    await expect(w.getByText(/Every tap saves itself/i)).toBeVisible();
+    await expect(w.getByText('Saved')).toBeVisible();
+    // Content scrolls in the shell's inner container, never the window or `main` — reset whatever is scrolled.
+    await w.evaluate(() => {
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        if (el.scrollTop > 0) el.scrollTop = 0;
+      }
+    });
+    await w.screenshot({ path: 'e2e-artifacts/74-autosave.png' });
+    const LEXICON = 'people/owner-1/tests/lexicon.enc';
+    await expect
+      .poll(async () => {
+        const lex = (await readEncryptedJson(fs, LEXICON, key).catch(() => null)) as {
+          entries: { key: string; state?: string; hear: number }[];
+        } | null;
+        return (lex?.entries ?? []).filter((e) => e.hear > 0 || e.state).length;
+      })
+      .toBeGreaterThanOrEqual(3);
+
+    // A mis-tap is not a life sentence: un-marking takes the boundary back out of the store.
+    await w.getByRole('button', { name: 'whore — never', exact: true }).first().click();
+    await expect(w.getByText('2 marked')).toBeVisible();
+    await expect
+      .poll(async () => {
+        const lex = (await readEncryptedJson(fs, LEXICON, key)) as {
+          boundaries: { text: string }[];
+        };
+        return lex.boundaries.some((b) => b.text === 'whore');
+      })
+      .toBe(false);
+    await w.getByRole('button', { name: 'whore — never', exact: true }).first().click();
+    await expect(w.getByText('3 marked')).toBeVisible();
+
     // The §12 guard runs against the DENSEST surface — the bank grid, mid-mark.
     await w.setViewportSize({ width: 360, height: 900 });
     await expectNoInnerOverflow(w);

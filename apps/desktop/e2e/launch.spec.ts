@@ -16042,6 +16042,15 @@ test('story (72): every book on the shelf gets the same cover, whatever its titl
     expect(covers.length).toBe(2);
     for (const c of covers) expect(c.coverW).toBe(c.itemW); // fills its card, never its title
     expect(covers[0]!.coverW).toBe(covers[1]!.coverW); // and every book is the same size
+
+    // The new-book tile says what a book could BE, and the count is derived from the registry (72 §3.1).
+    // Scoped to the tile: a book card's meta line also reads "Biography · …".
+    const newTile = w.getByRole('button', { name: 'Start a new book' });
+    await expect(newTile).toContainText(/kinds of book/);
+    await expect(newTile).toContainText(/biography/i);
+    await expect(newTile).toContainText(/children’s/i);
+    // The 18+ type is never advertised on an empty tile.
+    await expect(newTile).not.toContainText(/erotica/i);
   } finally {
     await app.close();
   }

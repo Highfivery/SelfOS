@@ -1,0 +1,698 @@
+# 74 — Adaptive tests & the erotic lexicon ("Dirty Talk")
+
+> **Status:** Draft — _last updated 2026-08-16_ (brainstormed + 10 owner decisions locked before any code)
+>
+> A **second kind of test**. Every instrument in [`50`](50-self-assessments.md)/[`51`](51-wellbeing-neurodivergence-reflections.md)
+> is a fixed item list scored by pure arithmetic. This adds an **adaptive** kind: the AI writes the items as it
+> goes, seeded by what the app already knows, and a synthesis pass turns the take into a structured profile the
+> whole app consumes. Its first instrument is **Dirty Talk** — a map of the sexual language a person wants to
+> hear, wants to say, wants to be _able_ to say, and never wants again. **Fantasy** and **Sex Sessions** are the
+> next two instruments on the same engine, which is why the engine exists at all.
+
+Builds on [`50`](50-self-assessments.md) (the Tests hub, `TestResult`, the result→Insight bridge, `tests.own`,
+the shared 18+ ack), [`49`](49-intimacy-activities-inventory.md) (the rating inventory + the "a hard no is a
+boundary" rule), [`71`](71-question-intelligence-rebuild.md) (the ask ledger + topic map, which this both reads
+and writes), [`70`](70-adaptive-exploration.md) (the silent partner steer), [`08`](08-questionnaires.md) (the
+answering renderer, the context-provider registry, `explicitFraming`), [`58`](58-together-couples-sessions.md)
+(the couples register + the consented-overlap precedent), [`66`](66-chat-reliability-and-message-management.md)
+(`streamWithContinuation`), and [`06`](06-ai-usage-and-budgets.md) (every call metered + budget-gated).
+
+---
+
+## 1. Overview
+
+### 1.1 The problem
+
+SelfOS knows what a person likes to **do**. It knows almost nothing about what they want **said**.
+
+Five surfaces touch dirty talk today and none of them produce anything usable: onboarding has a free-text box
+(`dirtyTalkLikes`, "things you love to hear"); the activity matrix has six rows (_Light dirty talk · Explicit
+dirty talk · Sexting · Phone sex · Begging · Verbal commands_); the kink test scores a `kink.dirty-talk`
+category; there is a guided `dirty-talk-practice` session that opens by asking the person what they want to be
+able to say; and the topic map carries `Intimacy:dirty-talk` as ground to mine. The result is a person who has
+been asked about dirty talk five times and an app that still cannot produce one sentence they'd actually want to
+hear — while spec 71 §1 measured that same ground being re-asked _7+ times in near-identical wording_.
+
+Language is also the highest-leverage thing to know. A rating on "Explicit dirty talk: ♥♥♥" is nearly useless.
+_"`good girl` and `mine` land, `filthy little slut` doesn't, and she wants to be able to say `cock` but freezes"_
+changes what the coach says, what a questionnaire asks, what a challenge proposes, what her book sounds like,
+and what her partner is told to try tonight.
+
+### 1.2 Why a new test KIND, not a new instrument
+
+The spec-50 engine cannot host this, structurally:
+
+| Spec-50 assumption                                   | Why an adaptive test breaks it                                                                        |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `TestDefinition.items` is a fixed list               | The items are written per take, from the person's own answers                                         |
+| `testsGet` returns the whole form up front           | There is no whole form until the take is over                                                         |
+| `itemCount` / `estimatedMinutes` derive from `items` | Both are estimates, not counts                                                                        |
+| `TestResult.answers` = `questionId → value`          | Stores answers with **no record of what was asked** — meaningless six weeks later for generated items |
+| Subscale keys come from the definition               | If the AI names dimensions per take, trends silently break                                            |
+| Scoring is free                                      | Every adaptive turn is a metered model call                                                           |
+
+So: a second kind, sharing the hub, the result→Insight bridge, the 18+ ack, the capability, and the Memory
+integration — and diverging on items, storage, scoring, and cost.
+
+### 1.3 Where the output goes
+
+The take produces two artifacts:
+
+1. An **`AdaptiveTestResult`** — versioned, dated, trend-bearing, deletable, exactly like any other test result.
+2. A shared **erotic lexicon** (`EroticLexicon`) — one per person, written by every adaptive intimacy test and
+   read by every explicit surface in the app. Dirty Talk writes its `words`/`lines`/`registers`/`contexts`;
+   Fantasy and Sex Sessions will write their own sections into the same store. **Boundaries are global**: a hard
+   no recorded in one test constrains all three, and every consumer.
+
+Consumers: the solo coach, guided intimacy sessions (especially `dirty-talk-practice`), questionnaire generation
+(`explicitFraming`), Together, challenges, the intimacy email, the **erotica book type**, and — silently — a
+partner's suggestions.
+
+## 2. Goals / Non-goals
+
+**Goals**
+
+- A reusable **adaptive test engine** in `@selfos/core/tests/adaptive`: probe packs, a fixed dimensional spine,
+  seed material, a stopping rule, a synthesis contract. Adding Fantasy or Sex Sessions is then a definition file.
+- The **Dirty Talk** instrument: a free deterministic word bank, an AI line-reaction pass, adaptive probes,
+  context scenarios, and a synthesis into a profile the person can read, edit, and act on.
+- A shared, **editable** `EroticLexicon` + a **global boundary store** every explicit surface honors.
+- **Saturation write-back**: taking the test marks `Intimacy:dirty-talk` worked-through in the ask ledger, so
+  the questionnaire planner stops mining ground the test just covered.
+- A **silent partner steer** so one partner's coach can suggest language the other actually wants — never
+  attributed, never announced — plus a **hard-no suppression that applies with or without any sharing**.
+- The hub renamed **Tests** (`/tests`), with wellbeing instruments keeping their "check-in"/"reflection" nouns.
+
+**Non-goals**
+
+- **Retiring any existing surface.** Owner decision: coexist + seed. `dirtyTalkLikes`, the matrix rows, the kink
+  subscale and the guided session all stay exactly as they are; the test seeds from them and saturates the topic.
+- **A consented partner-share surface.** The partner path is the silent steer only (§5.7). No opt-in screen, no
+  "share my profile" toggle, no phrasebook to send. (If that's ever wanted it is additive.)
+- **Audio / voice.** Register is captured as text about voice ("low, close, certain"), never recorded audio. No
+  second provider.
+- **Fantasy and Sex Sessions themselves** — this spec builds the engine and one instrument; each later
+  instrument is its own slice (and its own §11 decisions).
+- **Anything outside consensual adults.** Unchanged from every intimacy surface (§8).
+
+## 3. UX & flows
+
+### 3.1 The hub rename (`/you` → `/tests`)
+
+Nav label and route become **Tests**; the page keeps its "how you see yourself" framing and its link to Memory.
+The **wellbeing group keeps its own nouns everywhere** — cards say _Check in_, results say _check-in_, the
+recommendation copy is unchanged — because [`51`](51-wellbeing-neurodivergence-reflections.md) §8.1 forbids
+framing a PHQ-9 as a test. `/you` and `/you/*` **redirect** to `/tests/*` (deep links, the `wellbeing-checkin`
+recommendation route, and any bookmark keep working).
+
+An adaptive test's catalog card differs from a deterministic one in three ways: it says **"about 15 min · adapts
+as you go"** instead of an item count, it carries a **cost line** ("uses a little of your AI allowance"), and its
+Take button reads **Start**.
+
+### 3.2 The take — Dirty Talk, phase by phase
+
+Every phase persists on completion. The take is **resumable across sittings** (a `draft` result), shows
+**realtime progress** on every AI phase (phase label + elapsed + ETA — the durable §12 rule; a bare spinner is
+unacceptable), and can be abandoned at any point without saving a profile.
+
+**Phase 0 — Intro.** 18+ ack if not already held (the shared `guidance/prefs.enc adultAcknowledged`); the
+non-diagnostic framing; what it costs; and the honest privacy line: _"This stays yours. It shapes how SelfOS
+talks to you — and, if you have a partner here, it can quietly shape what their coach suggests to them. It never
+tells them what you said."_ (§8.4 — the person is told the steer exists before they produce the material.)
+
+**Phase 1 — The bank.** Deterministic, free, instant, and **comprehensive** — the full draft inventory is §13:
+~300 entries across **19 families**, each carrying an intensity **tier 1 (tame) → 5 (extreme / taboo fantasy)**,
+mirroring the spec-49 activity inventory's `{ key, label, category, tier }` model so the two read the same way.
+
+Two kinds of entry, because people don't speak in single words:
+
+- **Words** — `cunt`, `cock`, `good girl`, `slut`, `wet`, `throbbing`.
+- **Phrases** — the things actually said: _"fuck me in the ass" · "choke me" · "finger my asshole" · "deeper" ·
+  "pound my pussy" · "suck that cock" · "don't come until I say" · "I can feel you throb"_. These are the high-value
+  entries; a word rating alone can't tell you whether she wants to be **told**, **asked**, or **narrated to**.
+
+Each entry is rated **twice** — hear and say — because what you love to hear and what you can get out of your
+own mouth are completely different things, and that gap is the most useful thing this test finds:
+
+|             | HEAR | SAY |
+| ----------- | ---- | --- |
+| `cunt`      | ♥♥♥♥ | ✗   |
+| `good girl` | ♥♥♥♥ | —   |
+| `whore`     | ✗    | ✗   |
+
+Scale: `✗` never · `~` not yet · `—` nothing · `♥`…`♥♥♥♥`. **Three negative states, not one** (owner decision):
+
+- **`✗` never** — permanent. Suppressed everywhere, never re-offered on a retake, and **no reason is ever
+  asked**. Requiring someone to justify a no is itself coercive (§8.2).
+- **`~` not yet** — "makes me cringe / I'd feel like an idiot". Revisitable on a retake, and the raw material
+  for the shame + practice sessions. This is where most of the coaching value lives.
+- **`—` nothing** — neutral, no signal.
+
+**Pacing a 300-entry bank without a wall.** Rating 300 entries in two directions is 600 taps and nobody finishes.
+Three mechanisms, all existing precedents:
+
+1. **A ceiling.** One question first — _"How far should this go?"_ — sets the tier ceiling (**1–2 playful · 3
+   explicit · 4 filthy & kinky · 5 no limits, show me everything**). Entries above the ceiling are never
+   rendered. Raising it later is one tap and reveals the rest; it is never raised for them.
+2. **Family opt-in**, exactly the kink test's branched `equalsAny` pattern: they pick which families to work
+   through; each family's grid is revealed only when chosen. Degradation, taboo fantasy and edge families are
+   never shown unopened.
+3. **Skip is free** at family and entry level, and an unrated entry is simply omitted from the scoring mean —
+   never treated as a no (the `scoreSubscale` "unanswered → omit" rule).
+
+A free write-in per family ("your words — anything we missed"). One **dialect** question up front (`cunt` is
+affectionate in Glasgow and a hard stop in Ohio — asked, never assumed). Anatomy words and the anatomy inside
+phrases are resolved per person the way `activityRows.ts` resolves the oral rows, from the intake anatomy
+answers where present (_"pound my pussy"_ / _"pound my ass"_ / a neutral form when unknown).
+
+Each entry declares its sensible **directions** — most demands are `both` (she says _"fuck me harder"_, he hears
+it), a few are one-way (_"good girl"_ is rarely a thing you say about yourself) — so the grid never asks a
+nonsense question.
+
+This phase alone is shippable value: no AI, no cost, and already better than the free-text box.
+
+**Phase 2 — Line reactions.** ONE batched model call writes ~12 complete lines, seeded by phase 1 + the seeds in
+§5.4, each tagged internally with register + heat. The person marks 🔥 / 😐 / 🚫.
+
+> _"You're so fucking wet for me." · "Good girl. Just like that." · "I can feel you throbbing around me." ·
+> "Don't come until I say." · "Look at you, taking every inch." · "You're mine. Say it." · "Beg me for it." ·
+> "You filthy little slut, you love this." · "God, you feel perfect." · "Tell me what you want. Out loud."_
+
+The inference this unlocks is the point: `good girl` ♥♥♥♥ + `slut` ♥♥♥ + _"filthy little slut"_ 🚫 means the pull
+is **claiming and praise inside a power dynamic**, not degradation — which no word-level rating could tell you.
+
+**Phase 3 — Probes.** 3–6 adaptive turns, only where the signal is genuinely ambiguous. Not a survey; a
+conversation that already knows things:
+
+> **You loved _"good girl"_ and _"you're mine"_ but _"filthy little slut"_ was a no. Is it being talked _down_
+> to that doesn't land — or that word specifically?**
+>
+> **You marked _"cunt"_ as never-say but yes-hear. Is that "he can, I can't", or does hearing it in your own
+> mouth just feel wrong?**
+
+The second question is the one that finds a **goal** rather than a preference — _"I want to be able to. I just
+freeze"_ — and hands `dirty-talk-practice` a real starting point.
+
+**Phase 4 — Context scenarios.** 2–3 scenes, because register is context-dependent and the most obvious way this
+feature embarrasses someone is suggesting mid-act language for a 2pm text (owner decision: score per context).
+Contexts: **build-up · during · edge/climax · after · sexting · phone**.
+
+> _It's 2pm. He texts: "thinking about last night. specifically the noise you made." What's the right next
+> message?_ → escalate / tease / soft / not at work
+>
+> _He's got you pinned, thirty seconds away. What do you want in your ear?_ → "come for me" / "not yet" /
+> narration / no words
+>
+> _Afterwards, still lying there._ → "good girl" / "that was incredible" / "come here" / nothing
+
+**Phase 5 — Synthesis.** One structured pass → the profile. Metered; the person sees phase + timer + ETA.
+
+### 3.3 The report
+
+Written **to them, in their register** — not a clinical readout. It is also, deliberately, a thing they might
+read aloud or hand to a partner (§8.5), so it reads like prose with the structure underneath:
+
+> **You want to be claimed, not degraded.** _Mine · my slut · good girl · you're perfect_ all landed hard.
+> _Filthy little slut_ didn't. The line isn't how crude the word is — it's whether there's warmth behind it.
+>
+> **You want to be told, not asked.** Every question-shaped line scored lower than every command.
+>
+> **Your strongest register is narration.** _You're so wet · I can feel you throb · you're so tight._ He doesn't
+> need better words; he needs to say what's happening out loud.
+>
+> **What you can't say yet.** _Cock. Cunt._ You want to and you freeze. That's not a limit — that's the thing to
+> practise, and there's a session for it. → **Practise this**
+>
+> **Off the table.** _Whore · filthy · daddy · anything about being used._ Not "maybe later" — off.
+>
+> **Timing.** Build-up: teasing, no filth. During: filth, commands, narration. After: soft and short.
+
+Below it: the editable lexicon (§3.4), the spine bars (`SubscaleBar`, reusing the deterministic result screen),
+trends across retakes (`LineChart`, ≥2 results), history, and Delete.
+
+The report **may interpret** ("you respond to being claimed, not degraded") — clearly labelled as a reading of
+what they answered, never a verdict (§8.1). It is second-person, in their words, never clinical labels.
+
+### 3.4 Editing
+
+Every part of the lexicon is editable in place: add a word, move one between states, fix a mis-read line, edit
+the prose. It is _their vocabulary_; an AI reading of it is a draft. Edits write straight to the `EroticLexicon`
+(not the result — the result is the dated record of what they answered on the day).
+
+### 3.5 Retakes, deletion, and the practice handoff
+
+Retake = a new dated result + a trend point; the lexicon is **merged forward**, and a `✗ never` is never
+re-offered (a `~ not yet` is). Delete-one re-derives from the latest remaining result; delete-all removes the
+results, the derived Insight, **and** the lexicon sections this test owns — deletion has to be real here (§8.5).
+
+The report's **"Practise this"** button starts the existing `dirty-talk-practice` guided session with the goal
+pre-loaded, so the guided session stops opening on "what do you want to be able to say?" when the app already
+knows.
+
+## 4. Data model
+
+All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.
+
+### 4.1 Vault layout
+
+```
+people/<person-id>/
+  tests/<result-id>.enc          # existing — now holds AdaptiveTestResult too (discriminated by `kind`)
+  tests/lexicon.enc              # NEW — the shared EroticLexicon (one per person, all adaptive intimacy tests)
+  insights/<insight-id>.enc      # existing — the derived Insight (source: 'test')
+  questionnaires/askLedger.enc   # existing — the saturation write-back (§5.6)
+  guidance/prefs.enc             # existing — the shared 18+ ack
+```
+
+### 4.2 `AdaptiveTestDefinition` (code)
+
+```ts
+type TestKind = 'deterministic' | 'adaptive';
+
+interface AdaptiveTestDefinition {
+  id: 'dirty-talk'; // later: 'fantasy', 'sex-sessions'
+  kind: 'adaptive';
+  group: 'intimacy';
+  adult: true;
+  sensitive: true;
+  title: string;
+  blurb: string;
+  framing: string;
+  estimatedMinutes: number; // an estimate, not a count
+
+  /** The FIXED dimensional spine — stable metric keys, so trends and `Insight.metrics` survive a retake even
+   *  though the items don't. The synthesis MAPS onto these; it may never invent a key. */
+  spine: { key: string; label: string; description: string }[];
+
+  /** The phases this instrument runs, in order. Each names a probe pack (§5.2). */
+  phases: AdaptivePhase[];
+
+  /** What the take may read to personalize turn 1 (§5.4). */
+  seeds: SeedSource[];
+
+  /** The topic ids this instrument covers, written back to the ask ledger on completion (§5.6). */
+  saturates: string[]; // ['Intimacy:dirty-talk']
+
+  /** The synthesis contract — the JSON shape the report parses into. */
+  synthesis: { schema: ZodType; system: string };
+}
+```
+
+Dirty Talk's spine (stable keys, never AI-invented):
+
+`dirtytalk.explicitness · .praise · .claiming · .command · .narration · .degradation · .begging ·
+.receiving-voice · .giving-voice · .say-confidence`
+
+### 4.3 `AdaptiveTestResult`
+
+The critical difference from `TestResult`: it stores **what was asked**, not just the answers.
+
+```ts
+interface AdaptiveTestResult {
+  id: string;
+  schemaVersion: number;
+  kind: 'adaptive';
+  testId: string;
+  testVersion: number;
+  subjectPersonId: string;
+  status: 'draft' | 'complete'; // resumable across sittings
+  /** Every turn, in order — the generated item AND the answer. Without this a generated item's answer is
+   *  meaningless later, and a retake can't tell what it already asked. */
+  turns: { phase: string; item: AdaptiveItem; answer: AnswerValue; at: string }[];
+  scores: TestSubscaleScore[]; // mapped onto the definition's spine — reuses the 50 shape
+  profile: DirtyTalkProfile; // the structured synthesis (§4.5)
+  narrative: string; // the prose report
+  reTakeOf?: string;
+  insightId?: string;
+  costUsd: number; // what this take actually cost (admin-visible only)
+  takenAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+### 4.4 `EroticLexicon` (shared, per person)
+
+```ts
+interface EroticLexicon {
+  schemaVersion: number;
+  personId: string;
+  entries: {
+    key: string; // stable slug — survives a relabel, the 46 §4.2 rule
+    text: string;
+    kind: 'word' | 'phrase';
+    family: DirtyTalkFamily; // one of the 17 (§13)
+    tier: 1 | 2 | 3 | 4 | 5; // tame → extreme, mirroring INTIMACY_ACTIVITIES_FULL
+    directions: ('hear' | 'say')[]; // most are both; a few only make sense one way
+    hear: 0 | 1 | 2 | 3 | 4; // — · fine · like · love · that word does it
+    say: 0 | 1 | 2 | 3 | 4;
+    state?: 'never' | 'notYet'; // a boundary, not a low score (49 §3.1)
+    custom?: boolean; // their write-in
+    source: string; // which test/edit wrote it
+  }[];
+  /** The tier ceiling they chose (§3.2). Entries above it were never shown — so an unrated tier-5 entry means
+   *  "not asked", NEVER "not interested", and no consumer may read it as a no. */
+  ceiling: 1 | 2 | 3 | 4 | 5;
+  lines: { text: string; reaction: 'love' | 'meh' | 'no'; registers: string[] }[];
+  registers: Record<string, number>; // praise · claiming · command · narration · degradation · begging
+  contexts: Record<string, { heat: number; note?: string }>; // buildUp · during · edge · after · sexting · phone
+  wantsToSay: string[]; // the GOAL list — the coachable material
+  themes: string[]; // their own words
+  voice?: string; // "low, close, certain. not loud."
+  /** GLOBAL boundaries — written by any adaptive intimacy test, honored by every consumer. Never re-offered. */
+  boundaries: { text: string; kind: 'word' | 'theme'; at: string }[];
+  updatedAt: string;
+}
+```
+
+### 4.5 `DirtyTalkProfile`
+
+The per-result snapshot of what this take concluded (the lexicon is the living merge of all takes). Same fields,
+plus the mapped `spine` values.
+
+### 4.6 Additive schema changes
+
+- `TestResultSchema` → a discriminated union on `kind` (absent ⇒ `'deterministic'`, so **no migration**).
+- `InsightProvenance` already carries `testId`/`testResultId`. No change.
+- New `USAGE_TYPE_LABELS` entries: `test.adaptive.lines` · `test.adaptive.probe` · `test.adaptive.scenario` ·
+  `test.adaptive.synthesize`.
+- **No new capability** — `tests.own` + the shared 18+ ack cover it.
+
+## 5. Architecture & modules
+
+`@selfos/core/tests/adaptive/` — `engine.ts` (the run loop + stopping rule) · `probePacks.ts` · `lexicon.ts`
+(the shared store + merge + boundary rules) · `saturation.ts` (the ledger write-back) · `steer.ts` (the partner
+steer + the suppression) · `instruments/dirtyTalk.ts` (the definition + word bank + synthesis contract).
+
+### 5.1 The run loop
+
+Each AI phase is one `runClaude` call (`AiDeps`, budget-gated, metered, `streamWithContinuation`,
+tolerant-parsed via `jsonSalvage`, **metered before parse**). The engine never runs a phase without a budget
+check, and a failed phase degrades to _skip this phase_, never to a failed take: a take that reaches synthesis
+with only phase 1 answered still produces a (thinner, honest) profile.
+
+### 5.2 Probe packs
+
+`word-bank` (deterministic) · `line-reaction` (batched generation + swipe) · `probe` (open adaptive turn) ·
+`scenario` (a described moment + choices) · `forced-choice`. A pack declares how it renders (reusing
+`@selfos/answering` where the shape fits) and how its answers feed the synthesis. Fantasy will lean on
+`scenario`; Sex Sessions on `scenario` + a new `sequence` pack.
+
+### 5.3 The stopping rule
+
+Bounded by BOTH: a per-phase turn cap AND a hard **`MAX_ADAPTIVE_CALLS = 6`** and **`MAX_TAKE_COST_USD = 0.40`**
+per take, stated up front in the intro. When either is hit the engine proceeds to synthesis with what it has.
+
+### 5.4 Seeds
+
+Read once at the start of the take (never re-read mid-take): the intake intimacy section (`dirtyTalkLikes`,
+`turnOns`, the `dirty-talk` matrix rows, anatomy, orientation), the kink test's `kink.dirty-talk` subscale, the
+topic map's open/closed intimacy ground, whether a live `partner` edge exists, and the existing lexicon on a
+retake. **Coexist + seed** (owner decision): nothing upstream is retired or changed.
+
+### 5.5 Result → Insight
+
+Unchanged bridge (50 §5.4): one Insight, `source:'test'`, `approved:true`, retake reuses `insightId`, facts
+`lifeArea:'Intimacy'` and `shareableTypes:['partner']`. Which means the existing **relevance gate applies**: the
+profile reaches the taker's own intimacy-topic context only, is excluded from topic-free digests
+(`digestableInsights`), and is excluded from Together prompts by `excludeRestricted`. Consumers that need more
+than that get an **explicit seam** (§5.8), never a loosened gate.
+
+### 5.6 Saturation write-back
+
+On completion the engine appends ask-ledger entries for `saturates` (`Intimacy:dirty-talk`) with a synthetic
+`assignmentId` of `test:<resultId>`, `outcome: 'rich'`, and a gist per phase. `deriveTopicStats` then counts them
+like any other ask, so the planner treats the ground as worked-through and moves on — reopening naturally after
+`DORMANT_DAYS`. Idempotent by `questionId` (`test:<resultId>:<phase>`), so a re-merge is a no-op.
+
+### 5.7 The partner steer (owner decision: silent, full-fidelity)
+
+`buildDirtyTalkSteer(fs, key, requesterId, partnerId)`, modelled on `buildPartnerWishGuidance`:
+
+- Gated on a **live `partner` edge**, re-checked on every call (a removed edge drops it immediately).
+- Gated on **both** parties holding the 18+ ack.
+- Emits the partner's lexicon as guidance the coach may use — **including her own written-in words and themes
+  verbatim** (the owner's informed decision, §8.4) — under a NEVER-ATTRIBUTE instruction identical in force to
+  the partner-wish block: never say it came from anyone, never say their partner told you, never quote a source.
+- **Recommended bound (§11 Q1):** only the `loves`/`likes` lexicon, `lines` marked love, `themes`, `voice` and
+  `contexts` travel. Boundary **reasons** and free-text **probe answers** never travel — those can carry history
+  and narrative that has nothing to do with what she wants said in bed.
+
+### 5.8 Consumers
+
+| Consumer                        | Seam                                                                                                                                                                 |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Solo sessions + guided intimacy | The lexicon block appended after PERSONA/SAFETY/context, gated on the 18+ ack                                                                                        |
+| `dirty-talk-practice`           | Opens on the `wantsToSay` goal; the practice material is their own list                                                                                              |
+| Questionnaire generation        | `explicitFraming` gains an optional vocabulary block — the tier still governs intensity, but the WORDS become theirs                                                 |
+| Challenges                      | Drawn from `wantsToSay`/`likes`, never from `boundaries`                                                                                                             |
+| Intimacy email                  | Same block, same gating (§11 Q3)                                                                                                                                     |
+| Together                        | Both partners' lexicons when both acked; the mismatch is nameable                                                                                                    |
+| **Erotica book**                | The `filthyTalk` register and the vocabulary substitution lists become person-tuned. **Deferred to its own slice** — that file is under active development elsewhere |
+| Partner's coach                 | §5.7, plus the **unconditional suppression**: a `boundaries` entry can never appear in a suggestion to their partner, with or without any steer                      |
+
+## 6. IPC / API contracts
+
+All gated `tests.own` + active-person-scoped + 18+-withheld **in the bridge** (the trust boundary), with the
+Claude key resolved host-side and never crossing IPC:
+
+- `tests:adaptiveStart({ testId })` → `{ resultId, phase, item }` — creates/resumes a draft.
+- `tests:adaptiveAnswer({ resultId, answer })` → `{ phase, item } | { done: true }` — persists the turn and
+  returns the next item (running a model call only when the phase needs one). Progress is streamed on an
+  `tests:adaptiveProgress` event (phase + elapsed + ETA, the §12 realtime rule).
+- `tests:adaptiveSynthesize({ resultId })` → the profile + narrative.
+- `tests:lexicon()` / `tests:updateLexicon({ patch })` — read + the §3.4 edits.
+- `tests:adaptiveAbandon({ resultId })` — discard a draft.
+
+`costUsd` is admin-only on every response (`budgets.manage`, redacted in the bridge — the 06 rule).
+
+## 7. States & edge cases
+
+- **AI off / no key / over budget** — phase 1 (the word bank) still runs and still writes a lexicon; the AI
+  phases are skipped with a calm `AiUnavailableNotice`, and the report says honestly that it's the short version.
+- **Mid-take failure** — the draft persists; reopening resumes at the last completed phase.
+- **Cap reached** — synthesis runs on what exists; the report says it went short.
+- **Empty seeds** (a person who did no intake) — the word bank carries the take on its own.
+- **Corrupt result / lexicon** — skipped, never thrown (the `listResults` precedent); a corrupt lexicon degrades
+  to empty rather than blocking a session.
+- **Sync conflict** — the lexicon is last-write-wins on `updatedAt` **except boundaries, which UNION** (a hard no
+  can never be lost by a merge).
+- **Retake** — merges forward; `never` entries are never re-offered; `notYet` may be.
+- **No partner** — solo/self-talk framing throughout; the steer simply never runs.
+- **Partner edge removed mid-life** — the steer re-gates on the next call, no stale access.
+
+## 8. Safety
+
+### 8.1 The boundary
+
+Consensual adults only; taboo strictly as fantasy/roleplay; never minors, never real non-consent, never illegal
+acts; within Anthropic's usage policy. Stated in-prompt on every phase, enforced by content + the model, **never
+a keyword filter** (the `@selfos/core/intimacy/topics` rule). The not-medical line and the `CrisisFooter` are on
+every surface. The report interprets but never diagnoses.
+
+### 8.2 Boundaries and shame
+
+- A `never` is permanent, suppressed everywhere, never re-offered, and **never requires a reason**.
+- The AI **never escalates**. It offers a spread; the person picks. If a probe would push toward material they
+  haven't shown interest in, it doesn't run. The app never pushes sex at anyone.
+- Names and roles are identity-loaded (_daddy_ for someone with a father wound, _slut_ for someone with a
+  history). A probe offers once and backs off the instant it lands wrong.
+- _"I'd feel like an idiot"_ is the most common answer this test will get. The response is warmth and the
+  `sexual-shame` / practice sessions — never more probing.
+- If shame, coercion, or an assault history surfaces: slow down, validate, **stop the take**, route to
+  professional support. Never frame trauma as kink; never treat a disclosed assault as erotic.
+
+### 8.3 Crisis
+
+Unchanged: a distress signal in a probe answer raises `crisisFlag` on the result, feeds `aggregateCrisisSignal`,
+and the report leads with resources.
+
+### 8.4 Privacy — and the informed override
+
+The profile is `lifeArea:'Intimacy'`, so by default it is own-context, intimacy-topic-only, digest-excluded and
+Together-excluded.
+
+**The owner has knowingly overridden this for the partner steer.** Recorded plainly: the steer may use the
+partner's **own written words verbatim** in suggestions to their partner. It is never attributed — but _those are
+her words, and she will recognise them_. The first time he uses two of her phrases in one night she can
+reasonably infer the app told him. This is a disclosure by inference, it was chosen deliberately, and §3.2's
+intro tells the person the steer exists **before** they produce any material. What it may **not** do is name the
+source, quote a boundary reason, or surface a free-text probe answer (§5.7).
+
+The suppression runs the other way unconditionally: a partner's coach can never suggest a word she has marked
+`never`, with or without any steer.
+
+**Never** tell a person an owner/admin can read this (the durable rule). Break-glass reveal of verbatim lines is
+**not** offered (§11 Q2).
+
+### 8.5 This artifact is different
+
+It is the most sensitive thing in the vault and it is also, by design, something a person may read aloud or show
+a partner. Two consequences: the report is written to be read that way, and **deletion is complete** — results,
+Insight, and the lexicon sections this test owns.
+
+## 9. Accessibility
+
+The word-bank grid is keyboard-operable with per-cell labels ("cunt — hear", "cunt — say") and never conveys
+state by colour alone (the `✗ / ~ / — / ♥` marks are text). Line reactions are buttons with real labels, not
+gestures. Spine bars + trends carry text equivalents (the `SubscaleBar` / `LineChart` precedent). Progress is a
+polite live region; the crisis banner is announced. Responsive ~360px→desktop with no horizontal scrollbar and no
+inner scroller — the word-bank grid collapses to one word per row at phone width. Reduced motion respected.
+
+## 10. Testing strategy
+
+- **Unit (core):** the word-bank scale + the three negative states; the boundary union on merge; a `never` never
+  re-offered on a retake; `mapToSpine` rejects an AI-invented key; the stopping rule caps calls AND cost; a
+  degraded phase still synthesizes; the saturation write is idempotent and lands `Intimacy:dirty-talk` in the
+  ledger; the steer is gated on a live edge + both acks and **never emits a boundary reason or a probe answer**;
+  the suppression holds with no steer at all.
+- **Bridge (two-persona, decrypt-level):** a take writes an encrypted result + lexicon + Insight; the Insight is
+  intimacy-gated (present in an intimacy context, **absent** from a money context, absent from the digest, absent
+  from Together); a partner's prompt carries the steer but **never** an attribution phrase; a `never` word is
+  absent from a partner's suggestion prompt; a Guest is refused; the 18+ gate withholds everything.
+- **RTL:** the word bank renders + records both directions; the report renders + edits persist; AI-off shows the
+  short-version path; the practice handoff carries the goal.
+- **E2E (Playwright, `SELFOS_FAKE_CLAUDE`):** a full take → profile → **decrypt the vault** to assert the lexicon
+  and the ledger entries; a retake versions and never re-offers a `never`; delete-all removes result + Insight +
+  lexicon sections; 360px overflow guard on the word bank + report; the full surface renders to the bottom.
+
+## 11. Open questions
+
+1. **Steer bound.** Confirm §5.7's recommendation: only loves/likes/lines/themes/voice/contexts travel; boundary
+   **reasons** and free-text **probe answers** never do. _Recommendation: adopt._
+2. **Break-glass.** Should an Owner ever be able to reveal verbatim lines? _Recommendation: no — unlike restricted
+   intake facts, there is no safety case for it._
+3. **Intimacy email.** May the lexicon reach an E-int suggestion email ("a line to try tonight")? Delightful or
+   horrifying depending on the person. _Recommendation: yes, behind the existing intimacy-email opt-in._
+4. **Erotica book.** Confirm the book consumes the lexicon in a **later slice** (that file is under active
+   development elsewhere). _Recommendation: yes, deferred._
+5. **Word-bank size.** ~90 words across 11 families is ~5 minutes of tapping. Trim to ~60 core + AI additions?
+6. **Anatomy variants** — resolve from intake anatomy answers (reusing `activityRows`), or ask inside the take?
+   _Recommendation: resolve, fall back to asking when intake is empty._
+7. **Together.** Should a couples session be able to NAME the mismatch ("one of you wants to be told, the other
+   has been asking permission")? That is the highest-value couples intervention here — and the most exposing.
+
+## 12. Changelog
+
+- 2026-08-16 — created (Draft). Ten owner decisions locked in the brainstorm before drafting: build the adaptive
+  ENGINE (not a bespoke test); coexist + seed with the five existing surfaces **but** saturate the topic; the
+  partner path is a **silent steer** carrying **her own words verbatim** (informed privacy override, §8.4); hard
+  nos **always suppress**; three results sharing **one lexicon**; the hub renames to **Tests** with wellbeing
+  keeping its own nouns; a `never`/`not yet` split; and **per-context** register scoring.
+
+---
+
+## 13. Appendix — the bank (draft content)
+
+The source of truth is `@selfos/core/tests/adaptive/instruments/dirtyTalkBank.ts` — the spec-49 shape
+(`{ key, text, kind, family, tier, directions }`) so it can be grouped, tier-gated and rendered exactly like the
+activity matrix. **Boundary, as everywhere:** consensual adults only; taboo strictly as **pre-agreed
+fantasy/roleplay** between adults who both know that's what it is; never minors, never real non-consent, never
+illegal acts — enforced by the content + the model, never a keyword filter. Nothing here is shown unless the
+person opened its family and their ceiling reaches its tier.
+
+**F1 · Anatomy — her body**
+_t1_ down there, between your legs, your body, your chest — _t2_ pussy, tits, ass, nipples, clit, thighs, mouth,
+throat, breasts, bum — _t3_ cunt, asshole, hole, that ass, those tits, your lips — _t4_ your tight little ass,
+that greedy cunt, your slick cunt
+
+**F2 · Anatomy — his body**
+_t1_ your body, down there — _t2_ cock, dick, balls — _t3_ that cock, your hard cock, your load, precum — _t4_
+fat cock, thick cock, every inch of you
+
+**F3 · State & sensation**
+_t1_ warm, close, breathless, shaking — _t2_ wet, hard, aching, sensitive, tight, needy — _t3_ soaked, dripping,
+throbbing, swollen, clenching, twitching, pulsing, slick — _t4_ gushing, stretched, full, sloppy, leaking, raw,
+sore, ruined — _t5_ wrecked, destroyed
+
+**F4 · Names — affectionate**
+_t1_ baby, babe, beautiful, gorgeous, sweetheart, honey, love, my love, angel, darling — _t2_ pretty girl,
+handsome, my girl, my boy, good one
+
+**F5 · Names — power & role**
+_t2_ good girl, good boy — _t3_ sir, ma'am, mistress, daddy, mommy, princess, kitten, pet, babygirl, boy —
+_t4_ master, owner, my property, my toy, plaything
+
+**F6 · Names — degrading** _(never shown unopened)_
+_t3_ naughty girl, dirty girl, bad girl — _t4_ slut, my slut, little slut, whore, bitch, filthy thing — _t5_
+cockslut, cumslut, cumdump, fucktoy, hole, pathetic little slut, worthless
+
+**F7 · Claiming & possession**
+_t2_ mine, you're mine, my girl — _t3_ you belong to me, nobody else gets this, say you're mine, say it — _t4_
+I own this pussy, this is mine, mine to use, you're my property, every part of you is mine — _t5_ _(roleplay)_
+"you don't get to say no to me", "I'll do what I like with you"
+
+**F8 · Praise & worship**
+_t1_ you're beautiful, you feel amazing, I love how you feel, you're perfect — _t2_ good girl, that's it, just
+like that, you're doing so well, you feel incredible, god you're gorgeous — _t3_ you take it so well, look how
+well you're taking it, you were made for this, I love how you taste, you're so good at that, look at you — _t4_
+you take my cock so well, that's my good little slut, perfect fucking pussy, you were made to take this
+
+**F9 · Degradation & humiliation** _(never shown unopened)_
+_t3_ you love this, don't you, look at the state of you, you're such a mess — _t4_ dirty little slut, filthy
+girl, look how wet you get for me, you're leaking everywhere, beg like the slut you are, you're pathetic when
+you want it — _t5_ you're just a hole, you exist for this, you'd take anything, wouldn't you, say you're my
+whore, thank me for it, look at yourself
+
+**F10 · Commands — general**
+_t1_ come here, kiss me, closer, slower, look at me — _t2_ don't move, stay still, open your mouth, spread your
+legs, hands above your head, turn around, bend over, on your knees, take it off, touch yourself — _t3_ open
+wider, arch your back, don't look away, say my name, take it, don't stop, keep going, be quiet, don't make a
+sound, let me hear you — _t4_ crawl, hold your legs open, keep them open, take it all, don't you dare stop,
+ask me nicely, hands behind your back — _t5_ gag on it, choke on it, hold your breath, count them, don't spill a
+drop
+
+**F11 · Commands — orgasm control**
+_t2_ come for me, let go, don't hold back — _t3_ not yet, hold it, don't come yet, wait, ask me first, come now,
+that's it, come — _t4_ don't come until I say, you'll come when I tell you, again, one more, ask permission,
+you can come — _t5_ _(roleplay)_ you don't get to come tonight, hold it or else
+
+**F12 · Demands — the receiving voice**
+_t1_ touch me, kiss me, closer, don't stop — _t2_ fuck me, harder, deeper, slower, right there, just like that,
+I want you inside me, I need you, more — _t3_ fuck me harder, pound me, **pound my pussy**, fuck me from behind,
+ride me, suck my clit, lick my pussy, finger me, use your mouth, put it in, give it to me, don't be gentle —
+_t4_ **fuck me in the ass**, **finger my asshole**, **choke me**, pull my hair, spank me, slap my tits, hold me
+down, spit in my mouth, come inside me, come on my face, come on my tits, use me, make me beg, ruin me, breed me,
+fill me up — _t5_ wreck my pussy, choke me harder, treat me like your whore, use every hole, _(pre-agreed CNC,
+safeworded)_ don't stop even if I say so
+
+**F13 · Demands — the giving voice**
+_t2_ come here, let me taste you, I want to watch, take it off — _t3_ **suck that cock**, suck my cock, get on
+your knees, ride me, sit on my face, open your mouth, take it, look at me while you take it, say my name, tell me
+who owns this — _t4_ swallow it, take it all, deeper, gag on it, beg for it, tell me what you are, hold still
+while I use you, arch for me — _t5_ _(roleplay)_ you'll take what I give you
+
+**F14 · Narration & feedback**
+_t1_ that feels amazing, I love this, you feel so good — _t2_ you're so wet, you're so hard, you're so tight,
+**you're so big**, god you fill me, I can feel you — _t3_ **I can feel you throb**, I can feel you clenching,
+you're dripping down my hand, listen to how wet you are, look how hard you make me, I'm going to come, I've been
+hard all day, I can still taste you — _t4_ your cunt is soaking, I can feel you tightening around my cock,
+you're leaking all over me, I'm going to fill you, watch it go in, look at you taking every inch
+
+**F15 · Begging & permission**
+_t2_ please, I need it, please don't stop — _t3_ please fuck me, can I come, may I come, please let me, I need
+you inside me — _t4_ please sir, please let me come, I'll be good, I'll do anything, please use me, may I touch
+myself — _t5_ thank you, thank you for letting me
+
+**F16 · Sexting & anticipation**
+_t1_ thinking about you, can't wait to see you, I miss you — _t2_ I've been thinking about last night, what are
+you wearing, I want you tonight, come home — _t3_ I'm so hard thinking about you, I'm wet just typing this, tell
+me what you'd do to me, send me one, I've been thinking about your mouth all day — _t4_ I've been thinking about
+your cunt all day, I'm going to ruin you tonight, I want you on your knees when I get home, I'm fucking you the
+second you walk in
+
+**F17 · Aftercare & tenderness**
+_t1_ come here, I've got you, that was perfect, you did so well, I love you, stay right there — _t2_ good girl,
+you were so good, are you okay, let me hold you, I'm proud of you, I've got you
+
+**F18 · Taboo fantasy & roleplay** _(t5, never shown unopened; every entry is **pre-agreed roleplay between
+adults**, safeworded, and framed as such in the UI and in every prompt)_
+CNC / ravishment lines _("you don't get a choice", "I'm not asking", "take it")_ · stranger _("you don't even
+know my name")_ · boss/employee · teacher/student _(adults)_ · doctor/patient · cheating roleplay _("does he know
+you're here", "tell me what he does to you")_ · cuckold / hotwife _("tell me what he did to you", "did you let
+him finish")_ · breeding _("I'm going to breed you", "you're going to take it")_ · primal _("run", "I'll catch
+you")_ · age-gap _(adults)_ · service/objectification _("you're furniture tonight")_
+
+**F19 · Delivery & voice** _(not words — how they're said; rated the same way)_
+whispered · in my ear · low and slow · growled · commanding · breathless · loud · filthy but smiling ·
+silent, just sounds · narrating the whole time · a single word at the right moment

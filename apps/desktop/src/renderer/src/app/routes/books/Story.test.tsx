@@ -438,11 +438,14 @@ describe('Story (64)', () => {
     await pickKind();
     // The default (Warm) specimen is on screen; the preview rail is labelled "How your biographer will sound".
     expect(screen.getByText('How your biographer will sound')).toBeInTheDocument();
-    expect(await screen.findByText(/porch light on/)).toBeInTheDocument();
+    // Scoped to the RAIL: every style card now carries its own sample line too, so an unscoped match finds
+    // the card and the rail both and can't tell whether the rail actually re-rendered.
+    const rail = (): HTMLElement => screen.getByLabelText('Specimen');
+    expect(rail()).toHaveTextContent(/porch light on/);
     // Picking the Cinematic style card re-renders the specimen.
     await userEvent.click(screen.getByRole('checkbox', { name: 'Cinematic' }));
-    expect(await screen.findByText(/Rain on the windshield/)).toBeInTheDocument();
-    expect(screen.queryByText(/porch light on/)).not.toBeInTheDocument();
+    await waitFor(() => expect(rail()).toHaveTextContent(/Rain on the windshield/));
+    expect(rail()).not.toHaveTextContent(/porch light on/);
   });
 
   it('writing: the outline reveals itself as a chapter list with a "Browse SelfOS" exit (§13.3)', async () => {

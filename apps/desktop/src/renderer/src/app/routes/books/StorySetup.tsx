@@ -323,6 +323,16 @@ export function StorySetup({
                     <span id={`style-hint-${s.value}`} className={styles.styleCardHint}>
                       {s.hint}
                     </span>
+                    {/* A line of what this register actually reads like, at the chosen voice — the same
+                        thing the explicit ladder does. The rail below only ever samples ONE style, and with
+                        registers combining, the comparison is the point. */}
+                    {specimenFor(typeId, { style: s.value, voice }) ? (
+                      // No wrapping quote marks: the serif italic already reads as a sample, and several
+                      // specimens open with dialogue — "Filthy talk" rendered as ““Say it,” …".
+                      <span className={styles.styleCardSample}>
+                        {specimenFor(typeId, { style: s.value, voice })}
+                      </span>
+                    ) : null}
                   </button>
                 ))}
               </div>
@@ -363,7 +373,11 @@ export function StorySetup({
               <Text size="sm" tone="tertiary">
                 How your biographer will sound
               </Text>
-              {specimen ? <p className={styles.previewSpecimenText}>{specimen}</p> : null}
+              {specimen ? (
+                <p aria-label="Specimen" className={styles.previewSpecimenText}>
+                  {specimen}
+                </p>
+              ) : null}
             </div>
           </aside>
         </div>

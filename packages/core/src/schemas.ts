@@ -1162,6 +1162,87 @@ export const EroticLexiconSchema = z.object({
 export type EroticLexicon = z.infer<typeof EroticLexiconSchema>;
 
 /**
+ * 74 §6 — the crypto-free VIEW types the adaptive-test IPC returns. They live here (not in `tests/adaptive`)
+ * for the same reason `AccessView` does: `channels.ts` imports them, and the renderer/preload must never pull
+ * the crypto-bearing module in behind them.
+ */
+
+export interface AdaptiveBankFamilyView {
+  id: string;
+  label: string;
+  kind: 'word' | 'phrase';
+  note?: string;
+}
+
+export interface AdaptiveBankEntryView {
+  key: string;
+  text: string;
+  kind: 'word' | 'phrase';
+  family: string;
+  tier: number;
+  directions: readonly ('hear' | 'say')[];
+}
+
+export interface AdaptiveBankView {
+  testId: string;
+  families: AdaptiveBankFamilyView[];
+  entries: AdaptiveBankEntryView[];
+}
+
+/** Everything the take screen + the report need in one read. */
+export interface AdaptiveStateView {
+  testId: string;
+  title: string;
+  blurb: string;
+  framing: string;
+  estimatedMinutes: number;
+  /** An in-flight take to resume, if any. */
+  draft: TestResult | null;
+  /** The newest COMPLETE take — the report + the trends. */
+  latest: TestResult | null;
+  /** Every dated take, newest first. */
+  history: TestResult[];
+  /** Their own lexicon — always fully visible to them (74 §8.4). */
+  lexicon: EroticLexicon;
+  /** How much the bank has left genuinely unresolved; 0 means the probes are done. */
+  ambiguitiesLeft: number;
+  /** Whether the profile is stale enough to invite a retake (74 §11). */
+  staleForRetake: boolean;
+  /** Admin-only (`budgets.manage`, redacted at the bridge — the 06 rule). */
+  costUsd?: number;
+}
+
+export interface AdaptivePhaseView {
+  ok: boolean;
+  lines?: string[];
+  degraded: boolean;
+  message?: string;
+}
+
+export interface AdaptiveProbeView {
+  ok: boolean;
+  question?: string;
+  /** Nothing left ambiguous — the probes are finished. */
+  done: boolean;
+  degraded: boolean;
+}
+
+export interface AdaptiveScenarioView {
+  ok: boolean;
+  context: string;
+  scene?: string;
+  options?: string[];
+  degraded: boolean;
+}
+
+/** The edits a person may make to their own lexicon (74 §3.4). */
+export type AdaptiveLexiconEdit =
+  | { kind: 'rate'; key: string; hear?: number; say?: number }
+  | { kind: 'setState'; key: string; state: 'never' | 'notYet' | null }
+  | { kind: 'addWord'; text: string; family: string; wordKind: 'word' | 'phrase' }
+  | { kind: 'addBoundary'; text: string; boundaryKind: 'word' | 'theme' };
+
+/**
  * One taking of a self-assessment ("Test"), per-person + encrypted at `people/<id>/tests/<result-id>.enc`
  * (50-self-assessments §4.3). A retake is a NEW file (`reTakeOf` set) + a new trend point; prior results are
  * kept (never overwritten) so trends are honest. `answers.value` reuses the questionnaire `Answer.value`

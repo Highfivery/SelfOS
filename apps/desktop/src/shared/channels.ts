@@ -242,6 +242,15 @@ import type {
 } from './schemas';
 import type { TestForm, TestNarrateResponse, TestSummary } from '@selfos/core/tests';
 import type {
+  AdaptiveBankView,
+  AdaptiveLexiconEdit,
+  AdaptivePhaseView,
+  AdaptiveProbeView,
+  AdaptiveScenarioView,
+  AdaptiveStateView,
+  EroticLexicon,
+} from '@selfos/core/schemas';
+import type {
   QuestionnaireCoverageView,
   CoverageSteerInput,
   CandidateCurateInput,
@@ -706,6 +715,21 @@ export const IpcChannels = {
   testsAcknowledgeAdult: 'tests:acknowledgeAdult',
   testsDeleteResult: 'tests:deleteResult',
   testsDeleteAll: 'tests:deleteAll',
+  // Adaptive tests (74). Same gates as above — `tests.own` + active-person scope + the 18+ ack, all enforced
+  // in the bridge. The bank + the scoring are FREE; only the four `adaptive*` AI phases spend.
+  testsBank: 'tests:bank',
+  testsAdaptiveState: 'tests:adaptiveState',
+  testsAdaptiveStart: 'tests:adaptiveStart',
+  testsAdaptiveBank: 'tests:adaptiveBank',
+  testsAdaptiveSplit: 'tests:adaptiveSplit',
+  testsAdaptiveLines: 'tests:adaptiveLines',
+  testsAdaptiveProbe: 'tests:adaptiveProbe',
+  testsAdaptiveScenario: 'tests:adaptiveScenario',
+  testsAdaptiveTurn: 'tests:adaptiveTurn',
+  testsAdaptiveSynthesize: 'tests:adaptiveSynthesize',
+  testsAdaptiveAbandon: 'tests:adaptiveAbandon',
+  testsLexicon: 'tests:lexicon',
+  testsLexiconEdit: 'tests:lexiconEdit',
   profileSuggestions: 'profile:suggestions',
   profileAcceptSuggestion: 'profile:acceptSuggestion',
   profileDismissSuggestion: 'profile:dismissSuggestion',
@@ -2367,6 +2391,59 @@ export interface SelfosBridge {
   testsDeleteResult(input: { testId: string; resultId: string }): Promise<TestResult[]>;
   /** Delete ALL results for a test + the derived Insight. */
   testsDeleteAll(input: { testId: string }): Promise<void>;
+  // --- Adaptive tests (74). Gated `tests.own` + active-person-scoped + 18+-withheld IN THE BRIDGE. ---
+  /** The bank an adaptive instrument works through: families + entries. Display data, no scoring spec. */
+  testsBank(input: { testId: string }): Promise<AdaptiveBankView | null>;
+  /** Everything the take screen needs: the instrument, an in-flight draft, the person's lexicon so far. */
+  testsAdaptiveState(input: { testId: string }): Promise<AdaptiveStateView | null>;
+  /** Start (or resume) a take. Free — no AI, no budget. */
+  testsAdaptiveStart(input: { testId: string }): Promise<AdaptiveStateView | null>;
+  /** Pass 1 — mark what lands across the whole bank. Free. */
+  testsAdaptiveBank(input: {
+    testId: string;
+    resultId: string;
+    marks: Record<string, 'love' | 'never' | 'notYet'>;
+  }): Promise<AdaptiveStateView | null>;
+  /** Pass 2 — the hear/say split on what pass 1 marked. Free. */
+  testsAdaptiveSplit(input: {
+    testId: string;
+    resultId: string;
+    splits: Record<string, { hear?: number; say?: number }>;
+  }): Promise<AdaptiveStateView | null>;
+  /** Generate a round of lines to react to. Metered `test.adaptive.lines`; degrades rather than failing. */
+  testsAdaptiveLines(input: {
+    testId: string;
+    resultId: string;
+    round: number;
+  }): Promise<AdaptivePhaseView>;
+  /** The next probe question, or done when nothing is left ambiguous. Metered `test.adaptive.probe`. */
+  testsAdaptiveProbe(input: { testId: string; resultId: string }): Promise<AdaptiveProbeView>;
+  /** A scenario for one context. Metered `test.adaptive.scenario`. */
+  testsAdaptiveScenario(input: {
+    testId: string;
+    resultId: string;
+    context: string;
+  }): Promise<AdaptiveScenarioView>;
+  /** Record one answered turn (a line reaction, a probe answer, a scenario choice). Free. */
+  testsAdaptiveTurn(input: {
+    testId: string;
+    resultId: string;
+    phase: string;
+    itemId: string;
+    text: string;
+    answer: string | number | string[] | Record<string, number>;
+  }): Promise<void>;
+  /** Synthesize + complete the take. Metered `test.adaptive.synthesize`; completes even if it degrades. */
+  testsAdaptiveSynthesize(input: {
+    testId: string;
+    resultId: string;
+  }): Promise<AdaptiveStateView | null>;
+  /** Discard an in-flight draft. Nothing is scored, no profile exists. */
+  testsAdaptiveAbandon(input: { testId: string; resultId: string }): Promise<void>;
+  /** The person's own lexicon — always fully visible to them (74 §8.4). */
+  testsLexicon(): Promise<EroticLexicon | null>;
+  /** Edit the lexicon: re-rate an entry, clear a boundary, add their own word, record a themed boundary. */
+  testsLexiconEdit(input: AdaptiveLexiconEdit): Promise<EroticLexicon | null>;
   // --- Self-maintaining profile (18-personal-onboarding §15) — own-scoped, gated `intake.own` ---
   /** The active person's pending profile-update suggestions (stale answers noticed by analysis, §15). */
   profileSuggestions(): Promise<ProfileUpdateSuggestion[]>;

@@ -203,3 +203,41 @@ describe('the hard-no list is never truncated (74 §8.4)', () => {
     for (const text of many) expect(block).toContain(text);
   });
 });
+describe('§3.6.2 — REGISTER steers generation, which the word list cannot', () => {
+  it('names the register that lands and the one that does not, in both blocks', async () => {
+    // The owner's case: "fuck your pussy" lands, "beat that pussy" does not. Same word — the difference is
+    // register, and the synthesis has been scoring it on every take while nothing read the result.
+    const { fs, ben, angel } = await seedPair();
+    const { readLexicon } = await import('./lexicon');
+    const lex = await readLexicon(fs, KEY, angel);
+    await writeLexicon(fs, KEY, {
+      ...lex,
+      registers: { claiming: 0.9, praise: 0.7, degradation: 0.1, command: 0.45 },
+    });
+
+    const own = buildOwnLexiconBlock(await readLexicon(fs, KEY, angel));
+    expect(own).toMatch(/register that lands/i);
+    expect(own).toContain('claiming / possession');
+    expect(own).toMatch(/do NOT land/i);
+    expect(own).toContain('degradation');
+    // A middling score says nothing useful, so it is named in neither list.
+    expect(own).not.toContain('command');
+
+    // It matters MORE in the partner steer — that is the half handing them words to say.
+    const steer = await buildPartnerSteer(fs, KEY, ben, angel, true);
+    expect(steer).toContain('claiming / possession');
+    expect(steer).toMatch(/avoid this framing/i);
+  });
+
+  it('is honest that a register miss is not a boundary', async () => {
+    // A low register score must not read as a hard no — their hard nos are the separate, absolute list.
+    const { fs, angel } = await seedPair();
+    const { readLexicon } = await import('./lexicon');
+    const lex = await readLexicon(fs, KEY, angel);
+    await writeLexicon(fs, KEY, { ...lex, registers: { degradation: 0.05 } });
+    const own = buildOwnLexiconBlock(await readLexicon(fs, KEY, angel));
+    expect(own).toMatch(/even with words they like/i);
+    // The absolute list is still its own, separately-worded thing.
+    expect(own).toMatch(/NEVER use, in any form/i);
+  });
+});

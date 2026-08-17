@@ -486,6 +486,30 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-17 — **Owner decision + Build (word-level marking stays; REGISTER carries the rest; SPEC 74 §3.6.2;
+  on `feat/adaptive-register-steer`).** The owner asked, from a case word-level can't answer alone — _"they
+  could like I want to fuck your pussy but not like I want to beat that pussy"_ — whether the bank should be
+  quote-based instead, and told me to **think it through and answer BEFORE changing anything**. I shipped code
+  first and was rightly pulled up for it. **Measured before deciding** (not assumed): 6 word families vs 30
+  phrase families, and 256 of ~1,033 entries carry a quote while **587 ARE the line** — the bank is already
+  ~75% quote-based, and the word-level part is exactly the nouns and vocatives. **Word-level stays because
+  SUPPRESSION depends on it:** every consumer feeds a model that GENERATES, and `violatesBoundary` matches
+  word-boundaried short strings — ban a word and every future line containing it is caught; ban a whole
+  sentence and a paraphrase sails through, so quote-only would quietly break the hard-no guarantee. **What was
+  missing was register:** the synthesis scores seven registers every take and **nothing read them**, so a coach
+  handed the vocabulary had no idea which way to point it — both steer blocks now name the register that lands
+  and the one that doesn't, as words not numbers, with the miss stated as explicitly NOT a boundary. **And a
+  rejected LINE can now become a limit** — not from the soft `no` (a boundary is permanent and lifts only by an
+  explicit act, §3.2) but from a second deliberate tap that records a THEME boundary, which matches on stemmed
+  content words so "beat that pussy" also stops "gonna beat that pussy up". Rejected: flipping to quotes; a
+  "not like that" control on all ~1,000 rows; a hand-authored contrasting-lines stage per loved word. Gate
+  green: typecheck (4 pkgs), lint, format, **2324 core + 13 relay + 1644 desktop** unit, both 74 E2E.
+  **Lessons: (1) when the owner asks "what would work better, think it through" — ANSWER FIRST. Shipping the
+  safe half of the change before the decision is still deciding for them. (2) The answer to "should this be X
+  or Y" was in the data: measuring the bank showed it was already 75% Y, which reframed the question from a
+  redesign into "which axis is missing". (3) A feature can have the right THREE-part architecture and still
+  fail, because one part's output was written and never read — grep for the READER of every score you compute.**
+
 - 2026-08-17 — **Fix (the intro/empty screens redesigned, one scrollbar, and the deck says you're marking the
   WORD; owner-reported; SPEC 74 §3.6.1/§3.6.4; on `fix/adaptive-intro-and-word-clarity`).** Three things, all
   reported from screenshots. **(1) TWO SCROLLBARS on every Tests screen** — `You.module.css` had `.page

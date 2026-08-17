@@ -50,6 +50,57 @@ function list(entries: LexiconEntry[]): string {
     .join(' · ');
 }
 
+/**
+ * 74 §3.6.2 — REGISTER, which is the axis the word list can't carry.
+ *
+ * The same word is loved in one line and hated in another: "fuck your pussy" lands, "beat that pussy" does
+ * not. That difference isn't the word, it's the register — tender/possessive vs violent — and the synthesis
+ * has been scoring exactly that on every take (praise, claiming, command, narration, degradation, begging,
+ * filth) while **nothing read the result**. So a coach handed the vocabulary had no idea which way to point it.
+ *
+ * Emitted as two short lists rather than numbers: a model composes better from "lead with claiming, avoid
+ * degradation" than from `{degradation: 0.12}`. Only clear signals are named — a middling score says nothing
+ * useful and would just crowd the prompt.
+ */
+const REGISTER_LABELS: Record<string, string> = {
+  praise: 'praise',
+  claiming: 'claiming / possession',
+  command: 'command',
+  narration: 'narration',
+  degradation: 'degradation',
+  begging: 'begging',
+  filth: 'plain filth',
+};
+
+const LANDS_AT = 0.6;
+const MISSES_AT = 0.3;
+
+function registerLines(lexicon: EroticLexicon): string[] {
+  const named = Object.entries(lexicon.registers).filter(([, v]) => Number.isFinite(v));
+  if (named.length === 0) return [];
+  const label = (key: string): string => REGISTER_LABELS[key] ?? key;
+  const lands = named
+    .filter(([, v]) => v >= LANDS_AT)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k]) => label(k));
+  const misses = named
+    .filter(([, v]) => v <= MISSES_AT)
+    .sort((a, b) => a[1] - b[1])
+    .map(([k]) => label(k));
+  const out: string[] = [];
+  if (lands.length > 0) {
+    out.push(`The register that lands — write in it: ${lands.join(' · ')}.`);
+  }
+  if (misses.length > 0) {
+    // Not a boundary: these words may still be usable, just not in this register. Said plainly so the model
+    // doesn't treat a low score as a hard no (their hard nos are the separate, absolute list).
+    out.push(
+      `Registers that do NOT land for them — avoid this framing even with words they like: ${misses.join(' · ')}.`,
+    );
+  }
+  return out;
+}
+
 /** The person's own vocabulary, for their own coach. Gated by the caller on the 18+ ack. */
 export function buildOwnLexiconBlock(lexicon: EroticLexicon): string {
   const hear = lovedEntries(lexicon, 'hear');
@@ -82,6 +133,7 @@ export function buildOwnLexiconBlock(lexicon: EroticLexicon): string {
         .join(' · ')}.`,
     );
   }
+  parts.push(...registerLines(lexicon));
   if (lexicon.voice) parts.push(`How they want it said: ${lexicon.voice}`);
   if (lexicon.themes.length > 0) parts.push(`In their words: ${lexicon.themes.join(' · ')}.`);
   if (banned.length > 0) {
@@ -148,7 +200,9 @@ export async function buildPartnerSteer(
 
   const lexicon = await readLexicon(fs, key, partnerId);
   const hear = lovedEntries(lexicon, 'hear');
-  if (hear.length === 0 && lexicon.themes.length === 0) return '';
+  if (hear.length === 0 && lexicon.themes.length === 0 && registerLines(lexicon).length === 0) {
+    return '';
+  }
 
   const parts = [
     'WHAT LANDS FOR THEIR PARTNER — when they ask what to say, draw on this. Present it entirely as your own' +
@@ -157,6 +211,9 @@ export async function buildPartnerSteer(
     `Language that lands for their partner: ${list(hear)}.`,
   ];
   if (lexicon.themes.length > 0) parts.push(`What they respond to: ${lexicon.themes.join(' · ')}.`);
+  // Register matters MORE here than in their own block: this is the half that hands their partner words to
+  // say, and the same word in the wrong register is the failure the owner reported.
+  parts.push(...registerLines(lexicon));
   if (lexicon.voice) parts.push(`How it should sound: ${lexicon.voice}`);
   return parts.join('\n');
 }

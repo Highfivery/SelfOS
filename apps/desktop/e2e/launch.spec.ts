@@ -16087,6 +16087,17 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
     // poison the profile, and the answer used to live only in the aria-label.
     await expect(w.getByText(/Things YOU SAY TO THEM/i)).toBeVisible();
     await w.screenshot({ path: 'e2e-artifacts/74-direction.png' });
+    // ONE vertical scrollbar, ever. The route used to add its own on top of the shell's, which puts two
+    // bars side by side — worst on the deck, where an area is 47 rows tall.
+    expect(
+      await w.evaluate(
+        () =>
+          Array.from(document.querySelectorAll('*')).filter((el) => {
+            const cs = getComputedStyle(el);
+            return /auto|scroll/.test(cs.overflowY) && el.scrollHeight - el.clientHeight > 2;
+          }).length,
+      ),
+    ).toBeLessThanOrEqual(1);
 
     // Walk to the names families and check both directions of the orientation.
     const goTo = async (heading: string): Promise<void> => {
@@ -16182,8 +16193,8 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     await w.getByRole('button', { name: 'Start' }).click();
 
     // The intro tells them the steer exists BEFORE they produce any material (74 §8.4).
-    await expect(w.getByText(/it can quietly shape what their coach suggests/i)).toBeVisible();
-    await expect(w.getByText(/never tells them what you said/i)).toBeVisible();
+    await expect(w.getByText(/shape what a partner’s coach suggests to them/i)).toBeVisible();
+    await expect(w.getByText(/never telling them what you said/i)).toBeVisible();
     await w.screenshot({ path: 'e2e-artifacts/74-dirty-talk-intro.png' });
     await w.getByRole('button', { name: 'Begin' }).click();
 

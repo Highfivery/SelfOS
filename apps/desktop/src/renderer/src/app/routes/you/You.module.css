@@ -1,6 +1,12 @@
+/*
+ * The shell's `.contentInner` is the app's ONE scroll container. This route used to add a second one —
+ * `height: 100%; overflow-y: auto` inside a parent that already scrolls and carries 48px of padding, so the
+ * page scrolled its own content AND pushed the parent past its height: two vertical scrollbars on every Tests
+ * screen, worst on the deck where an area is 47 rows tall. No other route does this (the others use
+ * `overflow-y` only on bounded inner lists), so this is the odd one out, not a new convention.
+ */
 .page {
-  height: 100%;
-  overflow-y: auto;
+  min-width: 0;
 }
 
 .inner {

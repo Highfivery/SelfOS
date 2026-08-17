@@ -234,16 +234,21 @@ export function AdaptiveReport(): JSX.Element {
            * One invitation, and everything downstream of a take stops here.
            */}
           {!latest ? (
-            <Stack gap={3}>
-              <Text tone="secondary">
-                Nothing here yet. The test walks you through the words themselves — you mark what
-                lands, skip the rest, and it saves as you go.
-              </Text>
-              <div>
-                <Button variant="primary" onClick={() => navigate(`/tests/${testId}/take`)}>
-                  Take it
-                </Button>
-              </div>
+            /* Bare text and a button on an empty canvas. It is the first thing anyone sees of this test, so
+               it gets the same shape as the invitation: what it will hold, then the one action. */
+            <Stack gap={4}>
+              <Card className={adaptive.introCard}>
+                <Text tone="secondary">
+                  Nothing here yet. Once you&rsquo;ve taken it, this page holds your words — what
+                  you love to hear, what you can say out loud, what you&rsquo;re working up to, and
+                  what is off the table for good.
+                </Text>
+                <div className={adaptive.introActions}>
+                  <Button variant="primary" onClick={() => navigate(`/tests/${testId}/take`)}>
+                    Take it
+                  </Button>
+                </div>
+              </Card>
               <CrisisFooter />
             </Stack>
           ) : (

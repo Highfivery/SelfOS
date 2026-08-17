@@ -826,3 +826,110 @@
   background: var(--color-warning);
   color: #fff;
 }
+
+/* What you're rating, named on the row (§3.6.1). A word row marks the WORD and the quote is context; a
+ * whole-line row marks the line. They used to look identical, which is how "am I rating the word or the
+ * quote?" became a real question. */
+.termWord {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.termWhat {
+  padding: 1px 6px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* The word, inside its quote. Weight rather than colour, so it survives greyscale and both themes (§9). */
+.saidWord {
+  font-weight: 700;
+  color: var(--color-text-heading);
+}
+
+/* The band's second line: what's being marked, stated once instead of chipped onto all 47 rows. */
+.bandSub {
+  display: block;
+  margin-top: 2px;
+  font-weight: 400;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+/* ── The invitation (§3.6.4) ───────────────────────────────────────────────────────────────────────
+ * It was a stack of left-aligned paragraphs and two info banners on an empty canvas, with the estimate
+ * on its own line and the buttons hanging off the right edge. Now the promise is three plain facts in a
+ * bounded card, and the privacy line is attached to the promise rather than shouted in a banner.
+ */
+.introWrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 620px;
+}
+
+.introHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.introBlurb {
+  font-size: 1.0625rem;
+  line-height: 1.5;
+}
+
+.introCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.introFacts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.introFacts > li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: start;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.introFacts b {
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.introFacts svg {
+  margin-top: 2px;
+  color: var(--color-accent-solid);
+  flex: none;
+}
+
+.introResume {
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-accent-subtle-bg);
+  border-radius: var(--radius-sm);
+}
+
+.introActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}

@@ -16056,6 +16056,92 @@ test('story (72): every book on the shelf gets the same cover, whatever its titl
   }
 });
 
+test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be called "good girl"', async () => {
+  test.setTimeout(120_000);
+  const { userData, vault } = await seedReadyVault();
+  const key = (await loadMasterKey(createNodeSecretStore(userData, passthrough)))!;
+  const fs = createNodeFileSystem(vault);
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: 'Tests' }).click();
+    await w.getByRole('button', { name: /I.m 18 or older/i }).click();
+    await w.getByRole('button', { name: 'Start' }).click();
+    await w.getByRole('button', { name: 'Begin' }).click();
+
+    // The two address taps (§3.6.4). "boy" is deliberately NOT an option here — it is a term you can mark,
+    // not an identity, so the identity answer is "man".
+    await expect(w.getByText(/Before we start/i)).toBeVisible();
+    await w.getByRole('button', { name: 'their man' }).click();
+    await w.getByRole('button', { name: 'a girl' }).click();
+    await w.getByRole('button', { name: 'Start', exact: true }).click();
+
+    // Walk to the names families and check both directions of the orientation.
+    const goTo = async (heading: string): Promise<void> => {
+      for (let i = 0; i < 40; i += 1) {
+        const found = await w
+          .getByRole('heading', { name: heading })
+          .waitFor({ state: 'attached', timeout: 750 })
+          .then(() => true)
+          .catch(() => false);
+        if (found) return;
+        await w.getByRole('button', { name: /Next area/ }).click();
+      }
+      throw new Error(`never reached ${heading}`);
+    };
+
+    // The deck only moves forward, so visit in family order: anatomy-him (2) before names-power (5).
+    await goTo('Anatomy — his body');
+    // A line about his own body is his to HEAR.
+    await expect(
+      w.getByRole('button', { name: 'your hard cock — love it', exact: true }),
+    ).toBeVisible();
+    await w.getByRole('button', { name: 'your hard cock — love it', exact: true }).click();
+
+    await goTo('Names — power & role');
+    // "good girl" is aimed at a girl, so HE would say it — it is offered, but never as something he hears.
+    await expect(w.getByRole('button', { name: 'good girl — love it', exact: true })).toBeVisible();
+    await w.getByRole('button', { name: 'good girl — love it', exact: true }).click();
+
+    // 74 §3.6.6 — the sides are RECORDED, so a side that was never offered is not a refusal. Without this,
+    // "good girl" (say-only for him) would look like something he loves to hear and refuses to say, and
+    // would be written into his goal list — and goals reach a partner-shared fact.
+    const LEXICON = 'people/owner-1/tests/lexicon.enc';
+    await expect
+      .poll(async () => {
+        const lex = (await readEncryptedJson(fs, LEXICON, key).catch(() => null)) as {
+          entries: { key: string; sides?: string[] }[];
+        } | null;
+        const good = (lex?.entries ?? []).find((e) => e.key === 'names-power:good-girl');
+        return good?.sides?.join(',') ?? '';
+      })
+      .toBe('say');
+
+    // §12 — the deck at phone width, with the quotes stacked under their terms.
+    await w.setViewportSize({ width: 360, height: 900 });
+    await w.evaluate(() => {
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        if (el.scrollTop > 0) el.scrollTop = 0;
+      }
+    });
+    await expectNoInnerOverflow(w);
+    await w.screenshot({ path: 'e2e-artifacts/74-deck-360.png' });
+    await w.setViewportSize({ width: 1280, height: 900 });
+
+    const lex = (await readEncryptedJson(fs, LEXICON, key)) as {
+      entries: { key: string; sides?: string[] }[];
+      address?: { self: string; partner: string };
+    };
+    expect(lex.address).toEqual({ self: 'man', partner: 'girl' });
+    expect(lex.entries.find((e) => e.key === 'anatomy-him:your-hard-cock')?.sides).toEqual([
+      'hear',
+    ]);
+  } finally {
+    await app.close();
+  }
+});
+
 test('74: the Dirty Talk take — mark, split, complete, and the boundary holds everywhere', async () => {
   // The bank renders ~1,100 entries (3 buttons each) and the §12 guard walks every element on the page, so
   // this walk is legitimately slower than a typical one.
@@ -16086,13 +16172,38 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     await w.screenshot({ path: 'e2e-artifacts/74-dirty-talk-intro.png' });
     await w.getByRole('button', { name: 'Begin' }).click();
 
-    // Pass 1: the whole bank, marking only what lands. The boundary rule is said in plain words.
-    await expect(w.getByRole('heading', { name: /what lands\?/i })).toBeVisible();
+    // 74 §3.6.4 — the two address taps come first. Answering "neither · both · depends" on both sides means
+    // nothing is oriented away, so this walk still sees the whole bank (the ORIENTED case is its own test).
+    await expect(w.getByText(/Before we start/i)).toBeVisible();
+    await w.getByRole('button', { name: 'neither · both · depends' }).first().click();
+    await w.getByRole('button', { name: 'neither · both · depends' }).last().click();
+    await w.getByRole('button', { name: 'Start', exact: true }).click();
+
+    // The deck: one area per screen. Walk to whichever area holds each entry we want to mark.
+    const markInDeck = async (name: string): Promise<void> => {
+      for (let i = 0; i < 40; i += 1) {
+        const target = w.getByRole('button', { name, exact: true }).first();
+        // `count()` does NOT auto-wait, so querying it straight after a click reads the PREVIOUS area
+        // mid-render and walks straight past the entry. `waitFor` is the auto-waiting form.
+        const found = await target
+          .waitFor({ state: 'attached', timeout: 750 })
+          .then(() => true)
+          .catch(() => false);
+        if (found) {
+          await target.click();
+          return;
+        }
+        await w.getByRole('button', { name: /Next area/ }).click();
+      }
+      throw new Error(`never reached ${name} in the deck`);
+    };
+
     await expect(w.getByText(/nothing in SelfOS will suggest it again/i)).toBeVisible();
-    await w.getByRole('button', { name: 'good girl — love it', exact: true }).first().click();
-    await w.getByRole('button', { name: 'mine — love it', exact: true }).first().click();
-    await w.getByRole('button', { name: 'whore — never', exact: true }).first().click();
-    await expect(w.getByText('3 marked')).toBeVisible();
+    // The deck only moves FORWARD, so mark in the bank's own family order: names-power → names-degrading
+    // → claiming. (The un-mark round trip below has to happen while `whore` is still on screen.)
+    await markInDeck('good girl — love it');
+    await markInDeck('whore — never');
+    await expect(w.getByText(/2 marked/)).toBeVisible();
 
     // 74 §3.4 — every tap saves itself. Nothing below clicks Next, so the only thing that can have written
     // this is the autosave; the vault is the assertion, not the screen.
@@ -16113,11 +16224,11 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
         } | null;
         return (lex?.entries ?? []).filter((e) => e.hear > 0 || e.state).length;
       })
-      .toBeGreaterThanOrEqual(3);
+      .toBeGreaterThanOrEqual(2);
 
     // A mis-tap is not a life sentence: un-marking takes the boundary back out of the store.
     await w.getByRole('button', { name: 'whore — never', exact: true }).first().click();
-    await expect(w.getByText('2 marked')).toBeVisible();
+    await expect(w.getByText(/1 marked/)).toBeVisible();
     await expect
       .poll(async () => {
         const lex = (await readEncryptedJson(fs, LEXICON, key)) as {
@@ -16127,15 +16238,29 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
       })
       .toBe(false);
     await w.getByRole('button', { name: 'whore — never', exact: true }).first().click();
-    await expect(w.getByText('3 marked')).toBeVisible();
+    await expect(w.getByText(/2 marked/)).toBeVisible();
+    await markInDeck('mine — love it');
+    await expect(w.getByText(/3 marked/)).toBeVisible();
 
-    // The §12 guard runs against the DENSEST surface — the bank grid, mid-mark.
+    // The §12 guard runs against the DENSEST surface — the deck mid-mark.
     await w.setViewportSize({ width: 360, height: 900 });
     await expectNoInnerOverflow(w);
     await w.screenshot({ path: 'e2e-artifacts/74-bank-360.png' });
     await w.setViewportSize({ width: 1280, height: 900 });
 
-    await w.getByRole('button', { name: /Next — how you want them/i }).click();
+    // Walk to the end of the deck and close the pass.
+    for (let i = 0; i < 40; i += 1) {
+      const done = w.getByRole('button', { name: /Done — show me/i });
+      const atEnd = await done
+        .waitFor({ state: 'attached', timeout: 750 })
+        .then(() => true)
+        .catch(() => false);
+      if (atEnd) {
+        await done.click();
+        break;
+      }
+      await w.getByRole('button', { name: /Next area/ }).click();
+    }
 
     // Pass 2 asks the split only for what was marked, and never for the one they ruled out.
     await expect(w.getByRole('heading', { name: /hearing it, or saying it\?/i })).toBeVisible();

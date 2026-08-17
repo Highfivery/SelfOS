@@ -31,7 +31,7 @@ function seeded(): EroticLexicon {
   return applyBankMarks(
     emptyLexicon('p1', NOW),
     DIRTY_TALK_BANK,
-    { [GOOD_GIRL]: 'love', [WHORE]: 'never', [CUNT]: 'notYet' },
+    { [GOOD_GIRL]: 'love', [WHORE]: 'never', [CUNT]: 'okay' },
     'take:1',
     NOW,
   );
@@ -43,7 +43,7 @@ describe('the erotic lexicon (74 §4.4)', () => {
     const byKey = new Map(lex.entries.map((entry) => [entry.key, entry]));
     expect(byKey.get(GOOD_GIRL)).toMatchObject({ hear: 3, say: 3, state: undefined });
     expect(byKey.get(WHORE)).toMatchObject({ hear: 0, say: 0, state: 'never' });
-    expect(byKey.get(CUNT)).toMatchObject({ hear: 0, say: 0, state: 'notYet' });
+    expect(byKey.get(CUNT)).toMatchObject({ hear: 0, say: 0, state: 'okay' });
     // A `never` becomes a GLOBAL boundary, which is what every consumer suppresses on.
     expect(lex.boundaries.map((b) => b.text)).toEqual(['whore']);
     // `notYet` is NOT a boundary — it is coachable material, not a hard no.
@@ -111,11 +111,12 @@ describe('the erotic lexicon (74 §4.4)', () => {
     expect(violatesBoundary(lex, 'good girl, just like that')).toBe(false);
   });
 
-  it('derives the wants-to-say goal list from the hear/say gap and every cringe', () => {
+  it('derives the wants-to-say goal list from the hear/say GAP alone (74 §3.6.2)', () => {
     const lex = applyDirections(seeded(), { [GOOD_GIRL]: { hear: 4, say: 0 } }, LATER);
     const goals = derivedWantsToSay(lex);
-    expect(goals).toContain('good girl'); // loves hearing it, can't say it
-    expect(goals).toContain('cunt'); // marked notYet — "I'd feel like an idiot"
+    expect(goals).toContain('good girl'); // loves hearing it, can't say it — the whole signal
+    // The middle mark is a MILD YES now, not "I'd feel like an idiot", so it is not a goal.
+    expect(goals).not.toContain('cunt');
     expect(goals).not.toContain('whore'); // a hard no is never a goal
   });
 
@@ -179,7 +180,7 @@ describe('boundary matching (74 §5.7)', () => {
 describe('a hard no is unliftable (74 §3.2 — the invariant the feature rests on)', () => {
   it('cannot be downgraded by ANY mark, not just by love', () => {
     const lex = seeded();
-    for (const mark of ['love', 'notYet'] as const) {
+    for (const mark of ['love', 'okay'] as const) {
       const after = applyBankMarks(lex, DIRTY_TALK_BANK, { [WHORE]: mark }, 'take:2', LATER);
       expect(after.entries.find((e) => e.key === WHORE)?.state).toBe('never');
       expect(suppressedTexts(after)).toContain('whore');
@@ -189,7 +190,7 @@ describe('a hard no is unliftable (74 §3.2 — the invariant the feature rests 
   it('never appears in the goal list, however it was marked', () => {
     // The path that used to leak: never → notYet put the word in `wantsToSay`, which reaches their own coach
     // prompt as something to PRACTISE, two lines under "never use this".
-    const downgraded = applyBankMarks(seeded(), DIRTY_TALK_BANK, { [WHORE]: 'notYet' }, 'e', LATER);
+    const downgraded = applyBankMarks(seeded(), DIRTY_TALK_BANK, { [WHORE]: 'okay' }, 'e', LATER);
     expect(derivedWantsToSay(downgraded)).not.toContain('whore');
   });
 
@@ -198,5 +199,52 @@ describe('a hard no is unliftable (74 §3.2 — the invariant the feature rests 
     expect(violatesBoundary(lex, 'that ass')).toBe(true);
     expect(violatesBoundary(lex, 'pass me the water')).toBe(false);
     expect(violatesBoundary(lex, 'a class act')).toBe(false);
+  });
+});
+
+describe('74 §3.6.6 — a side that was never asked is not a refusal', () => {
+  const base = {
+    key: 'names-power:good-girl',
+    text: 'good girl',
+    kind: 'word' as const,
+    family: 'names-power',
+    tier: 2,
+    hear: 4,
+    say: 0,
+  };
+
+  it('does NOT turn a loved HEAR-ONLY entry into a goal the person never declined', () => {
+    // The failure this guards: goals reach their own coach prompt AND a partner-shared Insight fact, so a
+    // fabricated one is not a cosmetic bug — it invents a want and then shares it.
+    const lexicon = {
+      ...emptyLexicon('p1', NOW),
+      entries: [{ ...base, sides: ['hear' as const] }],
+    };
+    expect(derivedWantsToSay(lexicon)).toEqual([]);
+  });
+
+  it('still derives the goal when BOTH sides were actually asked', () => {
+    const lexicon = {
+      ...emptyLexicon('p1', NOW),
+      entries: [{ ...base, sides: ['hear' as const, 'say' as const] }],
+    };
+    expect(derivedWantsToSay(lexicon)).toEqual(['good girl']);
+  });
+
+  it('treats a pre-orientation entry (no `sides`) as both-asked, which is what it was', () => {
+    const lexicon = { ...emptyLexicon('p1', NOW), entries: [base] };
+    expect(derivedWantsToSay(lexicon)).toEqual(['good girl']);
+  });
+
+  it('records the sides it showed, so the take is the record of what was asked', () => {
+    const marked = applyBankMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK_BANK,
+      { 'names-power:good-girl': 'love' },
+      'test:r1',
+      NOW,
+      { 'names-power:good-girl': ['say'] },
+    );
+    expect(marked.entries[0]?.sides).toEqual(['say']);
   });
 });

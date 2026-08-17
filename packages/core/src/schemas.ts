@@ -1082,12 +1082,18 @@ export const AdaptiveTurnSchema = z.object({
 export type AdaptiveTurn = z.infer<typeof AdaptiveTurnSchema>;
 
 /**
- * How one entry landed. THREE negative states, not one (74 §3.2, owner decision): `never` is a permanent
- * boundary — suppressed everywhere, never re-offered, and never requiring a reason; `notYet` is "makes me
- * cringe / I'd feel like an idiot", revisitable and the raw material for the practice + shame sessions.
- * Absent ⇒ simply unrated, which is NEVER read as a no (74 §7).
+ * How one entry landed (74 §3.6.2). `never` is a permanent boundary — suppressed everywhere, never
+ * re-offered, never requiring a reason. `okay` is a MILD YES: fine, works, not a favourite. Absent ⇒ simply
+ * unrated, which is NEVER read as a no (74 §7).
+ *
+ * `notYet` ("makes me cringe") is the superseded middle state and is accepted only so an existing vault still
+ * parses; it is coerced to `okay` on read and never written again. The coercion is real — the two meanings
+ * differ — and its blast radius is bounded because a COMPLETED take persists its derived goals onto the
+ * lexicon, so only an unfinished draft loses a goal contribution (74 §3.6.2).
  */
-export const LexiconStateSchema = z.enum(['never', 'notYet']);
+export const LexiconStateSchema = z
+  .enum(['never', 'okay', 'notYet'])
+  .transform((state) => (state === 'notYet' ? ('okay' as const) : state));
 export type LexiconState = z.infer<typeof LexiconStateSchema>;
 
 /** 0 = nothing · 1 fine · 2 like it · 3 love it · 4 that one does it. */
@@ -1104,6 +1110,17 @@ export const LexiconEntrySchema = z.object({
   hear: LexiconRatingSchema.catch(0).default(0),
   say: LexiconRatingSchema.catch(0).default(0),
   state: LexiconStateSchema.optional(),
+  /**
+   * Which sides this person was actually SHOWN for this entry (74 §3.6.6). Load-bearing, not bookkeeping:
+   * `say: 0` means "cannot say it" everywhere in the derivations, so an entry the orientation never offered
+   * on the say side would otherwise read as a declined one — turning every loved hear-only term into a goal
+   * the person never declined, and goals reach their own coach prompt AND a partner-shared fact.
+   *
+   * Written by the TAKE (it records what was asked), never re-derived at read time: a later orientation
+   * change must not rewrite the history of what a past take offered. Absent ⇒ both sides were asked, which is
+   * true of every entry written before orientation existed.
+   */
+  sides: z.array(z.enum(['hear', 'say'])).optional(),
   /** Their own write-in rather than a bank entry. */
   custom: z.boolean().optional(),
   /** Which take or edit last wrote this entry. */
@@ -1157,6 +1174,18 @@ export const EroticLexiconSchema = z.object({
   wantsToSay: z.array(z.string()).catch([]).default([]),
   voice: z.string().optional(),
   boundaries: z.array(LexiconBoundarySchema).catch([]).default([]),
+  /**
+   * 74 §3.6.3 — how this person is addressed, and how they address the person they're talking to. Asked in
+   * two taps at the top of the take and stored here so Fantasy and Sex Sessions inherit it and never re-ask.
+   * Absent ⇒ never asked ⇒ nothing is withheld. A display filter; never a boundary.
+   */
+  address: z
+    .object({
+      self: z.enum(['girl', 'man', 'either']),
+      partner: z.enum(['girl', 'man', 'either']),
+    })
+    .catch(undefined as never)
+    .optional(),
   updatedAt: z.string(),
 });
 export type EroticLexicon = z.infer<typeof EroticLexiconSchema>;
@@ -1186,12 +1215,31 @@ export interface AdaptiveBankEntryView {
   family: string;
   tier: number;
   directions: readonly ('hear' | 'say')[];
+  /** The §3.6.1 #1 example line. Absent when the entry is already a complete utterance. */
+  example?: string;
+  /**
+   * The sides THIS person is shown for this entry (74 §3.6.3) — always non-empty, since an entry reaching
+   * neither side is withheld rather than returned. Recorded on the mark so a side that was never offered is
+   * never mistaken for one they declined (§3.6.6).
+   */
+  sides: readonly ('hear' | 'say')[];
 }
 
 export interface AdaptiveBankView {
   testId: string;
   families: AdaptiveBankFamilyView[];
   entries: AdaptiveBankEntryView[];
+  /**
+   * 74 §3.6.5 — how many entries each family withheld for this person. Computed by the resolver alongside the
+   * entries it returned, NOT by the renderer counting empty rows, so the on-screen note and the rendered rows
+   * can never disagree. `shown + withheld === the family's entry count`.
+   */
+  withheldByFamily: Record<string, number>;
+  /**
+   * Whether the two address taps have been answered (74 §3.6.4). Absent ⇒ never asked ⇒ nothing withheld, and
+   * the take opens on phase 0a.
+   */
+  address?: { self: 'girl' | 'man' | 'either'; partner: 'girl' | 'man' | 'either' };
 }
 
 /** Everything the take screen + the report need in one read. */
@@ -1247,7 +1295,13 @@ export interface AdaptiveScenarioView {
 /** The edits a person may make to their own lexicon (74 §3.4). */
 export type AdaptiveLexiconEdit =
   | { kind: 'rate'; key: string; hear?: number; say?: number }
-  | { kind: 'setState'; key: string; state: 'never' | 'notYet' | null }
+  | { kind: 'setState'; key: string; state: 'never' | 'okay' | null }
+  | {
+      // 74 §3.6.4 — the two address taps. A DISPLAY filter: writes no mark, lifts no boundary.
+      kind: 'setAddress';
+      self: 'girl' | 'man' | 'either';
+      partner: 'girl' | 'man' | 'either';
+    }
   | { kind: 'addWord'; text: string; family: string; wordKind: 'word' | 'phrase' }
   | { kind: 'addBoundary'; text: string; boundaryKind: 'word' | 'theme' };
 

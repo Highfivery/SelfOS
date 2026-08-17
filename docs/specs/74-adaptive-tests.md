@@ -298,7 +298,7 @@ The report's **"Practise this"** button starts the existing `dirty-talk-practice
 pre-loaded, so the guided session stops opening on "what do you want to be able to say?" when the app already
 knows.
 
-### 3.6 The bank pass, redesigned — AMENDMENT (2026-08-16, owner-requested, mockup approved)
+### 3.6 The bank pass, redesigned — AMENDMENT (2026-08-16, owner-requested, mockup approved) — **BUILT**
 
 > **Supersedes** the pass-1/pass-2 presentation in §3.2 and the two-pass claim in §11 resolved #2. The
 > boundary rules (§8.1/§8.2), the 18+ gate, the taboo framing, the crisis handling and the autosave contract
@@ -886,7 +886,13 @@ inner scroller — the deck is a single column at every width, so nothing collap
   and the intake anatomy answers are LABELS, not enums, with no stated mapping — now written down, failing
   **open** so someone who declined to answer never gets a silently thinner test.
 
-  NOT YET BUILT — five slices in §3.6.7.
+  **BUILT 2026-08-16** on `feat/adaptive-deck`, all five slices. What the build itself surfaced, beyond the
+  audit: the deck's 36-dot progress rail is ~540px and cannot fit a phone, so it is hidden below 620px where
+  the "Area N of 36" text beside it already says the same thing (the §12 guard caught it, not a screenshot);
+  the withheld count is usually **0** with family-level tags, because an entry aimed at a girl still reaches a
+  straight man's SAY side — the real reduction is the side split (for a straight man: 129 say-only, 65
+  hear-only of 1,033), not withholding, and §3.6.5's note is the honest exception rather than the rule.
+  Coverage: **213/213** word entries carry a hand-written example, pinned by a bank-integrity guard.
 
 - 2026-08-16 — **BUILT** on `feat/adaptive-tests-spec`, in a worktree off `origin/main` (the books session
   holds the shared checkout). Eight slices:

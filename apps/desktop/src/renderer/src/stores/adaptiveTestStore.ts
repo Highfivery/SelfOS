@@ -17,9 +17,18 @@ import type {
  * `synthesis`. Each phase persists as it completes, so leaving mid-take resumes rather than losing it.
  */
 
-export type TakePhase = 'intro' | 'bank' | 'split' | 'lines' | 'probe' | 'scenario' | 'done';
+export type TakePhase =
+  | 'intro'
+  /** 74 §3.6.4 — the two address taps, before the deck. Skipped once answered (a retake never re-asks). */
+  | 'address'
+  | 'bank'
+  | 'split'
+  | 'lines'
+  | 'probe'
+  | 'scenario'
+  | 'done';
 
-export type BankMark = 'love' | 'never' | 'notYet';
+export type BankMark = 'love' | 'never' | 'okay';
 
 /** Long enough that a fast run of taps is one write; short enough that closing the app loses nothing real. */
 const AUTOSAVE_DELAY_MS = 700;
@@ -177,6 +186,12 @@ interface AdaptiveTestState {
   mark(key: string, mark: BankMark | null): void;
   /** Write whatever is pending right now — on leaving the take, and before closing a pass. */
   flush(testId: string): Promise<void>;
+  /** 74 §3.6.4 — record the two address taps, then re-read the bank so it comes back oriented. */
+  setAddress(
+    testId: string,
+    self: 'girl' | 'man' | 'either',
+    partner: 'girl' | 'man' | 'either',
+  ): Promise<void>;
   submitBank(testId: string): Promise<void>;
   setSplit(key: string, direction: 'hear' | 'say', value: number): void;
   submitSplit(testId: string): Promise<void>;
@@ -254,7 +269,7 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => ({
     const splits: Record<string, { hear?: number; say?: number }> = {};
     for (const entry of state?.lexicon.entries ?? []) {
       if (entry.state === 'never') marks[entry.key] = 'never';
-      else if (entry.state === 'notYet') marks[entry.key] = 'notYet';
+      else if (entry.state === 'okay') marks[entry.key] = 'okay';
       else if (entry.hear > 0 || entry.say > 0) marks[entry.key] = 'love';
       if (entry.hear > 0 || entry.say > 0) splits[entry.key] = { hear: entry.hear, say: entry.say };
     }
@@ -264,7 +279,10 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => ({
   start: async (testId) => {
     set({ busy: true, error: null, activeTestId: testId });
     const state = await (window.selfos?.testsAdaptiveStart({ testId }) ?? Promise.resolve(null));
-    set({ state, busy: false, phase: resumePhase(state?.draft?.turns) });
+    const resumed = resumePhase(state?.draft?.turns);
+    // The address taps come first, and only once: a retake with them already answered goes straight in.
+    const needsAddress = resumed === 'bank' && get().bank?.address === undefined;
+    set({ state, busy: false, phase: needsAddress ? 'address' : resumed });
   },
 
   mark: (key, mark) => {
@@ -309,6 +327,14 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => ({
     // A lost mark is precisely the promise this feature makes, so the writes queue.
     inFlight = inFlight.then(() => runFlush(testId, get, set)).catch(() => undefined);
     await inFlight;
+  },
+
+  setAddress: async (testId, self, partner) => {
+    set({ busy: true });
+    await window.selfos?.testsLexiconEdit({ kind: 'setAddress', self, partner });
+    // The bank is oriented HOST-SIDE, so it has to be re-read for the new answers to take effect.
+    const bank = await (window.selfos?.testsBank({ testId }) ?? Promise.resolve(null));
+    set({ bank: bank ?? get().bank, busy: false, phase: 'bank' });
   },
 
   submitBank: async (testId) => {

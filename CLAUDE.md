@@ -486,6 +486,34 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-16 — **Build (the bank pass, redesigned: oriented, one area per screen, a quote per term; SPEC 74
+  §3.6 written, audited, BUILT; on `feat/adaptive-deck`).** The owner, on seeing the shipped pass: _"it's
+  overwhelming with a ton of terms… needs a short quote for each in how it's used"_, then separately _"make it
+  smarter so if the person is a guy and straight it shows ones he likes to hear and likes to say"_. **Measured
+  before designing** (1,033 entries · 36 families · median 26 · tiers 76/159/287/343/168), which separated four
+  causes where "overwhelming" read as one: volume, missing context, uniformity, and orientation. Seven owner
+  decisions, asked one at a time, mockup approved first. **Two changed the model, not the pixels:** the middle
+  mark became **"It's okay"** (a mild yes that no longer feeds goals), and the bank is **oriented** — body from
+  the intake anatomy answers, address from two taps in-take, **never inferred from gender + orientation**,
+  which is the exact conflation that broke #62. **The doc audit found a blocker in my own amendment**, and it
+  would have shipped as a data bug rather than a layout one: `say: 0` does not mean "not asked" anywhere in the
+  code — it means _cannot say it_ — so collapsing the hear/say split would have made every loved hear-only
+  entry look declined, turning it into **a goal the person never declined**, and goals reach their own coach
+  prompt AND a partner-shared Insight fact. Fixed by RECORDING the shown sides (`LexiconEntry.sides`, written
+  by the take, never back-derived) and restricting `derivedWantsToSay` / `sayConfidence` / every
+  `direction: 'say'` dimension to entries that were actually asked. Two smaller audit finds, both real:
+  dropping the middle mark silently killed **both** probe inputs that read `notYet` (an empty probe pack is
+  invisible), and the anatomy answers are **labels, not enums** — now mapped explicitly and **failing open**,
+  so someone who declined to answer never gets a quietly thinner test. Gate green: typecheck (4 pkgs), lint,
+  format, **2304 core + 13 relay + 1627 desktop** unit, **2 E2E** (the full deck walk + an oriented walk that
+  decrypts the vault to prove `good girl` is recorded **say-only** for a straight man). The fabricated-goal
+  guard is verified to FAIL when `sides` is ignored. **Lessons: (1) a UI change that removes one of two inputs
+  to a derivation is a DATA change — `0` and "not asked" are the same value unless you make them different, and
+  the failure lands in a partner-shared fact rather than on screen. (2) Playwright's `count()` does NOT
+  auto-wait, so polling it right after a click reads the previous screen mid-render and walks straight past what
+  you're looking for — use `waitFor`. (3) A deck that only moves forward makes test ORDER load-bearing: mark in
+  the bank's own family order or the walk can never reach an earlier area.**
+
 - 2026-08-16 — **Fix (the adaptive take autosaves every tap, and says so; owner-requested; SPEC 74 §3.4; on
   `fix/adaptive-autosave`).** The owner, right after the 74 merge: _"since there are so many to select, it should
   autosave when they click on option"_ and _"make it clear to the user that's the case so they know they can come

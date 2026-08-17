@@ -16095,14 +16095,18 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
     await goTo('Anatomy — his body');
     // A line about his own body is his to HEAR.
     await expect(
-      w.getByRole('button', { name: 'your hard cock — love it', exact: true }),
+      w.getByRole('button', { name: 'your hard cock — you hear — love it', exact: true }),
     ).toBeVisible();
-    await w.getByRole('button', { name: 'your hard cock — love it', exact: true }).click();
+    await w
+      .getByRole('button', { name: 'your hard cock — you hear — love it', exact: true })
+      .click();
 
     await goTo('Names — power & role');
     // "good girl" is aimed at a girl, so HE would say it — it is offered, but never as something he hears.
-    await expect(w.getByRole('button', { name: 'good girl — love it', exact: true })).toBeVisible();
-    await w.getByRole('button', { name: 'good girl — love it', exact: true }).click();
+    await expect(
+      w.getByRole('button', { name: 'good girl — you say — love it', exact: true }),
+    ).toBeVisible();
+    await w.getByRole('button', { name: 'good girl — you say — love it', exact: true }).click();
 
     // 74 §3.6.6 — the sides are RECORDED, so a side that was never offered is not a refusal. Without this,
     // "good girl" (say-only for him) would look like something he loves to hear and refuses to say, and
@@ -16201,8 +16205,8 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     await expect(w.getByText(/nothing in SelfOS will suggest it again/i)).toBeVisible();
     // The deck only moves FORWARD, so mark in the bank's own family order: names-power → names-degrading
     // → claiming. (The un-mark round trip below has to happen while `whore` is still on screen.)
-    await markInDeck('good girl — love it');
-    await markInDeck('whore — never');
+    await markInDeck('good girl — hear & say — love it');
+    await markInDeck('whore — hear & say — never');
     await expect(w.getByText(/2 marked/)).toBeVisible();
 
     // 74 §3.4 — every tap saves itself. Nothing below clicks Next, so the only thing that can have written
@@ -16227,7 +16231,10 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
       .toBeGreaterThanOrEqual(2);
 
     // A mis-tap is not a life sentence: un-marking takes the boundary back out of the store.
-    await w.getByRole('button', { name: 'whore — never', exact: true }).first().click();
+    await w
+      .getByRole('button', { name: 'whore — hear & say — never', exact: true })
+      .first()
+      .click();
     await expect(w.getByText(/1 marked/)).toBeVisible();
     await expect
       .poll(async () => {
@@ -16237,9 +16244,12 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
         return lex.boundaries.some((b) => b.text === 'whore');
       })
       .toBe(false);
-    await w.getByRole('button', { name: 'whore — never', exact: true }).first().click();
+    await w
+      .getByRole('button', { name: 'whore — hear & say — never', exact: true })
+      .first()
+      .click();
     await expect(w.getByText(/2 marked/)).toBeVisible();
-    await markInDeck('mine — love it');
+    await markInDeck('mine — hear & say — love it');
     await expect(w.getByText(/3 marked/)).toBeVisible();
 
     // The §12 guard runs against the DENSEST surface — the deck mid-mark.

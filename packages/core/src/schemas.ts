@@ -247,6 +247,12 @@ export const DeviceStateSchema = z.object({
    */
   storyReadPosition: z.record(z.string(), z.record(z.string(), z.string())).optional(),
   /**
+   * 74 §3.6.4 — where each person left off in an adaptive test's deck, keyed personId → testId → area index.
+   * Device-local like the reader position: it is a resume marker, not part of the profile. Without it the
+   * take's own copy ("it picks up on this area") is false the second time it is opened.
+   */
+  adaptiveDeckArea: z.record(z.string(), z.record(z.string(), z.number())).optional(),
+  /**
    * When this device last ran the Your Story freshness check, keyed by subject person id
    * (64-your-story §3.4). The renderer-driven daily cadence throttle marker — device-local +
    * per-person, the `autoCheckinCheckedAt` precedent. Additive-optional (no schemaVersion bump).
@@ -1240,6 +1246,8 @@ export interface AdaptiveBankView {
    * the take opens on phase 0a.
    */
   address?: { self: 'girl' | 'man' | 'either'; partner: 'girl' | 'man' | 'either' };
+  /** Which area of the deck this person left off on (74 §3.6.4). Device-local; 0 for a fresh take. */
+  resumeArea: number;
 }
 
 /** Everything the take screen + the report need in one read. */

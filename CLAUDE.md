@@ -486,6 +486,32 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-16 — **Audit close-out (adaptive tests / Dirty Talk; SPEC 74 §3.5/§3.6/§8.4; on
+  `fix/adaptive-audit-closeout`).** A full audit of the shipped feature after the deck redesign — model, seam,
+  renderer, and the surfaces the lexicon feeds. Five user-facing defects, each fixed + guarded (every guard
+  **verified to fail when reverted**): **(1)** the Tests hub badged an adaptive intimacy profile **"private —
+  only you"** one screen before the take and the report both say the loved terms quietly steer a partner's
+  coach — the app contradicting itself about who sees what (now "yours"; a spec-50 sensitive result really is
+  own-context-only and keeps the stronger wording). **(2)** the report's **"Practise this"** passed the goal in
+  `seedText`, but the same navigation opens a guided thread, so the launcher that read it never rendered and
+  the goal was **silently dropped** — the practice session opened by asking what the report had just told us
+  (the seed now reaches the thread composer). **(3)** an area whose every entry is withheld — common on a
+  same-sex configuration — rendered the marking instructions + an empty card over "0 here". **(4)** a resumed
+  area index was not clamped to the current bank, so retiring a family would strand the deck on a blank screen.
+  **(5)** **every store action is now wrapped in a failure guard**: a rejected bridge call left `busy` set with
+  nothing on screen and no route out but quitting the app — which, on a take that autosaves, reads as losing
+  everything you just marked. **Suppression completed across every generation path** (challenge coach, intimacy
+  email, questionnaire generation, biographer chat): each took an explicit register while being denied the
+  hard-no list, so the session gate is now **unconditional** — suppression only ever PREVENTS a suggestion, and
+  a probabilistic topic classifier is the wrong thing to hang a boundary on. Gate green: typecheck (4 pkgs),
+  lint, format, **2311 core + 13 relay + 1632 desktop** unit, both 74 E2E. **Lessons: (1) a badge is a claim —
+  when one surface discloses that data travels and a neighbouring one says "only you", the cheaper screen is
+  usually the wrong one, and only reading them together catches it. (2) A navigation that carries two pieces of
+  state (`startGuideId` + `seedText`) can render one and drop the other forever, because the branch that
+  consumes the second never renders on that path — trace where each field is READ, not just where it is set.
+  (3) Wrapping actions at store CONSTRUCTION rather than per action means a future phase cannot reintroduce a
+  frozen-screen dead-end by forgetting a `catch`.**
+
 - 2026-08-16 — **Build (the bank pass, redesigned: oriented, one area per screen, a quote per term; SPEC 74
   §3.6 written, audited, BUILT; on `feat/adaptive-deck`).** The owner, on seeing the shipped pass: _"it's
   overwhelming with a ton of terms… needs a short quote for each in how it's used"_, then separately _"make it

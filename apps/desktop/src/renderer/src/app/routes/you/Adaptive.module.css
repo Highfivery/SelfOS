@@ -293,6 +293,22 @@
     gap: var(--space-1);
   }
 
+  /* The area title and the "shown for … — change" control stack rather than fighting for one line — the
+     control's text is a whole sentence and the heading is a serif h2, so side-by-side overflows a phone. */
+  .deckHead {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
+  }
+
+  .deckFoot {
+    gap: var(--space-2);
+  }
+
+  .deckFoot > span {
+    flex-wrap: wrap;
+  }
+
   /* 36 dots is ~540px of rail — it cannot fit a phone, and the "Area N of 36" text beside it already says
      the same thing (the §9 text equivalent), so the decorative half goes rather than scrolling sideways. */
   .dots {

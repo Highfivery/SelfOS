@@ -105,8 +105,15 @@ export function AdaptiveReport(): JSX.Element {
 
   const latest = state.latest;
   const lexicon = state.lexicon;
-  const loves = lexicon.entries.filter((e) => e.state === undefined && e.hear >= 3);
-  const says = lexicon.entries.filter((e) => e.state === undefined && e.say >= 3);
+  // Both lists are restricted to the side the person was actually ASKED about (74 §3.6.6). Without this an
+  // oriented entry — seeded on one side only — still shows up in the other list, and the report tells someone
+  // they love saying a line the deck never offered them on the say side.
+  const askedHear = (e: (typeof lexicon.entries)[number]): boolean =>
+    e.sides === undefined || e.sides.includes('hear');
+  const askedSay = (e: (typeof lexicon.entries)[number]): boolean =>
+    e.sides === undefined || e.sides.includes('say');
+  const loves = lexicon.entries.filter((e) => e.state === undefined && e.hear >= 3 && askedHear(e));
+  const says = lexicon.entries.filter((e) => e.state === undefined && e.say >= 3 && askedSay(e));
   // 74 §3.6.2/§3.6.6 — sourced from the hear/say GAP, not the middle mark (which is a mild yes now), and only
   // where BOTH sides were actually asked: a side the orientation never offered is not a thing they freeze on.
   const notYet = lexicon.entries.filter(

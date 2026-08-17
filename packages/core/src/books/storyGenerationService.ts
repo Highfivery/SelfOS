@@ -138,7 +138,7 @@ export type FoundationsResult =
  * or empty lexicon returns nothing so the prompt is byte-unchanged. A pair-owned book (`ownerRef` is a
  * pairKey, not a person) simply has no lexicon to read, which is the correct answer rather than a special case.
  */
-async function subjectLexiconBlock(
+export async function subjectLexiconBlock(
   fs: FileSystem,
   key: Uint8Array,
   bookType: BookType,

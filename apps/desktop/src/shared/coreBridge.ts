@@ -1155,6 +1155,10 @@ const AdaptiveRefSchema = z.object({
 const AdaptiveRoundSchema = AdaptiveRefSchema.extend({
   round: z.number().int().min(1).max(20),
 });
+const AdaptiveAreaSchema = z.object({
+  testId: z.string().min(1),
+  area: z.number().int().min(0).max(500),
+});
 const AdaptiveBankPassSchema = AdaptiveRefSchema.extend({
   marks: z.record(z.string(), z.enum(['love', 'never', 'okay'])),
   // Bounded: an autosave sends a small delta, and the closing call sends the whole pass. Neither is unbounded,
@@ -4191,7 +4195,23 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           })),
         withheldByFamily,
         ...(lexicon.address ? { address: lexicon.address } : {}),
+        resumeArea: (await host.readDeviceState()).adaptiveDeckArea?.[gate.personId]?.[testId] ?? 0,
       };
+    },
+    testsAdaptiveSetArea: async (input): Promise<void> => {
+      const parsed = AdaptiveAreaSchema.parse(input);
+      const gate = await adaptiveGate(parsed.testId);
+      if (!gate) return;
+      const device = await host.readDeviceState();
+      await host.updateDeviceState({
+        adaptiveDeckArea: {
+          ...device.adaptiveDeckArea,
+          [gate.personId]: {
+            ...device.adaptiveDeckArea?.[gate.personId],
+            [parsed.testId]: parsed.area,
+          },
+        },
+      });
     },
     testsAdaptiveState: async (input): Promise<AdaptiveStateView | null> => {
       const { testId } = TestIdSchema.parse(input);

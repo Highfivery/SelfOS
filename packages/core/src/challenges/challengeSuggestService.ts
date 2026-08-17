@@ -10,6 +10,7 @@ import {
   type UsageEvent,
 } from '../schemas';
 import { uuid } from '../id';
+import { readLexicon, suppressedTexts } from '../tests/adaptive/lexicon';
 import { checkBudget, costOf, queryUsage, recordUsage } from '../usage';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
 import {
@@ -109,6 +110,11 @@ function recentApprovedInsights(insights: Insight[], now: Date): Insight[] {
  * Assemble the bounded, structured, transcript-free digest (§5.3). This pass emits each insight's SUMMARY and
  * carries no topic, so `digestableInsights` drops wholly-flagged AND restricted-fact insights ENTIRELY — a
  * sexual/intimacy challenge reflection (restricted, 52 §8.4) must not reach the suggester via its summary.
+ *
+ * NOTE the limit of that: excluding restricted facts protects what goes IN, and by construction means the
+ * suggester cannot know what this person has ruled OUT. The hard nos therefore arrive through their own seam
+ * (`suppressedTexts`, 74 §8.4) rather than through the digest — this comment used to claim the exclusion made
+ * hard nos safe, which was the opposite of true.
  */
 function buildDigest(recent: Insight[], commitments: string): string {
   const lines = digestableInsights(recent).map((i) => {
@@ -129,11 +135,19 @@ function buildDigest(recent: Insight[], commitments: string): string {
     .join('\n\n');
 }
 
-function suggestGuidance(adultAllowed: boolean): string {
+function suggestGuidance(adultAllowed: boolean, suppressed: readonly string[] = []): string {
+  // The hard nos, as an actual list rather than an instruction to avoid a list the model was never given
+  // (74 §8.4). The inbound privacy rule below deliberately keeps restricted facts OUT of the digest, which
+  // is exactly why the boundary has to come in through its own seam: otherwise "NEVER anything they'd treat
+  // as a hard no" is addressed to a model with no way to know what those are.
+  const nos =
+    suppressed.length > 0
+      ? ` NEVER use any of these words or phrases, in any form, whatever else you suggest: ${suppressed.join(' · ')}.`
+      : '';
   const intimacy = adultAllowed
     ? `If — and only if — their own material clearly points to intimacy/sexual growth they want, a consensual-adult \
 intimacy challenge is allowed (set "adult": true, "domain": "intimacy"); draw it only from their interests and \
-curiosities, NEVER anything they'd treat as a hard no, and keep it gentle and consent-forward.`
+curiosities, NEVER anything they'd treat as a hard no, and keep it gentle and consent-forward.${nos}`
     : `Do NOT suggest any sexual or intimate challenge.`;
   return `You are SelfOS's challenge coach, proposing ONE small "challenge" — a deliberately-stretching little \
 experiment this person could try between now and a check-in, grounded in what they have actually been \
@@ -264,7 +278,14 @@ export async function suggestChallenge(
       {
         apiKey,
         model,
-        system: [PERSONA, SAFETY, suggestGuidance(adultAllowed)].join('\n\n'),
+        system: [
+          PERSONA,
+          SAFETY,
+          suggestGuidance(
+            adultAllowed,
+            suppressedTexts(await readLexicon(deps.fs, deps.key, personId)),
+          ),
+        ].join('\n\n'),
         messages: [{ role: 'user', content: digest }],
         maxTokens: 500,
         extendedThinking: false, // a bounded structured-JSON call — keep the whole budget for output

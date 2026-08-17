@@ -46,7 +46,12 @@ function ProfileCard({ test, results }: { test: TestSummary; results: TestResult
             {test.instrument}
             {test.sensitive ? (
               <span className={styles.privateTag}>
-                <Lock size={11} aria-hidden="true" /> private — only you
+                <Lock size={11} aria-hidden="true" />{' '}
+                {/* 74 §8.4 — an adaptive intimacy profile is NOT "only you": what you love travels
+                    silently into a partner's coach. The take's intro and the report both say so, so this
+                    badge must not contradict them one screen earlier. A spec-50 sensitive result really is
+                    own-context-only, so it keeps the stronger wording. */}
+                {test.kind === 'adaptive' ? 'yours' : 'private — only you'}
               </span>
             ) : null}
           </span>

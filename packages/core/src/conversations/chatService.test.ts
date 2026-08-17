@@ -4,7 +4,9 @@ import { toBase64 } from '../encoding';
 import type { ClaudeClient, ClaudeMessage } from '../host';
 import { memFileSystem } from '../host/memFileSystem';
 import type { AttachmentRef, Person } from '../schemas';
-import { savePerson } from '../people';
+import { savePerson, saveRelationship } from '../people';
+import { acknowledgeAdult } from './guidanceService';
+import { emptyLexicon, writeLexicon } from '../tests/adaptive/lexicon';
 import { queryUsage, recordUsage, setPersonBudget } from '../usage';
 import { saveInsight } from '../insights';
 import type { Insight } from '../schemas';
@@ -947,5 +949,58 @@ describe('runChatTurn — image attachments (45 §6.1 vision)', () => {
     // No image block survived; the user message fell back to plain text.
     const userMsg = captured.messages.find((m) => m.role === 'user');
     expect(userMsg?.content).toBe('this should still send');
+  });
+});
+
+describe('74 §8.4 — a hard no suppresses in EVERY session, not just an intimacy-topic one', () => {
+  it('carries the partner-suppression block on a session the topic gate would have skipped', async () => {
+    // The gate this used to share was unreliable in both directions: the challenge coach is
+    // `group: 'challenge'`, so it took an explicit sexual register while being denied the hard-no list, and a
+    // free-start session's topic comes from a probabilistic classifier that fails open. Suppression only ever
+    // PREVENTS a suggestion, so it is not topic-gated.
+    await savePerson(fs, key, person('p1', 'Alex'));
+    await savePerson(fs, key, person('p2', 'Sam'));
+    await saveRelationship(fs, key, {
+      id: 'r1',
+      schemaVersion: 1,
+      fromPersonId: 'p1',
+      toPersonId: 'p2',
+      type: 'partner',
+      createdAt: 'now',
+      updatedAt: 'now',
+    });
+    await acknowledgeAdult(fs, key, 'p1');
+    await writeLexicon(fs, key, {
+      ...emptyLexicon('p2', now),
+      boundaries: [{ text: 'whore', kind: 'word', at: now.toISOString() }],
+    });
+
+    let system = '';
+    const capturing: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (opts: { system?: string }) => {
+        system = opts.system ?? '';
+        return Promise.resolve({
+          text: 'ok',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+          stopReason: 'end_turn' as const,
+        });
+      },
+    } as unknown as ClaudeClient;
+
+    // No guideId and no intimacy topic override — the plainest possible session.
+    await runChatTurn({
+      fs,
+      key,
+      client: capturing,
+      apiKey: 'sk-test',
+      model: 'claude-sonnet-4-6',
+      personId: 'p1',
+      conversationId: 'c-plain',
+      userText: 'I want to be more vocal with my partner',
+      onDelta: () => {},
+      now,
+    });
+    expect(system).toContain('whore');
   });
 });

@@ -8,6 +8,7 @@ import { writeEncryptedJson } from '../vault';
 import type { EmailResponse, SentSuggestion } from '../schemas';
 import { saveInsight } from '../insights';
 import type { Insight } from '../schemas';
+import { emptyLexicon, writeLexicon } from '../tests/adaptive/lexicon';
 import {
   buildAvoidSet,
   gatherSuggestionSignals,
@@ -428,5 +429,52 @@ describe('emailed questions carry answers, not reactions (#459)', () => {
     expect(system).toMatch(/must be 2–5 short answers to THAT question/);
     expect(system).toMatch(/They are answers, NOT reactions/);
     expect(system).toMatch(/I'm game/);
+  });
+});
+
+describe('74 §8.4 — the intimacy email carries the hard nos', () => {
+  /** A person who has ruled one word out. */
+  async function withBoundary(fs: ReturnType<typeof memFileSystem>): Promise<void> {
+    await writeLexicon(fs, key, {
+      ...emptyLexicon(PERSON, now),
+      boundaries: [{ text: 'whore', kind: 'word', at: now.toISOString() }],
+    });
+  }
+
+  const intimacyInput = {
+    openGround: [],
+    family: 'ai-suggestion-intimacy' as const,
+    signals: emptySignals,
+    avoid: { texts: [], subjects: new Set<string>() },
+    intimacyOverlap: [{ key: 'oral', label: 'oral' }],
+  };
+
+  it('puts the ruled-out word in the prompt as a hard negative constraint', async () => {
+    const fs = memFileSystem();
+    await withBoundary(fs);
+    let seen = '';
+    const client: ClaudeClient = {
+      send: () => Promise.resolve(''),
+      stream: (opts: { system?: string }) => {
+        seen = opts.system ?? '';
+        return Promise.resolve({
+          text: '{"headline":"Tonight","body":"Tell him what you want."}',
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+          stopReason: 'end_turn' as const,
+        });
+      },
+    } as unknown as ClaudeClient;
+    await generateSuggestion(deps(fs, client), intimacyInput);
+    expect(seen).toContain('whore');
+    expect(seen).toMatch(/NEVER use any of these/i);
+  });
+
+  it('REFUSES to send a suggestion that touches a boundary, whatever the model returned', async () => {
+    // This is the only surface where explicit generated text leaves the device unreviewed, so the prompt
+    // line is not enough on its own — not sending beats sending the one thing they ruled out.
+    const fs = memFileSystem();
+    await withBoundary(fs);
+    const client = clientReturning('{"headline":"Tonight","body":"Tell him you are his whore."}');
+    expect(await generateSuggestion(deps(fs, client), intimacyInput)).toBeNull();
   });
 });

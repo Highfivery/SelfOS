@@ -40,7 +40,8 @@ const BANK: AdaptiveBankView = {
     },
   ],
   withheldByFamily: {},
-  address: { self: 'girl', partner: 'man' },
+  address: { self: 'girl' as const, partner: 'man' as const },
+  resumeArea: 0,
 };
 
 function state(overrides: Partial<AdaptiveStateView> = {}): AdaptiveStateView {
@@ -131,12 +132,14 @@ describe('AdaptiveTake (74 §3.2)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
 
     expect(await screen.findByText(/nothing in SelfOS will suggest it again/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'good girl — love it' }));
+    await userEvent.click(screen.getByRole('button', { name: 'good girl — hear & say — love it' }));
 
     await userEvent.click(screen.getByRole('button', { name: /Next area/ }));
     // The taboo family carries its roleplay framing wherever it appears (74 §8.1).
     expect(screen.getByText(/PRE-AGREED, SAFEWORDED ROLEPLAY/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'run (primal) — never' }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'run (primal) — hear & say — never' }),
+    );
     expect(screen.getByText(/2 marked/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: /Done — show me/i }));
@@ -158,9 +161,11 @@ describe('AdaptiveTake (74 §3.2)', () => {
     });
     renderTake();
     await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
-    await userEvent.click(screen.getByRole('button', { name: 'good girl — love it' }));
+    await userEvent.click(screen.getByRole('button', { name: 'good girl — hear & say — love it' }));
     await userEvent.click(screen.getByRole('button', { name: /Next area/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'run (primal) — never' }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'run (primal) — hear & say — never' }),
+    );
     await userEvent.click(screen.getByRole('button', { name: /Done — show me/i }));
 
     expect(await screen.findByText(/Hearing it, or saying it\?/i)).toBeInTheDocument();
@@ -213,7 +218,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
     expect(screen.getByText(/Every tap saves itself/i)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'good girl — love it' }));
+    await userEvent.click(screen.getByRole('button', { name: 'good girl — hear & say — love it' }));
     // No Next click anywhere in this test — the write happens on its own.
     await waitFor(() =>
       expect(bankPass).toHaveBeenCalledWith(
@@ -238,13 +243,17 @@ describe('AdaptiveTake (74 §3.2)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
 
     await userEvent.click(screen.getByRole('button', { name: /Next area/ }));
-    const never = screen.getByRole('button', { name: 'run (primal) — never' });
+    const never = screen.getByRole('button', { name: 'run (primal) — hear & say — never' });
     await userEvent.click(never);
     await waitFor(() => expect(bankPass).toHaveBeenCalled());
     // Still a live control, not the settled "off the table" row a PRIOR take's boundary renders as.
-    expect(screen.getByRole('button', { name: 'run (primal) — never' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'run (primal) — hear & say — never' }),
+    ).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'run (primal) — never' }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'run (primal) — hear & say — never' }),
+    );
     await waitFor(() =>
       expect(bankPass).toHaveBeenLastCalledWith(
         expect.objectContaining({ cleared: ['taboo:run-primal'], autosave: true }),
@@ -285,7 +294,9 @@ describe('AdaptiveTake (74 §3.2)', () => {
     // The boundary lives in the taboo family — the deck shows one area at a time (74 §3.6.4).
     await userEvent.click(await screen.findByRole('button', { name: /Next area/ }));
     expect(await screen.findByText(/off the table/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'run (primal) — never' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'run (primal) — hear & say — never' }),
+    ).not.toBeInTheDocument();
   });
 
   // --- 74 §3.6.3/§3.6.4/§3.6.5 — orientation ---
@@ -360,6 +371,60 @@ describe('AdaptiveTake (74 §3.2)', () => {
     await useAdaptiveTestStore.getState().load('dirty-talk');
     useAdaptiveTestStore.setState({ phase: 'lines' });
     await useAdaptiveTestStore.getState().loadLines('dirty-talk', 1);
-    expect(useAdaptiveTestStore.getState().phase).toBe('probe');
+    // It moved ON, which is the whole point — not to a fixed phase. With the component mounted, the phase
+    // it lands in keeps degrading forward under the same mock bridge (probe → scenario), so pinning one
+    // name would assert the mock's depth rather than the rule: a degraded phase is skipped, never fatal.
+    expect(useAdaptiveTestStore.getState().phase).not.toBe('lines');
+    expect(useAdaptiveTestStore.getState().busy).toBe(false);
+  });
+
+  it('says so and stays usable when a call fails — never a frozen take (74 §7)', async () => {
+    // Every action is wrapped, so a rejected bridge call cannot leave `busy` set with nothing on screen.
+    // Before the guard, this froze the take mid-phase and the only route out was quitting the app — which,
+    // on a take that autosaves, looks exactly like losing everything you just marked.
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveSynthesize: () => Promise.reject(new Error('offline')),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    await useAdaptiveTestStore.getState().synthesize('dirty-talk');
+    expect(useAdaptiveTestStore.getState().busy).toBe(false);
+    expect(useAdaptiveTestStore.getState().progress).toBeNull();
+    expect(await screen.findByText(/didn’t go through|didn't go through/)).toBeInTheDocument();
+  });
+
+  it('says what happened when an area holds nothing for either of them, instead of an empty card', async () => {
+    // A same-sex configuration resolves whole areas to one side. Rendering "0 here" under the marking
+    // instructions and an empty card reads as a broken screen.
+    installMockBridge({
+      testsBank: () =>
+        Promise.resolve({
+          ...BANK,
+          entries: BANK.entries.filter((e) => e.family !== 'names-power'),
+          withheldByFamily: { 'names-power': 1 },
+        }),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'bank' });
+    expect(await screen.findByText(/nothing to mark here/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Only tap what actually does something/)).not.toBeInTheDocument();
+    // The withheld note still carries the route back.
+    expect(screen.getByRole('button', { name: /Before we start/ })).toBeInTheDocument();
+  });
+
+  it('does not strand a resumed take past the end of a shorter bank', async () => {
+    installMockBridge({
+      testsBank: () => Promise.resolve({ ...BANK, resumeArea: 9 }),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'bank' });
+    // Clamped to the last real area, not a blank screen with no way forward.
+    expect(await screen.findByText(/Area 2 of 2/)).toBeInTheDocument();
   });
 });

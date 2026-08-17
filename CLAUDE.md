@@ -484,6 +484,44 @@ placing anything. Specifically:
 
 ## Changelog
 
+- 2026-08-17 — **Build (the take gets a MAP, a step rail, and a real readiness gate; owner-reported three ways;
+  SPEC 74 §3.6.9; PR [#511] on `feat/pet-names-model`).** _"it shows What do you call each other?, but doesnt give
+  any indication whats after that"_ · _"IT IMMEDIATELY GOES TO THE AI GENERATING WITH NO WAY TO GO BACK TO THE
+  WORDS"_ · _"they can answer none or just a few and run it which isnt helpful"_. **Audited in the code, not by
+  looking:** `setPhase` was called exactly **twice** in the whole screen, both to return to the identity taps — so
+  from the split onward there was **no route back at all**; every AI phase fired its call **on arrival**
+  (`started.current[phase]`); `testsAdaptiveLines` and `testsAdaptiveScenario` reached the model with **no check
+  that anything had been marked**; the probe returned the same `done` whether it had exhausted its ambiguities or
+  had nothing to work from; and a degraded phase **silently relocated** the person, which is indistinguishable from
+  that phase having worked. Built: **seven named steps from one pure model** (`takeSteps.ts`) that the map, the rail
+  and every frame read, so they cannot disagree; a **map** on the way in and on the way back; a **rail on every
+  step** with any reachable one a tap away — **verbs FIRST in the column**, because an area runs to 47 rows and
+  actions under a tally plus seven rows are below the fold before any scrolling has happened; **three verbs**
+  everywhere (Next / Skip / Finish) where a skip is recorded, shown, and **never spends** (skipping the last step
+  lands on the map, not on a synthesis). **The readiness gate:** an AI step waits to be **asked**, and needs
+  **15 marks and 3 that were a yes** (`generationReadiness` in crypto-free `schemas.ts`, read by the renderer AND
+  the bridge so they cannot drift) — below that it greys with the shortfall ("14 more marks"), because a model given
+  three marks writes from its own defaults, which is the generic output this test exists to avoid, charged for; a
+  page of hard nos is the same problem, hence the separate loved count. The **profile is deliberately NOT gated** —
+  being unable to finish is worse than a thin profile. **Two clean-ups the names phase made necessary:** the
+  _"you like being called girl / man"_ pair is **gone** — measured, it oriented **four anatomy/praise families** (a
+  body job) while the question it appeared to ask is answered one step over by marking 2,215 real names both ways,
+  so `address` now derives from identity (same orientation, no migration); and **nine terms sat in BOTH a deck
+  family and a name register** as two separate lexicon keys, so the same words were marked twice and one term could
+  hold a loved-to-hear AND a hard no — the deck gave them up, with a guard. Also: the profile **links back to the
+  step that produced each section** (the real answer to "easy to update"), and the practice sheet gained a way out
+  that isn't doing it. Gate green: typecheck (4 pkgs), lint, format, **2349 core + 13 relay + 1668 desktop** unit,
+  **216 E2E**, visual QA of the map / rail / blocked step / identity step. Both new guards **verified to fail when
+  reverted**. **Lessons: (1) a persistent step rail changes the cost model of every AI phase — arrival-fires-the-call
+  is survivable in a one-way chain and becomes a billed mis-tap the moment any step is one tap away, so "waits to be
+  asked" is a consequence of the navigation, not a nicety. (2) "Enough to generate from" needs TWO numbers: a total
+  and a positive count, because a page of hard nos passes any volume threshold and still leaves a generator nothing
+  to write. (3) A test fixture that reaches into the real bank via `bankEntry(...)!` turns a retired term into
+  `undefined` and fails six tests deep inside the resolver with "cannot read 'includes'" instead of naming the key —
+  make the helper throw (§4: never `!` to silence). (4) When one feature absorbs another\'s question, grep for what
+  the old one still DOES before deleting it: the address axis looked dead and in fact still oriented four families,
+  so the fix was to derive it, not drop it.**
+
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
 - 2026-08-17 — **Fix (the TWO SCROLLBARS, found by measuring the document rather than counting elements;

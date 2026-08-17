@@ -586,6 +586,11 @@
 
 /* Intensity: a 3-bar meter, red at the top tier. Never colour alone — it carries a text equivalent. */
 .heat {
+  /* LOAD-BEARING: the `.srOnly` text equivalent inside is `position: absolute`, and with no positioned ancestor
+   * it escapes to the initial containing block — 21 of them in one area extended the DOCUMENT to 3009px and
+   * painted a second, window-level scrollbar beside the shell's own. A visually-hidden span must always sit
+   * inside a positioned parent. */
+  position: relative;
   display: inline-flex;
   gap: 2px;
   flex: none;
@@ -939,4 +944,18 @@
   align-items: center;
   gap: var(--space-2);
   flex: none;
+}
+
+/* A pill that carries an example under its label — the address options were three abstract words until they
+ * showed what they actually decide. */
+.pill .pillEg {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: var(--color-text-tertiary);
+}
+
+.pill[aria-pressed='true'] .pillEg {
+  color: var(--color-accent-text);
 }

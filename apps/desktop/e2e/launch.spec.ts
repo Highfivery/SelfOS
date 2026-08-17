@@ -16267,6 +16267,27 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
       }
     });
     await w.screenshot({ path: 'e2e-artifacts/74-autosave.png' });
+    // ── ONE scrollbar, ever ────────────────────────────────────────────────────────────────────────
+    // Two guards, because the first one alone was VACUOUS: it counted elements whose computed `overflow-y`
+    // is auto/scroll, which (a) can never see the DOCUMENT — `html` computes to `visible` yet still paints
+    // the window scrollbar — and (b) ran against a 2-entry fixture that could not overflow anything.
+    //
+    // The real defect it missed: 21 `position: absolute` visually-hidden spans with no positioned ancestor
+    // escaped their rows and extended the document to 3009px, so the window scrolled beside the shell.
+    // Measured on the FULL bank, at a large window, which is where it was reported.
+    await w.setViewportSize({ width: 1800, height: 1120 });
+    const scroll = await w.evaluate(() => ({
+      document: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+      elements: Array.from(document.querySelectorAll('*')).filter((el) => {
+        const cs = getComputedStyle(el);
+        return /auto|scroll/.test(cs.overflowY) && el.scrollHeight - el.clientHeight > 2;
+      }).length,
+    }));
+    // The shell's own scroll container is the ONE permitted scroller…
+    expect(scroll.elements).toBe(1);
+    // …and the document must not scroll at all behind it.
+    expect(scroll.document).toBeLessThanOrEqual(2);
+    await w.setViewportSize({ width: 1280, height: 900 });
     const LEXICON = 'people/owner-1/tests/lexicon.enc';
     await expect
       .poll(async () => {

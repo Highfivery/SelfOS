@@ -229,7 +229,7 @@ export function AdaptiveReport(): JSX.Element {
           {!latest ? (
             /* Bare text and a button on an empty canvas. It is the first thing anyone sees of this test, so
                it gets the same shape as the invitation: what it will hold, then the one action. */
-            <Stack gap={4}>
+            <div className={adaptive.introWrap}>
               <Card className={adaptive.introCard}>
                 <Text tone="secondary">
                   Nothing here yet. Once you&rsquo;ve taken it, this page holds your words — what
@@ -243,7 +243,7 @@ export function AdaptiveReport(): JSX.Element {
                 </div>
               </Card>
               <CrisisFooter />
-            </Stack>
+            </div>
           ) : (
             <>
               {latest?.narrative ? (

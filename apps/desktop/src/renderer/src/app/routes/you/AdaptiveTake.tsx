@@ -32,9 +32,13 @@ function previewLines(
   self: 'man' | 'woman' | 'either' | null,
   partner: 'man' | 'woman' | 'either' | null,
 ): { side: 'hear' | 'say'; text: string }[] {
+  // VERIFIED bank strings, not written here: `anatomy-him:your hard cock` and `anatomy-her:pussy` carry these
+  // exact examples. The previous man-side line was invented — it appeared in no entry — so the screen promised
+  // a line the deck would never show, under a comment claiming these came from the bank. Never assert content
+  // from the bank without grepping it.
   const about = (who: 'man' | 'woman' | 'either' | null): string | null =>
     who === 'man'
-      ? 'I love how hard your cock gets for me'
+      ? 'I can feel your hard cock through your jeans'
       : who === 'woman'
         ? 'your pussy is so wet for me'
         : null;
@@ -51,10 +55,19 @@ function addressFor(identity: 'man' | 'woman' | 'either'): 'girl' | 'man' | 'eit
   return identity === 'man' ? 'man' : identity === 'woman' ? 'girl' : 'either';
 }
 
-const ADDRESS_OPTIONS: { value: 'girl' | 'man' | 'either'; self: string; partner: string }[] = [
-  { value: 'girl', self: 'their girl', partner: 'his girl' },
-  { value: 'man', self: 'their man', partner: 'her man' },
-  { value: 'either', self: 'neither · both · depends', partner: 'neither · both · depends' },
+/**
+ * What someone likes being CALLED — the vocative family, not their identity (§3.6.3).
+ *
+ * This asked it with possessives, and differently in each of its two questions: "their girl / their man" for
+ * you, "his girl / her man" for them. Whose "their"? And the second phrasing quietly assumed the other
+ * person's gender. The field only has three values, and the concrete way to ask which one is to show the
+ * WORDS it decides — all taken from the bank's own `addresses`-tagged entries, so the examples are exactly
+ * what will show up.
+ */
+const ADDRESS_OPTIONS: { value: 'girl' | 'man' | 'either'; label: string; eg: string }[] = [
+  { value: 'girl', label: 'girl', eg: 'good girl · my girl · princess' },
+  { value: 'man', label: 'man', eg: 'good boy · my man · sir' },
+  { value: 'either', label: 'either, or it depends', eg: 'both sets, nothing ruled out' },
 ];
 
 /** The two address answers in one line, for the always-present "change" affordance. */
@@ -547,7 +560,7 @@ export function AdaptiveTake(): JSX.Element {
               {addressDiffers ? (
                 <Card className={adaptive.identityCard}>
                   <span className={adaptive.identityLabel} id="adaptive-self-address-label">
-                    What you like being called:
+                    You like being called:
                   </span>
                   <div
                     className={adaptive.pills}
@@ -562,12 +575,13 @@ export function AdaptiveTake(): JSX.Element {
                         aria-pressed={selfAddress === option.value}
                         onClick={() => setSelfAddress(option.value)}
                       >
-                        {option.self}
+                        {option.label}
+                        <span className={adaptive.pillEg}>{option.eg}</span>
                       </button>
                     ))}
                   </div>
                   <span className={adaptive.identityLabel} id="adaptive-partner-address-label">
-                    What they like being called:
+                    They like being called:
                   </span>
                   <div
                     className={adaptive.pills}
@@ -582,7 +596,8 @@ export function AdaptiveTake(): JSX.Element {
                         aria-pressed={partnerAddress === option.value}
                         onClick={() => setPartnerAddress(option.value)}
                       >
-                        {option.partner}
+                        {option.label}
+                        <span className={adaptive.pillEg}>{option.eg}</span>
                       </button>
                     ))}
                   </div>

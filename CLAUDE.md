@@ -690,6 +690,36 @@ clientHeight <= 2`** AND exactly one overflowing element, on the FULL bank at th
   value get READ?" rather than "does the screen work?" (3) A per-branch crisis footer is a latent regression
   in any surface that later gets restructured — render it once, outside.**
 
+- 2026-08-17 — **Build (the practice sheet: two taps before the deck opens; owner-requested, mockup approved FIRST;
+  SPEC 74 §3.6.7; on `feat/adaptive-practice-sheet`).** The §3.6.3 direction band and §3.6.4 row hierarchy had both
+  landed and the owner still said the word-vs-phrase rule "gets a bit lost" — after three copy attempts, the third
+  drew the sharpest correction of the feature: _"you just changing some text and capitalizing it IS NOT AN
+  IMPROVEMENT"_, then _"the very first thing they read and eyes get drawn to to be: You're marking the word, not the
+  phrase."_ So the rule stopped being copy on the deck and became a **practice the deck sits behind**: the rule as
+  the headline (largest type, `word` underlined, **repeated on both beats** so it can't scroll away), then two beats
+  — `You → Them`, then flipped to `Them → You`, because watching the band CHANGE is what teaches "this varies per
+  area" where a sentence saying so was being skimmed. **The taps are real marks:** both words are actual bank
+  entries picked by the same orientation the deck uses, filtered to `kind:'word'` **with** a quote (a phrase-family
+  entry IS the whole line, so demonstrating on one would teach the opposite of the sentence above it) and sorted by
+  tier, so the first thing anyone ever sees in this test is a tier-1 word; each tap autosaves and the tally behind
+  the scrim visibly increments. **Required, not dismissible** — `Start marking` is disabled until the last beat
+  lands, and in a browser the scrim genuinely covers the rows, so the E2E walks CANNOT reach around it (that is the
+  difference between a practice and a notice). **Once ever, not once per sitting:** owed only when the person has
+  marked _nothing at all_, which — because the taps are marks — can never become true again, so "shown once" needed
+  **no new persistence and no new field**; a retake opens straight into the deck. The two unexplained step-dots the
+  owner asked about are gone, and so are the row's heat meter + side chip (the band already states the direction; an
+  unlabelled glyph is the thing being removed). Gate green: typecheck (4 pkgs), lint, format, \*\*2325 core + 13 relay
+  - 1647 desktop** unit, both 74 E2E. **Both guards verified to FAIL when reverted** (neutering the disabled gate
+    fails the RTL; removing the sheet fails the E2E). **Two findings from measuring rather than eyeballing:** (1) the
+    scrim was `position: absolute` inside `.deck` — an area is up to 47 rows, so it spanned thousands of pixels and
+    centred the sheet halfway DOWN the deck, off screen, while every `toBeVisible` assertion passed; fixed to `fixed`
+    and pinned with `toBeInViewport` (the #207 lesson, bitten again). (2) The 360px screenshots show an 18px document
+    overflow — chased it to the header's own SVG, then proved it is **entirely** the reserved macOS traffic-light
+    inset (378 → 360 the instant the inset is reclaimed), i.e. the already-documented macOS-only artifact that cannot
+    exist on the iOS target; **no header change made**, recorded here so it isn't re-chased. **Lesson: when a rule
+    keeps getting skimmed, stop rewording it and make the person DO it once — and a modal's scrim belongs on the
+    VIEWPORT, never on a scrollable container that can be taller than the window.\*\*
+
 - 2026-08-16 — **Audit close-out (adaptive tests / Dirty Talk; SPEC 74 §3.5/§3.6/§8.4; on
   `fix/adaptive-audit-closeout`).** A full audit of the shipped feature after the deck redesign — model, seam,
   renderer, and the surfaces the lexicon feeds. Five user-facing defects, each fixed + guarded (every guard

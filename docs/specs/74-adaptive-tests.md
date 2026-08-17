@@ -492,6 +492,39 @@ dropping the middle mark's goal contribution would leave the goal list _fabricat
 5. **Guards** — resolver truth table, a withheld-count assertion, the §12 overflow guard at 360px on the deck,
    and an E2E walking an oriented take end to end.
 
+### 3.6.7 The practice sheet — two taps before the deck opens (2026-08-17, owner-requested, mockup approved) — **BUILT**
+
+The §3.6.3 direction band and the §3.6.4 row hierarchy both landed, and the owner still said the word-vs-phrase
+rule "gets a bit lost". Three attempts at fixing it in copy failed the same way, and the third drew the sharpest
+correction of the whole feature: _"you just changing some text and capitalizing it IS NOT AN IMPROVEMENT."_ Then:
+_"the very first thing they read and eyes get drawn to to be: You're marking the word, not the phrase."_
+
+So the rule stops being copy on the deck and becomes a **practice** the deck sits behind:
+
+1. **The rule is the headline** — first element, largest type on the sheet, `word` underlined in warm, and
+   **repeated identically on both beats** so it cannot scroll away. It is a standing fact about ~1,000 rows, not
+   a caption on one example.
+2. **Two beats, one per direction.** Beat one is `You → Them`, beat two flips to `Them → You`. Watching the band
+   change is what teaches "this varies per area"; a sentence saying so is what was already being skimmed.
+3. **The taps are REAL marks.** Both words are actual bank entries, picked by the same orientation the deck uses,
+   filtered to `kind: 'word'` **with** a quote (a phrase-family entry — which IS the whole line — would
+   demonstrate the opposite of the rule above it) and sorted by tier, so the first thing anyone ever sees in this
+   test is a tier-1 word. Each tap autosaves like any other, and the running tally behind the scrim visibly
+   increments — the person sees their practice count rather than being asked to warm up for nothing.
+4. **Required, not dismissible.** `Start marking` is disabled until the last beat is answered; in a browser the
+   scrim genuinely covers the rows, so the deck cannot be reached around it. That is the whole difference between
+   a practice and a notice.
+5. **Once ever, not once per sitting.** It is owed only when the person has marked _nothing at all_ — which,
+   because the taps are marks, can never become true again. A retake or a resumed take opens straight into the
+   deck. No new persistence, no new field.
+6. **Nothing unexplained on it.** An earlier mockup carried two step-dots; the owner asked what they did, which
+   is the answer — they are gone. The row also drops the heat meter and the side chip: the band above already
+   states the direction, and an unlabelled glyph is the thing being removed.
+
+Its scrim is `position: fixed`. An area is up to 47 rows, so a scrim scoped to `.deck` spans thousands of pixels
+and centres the sheet halfway down it — off screen, while every `toBeVisible` assertion passes. The E2E asserts
+`toBeInViewport` for exactly that reason (the #207 lesson).
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

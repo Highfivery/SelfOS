@@ -163,6 +163,7 @@ import {
 } from '../../../design-system/components';
 import { useAdaptiveTestStore, type BankMark } from '../../../stores/adaptiveTestStore';
 import { AdaptiveHead } from './AdaptiveHead';
+import { PracticeSheet } from './PracticeSheet';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import styles from './You.module.css';
@@ -269,6 +270,18 @@ export function AdaptiveTake(): JSX.Element {
   const [areaIndex, setAreaIndex] = useState(0);
   const areaHeadingRef = useRef<HTMLDivElement>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  /**
+   * 74 §3.6.1 — whether the two-tap practice is still owed.
+   *
+   * Resolved ONCE, when the bank phase is first reached: a take with nothing marked has not done it. Because the
+   * practice taps are real marks, the condition can never become true again — so "shown once per take" needs no
+   * new persistence, and a resumed take with marks in it goes straight to the deck.
+   */
+  const [practice, setPractice] = useState<'unknown' | 'needed' | 'done'>('unknown');
+  useEffect(() => {
+    if (practice !== 'unknown' || store.phase !== 'bank' || !bank) return;
+    setPractice(Object.keys(store.marks).length === 0 ? 'needed' : 'done');
+  }, [practice, store.phase, bank, store.marks]);
   // Adopt the saved position once the bank arrives (it is device-local, so it comes with the bank read).
   const adopted = useRef(false);
   useEffect(() => {
@@ -661,6 +674,14 @@ export function AdaptiveTake(): JSX.Element {
 
           {phase === 'bank' && area ? (
             <div className={adaptive.deck}>
+              {/* Over the rows, so the marks are physically unreachable until the practice is done. */}
+              {practice === 'needed' ? (
+                <PracticeSheet
+                  entries={bank.entries}
+                  onMark={(key, mark) => store.mark(key, mark)}
+                  onDone={() => setPractice('done')}
+                />
+              ) : null}
               {/*
                * 74 §3.6.3 — DIRECTION, as a graphic. It used to be a sentence in body copy, which is how a
                * screen of lines about her body read as ambiguous: rating "you say" as though it were "you

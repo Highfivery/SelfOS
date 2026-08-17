@@ -427,4 +427,47 @@ describe('AdaptiveTake (74 §3.2)', () => {
     // Clamped to the last real area, not a blank screen with no way forward.
     expect(await screen.findByText(/Area 2 of 2/)).toBeInTheDocument();
   });
+
+  it('keeps the crisis footer on EVERY phase, including the ones you type into', async () => {
+    // It used to be rendered inside the intro/address/bank branches only, so it vanished on probe and
+    // scenario — the free-text phases the distress detector actually reads — and on `done`, where someone
+    // lands after a heavy take. A crisis affordance must not depend on which pane is showing.
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveProbe: () =>
+        Promise.resolve({
+          ok: true,
+          done: false,
+          degraded: false,
+          question: 'Say more about that?',
+          ambiguityId: 'a1',
+        }),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    for (const phase of ['probe', 'scenario', 'done', 'split', 'lines'] as const) {
+      useAdaptiveTestStore.setState({ phase });
+      expect(
+        await screen.findByRole('button', { name: /get help now/i }),
+        `crisis footer missing on the ${phase} phase`,
+      ).toBeInTheDocument();
+    }
+  });
+
+  it('offers a way back to the top of the deck — resume must not be a one-way door', async () => {
+    const abandon = vi.fn(() => Promise.resolve());
+    const setArea = vi.fn(() => Promise.resolve());
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveAbandon: abandon as never,
+      testsAdaptiveSetArea: setArea as never,
+    });
+    renderTake();
+    await userEvent.click(await screen.findByRole('button', { name: /Start over from the top/i }));
+    // Honest about what it does and does not touch: the marks are their answers, not this take's state.
+    expect(abandon).toHaveBeenCalled();
+    await waitFor(() => expect(setArea).toHaveBeenCalledWith({ testId: 'dirty-talk', area: 0 }));
+  });
 });

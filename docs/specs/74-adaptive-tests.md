@@ -864,6 +864,35 @@ inner scroller — the deck is a single column at every width, so nothing collap
 
 ## 12. Changelog
 
+- 2026-08-16 — **Second audit — deeper sweep (§3.6.2/§8.3).** Ran against the data lifecycle, the seam and
+  every consumer rather than the take. Four findings, all fixed and guarded:
+  **(1) SAFETY — the crisis footer was missing from most of the take.** It was rendered inside the intro,
+  address and bank branches only, so it disappeared on `probe` and `scenario` — the free-text phases
+  `readsAsDistress` actually reads — and on `done`, where someone lands after a heavy take. Hoisted to one
+  always-present footer outside the phase branches.
+  **(2) The middle mark was write-only.** `It's okay` was recorded, restored in the deck, and then appeared
+  nowhere: absent from the report and from every prompt. Hundreds of taps bought the person nothing, and
+  their own profile silently omitted their own answers. It now shows on the report as "Fine either way" and
+  reaches their OWN coach as second-tier ("usable, never lead with them"). It stays OUT of the partner steer,
+  which answers "what lands", and out of the goal derivation, which §3.6.2 already settled.
+  **(3) A ledger failure reported a completed take as failed.** `recordTakeSaturation` documents itself as
+  best-effort, but was awaited unguarded after the result and the Insight were already written — so a throw
+  surfaced "that didn't go through" over a finished profile. Now caught; a retry heals it, and the write is
+  idempotent by construction.
+  **(4) Resume was a one-way door.** `abandon` existed end-to-end and was rendered nowhere, so nothing could
+  take someone back to area 1 of a 36-area deck. Surfaced as "Start over from the top", which clears the
+  take's record and its place in the deck and says plainly that the marks are kept — they are the person's
+  answers and live in the lexicon, not in the take.
+  **Checked and found sound** (recorded so the next audit doesn't re-tread): person-delete reaps the lexicon
+  with the person folder; the derived Insight is `restricted` + `lifeArea: 'Intimacy'` and inherits its id
+  across retakes, so `deleteAllAdaptiveResults` can't orphan one; the adult-book lexicon block sits behind a
+  bridge-side ack re-check; the "Delete it all" copy already states that hard nos survive; and the hard-no
+  list is deliberately UNCAPPED where every neighbouring list caps at 20 — now pinned by a tripwire, since a
+  dropped boundary is not a cheaper prompt but a limit the coach never learns.
+  **Recorded, not built:** `recordBankPass` will write marks against any `resultId` the renderer sends (the
+  dangerous direction — un-marking — is already scoped to the open draft, and the write path is confined to
+  the caller's own person folder), so this is a hardening rather than a defect.
+
 - 2026-08-16 — **Audit close-out (§3.6/§3.5/§8.4).** A full audit of the shipped feature — model, seam,
   renderer, and its integration with the surfaces the lexicon feeds — after the redesign landed. Four
   user-facing defects, each now guarded (every guard verified to fail when reverted):

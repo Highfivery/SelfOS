@@ -16251,6 +16251,9 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     await expect(w.getByText(/2 marked/)).toBeVisible();
     await markInDeck('mine — hear & say — love it');
     await expect(w.getByText(/3 marked/)).toBeVisible();
+    // The middle mark. It used to be recorded and then invisible everywhere — asserted on the report below.
+    await markInDeck("all mine — hear & say — it's okay");
+    await expect(w.getByText(/4 marked/)).toBeVisible();
 
     // The §12 guard runs against the DENSEST surface — the deck mid-mark.
     await w.setViewportSize({ width: 360, height: 900 });
@@ -16289,6 +16292,8 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     await expect(w.getByText(/didn.t come through this time/i)).toBeVisible();
     await expect(w.getByText('Being claimed')).toBeVisible();
     await expect(w.getByText(/Off the table/i)).toBeVisible();
+    // Their own answers, all of them: a mild yes is shown, plainly second-tier, never as a favourite.
+    await expect(w.getByText(/Fine either way/i)).toBeVisible();
     await w.screenshot({ path: 'e2e-artifacts/74-report.png' });
 
     // Decrypt the vault: the lexicon is encrypted, carries the boundary, and the derived Insight NEVER does.

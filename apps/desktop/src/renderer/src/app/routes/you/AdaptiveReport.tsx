@@ -124,6 +124,10 @@ export function AdaptiveReport(): JSX.Element {
       (e.sides === undefined || (e.sides.includes('hear') && e.sides.includes('say'))),
   );
   const never = lexicon.entries.filter((e) => e.state === 'never');
+  // The middle mark. It used to appear nowhere: recorded, restored in the deck, then absent from the report
+  // AND from every prompt — so hundreds of taps bought the person nothing, and their own profile silently
+  // omitted their own answers. Shown last, plainly second-tier, so it can't be read as a favourite.
+  const okay = lexicon.entries.filter((e) => e.state === 'okay');
 
   return (
     <div className={styles.page}>
@@ -255,6 +259,14 @@ export function AdaptiveReport(): JSX.Element {
                       Practise this
                     </Button>
                   </div>
+                </div>
+              ) : null}
+              {okay.length > 0 ? (
+                <div>
+                  <Text size="sm" tone="secondary">
+                    Fine either way — usable, not favourites
+                  </Text>
+                  <Chips entries={okay} />
                 </div>
               ) : null}
               {never.length > 0 ? (

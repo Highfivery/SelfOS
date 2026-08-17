@@ -452,6 +452,20 @@ export function lovedEntries(
 }
 
 /**
+ * What they marked **"It's okay"** — a mild yes (74 §3.6.2).
+ *
+ * Not a favourite and never a goal, but it is not nothing either, and it is not the same as unrated: it is
+ * the explicit answer "fine, use it". Without this the middle mark was write-only — recorded, restored in the
+ * deck, and then invisible on the report and absent from every prompt, so the hundreds of taps a person spends
+ * on it bought them nothing (and their own profile silently omitted their own answers).
+ *
+ * Boundaries are excluded by the `state` check, and a `never` can never hold this state anyway.
+ */
+export function okayEntries(lexicon: EroticLexicon): LexiconEntry[] {
+  return lexicon.entries.filter((entry) => entry.state === 'okay');
+}
+
+/**
  * The GOAL list, derived rather than asked: things they clearly want to HEAR but rate low to SAY. That gap is
  * the coachable material the practice session runs on (74 §3.3).
  *

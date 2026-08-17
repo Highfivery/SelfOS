@@ -690,6 +690,27 @@ clientHeight <= 2`** AND exactly one overflowing element, on the FULL bank at th
   value get READ?" rather than "does the screen work?" (3) A per-branch crisis footer is a latent regression
   in any surface that later gets restructured — render it once, outside.**
 
+- 2026-08-17 — **Fix (the rail actually follows you now, and becomes a bar on a phone; owner-reported; SPEC 74
+  §3.6.4; on `fix/adaptive-sticky-rail`).** The owner, on a screenshot of the rail stranded at the top of a 47-row
+  area: _"add a button at the bottom to move on to the next area/done for now or even better have the right content
+  sticky so it scrolls with them down the page."_ The rail **was** declared `position: sticky` — and had never once
+  stuck, because `.deck` carried **`overflow: hidden`**, which makes the deck itself the sticky frame of reference,
+  and the deck never scrolls. One word (`clip`, which clips to the radius without establishing a scroll container)
+  and the rail follows. **The phone case needed a different answer, not a smaller one:** below 900px the columns
+  stack, and `sticky` cannot help there at all — a sticky element only pins while its OWN grid area is on screen,
+  and a stacked rail's area is a short strip after the rows, so my first attempt floated it mid-list and overflowed
+  360px. It is now a **bar fixed to the window** carrying the tally as dots + counts, the primary action, a back
+  arrow and a short `Done`, with `.rows` reserving its height so neither the last row nor the crisis footer can hide
+  behind it. **A third thing fell out of it:** the rail had been holding reading material as well as actions (the
+  "every tap saves itself · How marking works" line and its disclosure), which is what made a one-line bar
+  impossible — they moved to the deck HEAD, where a disclosure belongs next to its trigger, and the rail is now
+  exactly a tally and a set of actions. Gate green: typecheck (4 pkgs), lint, format, **2325 core + 13 relay + 1647
+  desktop** unit, both 74 E2E. **The guard is verified to FAIL when reverted** — scroll the container to the end of
+  an area and assert `toBeInViewport` on "Next area"; with `overflow: hidden` restored it fails. **Lesson: a sticky
+  element is positioned against its nearest SCROLLING ancestor, so any `overflow: hidden` between it and the real
+  scroller silently disables it — and `sticky` is the wrong tool entirely for a bar that must pin across a scroll
+  region taller than its own grid area; that is `fixed`, plus reserved space so it hides nothing.**
+
 - 2026-08-17 — **Build (the practice sheet: two taps before the deck opens; owner-requested, mockup approved FIRST;
   SPEC 74 §3.6.7; on `feat/adaptive-practice-sheet`).** The §3.6.3 direction band and §3.6.4 row hierarchy had both
   landed and the owner still said the word-vs-phrase rule "gets a bit lost" — after three copy attempts, the third

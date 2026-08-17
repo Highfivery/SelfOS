@@ -379,7 +379,13 @@
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  /*
+   * `clip`, NOT `hidden` — and that one word is why the rail actually sticks. `overflow: hidden` makes this
+   * box a scroll container, which becomes the sticky rail's frame of reference; since the deck never scrolls
+   * itself, the rail resolved against a frame that never moves and sat there like a static column while 47
+   * rows went past it. `clip` keeps the corner clipping without establishing a scroll container.
+   */
+  overflow: clip;
 }
 
 /* The direction band. Its COLOUR carries the direction, so it reads before anything is read. */
@@ -670,6 +676,21 @@
 }
 
 /* The rail: the tally + the actions, always in reach. */
+/* Standing information about the pass, with its disclosure right under its trigger. It used to live in the
+ * rail, which made the rail two different things at once — and made a one-line action bar impossible. */
+.deckNote {
+  display: block;
+  margin-top: var(--space-3);
+}
+
+.deckHelp {
+  display: block;
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-md);
+}
+
 .rail {
   position: sticky;
   top: var(--space-4);
@@ -741,15 +762,108 @@
   justify-content: center;
 }
 
-/* Below the rail's own width the two columns stack; the actions stop being sticky so they sit after
- * the rows rather than floating over them. */
+/*
+ * Below the rail's own width the two columns stack — and a stacked rail after 47 rows means scrolling the whole
+ * area to reach "Next". `position: sticky` cannot fix that: a sticky element only pins while its OWN grid area
+ * is on screen, and the stacked rail's area is a short strip after the rows, so it floated mid-list instead. So
+ * at narrow widths the rail leaves the flow entirely and becomes a bar fixed to the window, carrying the tally
+ * and the actions; `.rows` reserves its height so neither the last row nor the crisis footer can hide behind it.
+ */
 @media (max-width: 900px) {
   .deckBody {
     grid-template-columns: 1fr;
   }
 
+  .rows {
+    padding-bottom: 64px;
+  }
+
   .rail {
-    position: static;
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+    background: var(--color-surface-alt);
+    border-top: 1px solid var(--color-border);
+    box-shadow: var(--shadow-overlay);
+  }
+
+  .rail .railCard {
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .railHead {
+    display: none;
+  }
+
+  .tally {
+    flex-direction: row;
+    gap: var(--space-2);
+  }
+
+  /* Dot + count only. Each row keeps its label as screen-reader text, so the colour is never the only cue. */
+  .tallyRow {
+    gap: 3px;
+    font-size: 0.8125rem;
+  }
+
+  .tallyRow > .tallyLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .tallyRow > b {
+    margin-left: 0;
+  }
+
+  .railActions {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-2);
+    margin-left: auto;
+    min-width: 0;
+  }
+
+  .railActions > button {
+    width: auto;
+    white-space: nowrap;
+  }
+}
+
+/* 360px has room for the tally, the primary action and a way back — but not for the word "Previous", and not
+ * for a second full-width button. The back control keeps its arrow and hides its label. */
+@media (max-width: 480px) {
+  .railActions > .railBack {
+    padding-left: var(--space-2);
+    padding-right: var(--space-2);
+  }
+
+  .railActions > .railBack > span,
+  .railActions > .railDone > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 

@@ -672,16 +672,21 @@ export function AdaptiveTake(): JSX.Element {
             </Stack>
           ) : null}
 
+          {/*
+           * The practice sits OUTSIDE the deck: `.deck` clips to its own radius, and a fixed-position scrim
+           * nested inside a clipped box is a bug waiting to happen. It still covers the rows — its scrim is
+           * the viewport.
+           */}
+          {phase === 'bank' && area && practice === 'needed' ? (
+            <PracticeSheet
+              entries={bank.entries}
+              onMark={(key, mark) => store.mark(key, mark)}
+              onDone={() => setPractice('done')}
+            />
+          ) : null}
+
           {phase === 'bank' && area ? (
             <div className={adaptive.deck}>
-              {/* Over the rows, so the marks are physically unreachable until the practice is done. */}
-              {practice === 'needed' ? (
-                <PracticeSheet
-                  entries={bank.entries}
-                  onMark={(key, mark) => store.mark(key, mark)}
-                  onDone={() => setPractice('done')}
-                />
-              ) : null}
               {/*
                * 74 §3.6.3 — DIRECTION, as a graphic. It used to be a sentence in body copy, which is how a
                * screen of lines about her body read as ambiguous: rating "you say" as though it were "you
@@ -758,6 +763,28 @@ export function AdaptiveTake(): JSX.Element {
                 {area.note ? (
                   <Text tone="secondary" className={adaptive.areaNote}>
                     {area.note}
+                  </Text>
+                ) : null}
+                <Text size="sm" tone="tertiary" className={adaptive.deckNote}>
+                  Every tap saves itself. Stop anywhere.{' '}
+                  <button
+                    type="button"
+                    className={adaptive.textLink}
+                    onClick={() => setHelpOpen((open) => !open)}
+                    aria-expanded={helpOpen}
+                  >
+                    How marking works
+                  </button>
+                </Text>
+                {/* Four stacked paragraphs used to sit above every area. They are one link now. */}
+                {helpOpen ? (
+                  <Text size="sm" tone="secondary" className={adaptive.deckHelp}>
+                    Only tap what actually does something for you — skip the rest.{' '}
+                    <Flame size={13} aria-hidden="true" /> if you love it,{' '}
+                    <Contrast size={13} aria-hidden="true" /> if it&rsquo;s okay,{' '}
+                    <Ban size={13} aria-hidden="true" /> if it&rsquo;s a no. A <em>never</em> is a
+                    boundary: nothing in SelfOS will suggest it again. Moving on skips whatever you
+                    left alone, and everything saves as you go.
                   </Text>
                 ) : null}
               </div>
@@ -952,7 +979,7 @@ export function AdaptiveTake(): JSX.Element {
                             className={`${adaptive.dot} ${adaptive[option]}`}
                             aria-hidden="true"
                           />
-                          {MARK_META[option].label}
+                          <span className={adaptive.tallyLabel}>{MARK_META[option].label}</span>
                           <b>{Object.values(store.marks).filter((m) => m === option).length}</b>
                         </div>
                       ))}
@@ -976,47 +1003,28 @@ export function AdaptiveTake(): JSX.Element {
                       {areaIndex > 0 ? (
                         <Button
                           variant="secondary"
+                          className={adaptive.railBack}
                           disabled={store.busy}
                           onClick={() => goToArea(areaIndex - 1)}
                         >
-                          ← Previous
+                          {/* The label is hidden (not dropped) in the narrow action bar — see `.railBack`. */}
+                          ←<span> Previous</span>
                         </Button>
                       ) : null}
                       {/* A partial pass is designed to be worth something, so finishing must never require
                           clicking through all 36 areas. */}
                       <Button
                         variant="ghost"
+                        className={adaptive.railDone}
                         disabled={store.busy}
                         onClick={() => void store.submitBank(testId)}
                       >
-                        Done for now — show me
+                        {/* The tail is hidden, not dropped, in the narrow action bar — see `.railDone`. */}
+                        Done
+                        <span>for now — show me</span>
                       </Button>
                     </div>
                   </Card>
-                  <Text size="sm" tone="tertiary">
-                    Every tap saves itself. Stop anywhere.{' '}
-                    <button
-                      type="button"
-                      className={adaptive.textLink}
-                      onClick={() => setHelpOpen((open) => !open)}
-                      aria-expanded={helpOpen}
-                    >
-                      How marking works
-                    </button>
-                  </Text>
-                  {/* Four stacked paragraphs used to sit above every area. They are one link now. */}
-                  {helpOpen ? (
-                    <Card className={adaptive.railCard}>
-                      <Text size="sm" tone="secondary">
-                        Only tap what actually does something for you — skip the rest.{' '}
-                        <Flame size={13} aria-hidden="true" /> if you love it,{' '}
-                        <Contrast size={13} aria-hidden="true" /> if it&rsquo;s okay,{' '}
-                        <Ban size={13} aria-hidden="true" /> if it&rsquo;s a no. A <em>never</em> is
-                        a boundary: nothing in SelfOS will suggest it again. Moving on skips
-                        whatever you left alone, and everything saves as you go.
-                      </Text>
-                    </Card>
-                  ) : null}
                 </aside>
               </div>
             </div>

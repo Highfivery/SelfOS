@@ -16376,6 +16376,38 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     // Two buttons that did the same thing are one button now.
     await expect(w.getByRole('button', { name: 'Skip this area' })).toHaveCount(0);
 
+    // The rail must FOLLOW: an area is up to 47 rows, so if "Next area" only exists at the top, finishing an
+    // area means scrolling back through everything already decided. Scroll the shell's container to the end
+    // and the actions are still on screen. (It was declared sticky and wasn't: `.deck` had `overflow: hidden`,
+    // which makes the deck itself the sticky frame of reference, and the deck never scrolls.)
+    const nextArea = w.getByRole('button', { name: /Next area/ });
+    await expect(nextArea).toBeInViewport();
+    await w.evaluate(() => {
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        if (
+          el.scrollHeight - el.clientHeight > 2 &&
+          /auto|scroll/.test(getComputedStyle(el).overflowY)
+        ) {
+          el.scrollTop = el.scrollHeight;
+        }
+      }
+    });
+    await expect(nextArea).toBeInViewport();
+    await w.screenshot({ path: 'e2e-artifacts/74-rail-sticky.png' });
+    // …and at phone width, where the rail becomes a bar stuck to the bottom instead of a column.
+    await w.setViewportSize({ width: 360, height: 900 });
+    await expect(nextArea).toBeInViewport();
+    // The sidebar animates out of the way when a desktop window is resized this far; let it land before the
+    // screenshot, or the artifact is a picture of the drawer mid-slide rather than of the deck.
+    await w.waitForTimeout(400);
+    await w.screenshot({ path: 'e2e-artifacts/74-rail-360.png' });
+    await w.setViewportSize({ width: 1280, height: 900 });
+    await w.evaluate(() => {
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        if (el.scrollTop > 0) el.scrollTop = 0;
+      }
+    });
+
     // The §12 guard runs against the DENSEST surface — the deck mid-mark.
     await w.setViewportSize({ width: 360, height: 900 });
     await expectNoInnerOverflow(w);

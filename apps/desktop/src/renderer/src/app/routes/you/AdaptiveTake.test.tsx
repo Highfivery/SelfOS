@@ -106,9 +106,9 @@ describe('AdaptiveTake (74 §3.2)', () => {
     });
     renderTake();
     expect(
-      await screen.findByText(/it can quietly shape what their coach suggests to them/i),
+      await screen.findByText(/shape what a partner’s coach suggests to them/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/never tells them what you said/i)).toBeInTheDocument();
+    expect(screen.getByText(/never telling them what you said/i)).toBeInTheDocument();
   });
 
   it('is withheld entirely before the 18+ ack — the bridge returns nothing', async () => {
@@ -374,7 +374,10 @@ describe('AdaptiveTake (74 §3.2)', () => {
     });
     renderTake();
     await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
-    expect(await screen.findByText(/such a good girl for me/)).toBeInTheDocument();
+    // The quote wraps the marked word in a <b>, so it is no longer one text node — which is the point.
+    expect(await screen.findByText(/such a/)).toBeInTheDocument();
+    expect(screen.getByText('good girl', { selector: 'b' })).toBeInTheDocument();
+    expect(screen.getByText(/for me/)).toBeInTheDocument();
   });
 
   it('moves on rather than dead-ending when an AI phase degrades (74 §7)', async () => {

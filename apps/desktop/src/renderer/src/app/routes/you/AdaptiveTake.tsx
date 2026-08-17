@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowRight, Ban, Contrast, Flame, Lock } from 'lucide-react';
+import { ArrowRight, Ban, Clock, Contrast, Flame, ListChecks, Lock } from 'lucide-react';
 
 /**
  * 74 §3.6.1 #5 — the three marks, as lucide icons. `Ban` (a circle-slash) rather than a bare X because a
@@ -69,6 +69,33 @@ function addressSummary(
     return 'everything';
   }
   return `you as ${word(address.self)}, them as ${word(address.partner)}`;
+}
+
+/**
+ * 74 §3.6.1 — WHAT you are rating, made visible.
+ *
+ * The bank is mixed, and the two kinds look identical unless the row says so:
+ *
+ * - **A word** (587 of ~1,033 entries carry no quote of their own — but 256 do): the mark goes on the WORD,
+ *   and the quote is one illustration of it. "pussy" is loved in "I want to fuck your pussy" and hated in
+ *   "I want to beat that pussy", so a row that presents the quote as the thing being rated invites the wrong
+ *   answer. The word is bolded inside its quote and named as the thing being marked.
+ * - **A whole line**: the entry IS the utterance, there is no separate quote, and the mark goes on the line.
+ *
+ * Splitting on the word is case-insensitive and returns null when the quote doesn't actually contain it — a
+ * few examples paraphrase — so nothing is ever bolded that isn't there.
+ */
+function boldTermInQuote(
+  quote: string,
+  term: string,
+): { before: string; hit: string; after: string } | null {
+  const at = quote.toLowerCase().indexOf(term.toLowerCase());
+  if (at < 0) return null;
+  return {
+    before: quote.slice(0, at),
+    hit: quote.slice(at, at + term.length),
+    after: quote.slice(at + term.length),
+  };
 }
 
 /** The pair, in two words, for the band's change affordance. Falls back to "them" whenever unknown. */
@@ -386,55 +413,76 @@ export function AdaptiveTake(): JSX.Element {
               fix. The phase is left where it was, so the button that failed is right there to try again. */}
           {store.error ? <Banner tone="warning">{store.error}</Banner> : null}
 
+          {/*
+           * The invitation. It used to be a stack of left-aligned paragraphs and two info banners floating on
+           * an otherwise empty canvas, with the estimate on its own line and the buttons hanging off the
+           * right — no hierarchy, no shape, nothing that reads as an invitation to something intimate.
+           * Now: a bounded card with the promise as three plain facts, the privacy line where it belongs
+           * (attached to the promise, not shouted in a banner), and one clear action.
+           */}
           {phase === 'intro' ? (
-            <Stack gap={4}>
-              <div>
-                <span className={styles.eyebrow}>SelfOS</span>
+            <div className={adaptive.introWrap}>
+              <div className={adaptive.introHead}>
+                <span className={styles.eyebrow}>SelfOS · Dirty talk</span>
                 <Heading level={1}>{store.state.title}</Heading>
+                <Text tone="secondary" className={adaptive.introBlurb}>
+                  {store.state.blurb}
+                </Text>
               </div>
-              <Text tone="secondary">{store.state.blurb}</Text>
+
+              <Card className={adaptive.introCard}>
+                <ul className={adaptive.introFacts}>
+                  <li>
+                    <ListChecks size={17} aria-hidden="true" />
+                    <span>
+                      <b>You mark words, not answers.</b> Tap what lands, skip the rest — most of it
+                      won&rsquo;t be yours, and that&rsquo;s the point.
+                    </span>
+                  </li>
+                  <li>
+                    <Clock size={17} aria-hidden="true" />
+                    <span>
+                      <b>About {store.state.estimatedMinutes} minutes,</b> and it saves every tap.
+                      Stop anywhere and come back — it picks up where you were.
+                    </span>
+                  </li>
+                  <li>
+                    <Lock size={17} aria-hidden="true" />
+                    <span>
+                      <b>Nobody reads this.</b> It shapes how SelfOS talks to you, and it can
+                      quietly shape what a partner&rsquo;s coach suggests to them — never telling
+                      them what you said.
+                    </span>
+                  </li>
+                </ul>
+
+                {store.state.draft ? (
+                  <div className={adaptive.introResume}>
+                    <Text size="sm" tone="secondary">
+                      You have a take in progress. Picking up keeps everything you already marked;
+                      starting over just puts you back at the first area.
+                    </Text>
+                  </div>
+                ) : null}
+
+                <div className={adaptive.introActions}>
+                  <Button variant="primary" onClick={() => void store.start(testId)}>
+                    {store.state.draft ? 'Pick up where you left off' : 'Begin'}
+                  </Button>
+                  {/* The one route back to the top of a long deck — it clears this take's record and its
+                      place in the deck, never the marks, which are their answers. */}
+                  {store.state.draft ? (
+                    <Button variant="ghost" onClick={() => void store.abandon(testId)}>
+                      Start over from the top
+                    </Button>
+                  ) : null}
+                </div>
+              </Card>
+
               <Text size="sm" tone="tertiary" className={styles.framing}>
                 {store.state.framing}
               </Text>
-              <Banner tone="info">
-                This stays yours. It shapes how SelfOS talks to you — and, if you have a partner
-                here, it can quietly shape what their coach suggests to them. It never tells them
-                what you said.
-              </Banner>
-              <Text size="sm" tone="secondary">
-                About {store.state.estimatedMinutes} min · adapts as you go · uses a little of your
-                AI allowance
-              </Text>
-              {store.state.draft ? (
-                <Banner tone="info">
-                  You have a take in progress — this picks it up exactly where you stopped, with
-                  everything you already marked.
-                </Banner>
-              ) : (
-                <Text size="sm" tone="tertiary">
-                  It saves as you go, so you can stop anywhere and come back.
-                </Text>
-              )}
-              <div className={take.footer}>
-                <Button variant="primary" onClick={() => void store.start(testId)}>
-                  {store.state.draft ? 'Pick up where you left off' : 'Begin'}
-                </Button>
-                {/* The one route back to the top of a long deck. It clears THIS take's record and its place
-                    in the deck — never the marks, which are their answers and live in the lexicon. Without
-                    it, "resume where you stopped" was a one-way door: nothing could take you back to area 1. */}
-                {store.state.draft ? (
-                  <Button variant="ghost" onClick={() => void store.abandon(testId)}>
-                    Start over from the top
-                  </Button>
-                ) : null}
-              </div>
-              {store.state.draft ? (
-                <Text size="sm" tone="tertiary">
-                  Starting over keeps everything you marked — it just puts you back at the first
-                  area.
-                </Text>
-              ) : null}
-            </Stack>
+            </div>
           ) : null}
 
           {phase === 'address' ? (
@@ -627,7 +675,15 @@ export function AdaptiveTake(): JSX.Element {
                     </>
                   )}
                 </span>
-                <span className={adaptive.bandText}>{directionSentence(areaSides)}</span>
+                <span className={adaptive.bandText}>
+                  {directionSentence(areaSides)}
+                  {/* WHAT is being marked, said once. A word is loved in one line and hated in another
+                      ("fuck your pussy" vs "beat that pussy"), so the mark has to be unmistakably on the
+                      bolded word, with the quote as context. */}
+                  <span className={adaptive.bandSub}>
+                    You&rsquo;re marking the <b>bold word</b> — the quote just shows it in use.
+                  </span>
+                </span>
                 <span className={adaptive.bandSpacer} />
                 {/* SHORT, or it wraps the band's own sentence onto three lines. The full answer is the
                     tooltip and the screen it opens. */}
@@ -710,7 +766,17 @@ export function AdaptiveTake(): JSX.Element {
                         >
                           <div className={adaptive.line}>
                             <div className={adaptive.term}>
-                              {entry.text}
+                              {/* A whole-line entry has no separate word to name — saying "you belong to
+                                  me" twice (label + line) read as a rendering bug, which it was. */}
+                              {/* The word is the label; the band says once that the word is what's marked.
+                                  A chip on all 47 rows was the repeated-chrome mistake again — so only the
+                                  EXCEPTION is chipped: an entry that has no separate word, where the mark
+                                  goes on the whole line. */}
+                              {entry.example ? (
+                                <span className={adaptive.termWord}>{entry.text}</span>
+                              ) : (
+                                <span className={adaptive.termWhat}>the whole line</span>
+                              )}
                               {/* Intensity as a 3-bar meter with a text equivalent (§9) — it was a bare
                                   5px dot with no legend and nothing a screen reader could read. */}
                               <span
@@ -734,9 +800,22 @@ export function AdaptiveTake(): JSX.Element {
                                 <span className={adaptive.sideChip}>{sideLabel(entry.sides)}</span>
                               ) : null}
                             </div>
-                            {/* The line you react to is the hero of the row; the term is its label. */}
+                            {/* The line you react to is the hero of the row — with the word you're actually
+                                marking bolded inside it, so the quote reads as context, not as the thing
+                                being rated. */}
                             <div className={adaptive.said}>
-                              {entry.example ? `“${entry.example}”` : entry.text}
+                              {(() => {
+                                if (!entry.example) return entry.text;
+                                const split = boldTermInQuote(entry.example, entry.text);
+                                if (!split) return `“${entry.example}”`;
+                                return (
+                                  <>
+                                    “{split.before}
+                                    <b className={adaptive.saidWord}>{split.hit}</b>
+                                    {split.after}”
+                                  </>
+                                );
+                              })()}
                             </div>
                           </div>
                           {locked ? (

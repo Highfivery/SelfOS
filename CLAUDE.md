@@ -486,6 +486,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-17 — **Fix (the intro/empty screens redesigned, one scrollbar, and the deck says you're marking the
+  WORD; owner-reported; SPEC 74 §3.6.1/§3.6.4; on `fix/adaptive-intro-and-word-clarity`).** Three things, all
+  reported from screenshots. **(1) TWO SCROLLBARS on every Tests screen** — `You.module.css` had `.page
+{ height: 100%; overflow-y: auto }` nested inside the shell's `.contentInner`, which already scrolls and
+  carries 48px of padding, so the page scrolled its own content AND pushed the parent past its height. **No
+  other route does this** (every other one uses `overflow-y` only on bounded inner lists), so it was the odd
+  one out, not a convention — removed, with an E2E guard asserting **at most one** vertical scroller. **(2) The
+  intro and the report's empty state had never been designed** — I redesigned the deck and left these as a
+  stack of left-aligned paragraphs and two info banners on an empty canvas, with the estimate on its own line
+  and the buttons hanging off the right edge. Now a bounded card carrying the promise as three iconed facts
+  (you mark words / ~15 min and it saves every tap / nobody reads this), the privacy line attached to the
+  promise rather than shouted in a banner, and one action. **(3) The rating is on the WORD and nothing said
+  so** — the owner: _"they could like I want to fuck your pussy but not like I want to beat that pussy"_,
+  which is exactly right. **Measured the bank rather than assuming:** 6 word families vs 30 phrase families,
+  and 256 of ~1,033 entries carry a quote while 587 ARE the line — so the bank is MIXED, and my redesign
+  rendered both kinds identically with the quote as the visual hero of what is actually a word rating (and
+  duplicated a whole-line entry into both the label and the hero slot). Now the marked word is **bolded inside
+  its quote**, the band says once that the bold word is what's marked, and only the exception — an entry with
+  no separate word — is chipped ("the whole line"). **Lessons: (1) a route that makes its own `.page` a
+  scroller inside the shell's scroll container produces two bars — check the app's convention before adding
+  `overflow` anywhere, and guard the count. (2) When a bank mixes fragments and whole utterances, the ROW has
+  to say which one it is; rendering them identically turns "what am I even rating?" into a fair question and
+  invites the wrong answer, because a word is loved in one line and hated in another. (3) I redesigned the
+  screen I was looking at and left its neighbours untouched — a redesign's scope is the FLOW, not the screen.**
+
 - 2026-08-17 — **Feedback + Build (the deck redesigned for real; mockup approved FIRST; SPEC 74 §3.6.4; on
   `feat/adaptive-deck-redesign`).** The owner, after four rounds of asking for UI/UX work: _"WHEN I SAY IMPROVE
   SOMETHING FROM THE UI/UX, THAT MEANS DESIGN, NOT A LINE OF TEXT"_ — and they were right. Every one of my

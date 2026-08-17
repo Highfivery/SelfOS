@@ -864,6 +864,34 @@ inner scroller — the deck is a single column at every width, so nothing collap
 
 ## 12. Changelog
 
+- 2026-08-16 — **Audit close-out (§3.6/§3.5/§8.4).** A full audit of the shipped feature — model, seam,
+  renderer, and its integration with the surfaces the lexicon feeds — after the redesign landed. Four
+  user-facing defects, each now guarded (every guard verified to fail when reverted):
+  **(1)** the Tests hub badged an adaptive intimacy profile **"private — only you"** one screen before the
+  take and the report both say the loved terms quietly steer a partner's coach — the app contradicting
+  itself about who sees what. It now reads "yours", which is true; a spec-50 sensitive result really is
+  own-context-only and keeps the stronger wording.
+  **(2)** the report's **"Practise this"** handed the goal over in `seedText`, but the same navigation opens
+  a guided thread, so the launcher that read it never rendered and the goal was silently dropped — the
+  practice session opened by asking what the report had just told us. The seed now reaches the thread
+  composer.
+  **(3)** an area whose every entry is withheld (common on a same-sex configuration) rendered the marking
+  instructions and an empty card over "0 here"; it now says what happened and keeps the route back.
+  **(4)** a resumed area index was not clamped to the current bank, so retiring a family would strand the
+  deck on a blank screen.
+  **(5)** every store action is now wrapped in a failure guard: a rejected bridge call used to leave `busy`
+  set with nothing on screen and no route out but quitting the app — which, on a take that autosaves, reads
+  as losing everything you just marked. It stops, says so, and leaves the phase where it was.
+  **Suppression was also completed across every generation path** — the challenge coach, the intimacy
+  email, questionnaire generation, and the biographer chat all took an explicit register while being denied
+  the hard-no list; the session gate is now unconditional, since suppression only ever PREVENTS a
+  suggestion and a topic classifier that fails open is the wrong thing to hang a boundary on.
+  **Recorded, not built:** the hear/say split still renders as one long list for an `either/either`
+  configuration (it autosaves and is skippable, so it works — chunking it by area would mirror the deck);
+  the report shows the profile but not the orientation it was built under (the take's "Before we start" is
+  the one place that changes it); and there is no per-entry way to move a `love` down to `okay` outside a
+  retake — a `never` can already be lifted from the report.
+
 - 2026-08-16 — **AMENDED (§3.6): the bank pass, redesigned.** Owner-requested after seeing the built pass, and
   approved as a mockup before any code. Measured first (1,033 entries · 36 families · median 26), which named
   four separate causes where "overwhelming" had read as one: volume, missing context, uniformity, and — the

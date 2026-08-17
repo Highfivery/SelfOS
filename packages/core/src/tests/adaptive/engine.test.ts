@@ -203,3 +203,45 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
     expect(out.value).toEqual(['good girl']);
   });
 });
+
+describe('74 §3.6.6 — an unasked side is never read as a refusal', () => {
+  it('does NOT raise the "frozen" probe for a HEAR-ONLY entry', () => {
+    // The probe says "they rated it 0 to say" out loud. For an oriented entry the say side was never
+    // offered, so that statement is false — and the person's answer to it feeds synthesis.
+    const lex = {
+      ...emptyLexicon('p1', NOW),
+      entries: [
+        {
+          key: 'names-power:good-girl',
+          text: 'good girl',
+          kind: 'word' as const,
+          family: 'names-power',
+          tier: 2,
+          hear: 3,
+          say: 0,
+          sides: ['hear' as const],
+        },
+      ],
+    };
+    expect(openAmbiguities(lex).map((a) => a.id)).not.toContain('frozen');
+  });
+
+  it('still raises it when both sides WERE asked', () => {
+    const lex = {
+      ...emptyLexicon('p1', NOW),
+      entries: [
+        {
+          key: 'names-power:good-girl',
+          text: 'good girl',
+          kind: 'word' as const,
+          family: 'names-power',
+          tier: 2,
+          hear: 3,
+          say: 0,
+          sides: ['hear' as const, 'say' as const],
+        },
+      ],
+    };
+    expect(openAmbiguities(lex).map((a) => a.id)).toContain('frozen');
+  });
+});

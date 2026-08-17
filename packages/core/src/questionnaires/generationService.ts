@@ -36,6 +36,7 @@ import { gatherGenerationContext, type GenerationContextRequest } from './contex
 import { isNearDuplicate } from './dedup';
 import { readProfile, writeProfile } from './personalizationProfile';
 import { planQuestions, steeringLifeAreas } from './planService';
+import { readLexicon, suppressedTexts } from '../tests/adaptive/lexicon';
 import { hasDanglingReference, hasRecitation } from './selfContained';
 import { semanticDedupFilter } from './semanticDedup';
 import {
@@ -404,6 +405,11 @@ export async function generateQuestions(
     ...request.context,
     questionnaireType: request.type,
   });
+  // The RECIPIENT's hard nos — they are the one who will read the questions. Falls back to the author for a
+  // self-send, and to nothing at all for an external recipient (no vault, nothing known).
+  const suppressed = request.recipientPersonId
+    ? suppressedTexts(await readLexicon(deps.fs, deps.key, request.recipientPersonId))
+    : [];
   // An explicit-tier intimacy draft draws its subject matter from the recipient's own open ground (§5.3).
   const user = buildGenerationUserMessage({
     type: request.type,
@@ -427,6 +433,10 @@ export async function generateQuestions(
     // `statuses` is already scoped to this type/tier's life areas, so an intimacy set contributes exactly the
     // Intimacy topics. Empty for an external recipient — nothing known, nothing to bound.
     ...(closedTopicIds.length > 0 ? { closedTopicIds } : {}),
+    // The recipient's hard nos (74 §8.4). Unconditional: it only ever PREVENTS a question, so it goes on
+    // every explicit draft whether or not anything is shared. Without it an intimacy questionnaire can ask
+    // about the one word they ruled out — and nobody reviews a generated question before it is sent.
+    ...(suppressed.length > 0 ? { suppressedTexts: suppressed } : {}),
     ...(request.recipient !== undefined ? { recipient: request.recipient } : {}),
     ...(request.feedbackGuidance !== undefined
       ? { feedbackGuidance: request.feedbackGuidance }

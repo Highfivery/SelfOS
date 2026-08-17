@@ -722,6 +722,7 @@ export const IpcChannels = {
   testsAdaptiveStart: 'tests:adaptiveStart',
   testsAdaptiveBank: 'tests:adaptiveBank',
   testsAdaptiveSplit: 'tests:adaptiveSplit',
+  testsAdaptiveSetArea: 'tests:adaptiveSetArea',
   testsAdaptiveLines: 'tests:adaptiveLines',
   testsAdaptiveProbe: 'tests:adaptiveProbe',
   testsAdaptiveScenario: 'tests:adaptiveScenario',
@@ -2412,6 +2413,8 @@ export interface SelfosBridge {
     cleared?: string[];
     autosave?: boolean;
   }): Promise<AdaptiveStateView | null>;
+  /** Remember where they are in the deck, so resuming is honest (74 §3.6.4). Device-local, free. */
+  testsAdaptiveSetArea(input: { testId: string; area: number }): Promise<void>;
   /** Pass 2 — the hear/say split on what pass 1 marked. Free; autosaved the same way. */
   testsAdaptiveSplit(input: {
     testId: string;

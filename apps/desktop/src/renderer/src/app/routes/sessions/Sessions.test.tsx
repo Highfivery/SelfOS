@@ -670,4 +670,57 @@ describe('Sessions', () => {
     expect(await screen.findByLabelText('Message')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Wrap up & reflect' })).not.toBeInTheDocument();
   });
+
+  it('seeds the composer from "Practise this" — the goal must not vanish on the way (74 §3.5)', async () => {
+    // Both halves of that navigation arrive together: `startGuideId` opens the guided thread, so the
+    // launcher (where `seedText` used to be read) never renders. The seed belongs on the thread composer,
+    // or the practice session opens by asking what the report just told us.
+    installMockBridge({
+      secretHas: () => Promise.resolve(true),
+      aiKeyStatus: () =>
+        Promise.resolve({
+          hasSharedKey: false,
+          hasDeviceOverride: true,
+          resolvedReady: true,
+          source: 'device' as const,
+        }),
+      sessionsStartGuided: () => Promise.resolve({ conversationId: 'c-practice' }),
+      conversationsList: () =>
+        Promise.resolve([
+          { id: 'c-practice', title: 'Practice', updatedAt: 'now', status: 'inProgress' as const },
+        ]),
+      conversationsGet: () =>
+        Promise.resolve({
+          id: 'c-practice',
+          schemaVersion: 1,
+          personId: 'p1',
+          title: 'Practice',
+          createdAt: 'now',
+          updatedAt: 'now',
+          status: 'inProgress',
+          messages: [{ role: 'assistant', content: 'Ready when you are.', ts: 'now' }],
+        }),
+    });
+    setAiEnabled(true);
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/sessions',
+            state: {
+              startGuideId: 'dirty-talk-practice',
+              seedText: 'I want to be able to say: good girl.',
+            },
+          },
+        ]}
+      >
+        <Sessions />
+      </MemoryRouter>,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue(
+        'I want to be able to say: good girl.',
+      ),
+    );
+  });
 });

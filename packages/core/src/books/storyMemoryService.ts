@@ -36,6 +36,7 @@ import { checkBudget, costOf, recordUsage } from '../usage';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { BIOGRAPHY_BOOK_TYPE, MCADAMS_SCENES, getBookType } from './bookTypes';
 import { resolvePersonOptionNames } from './castRegister';
+import { subjectLexiconBlock } from './storyGenerationService';
 import { buildBiographerSystem } from './storyPromptBuilder';
 import { gatherBiographerReference } from './storyReference';
 import { getInterviewState, listBooks, listChapters, saveInterviewState } from './storyService';
@@ -323,6 +324,10 @@ async function buildMemorySystem(
     name,
     undefined,
     await resolvePersonOptionNames(fs, key, bookType, config.typeOptions),
+    // The biographer CHAT is a live conversational surface inside an adult-gated book, so it carries the
+    // same vocabulary + hard-no block the chapter passes do (74 §8.4). It was the one prose surface here
+    // generating in that register with no boundary list at all.
+    await subjectLexiconBlock(fs, key, bookType, personId),
   );
   const guidance = MEMORY_INTERVIEW_GUIDANCE.replace('${name}', name || 'this person');
   // What it already knows (72 §5.5). Without this the conversation opens cold and asks about things the

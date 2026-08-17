@@ -222,4 +222,44 @@ describe('You hub', () => {
     // The wellbeing card invites "Check in again", not "Retake".
     expect(screen.getByRole('button', { name: 'Check in again' })).toBeInTheDocument();
   });
+
+  it('does not call an adaptive intimacy profile "only you" — it feeds a partner\'s coach (74 §8.4)', async () => {
+    // The take's intro and the report both say the loved terms quietly steer a partner's coach. A stronger
+    // claim one screen earlier would be the app contradicting itself about who sees what.
+    const dirtyTalk: TestSummary = {
+      id: 'dirty-talk',
+      kind: 'adaptive',
+      group: 'intimacy',
+      title: 'Dirty talk',
+      instrument: 'SelfOS',
+      blurb: 'What you want said to you.',
+      framing: 'A map, not a verdict.',
+      estimatedMinutes: 15,
+      itemCount: 0,
+      adult: true,
+      sensitive: true,
+      subscales: [{ key: 'dirty.filth', label: 'Filthiness', signed: false }],
+      wellbeing: false,
+    };
+    installMockBridge({
+      testsList: () => Promise.resolve({ tests: [dirtyTalk, kink], adultAcknowledged: true }),
+      testsResults: ({ testId }) =>
+        Promise.resolve(
+          testId === 'dirty-talk'
+            ? [
+                {
+                  ...bigFiveResult(),
+                  id: 'a1',
+                  testId: 'dirty-talk',
+                  scores: [{ key: 'dirty.filth', raw: 4, normalized: 0.8, band: 'high' }],
+                },
+              ]
+            : [],
+        ),
+    });
+    renderYou();
+    expect(await screen.findByText('Dirty talk')).toBeInTheDocument();
+    expect(screen.getByText('yours')).toBeInTheDocument();
+    expect(screen.queryByText(/private — only you/)).not.toBeInTheDocument();
+  });
 });

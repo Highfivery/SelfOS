@@ -18,6 +18,8 @@ import { getSynthesis } from '../coaching/coachingSynthesisService';
 import { stalestOpenGoal } from '../recommendations/providers';
 import { isNearDuplicate } from '../questionnaires/dedup';
 import { normalizeOptions } from '../questionnaires/questionnaireService';
+import { readLexicon, suppressedTexts, violatesBoundary } from '../tests/adaptive/lexicon';
+import type { EroticLexicon } from '../schemas';
 import { runClaude, type AiDeps } from '../questionnaires/aiCall';
 import { extractJsonObject } from '../ai/jsonSalvage';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
@@ -231,6 +233,19 @@ interface GenerateInput {
  * usage metering all come from `runClaude` (it records the `email.suggest` event itself — the caller must NOT
  * re-record `usage`, which is returned only for assertions). The caller persists the returned `SentSuggestion`.
  */
+/**
+ * The hard-no list as a negative constraint. Mirrors the wording `buildSuppressionBlock` uses so the same
+ * rule reads the same way in every prompt that carries it.
+ */
+function suppressionLine(lexicon: EroticLexicon): string {
+  const nos = suppressedTexts(lexicon);
+  if (nos.length === 0) return '';
+  return (
+    'NEVER use any of these words or phrases, in any form — they have been ruled out and the rule is ' +
+    `absolute, whatever else this email says: ${nos.join(' · ')}. Never mention that anything was ruled out.`
+  );
+}
+
 export async function generateSuggestion(
   deps: AiDeps,
   input: GenerateInput,
@@ -238,6 +253,8 @@ export async function generateSuggestion(
   const intimacy = input.family === 'ai-suggestion-intimacy';
   const overlap = (input.intimacyOverlap ?? []).filter((a) => !input.avoid.subjects.has(a.key));
   if (intimacy && overlap.length === 0) return null; // shared signal exhausted / all avoided
+  // Read the recipient's own boundary list before generating anything explicit for them (74 §8.4).
+  const lexicon = intimacy ? await readLexicon(deps.fs, deps.key, deps.personId) : null;
 
   const suggestionType: EmailSuggestionType = intimacy ? 'intimacy' : pickType(input.signals);
   const subjectKey = intimacy
@@ -253,6 +270,11 @@ export async function generateSuggestion(
     // Same rule as questionnaire generation: the subject matter is this person's OWN open ground, so an
     // intimacy email can never nudge toward an area they have already worked through.
     intimacy ? explicitFraming('explicit', [], { openGround: input.openGround }) : '',
+    // The hard-no list, as a negative constraint (74 §8.4: suppression is unconditional, with or without any
+    // steer). This is the ONLY surface where explicit generated text leaves the device with nobody reviewing
+    // it first, so it is the last place that should be generating in the explicit register without knowing
+    // what someone has ruled out — a person who marked a word `never` could be emailed it.
+    intimacy && lexicon ? suppressionLine(lexicon) : '',
     'You write ONE short, warm coaching suggestion to email a person, in their own SelfOS space. Return ' +
       'ONLY a JSON object {"headline": string, "body": string, "options": string[]}. The headline is a ' +
       'short subject line (≤ 8 words). The body is 1–3 plain sentences — specific, kind, never clinical, ' +
@@ -325,6 +347,10 @@ export async function generateSuggestion(
   const headline = typeof parsed?.headline === 'string' ? parsed.headline.trim() : '';
   const body = typeof parsed?.body === 'string' ? parsed.body.trim() : '';
   if (!headline || !body) return null; // a bad/empty parse → no email (scheduled family, no retry)
+  // Belt and braces on top of the prompt line: nothing that touches a boundary is emailed, whatever the
+  // model returned. Refusing to send beats sending the one thing they ruled out.
+  if (lexicon && (violatesBoundary(lexicon, headline) || violatesBoundary(lexicon, body)))
+    return null;
   // Run the SAME shape rules as questionnaire generation (08 §32.8) — trim, drop blanks, reject
   // case-insensitive duplicates, require at least two. An unusable set degrades to NO buttons rather than to
   // buttons that cannot answer the question, which is the #459 failure. `normalizeOptions` is the single

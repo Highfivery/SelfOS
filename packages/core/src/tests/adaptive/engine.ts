@@ -123,7 +123,12 @@ export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
   }
 
   // 2) Something they clearly want to hear and cannot say. A preference or a goal? Only they know.
-  const frozen = lexicon.entries.filter((e) => e.state !== 'never' && e.hear >= 3 && e.say === 0);
+  // BOTH sides must have been asked (74 §3.6.6). Without the guard this reads a side the deck never offered
+  // as a refusal — and once seeding stopped filling the unshown side, it fired for essentially every oriented
+  // person, putting a FALSE statement in front of them ("rated it 0 to say") whose answer then feeds synthesis.
+  const frozen = lexicon.entries.filter(
+    (e) => e.state !== 'never' && bothSidesAsked(e) && e.hear >= 3 && e.say === 0,
+  );
   if (frozen.length > 0) {
     out.push({
       id: 'frozen',

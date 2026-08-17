@@ -259,7 +259,7 @@ export function AppShell(): JSX.Element {
         />
         <div className={styles.body}>
           <main className={styles.content}>
-            <div className={styles.contentInner}>
+            <div className={styles.contentInner} data-app-scroll>
               <Onboarding />
             </div>
           </main>
@@ -573,7 +573,7 @@ export function AppShell(): JSX.Element {
         </aside>
 
         <main className={styles.content}>
-          <div className={styles.contentInner}>
+          <div className={styles.contentInner} data-app-scroll>
             {conflicts.length > 0 ? (
               <div className={styles.banner}>
                 <Banner tone="warning">

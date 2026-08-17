@@ -504,6 +504,11 @@ export function Sessions(): JSX.Element {
                 <Composer
                   disabled={sending}
                   allowAttachments
+                  // 74 §3.5 — the report's "Practise this" hands the goal over in `seedText`. It used to be
+                  // passed only to the launcher, which never renders on that path (the same navigation opens
+                  // the guided thread), so the goal was silently dropped and the session opened by asking
+                  // what they had just told us. Read once at mount, like the launcher's.
+                  initialText={(location.state as { seedText?: string } | null)?.seedText ?? ''}
                   // Return the send promise so the composer keeps pending attachments if a store fails.
                   onSend={(text, attachments) => send(text, attachments)}
                 />

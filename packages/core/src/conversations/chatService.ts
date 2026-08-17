@@ -307,21 +307,30 @@ async function generateCoachReply(
         partnerSuppression?: string;
       }
     | undefined;
-  // Topic-gated as well as ack-gated. A grief or money session has no business carrying someone's loved-phrase
-  // list — it is a token tax, and it is the likeliest way the silent steer becomes visible (a non-sequitur
-  // suggestion in an unrelated conversation). Same shape as the sensitive-insight relevance gate.
+  // Topic-gated as well as ack-gated — but ONLY the positive halves. A grief or money session has no business
+  // carrying someone's loved-phrase list: it is a token tax, and it is the likeliest way the silent steer
+  // becomes visible (a non-sequitur suggestion in an unrelated conversation).
+  //
+  // The SUPPRESSION is different and is deliberately NOT topic-gated (74 §8.4: "with or without any steer").
+  // It only ever prevents a suggestion, and the gate it used to share was unreliable in both directions: the
+  // challenge coach is `group: 'challenge'`, so it took an explicit sexual register (`CHALLENGE_INTIMACY_REGISTER`)
+  // while being denied the hard-no list; and a free-start session's topic comes from a probabilistic classifier
+  // that fails open, so "I want to be more vocal with my partner" could classify as Relationships and drop it.
   const intimateTopic =
     conversation.guideId !== undefined
       ? INTIMACY_GUIDE_GROUPS.has(getExercise(conversation.guideId)?.group ?? '')
       : (topicOverride?.lifeAreas ?? []).includes('Intimacy');
-  if (adultAcked && intimateTopic) {
-    const own = buildOwnLexiconBlock(await readLexicon(fs, key, personId));
+  if (adultAcked) {
+    const own = intimateTopic ? buildOwnLexiconBlock(await readLexicon(fs, key, personId)) : '';
     const partnerId = await livePartnerOf(fs, key, personId);
     let partnerSteer = '';
     let partnerSuppression = '';
     if (partnerId) {
       const partnerAcked = (await getGuidancePrefs(fs, key, partnerId)).adultAcknowledged === true;
-      partnerSteer = await buildPartnerSteer(fs, key, personId, partnerId, partnerAcked);
+      partnerSteer = intimateTopic
+        ? await buildPartnerSteer(fs, key, personId, partnerId, partnerAcked)
+        : '';
+      // Always.
       partnerSuppression = await buildSuppressionBlock(fs, key, personId, partnerId);
     }
     if (own || partnerSteer || partnerSuppression) {

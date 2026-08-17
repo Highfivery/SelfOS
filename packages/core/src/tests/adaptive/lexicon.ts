@@ -145,9 +145,17 @@ export function applyBankMarks(
       // otherwise reset a hear:4/say:1 split back to 3/3 — and quitting between the two passes, which the
       // autosave copy actively encourages, is exactly when that lands and never gets repaired.
       const seeded = base.hear === 0 && base.say === 0;
+      // …and seed ONLY the sides this person was actually shown (74 §3.6.6). §3.6.6 fixed a `0` on an unshown
+      // side being read as a refusal; seeding both directions is the same bug inverted — a `3` on a side that
+      // was never offered reads as an ENDORSEMENT, and the report then tells someone they are "comfortable
+      // saying" a line the deck never put to them, on the one screen §8.5 says they may read to a partner.
+      const shown = shownSides ?? (['hear', 'say'] as const);
+      const seedFor = (side: 'hear' | 'say'): number =>
+        seeded && shown.includes(side) ? LOVE_SEED : base[side];
       byKey.set(key, {
         ...base,
-        ...(seeded ? { hear: LOVE_SEED, say: LOVE_SEED } : {}),
+        hear: seedFor('hear'),
+        say: seedFor('say'),
         state: undefined,
         source,
       });
@@ -433,8 +441,13 @@ export function lovedEntries(
       : direction === 'say'
         ? entry.say
         : Math.max(entry.hear, entry.say);
+  // A direction-specific read must ignore entries that direction was never put to (74 §3.6.6). Correctness
+  // here currently also depends on `applyBankMarks` not seeding an unshown side — make it explicit rather
+  // than rely on the writer, because a merge from an older device copies ratings verbatim.
+  const asked = (entry: LexiconEntry): boolean =>
+    direction === 'either' || entry.sides === undefined || entry.sides.includes(direction);
   return lexicon.entries
-    .filter((entry) => entry.state === undefined && value(entry) >= 3)
+    .filter((entry) => entry.state === undefined && asked(entry) && value(entry) >= 3)
     .sort((x, y) => value(y) - value(x));
 }
 

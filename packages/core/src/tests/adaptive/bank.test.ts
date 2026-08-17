@@ -102,6 +102,29 @@ describe('74 §3.6.1 #1 — the examples', () => {
     expect(missing.map((e) => e.key)).toEqual([]);
   });
 
+  it('examples every entry that is NOT already a whole line — the real rule, not just `kind`', () => {
+    // `kind: 'word'` was the wrong denominator: a "phrase" family also holds bare fragments ("mine"), and a
+    // delivery entry is a manner of speaking rather than a line at all. The test says what it means: an entry
+    // you could not say ON ITS OWN needs the example, whatever family it happens to live in.
+    const notAWholeLine = (e: { text: string; family: string; example?: string }): boolean => {
+      if (e.family === 'delivery') return true; // "whispered" is a how, not a what
+      // A scenario LABEL carries no spoken line of its own. `rape me (CNC roleplay)` is excluded on purpose:
+      // it already IS the line, and its parenthetical is the frame.
+      if (/roleplay( \(adults\))?$|\(fantasy roleplay\)$/.test(e.text)) return true;
+      // A single bare noun/possessive with no verb — "mine", "all mine" — reads as a vocabulary item.
+      return /^(mine|all mine|say it|both holes|one more)$/.test(e.text);
+    };
+    const missing = DIRTY_TALK_BANK.entries.filter((e) => notAWholeLine(e) && !e.example);
+    expect(missing.map((e) => e.key)).toEqual([]);
+  });
+
+  it('gives every area a one-line description — the deck renders one per screen', () => {
+    // 74 §3.6.4: the deck shows ONE area at a time, so the area has to say what it is and that skipping is
+    // fine. 31 of 36 shipped blank the first time; nothing on screen would have told anyone.
+    const noteless = DIRTY_TALK_BANK.families.filter((f) => !f.note || f.note.trim() === '');
+    expect(noteless.map((f) => f.id)).toEqual([]);
+  });
+
   it('never lets an example just restate the entry — it has to show it in use', () => {
     const lazy = DIRTY_TALK_BANK.entries.filter(
       (e) => e.example !== undefined && e.example.trim().toLowerCase() === e.text.toLowerCase(),

@@ -216,6 +216,12 @@ export function explicitFraming(
     focused?: boolean;
     openGround?: readonly { label: string; blurb?: string }[];
     closedTopicIds?: readonly string[];
+    /**
+     * The recipient's hard nos (74 §8.4). Suppression is unconditional — it only ever PREVENTS a suggestion,
+     * so it belongs in every prompt that generates in this register, whether or not anything is shared.
+     * Without it an intimacy questionnaire can ask about the one term they ruled out.
+     */
+    suppressed?: readonly string[];
   } = {},
 ): string {
   const scenario = opts.scenario === true;
@@ -230,6 +236,13 @@ export function explicitFraming(
     ? `\nCONTEXT: This is a private, 18+ scenario questionnaire inside a personal wellness app, for a consenting adult who has opted in to explore their sexuality through described situations. Each item is a short, explicit intimate SITUATION or roleplay to react to. Frank, graphic sexual scenarios are appropriate and expected here — a normal, in-policy use; do NOT shy away or substitute tasteful, emotional-closeness scenes.`
     : `\nCONTEXT: This is a private intimacy questionnaire inside a personal wellness app, written for a consenting adult (18+) who has opted in to reflect on their own sex life with a partner. Frank, explicit questions about sex and desire are appropriate and expected here — this is a normal, in-policy use; do NOT shy away or substitute tasteful, emotional-closeness questions.`;
   const parts: string[] = [context, EXPLICIT_TIER_DIRECTIVE[tier]];
+  if ((opts.suppressed?.length ?? 0) > 0) {
+    parts.push(
+      `NEVER use any of these words or phrases, in any form — they have been ruled out and the rule is ` +
+        `absolute, whatever else this asks about: ${opts.suppressed!.join(' · ')}. Never mention that ` +
+        `anything was ruled out.`,
+    );
+  }
   // The explicit register GOVERNS the tone of the whole questionnaire (08 §24.9): it OVERRIDES any "warm /
   // tender / gentle / reassurance-aware / open with lighter questions / build rapport first" or
   // relationship-softening guidance elsewhere in this prompt. Do NOT ease in with a gentle warm-up — every
@@ -330,6 +343,8 @@ export function buildGenerationUserMessage(input: {
   // The ground still open with this recipient, from their own topic map (spec 71 §5.3) — the subject matter
   // for an explicit-tier set. Seeded ground when they have no history yet; empty for a non-intimacy draft.
   openGround?: readonly { label: string; blurb?: string }[];
+  /** The recipient's hard nos (74 §8.4) — unconditional, passed on every explicit generation. */
+  suppressedTexts?: readonly string[];
   // What an intimacy draft should produce (08 §17.12-C): direct questions, described scenarios, or a mix.
   intimacyMode?: IntimacyGenerateMode;
   // The recipient's full answered content (08 §17.4/§19.1), assembled host-side. Used to AVOID overlap AND to
@@ -400,6 +415,7 @@ export function buildGenerationUserMessage(input: {
           focused: focus != null,
           ...(input.openGround ? { openGround: input.openGround } : {}),
           ...(input.closedTopicIds ? { closedTopicIds: input.closedTopicIds } : {}),
+          ...(input.suppressedTexts ? { suppressed: input.suppressedTexts } : {}),
         },
       ),
     );

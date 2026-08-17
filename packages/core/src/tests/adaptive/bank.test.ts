@@ -139,3 +139,12 @@ describe('74 §3.6.1 #1 — the examples', () => {
     expect(bad.map((e) => e.key)).toEqual([]);
   });
 });
+describe('§3.6.3 — the identity preview only promises lines the bank actually has', () => {
+  it('contains both example lines the preview shows', () => {
+    // One of these was INVENTED and shipped, inside a comment claiming it came from the bank — so the
+    // identity screen promised a line the deck could never show. Pinned here rather than trusted.
+    const examples = DIRTY_TALK_BANK.entries.map((entry) => entry.example).filter(Boolean);
+    expect(examples).toContain('your pussy is so wet for me');
+    expect(examples).toContain('I can feel your hard cock through your jeans');
+  });
+});

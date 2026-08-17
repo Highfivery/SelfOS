@@ -486,6 +486,33 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-17 — **Fix (the TWO SCROLLBARS, found by measuring the document rather than counting elements;
+  owner-reported three times; SPEC 74 §3.6.4; on `fix/adaptive-two-scrollbars`).** The cause was **21
+  `position: absolute` visually-hidden `.srOnly` spans** — the text equivalent I added for the intensity meter —
+  sitting inside a parent with no positioning context. With no positioned ancestor they escape to the initial
+  containing block, so one 47-row area extended `documentElement.scrollHeight` to **3009px** and the WINDOW
+  scrolled beside the shell's own container. Fixed with `position: relative` on `.heat`.
+  **The guard I had written for this was VACUOUS, twice over**, which is why I "fixed" it and he kept seeing it:
+  it counted elements whose computed `overflow-y` is auto/scroll, and (a) `html` computes to `visible` while
+  still painting the window scrollbar, so the document was structurally invisible to it, and (b) it ran against
+  a 2-entry test fixture that cannot overflow anything. It now asserts **`documentElement.scrollHeight -
+clientHeight <= 2`** AND exactly one overflowing element, on the FULL bank at the reported 1800px window —
+  verified to fail with `Received: 1889` when the fix is reverted.
+  Also in this pass: the report's empty-state card now uses the same container as the invitation (sharing only
+  the HEAD had left the two bodies at different measures, which is what still read as inconsistent); the
+  "you/they like being called" options were incoherent — one question offered "their girl / their man", the next
+  "his girl / her man" for the same three-value field, and the second quietly assumed the other person's gender
+  — so they now ask in the actual words with real examples (**girl** — _good girl · my girl · princess_); and a
+  **fabricated example line was removed from the identity preview**: "I love how hard your cock gets for me"
+  exists in no bank entry, so the screen promised a line the deck could never show, under a code comment
+  claiming the examples came from the bank. Both preview strings are now grepped-and-pinned by a test.
+  **Lessons: (1) a scrollbar guard must measure the DOCUMENT — `html` computes `overflow-y: visible` yet paints
+  the window bar, so any element-scan probe is blind to the most likely second scroller. (2) A guard that runs
+  against a minimal fixture can be structurally incapable of failing; run layout guards against the real data
+  at the reported window size. (3) `position: absolute` on a visually-hidden span is a document-height bug
+  waiting to happen — its parent must be positioned. (4) I wrote a comment asserting content came from the bank
+  and it did not; grep before claiming.**
+
 - 2026-08-17 — **Fix (one head for both adaptive screens; the row's HIERARCHY says what you're rating;
   owner-reported; SPEC 74 §3.6.1/§3.6.4; on `fix/adaptive-consistent-head-and-hierarchy`).** Two reports.
   **(1) "Styling inconsistencies between these two screens… I like the second screen styling better."** Right:

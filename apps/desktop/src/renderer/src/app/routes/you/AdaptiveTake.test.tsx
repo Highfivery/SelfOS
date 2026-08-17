@@ -572,7 +572,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     expect(screen.getByText('YOU SAY')).toBeInTheDocument();
     expect(screen.getByText('YOU HEAR')).toBeInTheDocument();
     expect(screen.getByText(/your pussy is so wet for me/)).toBeInTheDocument();
-    expect(screen.getByText(/how hard your cock gets/)).toBeInTheDocument();
+    expect(screen.getByText(/hard cock through your jeans/)).toBeInTheDocument();
   });
 
   it('puts the deck actions in a rail, so finishing never means scrolling 47 rows', async () => {

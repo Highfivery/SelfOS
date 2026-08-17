@@ -325,6 +325,12 @@ export function mergeLexicons(a: EroticLexicon, b: EroticLexicon): EroticLexicon
       ...entry,
       ...(state ? { state } : {}),
       ...(state === 'never' ? { hear: 0, say: 0 } : {}),
+      // `sides` records what was ASKED (74 §3.6.6), and a device on an older build writes entries without
+      // it. Spreading the newer entry alone would DROP that record, and an entry with no `sides` is read as
+      // both-sides-asked — which turns every loved hear-only entry back into a goal the person never
+      // declined. What was asked is not a rating: it cannot be un-known by a later write, so it survives the
+      // merge like a boundary does. Newer wins only when it actually has an answer.
+      ...((entry.sides ?? prior?.sides) ? { sides: entry.sides ?? prior?.sides } : {}),
     });
   }
   return {

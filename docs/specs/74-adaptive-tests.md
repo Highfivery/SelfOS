@@ -864,6 +864,31 @@ inner scroller — the deck is a single column at every width, so nothing collap
 
 ## 12. Changelog
 
+- 2026-08-16 — **Third audit + visual / workflow / usability passes (§3.3/§3.6.4/§5.3).** This one went at the
+  AI phases' own prompts, the scoring math, the sync merge, and then at the rendered screens.
+  **Correctness:** the probe QUESTION and the scenario SCENE were the only model prose reaching the person
+  unfiltered — lines, options, narrative, themes, wantsToSay and voice all pass through `violatesBoundary`,
+  and those two did not; the probe is the phase that asks open questions, so "never ask them to justify a
+  boundary" was requested and not enforced. Both now filter, degrading the phase rather than showing it.
+  `mergeLexicons` dropped `sides` when the newer copy lacked it — a device on an older build would erase the
+  record of what was ASKED, and an entry with no `sides` reads as both-sides-asked, which is exactly how a
+  fabricated goal gets into their own coach's prompt; what was asked now survives a merge the way a boundary
+  does.
+  **Two things were generated and thrown away:** the synthesis scores seven **registers** and six **contexts**
+  with notes on every take, stored them, and nothing read them — now the report's "Register & timing"; and
+  the fixed spine exists so retakes stay comparable, yet the report showed only the newest take — now
+  "Across your takes" (≥2 takes, no-signal dimensions excluded rather than plotted at zero).
+  **Visual / usability:** the standing instructions and the autosave banner were repeating on **all 36 areas**,
+  pushing the first markable row most of the way down the viewport every time (4 rows visible, now 7); they
+  show once, and a permanent one-line legend carries the marks. The tier pip was a colour-only dot with no
+  legend (§9) and now carries a text equivalent. "Shown for: either · either" was machine output, not
+  language. The report's section headings sat flush against their first row.
+  **Workflow:** "Skip this area" and "Next area →" called the same function — two labels, one behaviour, side
+  by side, so Skip read as meaning something extra it never did. One button now, and the banner says moving on
+  skips whatever you left alone.
+  **Recorded, not built:** a retake re-walks all 36 areas with every prior mark pre-filled; there is no
+  "show me only what I haven't marked".
+
 - 2026-08-16 — **Second audit — deeper sweep (§3.6.2/§8.3).** Ran against the data lifecycle, the seam and
   every consumer rather than the take. Four findings, all fixed and guarded:
   **(1) SAFETY — the crisis footer was missing from most of the take.** It was rendered inside the intro,

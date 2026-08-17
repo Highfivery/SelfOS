@@ -486,6 +486,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-16 — **Third audit + visual / workflow / usability passes (SPEC 74 §3.3/§3.6.4/§5.3; on
+  `fix/adaptive-audit-three`).** Went at the AI phases' own prompts, the scoring math and the sync merge, then
+  at the rendered screens. **Correctness:** the probe QUESTION and the scenario SCENE were the only model
+  prose reaching the person **unfiltered** — lines, options, narrative, themes, wantsToSay and voice all pass
+  `violatesBoundary`, those two did not, and the probe is the phase that asks open questions, so "never ask
+  them to justify a boundary" was requested and not enforced. `mergeLexicons` **dropped `sides`** when the
+  newer copy lacked it (a device on an older build), erasing the record of what was ASKED — and an entry with
+  no `sides` reads as both-sides-asked, which is precisely how a fabricated goal reaches their own coach.
+  **Two things were generated and discarded:** the synthesis scores 7 registers + 6 contexts with notes on
+  every take and **nothing read them** (now the report's "Register & timing"), and the FIXED spine exists so
+  retakes stay comparable while the report showed only the newest take (now "Across your takes", ≥2 takes,
+  no-signal dimensions excluded rather than plotted at zero). **Visual/usability:** the standing instructions
+  - autosave banner repeated on **all 36 areas**, pushing the first markable row most of the way down the
+    viewport every time (4 rows visible → 7); they show once, with a permanent one-line legend. The tier pip was
+    a colour-only dot with no legend (§9). "Shown for: either · either" was machine output, not language. The
+    report's section headings sat flush against their content. **Workflow:** "Skip this area" and "Next area →"
+    called the SAME function — two labels, one behaviour, side by side. Gate green: typecheck (4 pkgs), lint,
+    format, **2319 core + 13 relay + 1637 desktop** unit, both 74 E2E, visual QA at desktop. **Lessons: (1) when
+    N sibling code paths sanitize model output and one does not, the gap is invisible in review because the
+    prompt for that path already forbids the thing — grep for the SANITIZER, not the instruction. (2) "Generated,
+    stored, read by nothing" is a whole defect class worth grepping for on any feature with a model-written
+    profile: it is paid-for output the user never sees, and it looks identical to a finished feature. (3) Chrome
+    that is correct on screen 1 is a tax on screens 2–36 — count what a repeated instruction costs above the
+    fold before deciding it is harmless.**
+
 - 2026-08-16 — **Second audit (deeper sweep: data lifecycle, seam, consumers; SPEC 74 §3.6.2/§8.3; on
   `fix/adaptive-audit-two`).** The owner asked for another, more thorough pass after the first one found real
   defects. This one swept the LIFECYCLE (create → resume → complete → delete → person-delete) and every

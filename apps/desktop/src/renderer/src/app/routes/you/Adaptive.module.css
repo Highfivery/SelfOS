@@ -222,6 +222,7 @@
 }
 
 .tierPip {
+  position: relative;
   display: inline-block;
   width: 5px;
   height: 5px;
@@ -315,3 +316,27 @@
     display: none;
   }
 }
+
+/* A text equivalent that carries meaning to a screen reader without changing the visual row (§9). */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+ * The report's sections are bare `<section>`s whose heading sat flush against the first row of content — no
+ * rhythm between "The shape of it" and the first bar, or "Your words" and the first chip row. One rule beats
+ * a margin on every heading, and it keeps the sections reading as separate things rather than one long run.
+ */
+.reportBody section > :global(h2) {
+  margin-bottom: var(--space-3);
+}
+
+/* `Stack` already spaces the sections apart; only the heading-to-content gap was missing. */

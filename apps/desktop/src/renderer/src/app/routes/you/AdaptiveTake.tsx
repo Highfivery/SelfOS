@@ -17,10 +17,14 @@ const ADDRESS_OPTIONS: { value: 'girl' | 'man' | 'either'; self: string; partner
 function addressSummary(
   address: { self: 'girl' | 'man' | 'either'; partner: 'girl' | 'man' | 'either' } | undefined,
 ): string {
+  // It used to print the raw stored values — "either · either", which is machine output, not language, and
+  // says nothing about which of the two answers is which. This reads as a sentence about the two of you.
   const word = (v: 'girl' | 'man' | 'either' | undefined): string =>
-    v === 'girl' ? 'girl' : v === 'man' ? 'man' : 'either';
-  if (!address) return 'everyone';
-  return `${word(address.self)} · ${word(address.partner)}`;
+    v === 'girl' ? 'their girl' : v === 'man' ? 'their man' : 'anything';
+  if (!address || (address.self === 'either' && address.partner === 'either')) {
+    return 'everything';
+  }
+  return `you as ${word(address.self)}, them as ${word(address.partner)}`;
 }
 
 /** What a row is rating, in the person's terms. Both sides shown ⇒ nothing to disambiguate. */
@@ -435,20 +439,33 @@ export function AdaptiveTake(): JSX.Element {
                 </Text>
               ) : (
                 <>
-                  <Text tone="secondary">
-                    Only tap what actually does something for you — skip the rest.{' '}
-                    <Flame size={14} aria-hidden="true" /> if you love it,{' '}
-                    <Contrast size={14} aria-hidden="true" /> if it&rsquo;s okay,{' '}
-                    <Ban size={14} aria-hidden="true" /> if it&rsquo;s a no. A <em>never</em> is a
-                    boundary: nothing in SelfOS will suggest it again.
-                  </Text>
-                  <Banner tone="info" role="none">
-                    <strong>Every tap saves itself.</strong> Mark what you feel like marking and
-                    close it whenever — it picks up on this area, with everything you already
-                    marked. Skip a whole area in one tap.
-                  </Banner>
+                  {/* 74 §3.6.4 — standing instructions, shown ONCE. They were repeating on all 36 areas,
+                      pushing the first markable row most of the way down the viewport every single time; by
+                      area 6 the person has scrolled past the same two paragraphs six times. The marks keep a
+                      permanent one-line legend below, which is the part you actually need again. */}
+                  {areaIndex === 0 ? (
+                    <>
+                      <Text tone="secondary">
+                        Only tap what actually does something for you — skip the rest.{' '}
+                        <Flame size={14} aria-hidden="true" /> if you love it,{' '}
+                        <Contrast size={14} aria-hidden="true" /> if it&rsquo;s okay,{' '}
+                        <Ban size={14} aria-hidden="true" /> if it&rsquo;s a no. A <em>never</em> is
+                        a boundary: nothing in SelfOS will suggest it again.
+                      </Text>
+                      <Banner tone="info" role="none">
+                        <strong>Every tap saves itself.</strong> Mark what you feel like marking and
+                        close it whenever — it picks up on this area, with everything you already
+                        marked. Moving on skips whatever you left alone.
+                      </Banner>
+                    </>
+                  ) : null}
+                  {/* The legend stays on every area — it is the part you need again, and it costs one line
+                      where the two paragraphs above cost most of a viewport. */}
                   <Text size="sm" tone="tertiary">
-                    {areaEntries.length} here · {marked.length} marked so far
+                    {areaEntries.length} here · {marked.length} marked so far ·{' '}
+                    <Flame size={13} aria-hidden="true" /> love ·{' '}
+                    <Contrast size={13} aria-hidden="true" /> okay ·{' '}
+                    <Ban size={13} aria-hidden="true" /> never
                   </Text>
 
                   <Card className={adaptive.family}>
@@ -474,10 +491,17 @@ export function AdaptiveTake(): JSX.Element {
                           <li key={entry.key} className={adaptive.entryRow}>
                             <span className={adaptive.entryText}>
                               {entry.text}
+                              {/* Intensity was a bare coloured dot: no legend, no text, nothing a screen
+                                  reader or a colourblind eye could read (§9). It still reads as a pip; it
+                                  just says what it means now. */}
                               <span
                                 className={`${adaptive.tierPip} ${entry.tier >= 4 ? adaptive.hot : ''}`}
-                                aria-hidden="true"
-                              />
+                                title={entry.tier >= 4 ? 'more intense' : 'gentler'}
+                              >
+                                <span className={adaptive.srOnly}>
+                                  {entry.tier >= 4 ? 'more intense' : 'gentler'}
+                                </span>
+                              </span>
                             </span>
                             <span className={adaptive.example}>
                               {entry.example ? `“${entry.example}”` : ''}
@@ -559,14 +583,13 @@ export function AdaptiveTake(): JSX.Element {
                 </span>
                 <span style={{ display: 'inline-flex', gap: 'var(--space-3)' }}>
                   {areaIndex + 1 < bank.families.length ? (
-                    <>
-                      <Button variant="secondary" disabled={store.busy} onClick={() => nextArea()}>
-                        Skip this area
-                      </Button>
-                      <Button variant="primary" disabled={store.busy} onClick={() => nextArea()}>
-                        Next area →
-                      </Button>
-                    </>
+                    // "Skip this area" sat beside this calling the SAME function — two labels, one
+                    // behaviour, side by side. A reader has to assume Skip means something extra (never
+                    // show me this again?) and it never did. Nothing here is required, so moving on IS
+                    // skipping, and the banner above now says so.
+                    <Button variant="primary" disabled={store.busy} onClick={() => nextArea()}>
+                      Next area →
+                    </Button>
                   ) : (
                     <Button
                       variant="primary"

@@ -248,3 +248,59 @@ describe('74 §3.6.6 — a side that was never asked is not a refusal', () => {
     expect(marked.entries[0]?.sides).toEqual(['say']);
   });
 });
+describe('mergeLexicons keeps what was ASKED (74 §3.6.6)', () => {
+  it('does not let an older device drop `sides` — that would recreate the fabricated goal', () => {
+    // A device on a pre-orientation build writes entries with no `sides`. Spreading the newer entry alone
+    // dropped the record of what was offered, and an entry with no `sides` reads as both-sides-asked — so a
+    // loved hear-only entry becomes a goal the person never declined, in their own coach's prompt.
+    const withSides: EroticLexicon = {
+      ...emptyLexicon('p1', new Date('2026-08-01T00:00:00.000Z')),
+      entries: [
+        {
+          key: 'names-power:good-girl',
+          text: 'good girl',
+          kind: 'word',
+          family: 'names-power',
+          tier: 2,
+          hear: 4,
+          say: 0,
+          sides: ['hear'],
+        },
+      ],
+    };
+    const older = { ...withSides, updatedAt: '2026-08-01T00:00:00.000Z' };
+    const newerNoSides: EroticLexicon = {
+      ...withSides,
+      updatedAt: '2026-08-02T00:00:00.000Z',
+      entries: [{ ...withSides.entries[0]!, sides: undefined }],
+    };
+    const merged = mergeLexicons(older, newerNoSides);
+    expect(merged.entries[0]?.sides).toEqual(['hear']);
+    // …and the consequence that actually matters: it is still not a goal.
+    expect(derivedWantsToSay(merged)).toEqual([]);
+  });
+
+  it('takes the newer answer when BOTH sides recorded one', () => {
+    const base = emptyLexicon('p1', new Date('2026-08-01T00:00:00.000Z'));
+    const entry = {
+      key: 'names-power:good-girl',
+      text: 'good girl',
+      kind: 'word' as const,
+      family: 'names-power',
+      tier: 2 as const,
+      hear: 4,
+      say: 4,
+    };
+    const older: EroticLexicon = {
+      ...base,
+      updatedAt: '2026-08-01T00:00:00.000Z',
+      entries: [{ ...entry, sides: ['hear'] }],
+    };
+    const newer: EroticLexicon = {
+      ...base,
+      updatedAt: '2026-08-02T00:00:00.000Z',
+      entries: [{ ...entry, sides: ['hear', 'say'] }],
+    };
+    expect(mergeLexicons(older, newer).entries[0]?.sides).toEqual(['hear', 'say']);
+  });
+});

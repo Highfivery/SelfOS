@@ -130,6 +130,26 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
     expect(prompts[0]?.user).toContain(ambiguity.question);
   });
 
+  it('drops a probe QUESTION that names a hard no — the instruction is belt, this is braces', async () => {
+    // Every sibling phase filters what the model wrote; this one shipped its prose straight to the screen,
+    // and it is the phase that asks open questions. "Never ask them to justify a boundary" has to be
+    // enforced, not requested.
+    const { client } = fakeClient(['{"question": "What is it about being called a whore?"}']);
+    const ambiguity = openAmbiguities(seeded())[0]!;
+    const out = await runProbePhase(deps(client), seeded(), ambiguity);
+    expect(out.value).toBeUndefined();
+    expect(out.degraded).toBe(true);
+  });
+
+  it('drops a scenario whose SCENE names a hard no, not just its options', async () => {
+    const { client } = fakeClient([
+      '{"scene": "He calls you a whore across the room.", "options": ["tease", "escalate"]}',
+    ]);
+    const out = await runScenarioPhase(deps(client), seeded(), 'sexting');
+    expect(out.value).toBeUndefined();
+    expect(out.degraded).toBe(true);
+  });
+
   it('scores a scenario per CONTEXT, because filth mid-act is wrong at 2pm', async () => {
     const { client, prompts } = fakeClient([
       '{"scene": "He texts you at 2pm.", "options": ["escalate", "tease", "not at work"]}',

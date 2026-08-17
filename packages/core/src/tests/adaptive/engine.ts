@@ -239,7 +239,12 @@ ask why something is a hard no. Return ONLY {"question": string}.`,
   );
   if (!out.ok) return { ok: false, degraded: true, costUsd: 0 };
   const parsed = z.object({ question: z.string().min(1) }).safeParse(extractJsonObject(out.text));
-  const question = parsed.success ? parsed.data.question : '';
+  const raw = parsed.success ? parsed.data.question : '';
+  // Every other phase filters what the model wrote; this one didn't, and it is the phase that puts free
+  // prose in front of the person. A probe asking about a hard no is exactly what the prompt above forbids
+  // ("never ask them to justify a boundary") — the instruction is belt, this is braces. Dropping it degrades
+  // the phase, which the caller already handles, rather than showing them the question.
+  const question = violatesBoundary(lexicon, raw) ? '' : raw;
   return {
     ok: question !== '',
     ...(question !== '' ? { value: question } : {}),
@@ -297,10 +302,13 @@ at 2pm. Return ONLY {"scene": string, "options": string[]}.`,
     return { ok: false, degraded: true, costUsd: out.usage.costUsd };
   }
   const options = parsed.data.options.filter((o) => !violatesBoundary(lexicon, o));
+  // The SCENE is prose shown to them too, and it was passing through unchecked while its options were
+  // filtered — a scene that sets up a boundary is the same failure as an option that names one.
+  const clean = options.length > 0 && !violatesBoundary(lexicon, parsed.data.scene);
   return {
-    ok: options.length > 0,
-    ...(options.length > 0 ? { value: { context, scene: parsed.data.scene, options } } : {}),
-    degraded: options.length === 0,
+    ok: clean,
+    ...(clean ? { value: { context, scene: parsed.data.scene, options } } : {}),
+    degraded: !clean,
     costUsd: out.usage.costUsd,
   };
 }

@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   Heading,
+  LineChart,
   Markdown,
   Stack,
   SubscaleBar,
@@ -18,6 +19,30 @@ import { CrisisFooter } from '../sessions/CrisisFooter';
 import styles from './You.module.css';
 import take from './TestTake.module.css';
 import adaptive from './Adaptive.module.css';
+
+/**
+ * The synthesis returns machine keys (`buildUp`, `praise`). Nothing had ever rendered them, so nothing had
+ * ever needed labels — an unmapped key falls back to itself rather than being hidden, so a new register or
+ * context the model returns still shows up instead of silently vanishing.
+ */
+const REGISTER_LABELS: Record<string, string> = {
+  praise: 'Praise',
+  claiming: 'Claiming',
+  command: 'Command',
+  narration: 'Narration',
+  degradation: 'Degradation',
+  begging: 'Begging',
+  filth: 'Filth',
+};
+
+const CONTEXT_LABELS: Record<string, string> = {
+  buildUp: 'Build-up',
+  during: 'During',
+  edge: 'At the edge',
+  after: 'After',
+  sexting: 'Sexting',
+  phone: 'On the phone',
+};
 
 const SPINE_LABELS: Record<string, string> = {
   'dirtytalk.explicitness': 'How explicit',
@@ -129,9 +154,35 @@ export function AdaptiveReport(): JSX.Element {
   // omitted their own answers. Shown last, plainly second-tier, so it can't be read as a favourite.
   const okay = lexicon.entries.filter((e) => e.state === 'okay');
 
+  // Oldest → newest, so the chart reads left-to-right like time does. `history` arrives newest-first.
+  const takes = [...state.history].reverse();
+  // One series per spine dimension that has a real reading in at least two takes. A dimension with no signal
+  // is EXCLUDED rather than plotted at 0 — the same rule the bars follow, for the same reason: a flat zero
+  // line would tell them something about themselves they never said (74 §3.3).
+  const trendSeries =
+    takes.length >= 2
+      ? Object.entries(
+          takes.reduce<Record<string, { x: number; y: number }[]>>((acc, result, i) => {
+            for (const score of result.scores) {
+              if (score.band === NO_SIGNAL_BAND) continue;
+              (acc[score.key] ??= []).push({ x: i, y: score.normalized });
+            }
+            return acc;
+          }, {}),
+        )
+          .filter(([, points]) => points.length >= 2)
+          .map(([key, points]) => ({ label: SPINE_LABELS[key] ?? key, points }))
+      : [];
+
+  // The synthesis scores these on every take. Strongest first, and only what it actually returned.
+  const registers = Object.entries(lexicon.registers)
+    .filter(([, value]) => Number.isFinite(value))
+    .sort((a, b) => b[1] - a[1]);
+  const contexts = Object.entries(lexicon.contexts).filter(([, ctx]) => Number.isFinite(ctx?.heat));
+
   return (
     <div className={styles.page}>
-      <div className={styles.inner}>
+      <div className={`${styles.inner} ${adaptive.reportBody}`}>
         <Stack gap={5}>
           <button type="button" className={take.back} onClick={() => navigate('/tests')}>
             ← Tests
@@ -216,6 +267,79 @@ export function AdaptiveReport(): JSX.Element {
                   .
                 </Text>
               ) : null}
+            </section>
+          ) : null}
+
+          {/*
+           * Across takes. The whole reason the spine is FIXED (74 §4.2) is that a retake stays comparable —
+           * the report was throwing that away and showing only the newest take, so nothing in the app ever
+           * answered "has this moved?". The chart's text equivalents come from `LineChart` itself (§9).
+           */}
+          {trendSeries.length > 0 ? (
+            <section>
+              <Heading level={2}>Across your takes</Heading>
+              <LineChart
+                series={trendSeries}
+                ariaLabel="How each dimension has moved across your takes"
+                yMin={0}
+                yMax={1}
+                yLowLabel="Low"
+                yHighLabel="High"
+                emphasizeLast
+              />
+            </section>
+          ) : null}
+
+          {/*
+           * What the synthesis actually said about REGISTER and TIMING. It has been scoring both on every
+           * take and nothing read them — generated, stored, discarded. This is the person's own profile, and
+           * the timing read is the most usable thing in it.
+           */}
+          {registers.length > 0 || contexts.length > 0 ? (
+            <section>
+              <Heading level={2}>Register &amp; timing</Heading>
+              <Stack gap={4}>
+                {registers.length > 0 ? (
+                  <div>
+                    <Text size="sm" tone="secondary">
+                      Which register lands
+                    </Text>
+                    <Stack gap={2}>
+                      {registers.map(([key, value]) => (
+                        <SubscaleBar
+                          key={key}
+                          label={REGISTER_LABELS[key] ?? key}
+                          normalized={value}
+                          signed={false}
+                        />
+                      ))}
+                    </Stack>
+                  </div>
+                ) : null}
+                {contexts.length > 0 ? (
+                  <div>
+                    <Text size="sm" tone="secondary">
+                      When it lands
+                    </Text>
+                    <Stack gap={2}>
+                      {contexts.map(([key, ctx]) => (
+                        <div key={key}>
+                          <SubscaleBar
+                            label={CONTEXT_LABELS[key] ?? key}
+                            normalized={ctx.heat}
+                            signed={false}
+                          />
+                          {ctx.note ? (
+                            <Text size="sm" tone="tertiary">
+                              {ctx.note}
+                            </Text>
+                          ) : null}
+                        </div>
+                      ))}
+                    </Stack>
+                  </div>
+                ) : null}
+              </Stack>
             </section>
           ) : null}
 

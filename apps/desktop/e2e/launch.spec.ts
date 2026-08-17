@@ -16203,6 +16203,8 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     };
 
     await expect(w.getByText(/nothing in SelfOS will suggest it again/i)).toBeVisible();
+    // The autosave promise is made once, on the first area, where the standing instructions live.
+    await expect(w.getByText(/Every tap saves itself/i)).toBeVisible();
     // The deck only moves FORWARD, so mark in the bank's own family order: names-power → names-degrading
     // → claiming. (The un-mark round trip below has to happen while `whore` is still on screen.)
     await markInDeck('good girl — hear & say — love it');
@@ -16211,7 +16213,6 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
 
     // 74 §3.4 — every tap saves itself. Nothing below clicks Next, so the only thing that can have written
     // this is the autosave; the vault is the assertion, not the screen.
-    await expect(w.getByText(/Every tap saves itself/i)).toBeVisible();
     await expect(w.getByText('Saved')).toBeVisible();
     // Content scrolls in the shell's inner container, never the window or `main` — reset whatever is scrolled.
     await w.evaluate(() => {
@@ -16254,6 +16255,12 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     // The middle mark. It used to be recorded and then invisible everywhere — asserted on the report below.
     await markInDeck("all mine — hear & say — it's okay");
     await expect(w.getByText(/4 marked/)).toBeVisible();
+
+    // The standing instructions appear ONCE, not on all 36 areas — the legend is what repeats.
+    await expect(w.getByText(/Only tap what actually does something/)).toHaveCount(0);
+    await expect(w.getByText(/love · .* okay · .* never|marked so far/).first()).toBeVisible();
+    // Two buttons that did the same thing are one button now.
+    await expect(w.getByRole('button', { name: 'Skip this area' })).toHaveCount(0);
 
     // The §12 guard runs against the DENSEST surface — the deck mid-mark.
     await w.setViewportSize({ width: 360, height: 900 });

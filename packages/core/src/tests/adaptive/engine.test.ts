@@ -64,7 +64,7 @@ function seeded() {
       'names-power:good-girl': 'love',
       'names-degrading:whore': 'never',
       'names-degrading:slut': 'love',
-      'anatomy-her:cunt': 'notYet',
+      'anatomy-her:cunt': 'okay',
     },
     'take:1',
     NOW,
@@ -187,8 +187,13 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
   it('carries what the bank already established, so a phase never re-asks what it knows', () => {
     const digest = lexiconDigest(seeded());
     expect(digest).toContain('good girl');
-    expect(digest).toContain('cunt'); // the cringe, flagged as a cringe not a boundary
     expect(digest).not.toContain('whore'); // a hard no is never offered back as material
+  });
+
+  it('surfaces the hear/say GAP as context — the signal that replaced the old cringe list (§3.6.2)', () => {
+    // Loves hearing it, rated 0 to say, and BOTH sides were asked: that is the coachable material now.
+    const lex = applyDirections(seeded(), { 'names-power:good-girl': { hear: 4, say: 0 } }, NOW);
+    expect(lexiconDigest(lex)).toContain('low on saying');
   });
 
   it('honors a themed boundary a probe recorded, not just a bank entry', async () => {

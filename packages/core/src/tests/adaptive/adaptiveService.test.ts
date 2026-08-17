@@ -36,7 +36,7 @@ async function fullTake(fs = memFileSystem(), now = NOW) {
     {
       personId: P,
       resultId: draft.id,
-      marks: { [GOOD_GIRL]: 'love', [MINE]: 'love', [WHORE]: 'never', [CUNT]: 'notYet' },
+      marks: { [GOOD_GIRL]: 'love', [MINE]: 'love', [WHORE]: 'never', [CUNT]: 'okay' },
     },
     now,
   );
@@ -135,7 +135,8 @@ describe('the adaptive take (74 §5)', () => {
     const insight = (await listAllInsights(fs, KEY))[0]!;
     const goal = insight.facts.find((fact) => fact.id.endsWith(':wants-to-say'));
     expect(goal?.text).toContain('good girl'); // loves hearing it, rated 0 to say
-    expect(goal?.text).toContain('cunt'); // marked notYet — "I'd feel like an idiot"
+    // The middle mark is a mild yes now, not a goal (74 §3.6.2) — the gap is the whole signal.
+    expect(goal?.text).not.toContain('cunt');
   });
 
   it('marks the ground worked-through so the questionnaire planner stops mining it (74 §5.6)', async () => {

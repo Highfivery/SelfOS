@@ -93,3 +93,26 @@ describe('the dirty-talk bank (74 §13)', () => {
     expect(entry.state).toBeUndefined();
   });
 });
+
+describe('74 §3.6.1 #1 — the examples', () => {
+  it('gives every WORD entry a hand-written example, since a bare word cannot be reacted to', () => {
+    const words = DIRTY_TALK_BANK.entries.filter((e) => e.kind === 'word');
+    const missing = words.filter((e) => !e.example || e.example.trim() === '');
+    // ~200 hand-authored lines rot silently otherwise: nothing else in the app would notice one going away.
+    expect(missing.map((e) => e.key)).toEqual([]);
+  });
+
+  it('never lets an example just restate the entry — it has to show it in use', () => {
+    const lazy = DIRTY_TALK_BANK.entries.filter(
+      (e) => e.example !== undefined && e.example.trim().toLowerCase() === e.text.toLowerCase(),
+    );
+    expect(lazy.map((e) => e.key)).toEqual([]);
+  });
+
+  it('keeps every example inside the boundary the bank itself sets', () => {
+    // The content standard is the same one the entries carry (74 §8.1) — the examples are not an exception.
+    const forbidden = /\b(child|kid|minor|teen|underage)\b/i;
+    const bad = DIRTY_TALK_BANK.entries.filter((e) => e.example && forbidden.test(e.example));
+    expect(bad.map((e) => e.key)).toEqual([]);
+  });
+});

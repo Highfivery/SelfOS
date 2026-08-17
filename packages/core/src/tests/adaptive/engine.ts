@@ -4,7 +4,7 @@ import { extractJsonArray, extractJsonObject, tolerantArray } from '../../ai/jso
 import { PERSONA, SAFETY } from '../../conversations/promptBuilder';
 import type { AdaptiveProfile, EroticLexicon, LexiconEntry } from '../../schemas';
 import { runClaude, type AiDeps } from '../../questionnaires/aiCall';
-import { suppressedTexts, violatesBoundary } from './lexicon';
+import { bothSidesAsked, suppressedTexts, violatesBoundary } from './lexicon';
 
 /**
  * 74-adaptive-tests §5.1/§5.3 — the **adaptive half**: the phases that chase what the bank left ambiguous,
@@ -73,10 +73,14 @@ export function lexiconDigest(lexicon: EroticLexicon): string {
   const loved = lexicon.entries.filter(
     (e) => e.state === undefined && Math.max(e.hear, e.say) >= 3,
   );
-  const cringe = lexicon.entries.filter((e) => e.state === 'notYet');
+  // Re-sourced from the GAP, not the middle mark: `okay` is a mild yes now, so the old `notYet` filter would
+  // be permanently empty and this context line would silently stop existing (74 §3.6.2).
+  const stuck = lexicon.entries.filter(
+    (e) => e.state === undefined && bothSidesAsked(e) && e.hear >= 3 && e.say <= 1,
+  );
   return [
     line('They marked these as landing', loved),
-    line('They flinched at these (cringe, not a boundary)', cringe),
+    line('They love hearing these but rate themselves low on saying them', stuck),
     lexicon.themes.length > 0 ? `In their words: ${lexicon.themes.join(' · ')}` : '',
   ]
     .filter(Boolean)
@@ -127,12 +131,16 @@ export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
     });
   }
 
-  // 3) A cringe with no explanation — the most coachable signal in the take.
-  const cringe = lexicon.entries.filter((e) => e.state === 'notYet');
+  // 3) Loves to hear it, can't say it — the most coachable signal in the take. Sourced from the gap since
+  // the middle mark stopped meaning "cringe" (74 §3.6.2); an empty probe pack is invisible, so a filter that
+  // can never match again would have removed this silently.
+  const cringe = lexicon.entries.filter(
+    (e) => e.state === undefined && bothSidesAsked(e) && e.hear >= 3 && e.say <= 1,
+  );
   if (cringe.length > 0) {
     out.push({
       id: 'cringe',
-      question: `"${cringe[0]!.text}" made them cringe rather than refuse — what is the cringe about?`,
+      question: `They love hearing "${cringe[0]!.text}" but rate themselves near zero on saying it — what stops them?`,
     });
   }
 

@@ -6,10 +6,7 @@ import { DIRTY_TALK_SPINE, scoreSpine } from './spine';
 
 const NOW = new Date('2026-08-16T12:00:00.000Z');
 
-function score(
-  marks: Record<string, 'love' | 'never' | 'notYet'>,
-  splits = {},
-): Map<string, number> {
+function score(marks: Record<string, 'love' | 'never' | 'okay'>, splits = {}): Map<string, number> {
   let lex = applyBankMarks(emptyLexicon('p1', NOW), DIRTY_TALK_BANK, marks, 'take:1', NOW);
   lex = applyDirections(lex, splits, NOW);
   return new Map(scoreSpine(lex).map((s) => [s.key, s.normalized]));

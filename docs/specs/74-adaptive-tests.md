@@ -113,6 +113,11 @@ Take button reads **Start**.
 
 ### 3.2 The take — Dirty Talk, phase by phase
 
+> **§3.6 supersedes the PRESENTATION below** (2026-08-16): the bank is walked one area per screen with a
+> hand-authored example under every term, oriented to who is speaking to whom, and the middle mark now means
+> "it's okay" rather than "not yet". What a mark MEANS to safety is unchanged. Read §3.2 for the model and
+> §3.6 for what is on screen.
+
 Every phase persists on completion. The take is **resumable across sittings** (a `draft` result), shows
 **realtime progress** on every AI phase (phase label + elapsed + ETA — the durable §12 rule; a bare spinner is
 unacceptable), and can be abandoned at any point without saving a profile.
@@ -133,8 +138,10 @@ Two kinds of entry, because people don't speak in single words:
   "pound my pussy" · "suck that cock" · "don't come until I say" · "I can feel you throb"_. These are the high-value
   entries; a word rating alone can't tell you whether she wants to be **told**, **asked**, or **narrated to**.
 
-Each entry is rated **twice** — hear and say — because what you love to hear and what you can get out of your
-own mouth are completely different things, and that gap is the most useful thing this test finds:
+Each entry is rated in **both directions** — hear and say — because what you love to hear and what you can get out of your
+own mouth are completely different things, and that gap is the most useful thing this test finds. (§3.6.4
+narrows this: an ORIENTED entry carries one rating, on the side it belongs to, and §3.6.6 is what keeps the
+unshown side from reading as "cannot say it".)
 
 |             | HEAR | SAY |
 | ----------- | ---- | --- |
@@ -142,12 +149,14 @@ own mouth are completely different things, and that gap is the most useful thing
 | `good girl` | ♥♥♥♥ | —   |
 | `whore`     | ✗    | ✗   |
 
-Scale: `✗` never · `~` not yet · `—` nothing · `♥`…`♥♥♥♥`. **Three negative states, not one** (owner decision):
+Scale: `Ban` never · `Contrast` it's okay · `—` nothing · `Flame` 0–4. **Two states, three marks** — the
+`~ not yet` state below is **SUPERSEDED by §3.6.2**:
 
 - **`✗` never** — permanent. Suppressed everywhere, never re-offered on a retake, and **no reason is ever
   asked**. Requiring someone to justify a no is itself coercive (§8.2).
-- **`~` not yet** — "makes me cringe / I'd feel like an idiot". Revisitable on a retake, and the raw material
-  for the shame + practice sessions. This is where most of the coaching value lives.
+- ~~**`~` not yet** — "makes me cringe / I'd feel like an idiot".~~ **SUPERSEDED by §3.6.2**: the middle mark
+  now means "It's okay", a mild yes that feeds no goal. The cringe signal is no longer captured by a mark at
+  all; the goal signal comes from the hear/say gap (§3.6.6).
 - **`—` nothing** — neutral, no signal.
 
 **Pacing a 300-entry bank without a wall.** Rating 300 entries in two directions is 600 taps and nobody finishes.
@@ -162,9 +171,10 @@ Three mechanisms, all existing precedents:
 3. **Skip is free** at family and entry level, and an unrated entry is simply omitted from the scoring mean —
    never treated as a no (the `scoreSubscale` "unanswered → omit" rule).
 
-A free write-in per family ("your words — anything we missed"). **As built:** both anatomical forms ship as
-entries and everyone sees both, marking what applies; per-person resolution via `activityRows` (and the dialect
-question) are later refinements rather than shipped behaviour.
+A free write-in per family ("your words — anything we missed"). **As built — SUPERSEDED by §3.6.3:** both
+anatomical forms ship as entries and everyone sees both. §3.6.3 replaces that with the `body`/`addresses`
+resolver; entries matching neither side are withheld, counted and stated (§3.6.5). Rewriting a phrase's
+anatomy in place is NOT the mechanism and was never built.
 
 Each entry declares its sensible **directions** — most demands are `both` (she says _"fuck me harder"_, he hears
 it), a few are one-way (_"good girl"_ is rarely a thing you say about yourself) — so the grid never asks a
@@ -173,7 +183,8 @@ nonsense question.
 This phase alone is shippable value: no AI, no cost, and already better than the free-text box.
 
 **Phase 2 — Line reactions.** ONE batched model call writes ~12 complete lines, seeded by phase 1 + the seeds in
-§5.4, each tagged internally with register + heat. The person marks 🔥 / 😐 / 🚫.
+§5.4, each tagged internally with register + heat. The person marks it with the same three lucide marks as the deck — `Flame` / `Contrast` / `Ban` (§3.6.1 #5;
+the emoji here are superseded, and `AdaptiveTake.tsx:395` still renders them).
 
 > _"You're so fucking wet for me." · "Good girl. Just like that." · "I can feel you throbbing around me." ·
 > "Don't come until I say." · "Look at you, taking every inch." · "You're mine. Say it." · "Beg me for it." ·
@@ -209,6 +220,10 @@ Contexts: **build-up · during · edge/climax · after · sexting · phone**.
 **Phase 5 — Synthesis.** One structured pass → the profile. Metered; the person sees phase + timer + ETA.
 
 ### 3.3 The report
+
+> **§3.6.2/§3.6.6 amend the SOURCE of "What you can't say yet"**: it renders from `state === 'notYet'` today
+> (`AdaptiveReport.tsx:218`), which the middle-mark change empties. Slice 4 re-sources it from the hear/say
+> gap, and only for entries where both sides were shown.
 
 Written **to them, in their register** — not a clinical readout. It is also, deliberately, a thing they might
 read aloud or hand to a partner (§8.5), so it reads like prose with the structure underneath:
@@ -250,7 +265,7 @@ useful. The take says so on screen: _every tap saves itself · move on whenever 
 
 Three things this rule drags in, each of which is a defect if skipped:
 
-- **Un-marking has to reach the store.** Once a tap is written before it can be reconsidered, a mis-tapped ✗
+- **Un-marking has to reach the store.** Once a tap is written before it can be reconsidered, a mis-tapped `Ban` mark
   would be a permanent boundary they never meant. So the pass sends `cleared` alongside `marks`, and
   `clearMarks` reverses the state, the seeded ratings, and the boundary. This is not §3.2's "a boundary lifts
   only by an explicit act" being widened — un-marking **is** that act, by the same person, on a mark made in
@@ -275,13 +290,207 @@ promise on screen is a lie the second time they open it.
 
 ### 3.5 Retakes, deletion, and the practice handoff
 
-Retake = a new dated result + a trend point; the lexicon is **merged forward**, and a `✗ never` is never
-re-offered (a `~ not yet` is). Delete-one re-derives from the latest remaining result; delete-all removes the
+Retake = a new dated result + a trend point; the lexicon is **merged forward**, and a `never` is never
+re-offered (an `okay` is — §3.6.2). Delete-one re-derives from the latest remaining result; delete-all removes the
 results, the derived Insight, **and** the lexicon sections this test owns — deletion has to be real here (§8.5).
 
 The report's **"Practise this"** button starts the existing `dirty-talk-practice` guided session with the goal
 pre-loaded, so the guided session stops opening on "what do you want to be able to say?" when the app already
 knows.
+
+### 3.6 The bank pass, redesigned — AMENDMENT (2026-08-16, owner-requested, mockup approved) — **BUILT**
+
+> **Supersedes** the pass-1/pass-2 presentation in §3.2 and the two-pass claim in §11 resolved #2. The
+> boundary rules (§8.1/§8.2), the 18+ gate, the taboo framing, the crisis handling and the autosave contract
+> (§3.4) are **unchanged** — this changes what is shown and how it is asked, not what a mark means to safety.
+
+The owner, on first sight of the built pass: _"it's overwhelming with a ton of terms — which is good to have,
+but needs to be presented much better and have like a short quote for each in how it's used."_ Then, separately:
+_"make it smarter so if the person is a guy and straight it shows ones that he likes to hear and likes to say,
+and vice versa for a girl."_
+
+**Measured before designing** (not estimated): **1,033 entries · 36 families · median 26 per family**, tiers
+`1:76 · 2:159 · 3:287 · 4:343 · 5:168`. So half the bank sits at the intense end, and the median area is a
+comfortable screen — the size was never the problem.
+
+Four distinct causes, and a quote only fixes one:
+
+1. **Volume** — 36 families in one scroll, no sense of position, progress, or remaining.
+2. **Context** — `hole`, `mine`, `brat`, `cumslut` out of context are a vocabulary list. You cannot react to a
+   word; you can react to being spoken to.
+3. **Uniformity** — 1,033 identical rows with three identical buttons, optimizing for the _rare_ action. Most
+   entries get no mark, so the common interaction is scanning past, which should be free.
+4. **Orientation** — a straight man was being asked to rate `your cunt` in the hear direction and `good girl`
+   in the hear direction. Roughly half the bank could never be said to him or by him.
+
+#### 3.6.1 The seven decisions (owner, asked one at a time)
+
+| #   | Decision                                                                                   | Why this one                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **A hand-authored example quote** per fragment; complete lines show none                   | Templates break exactly where the term is unusual (`"I want to feel your down there"`), which is where the example matters most                                                                                                                                                                                                                                                                                                                                                                    |
+| 2   | **One area per screen** — a deck of 36, with progress and a one-tap skip                   | Turns an endless scroll into ~26 rows, and makes stopping read as progress rather than abandonment                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 3   | **No pre-filter** — order areas broad-first, niche-last                                    | The test exists to DISCOVER; pre-excluding an area sight-unseen means never finding out. Ordering buys the speed without the cost. Needs **no new field** — `Bank.families` is already an ordered array and `buildBank` preserves declaration order, so this is a re-ordering of the `bankFamily(...)` blocks. What IS missing is the per-area one-line description the deck needs: `BankFamily.note` exists but is optional and mostly unset, so slice 3 fills it — content, alongside the quotes |
+| 4   | **Nothing hidden** — every tier on screen, ordered gentle → extreme, with an intensity pip | Matches the standing "gate nothing" posture; the pip is information, not a reveal                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| 5   | **Three marks, lucide icons only** — `Flame` / `Contrast` / `Ban`                          | `AdaptiveTake.tsx:291` renders `🔥 / ~ / ✗` — one emoji plus two text glyphs; the line reactions (`:395`), the instructions (`:215`) and the settled-boundary row (`:266`) are emoji too and are all in scope. `Ban` (circle-slash) reads as a boundary where a bare X reads as "close"                                                                                                                                                                                                            |
+| 6   | **The middle mark means "It's okay"** — a mild yes, not "not yet"                          | See §3.6.2 — this is a model change, not a relabel                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 7   | **Oriented to the person** — body from intake anatomy, address asked in-take               | See §3.6.3. Inferring from gender + orientation is the exact conflation that broke #62. NB the anatomy answers exist but **nothing in `tests/adaptive` reads intake today** (§5.4's seeds are unbuilt) — slice 1 adds that read                                                                                                                                                                                                                                                                    |
+
+#### 3.6.2 The middle mark changes meaning
+
+`~ not yet` ("makes me cringe / I'd feel like an idiot") becomes **"It's okay"** — fine, works, not a
+favourite. That is a **different signal**, so:
+
+- `LexiconState` is `'never' | 'okay'`. New marks only ever produce `okay`.
+- **The middle mark no longer feeds `derivedWantsToSay`.** A mild yes is not a goal. The goal signal moves
+  wholly to the hear/say **gap** — loved to hear, rated low to say — which is stronger for being derived from
+  two answers rather than one. **But the gap needs both answers**, and §3.6.4's collapse removes one of them
+  for every oriented entry: see **§3.6.6, which is a prerequisite of this change, not a follow-up.**
+- **Two probe inputs go with it.** `engine.ts:76` (the "they flinched at these" context line) and
+  `engine.ts:131` (the `cringe` probe — the code calls it "the most coachable signal in the take") both read
+  `notYet` and would silently never fire again. Both re-source from the gap set in slice 1; an empty probe
+  pack is invisible, so nothing would report the loss.
+- The negative side is unchanged: `never` is still permanent, still suppressed everywhere, still never
+  re-offered, still asks no reason (§8.2).
+
+**Legacy `notYet` values.** The semantics genuinely differ, so this is a real coercion, not a rename: on read,
+`notYet` → `okay`, and it stops contributing to goals. The negative side is untouched.
+
+**The blast radius is small by construction**, which is a better argument than "the population is ~0":
+`completeAdaptiveTake` persists the derived goals onto the lexicon (`adaptiveService.ts:302`) and
+`derivedWantsToSay` UNIONS with that persisted list (`lexicon.ts:432`), so a COMPLETED legacy take keeps every
+goal it produced. Only a `notYet` sitting in an unfinished draft loses its contribution.
+
+**If you want the count anyway** it needs a main-process decrypt — the master key is under Electron
+`safeStorage`, so no plain node script can read a lexicon. Either temporarily log
+`(await readLexicon(fs, key, personId)).entries.filter((e) => e.state === 'notYet').length` from the
+`testsAdaptiveState` handler and open the Tests hub once per person, or accept the blast radius above. A
+key-free `ls people/*/tests/lexicon.enc` is NOT a proxy: `recordBankPass` writes a lexicon on the FIRST
+autosave, so an abandoned draft leaves one behind.
+
+**The rename is five declarations, not one**: `LexiconStateSchema` (`schemas.ts:1090`), `BankMark`
+(`lexicon.ts:81`), the two bridge input enums (`coreBridge.ts:1153`, `:1188`), the channel contract
+(`channels.ts:2411`), and the store's `BankMark` (`adaptiveTestStore.ts:22`).
+
+#### 3.6.3 Orientation — what could actually be said in your bed
+
+Two independent axes, each split by direction. Getting this from `gender` + orientation is forbidden: the
+onboarding activity matrix did exactly that and issue **#62** was the result — it conflated who-you-date with
+what-they-have, was wrong for trans and non-binary people, and orphaned prior ratings when someone edited
+their gender. The fix then was to **ask anatomy directly**, and those answers already exist.
+
+| Axis        | Example terms                    | Source                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Body**    | `your cunt`, `your cock is huge` | `ownAnatomy` / `partnerAnatomy` from the intake intimacy section, via `activityContext.activityRowContext` — already collected, never re-asked. **The answers are LABELS, not enums**, so slice 1 states the mapping: `Cock (penis)`→`penis`, `Pussy (vulva)`→`vulva`, `Both or intersex`→`either`; `Rather not say` / `Don't mind` / unset / unrecognized → **`either`, never a withhold** |
+| **Address** | `good girl`, `my boy`, `brat`    | **Asked in-take**, two taps (§3.6.4). Recorded nowhere today, and NOT derivable from anatomy: a trans woman may absolutely want "good girl"                                                                                                                                                                                                                                                 |
+
+`BankEntry` gains both as optional tags — absent means universal:
+
+```ts
+interface BankEntry {
+  // …existing
+  /** One short line showing it in use. Absent when the entry is already a complete utterance. */
+  example?: string;
+  /** Who the line is aimed at. Absent ⇒ addresses anyone. */
+  addresses?: 'girl' | 'man' | 'either';
+  /** Whose anatomy it names. Absent ⇒ names no one's. */
+  body?: 'penis' | 'vulva' | 'either';
+}
+```
+
+**The resolver** (pure, unit-testable, no AI):
+
+- Shown on the **HEAR** side when the entry addresses _me_ and names _my_ body (or names no body).
+- Shown on the **SAY** side when it addresses _my partner_ and names _their_ body.
+- `either` on an axis satisfies both sides; an `either/either` person sees both sides for everything.
+- Matching neither side ⇒ **withheld**, counted, and said out loud (§3.6.5).
+- **Absent or non-committal on an axis ⇒ `either`, never a withhold.** `Rather not say`, `Both or intersex`,
+  `Don't mind`, unset, and anything unrecognized all fail **open**. Withholding by default would give someone
+  who declined to answer a thinner test with no way to know why — the exact §3.6.5 failure — and it mirrors
+  `resolveOral`'s existing "never guess → neutral" rule (`activityRows.ts:97`).
+
+**Orientation is a display filter and nothing else.** It is never written to the lexicon, never a boundary,
+and never suppresses anything downstream. Changing the answer re-shows everything; no mark is lost. That
+distinction is load-bearing — a `never` is permanent and this deliberately is not.
+
+#### 3.6.4 The shape of the take after this
+
+**Phase 0a — two taps** (new, before the deck; skipped when already answered on a retake):
+
+```
+When someone talks to you like this, you're…   [ their girl ] [ their man ] [ neither · both · depends ]
+And the person you're saying it to is…          [ a girl ]     [ a man ]     [ neither · both · depends ]
+```
+
+Stored on the lexicon (`EroticLexicon.address = { self, partner }`), so Fantasy and Sex Sessions inherit it
+and never ask again. Three additive pieces slice 1 must name, because nothing carries it today:
+`EroticLexiconSchema.address` (optional `{ self, partner }`, each `'girl' | 'man' | 'either'`, absent ⇒
+unasked, `.catch(undefined)` like every other lexicon field); a `{ kind: 'setAddress' }` arm on
+`AdaptiveLexiconEdit`; and — because §3.6.5 promises a route back — an affordance that re-opens phase 0a
+mid-take, not only on first run. Changing it re-runs the resolver and re-shows; it writes no mark and lifts
+no boundary. Anatomy is **not** re-asked; when intake has none, §11 resolved #7 already covers asking
+in-take.
+
+**Phase 1 — the deck.** One area per screen: progress rail (`Area 4 of 36`), area title + its own one-line
+description, the terms in a single column as `term → quote → marks`, then `Skip this area` / `Next area`. The
+quote is the widest column, not a subtitle under the term — that keeps the row one line tall and puts the eye
+on the sentence.
+
+**Phase 2 — the hear/say split largely COLLAPSES.** Once an entry is oriented its direction is implied, so it
+carries **one rating on the side it belongs to**, inline in the deck. The separate split screen survives only
+for `either/either` entries, which need both. This is the second reduction: the take gets shorter twice over.
+
+#### 3.6.5 Withheld terms are stated, never silently dropped
+
+Each area that hides entries says so, with a count, a reason, and a route back:
+
+> _14 terms in this area are things said to a girl about her body — not shown, because nobody is saying them
+> to you. Change that in **Before we start**._
+
+An invisible filter would be the worse failure here: on a test whose whole point is discovery, you would only
+notice by wondering why an area felt thin.
+
+The count comes from the **pure resolver**, returned with the area — not from the renderer counting empty
+rows — so the note and the rendered rows can never disagree. Slice 5 asserts it on the resolver: for a fixed
+person and area, `shown + withheld === the area's entry count`.
+
+#### 3.6.6 The collapse needs a third value: NOT APPLICABLE
+
+**This is a prerequisite of §3.6.4, and I had it wrong.** `say: 0` today does not mean "not asked" — every
+derived signal reads it as _cannot say it_. Once orientation means an entry is only ever SHOWN on one side,
+the unshown side silently becomes that same 0, and three things break at once:
+
+- `derivedWantsToSay` (`lexicon.ts:428`, `hear >= 3 && say <= 1`) turns **every loved hear-only entry into a
+  goal the person never declined** — and goals reach their own coach prompt AND a partner-shared Insight fact
+  (`adaptiveService.ts:379`). That is the worst of the three: it invents wants and shares them.
+- `sayConfidence` (`spine.ts:163`) averages `say / 4` over everything loved-to-hear, so `.say-confidence`
+  floors for everyone.
+- `.receiving-voice` / `.giving-voice` are `direction: 'say'` (`spine.ts:83`, `:92`) and `meanOf` counts a
+  hear-only mark as "marked" (`spine.ts:139`), so both dimensions floor too — the same "not their thing, 0%"
+  failure visual QA already caught once on this feature.
+
+So the shown sides must be **recorded, not inferred from a zero**. `LexiconEntry` gains
+`sides?: ('hear' | 'say')[]` — which sides this person was actually asked — and:
+
+- `derivedWantsToSay` reads the gap only when BOTH sides were shown; a hear-only entry contributes no goal.
+- `sayConfidence` and every `direction: 'say'` dimension restrict to entries whose `sides` include `say`, and
+  report `NO_SIGNAL_BAND` when that set is empty rather than 0.
+- `sides` is written **by the take** (it is a record of what was asked), never by the resolver at read time —
+  a later orientation change must not retroactively rewrite what a past take asked.
+
+Consequence for §3.6.2, stated honestly: the goal signal does **not** survive intact for oriented entries. It
+survives for `either/either` entries and for whatever reaches the surviving split screen. Without `sides`,
+dropping the middle mark's goal contribution would leave the goal list _fabricated_ rather than merely thinner.
+
+#### 3.6.7 Build slices
+
+1. **Model + resolver** — `example`/`addresses`/`body` tags, `EroticLexicon.address`, the `okay` rename and
+   its goal-derivation change, the pure orientation resolver. No UI.
+2. **The quotes** — ~400 hand-authored lines. The bulk of the work, and content, not code.
+3. **The deck** — phase 0a, one-area-per-screen, lucide marks, the withheld note, the tier pip.
+4. **The collapse** — one rating inline; the split screen reduced to the `either/either` remainder; report and
+   `DirtyTalkProfile` reconciled.
+5. **Guards** — resolver truth table, a withheld-count assertion, the §12 overflow guard at 360px on the deck,
+   and an E2E walking an oriented take end to end.
 
 ## 4. Data model
 
@@ -380,7 +589,7 @@ interface EroticLexicon {
     directions: ('hear' | 'say')[]; // most are both; a few only make sense one way
     hear: 0 | 1 | 2 | 3 | 4; // — · fine · like · love · that word does it
     say: 0 | 1 | 2 | 3 | 4;
-    state?: 'never' | 'notYet'; // a boundary, not a low score (49 §3.1)
+    state?: 'never' | 'okay'; // a boundary, or a mild yes (§3.6.2). `notYet` is coerced on read.
     custom?: boolean; // their write-in
     source: string; // which test/edit wrote it
   }[];
@@ -511,7 +720,8 @@ Claude key resolved host-side and never crossing IPC:
   to empty rather than blocking a session.
 - **Sync conflict** — the lexicon is last-write-wins on `updatedAt` **except boundaries, which UNION** (a hard no
   can never be lost by a merge).
-- **Retake** — merges forward; `never` entries are never re-offered; `notYet` may be.
+- **Retake** — merges forward; `never` entries are never re-offered; `okay` may be. A legacy `notYet` reads as
+  `okay` (§3.6.2).
 - **No partner** — solo/self-talk framing throughout; the steer simply never runs.
 - **Partner edge removed mid-life** — the steer re-gates on the next call, no stale access.
 
@@ -577,15 +787,19 @@ Insight, and the lexicon sections this test owns.
 
 ## 9. Accessibility
 
-The word-bank grid is keyboard-operable with per-cell labels ("cunt — hear", "cunt — say") and never conveys
-state by colour alone (the `✗ / ~ / — / ♥` marks are text). Line reactions are buttons with real labels, not
-gestures. Spine bars + trends carry text equivalents (the `SubscaleBar` / `LineChart` precedent). Progress is a
+The deck is keyboard-operable one area at a time, with a per-mark accessible label naming the entry, the
+direction it is rated on, and the mark ("good girl — hear — it's okay"). The three marks are lucide **icons**
+(§3.6.1 #5), so text equivalence is a REQUIREMENT rather than a property of the glyph: each carries a text
+label and `aria-pressed`, and state is never conveyed by icon or colour alone. Line reactions are buttons with
+real labels, not gestures. The withheld note (§3.6.5) is part of the area's accessible content, not a visual
+aside. Spine bars + trends carry text equivalents (the `SubscaleBar` / `LineChart` precedent). Progress is a
 polite live region; the crisis banner is announced. Responsive ~360px→desktop with no horizontal scrollbar and no
-inner scroller — the word-bank grid collapses to one word per row at phone width. Reduced motion respected.
+inner scroller — the deck is a single column at every width, so nothing collapses. Reduced motion respected.
 
 ## 10. Testing strategy
 
-- **Unit (core):** the word-bank scale + the three negative states; the boundary union on merge; a `never` never
+- **Unit (core):** the bank marks + the two states (`never` permanent, `okay` a mild yes) + the legacy-`notYet` coercion + the
+  orientation resolver truth table + `shown + withheld === total` + the fabricated-goal guard (§3.6.6); the boundary union on merge; a `never` never
   re-offered on a retake; `mapToSpine` rejects an AI-invented key; the stopping rule caps calls AND cost; a
   degraded phase still synthesizes; the saturation write is idempotent and lands `Intimacy:dirty-talk` in the
   ledger; the steer is gated on a live edge + both acks and **never emits a boundary reason or a probe answer**;
@@ -594,11 +808,12 @@ inner scroller — the word-bank grid collapses to one word per row at phone wid
   intimacy-gated (present in an intimacy context, **absent** from a money context, absent from the digest, absent
   from Together); a partner's prompt carries the steer but **never** an attribution phrase; a `never` word is
   absent from a partner's suggestion prompt; a Guest is refused; the 18+ gate withholds everything.
-- **RTL:** the word bank renders + records both directions; the report renders + edits persist; AI-off shows the
+- **RTL:** the deck renders one area with its quotes, records a mark on the oriented side only, and states the withheld
+  count; the report renders + edits persist; AI-off shows the
   short-version path; the practice handoff carries the goal.
 - **E2E (Playwright, `SELFOS_FAKE_CLAUDE`):** a full take → profile → **decrypt the vault** to assert the lexicon
   and the ledger entries; a retake versions and never re-offers a `never`; delete-all removes result + Insight +
-  lexicon sections; 360px overflow guard on the word bank + report; the full surface renders to the bottom.
+  lexicon sections; 360px overflow guard on the deck + report; the full surface renders to the bottom.
 
 ## 11. Open questions
 
@@ -606,8 +821,10 @@ inner scroller — the word-bank grid collapses to one word per row at phone wid
 
 1. **Taboo fantasy (F18)** → **ships in v1**, and **nothing is gated at all** — no tier ceiling, no family
    opt-in. Private two-person household of consenting adults. The roleplay framing + hard limits stay (§8.1).
-2. **Pacing** → a **two-pass bank**: pass 1 marks only what lands (🔥 / ✗ / ~), pass 2 asks the hear/say split on
-   what was marked. ~500 entries without ~1,000 taps.
+2. **Pacing** → ~~a **two-pass bank**: pass 1 marks only what lands, pass 2 asks the hear/say split on what was
+   marked.~~ **SUPERSEDED by §3.6.4** — one area per screen, one rating on the oriented side, the split screen
+   surviving only for `either/either` entries. Marks are lucide (#14) and the middle mark's meaning changed
+   (#15).
 3. **Steer bound** → **everything travels**. Sole exception: crisis / trauma-flagged text (a safety rule,
    §8.4). As built it emits the DERIVED vocabulary + themes rather than raw probe text, and never a boundary
    reason — the suppression needs the boundary itself, not the why.
@@ -618,6 +835,20 @@ inner scroller — the word-bank grid collapses to one word per row at phone wid
 8. **Break-glass** → **no cross-person reveal**; a person always sees ALL of their own data (§8.4).
 9. **Depth** → **uncapped, confidence-based**. The budget still gates every call, plus a non-binding runaway
    backstop (§5.3).
+
+### Resolved (2026-08-16 — the bank-pass redesign, asked one at a time; see §3.6)
+
+10. **Quotes** → **hand-authored per fragment**, not templated and not AI-generated. ~400 lines; complete
+    utterances show none.
+11. **Pacing** → **one area per screen**, a deck of 36 with progress and a per-area skip. Supersedes the
+    single-scroll presentation in #2 (the two-PASS model itself is superseded separately by §3.6.4's collapse).
+12. **Narrowing** → **no pre-filter**; areas are ORDERED broad-first so a half-finished take is a real profile.
+13. **Intensity** → **nothing hidden**; every tier on screen, gentle → extreme, with an intensity pip.
+14. **Marks** → **keep all three**, lucide icons only (`Flame` / `Contrast` / `Ban`).
+15. **The middle mark** → **"It's okay"**, a mild yes. A model change: it stops feeding goals, which now come
+    from the hear/say gap alone (§3.6.2).
+16. **Orientation** → body from **intake anatomy**, address from **two taps in-take**. Never inferred from
+    gender + orientation (#62). A display filter only — never a boundary (§3.6.3).
 
 ### Still open
 
@@ -632,6 +863,36 @@ inner scroller — the word-bank grid collapses to one word per row at phone wid
   "tonight I want _\_\_" that temporarily biases the register? \_Recommendation: not v1 — see how the profile lands._
 
 ## 12. Changelog
+
+- 2026-08-16 — **AMENDED (§3.6): the bank pass, redesigned.** Owner-requested after seeing the built pass, and
+  approved as a mockup before any code. Measured first (1,033 entries · 36 families · median 26), which named
+  four separate causes where "overwhelming" had read as one: volume, missing context, uniformity, and — the
+  one the owner spotted independently — **orientation**, since roughly half the bank could never be said to a
+  given person or by them. Seven decisions locked; the two that change more than pixels are the **middle mark
+  becoming "It's okay"** (a mild yes that no longer feeds goals — the goal signal moves wholly to the hear/say
+  gap, which is stronger for being derived from two answers) and **orientation**, whose body axis reuses the
+  intake anatomy answers rather than inferring from gender + orientation, because that inference is precisely
+  what broke #62. Two consequences worth their own line: the hear/say split **collapses** into the deck for
+  every oriented entry, and withheld terms are **counted and stated** rather than silently dropped, because an
+  invisible filter on a discovery test is the worse failure.
+
+  **The doc audit then found a blocker in the amendment itself**, which is why §3.6.6 exists: `say: 0` does not
+  mean "not asked" anywhere in the code — it means _cannot say it_. So collapsing the split would have left
+  every loved hear-only entry looking like a declined one, turning it into a **goal the person never declined**
+  — and goals reach their own coach prompt AND a partner-shared Insight fact. The shown sides therefore have to
+  be RECORDED (`LexiconEntry.sides`), not inferred from a zero, and the claim that "the goal signal survives
+  intact" was corrected: it survives for `either/either` entries, not for oriented ones. Two smaller finds:
+  dropping the middle mark silently kills both `notYet`-fed probe inputs (an empty probe pack is invisible),
+  and the intake anatomy answers are LABELS, not enums, with no stated mapping — now written down, failing
+  **open** so someone who declined to answer never gets a silently thinner test.
+
+  **BUILT 2026-08-16** on `feat/adaptive-deck`, all five slices. What the build itself surfaced, beyond the
+  audit: the deck's 36-dot progress rail is ~540px and cannot fit a phone, so it is hidden below 620px where
+  the "Area N of 36" text beside it already says the same thing (the §12 guard caught it, not a screenshot);
+  the withheld count is usually **0** with family-level tags, because an entry aimed at a girl still reaches a
+  straight man's SAY side — the real reduction is the side split (for a straight man: 129 say-only, 65
+  hear-only of 1,033), not withholding, and §3.6.5's note is the honest exception rather than the rule.
+  Coverage: **213/213** word entries carry a hand-written example, pinned by a bank-integrity guard.
 
 - 2026-08-16 — **BUILT** on `feat/adaptive-tests-spec`, in a worktree off `origin/main` (the books session
   holds the shared checkout). Eight slices:

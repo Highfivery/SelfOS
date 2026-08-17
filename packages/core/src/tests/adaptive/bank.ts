@@ -20,6 +20,14 @@ import type { LexiconEntry } from '../../schemas';
 /** Which direction an entry can sensibly be rated in. Most are both; a few only make sense one way. */
 export type BankDirection = 'hear' | 'say';
 
+/**
+ * 74 §3.6.3 — the two orientation axes. Both are OPTIONAL on an entry and both fail **open**: absent means
+ * "applies to anyone", and `either` matches every person. Nothing here is a boundary — it decides only what a
+ * given person is SHOWN, and changing the answer re-shows everything (§3.6.3).
+ */
+export type BankAddress = 'girl' | 'man' | 'either';
+export type BankBody = 'penis' | 'vulva' | 'either';
+
 export interface BankFamily {
   id: string;
   label: string;
@@ -29,6 +37,9 @@ export interface BankFamily {
   directions: readonly BankDirection[];
   /** Shown under the family heading — the framing an entry list can't carry on its own. */
   note?: string;
+  /** Default orientation for the family's entries; an entry may override either axis (§3.6.3). */
+  addresses?: BankAddress;
+  body?: BankBody;
 }
 
 export interface BankEntry {
@@ -38,6 +49,16 @@ export interface BankEntry {
   family: string;
   tier: 1 | 2 | 3 | 4 | 5;
   directions: readonly BankDirection[];
+  /**
+   * One short line showing the term in use (74 §3.6.1 #1). Present on FRAGMENTS — a bare `hole` or `mine` is
+   * a vocabulary item you can't react to. Absent on entries that are already a complete utterance, where an
+   * example would just restate the entry.
+   */
+  example?: string;
+  /** Who the line is aimed at. Absent ⇒ anyone. */
+  addresses?: BankAddress;
+  /** Whose anatomy it names. Absent ⇒ nobody's. */
+  body?: BankBody;
 }
 
 /** Deterministic, stable slug — mirrors `slug()` in `intimacy/topics.ts` so the two read the same way. */
@@ -48,8 +69,23 @@ export function bankSlug(text: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-/** Per-tier entry text for one family. A tier with no entries is simply omitted. */
-export type TierTexts = Partial<Record<1 | 2 | 3 | 4 | 5, readonly string[]>>;
+/**
+ * One entry in a tier: either the bare text (inherits everything from its family) or an object carrying its
+ * example and any per-entry orientation override. The bare form stays valid so ~1,000 existing declarations
+ * are untouched, and enrichment is incremental.
+ */
+export type TierItem =
+  | string
+  | {
+      text: string;
+      /** The §3.6.1 #1 example. Omit on entries that are already a complete utterance. */
+      ex?: string;
+      addresses?: BankAddress;
+      body?: BankBody;
+    };
+
+/** Per-tier entries for one family. A tier with no entries is simply omitted. */
+export type TierTexts = Partial<Record<1 | 2 | 3 | 4 | 5, readonly TierItem[]>>;
 
 /**
  * Declare a family + its tiered entries. The family id prefixes every key, so the same phrase can appear in
@@ -61,14 +97,22 @@ export function bankFamily(
 ): { family: BankFamily; entries: BankEntry[] } {
   const entries: BankEntry[] = [];
   for (const tier of [1, 2, 3, 4, 5] as const) {
-    for (const text of tiers[tier] ?? []) {
+    for (const item of tiers[tier] ?? []) {
+      const spec = typeof item === 'string' ? { text: item } : item;
+      // Orientation resolves entry-first, then family, then absent (= applies to anyone). Conditional spreads
+      // because `exactOptionalPropertyTypes` treats an explicit `undefined` as a different type from absent.
+      const addresses = spec.addresses ?? family.addresses;
+      const body = spec.body ?? family.body;
       entries.push({
-        key: `${family.id}:${bankSlug(text)}`,
-        text,
+        key: `${family.id}:${bankSlug(spec.text)}`,
+        text: spec.text,
         kind: family.kind,
         family: family.id,
         tier,
         directions: family.directions,
+        ...(spec.ex ? { example: spec.ex } : {}),
+        ...(addresses ? { addresses } : {}),
+        ...(body ? { body } : {}),
       });
     }
   }

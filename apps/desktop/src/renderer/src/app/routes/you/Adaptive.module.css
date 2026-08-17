@@ -156,3 +156,146 @@
   color: var(--color-text-tertiary);
   white-space: nowrap;
 }
+
+/* 74 §3.6.1 #5 — a boundary mark reads as a boundary, not just another toggle. */
+.markNo[aria-pressed='true'] {
+  background: var(--color-danger-subtle-bg);
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+/* 74 §3.6.4 — the deck: one area per screen. */
+.deckHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.dots {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  flex: none;
+}
+
+.dots i {
+  width: 12px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border-strong);
+  display: block;
+}
+
+.dots i.done {
+  background: var(--color-accent);
+}
+
+.dots i.now {
+  background: var(--color-accent-solid);
+  width: 22px;
+}
+
+/* The quote is the widest thing on the line — it is what they are actually reacting to (74 §3.6.4). */
+.entryRow {
+  display: grid;
+  grid-template-columns: minmax(110px, 180px) 1fr auto;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+  min-width: 0;
+}
+
+.entryRow:last-child {
+  border-bottom: 0;
+}
+
+.example {
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--color-text-secondary);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tierPip {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-border-strong);
+  margin-left: var(--space-2);
+  vertical-align: middle;
+}
+
+.tierPip.hot {
+  background: var(--color-warning);
+}
+
+/* Withheld terms are STATED, never silently dropped (74 §3.6.5). */
+.withheld {
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface-alt);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+
+.deckFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-4);
+}
+
+/* The two address taps (74 §3.6.4). */
+.pills {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.pill {
+  font: inherit;
+  padding: var(--space-2) var(--space-4);
+  border-radius: 999px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.pill:hover {
+  border-color: var(--color-text-tertiary);
+}
+
+.pill:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.pill[aria-pressed='true'] {
+  background: var(--color-accent-subtle-bg);
+  border-color: var(--color-accent);
+  color: var(--color-accent-subtle-text);
+  font-weight: 500;
+}
+
+@media (max-width: 620px) {
+  .entryRow {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+
+  /* 36 dots is ~540px of rail — it cannot fit a phone, and the "Area N of 36" text beside it already says
+     the same thing (the §9 text equivalent), so the decorative half goes rather than scrolling sideways. */
+  .dots {
+    display: none;
+  }
+}

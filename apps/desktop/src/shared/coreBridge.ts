@@ -841,6 +841,7 @@ import {
   skipIntakeSection,
   submitSectionForm,
   synthesizeIntake,
+  activityRowContext,
 } from '@selfos/core/intake';
 import {
   deleteAllResults,
@@ -883,7 +884,12 @@ import {
   stampTurn,
   startAdaptiveTake,
   writeLexicon,
+  addressFromAnswer,
+  bodyFromAnatomyAnswer,
+  orientArea,
+  shownSides,
   type AdaptiveTestDefinition,
+  type Orientation,
 } from '@selfos/core/tests';
 import {
   acceptSuggestion,
@@ -1150,7 +1156,7 @@ const AdaptiveRoundSchema = AdaptiveRefSchema.extend({
   round: z.number().int().min(1).max(20),
 });
 const AdaptiveBankPassSchema = AdaptiveRefSchema.extend({
-  marks: z.record(z.string(), z.enum(['love', 'never', 'notYet'])),
+  marks: z.record(z.string(), z.enum(['love', 'never', 'okay'])),
   // Bounded: an autosave sends a small delta, and the closing call sends the whole pass. Neither is unbounded,
   // and a renderer that sends a million keys is a bug, not a use case.
   cleared: z.array(z.string().min(1)).max(2000).optional(),
@@ -1185,7 +1191,14 @@ const AdaptiveLexiconEditSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('setState'),
     key: z.string().min(1),
-    state: z.enum(['never', 'notYet']).nullable(),
+    state: z.enum(['never', 'okay']).nullable(),
+  }),
+  z.object({
+    // 74 §3.6.4 — the two address taps. A display filter: it writes no mark and lifts no boundary, so it is
+    // freely changeable and re-running the resolver re-shows everything.
+    kind: z.literal('setAddress'),
+    self: z.enum(['girl', 'man', 'either']),
+    partner: z.enum(['girl', 'man', 'either']),
   }),
   z.object({
     kind: z.literal('addWord'),
@@ -2185,6 +2198,50 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       return null;
     }
     return { ctx, personId, def };
+  };
+
+  /**
+   * 74 §3.6.3 — this person's orientation: the two address taps they answered (stored on their lexicon) plus
+   * the anatomy they already gave onboarding. Never inferred from gender + orientation — that conflation is
+   * what broke #62. Anything unanswered, non-committal or unrecognized resolves to `either`, so the resolver
+   * FAILS OPEN and someone who declined to answer is never handed a quietly thinner test.
+   */
+  const personOrientation = async (gate: {
+    ctx: { fs: FileSystem; key: Uint8Array };
+    personId: string;
+  }): Promise<Orientation> => {
+    const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
+    const session = await getIntakeSession(gate.ctx.fs, gate.ctx.key, gate.personId).catch(
+      () => null,
+    );
+    const anatomy = session ? activityRowContext(session) : { ownAnatomy: undefined };
+    const partner = Array.isArray(anatomy.partnerAnatomy) ? anatomy.partnerAnatomy : [];
+    return {
+      selfAddress: addressFromAnswer(lexicon.address?.self),
+      partnerAddress: addressFromAnswer(lexicon.address?.partner),
+      selfBody: bodyFromAnatomyAnswer(anatomy.ownAnatomy),
+      // More than one answer means "either" by construction — two bodies is not one body.
+      partnerBody: partner.length === 1 ? bodyFromAnatomyAnswer(partner[0]) : 'either',
+    };
+  };
+
+  /** The sides each marked key was offered on, for the record `applyBankMarks` writes (74 §3.6.6). */
+  const markedSides = async (
+    gate: {
+      ctx: { fs: FileSystem; key: Uint8Array };
+      personId: string;
+      def: AdaptiveTestDefinition;
+    },
+    keys: readonly string[],
+  ): Promise<Record<string, readonly ('hear' | 'say')[]>> => {
+    if (keys.length === 0) return {};
+    const who = await personOrientation(gate);
+    const out: Record<string, readonly ('hear' | 'say')[]> = {};
+    for (const key of keys) {
+      const entry = gate.def.bank.entries.find((e) => e.key === key);
+      if (entry) out[key] = shownSides(entry, who);
+    }
+    return out;
   };
 
   /** How long before a profile is stale enough to invite a fresh look (74 §11). */
@@ -4096,6 +4153,22 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const { testId } = TestIdSchema.parse(input);
       const gate = await adaptiveGate(testId);
       if (!gate) return null;
+      // 74 §3.6.3 — orient HOST-SIDE. The renderer receives only what could actually be said to or by this
+      // person, plus a per-family withheld count it states out loud (§3.6.5). Both axes fail open, so an
+      // unanswered question widens what is shown and never quietly narrows it.
+      const who = await personOrientation(gate);
+      const shownByKey = new Map<string, readonly ('hear' | 'say')[]>();
+      const withheldByFamily: Record<string, number> = {};
+      for (const family of gate.def.bank.families) {
+        const area = orientArea(
+          family.id,
+          gate.def.bank.entries.filter((entry) => entry.family === family.id),
+          who,
+        );
+        withheldByFamily[family.id] = area.withheld;
+        for (const item of area.shown) shownByKey.set(item.entry.key, item.sides);
+      }
+      const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
       return {
         testId,
         families: gate.def.bank.families.map((family) => ({
@@ -4104,14 +4177,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           kind: family.kind,
           ...(family.note !== undefined ? { note: family.note } : {}),
         })),
-        entries: gate.def.bank.entries.map((entry) => ({
-          key: entry.key,
-          text: entry.text,
-          kind: entry.kind,
-          family: entry.family,
-          tier: entry.tier,
-          directions: entry.directions,
-        })),
+        entries: gate.def.bank.entries
+          .filter((entry) => shownByKey.has(entry.key))
+          .map((entry) => ({
+            key: entry.key,
+            text: entry.text,
+            kind: entry.kind,
+            family: entry.family,
+            tier: entry.tier,
+            directions: entry.directions,
+            ...(entry.example !== undefined ? { example: entry.example } : {}),
+            sides: shownByKey.get(entry.key) ?? entry.directions,
+          })),
+        withheldByFamily,
+        ...(lexicon.address ? { address: lexicon.address } : {}),
       };
     },
     testsAdaptiveState: async (input): Promise<AdaptiveStateView | null> => {
@@ -4142,6 +4221,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           personId: gate.personId,
           resultId: parsed.resultId,
           marks: parsed.marks,
+          // 74 §3.6.6 — resolve the sides HERE, from the same orientation the deck was built with, so the
+          // record of what was asked can't drift from what was shown.
+          sides: await markedSides(gate, Object.keys(parsed.marks)),
           ...(parsed.cleared ? { cleared: parsed.cleared } : {}),
           ...(parsed.autosave ? { autosave: true } : {}),
         },
@@ -4347,6 +4429,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             edit.state === null
               ? clearState(lexicon, edit.key, now)
               : applyBankMarks(lexicon, DIRTY_TALK_BANK, { [edit.key]: edit.state }, 'edit', now);
+          break;
+        case 'setAddress':
+          lexicon = { ...lexicon, address: { self: edit.self, partner: edit.partner } };
           break;
         case 'addWord':
           lexicon = addCustomEntry(

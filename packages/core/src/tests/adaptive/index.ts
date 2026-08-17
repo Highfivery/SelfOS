@@ -1,5 +1,6 @@
 export * from './bank';
 export * from './lexicon';
+export * from './orientation';
 export * from './spine';
 export { DIRTY_TALK_BANK } from './instruments/dirtyTalkBank';
 export * from './types';

@@ -304,3 +304,81 @@ describe('mergeLexicons keeps what was ASKED (74 §3.6.6)', () => {
     expect(mergeLexicons(older, newer).entries[0]?.sides).toEqual(['hear', 'say']);
   });
 });
+
+describe('74 §3.6.8 — a name can be ruled out one way and loved the other', () => {
+  const base = (over: Partial<EroticLexicon> = {}): EroticLexicon => ({
+    schemaVersion: 1,
+    personId: 'p1',
+    entries: [],
+    registers: {},
+    contexts: {},
+    themes: [],
+    wantsToSay: [],
+    boundaries: [],
+    updatedAt: 'now',
+    ...over,
+  });
+
+  const withSlut = base({
+    entries: [
+      {
+        key: 'names-degrading:slut',
+        text: 'slut',
+        kind: 'word',
+        family: 'names-degrading',
+        tier: 4,
+        hear: 0,
+        say: 4,
+        // "never call me that" — while loving to call HER that.
+        hearState: 'never' as const,
+        sayState: 'love' as const,
+        source: 'test:r1',
+      },
+    ],
+  });
+
+  it('suppresses it for lines aimed AT them, and not for lines they say', () => {
+    expect(violatesBoundary(withSlut, 'that is my slut', 'hear')).toBe(true);
+    expect(violatesBoundary(withSlut, 'that is my slut', 'say')).toBe(false);
+  });
+
+  it('refuses when the caller cannot say which way the line runs', () => {
+    // The strict default: a consumer that does not know the direction is exactly the one that must not
+    // be trusted to thread it.
+    expect(violatesBoundary(withSlut, 'that is my slut')).toBe(true);
+  });
+
+  it('keeps a whole-entry `never` and an old undirected boundary covering BOTH ways', () => {
+    const legacy = base({
+      entries: [
+        {
+          key: 'names-degrading:whore',
+          text: 'whore',
+          kind: 'word',
+          family: 'names-degrading',
+          tier: 4,
+          hear: 0,
+          say: 0,
+          state: 'never' as const,
+          source: 'test:r0',
+        },
+      ],
+      boundaries: [{ text: 'being used', kind: 'theme' as const, at: 'now' }],
+    });
+    for (const direction of ['hear', 'say'] as const) {
+      expect(violatesBoundary(legacy, 'you filthy whore', direction)).toBe(true);
+      expect(violatesBoundary(legacy, 'I love using you', direction)).toBe(true);
+    }
+  });
+
+  it('honours a directional THEME boundary', () => {
+    const themed = base({
+      boundaries: [
+        { text: 'being used', kind: 'theme' as const, at: 'now', direction: 'hear' as const },
+      ],
+    });
+    expect(violatesBoundary(themed, 'I love using you', 'hear')).toBe(true);
+    expect(violatesBoundary(themed, 'I love using you', 'say')).toBe(false);
+    expect(violatesBoundary(themed, 'I love using you')).toBe(true);
+  });
+});

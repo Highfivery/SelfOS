@@ -161,14 +161,43 @@ export async function startAdaptiveTake(
   return draft;
 }
 
-/** Abandon a draft — nothing is scored, nothing is written to the lexicon, no profile exists. */
+/**
+ * Start over from the top — and mean it.
+ *
+ * This used to delete the take record and reset the position, then re-seed the deck from the person's
+ * lexicon, which still held every mark: the screen came back looking exactly as they left it. The owner's
+ * expectation, taken as the requirement (2026-08-17): **it clears everything for that person.**
+ *
+ * That includes the hard nos, deliberately. A `never` is the strongest thing in the model — it suppresses
+ * that word everywhere in the app — so leaving them behind would have left the deck full of settled "off the
+ * table" rows, which is the state the person is trying to leave. The caller is responsible for making it an
+ * informed act (the UI confirms, and says the suppression list goes with it).
+ *
+ * `key` is required because this rewrites the lexicon rather than only removing a file.
+ */
 export async function abandonAdaptiveTake(
   fs: FileSystem,
   personId: string,
   resultId: string,
+  key?: Uint8Array,
 ): Promise<void> {
   const path = resultPath(personId, resultId);
   if (path) await fs.remove(path);
+  if (!key) return;
+  const lexicon = await readLexicon(fs, key, personId);
+  if (!lexicon) return;
+  await writeLexicon(fs, key, {
+    ...lexicon,
+    entries: [],
+    boundaries: [],
+    registers: {},
+    contexts: {},
+    themes: [],
+    wantsToSay: [],
+    // `address` and `identity` are kept: they are who the two of you are, not answers about words — and
+    // re-asking them would make "start over" mean "answer the setup again", which it doesn't.
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 /**

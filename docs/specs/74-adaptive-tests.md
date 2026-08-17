@@ -525,6 +525,45 @@ Its scrim is `position: fixed`. An area is up to 47 rows, so a scrim scoped to `
 and centres the sheet halfway down it — off screen, while every `toBeVisible` assertion passes. The E2E asserts
 `toBeInViewport` for exactly that reason (the #207 lesson).
 
+### 3.6.8 Pet names as their own phase — APPROVED (2026-08-17, owner-directed), BUILD IN PROGRESS
+
+The owner, on the address screen: _"i think pet names would be useful in this test and analysis… a user can, like
+words, mark pet names they like, ok, not ok for what they like to me called and what they like to call their
+partner, then maybe we complete remove the existing pet names stuff and replace it with this."_
+
+**What the measurement showed before any of this was designed.** `lexicon.address` is read in exactly ONE place —
+the orientation resolver — and never by the synthesis, the report, or either coach prompt. It withholds nothing:
+on the real bank a straight man has **0 of 1,033 entries hidden**; the axis only decides which _direction_ each is
+asked in. Meanwhile **44 of the 78 pet names map to no spine dimension at all**, so a loved name reached nothing.
+So the address question was a direction filter dressed as a preference question, and the names themselves — the
+most directly usable output the test could produce — were the least used thing in it.
+
+1. **A phase of its own, first, before the vocabulary.** Registers are cards with counts, an intensity range and
+   three real names; the person opens the ones that mean something. A register they never open is simply unasked.
+   Inside, the whole register is on the page — the tier lines are signposts, not doors.
+2. **Two marks per name**, `call me` and `call them`, in columns tinted with the same two colours the §3.6.3
+   direction band already teaches, carrying both people's actual names. Never one mark plus an inferred side.
+3. **The address axis stops applying to names** and survives only for the ~144 body/praise/claiming entries, where
+   marking cannot help: a line naming a body either fits yours or it doesn't. The identity question shrinks to
+   that job and loses every pet-name example.
+4. **Boundaries become directional.** "Never call me slut" must not stop him calling her slut, so
+   `LexiconBoundary.direction` and per-entry `hearState`/`sayState` exist. **Absent means both directions** — the
+   strictest reading — so no boundary written before this loosens, and `violatesBoundary` without a stated
+   direction still refuses everything ruled out either way. `hear`/`say` stay derived (love → 4, okay → 2,
+   never → 0) so the spine, steer and report read exactly what they always did.
+5. **A "Names & address" dimension** joins the fixed spine, so the warm and role registers finally reach the
+   chart; the rough ones keep feeding Degradation. A dimension that did not exist for an older take reads
+   "nothing yet", never a false zero.
+6. **Across the whole app.** Suppression already reaches everywhere. What is new is that a loved name is a
+   _vocative_ — usable in any generated line, where a loved phrase can only be quoted — so both coach prompts get
+   an explicit block. The non-sexual surfaces (biographer, dream analysis, wellbeing) are deliberately excluded.
+7. **Two people's answers can collide**, and the boundary wins: if she has ruled out being called something he
+   loves calling her, it is suppressed silently and his own report says only "Angel has ruled this one out" —
+   never a list of her answers.
+8. **"Start over from the top" clears everything for that person**, hard nos included (owner-directed). A `never`
+   left behind renders as a settled row, which is the state they are trying to leave; the confirm says the
+   suppression list goes with it. Identity and address survive — starting over is not answering the setup again.
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

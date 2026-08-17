@@ -342,12 +342,27 @@ export function mergeLexicons(a: EroticLexicon, b: EroticLexicon): EroticLexicon
   };
 }
 
-/** Every text a consumer must never produce for this person — the suppression list (74 §5.7/§8.4). */
-export function suppressedTexts(lexicon: EroticLexicon): string[] {
+/**
+ * Every text a consumer must never produce for this person — the suppression list (74 §5.7/§8.4).
+ *
+ * `direction` narrows it to lines running one way, which only matters since a name can be marked twice
+ * (74 §3.6.8): "never call me slut" must not stop him calling HER slut. **Omitting it keeps the strictest
+ * reading** — everything ruled out either way — because a caller that cannot say which way its line runs is
+ * exactly the caller that must not be trusted to thread the needle.
+ */
+export function suppressedTexts(lexicon: EroticLexicon, direction?: 'hear' | 'say'): string[] {
   const fromEntries = lexicon.entries
-    .filter((entry) => entry.state === 'never')
+    .filter((entry) => {
+      // A per-direction mark is authoritative for its own side; `state` still covers the whole entry.
+      if (entry.state === 'never') return true;
+      if (direction === 'hear') return entry.hearState === 'never';
+      if (direction === 'say') return entry.sayState === 'never';
+      return entry.hearState === 'never' || entry.sayState === 'never';
+    })
     .map((entry) => entry.text);
-  const fromBoundaries = lexicon.boundaries.map((boundary) => boundary.text);
+  const fromBoundaries = lexicon.boundaries
+    .filter((boundary) => !direction || !boundary.direction || boundary.direction === direction)
+    .map((boundary) => boundary.text);
   return [...new Set([...fromEntries, ...fromBoundaries])];
 }
 
@@ -418,10 +433,15 @@ function contentStems(text: string): string[] {
  * This is the SECOND line of defence. The first is the prompt, which carries every boundary as a hard negative
  * constraint; a theme that slips past both is why the person can always edit their profile.
  */
-export function violatesBoundary(lexicon: EroticLexicon, candidate: string): boolean {
+export function violatesBoundary(
+  lexicon: EroticLexicon,
+  candidate: string,
+  /** Which way this line runs, when the caller knows. Omitted ⇒ refuse anything ruled out either way. */
+  direction?: 'hear' | 'say',
+): boolean {
   const text = candidate.toLowerCase();
   const stems = new Set(contentStems(candidate));
-  const literal = suppressedTexts(lexicon).some((banned) => {
+  const literal = suppressedTexts(lexicon, direction).some((banned) => {
     const needle = banned.trim().toLowerCase();
     if (needle === '') return false;
     // Word-boundaried, or a short banned word suppresses every line containing it ("ass" → "pass", "class").
@@ -431,6 +451,7 @@ export function violatesBoundary(lexicon: EroticLexicon, candidate: string): boo
   if (literal) return true;
   return lexicon.boundaries.some((boundary) => {
     if (boundary.kind !== 'theme') return false;
+    if (direction && boundary.direction && boundary.direction !== direction) return false;
     const needed = contentStems(boundary.text);
     return needed.length > 0 && needed.every((word) => stems.has(word));
   });

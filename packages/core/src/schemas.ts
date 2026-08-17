@@ -1102,6 +1102,14 @@ export const LexiconStateSchema = z
   .transform((state) => (state === 'notYet' ? ('okay' as const) : state));
 export type LexiconState = z.infer<typeof LexiconStateSchema>;
 
+/**
+ * 74 §3.6.8 — one direction's answer for a name: the three marks the deck already uses. Distinct from
+ * `LexiconState`, which has no `love` because love is carried by the ratings; a per-direction mark needs all
+ * three in one value, since there is no second number to put it in.
+ */
+export const LexiconDirectionMarkSchema = z.enum(['love', 'okay', 'never']);
+export type LexiconDirectionMark = z.infer<typeof LexiconDirectionMarkSchema>;
+
 /** 0 = nothing · 1 fine · 2 like it · 3 love it · 4 that one does it. */
 export const LexiconRatingSchema = z.number().int().min(0).max(4);
 
@@ -1116,6 +1124,17 @@ export const LexiconEntrySchema = z.object({
   hear: LexiconRatingSchema.catch(0).default(0),
   say: LexiconRatingSchema.catch(0).default(0),
   state: LexiconStateSchema.optional(),
+  /**
+   * 74 §3.6.8 — the per-DIRECTION marks, written by the pet-name phase, where a name is answered twice: once
+   * for being called it and once for calling them it. The two genuinely diverge — wanting to call her
+   * "good girl" says nothing about wanting to be called it — so one `state` cannot hold the answer.
+   *
+   * `hear`/`say` are still derived from these (love → 4, okay → 2, never → 0), so the spine, the steer, the
+   * report and every existing consumer keep reading the same two numbers they always did. Absent on a phrase
+   * entry, which is marked once and split afterwards.
+   */
+  hearState: LexiconDirectionMarkSchema.optional(),
+  sayState: LexiconDirectionMarkSchema.optional(),
   /**
    * Which sides this person was actually SHOWN for this entry (74 §3.6.6). Load-bearing, not bookkeeping:
    * `say: 0` means "cannot say it" everywhere in the derivations, so an entry the orientation never offered
@@ -1141,6 +1160,16 @@ export const LexiconBoundarySchema = z.object({
   kind: z.enum(['word', 'theme']),
   reason: z.string().optional(),
   at: z.string(),
+  /**
+   * 74 §3.6.8 — which direction this boundary covers, once a name can be ruled out one way and loved the
+   * other: "never call me slut" must not stop him calling HER slut.
+   *
+   * **Absent means BOTH directions**, which is every boundary written before names were marked two ways, and
+   * every boundary a phrase entry writes — so the default stays the strictest reading and no existing
+   * boundary loosens. A directional boundary only narrows for a caller that states which way its line runs;
+   * a caller that doesn't know is still refused (`violatesBoundary`).
+   */
+  direction: z.enum(['hear', 'say']).optional(),
 });
 export type LexiconBoundary = z.infer<typeof LexiconBoundarySchema>;
 

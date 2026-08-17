@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { memFileSystem } from '../../host/memFileSystem';
 import { readLedger } from '../../questionnaires/askLedger';
 import { listAllInsights, summarizeForContext } from '../../insights/insightStore';
-import { readLexicon } from './lexicon';
+import { readLexicon, writeLexicon } from './lexicon';
 import { DIRTY_TALK } from './instruments/dirtyTalk';
 import {
   abandonAdaptiveTake,
@@ -339,5 +339,67 @@ describe('the adaptive take (74 §5)', () => {
     expect(result?.narrative).toBeUndefined();
     expect(result?.scores.length).toBe(DIRTY_TALK.spine.length);
     expect(await listAllInsights(fs, KEY)).toHaveLength(1);
+  });
+});
+
+describe('74 §3.6.8 — start over from the top', () => {
+  it('clears EVERYTHING for that person, hard nos included', async () => {
+    const fs = memFileSystem();
+    const key = new Uint8Array(32).fill(7);
+    const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', new Date());
+    await recordBankPass(
+      fs,
+      key,
+      DIRTY_TALK,
+      {
+        personId: 'p1',
+        resultId: draft.id,
+        marks: { 'names-power:good-girl': 'love', 'names-degrading:whore': 'never' },
+      },
+      NOW,
+    );
+    const before = await readLexicon(fs, key, 'p1');
+    expect(before?.entries.length).toBeGreaterThan(0);
+    expect(before?.boundaries.map((b) => b.text)).toContain('whore');
+
+    await abandonAdaptiveTake(fs, 'p1', draft.id, key);
+
+    const after = await readLexicon(fs, key, 'p1');
+    // The deck comes back genuinely blank — the whole point of the owner's correction. A `never` left behind
+    // would render as a settled "off the table" row, which is the state they are trying to leave.
+    expect(after?.entries).toEqual([]);
+    expect(after?.boundaries).toEqual([]);
+    expect(after?.wantsToSay).toEqual([]);
+    // …and the take record is gone with it.
+    expect(await openDraft(fs, key, 'p1', DIRTY_TALK.id)).toBeNull();
+  });
+
+  it('keeps who the two of you are — start over is not "answer the setup again"', async () => {
+    const fs = memFileSystem();
+    const key = new Uint8Array(32).fill(7);
+    const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', new Date());
+    await recordBankPass(
+      fs,
+      key,
+      DIRTY_TALK,
+      {
+        personId: 'p1',
+        resultId: draft.id,
+        marks: { 'names-power:good-girl': 'love' },
+      },
+      NOW,
+    );
+    const seeded = await readLexicon(fs, key, 'p1');
+    await writeLexicon(fs, key, {
+      ...seeded!,
+      address: { self: 'man', partner: 'girl' },
+      identity: { self: 'man', partner: 'woman' },
+    });
+
+    await abandonAdaptiveTake(fs, 'p1', draft.id, key);
+
+    const after = await readLexicon(fs, key, 'p1');
+    expect(after?.address).toEqual({ self: 'man', partner: 'girl' });
+    expect(after?.identity).toEqual({ self: 'man', partner: 'woman' });
   });
 });

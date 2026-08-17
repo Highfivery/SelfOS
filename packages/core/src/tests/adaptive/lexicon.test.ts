@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { DIRTY_TALK } from './instruments/dirtyTalk';
+
 import { memFileSystem } from '../../host/memFileSystem';
 import type { EroticLexicon } from '../../schemas';
-import { DIRTY_TALK_BANK } from './instruments/dirtyTalkBank';
 import {
   addBoundary,
   addCustomEntry,
@@ -23,14 +24,14 @@ const NOW = new Date('2026-08-16T12:00:00.000Z');
 const LATER = new Date('2026-08-17T12:00:00.000Z');
 const KEY = new Uint8Array(32).fill(7);
 
-const GOOD_GIRL = 'names-power:good-girl';
-const WHORE = 'names-degrading:whore';
+const GOOD_GIRL = 'names-praise:good-girl';
+const WHORE = 'names-rough-heavy:whore';
 const CUNT = 'anatomy-her:cunt';
 
 function seeded(): EroticLexicon {
   return applyBankMarks(
     emptyLexicon('p1', NOW),
-    DIRTY_TALK_BANK,
+    DIRTY_TALK.bank,
     { [GOOD_GIRL]: 'love', [WHORE]: 'never', [CUNT]: 'okay' },
     'take:1',
     NOW,
@@ -58,7 +59,7 @@ describe('the erotic lexicon (74 §4.4)', () => {
 
   it('never lets a mark or a split lift a hard no', () => {
     const lex = seeded();
-    const reMarked = applyBankMarks(lex, DIRTY_TALK_BANK, { [WHORE]: 'love' }, 'take:2', LATER);
+    const reMarked = applyBankMarks(lex, DIRTY_TALK.bank, { [WHORE]: 'love' }, 'take:2', LATER);
     expect(reMarked.entries.find((e) => e.key === WHORE)).toMatchObject({
       state: 'never',
       hear: 0,
@@ -87,7 +88,7 @@ describe('the erotic lexicon (74 §4.4)', () => {
     const theirs = addBoundary(
       applyBankMarks(
         emptyLexicon('p1', LATER),
-        DIRTY_TALK_BANK,
+        DIRTY_TALK.bank,
         { [GOOD_GIRL]: 'love', 'anatomy-her:tits': 'love' },
         'take:2',
         LATER,
@@ -181,7 +182,7 @@ describe('a hard no is unliftable (74 §3.2 — the invariant the feature rests 
   it('cannot be downgraded by ANY mark, not just by love', () => {
     const lex = seeded();
     for (const mark of ['love', 'okay'] as const) {
-      const after = applyBankMarks(lex, DIRTY_TALK_BANK, { [WHORE]: mark }, 'take:2', LATER);
+      const after = applyBankMarks(lex, DIRTY_TALK.bank, { [WHORE]: mark }, 'take:2', LATER);
       expect(after.entries.find((e) => e.key === WHORE)?.state).toBe('never');
       expect(suppressedTexts(after)).toContain('whore');
     }
@@ -190,7 +191,7 @@ describe('a hard no is unliftable (74 §3.2 — the invariant the feature rests 
   it('never appears in the goal list, however it was marked', () => {
     // The path that used to leak: never → notYet put the word in `wantsToSay`, which reaches their own coach
     // prompt as something to PRACTISE, two lines under "never use this".
-    const downgraded = applyBankMarks(seeded(), DIRTY_TALK_BANK, { [WHORE]: 'okay' }, 'e', LATER);
+    const downgraded = applyBankMarks(seeded(), DIRTY_TALK.bank, { [WHORE]: 'okay' }, 'e', LATER);
     expect(derivedWantsToSay(downgraded)).not.toContain('whore');
   });
 
@@ -204,7 +205,7 @@ describe('a hard no is unliftable (74 §3.2 — the invariant the feature rests 
 
 describe('74 §3.6.6 — a side that was never asked is not a refusal', () => {
   const base = {
-    key: 'names-power:good-girl',
+    key: 'names-praise:good-girl',
     text: 'good girl',
     kind: 'word' as const,
     family: 'names-power',
@@ -239,11 +240,11 @@ describe('74 §3.6.6 — a side that was never asked is not a refusal', () => {
   it('records the sides it showed, so the take is the record of what was asked', () => {
     const marked = applyBankMarks(
       emptyLexicon('p1', NOW),
-      DIRTY_TALK_BANK,
-      { 'names-power:good-girl': 'love' },
+      DIRTY_TALK.bank,
+      { 'names-praise:good-girl': 'love' },
       'test:r1',
       NOW,
-      { 'names-power:good-girl': ['say'] },
+      { 'names-praise:good-girl': ['say'] },
     );
     expect(marked.entries[0]?.sides).toEqual(['say']);
   });
@@ -257,7 +258,7 @@ describe('mergeLexicons keeps what was ASKED (74 §3.6.6)', () => {
       ...emptyLexicon('p1', new Date('2026-08-01T00:00:00.000Z')),
       entries: [
         {
-          key: 'names-power:good-girl',
+          key: 'names-praise:good-girl',
           text: 'good girl',
           kind: 'word',
           family: 'names-power',
@@ -283,7 +284,7 @@ describe('mergeLexicons keeps what was ASKED (74 §3.6.6)', () => {
   it('takes the newer answer when BOTH sides recorded one', () => {
     const base = emptyLexicon('p1', new Date('2026-08-01T00:00:00.000Z'));
     const entry = {
-      key: 'names-power:good-girl',
+      key: 'names-praise:good-girl',
       text: 'good girl',
       kind: 'word' as const,
       family: 'names-power',
@@ -322,7 +323,7 @@ describe('74 §3.6.8 — a name can be ruled out one way and loved the other', (
   const withSlut = base({
     entries: [
       {
-        key: 'names-degrading:slut',
+        key: 'names-rough-heavy:slut',
         text: 'slut',
         kind: 'word',
         family: 'names-degrading',
@@ -352,7 +353,7 @@ describe('74 §3.6.8 — a name can be ruled out one way and loved the other', (
     const legacy = base({
       entries: [
         {
-          key: 'names-degrading:whore',
+          key: 'names-rough-heavy:whore',
           text: 'whore',
           kind: 'word',
           family: 'names-degrading',

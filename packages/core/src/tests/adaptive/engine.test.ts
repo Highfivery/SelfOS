@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { DIRTY_TALK } from './instruments/dirtyTalk';
+
 import type { ClaudeClient } from '../../host';
 import { memFileSystem } from '../../host/memFileSystem';
 import type { AiDeps } from '../../questionnaires/aiCall';
-import { DIRTY_TALK_BANK } from './instruments/dirtyTalkBank';
 import { applyBankMarks, applyDirections, emptyLexicon, addBoundary } from './lexicon';
 import {
   lexiconDigest,
@@ -59,17 +60,17 @@ function deps(client: ClaudeClient): AiDeps {
 function seeded() {
   let lex = applyBankMarks(
     emptyLexicon('angel', NOW),
-    DIRTY_TALK_BANK,
+    DIRTY_TALK.bank,
     {
-      'names-power:good-girl': 'love',
-      'names-degrading:whore': 'never',
-      'names-degrading:slut': 'love',
+      'names-praise:good-girl': 'love',
+      'names-rough-heavy:whore': 'never',
+      'names-rough-heavy:slut': 'love',
       'anatomy-her:cunt': 'okay',
     },
     'take:1',
     NOW,
   );
-  lex = applyDirections(lex, { 'names-power:good-girl': { hear: 4, say: 0 } }, NOW);
+  lex = applyDirections(lex, { 'names-praise:good-girl': { hear: 4, say: 0 } }, NOW);
   return lex;
 }
 
@@ -79,7 +80,7 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
     const ids = ambiguities.map((a) => a.id);
     // Loved `slut`, ruled out `whore`, same family → the "is it the word or the register?" question, which is
     // the single most useful thing a probe can settle.
-    expect(ids).toContain('split:names-degrading');
+    expect(ids).toContain('split:names-rough-heavy');
     // Loves hearing "good girl", rated 0 to say → preference or goal?
     expect(ids).toContain('frozen');
     expect(ids).toContain('cringe');
@@ -212,7 +213,7 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
 
   it('surfaces the hear/say GAP as context — the signal that replaced the old cringe list (§3.6.2)', () => {
     // Loves hearing it, rated 0 to say, and BOTH sides were asked: that is the coachable material now.
-    const lex = applyDirections(seeded(), { 'names-power:good-girl': { hear: 4, say: 0 } }, NOW);
+    const lex = applyDirections(seeded(), { 'names-praise:good-girl': { hear: 4, say: 0 } }, NOW);
     expect(lexiconDigest(lex)).toContain('low on saying');
   });
 
@@ -232,7 +233,7 @@ describe('74 §3.6.6 — an unasked side is never read as a refusal', () => {
       ...emptyLexicon('p1', NOW),
       entries: [
         {
-          key: 'names-power:good-girl',
+          key: 'names-praise:good-girl',
           text: 'good girl',
           kind: 'word' as const,
           family: 'names-power',
@@ -251,7 +252,7 @@ describe('74 §3.6.6 — an unasked side is never read as a refusal', () => {
       ...emptyLexicon('p1', NOW),
       entries: [
         {
-          key: 'names-power:good-girl',
+          key: 'names-praise:good-girl',
           text: 'good girl',
           kind: 'word' as const,
           family: 'names-power',

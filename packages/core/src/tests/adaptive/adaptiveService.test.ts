@@ -22,9 +22,9 @@ const LATER = new Date('2026-11-20T12:00:00.000Z');
 const KEY = new Uint8Array(32).fill(9);
 const P = 'angel';
 
-const GOOD_GIRL = 'names-power:good-girl';
+const GOOD_GIRL = 'names-praise:good-girl';
 const MINE = 'claiming:mine';
-const WHORE = 'names-degrading:whore';
+const WHORE = 'names-rough-heavy:whore';
 const CUNT = 'anatomy-her:cunt';
 
 async function fullTake(fs = memFileSystem(), now = NOW) {
@@ -354,7 +354,7 @@ describe('74 §3.6.8 — start over from the top', () => {
       {
         personId: 'p1',
         resultId: draft.id,
-        marks: { 'names-power:good-girl': 'love', 'names-degrading:whore': 'never' },
+        marks: { 'names-praise:good-girl': 'love', 'names-rough-heavy:whore': 'never' },
       },
       NOW,
     );
@@ -385,7 +385,7 @@ describe('74 §3.6.8 — start over from the top', () => {
       {
         personId: 'p1',
         resultId: draft.id,
-        marks: { 'names-power:good-girl': 'love' },
+        marks: { 'names-praise:good-girl': 'love' },
       },
       NOW,
     );

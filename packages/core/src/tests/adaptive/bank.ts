@@ -40,6 +40,15 @@ export interface BankFamily {
   /** Default orientation for the family's entries; an entry may override either axis (§3.6.3). */
   addresses?: BankAddress;
   body?: BankBody;
+  /**
+   * 74 §3.6.8 — which phase marks this family. Absent ⇒ the deck, which is every family that existed before
+   * pet names became their own phase. `'names'` families are answered TWICE (call me / call them) in the
+   * phase that runs first, and never appear in the deck.
+   *
+   * One bank, two phases — rather than two banks — so suppression, the lexicon, the spine and the ask ledger
+   * all keep working over a single set of entries.
+   */
+  phase?: 'names';
 }
 
 export interface BankEntry {
@@ -130,6 +139,21 @@ export function buildBank(blocks: readonly { family: BankFamily; entries: BankEn
     families: blocks.map((b) => b.family),
     entries: blocks.flatMap((b) => b.entries),
   };
+}
+
+/**
+ * The families the DECK asks (74 §3.6.8) — everything that is not marked as a pet-name family.
+ *
+ * Both halves of this split live here, next to each other, because a family appearing in neither phase or in
+ * both is the kind of bug that looks like missing content rather than a routing mistake.
+ */
+export function deckFamilies(bank: Bank): BankFamily[] {
+  return bank.families.filter((family) => family.phase !== 'names');
+}
+
+/** The families the PET-NAME phase asks. */
+export function nameFamilies(bank: Bank): BankFamily[] {
+  return bank.families.filter((family) => family.phase === 'names');
 }
 
 /** Entries grouped by family, in the bank's family order. */

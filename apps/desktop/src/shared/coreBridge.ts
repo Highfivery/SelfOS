@@ -889,6 +889,7 @@ import {
   bodyFromAnatomyAnswer,
   orientArea,
   shownSides,
+  deckFamilies,
   type AdaptiveTestDefinition,
   type Orientation,
 } from '@selfos/core/tests';
@@ -4179,7 +4180,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const who = await personOrientation(gate);
       const shownByKey = new Map<string, readonly ('hear' | 'say')[]>();
       const withheldByFamily: Record<string, number> = {};
-      for (const family of gate.def.bank.families) {
+      // The pet names are marked in their own phase, both ways per name (74 §3.6.8) — they would otherwise
+      // add 24 areas of vocabulary to a deck that has already asked them.
+      const families = deckFamilies(gate.def.bank);
+      for (const family of families) {
         const area = orientArea(
           family.id,
           gate.def.bank.entries.filter((entry) => entry.family === family.id),
@@ -4191,7 +4195,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
       return {
         testId,
-        families: gate.def.bank.families.map((family) => ({
+        families: families.map((family) => ({
           id: family.id,
           label: family.label,
           kind: family.kind,

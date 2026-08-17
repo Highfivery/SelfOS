@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import { DIRTY_TALK } from './instruments/dirtyTalk';
+
 import { memFileSystem } from '../../host/memFileSystem';
 import type { FileSystem } from '../../host';
 import { upsertPerson } from '../../people/peopleService';
 import { upsertRelationship } from '../../people/relationshipService';
-import { DIRTY_TALK_BANK } from './instruments/dirtyTalkBank';
 import { applyBankMarks, applyDirections, emptyLexicon, writeLexicon } from './lexicon';
 import {
   buildOwnLexiconBlock,
@@ -29,12 +30,12 @@ async function seedPair(): Promise<{ fs: FileSystem; ben: string; angel: string;
   // Angel's lexicon: loves being claimed, one hard no, one theme.
   let lex = applyBankMarks(
     emptyLexicon(angel, NOW),
-    DIRTY_TALK_BANK,
-    { 'names-power:good-girl': 'love', 'claiming:mine': 'love', 'names-degrading:whore': 'never' },
+    DIRTY_TALK.bank,
+    { 'names-praise:good-girl': 'love', 'claiming:mine': 'love', 'names-rough-heavy:whore': 'never' },
     'take:1',
     NOW,
   );
-  lex = applyDirections(lex, { 'names-power:good-girl': { hear: 4, say: 0 } }, NOW);
+  lex = applyDirections(lex, { 'names-praise:good-girl': { hear: 4, say: 0 } }, NOW);
   lex = { ...lex, themes: ['being claimed, not degraded'], voice: 'low, close, certain.' };
   await writeLexicon(fs, KEY, lex);
   return { fs, ben, angel, relId: rel.id };

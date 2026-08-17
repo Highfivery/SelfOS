@@ -139,6 +139,19 @@ export function AdaptiveReport(): JSX.Element {
     e.sides === undefined || e.sides.includes('hear');
   const askedSay = (e: (typeof lexicon.entries)[number]): boolean =>
     e.sides === undefined || e.sides.includes('say');
+  // 74 §3.6.8 — pet names, per direction. A name is answered twice, so it belongs in its own section rather
+  // than folded into the loved-lines list where the direction would be lost.
+  const nameEntries = lexicon.entries.filter((e) => e.family.startsWith('names-'));
+  const pickNames = (side: 'hearState' | 'sayState', mark: 'love' | 'okay' | 'never'): string[] =>
+    nameEntries.filter((e) => e[side] === mark).map((e) => e.text);
+  const names = {
+    callMe: pickNames('hearState', 'love'),
+    okayCalled: pickNames('hearState', 'okay'),
+    neverCalled: pickNames('hearState', 'never'),
+    iCall: pickNames('sayState', 'love'),
+    okaySaying: pickNames('sayState', 'okay'),
+    neverSaying: pickNames('sayState', 'never'),
+  };
   const loves = lexicon.entries.filter((e) => e.state === undefined && e.hear >= 3 && askedHear(e));
   const says = lexicon.entries.filter((e) => e.state === undefined && e.say >= 3 && askedSay(e));
   // 74 §3.6.2/§3.6.6 — sourced from the hear/say GAP, not the middle mark (which is a mild yes now), and only
@@ -358,6 +371,72 @@ export function AdaptiveReport(): JSX.Element {
                       </div>
                     ) : null}
                   </Stack>
+                </section>
+              ) : null}
+
+              {/*
+               * 74 §3.6.8 — the most directly usable thing the test produces, and it produced none of it
+               * before: what the two of you want to be called. Loved names lead; the middle mark is listed
+               * plainly as second-tier; a hard no is shown struck through, because seeing it recorded is
+               * the point. Per direction, since a name is answered twice.
+               */}
+              {names.callMe.length + names.iCall.length + names.neverCalled.length > 0 ? (
+                <section>
+                  <Heading level={2}>What to call each other</Heading>
+                  <div className={adaptive.nameCols}>
+                    <div>
+                      <Text size="sm" tone="secondary">
+                        Call me
+                      </Text>
+                      <div className={adaptive.chipRow}>
+                        {names.callMe.map((text) => (
+                          <span key={text} className={`${adaptive.nameChip} ${adaptive.chipLove}`}>
+                            {text}
+                          </span>
+                        ))}
+                      </div>
+                      {names.okayCalled.length > 0 ? (
+                        <Text size="sm" tone="tertiary" className={adaptive.tier2}>
+                          Fine either way: {names.okayCalled.join(' · ')}
+                        </Text>
+                      ) : null}
+                      {names.neverCalled.length > 0 ? (
+                        <div className={adaptive.chipRow}>
+                          {names.neverCalled.map((text) => (
+                            <span key={text} className={`${adaptive.nameChip} ${adaptive.chipNo}`}>
+                              {text}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div>
+                      <Text size="sm" tone="secondary">
+                        What you call them
+                      </Text>
+                      <div className={adaptive.chipRow}>
+                        {names.iCall.map((text) => (
+                          <span key={text} className={`${adaptive.nameChip} ${adaptive.chipLove}`}>
+                            {text}
+                          </span>
+                        ))}
+                      </div>
+                      {names.okaySaying.length > 0 ? (
+                        <Text size="sm" tone="tertiary" className={adaptive.tier2}>
+                          Fine either way: {names.okaySaying.join(' · ')}
+                        </Text>
+                      ) : null}
+                      {names.neverSaying.length > 0 ? (
+                        <div className={adaptive.chipRow}>
+                          {names.neverSaying.map((text) => (
+                            <span key={text} className={`${adaptive.nameChip} ${adaptive.chipNo}`}>
+                              {text}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
                 </section>
               ) : null}
 

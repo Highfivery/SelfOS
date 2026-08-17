@@ -1160,7 +1160,10 @@ const AdaptiveNamesInputSchema = z.object({
   marks: z
     .record(
       z.string(),
-      z.object({ hear: z.enum(['love', 'okay', 'never']).optional(), say: z.enum(['love', 'okay', 'never']).optional() }),
+      z.object({
+        hear: z.enum(['love', 'okay', 'never']).optional(),
+        say: z.enum(['love', 'okay', 'never']).optional(),
+      }),
     )
     .default({}),
   cleared: z.record(z.string(), z.array(z.enum(['hear', 'say']))).optional(),
@@ -4260,8 +4263,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // governs the DECK, where a line naming a body either fits or doesn't.
       const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
       const byKey = new Map((lexicon?.entries ?? []).map((entry) => [entry.key, entry]));
-      const draftId = (await openDraft(gate.ctx.fs, gate.ctx.key, gate.personId, testId))
-        ?.id;
+      const draftId = (await openDraft(gate.ctx.fs, gate.ctx.key, gate.personId, testId))?.id;
       const families = nameFamilies(gate.def.bank);
       const entriesFor = (familyId: string) =>
         gate.def.bank.entries.filter((entry) => entry.family === familyId);

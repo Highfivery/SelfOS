@@ -1,17 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
+import type { EroticLexicon } from '../../schemas';
+
 import { DIRTY_TALK } from './instruments/dirtyTalk';
 
 import { memFileSystem } from '../../host/memFileSystem';
 import type { FileSystem } from '../../host';
 import { upsertPerson } from '../../people/peopleService';
 import { upsertRelationship } from '../../people/relationshipService';
-import { applyBankMarks, applyDirections, emptyLexicon, writeLexicon } from './lexicon';
+import {
+  applyBankMarks,
+  applyDirections,
+  emptyLexicon,
+  writeLexicon,
+  applyNameMarks,
+} from './lexicon';
 import {
   buildOwnLexiconBlock,
   buildPartnerSteer,
   buildSuppressionBlock,
   livePartnerOf,
+  nameLines,
 } from './steer';
 
 const NOW = new Date('2026-08-16T12:00:00.000Z');
@@ -31,7 +40,11 @@ async function seedPair(): Promise<{ fs: FileSystem; ben: string; angel: string;
   let lex = applyBankMarks(
     emptyLexicon(angel, NOW),
     DIRTY_TALK.bank,
-    { 'names-praise:good-girl': 'love', 'claiming:mine': 'love', 'names-rough-heavy:whore': 'never' },
+    {
+      'names-praise:good-girl': 'love',
+      'claiming:mine': 'love',
+      'names-rough-heavy:whore': 'never',
+    },
     'take:1',
     NOW,
   );
@@ -240,5 +253,42 @@ describe('§3.6.2 — REGISTER steers generation, which the word list cannot', (
     expect(own).toMatch(/even with words they like/i);
     // The absolute list is still its own, separately-worded thing.
     expect(own).toMatch(/NEVER use, in any form/i);
+  });
+});
+
+describe('74 §3.6.8 — names reach both prompts as vocatives', () => {
+  const now = new Date('2026-08-17T10:00:00.000Z');
+  const marked = (): EroticLexicon =>
+    applyNameMarks(
+      emptyLexicon('p1', now),
+      DIRTY_TALK.bank,
+      {
+        'names-praise:good-girl': { hear: 'love', say: 'okay' },
+        'names-rough-heavy:slut': { hear: 'never', say: 'love' },
+        'names-warm:baby': { hear: 'okay' },
+      },
+      'take:1',
+      now,
+    );
+
+  it('tells their own coach what to CALL them, and what they like calling their partner', () => {
+    const block = buildOwnLexiconBlock(marked());
+    expect(block).toContain('CALL THEM: good girl');
+    expect(block).toContain('What they like CALLING their partner: slut');
+    // Per direction, so a one-way limit is never read as a two-way one — which would delete something they
+    // actively want.
+    expect(block).toContain('NEVER call them: slut');
+    expect(block).not.toContain('Never put these in THEIR mouth: slut');
+  });
+
+  it('marks the middle mark as second-tier rather than a favourite, on BOTH sides', () => {
+    const block = buildOwnLexiconBlock(marked());
+    expect(block).toContain('Fine being called, second-tier: baby');
+    // …and the saying side, which was write-only until this — the §3.6.2 defect one direction over.
+    expect(block).toContain('Fine saying, not favourites: good girl');
+  });
+
+  it('says nothing about names when none were marked', () => {
+    expect(nameLines(emptyLexicon('p1', now))).toEqual([]);
   });
 });

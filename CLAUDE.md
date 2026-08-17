@@ -690,6 +690,48 @@ clientHeight <= 2`** AND exactly one overflowing element, on the FULL bank at th
   value get READ?" rather than "does the screen work?" (3) A per-branch crisis footer is a latent regression
   in any surface that later gets restructured — render it once, outside.**
 
+- 2026-08-17 — **Build (pet names become a first-class phase of the Dirty Talk test — 2,215 names, marked BOTH
+  ways; owner-directed after a measured design round; SPEC 74 §3.6.8; on `feat/pet-names-model`).** The owner:
+  _"i think pet names would be useful in this test and analysis… a user can, like words, mark pet names they like,
+  ok, not ok for what they like to me called and what they like to call their partner."_ Then, on my first list:
+  _"youre adding things that ARE NOT pet names like used, well used"_ — correct, and the criterion I should have
+  applied from the start is now enforced in the generator: **a pet name has to finish "come here, \_\_\_"**; a state
+  or an adjective can only live inside a line, which is what the `degradation` family already exists for. That
+  removed 30 entries and dissolved two whole registers, and flagged three names **already mis-filed in the bank**
+  (`cock hungry`, `worthless`, `my everything`).
+  **What the measurement showed before anything was designed** (asked for, then measured rather than assumed):
+  `lexicon.address` is read in exactly ONE place — the orientation resolver — never by the synthesis, the report,
+  or either coach prompt, and on the real bank it withholds **0 of 1,033** entries; it only assigns direction. And
+  **44 of the 78 pet names mapped to no spine dimension at all** — marked, then dropped on the floor. So the
+  address screen was a direction filter dressed as a preference question, and the names themselves were the most
+  usable output of the test and the least used thing in it.
+  **Built:** a register-first phase that runs FIRST (24 cards with counts, tier spans and three real names — scope
+  is the person's move, an unopened register is simply unasked, and inside one the whole register is on the page
+  because the tier lines are signposts, not doors, which the owner asked for explicitly); **two marks per name** in
+  columns that cannot be confused (full-strength tint, own edge, sticky headers carrying both real names, in the
+  two colours §3.6.3 already teaches); a **"Names & address" spine dimension**; a **report section** that is the
+  most directly usable thing the test produces; **vocative blocks in both coach prompts** (a name goes into any
+  generated line, where a phrase can only be quoted); and the three superseded name families deleted from the deck.
+  **The load-bearing model change: boundaries are now DIRECTIONAL.** "Never call me slut" must not stop him calling
+  her slut, and the old model had one global list — so `LexiconEntry.hearState`/`sayState` and
+  `LexiconBoundary.direction` exist, with **absent meaning BOTH** (the strictest reading, so nothing written before
+  today loosens) and `violatesBoundary` still refusing anything ruled out either way when the caller cannot say
+  which way its line runs. `hear`/`say` stay derived, so the spine, steer and report read exactly what they always
+  did. Gate green: typecheck (4 pkgs), lint, format, **2350 core + 13 relay + 1653 desktop** unit, **214 E2E**.
+  **Three real defects found by my own guards or by measuring, not by looking:** (1) `dedupeBoundaries` keyed on
+  text alone, so ruling a name out to HEAR then to SAY left one record and taking back the first took both — now
+  keyed on text + direction. (2) The row's `1fr 148px 148px` grid gave the NAME column **105px** at a 1100px window,
+  so "my good boy" wrapped over three lines and the second column's 44px buttons literally intercepted clicks meant
+  for the first — found by measuring `gridTemplateColumns` and the child boxes, not by squinting; the phase now
+  gives its rows the full width and puts the tally + actions in a fixed bottom bar. (3) The register header read
+  "0 of 72 marked" while the rail counted two — a stale server number where a live one belongs.
+  **Lessons: (1) when the owner says an item "is not" the thing you're collecting, the criterion is missing, not
+  the item — write the test into the generator so it cannot drift back. (2) A two-directional answer turns one
+  global boundary list into a correctness problem: make absence mean the strictest reading and every existing
+  record keeps its meaning. (3) Two 44px tap targets per row do not fit beside a 232px rail — measure the computed
+  grid, because the symptom (a wrapped name) looks like a typography problem and the cause is a click-stealing
+  overlap.**
+
 - 2026-08-17 — **Fix (the rail actually follows you now, and becomes a bar on a phone; owner-reported; SPEC 74
   §3.6.4; on `fix/adaptive-sticky-rail`).** The owner, on a screenshot of the rail stranded at the top of a 47-row
   area: _"add a button at the bottom to move on to the next area/done for now or even better have the right content

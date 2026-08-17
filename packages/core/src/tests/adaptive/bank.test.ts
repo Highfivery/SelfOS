@@ -160,9 +160,7 @@ describe('§3.6.3 — the identity preview only promises lines the bank actually
 describe('74 §3.6.8 — the pet-name bank', () => {
   const names = nameFamilies(DIRTY_TALK.bank);
   const deck = deckFamilies(DIRTY_TALK.bank);
-  const nameEntries = DIRTY_TALK.bank.entries.filter((e) =>
-    names.some((f) => f.id === e.family),
-  );
+  const nameEntries = DIRTY_TALK.bank.entries.filter((e) => names.some((f) => f.id === e.family));
 
   it('splits every family into exactly one phase — never both, never neither', () => {
     expect(names.length + deck.length).toBe(DIRTY_TALK.bank.families.length);
@@ -190,9 +188,9 @@ describe('74 §3.6.8 — the pet-name bank', () => {
   });
 
   it('asks every name BOTH ways — the whole point of the phase', () => {
-    expect(nameEntries.every((e) => e.directions.includes('hear') && e.directions.includes('say'))).toBe(
-      true,
-    );
+    expect(
+      nameEntries.every((e) => e.directions.includes('hear') && e.directions.includes('say')),
+    ).toBe(true);
   });
 
   it('carries the roleplay framing on every register that needs it', () => {
@@ -203,10 +201,11 @@ describe('74 §3.6.8 — the pet-name bank', () => {
   });
 
   it('never names a minor in any roleplay register', () => {
-    const forbidden = /\b(child|kid|kids|minor|teen|teenage|schoolgirl|schoolboy|underage|toddler|infant)\b/i;
+    const forbidden =
+      /\b(child|kid|kids|minor|teen|teenage|schoolgirl|schoolboy|underage|toddler|infant)\b/i;
     const offenders = nameEntries.filter(
       (e) => forbidden.test(e.text) || forbidden.test(e.example ?? ''),
     );
     expect(offenders.map((e) => e.text)).toEqual([]);
   });
-})
+});

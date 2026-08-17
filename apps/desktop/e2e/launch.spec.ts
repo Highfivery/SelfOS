@@ -16125,6 +16125,14 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
       .click();
     await w.screenshot({ path: 'e2e-artifacts/74-identity.png' });
     await w.getByRole('button', { name: 'Start', exact: true }).click();
+    // 74 §3.6.8 — the pet names come first now, and they are NOT oriented: "good girl" is offered to this
+    // straight man in BOTH directions, because whether a name is "for a girl" is a convention and the point
+    // of the phase is that he decides. (The deck stays oriented — that is what the rest of this walk checks.)
+    await expect(w.getByRole('heading', { name: /what do you call each other/i })).toBeVisible();
+    await w.getByRole('button', { name: /^praise/i }).click();
+    await expect(w.getByRole('button', { name: /^good girl — .*→ Tester/i }).first()).toBeVisible();
+    await expect(w.getByRole('button', { name: /^good girl — Tester →/i }).first()).toBeVisible();
+    await w.getByRole('button', { name: /Done with names/i }).click();
     // The practice comes first, and its own row would otherwise be the one measured below.
     await clearPractice(w);
     // The direction is STATED, not implied — rating "you say" as though it were "you hear" would silently
@@ -16183,26 +16191,19 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
       .getByRole('button', { name: 'your hard cock — you hear — love it', exact: true })
       .click();
 
-    await goTo('Names — power & role');
-    // "good girl" is aimed at a girl, so HE would say it — it is offered, but never as something he hears.
-    await expect(
-      w.getByRole('button', { name: 'good girl — you say — love it', exact: true }),
-    ).toBeVisible();
-    await w.getByRole('button', { name: 'good girl — you say — love it', exact: true }).click();
-
-    // 74 §3.6.6 — the sides are RECORDED, so a side that was never offered is not a refusal. Without this,
-    // "good girl" (say-only for him) would look like something he loves to hear and refuses to say, and
-    // would be written into his goal list — and goals reach a partner-shared fact.
+    // 74 §3.6.6 — the sides are RECORDED, so a side that was never offered is not a refusal: without it, a
+    // hear-only line would look like something he refuses to SAY and land in his goal list, which reaches a
+    // partner-shared fact.
     const LEXICON = 'people/owner-1/tests/lexicon.enc';
     await expect
       .poll(async () => {
         const lex = (await readEncryptedJson(fs, LEXICON, key).catch(() => null)) as {
           entries: { key: string; sides?: string[] }[];
         } | null;
-        const good = (lex?.entries ?? []).find((e) => e.key === 'names-power:good-girl');
-        return good?.sides?.join(',') ?? '';
+        const cock = (lex?.entries ?? []).find((e) => e.key === 'anatomy-him:your-hard-cock');
+        return cock?.sides?.join(',') ?? '';
       })
-      .toBe('say');
+      .toBe('hear');
 
     // §12 — the deck at phone width, with the quotes stacked under their terms.
     await w.setViewportSize({ width: 360, height: 900 });
@@ -16270,6 +16271,52 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
       .getByRole('button', { name: /neither/ })
       .click();
     await w.getByRole('button', { name: 'Start', exact: true }).click();
+
+    const LEXICON = 'people/owner-1/tests/lexicon.enc';
+
+    // ── 74 §3.6.8 — the pet-name phase, which runs first ───────────────────────────────────────
+    // Register-first: 2,000+ names is not a list anyone walks, so scope is the person's move.
+    await expect(w.getByRole('heading', { name: /what do you call each other/i })).toBeVisible();
+    await w.screenshot({ path: 'e2e-artifacts/74-names-grid.png' });
+    await w.getByRole('button', { name: /^praise/i }).click();
+    await expect(w.getByRole('heading', { name: /^praise$/i })).toBeVisible();
+
+    // The two columns are the point: the same name, answered differently each way. "Never call me that"
+    // must not stop him calling HER that — which is what makes the boundary directional.
+    const bothWays = async (name: string, hear: string, say: string): Promise<void> => {
+      for (const [side, mark] of [
+        ['them', hear],
+        ['you', say],
+      ] as const) {
+        const label = new RegExp(
+          `^${name} — .*${side === 'them' ? '→ Tester' : 'Tester →'}.*— ${mark}$`,
+          'i',
+        );
+        await w.getByRole('button', { name: label }).first().click();
+      }
+    };
+    await bothWays('good girl', 'never', 'love it');
+    await expect(w.getByTestId('name-tally-love')).toContainText('1');
+    await expect(w.getByTestId('name-tally-never')).toContainText('1');
+    await w.screenshot({ path: 'e2e-artifacts/74-names-marking.png' });
+
+    // Autosave, then the vault: one entry, two directions, and a ONE-WAY boundary.
+    await expect
+      .poll(async () => {
+        const lex = (await readEncryptedJson(fs, LEXICON, key).catch(() => null)) as {
+          entries: { key: string; hearState?: string; sayState?: string }[];
+          boundaries: { text: string; direction?: string }[];
+        } | null;
+        const entry = (lex?.entries ?? []).find((e) => e.key === 'names-praise:good-girl');
+        return `${entry?.hearState ?? '-'}/${entry?.sayState ?? '-'}/${
+          (lex?.boundaries ?? []).find((b) => b.text === 'good girl')?.direction ?? '-'
+        }`;
+      })
+      .toBe('never/love/hear');
+
+    await w.getByRole('button', { name: /Done with this one/i }).click();
+    await w.getByRole('button', { name: /Done with names/i }).click();
+
     await w.screenshot({ path: 'e2e-artifacts/74-practice.png' });
     await clearPractice(w);
 
@@ -16296,11 +16343,17 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     await expect(w.getByText(/Every tap saves itself/i)).toBeVisible();
     await w.getByRole('button', { name: /How marking works/i }).click();
     await expect(w.getByText(/nothing in SelfOS will suggest it again/i)).toBeVisible();
-    // The deck only moves FORWARD, so mark in the bank's own family order: names-power → names-degrading
-    // → claiming. (The un-mark round trip below has to happen while `whore` is still on screen.)
-    await markInDeck('good girl — hear & say — love it');
-    await markInDeck('whore — hear & say — never');
-    await expect(w.getByTestId('tally-love')).toContainText('1');
+    // The deck only moves FORWARD, so mark in the bank's own family order: claiming (mine, my girl, all mine)
+    // before degradation. The un-mark round trip below happens while the ruled-out row is still on screen.
+    await markInDeck('mine — hear & say — love it');
+    await markInDeck('my girl — hear & say — love it');
+    await expect(w.getByTestId('tally-love')).toContainText('2');
+    // The middle mark. It used to be recorded and then invisible everywhere — asserted on the report below.
+    await markInDeck("all mine — hear & say — it's okay");
+    // 3, not 1: the two practice taps were real marks. That count IS the assertion that the practice is not
+    // a demo — a sheet that threw its taps away would read '1' here.
+    await expect(w.getByTestId('tally-okay')).toContainText('3');
+    await markInDeck('dirty little slut — hear & say — never');
     await expect(w.getByTestId('tally-never')).toContainText('1');
 
     // 74 §3.4 — every tap saves itself. Nothing below clicks Next, so the only thing that can have written
@@ -16334,7 +16387,6 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     // …and the document must not scroll at all behind it.
     expect(scroll.document).toBeLessThanOrEqual(2);
     await w.setViewportSize({ width: 1280, height: 900 });
-    const LEXICON = 'people/owner-1/tests/lexicon.enc';
     await expect
       .poll(async () => {
         const lex = (await readEncryptedJson(fs, LEXICON, key).catch(() => null)) as {
@@ -16346,7 +16398,7 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
 
     // A mis-tap is not a life sentence: un-marking takes the boundary back out of the store.
     await w
-      .getByRole('button', { name: 'whore — hear & say — never', exact: true })
+      .getByRole('button', { name: 'dirty little slut — hear & say — never', exact: true })
       .first()
       .click();
     await expect(w.getByTestId('tally-never')).toContainText('0');
@@ -16355,21 +16407,14 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
         const lex = (await readEncryptedJson(fs, LEXICON, key)) as {
           boundaries: { text: string }[];
         };
-        return lex.boundaries.some((b) => b.text === 'whore');
+        return lex.boundaries.some((b) => b.text === 'dirty little slut');
       })
       .toBe(false);
     await w
-      .getByRole('button', { name: 'whore — hear & say — never', exact: true })
+      .getByRole('button', { name: 'dirty little slut — hear & say — never', exact: true })
       .first()
       .click();
     await expect(w.getByTestId('tally-never')).toContainText('1');
-    await markInDeck('mine — hear & say — love it');
-    await expect(w.getByTestId('tally-love')).toContainText('2');
-    // The middle mark. It used to be recorded and then invisible everywhere — asserted on the report below.
-    await markInDeck("all mine — hear & say — it's okay");
-    // 3, not 1: the two practice taps were real marks. That count IS the assertion that the practice is not
-    // a demo — a sheet that threw its taps away would read '1' here.
-    await expect(w.getByTestId('tally-okay')).toContainText('3');
 
     // The rail carries the running tally and the actions, so finishing never means scrolling the area.
     await expect(w.getByTestId('tally-never')).toContainText('1');
@@ -16430,11 +16475,11 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
 
     // Pass 2 asks the split only for what was marked, and never for the one they ruled out.
     await expect(w.getByRole('heading', { name: /hearing it, or saying it\?/i })).toBeVisible();
-    await w.getByRole('button', { name: 'good girl — hear 4 of 4', exact: true }).first().click();
-    await w.getByRole('button', { name: 'good girl — say 0 of 4', exact: true }).first().click();
-    await expect(w.getByRole('button', { name: 'whore — hear 4 of 4', exact: true })).toHaveCount(
-      0,
-    );
+    await w.getByRole('button', { name: 'mine — hear 4 of 4', exact: true }).first().click();
+    await w.getByRole('button', { name: 'mine — say 0 of 4', exact: true }).first().click();
+    await expect(
+      w.getByRole('button', { name: 'dirty little slut — hear 4 of 4', exact: true }),
+    ).toHaveCount(0);
     await w.getByRole('button', { name: 'Next', exact: true }).click();
 
     // AI is off in this vault, so every AI phase degrades — and the take still COMPLETES (74 §7).
@@ -16456,15 +16501,20 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
       return JSON.parse(Buffer.from(bytes).toString('utf8')) as Record<string, unknown>;
     };
     const lexRaw = await fs.read('people/owner-1/tests/lexicon.enc');
-    expect(Buffer.from(lexRaw!).toString('utf8')).not.toContain('good girl'); // encrypted at rest
+    expect(Buffer.from(lexRaw!).toString('utf8')).not.toContain('dirty little slut'); // encrypted at rest
     const lexicon = (await readEncryptedJson(fs, 'people/owner-1/tests/lexicon.enc', key)) as {
       boundaries: { text: string }[];
       entries: { key: string; state?: string }[];
     };
-    expect(lexicon.boundaries.map((b) => b.text)).toEqual(['whore']);
+    expect(lexicon.boundaries.map((b) => b.text).sort()).toEqual([
+      'dirty little slut',
+      'good girl',
+    ]);
     // The practice's two taps persisted alongside "all mine" — three middle marks, none of them invented.
     expect(lexicon.entries.filter((e) => e.state === 'okay')).toHaveLength(3);
-    expect(lexicon.entries.find((e) => e.key === 'names-degrading:whore')?.state).toBe('never');
+    expect(lexicon.entries.find((e) => e.key === 'degradation:dirty-little-slut')?.state).toBe(
+      'never',
+    );
 
     // The Insight feeds the coach — and carries no boundary (suppression is structural, 74 §5.5).
     const insightNames = await fs.list('people/owner-1/insights');
@@ -16474,7 +16524,7 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
       const json = JSON.stringify(insight);
       if (json.includes('dirty-talk')) {
         found = true;
-        expect(json).not.toContain('whore');
+        expect(json).not.toContain('dirty little slut');
         expect(json).toContain('Intimacy');
       }
     }

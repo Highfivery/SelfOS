@@ -164,6 +164,7 @@ import {
 import { useAdaptiveTestStore, type BankMark } from '../../../stores/adaptiveTestStore';
 import { AdaptiveHead } from './AdaptiveHead';
 import { PracticeSheet } from './PracticeSheet';
+import { NamesPhase } from './NamesPhase';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import styles from './You.module.css';
@@ -671,6 +672,9 @@ export function AdaptiveTake(): JSX.Element {
               </div>
             </Stack>
           ) : null}
+
+          {/* 74 §3.6.8 — the pet-name phase runs first: what the two of you call each other. */}
+          {phase === 'names' ? <NamesPhase testId={testId} /> : null}
 
           {/*
            * The practice sits OUTSIDE the deck: `.deck` clips to its own radius, and a fixed-position scrim

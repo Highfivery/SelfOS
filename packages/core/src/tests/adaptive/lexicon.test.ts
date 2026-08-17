@@ -414,16 +414,26 @@ describe('74 §3.6.8 — the pet-name pass', () => {
       'take:1',
       now,
     );
-    expect(lex.boundaries).toEqual([
-      expect.objectContaining({ text: 'slut', direction: 'hear' }),
-    ]);
+    expect(lex.boundaries).toEqual([expect.objectContaining({ text: 'slut', direction: 'hear' })]);
     expect(violatesBoundary(lex, 'take it, slut', 'hear')).toBe(true);
     expect(violatesBoundary(lex, 'take it, slut', 'say')).toBe(false);
   });
 
   it('leaves an EARLIER take’s boundary settled — marking over it does not lift it', () => {
-    const first = applyNameMarks(start(), DIRTY_TALK.bank, { [KEY]: { hear: 'never' } }, 'take:1', now);
-    const second = applyNameMarks(first, DIRTY_TALK.bank, { [KEY]: { hear: 'love' } }, 'take:2', now);
+    const first = applyNameMarks(
+      start(),
+      DIRTY_TALK.bank,
+      { [KEY]: { hear: 'never' } },
+      'take:1',
+      now,
+    );
+    const second = applyNameMarks(
+      first,
+      DIRTY_TALK.bank,
+      { [KEY]: { hear: 'love' } },
+      'take:2',
+      now,
+    );
     expect(second.entries.find((e) => e.key === KEY)?.hearState).toBe('never');
     expect(violatesBoundary(second, 'take it, slut', 'hear')).toBe(true);
   });
@@ -444,9 +454,15 @@ describe('74 §3.6.8 — the pet-name pass', () => {
   });
 
   it('never lets a later take un-mark an earlier one', () => {
-    const first = applyNameMarks(start(), DIRTY_TALK.bank, { [KEY]: { say: 'never' } }, 'take:1', now);
+    const first = applyNameMarks(
+      start(),
+      DIRTY_TALK.bank,
+      { [KEY]: { say: 'never' } },
+      'take:1',
+      now,
+    );
     const attempt = clearNameMarks(first, { [KEY]: ['say'] }, now, 'take:2');
     expect(attempt.entries.find((e) => e.key === KEY)?.sayState).toBe('never');
     expect(attempt.boundaries).toHaveLength(1);
   });
-})
+});

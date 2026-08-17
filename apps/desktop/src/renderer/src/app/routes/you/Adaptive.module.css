@@ -1218,3 +1218,349 @@
     font-size: 1.25rem;
   }
 }
+
+/* ══ 74 §3.6.8 — the pet-name phase ════════════════════════════════════════════════════════════════ */
+
+/* The register grid: choosing scope is the person's move, so every card carries what it costs. */
+.regGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(238px, 1fr));
+  gap: var(--space-2);
+  padding: 0 var(--space-5) var(--space-5);
+}
+
+.regCard {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  font: inherit;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    background var(--motion-fast) var(--ease-standard);
+}
+
+.regCard:hover {
+  border-color: var(--color-border-strong);
+}
+
+.regCard:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* A started register reads as started — that is the unit of progress, not a row. */
+.regCardDone {
+  background: var(--color-accent-subtle-bg);
+  border-color: var(--color-accent);
+}
+
+.regTop {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.regName {
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  color: var(--color-text-heading);
+}
+
+.regCount {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.regEg {
+  font-size: 0.8125rem;
+  color: var(--color-text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.regState {
+  margin-top: 4px;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-accent-text);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.heatOn {
+  background: var(--color-warning) !important;
+}
+
+.bandNames {
+  background: var(--color-accent-subtle-bg);
+}
+
+/*
+ * The two direction columns. They must never look alike — the marks inside them are the same three glyphs, so
+ * a permanent tint, an edge and a sticky header are what tell them apart, in the same two colours the §3.6.3
+ * direction band already teaches (them→you warm, you→them accent).
+ */
+.colHead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) 152px 152px;
+  align-items: stretch;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-2);
+}
+
+.colLead {
+  align-self: end;
+  padding: 0 var(--space-3) var(--space-2);
+  font-size: 0.8125rem;
+  color: var(--color-text-tertiary);
+}
+
+.colTag {
+  padding: 6px var(--space-2) 7px;
+  text-align: center;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.colTag > small {
+  display: block;
+  font-size: 0.625rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  font-weight: 400;
+  opacity: 0.85;
+  margin-top: 1px;
+}
+
+.colTagMe {
+  background: var(--color-warning-subtle-bg);
+  color: var(--color-warning-subtle-text);
+}
+
+.colTagThem {
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-text);
+}
+
+.nameRow {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) 152px 152px;
+  gap: 0;
+  align-items: center;
+  padding: var(--space-2) 0 var(--space-2) var(--space-3);
+}
+
+.nameRow > .colMe,
+.nameRow > .colThem {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid var(--color-border);
+}
+
+/*
+ * The tint has to be PRESENT, not a hint: at 46% over a cream row it was invisible, and six identical glyphs
+ * in a line read as one strip of six rather than two answers. Full-strength tint + a strong divider between
+ * the columns, so the pairing with the header is unmistakable.
+ */
+.colMe {
+  background: var(--color-warning-subtle-bg);
+}
+
+.colThem {
+  background: var(--color-accent-subtle-bg);
+}
+
+.nameRow > .colThem {
+  border-left-color: var(--color-border-strong);
+}
+
+.markSlot {
+  display: inline-flex;
+  align-items: center;
+}
+
+.settled {
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+/* A signpost telling you where you are, never a door — the register was already chosen. */
+.tierLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 var(--space-2);
+}
+
+.tierLine > span {
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.tierLine > hr {
+  flex: 1;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  margin: 0;
+}
+
+/* Phone: the columns stack into a labelled tinted pair, so which marks are which stays unambiguous. */
+@media (max-width: 760px) {
+  .colHead {
+    display: none;
+  }
+
+  .nameRow {
+    grid-template-columns: 1fr;
+    padding: var(--space-3);
+  }
+
+  .nameRow > .colMe,
+  .nameRow > .colThem {
+    justify-content: flex-start;
+    border-left: 0;
+    border-radius: var(--radius-sm);
+    margin-top: var(--space-2);
+    padding: var(--space-2);
+  }
+
+  .nameRow > .colMe::before,
+  .nameRow > .colThem::before {
+    content: attr(data-label);
+    font-size: 0.625rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-right: var(--space-2);
+    color: var(--color-text-secondary);
+  }
+}
+
+/* 74 §3.6.8 — the report's "what to call each other": two directions, side by side. */
+.nameCols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--space-2);
+}
+
+.nameChip {
+  font-family: var(--font-serif);
+  font-size: 0.9375rem;
+  padding: 4px var(--space-3);
+  border-radius: 999px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-alt);
+  color: var(--color-text-heading);
+}
+
+.chipLove {
+  border-color: var(--color-warning);
+  background: var(--color-warning-subtle-bg);
+  color: var(--color-warning-subtle-text);
+}
+
+/* Struck through, not hidden: seeing a hard no recorded is the point (74 §3.5). */
+.chipNo {
+  border-color: var(--color-danger);
+  background: var(--color-danger-subtle-bg);
+  color: var(--color-danger);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.tier2 {
+  display: block;
+  margin-top: var(--space-2);
+}
+
+/*
+ * The names phase gives its rows the FULL width and puts the tally + actions in a bar fixed to the window.
+ *
+ * Measured, not guessed: with the deck's 232px side rail, the row's three tracks came out `105px 148px 148px`
+ * at a 1100px window — the 44px mark buttons overflowed their 148px column and the second column's buttons
+ * literally intercepted clicks meant for the first, while "my good boy" wrapped over three lines. Two clusters
+ * of three 44px targets need ~300px between them; that only fits if the rail stops competing for it.
+ */
+.nameBody {
+  display: block;
+  padding: var(--space-4) var(--space-5) 76px;
+}
+
+.nameBody .rail {
+  position: fixed;
+  top: auto;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+  background: var(--color-surface-alt);
+  border-top: 1px solid var(--color-border);
+  box-shadow: var(--shadow-overlay);
+}
+
+.nameBody .rail .railCard {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.nameBody .rail .railHead {
+  display: none;
+}
+
+.nameBody .rail .tally {
+  flex-direction: row;
+  gap: var(--space-3);
+}
+
+.nameBody .rail .tallyRow {
+  gap: 4px;
+}
+
+.nameBody .rail .railActions {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.nameBody .rail .railActions > button {
+  width: auto;
+  white-space: nowrap;
+}

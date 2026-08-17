@@ -525,7 +525,7 @@ Its scrim is `position: fixed`. An area is up to 47 rows, so a scrim scoped to `
 and centres the sheet halfway down it — off screen, while every `toBeVisible` assertion passes. The E2E asserts
 `toBeInViewport` for exactly that reason (the #207 lesson).
 
-### 3.6.8 Pet names as their own phase — APPROVED (2026-08-17, owner-directed), BUILD IN PROGRESS
+### 3.6.8 Pet names as their own phase — APPROVED + **BUILT** (2026-08-17, owner-directed)
 
 The owner, on the address screen: _"i think pet names would be useful in this test and analysis… a user can, like
 words, mark pet names they like, ok, not ok for what they like to me called and what they like to call their
@@ -560,9 +560,18 @@ most directly usable output the test could produce — were the least used thing
 7. **Two people's answers can collide**, and the boundary wins: if she has ruled out being called something he
    loves calling her, it is suppressed silently and his own report says only "Angel has ruled this one out" —
    never a list of her answers.
-8. **"Start over from the top" clears everything for that person**, hard nos included (owner-directed). A `never`
-   left behind renders as a settled row, which is the state they are trying to leave; the confirm says the
-   suppression list goes with it. Identity and address survive — starting over is not answering the setup again.
+8. **2,215 names across 24 registers**, each with a line showing it in use. The lines are composed from
+   per-register frames rather than written one at a time — at this size that is the honest way to keep one
+   voice, and it is stated rather than implied. Guards: every name has an example, the example contains the
+   name, keys are unique across registers, both directions are always asked, every roleplay register carries
+   its adults-only framing, and **no entry in any register names a minor** (that guard caught `wild child`,
+   which was removed rather than exempted).
+9. **The three original name families are GONE from the deck.** The new registers carry all 78 of their names,
+   so leaving them would have duplicated every one under two keys with split marks. `cock hungry` fell out
+   entirely — it is an adjective, not a name — and belongs in the degradation family as a line.
+10. **"Start over from the top" clears everything for that person**, hard nos included (owner-directed). A `never`
+    left behind renders as a settled row, which is the state they are trying to leave; the confirm says the
+    suppression list goes with it. Identity and address survive — starting over is not answering the setup again.
 
 ## 4. Data model
 

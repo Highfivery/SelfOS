@@ -417,7 +417,12 @@ describe('74 §3.6.8 — recording the pet-name phase', () => {
       fs,
       key,
       DIRTY_TALK,
-      { personId: 'p1', resultId: draft.id, marks: { [KEY]: { hear: 'never', say: 'love' } }, autosave: true },
+      {
+        personId: 'p1',
+        resultId: draft.id,
+        marks: { [KEY]: { hear: 'never', say: 'love' } },
+        autosave: true,
+      },
       NOW,
     );
     const lex = await readLexicon(fs, key, 'p1');
@@ -473,4 +478,4 @@ describe('74 §3.6.8 — recording the pet-name phase', () => {
     expect(lex?.entries.find((e) => e.key === KEY)?.hearState).toBe('never');
     expect(lex?.boundaries).toHaveLength(1);
   });
-})
+});

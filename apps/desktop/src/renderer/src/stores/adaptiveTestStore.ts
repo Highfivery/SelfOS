@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type {
   AdaptiveBankView,
+  AdaptiveNamesView,
   AdaptiveLexiconEdit,
   AdaptivePhaseView,
   AdaptiveProbeView,
@@ -21,6 +22,8 @@ export type TakePhase =
   | 'intro'
   /** 74 §3.6.4 — the two address taps, before the deck. Skipped once answered (a retake never re-asks). */
   | 'address'
+  /** 74 §3.6.8 — the pet-name phase, which runs FIRST: what the two of you call each other. */
+  | 'names'
   | 'bank'
   | 'split'
   | 'lines'
@@ -41,6 +44,9 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let dirtyMarks = new Set<string>();
 let dirtyCleared = new Set<string>();
 let dirtySplits = new Set<string>();
+/** 74 §3.6.8 — pending pet-name work: which sides of which names changed, and which were taken back. */
+let dirtyNames = new Map<string, Set<'hear' | 'say'>>();
+let dirtyNameCleared = new Map<string, Set<'hear' | 'say'>>();
 
 /** Serializes the writes — see `flush`. */
 let inFlight: Promise<void> = Promise.resolve();
@@ -63,6 +69,8 @@ function resetPending(): void {
   dirtyMarks = new Set();
   dirtyCleared = new Set();
   dirtySplits = new Set();
+  dirtyNames = new Map();
+  dirtyNameCleared = new Map();
   clearedThisTake = new Set();
 }
 
@@ -80,7 +88,7 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = null;
   const mine = generation;
-  const { state, marks, splits } = get();
+  const { state, marks, splits, nameMarks } = get();
   const resultId = state?.draft?.id;
   const marksDelta: Record<string, BankMark> = {};
   for (const key of dirtyMarks) {
@@ -93,10 +101,24 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
     const value = splits[key];
     if (value) splitsDelta[key] = value;
   }
+  const namesDelta: Record<string, { hear?: BankMark; say?: BankMark }> = {};
+  for (const [key, sides] of dirtyNames) {
+    const current = nameMarks[key];
+    const mark: { hear?: BankMark; say?: BankMark } = {};
+    for (const side of sides) {
+      const value = current?.[side];
+      if (value) mark[side] = value;
+    }
+    if (Object.keys(mark).length > 0) namesDelta[key] = mark;
+  }
+  const nameCleared: Record<string, ('hear' | 'say')[]> = {};
+  for (const [key, sides] of dirtyNameCleared) nameCleared[key] = [...sides];
   const nothing =
     Object.keys(marksDelta).length === 0 &&
     cleared.length === 0 &&
-    Object.keys(splitsDelta).length === 0;
+    Object.keys(splitsDelta).length === 0 &&
+    Object.keys(namesDelta).length === 0 &&
+    Object.keys(nameCleared).length === 0;
   if (nothing) {
     set({ saveState: 'saved' });
     return;
@@ -110,6 +132,8 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
   dirtyMarks = new Set();
   dirtyCleared = new Set();
   dirtySplits = new Set();
+  dirtyNames = new Map();
+  dirtyNameCleared = new Map();
   let ok = true;
   try {
     if (Object.keys(marksDelta).length > 0 || cleared.length > 0) {
@@ -118,6 +142,16 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
         resultId,
         marks: marksDelta,
         cleared,
+        autosave: true,
+      });
+      ok = res !== null && res !== undefined;
+    }
+    if (ok && (Object.keys(namesDelta).length > 0 || Object.keys(nameCleared).length > 0)) {
+      const res = await window.selfos?.testsAdaptiveNames({
+        testId,
+        resultId,
+        marks: namesDelta,
+        cleared: nameCleared,
         autosave: true,
       });
       ok = res !== null && res !== undefined;
@@ -144,6 +178,14 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
   for (const key of Object.keys(marksDelta)) dirtyMarks.add(key);
   for (const key of cleared) dirtyCleared.add(key);
   for (const key of Object.keys(splitsDelta)) dirtySplits.add(key);
+  for (const [key, mark] of Object.entries(namesDelta)) {
+    const sides = dirtyNames.get(key) ?? new Set<'hear' | 'say'>();
+    for (const side of ['hear', 'say'] as const) if (mark[side]) sides.add(side);
+    dirtyNames.set(key, sides);
+  }
+  for (const [key, sides] of Object.entries(nameCleared)) {
+    dirtyNameCleared.set(key, new Set(sides));
+  }
   set({ saveState: 'unsaved', error: "Couldn't save that just now — it'll retry." });
 }
 
@@ -172,6 +214,11 @@ interface AdaptiveTestState {
   touched: string[];
   marks: Record<string, BankMark>;
   splits: Record<string, { hear?: number; say?: number }>;
+  /** 74 §3.6.8 — the pet-name phase: its registers + names, and two marks per name. */
+  names: AdaptiveNamesView | null;
+  nameMarks: Record<string, { hear?: BankMark; say?: BankMark }>;
+  /** Which register is open. `null` ⇒ the grid, which is where the phase starts. */
+  openRegister: string | null;
   lines: string[];
   lineReactions: Record<string, 'love' | 'meh' | 'no'>;
   probeQuestion: string | null;
@@ -184,6 +231,13 @@ interface AdaptiveTestState {
   load(testId: string): Promise<void>;
   start(testId: string): Promise<void>;
   mark(key: string, mark: BankMark | null): void;
+  /** Load the pet-name phase (free — no AI). */
+  loadNames(testId: string): Promise<void>;
+  /** Mark one direction of one name. Passing the same mark again takes it back (74 §3.4). */
+  markName(key: string, side: 'hear' | 'say', mark: BankMark): void;
+  setOpenRegister(id: string | null): void;
+  /** Close the phase and move on to the deck. */
+  finishNames(testId: string): Promise<void>;
   /** Write whatever is pending right now — on leaving the take, and before closing a pass. */
   flush(testId: string): Promise<void>;
   /** 74 §3.6.4 — record the two address taps, then re-read the bank so it comes back oriented. */
@@ -232,6 +286,9 @@ const EMPTY = {
   touched: [] as string[],
   marks: {},
   splits: {},
+  names: null,
+  nameMarks: {},
+  openRegister: null,
   lines: [],
   lineReactions: {},
   probeQuestion: null,
@@ -254,7 +311,9 @@ export function resumePhase(turns: readonly { phase: string }[] | undefined): Ta
   if (seen.has('lines')) return 'lines';
   if (seen.has('split')) return 'lines';
   if (seen.has('bank')) return 'split';
-  return 'bank';
+  // A stamped `names` turn means the pet-name phase closed, so the deck is next (74 §3.6.8).
+  if (seen.has('names')) return 'bank';
+  return 'names';
 }
 
 /**
@@ -332,8 +391,10 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       const state = await (window.selfos?.testsAdaptiveStart({ testId }) ?? Promise.resolve(null));
       const resumed = resumePhase(state?.draft?.turns);
       // The address taps come first, and only once: a retake with them already answered goes straight in.
-      const needsAddress = resumed === 'bank' && get().bank?.address === undefined;
+      const needsAddress = resumed === 'names' && get().bank?.address === undefined;
       set({ state, busy: false, phase: needsAddress ? 'address' : resumed });
+      // Free (no AI), so it can load eagerly whenever the phase might need it.
+      if (!needsAddress && resumed === 'names') await get().loadNames(testId);
     },
 
     mark: (key, mark) => {
@@ -367,6 +428,78 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       saveTimer = setTimeout(() => void get().flush(get().activeTestId), AUTOSAVE_DELAY_MS);
     },
 
+    loadNames: async (testId) => {
+      const names = await (window.selfos?.testsNames({ testId }) ?? Promise.resolve(null));
+      // No registers to ask about (a bank with no name families, or a refused gate) — move on rather than
+      // stranding them on an empty phase. A dead end is never the right answer to missing content.
+      if (!names || names.registers.length === 0) {
+        set({ names: null, phase: get().phase === 'names' ? 'bank' : get().phase });
+        return;
+      }
+      // Seed from what they have already said, exactly as the deck seeds from the lexicon — a retake must not
+      // present every answered name blank, and "pick up where you left off" must look like it did.
+      const nameMarks: Record<string, { hear?: BankMark; say?: BankMark }> = {};
+      for (const entry of names.entries) {
+        if (entry.hearState || entry.sayState) {
+          nameMarks[entry.key] = {
+            ...(entry.hearState ? { hear: entry.hearState } : {}),
+            ...(entry.sayState ? { say: entry.sayState } : {}),
+          };
+        }
+      }
+      set({ names, nameMarks });
+    },
+
+    markName: (key, side, mark) => {
+      set((prev) => {
+        const entry = prev.names?.entries.find((item) => item.key === key);
+        // A hard no from an EARLIER take is settled, per direction — same rule as the deck's rows.
+        if (side === 'hear' ? entry?.settledHear : entry?.settledSay) return prev;
+        const current = prev.nameMarks[key] ?? {};
+        const next = { ...current };
+        const cleared = current[side] === mark;
+        if (cleared) delete next[side];
+        else next[side] = mark;
+        const nameMarks = { ...prev.nameMarks };
+        if (Object.keys(next).length === 0) delete nameMarks[key];
+        else nameMarks[key] = next;
+
+        const sides = dirtyNames.get(key) ?? new Set<'hear' | 'say'>();
+        const clearedSides = dirtyNameCleared.get(key) ?? new Set<'hear' | 'say'>();
+        if (cleared) {
+          sides.delete(side);
+          clearedSides.add(side);
+        } else {
+          clearedSides.delete(side);
+          sides.add(side);
+        }
+        if (sides.size > 0) dirtyNames.set(key, sides);
+        else dirtyNames.delete(key);
+        if (clearedSides.size > 0) dirtyNameCleared.set(key, clearedSides);
+        else dirtyNameCleared.delete(key);
+        return { nameMarks, saveState: 'saving' };
+      });
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => void get().flush(get().activeTestId), AUTOSAVE_DELAY_MS);
+    },
+
+    setOpenRegister: (id) => set({ openRegister: id }),
+
+    finishNames: async (testId) => {
+      // Flush first, then close the pass so it stamps its one turn — the same order the deck uses.
+      await get().flush(testId);
+      const resultId = get().state?.draft?.id;
+      if (resultId) {
+        const next = await (window.selfos?.testsAdaptiveNames({
+          testId,
+          resultId,
+          marks: {},
+        }) ?? Promise.resolve(null));
+        if (next) set({ state: next });
+      }
+      set({ phase: 'bank', openRegister: null });
+    },
+
     /**
      * Persist the delta. Autosave never touches `phase` and never re-reads `state.lexicon` into the store: a
      * refresh mid-pass would re-lock rows they are still working on, and the grid would jump under their hands.
@@ -390,7 +523,9 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       });
       // The bank is oriented HOST-SIDE, so it has to be re-read for the new answers to take effect.
       const bank = await (window.selfos?.testsBank({ testId }) ?? Promise.resolve(null));
-      set({ bank: bank ?? get().bank, busy: false, phase: 'bank' });
+      // Names come first (74 §3.6.8) — the address taps only ever governed the deck.
+      set({ bank: bank ?? get().bank, busy: false, phase: 'names' });
+      await get().loadNames(testId);
     },
 
     banLine: async (line) => {

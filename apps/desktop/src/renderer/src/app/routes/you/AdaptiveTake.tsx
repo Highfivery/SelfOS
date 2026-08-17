@@ -1047,7 +1047,28 @@ export function AdaptiveTake(): JSX.Element {
               ) : null}
               {store.lines.map((line) => (
                 <div key={line} className={adaptive.lineRow}>
-                  <span className={adaptive.lineText}>&ldquo;{line}&rdquo;</span>
+                  <span className={adaptive.lineText}>
+                    &ldquo;{line}&rdquo;
+                    {/*
+                     * 74 §3.6.2 — the "not like that" escape, and the ONLY place a line becomes a boundary.
+                     *
+                     * A word is loved in one line and hated in another ("fuck your pussy" vs "beat that
+                     * pussy"), and this is the phase built to catch that. But a plain "no" here means "this
+                     * line doesn't land" — it must NOT silently mint a boundary, because a boundary is
+                     * permanent and lifts only by an explicit act (§3.2). So the soft reaction keeps steering
+                     * register, and turning it into a limit takes this second, deliberate tap.
+                     */}
+                    {store.lineReactions[line] === 'no' ? (
+                      <button
+                        type="button"
+                        className={adaptive.textLink}
+                        onClick={() => void store.banLine(line)}
+                        disabled={store.busy}
+                      >
+                        Never anything like this again
+                      </button>
+                    ) : null}
+                  </span>
                   <span className={adaptive.marks}>
                     {(['love', 'meh', 'no'] as const).map((reaction) => (
                       <button

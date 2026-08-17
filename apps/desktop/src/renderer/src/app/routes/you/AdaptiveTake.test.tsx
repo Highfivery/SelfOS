@@ -589,4 +589,37 @@ describe('AdaptiveTake (74 §3.2)', () => {
     // Progress is one bar, not 36 dashes.
     expect(screen.getByRole('progressbar', { name: /Area 1 of 2/ })).toBeInTheDocument();
   });
+
+  it('turns a rejected LINE into a boundary only on a second, deliberate tap', async () => {
+    // A plain "no" means "this line doesn't land" and must not mint a boundary — a boundary is permanent and
+    // lifts only by an explicit act. The escape is what catches "the word is fine, not like that".
+    const edit = vi.fn(() => Promise.resolve(null));
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveLines: () =>
+        Promise.resolve({ ok: true, lines: ['I want to beat that pussy'], degraded: false }),
+      testsLexiconEdit: edit as never,
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'lines' });
+    await useAdaptiveTestStore.getState().loadLines('dirty-talk', 1);
+
+    // Before the reaction there is no escape at all.
+    expect(screen.queryByRole('button', { name: /Never anything like this/i })).toBeNull();
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'I want to beat that pussy — no' }),
+    );
+    expect(edit).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: /Never anything like this/i }));
+    await waitFor(() =>
+      expect(edit).toHaveBeenCalledWith({
+        kind: 'addBoundary',
+        text: 'I want to beat that pussy',
+        boundaryKind: 'theme',
+      }),
+    );
+  });
 });

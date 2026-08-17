@@ -864,6 +864,31 @@ inner scroller — the deck is a single column at every width, so nothing collap
 
 ## 12. Changelog
 
+- 2026-08-17 — **AMENDED (§3.6.2): word-level marking stays; REGISTER becomes the axis that carries the rest,
+  and a rejected line can become a boundary.** The owner asked whether the bank should be quote-based instead
+  of word-based, from a case word-level can't answer on its own: _"they could like I want to fuck your pussy
+  but not like I want to beat that pussy"_. **Measured before deciding:** 6 word families vs 30 phrase
+  families, and 256 of ~1,033 entries carry a quote while 587 ARE the line — so the bank is already ~75%
+  quote-based, and the word-level part is exactly the nouns and vocatives.
+  **Word-level stays, because suppression depends on it.** All three consumers feed a model that GENERATES,
+  and `violatesBoundary` blocks a candidate by word-boundaried match on short strings. Ban a word and every
+  future line containing it is caught; ban a whole sentence and a paraphrase sails through. Quote-only would
+  quietly break the hard-no guarantee, which is the strongest promise in the feature.
+  **What was actually missing is register.** The synthesis has been scoring seven registers on every take and
+  **nothing read the result**, so a coach handed the vocabulary had no idea which way to point it.
+  `buildOwnLexiconBlock` and `buildPartnerSteer` now name the register that lands and the register that does
+  not — as words, not numbers, and only for clear signals — with the miss stated honestly as _not_ a boundary
+  ("avoid this framing even with words they like"), since their hard nos are the separate absolute list.
+  **And the lines phase can now produce a limit.** A "no" there meant "this line doesn't land" and produced
+  nothing durable. It still doesn't mint a boundary on its own — a boundary is permanent and lifts only by an
+  explicit act (§3.2) — but a rejected line now offers a second, deliberate tap that records it as a THEME
+  boundary, which `violatesBoundary` matches on stemmed content words, so "beat that pussy" also stops "gonna
+  beat that pussy up".
+  **Considered and rejected:** flipping the bank to quotes (unenforceable boundaries, several thousand
+  entries, a much longer pass, and the coach loses composable vocabulary); a per-row "not like that" on all
+  ~1,000 rows (control noise); and a hand-authored contrasting-lines stage per loved word (256+ words × 3
+  lines of content, materially longer take).
+
 - 2026-08-17 — **The deck, redesigned for real (§3.6.4; mockup approved before any code).** The owner, on the
   fourth round of "improve the UI/UX" being answered with copy edits: _"WHEN I SAY IMPROVE SOMETHING FROM THE
   UI/UX, THAT MEANS DESIGN, NOT A LINE OF TEXT"_ — and they were right. Direction had become a sentence, the

@@ -194,6 +194,12 @@ interface AdaptiveTestState {
     /** Who the two of you are — backs the BODY axis when onboarding has no anatomy answer (§3.6.3). */
     identity?: { self: 'man' | 'woman' | 'either'; partner: 'man' | 'woman' | 'either' },
   ): Promise<void>;
+  /**
+   * Turn a line they rejected into a THEME boundary (74 §3.6.2). Deliberate and separate from the soft `no`,
+   * because a boundary is permanent — `violatesBoundary` blocks any future line whose content words cover the
+   * theme, so "beat that pussy" also stops "gonna beat that pussy up".
+   */
+  banLine(line: string): Promise<void>;
   /** Remember the deck position so resuming lands where they stopped (74 §3.6.4). */
   rememberArea(area: number): Promise<void>;
   submitBank(testId: string): Promise<void>;
@@ -385,6 +391,16 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       // The bank is oriented HOST-SIDE, so it has to be re-read for the new answers to take effect.
       const bank = await (window.selfos?.testsBank({ testId }) ?? Promise.resolve(null));
       set({ bank: bank ?? get().bank, busy: false, phase: 'bank' });
+    },
+
+    banLine: async (line) => {
+      const lexicon = await (window.selfos?.testsLexiconEdit({
+        kind: 'addBoundary',
+        text: line,
+        boundaryKind: 'theme',
+      }) ?? Promise.resolve(null));
+      if (!lexicon) return;
+      set((prev) => ({ state: prev.state ? { ...prev.state, lexicon } : prev.state }));
     },
 
     rememberArea: async (area) => {

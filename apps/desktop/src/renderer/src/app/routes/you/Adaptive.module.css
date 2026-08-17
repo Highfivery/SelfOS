@@ -1504,63 +1504,84 @@
 }
 
 /*
- * The names phase gives its rows the FULL width and puts the tally + actions in a bar fixed to the window.
+ * The names row STACKS: the name and its quote, then the two labelled clusters beneath.
  *
- * Measured, not guessed: with the deck's 232px side rail, the row's three tracks came out `105px 148px 148px`
- * at a 1100px window — the 44px mark buttons overflowed their 148px column and the second column's buttons
- * literally intercepted clicks meant for the first, while "my good boy" wrapped over three lines. Two clusters
- * of three 44px targets need ~300px between them; that only fits if the rail stops competing for it.
+ * Measured, not guessed. Two clusters of three 44px targets need ~300px, and beside the deck's 232px sticky
+ * rail the row's three tracks came out `105px 148px 148px` at a 1100px window — the name wrapped over three
+ * lines and the second cluster's buttons intercepted clicks meant for the first. Stacking is what lets the
+ * rail stay where it is on every other screen of this test.
  */
-.nameBody {
+.nameRow {
   display: block;
-  padding: var(--space-4) var(--space-5) 76px;
+  padding: var(--space-3) var(--space-4);
 }
 
-.nameBody .rail {
-  position: fixed;
-  top: auto;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 20;
-  flex-direction: row;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
-  background: var(--color-surface-alt);
-  border-top: 1px solid var(--color-border);
-  box-shadow: var(--shadow-overlay);
+.nameMarksRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
 }
 
-.nameBody .rail .railCard {
-  padding: 0;
-  border: 0;
-  background: none;
-  box-shadow: none;
-}
-
-.nameBody .rail .railHead {
-  display: none;
-}
-
-.nameBody .rail .tally {
-  flex-direction: row;
-  gap: var(--space-3);
-}
-
-.nameBody .rail .tallyRow {
-  gap: 4px;
-}
-
-.nameBody .rail .railActions {
-  flex-direction: row;
+.nameRow .colMe,
+.nameRow .colThem {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
   align-items: center;
   gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.nameRow .colMe {
+  background: var(--color-warning-subtle-bg);
+  border-color: color-mix(in srgb, var(--color-warning) 35%, transparent);
+}
+
+.nameRow .colThem {
+  background: var(--color-accent-subtle-bg);
+  border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+}
+
+/* The label rides with its cluster rather than sitting in a sticky header that detaches from it. */
+.colWho {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 0.6875rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.colWho > small {
+  display: block;
+  font-size: 0.625rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+.nameRow .colMe .colWho {
+  color: var(--color-warning-subtle-text);
+}
+
+.nameRow .colThem .colWho {
+  color: var(--color-accent-text);
+}
+
+.nameRow .marks {
   margin-left: auto;
 }
 
-.nameBody .rail .railActions > button {
-  width: auto;
-  white-space: nowrap;
+/* The grid's footer had no side padding, so the count sat flush against the card edge. */
+.regFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: 0 var(--space-5) var(--space-5);
 }

@@ -149,7 +149,7 @@ export function NamesPhase({ testId }: { testId: string }): JSX.Element | null {
             />
           ))}
         </div>
-        <div className={adaptive.deckFoot}>
+        <div className={adaptive.regFoot}>
           <Text size="sm" tone="tertiary">
             {openedCount} of {names.registers.length} registers started ·{' '}
             {Object.keys(store.nameMarks).length} names marked
@@ -189,19 +189,8 @@ export function NamesPhase({ testId }: { testId: string }): JSX.Element | null {
           </Text>
         ) : null}
       </div>
-      <div className={`${adaptive.deckBody} ${adaptive.nameBody}`}>
+      <div className={adaptive.deckBody}>
         <div className={adaptive.rows}>
-          <div className={adaptive.colHead}>
-            <span className={adaptive.colLead}>Gentlest first. Mark what does something.</span>
-            <span className={`${adaptive.colTag} ${adaptive.colTagMe}`}>
-              {them} → {me}
-              <small>call me this</small>
-            </span>
-            <span className={`${adaptive.colTag} ${adaptive.colTagThem}`}>
-              {me} → {them}
-              <small>I call them this</small>
-            </span>
-          </div>
           {rows.map((entry, index) => (
             <NameRow
               key={entry.key}
@@ -270,7 +259,13 @@ function NameRow({
     const current = mark[side];
     const who = side === 'hear' ? `${them} → ${me}` : `${me} → ${them}`;
     return (
-      <span className={side === 'hear' ? adaptive.colMe : adaptive.colThem} data-label={who}>
+      <span className={side === 'hear' ? adaptive.colMe : adaptive.colThem}>
+        {/* The label rides WITH its cluster. As a sticky header it detached from the buttons it named and
+            hovered mid-list, and two long display names wrapped it onto two lines. */}
+        <span className={adaptive.colWho}>
+          {who}
+          <small>{side === 'hear' ? 'call me this' : 'I call them this'}</small>
+        </span>
         {settled ? (
           <span className={adaptive.settled}>off the table</span>
         ) : (
@@ -318,8 +313,10 @@ function NameRow({
             <Phrase quote={entry.example} term={entry.text} />
           </div>
         </div>
-        {column('hear')}
-        {column('say')}
+        <div className={adaptive.nameMarksRow}>
+          {column('hear')}
+          {column('say')}
+        </div>
       </div>
     </>
   );

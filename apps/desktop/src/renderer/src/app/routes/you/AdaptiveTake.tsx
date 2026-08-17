@@ -149,6 +149,7 @@ import {
   Textarea,
 } from '../../../design-system/components';
 import { useAdaptiveTestStore, type BankMark } from '../../../stores/adaptiveTestStore';
+import { AdaptiveHead } from './AdaptiveHead';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import styles from './You.module.css';
@@ -422,13 +423,11 @@ export function AdaptiveTake(): JSX.Element {
            */}
           {phase === 'intro' ? (
             <div className={adaptive.introWrap}>
-              <div className={adaptive.introHead}>
-                <span className={styles.eyebrow}>SelfOS · Dirty talk</span>
-                <Heading level={1}>{store.state.title}</Heading>
-                <Text tone="secondary" className={adaptive.introBlurb}>
-                  {store.state.blurb}
-                </Text>
-              </div>
+              <AdaptiveHead
+                title={store.state.title}
+                lead={store.state.blurb}
+                framing={store.state.framing}
+              />
 
               <Card className={adaptive.introCard}>
                 <ul className={adaptive.introFacts}>
@@ -478,10 +477,6 @@ export function AdaptiveTake(): JSX.Element {
                   ) : null}
                 </div>
               </Card>
-
-              <Text size="sm" tone="tertiary" className={styles.framing}>
-                {store.state.framing}
-              </Text>
             </div>
           ) : null}
 
@@ -765,57 +760,75 @@ export function AdaptiveTake(): JSX.Element {
                           }`}
                         >
                           <div className={adaptive.line}>
-                            <div className={adaptive.term}>
-                              {/* A whole-line entry has no separate word to name — saying "you belong to
-                                  me" twice (label + line) read as a rendering bug, which it was. */}
-                              {/* The word is the label; the band says once that the word is what's marked.
-                                  A chip on all 47 rows was the repeated-chrome mistake again — so only the
-                                  EXCEPTION is chipped: an entry that has no separate word, where the mark
-                                  goes on the whole line. */}
-                              {entry.example ? (
-                                <span className={adaptive.termWord}>{entry.text}</span>
-                              ) : (
-                                <span className={adaptive.termWhat}>the whole line</span>
-                              )}
-                              {/* Intensity as a 3-bar meter with a text equivalent (§9) — it was a bare
+                            {/*
+                             * 74 §3.6.1 — the HIERARCHY is the explanation. This row made the quote the
+                             * visual hero and the word a tiny uppercase label, which reads as "rate this
+                             * sentence" — the opposite of what the mark does. A sentence of prose saying
+                             * otherwise gets skimmed; making the thing you're rating the biggest thing in
+                             * the row can't be. So the word leads at reading size and its quote sits
+                             * underneath, prefixed, as context.
+                             *
+                             * It also separates the two kinds of row without a word of explanation: a word
+                             * row is a big word over a small "as in …"; a whole-line row is just the line.
+                             */}
+                            <div className={adaptive.rated}>
+                              {entry.example ? entry.text : `“${entry.text}”`}
+                              {/* Trailing the word, not on a line of its own — it read as an orphaned
+                                  fragment between the word and its quote. */}
+                              <span className={adaptive.termInline}>
+                                {/* Intensity as a 3-bar meter with a text equivalent (§9) — it was a bare
                                   5px dot with no legend and nothing a screen reader could read. */}
-                              <span
-                                className={`${adaptive.heat} ${entry.tier >= 4 ? adaptive.heatHi : ''}`}
-                                title={entry.tier >= 4 ? 'more intense' : 'gentler'}
-                              >
-                                {[1, 2, 3].map((step) => (
-                                  <i
-                                    key={step}
-                                    className={
-                                      step <= Math.ceil(entry.tier / 2) ? adaptive.lit : ''
-                                    }
-                                  />
-                                ))}
-                                <span className={adaptive.srOnly}>
-                                  {entry.tier >= 4 ? 'more intense' : 'gentler'}
+                                <span
+                                  className={`${adaptive.heat} ${entry.tier >= 4 ? adaptive.heatHi : ''}`}
+                                  title={entry.tier >= 4 ? 'more intense' : 'gentler'}
+                                >
+                                  {[1, 2, 3].map((step) => (
+                                    <i
+                                      key={step}
+                                      className={
+                                        step <= Math.ceil(entry.tier / 2) ? adaptive.lit : ''
+                                      }
+                                    />
+                                  ))}
+                                  <span className={adaptive.srOnly}>
+                                    {entry.tier >= 4 ? 'more intense' : 'gentler'}
+                                  </span>
                                 </span>
+                                {/* Only when the area MIXES the two — the band carries it otherwise. */}
+                                {areaSides === null ? (
+                                  <span className={adaptive.sideChip}>
+                                    {sideLabel(entry.sides)}
+                                  </span>
+                                ) : null}
                               </span>
-                              {/* Only when the area MIXES the two — the band carries it otherwise. */}
-                              {areaSides === null ? (
-                                <span className={adaptive.sideChip}>{sideLabel(entry.sides)}</span>
-                              ) : null}
                             </div>
                             {/* The line you react to is the hero of the row — with the word you're actually
                                 marking bolded inside it, so the quote reads as context, not as the thing
                                 being rated. */}
+                            {/* Context UNDER the word, prefixed so it can never read as the thing being
+                                marked. The word stays bolded inside it, so the eye connects the two with no
+                                label at all. */}
                             <div className={adaptive.said}>
-                              {(() => {
-                                if (!entry.example) return entry.text;
-                                const split = boldTermInQuote(entry.example, entry.text);
-                                if (!split) return `“${entry.example}”`;
-                                return (
-                                  <>
-                                    “{split.before}
-                                    <b className={adaptive.saidWord}>{split.hit}</b>
-                                    {split.after}”
-                                  </>
-                                );
-                              })()}
+                              {entry.example ? (
+                                <>
+                                  <span className={adaptive.asIn}>as in</span>{' '}
+                                  {(() => {
+                                    const split = boldTermInQuote(entry.example, entry.text);
+                                    if (!split) return `“${entry.example}”`;
+                                    return (
+                                      <>
+                                        “{split.before}
+                                        <b className={adaptive.saidWord}>{split.hit}</b>
+                                        {split.after}”
+                                      </>
+                                    );
+                                  })()}
+                                </>
+                              ) : (
+                                <span className={adaptive.asIn}>
+                                  the whole line — marked as it is
+                                </span>
+                              )}
                             </div>
                           </div>
                           {locked ? (

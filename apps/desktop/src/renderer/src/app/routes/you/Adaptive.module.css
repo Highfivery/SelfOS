@@ -557,23 +557,31 @@
 }
 
 /* The term is the LABEL; the line underneath is what you react to. */
-.term {
+/* What you are MARKING — the biggest thing in the row, because that is what makes it unmissable. */
+.rated {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--space-2);
   flex-wrap: wrap;
-  margin-bottom: 3px;
-  font-size: 0.6875rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-text-tertiary);
+  font-family: var(--font-serif);
+  font-size: 1.125rem;
+  line-height: 1.35;
+  color: var(--color-text-heading);
 }
 
+/* Its quote, underneath and clearly subordinate: smaller, lighter, and prefixed. */
 .said {
-  font-family: var(--font-serif);
-  font-size: 1.0625rem;
+  margin-top: 2px;
+  font-size: 0.875rem;
   line-height: 1.4;
-  color: var(--color-text-primary);
+  color: var(--color-text-secondary);
+}
+
+.asIn {
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
 }
 
 /* Intensity: a 3-bar meter, red at the top tier. Never colour alone — it carries a text equivalent. */
@@ -827,25 +835,6 @@
   color: #fff;
 }
 
-/* What you're rating, named on the row (§3.6.1). A word row marks the WORD and the quote is context; a
- * whole-line row marks the line. They used to look identical, which is how "am I rating the word or the
- * quote?" became a real question. */
-.termWord {
-  color: var(--color-text-secondary);
-  font-weight: 600;
-}
-
-.termWhat {
-  padding: 1px 6px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: 0.625rem;
-  letter-spacing: 0.06em;
-  color: var(--color-text-tertiary);
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
 /* The word, inside its quote. Weight rather than colour, so it survives greyscale and both themes (§9). */
 .saidWord {
   font-weight: 700;
@@ -932,4 +921,22 @@
   align-items: center;
   gap: var(--space-3);
   flex-wrap: wrap;
+}
+
+/* One head for both adaptive screens (see `AdaptiveHead`). The measure is bounded HERE and nowhere else —
+ * a title and a sentence read badly at 1300px, while the report's own body still fills the width (§12). */
+.screenHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 620px;
+}
+
+/* The intensity meter (and, on a mixed area, the direction chip) trailing the word rather than sitting on a
+ * line of its own between the word and its quote, where it read as an orphaned fragment. */
+.termInline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
 }

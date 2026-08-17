@@ -622,4 +622,25 @@ describe('AdaptiveTake (74 §3.2)', () => {
       }),
     );
   });
+
+  it('makes the WORD the biggest thing in its row, with the quote subordinate', async () => {
+    // The clarity fix that isn't prose: the row used to make the quote the visual hero and the word a tiny
+    // uppercase label, which reads as "rate this sentence" — the opposite of what the mark does. A sentence
+    // telling people otherwise gets skimmed; hierarchy can't be.
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'bank' });
+
+    const word = await screen.findByText('good girl', { selector: 'div' });
+    const quote = screen.getByText('as in');
+    // Structure here; the actual type SIZES are asserted in the E2E, since jsdom doesn't apply CSS modules.
+    expect(word).toBeInTheDocument();
+    expect(quote).toBeInTheDocument();
+    // The word comes FIRST in the row, and the quote is explicitly labelled as illustration.
+    expect(word.compareDocumentPosition(quote) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

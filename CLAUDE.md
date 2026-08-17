@@ -486,6 +486,30 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-17 — **Feedback + Build (the deck redesigned for real; mockup approved FIRST; SPEC 74 §3.6.4; on
+  `feat/adaptive-deck-redesign`).** The owner, after four rounds of asking for UI/UX work: _"WHEN I SAY IMPROVE
+  SOMETHING FROM THE UI/UX, THAT MEANS DESIGN, NOT A LINE OF TEXT"_ — and they were right. Every one of my
+  "UI/UX fixes" had been a copy edit: direction became a sentence, the address screen a relabel, the repeated
+  chrome a moved paragraph. The deck was still four stacked paragraphs above a flat hairline table with three
+  identical grey squares per row. §12 already says **"'Improve' means redesign, not relocate"** and I broke it
+  four times running. Built (after an Artifact mockup in the app's real tokens was approved): **direction is a
+  GRAPHIC** — a coloured band with a `You → Them` flow whose colour changes with the direction, and the same
+  two colours tag the identity screen's preview so the preview teaches the band; **the line is the hero of its
+  row** (serif at reading size, the term demoted to an uppercase label); **three visually distinct marks** with
+  the boundary set apart by a divider so a hard no can't be a mis-tap neighbour; **intensity as a 3-bar meter**
+  with a text equivalent; **one slim progress bar** (with a floor, or 1-of-36 renders as nothing) replacing 36
+  dashes; **a sticky rail** holding the actions + a running per-mark tally, so finishing never means scrolling
+  47 rows already decided; **the marking rules behind one link** instead of four paragraphs on each of 36
+  areas; and **the identity screen previews its own consequence** with two real bank lines tagged YOU SAY /
+  YOU HEAR, chosen by the SAME rule the resolver uses so it can't promise a line the deck withholds. Gate
+  green: typecheck (4 pkgs), lint, format, **2322 core + 13 relay + 1643 desktop** unit, both 74 E2E, visual QA
+  against the approved mockup. **Lessons: (1) when the ask is "improve the UI/UX", a sentence is never the
+  answer — go to layout, hierarchy, colour and control design, and show a MOCKUP before writing code (§12).
+  (2) A redesign that reuses a class name inherits the OLD rule: a stale `.deckHead { display: flex }` turned
+  the new progress bar into a content-sized flex item parked mid-header, which I only found by MEASURING its
+  bounding box (10px wide) instead of squinting at a screenshot. (3) Delete the CSS the redesign orphans in the
+  same change — `.dots`/`.direction` were dead the moment the band and the bar replaced them.**
+
 - 2026-08-17 — **Fourth audit + owner UI/UX corrections (SPEC 74 §3.3/§3.6.3/§6; on `fix/adaptive-audit-four`).**
   The owner reported two of these from screenshots, and both were things three audits had missed **because I
   only ever looked at the taken state of a fully-onboarded person**. **(1) The direction was not clear** — a

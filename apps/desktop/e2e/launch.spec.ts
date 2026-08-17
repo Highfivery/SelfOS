@@ -16085,7 +16085,7 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
     await w.getByRole('button', { name: 'Start', exact: true }).click();
     // The direction is STATED, not implied — rating "you say" as though it were "you hear" would silently
     // poison the profile, and the answer used to live only in the aria-label.
-    await expect(w.getByText(/These are things YOU SAY TO THEM/i)).toBeVisible();
+    await expect(w.getByText(/Things YOU SAY TO THEM/i)).toBeVisible();
     await w.screenshot({ path: 'e2e-artifacts/74-direction.png' });
 
     // Walk to the names families and check both directions of the orientation.
@@ -16219,14 +16219,16 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
       throw new Error(`never reached ${name} in the deck`);
     };
 
-    await expect(w.getByText(/nothing in SelfOS will suggest it again/i)).toBeVisible();
-    // The autosave promise is made once, on the first area, where the standing instructions live.
+    // The marking rules live behind one link now, not four paragraphs on every one of 36 areas.
     await expect(w.getByText(/Every tap saves itself/i)).toBeVisible();
+    await w.getByRole('button', { name: /How marking works/i }).click();
+    await expect(w.getByText(/nothing in SelfOS will suggest it again/i)).toBeVisible();
     // The deck only moves FORWARD, so mark in the bank's own family order: names-power → names-degrading
     // → claiming. (The un-mark round trip below has to happen while `whore` is still on screen.)
     await markInDeck('good girl — hear & say — love it');
     await markInDeck('whore — hear & say — never');
-    await expect(w.getByText(/2 marked/)).toBeVisible();
+    await expect(w.getByTestId('tally-love')).toContainText('1');
+    await expect(w.getByTestId('tally-never')).toContainText('1');
 
     // 74 §3.4 — every tap saves itself. Nothing below clicks Next, so the only thing that can have written
     // this is the autosave; the vault is the assertion, not the screen.
@@ -16253,7 +16255,7 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
       .getByRole('button', { name: 'whore — hear & say — never', exact: true })
       .first()
       .click();
-    await expect(w.getByText(/1 marked/)).toBeVisible();
+    await expect(w.getByTestId('tally-never')).toContainText('0');
     await expect
       .poll(async () => {
         const lex = (await readEncryptedJson(fs, LEXICON, key)) as {
@@ -16266,16 +16268,15 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
       .getByRole('button', { name: 'whore — hear & say — never', exact: true })
       .first()
       .click();
-    await expect(w.getByText(/2 marked/)).toBeVisible();
+    await expect(w.getByTestId('tally-never')).toContainText('1');
     await markInDeck('mine — hear & say — love it');
-    await expect(w.getByText(/3 marked/)).toBeVisible();
+    await expect(w.getByTestId('tally-love')).toContainText('2');
     // The middle mark. It used to be recorded and then invisible everywhere — asserted on the report below.
     await markInDeck("all mine — hear & say — it's okay");
-    await expect(w.getByText(/4 marked/)).toBeVisible();
+    await expect(w.getByTestId('tally-okay')).toContainText('1');
 
-    // The standing instructions appear ONCE, not on all 36 areas — the legend is what repeats.
-    await expect(w.getByText(/Only tap what actually does something/)).toHaveCount(0);
-    await expect(w.getByText(/love · .* okay · .* never|marked so far/).first()).toBeVisible();
+    // The rail carries the running tally and the actions, so finishing never means scrolling the area.
+    await expect(w.getByTestId('tally-never')).toContainText('1');
     // Two buttons that did the same thing are one button now.
     await expect(w.getByRole('button', { name: 'Skip this area' })).toHaveCount(0);
 

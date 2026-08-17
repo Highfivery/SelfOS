@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Ban, Contrast, Flame, Lock } from 'lucide-react';
+import { ArrowRight, Ban, Contrast, Flame, Lock } from 'lucide-react';
 
 /**
  * 74 §3.6.1 #5 — the three marks, as lucide icons. `Ban` (a circle-slash) rather than a bare X because a
@@ -19,6 +19,32 @@ const IDENTITY_OPTIONS: { value: 'man' | 'woman' | 'either'; label: string }[] =
   { value: 'woman', label: 'a woman' },
   { value: 'either', label: 'neither · both · it depends' },
 ];
+
+/**
+ * What the two answers actually CHANGE, shown as two example lines (74 §3.6.3). The answer's effect used to
+ * be described in a sentence; a person picking "a man / a woman" had no way to see that it decides which half
+ * of a thousand lines they'll be shown, or which of them count as things they'd HEAR.
+ *
+ * These are real bank lines, chosen by the SAME rule the resolver uses (a say line names the partner's body,
+ * a hear line names their own), so the preview can never promise something the deck then withholds.
+ */
+function previewLines(
+  self: 'man' | 'woman' | 'either' | null,
+  partner: 'man' | 'woman' | 'either' | null,
+): { side: 'hear' | 'say'; text: string }[] {
+  const about = (who: 'man' | 'woman' | 'either' | null): string | null =>
+    who === 'man'
+      ? 'I love how hard your cock gets for me'
+      : who === 'woman'
+        ? 'your pussy is so wet for me'
+        : null;
+  const out: { side: 'hear' | 'say'; text: string }[] = [];
+  const say = about(partner);
+  const hear = about(self);
+  if (say) out.push({ side: 'say', text: say });
+  if (hear) out.push({ side: 'hear', text: hear });
+  return out;
+}
 
 /** What someone of this identity is called by default. Overridable below — a man can want "good girl". */
 function addressFor(identity: 'man' | 'woman' | 'either'): 'girl' | 'man' | 'either' {
@@ -45,6 +71,14 @@ function addressSummary(
   return `you as ${word(address.self)}, them as ${word(address.partner)}`;
 }
 
+/** The pair, in two words, for the band's change affordance. Falls back to "them" whenever unknown. */
+function pairShorthand(
+  identity: { self: 'man' | 'woman' | 'either'; partner: 'man' | 'woman' | 'either' } | undefined,
+): string {
+  const them = identity?.partner === 'woman' ? 'her' : identity?.partner === 'man' ? 'him' : 'them';
+  return `You & ${them}`;
+}
+
 /** What a row is rating, in the person's terms. Both sides shown ⇒ nothing to disambiguate. */
 function sideLabel(sides: readonly ('hear' | 'say')[]): string {
   if (sides.length >= 2) return 'hear & say';
@@ -60,13 +94,17 @@ function sideLabel(sides: readonly ('hear' | 'say')[]): string {
  * aria-label, where a sighted person never sees it. Rating the wrong direction silently poisons the whole
  * profile, so it is stated, not implied.
  */
-function directionSentence(sides: readonly ('hear' | 'say')[]): string {
+function directionSentence(sides: readonly ('hear' | 'say')[] | null): string {
+  // Mixed area: each row carries its own marker, so the band says that rather than picking a side.
+  if (sides === null) {
+    return 'This area mixes the two — each line says which way it goes.';
+  }
   if (sides.length >= 2) {
     return 'Rate these BOTH ways at once — hearing it from them and saying it to them. You split the two apart in the next step.';
   }
   return sides[0] === 'say'
-    ? 'These are things YOU SAY TO THEM. Rate how much you want to say it.'
-    : 'These are things THEY SAY TO YOU. Rate how much you want to hear it.';
+    ? 'Things YOU SAY TO THEM — rate how much you want to say it.'
+    : 'Things THEY SAY TO YOU — rate how much you want to hear it.';
 }
 
 const MARK_META: Record<BankMark, { label: string; Icon: typeof Flame }> = {
@@ -188,7 +226,8 @@ export function AdaptiveTake(): JSX.Element {
   // lie the second time they open it: someone who stopped at area 22 comes back to area 1 with 21 areas of
   // already-marked terms to page through (the §3.4 argument, one level down).
   const [areaIndex, setAreaIndex] = useState(0);
-  const areaHeadingRef = useRef<HTMLHeadingElement>(null);
+  const areaHeadingRef = useRef<HTMLDivElement>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
   // Adopt the saved position once the bank arrives (it is device-local, so it comes with the bank read).
   const adopted = useRef(false);
   useEffect(() => {
@@ -406,56 +445,58 @@ export function AdaptiveTake(): JSX.Element {
                 between the two of you — and so &ldquo;what you like to hear&rdquo; means lines
                 about your body, not theirs.
               </Text>
-              <Card className={adaptive.identityCard}>
-                <span className={adaptive.identityLabel} id="adaptive-self-identity-label">
-                  You are a:
-                </span>
-                <div
-                  className={adaptive.pills}
-                  role="group"
-                  aria-labelledby="adaptive-self-identity-label"
-                >
-                  {IDENTITY_OPTIONS.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={adaptive.pill}
-                      aria-pressed={selfIdentity === option.value}
-                      onClick={() => {
-                        setSelfIdentity(option.value);
-                        if (!addressDiffers) setSelfAddress(addressFor(option.value));
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </Card>
-              <Card className={adaptive.identityCard}>
-                <span className={adaptive.identityLabel} id="adaptive-partner-identity-label">
-                  Your partner is a:
-                </span>
-                <div
-                  className={adaptive.pills}
-                  role="group"
-                  aria-labelledby="adaptive-partner-identity-label"
-                >
-                  {IDENTITY_OPTIONS.map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      className={adaptive.pill}
-                      aria-pressed={partnerIdentity === option.value}
-                      onClick={() => {
-                        setPartnerIdentity(option.value);
-                        if (!addressDiffers) setPartnerAddress(addressFor(option.value));
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </Card>
+              <div className={adaptive.idPair}>
+                <Card className={adaptive.identityCard}>
+                  <span className={adaptive.identityLabel} id="adaptive-self-identity-label">
+                    You are a:
+                  </span>
+                  <div
+                    className={adaptive.pills}
+                    role="group"
+                    aria-labelledby="adaptive-self-identity-label"
+                  >
+                    {IDENTITY_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={adaptive.pill}
+                        aria-pressed={selfIdentity === option.value}
+                        onClick={() => {
+                          setSelfIdentity(option.value);
+                          if (!addressDiffers) setSelfAddress(addressFor(option.value));
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </Card>
+                <Card className={adaptive.identityCard}>
+                  <span className={adaptive.identityLabel} id="adaptive-partner-identity-label">
+                    Your partner is a:
+                  </span>
+                  <div
+                    className={adaptive.pills}
+                    role="group"
+                    aria-labelledby="adaptive-partner-identity-label"
+                  >
+                    {IDENTITY_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={adaptive.pill}
+                        aria-pressed={partnerIdentity === option.value}
+                        onClick={() => {
+                          setPartnerIdentity(option.value);
+                          if (!addressDiffers) setPartnerAddress(addressFor(option.value));
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </Card>
+              </div>
 
               {/* The escape hatch. Identity sets what you're CALLED by default, but the two are genuinely
                   different questions — a man can want "good girl" — so the override stays reachable instead
@@ -515,10 +556,31 @@ export function AdaptiveTake(): JSX.Element {
                 </div>
               )}
 
-              <Text size="sm" tone="tertiary">
-                Change this any time. It only decides what you&rsquo;re shown — nothing is ruled
-                out, and no mark is lost.
-              </Text>
+              {/* The consequence, visible rather than described — it updates as they pick. */}
+              {previewLines(selfIdentity, partnerIdentity).length > 0 ? (
+                <div className={adaptive.preview}>
+                  <div className={adaptive.railHead}>So you&rsquo;ll be asked things like</div>
+                  {previewLines(selfIdentity, partnerIdentity).map((line) => (
+                    <div key={line.side} className={adaptive.previewRow}>
+                      <span
+                        className={`${adaptive.dirTag} ${line.side === 'say' ? adaptive.tagSay : adaptive.tagHear}`}
+                      >
+                        {line.side === 'say' ? 'YOU SAY' : 'YOU HEAR'}
+                      </span>
+                      <em>&ldquo;{line.text}&rdquo;</em>
+                    </div>
+                  ))}
+                  <Text size="sm" tone="tertiary">
+                    Change this any time. It only decides what you&rsquo;re shown — nothing is ruled
+                    out, and no mark is lost.
+                  </Text>
+                </div>
+              ) : (
+                <Text size="sm" tone="tertiary">
+                  Change this any time. It only decides what you&rsquo;re shown — nothing is ruled
+                  out, and no mark is lost.
+                </Text>
+              )}
               <div className={take.footer}>
                 <Button
                   variant="primary"
@@ -540,243 +602,296 @@ export function AdaptiveTake(): JSX.Element {
           ) : null}
 
           {phase === 'bank' && area ? (
-            <Stack gap={4}>
-              <div className={adaptive.deckHead}>
-                <Text size="sm" tone="tertiary">
-                  Area {areaIndex + 1} of {bank.families.length}
-                </Text>
-                <span
-                  className={adaptive.dots}
-                  role="img"
-                  aria-label={`Area ${areaIndex + 1} of ${bank.families.length}`}
-                >
-                  {bank.families.map((family, index) => (
-                    <i
-                      key={family.id}
-                      className={
-                        index === areaIndex
-                          ? adaptive.now
-                          : index < areaIndex
-                            ? adaptive.done
-                            : undefined
-                      }
-                    />
-                  ))}
+            <div className={adaptive.deck}>
+              {/*
+               * 74 §3.6.3 — DIRECTION, as a graphic. It used to be a sentence in body copy, which is how a
+               * screen of lines about her body read as ambiguous: rating "you say" as though it were "you
+               * hear" silently poisons the profile, so it has to be legible before anything is read. The
+               * whole band changes colour with the direction, and the two pills show the flow.
+               */}
+              <div
+                className={`${adaptive.band} ${areaSides?.length === 1 && areaSides[0] === 'hear' ? adaptive.bandHear : ''}`}
+              >
+                <span className={adaptive.flow}>
+                  {areaSides?.length === 1 && areaSides[0] === 'hear' ? (
+                    <>
+                      <span className={`${adaptive.who} ${adaptive.them}`}>Them</span>
+                      <ArrowRight size={16} aria-hidden="true" className={adaptive.arrow} />
+                      <span className={`${adaptive.who} ${adaptive.me}`}>You</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className={`${adaptive.who} ${adaptive.me}`}>You</span>
+                      <ArrowRight size={16} aria-hidden="true" className={adaptive.arrow} />
+                      <span className={`${adaptive.who} ${adaptive.them}`}>Them</span>
+                    </>
+                  )}
                 </span>
-                <SaveState state={store.saveState} />
-              </div>
-
-              <div className={adaptive.deckHead}>
-                {/* Focus target for an area change (see `goToArea`). `tabIndex={-1}` makes it programmatically
-                    focusable without adding a tab stop, and the ref lives here rather than on `Heading`
-                    because that primitive doesn't forward one. */}
-                <div ref={areaHeadingRef} tabIndex={-1} className={adaptive.deckHeadTitle}>
-                  <Heading level={2}>{area.label}</Heading>
-                </div>
-                {/* §3.6.5 promises a route back. Burying it in the withheld note made it unreachable, since
-                    that note usually doesn't render — so it lives here, always, beside the area title. */}
+                <span className={adaptive.bandText}>{directionSentence(areaSides)}</span>
+                <span className={adaptive.bandSpacer} />
+                {/* SHORT, or it wraps the band's own sentence onto three lines. The full answer is the
+                    tooltip and the screen it opens. */}
                 <button
                   type="button"
-                  className={take.back}
+                  className={adaptive.change}
+                  title={`Shown for ${addressSummary(bank.address)}`}
                   onClick={() => store.setPhase('address')}
                 >
-                  Shown for: {addressSummary(bank.address)} — change
+                  {pairShorthand(bank.identity)} — change
                 </button>
               </div>
-              {areaSides ? (
-                <Text tone="secondary" className={adaptive.direction}>
-                  {directionSentence(areaSides)}
-                </Text>
-              ) : (
-                <Text tone="secondary" className={adaptive.direction}>
-                  These are mixed — each line says whether it&rsquo;s one you&rsquo;d hear or one
-                  you&rsquo;d say.
-                </Text>
-              )}
-              {area.note ? (
-                <Text tone="secondary" className={styles.framing}>
-                  {area.note}
-                </Text>
-              ) : null}
-              {areaEntries.length === 0 ? (
-                /* Every term here is aimed at a body or a role that is neither of theirs (common on a
-                   same-sex configuration, where whole areas resolve to one side). Rendering the marking
-                   instructions and an empty card over "0 here" reads as a broken screen — say what
-                   happened instead, and leave the withheld note below to carry the route back. */
-                <Text tone="secondary">
-                  Nothing in this area is aimed at either of you, so there&rsquo;s nothing to mark
-                  here.
-                </Text>
-              ) : (
-                <>
-                  {/* 74 §3.6.4 — standing instructions, shown ONCE. They were repeating on all 36 areas,
-                      pushing the first markable row most of the way down the viewport every single time; by
-                      area 6 the person has scrolled past the same two paragraphs six times. The marks keep a
-                      permanent one-line legend below, which is the part you actually need again. */}
-                  {areaIndex === 0 ? (
-                    <>
-                      <Text tone="secondary">
-                        Only tap what actually does something for you — skip the rest.{' '}
-                        <Flame size={14} aria-hidden="true" /> if you love it,{' '}
-                        <Contrast size={14} aria-hidden="true" /> if it&rsquo;s okay,{' '}
-                        <Ban size={14} aria-hidden="true" /> if it&rsquo;s a no. A <em>never</em> is
-                        a boundary: nothing in SelfOS will suggest it again.
-                      </Text>
-                      <Banner tone="info" role="none">
-                        <strong>Every tap saves itself.</strong> Mark what you feel like marking and
-                        close it whenever — it picks up on this area, with everything you already
-                        marked. Moving on skips whatever you left alone.
-                      </Banner>
-                    </>
-                  ) : null}
-                  {/* The legend stays on every area — it is the part you need again, and it costs one line
-                      where the two paragraphs above cost most of a viewport. */}
-                  <Text size="sm" tone="tertiary">
-                    {areaEntries.length} here · {marked.length} marked so far ·{' '}
-                    <Flame size={13} aria-hidden="true" /> love ·{' '}
-                    <Contrast size={13} aria-hidden="true" /> okay ·{' '}
-                    <Ban size={13} aria-hidden="true" /> never
-                  </Text>
 
-                  <Card className={adaptive.family}>
-                    <ul className={adaptive.grid} style={{ display: 'block' }}>
-                      {areaEntries.map((entry) => {
-                        // Settled = a boundary from an EARLIER take. One made in THIS take stays editable,
-                        // whether it was tapped a minute ago (`touched`) or in a previous sitting of the same
-                        // take (its lexicon entry carries this take's `source`) — core allows both, and a
-                        // stricter UI would strand a mis-tap noticed tomorrow with no way to fix it.
-                        const mark = store.marks[entry.key];
-                        const mineThisTake =
-                          store.touched.includes(entry.key) ||
-                          store.state?.lexicon.entries.some(
-                            (e) =>
-                              e.key === entry.key && e.source === `test:${store.state?.draft?.id}`,
-                          );
-                        const locked =
-                          !mineThisTake &&
-                          store.state?.lexicon.entries.some(
-                            (e) => e.key === entry.key && e.state === 'never',
-                          );
-                        return (
-                          <li key={entry.key} className={adaptive.entryRow}>
-                            <span className={adaptive.entryText}>
+              <div className={adaptive.deckHead}>
+                <div className={adaptive.headTop}>
+                  {/* Focus target for an area change (see `goToArea`). `tabIndex={-1}` makes it
+                      programmatically focusable without adding a tab stop. */}
+                  <div ref={areaHeadingRef} tabIndex={-1} className={adaptive.deckHeadTitle}>
+                    <Heading level={2}>{area.label}</Heading>
+                  </div>
+                  <Text size="sm" tone="tertiary">
+                    Area {areaIndex + 1} of {bank.families.length} · {areaEntries.length} here
+                  </Text>
+                  <span className={adaptive.headSpacer} />
+                  <SaveState state={store.saveState} />
+                </div>
+                {/* One slim bar, not 36 dashes. */}
+                <div
+                  className={adaptive.track}
+                  role="progressbar"
+                  aria-valuenow={areaIndex + 1}
+                  aria-valuemin={1}
+                  aria-valuemax={bank.families.length}
+                  aria-label={`Area ${areaIndex + 1} of ${bank.families.length}`}
+                >
+                  <i
+                    style={{ width: `${((areaIndex + 1) / bank.families.length) * 100}%` }}
+                    aria-hidden="true"
+                  />
+                </div>
+                {area.note ? (
+                  <Text tone="secondary" className={adaptive.areaNote}>
+                    {area.note}
+                  </Text>
+                ) : null}
+              </div>
+
+              <div className={adaptive.deckBody}>
+                <div className={adaptive.rows}>
+                  {areaEntries.length === 0 ? (
+                    /* Every term here is aimed at a body or a role that is neither of theirs (common on a
+                       same-sex configuration, where whole areas resolve to one side). */
+                    <Text tone="secondary">
+                      Nothing in this area is aimed at either of you, so there&rsquo;s nothing to
+                      mark here.
+                    </Text>
+                  ) : (
+                    areaEntries.map((entry) => {
+                      // Settled = a boundary from an EARLIER take. One made in THIS take stays editable,
+                      // whether it was tapped a minute ago (`touched`) or in a previous sitting of the
+                      // same take — a stricter UI would strand a mis-tap noticed tomorrow.
+                      const mark = store.marks[entry.key];
+                      const mineThisTake =
+                        store.touched.includes(entry.key) ||
+                        store.state?.lexicon.entries.some(
+                          (e) =>
+                            e.key === entry.key && e.source === `test:${store.state?.draft?.id}`,
+                        );
+                      const locked =
+                        !mineThisTake &&
+                        store.state?.lexicon.entries.some(
+                          (e) => e.key === entry.key && e.state === 'never',
+                        );
+                      return (
+                        <div
+                          key={entry.key}
+                          className={`${adaptive.row} ${mark && mark !== 'never' ? adaptive.rowOn : ''} ${
+                            mark === 'never' || locked ? adaptive.rowNo : ''
+                          }`}
+                        >
+                          <div className={adaptive.line}>
+                            <div className={adaptive.term}>
                               {entry.text}
-                              {/* Intensity was a bare coloured dot: no legend, no text, nothing a screen
-                                  reader or a colourblind eye could read (§9). It still reads as a pip; it
-                                  just says what it means now. */}
+                              {/* Intensity as a 3-bar meter with a text equivalent (§9) — it was a bare
+                                  5px dot with no legend and nothing a screen reader could read. */}
                               <span
-                                className={`${adaptive.tierPip} ${entry.tier >= 4 ? adaptive.hot : ''}`}
+                                className={`${adaptive.heat} ${entry.tier >= 4 ? adaptive.heatHi : ''}`}
                                 title={entry.tier >= 4 ? 'more intense' : 'gentler'}
                               >
+                                {[1, 2, 3].map((step) => (
+                                  <i
+                                    key={step}
+                                    className={
+                                      step <= Math.ceil(entry.tier / 2) ? adaptive.lit : ''
+                                    }
+                                  />
+                                ))}
                                 <span className={adaptive.srOnly}>
                                   {entry.tier >= 4 ? 'more intense' : 'gentler'}
                                 </span>
                               </span>
-                            </span>
-                            <span className={adaptive.example}>
-                              {entry.example ? `“${entry.example}”` : ''}
-                              {/* Only when the area is mixed — repeating "you say" on 47 uniform rows is
-                                  noise, and the area sentence above already carries it. */}
+                              {/* Only when the area MIXES the two — the band carries it otherwise. */}
                               {areaSides === null ? (
                                 <span className={adaptive.sideChip}>{sideLabel(entry.sides)}</span>
                               ) : null}
+                            </div>
+                            {/* The line you react to is the hero of the row; the term is its label. */}
+                            <div className={adaptive.said}>
+                              {entry.example ? `“${entry.example}”` : entry.text}
+                            </div>
+                          </div>
+                          {locked ? (
+                            <span className={adaptive.lockedMark}>
+                              <Ban size={13} aria-hidden="true" /> off the table
                             </span>
-                            {locked ? (
-                              <span className={adaptive.lockedMark}>
-                                <Ban size={13} aria-hidden="true" /> off the table
-                              </span>
-                            ) : (
-                              <span className={adaptive.marks}>
-                                {(['love', 'okay', 'never'] as BankMark[]).map((option) => {
-                                  const { label, Icon } = MARK_META[option];
-                                  return (
-                                    <button
-                                      key={option}
-                                      type="button"
-                                      className={`${adaptive.markButton} ${
-                                        option === 'never' ? adaptive.markNo : ''
-                                      }`}
-                                      aria-pressed={mark === option}
-                                      aria-label={`${entry.text} — ${sideLabel(entry.sides)} — ${label}`}
-                                      onClick={() =>
-                                        store.mark(entry.key, mark === option ? null : option)
-                                      }
-                                    >
-                                      <Icon size={17} aria-hidden="true" />
-                                    </button>
-                                  );
-                                })}
-                              </span>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </Card>
-                </>
-              )}
+                          ) : (
+                            <span className={adaptive.marks}>
+                              {(['love', 'okay'] as BankMark[]).map((option) => {
+                                const { label, Icon } = MARK_META[option];
+                                return (
+                                  <button
+                                    key={option}
+                                    type="button"
+                                    className={`${adaptive.mark} ${adaptive[option]} ${
+                                      mark === option ? adaptive.markOn : ''
+                                    }`}
+                                    aria-pressed={mark === option}
+                                    aria-label={`${entry.text} — ${sideLabel(entry.sides)} — ${label}`}
+                                    onClick={() =>
+                                      store.mark(entry.key, mark === option ? null : option)
+                                    }
+                                  >
+                                    <Icon size={18} aria-hidden="true" />
+                                  </button>
+                                );
+                              })}
+                              {/* A hard no is set apart, so it can never be a mis-tap neighbour. */}
+                              <span className={adaptive.markGap} aria-hidden="true" />
+                              <button
+                                type="button"
+                                className={`${adaptive.mark} ${adaptive.never} ${
+                                  mark === 'never' ? adaptive.markOn : ''
+                                }`}
+                                aria-pressed={mark === 'never'}
+                                aria-label={`${entry.text} — ${sideLabel(entry.sides)} — ${MARK_META.never.label}`}
+                                onClick={() =>
+                                  store.mark(entry.key, mark === 'never' ? null : 'never')
+                                }
+                              >
+                                <Ban size={18} aria-hidden="true" />
+                              </button>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
 
-              {withheld > 0 ? (
-                <div className={adaptive.withheld}>
+                  {withheld > 0 ? (
+                    <div className={adaptive.withheld}>
+                      <Text size="sm" tone="tertiary">
+                        {withheld} {withheld === 1 ? 'term is' : 'terms are'} hidden here —
+                        they&rsquo;re aimed at a body or a role that isn&rsquo;t yours or theirs.
+                        Change that in{' '}
+                        <button
+                          type="button"
+                          className={adaptive.textLink}
+                          onClick={() => store.setPhase('address')}
+                        >
+                          Before we start
+                        </button>
+                        .
+                      </Text>
+                    </div>
+                  ) : null}
+                </div>
+
+                {/*
+                 * The rail. Next / Previous / Done used to sit under 47 rows, so finishing meant scrolling
+                 * an entire area you had already decided about; and the running tally makes a partial pass
+                 * visibly worth something, which §3.6.1 #3 says it is.
+                 */}
+                <aside className={adaptive.rail} aria-label="Your marks and where to go next">
+                  <Card className={adaptive.railCard}>
+                    <div className={adaptive.railHead}>Marked so far</div>
+                    <div className={adaptive.tally}>
+                      {(['love', 'okay', 'never'] as BankMark[]).map((option) => (
+                        <div
+                          key={option}
+                          className={adaptive.tallyRow}
+                          data-testid={`tally-${option}`}
+                        >
+                          <span
+                            className={`${adaptive.dot} ${adaptive[option]}`}
+                            aria-hidden="true"
+                          />
+                          {MARK_META[option].label}
+                          <b>{Object.values(store.marks).filter((m) => m === option).length}</b>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+                  <Card className={adaptive.railCard}>
+                    <div className={adaptive.railActions}>
+                      {areaIndex + 1 < bank.families.length ? (
+                        <Button variant="primary" disabled={store.busy} onClick={() => nextArea()}>
+                          Next area →
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="primary"
+                          disabled={store.busy}
+                          onClick={() => void store.submitBank(testId)}
+                        >
+                          Done — show me
+                        </Button>
+                      )}
+                      {areaIndex > 0 ? (
+                        <Button
+                          variant="secondary"
+                          disabled={store.busy}
+                          onClick={() => goToArea(areaIndex - 1)}
+                        >
+                          ← Previous
+                        </Button>
+                      ) : null}
+                      {/* A partial pass is designed to be worth something, so finishing must never require
+                          clicking through all 36 areas. */}
+                      <Button
+                        variant="ghost"
+                        disabled={store.busy}
+                        onClick={() => void store.submitBank(testId)}
+                      >
+                        Done for now — show me
+                      </Button>
+                    </div>
+                  </Card>
                   <Text size="sm" tone="tertiary">
-                    {withheld} {withheld === 1 ? 'term is' : 'terms are'} hidden here —
-                    they&rsquo;re aimed at a body or a role that isn&rsquo;t yours or theirs. Change
-                    that in{' '}
+                    Every tap saves itself. Stop anywhere.{' '}
                     <button
                       type="button"
-                      className={take.back}
-                      onClick={() => store.setPhase('address')}
+                      className={adaptive.textLink}
+                      onClick={() => setHelpOpen((open) => !open)}
+                      aria-expanded={helpOpen}
                     >
-                      Before we start
+                      How marking works
                     </button>
-                    .
                   </Text>
-                </div>
-              ) : null}
-
-              <div className={adaptive.deckFoot}>
-                <span style={{ display: 'inline-flex', gap: 'var(--space-3)' }}>
-                  {areaIndex > 0 ? (
-                    <Button
-                      variant="secondary"
-                      disabled={store.busy}
-                      onClick={() => goToArea(areaIndex - 1)}
-                    >
-                      ← Previous
-                    </Button>
+                  {/* Four stacked paragraphs used to sit above every area. They are one link now. */}
+                  {helpOpen ? (
+                    <Card className={adaptive.railCard}>
+                      <Text size="sm" tone="secondary">
+                        Only tap what actually does something for you — skip the rest.{' '}
+                        <Flame size={13} aria-hidden="true" /> if you love it,{' '}
+                        <Contrast size={13} aria-hidden="true" /> if it&rsquo;s okay,{' '}
+                        <Ban size={13} aria-hidden="true" /> if it&rsquo;s a no. A <em>never</em> is
+                        a boundary: nothing in SelfOS will suggest it again. Moving on skips
+                        whatever you left alone, and everything saves as you go.
+                      </Text>
+                    </Card>
                   ) : null}
-                  {/* A partial pass is explicitly designed to be worth something (§3.6.1 #3), so finishing
-                      must NOT require clicking through all 36 areas. Without this, someone who marked the
-                      three areas they cared about had to press Skip 33 more times to see their profile. */}
-                  <Button
-                    variant="secondary"
-                    disabled={store.busy}
-                    onClick={() => void store.submitBank(testId)}
-                  >
-                    Done for now — show me
-                  </Button>
-                </span>
-                <span style={{ display: 'inline-flex', gap: 'var(--space-3)' }}>
-                  {areaIndex + 1 < bank.families.length ? (
-                    // "Skip this area" sat beside this calling the SAME function — two labels, one
-                    // behaviour, side by side. A reader has to assume Skip means something extra (never
-                    // show me this again?) and it never did. Nothing here is required, so moving on IS
-                    // skipping, and the banner above now says so.
-                    <Button variant="primary" disabled={store.busy} onClick={() => nextArea()}>
-                      Next area →
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="primary"
-                      disabled={store.busy}
-                      onClick={() => void store.submitBank(testId)}
-                    >
-                      Done — show me
-                    </Button>
-                  )}
-                </span>
+                </aside>
               </div>
-            </Stack>
+            </div>
           ) : null}
 
           {phase === 'split' ? (

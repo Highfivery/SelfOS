@@ -164,40 +164,6 @@
   color: var(--color-danger);
 }
 
-/* 74 §3.6.4 — the deck: one area per screen. */
-.deckHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-.dots {
-  display: inline-flex;
-  gap: 3px;
-  align-items: center;
-  flex: none;
-}
-
-.dots i {
-  width: 12px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--color-border-strong);
-  display: block;
-}
-
-.dots i.done {
-  background: var(--color-accent);
-}
-
-.dots i.now {
-  background: var(--color-accent-solid);
-  width: 22px;
-}
-
 /* The quote is the widest thing on the line — it is what they are actually reacting to (74 §3.6.4). */
 .entryRow {
   display: grid;
@@ -349,15 +315,6 @@
   border-radius: var(--radius-sm);
 }
 
-/*
- * The direction statement. It is the one thing on the deck a person cannot afford to misread — rating "you
- * say" as though it were "you hear" silently poisons the profile — so it reads as an instruction, not a note.
- */
-.direction {
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-
 /* Per-row direction, shown only when an area mixes the two. */
 .sideChip {
   margin-left: var(--space-2);
@@ -408,4 +365,464 @@
 
 .textLink:hover {
   color: var(--color-text-primary);
+}
+
+/* ══ 74 §3.6.4 — the deck, redesigned ══════════════════════════════════════════════════════════════
+ * The old deck was four stacked paragraphs above a flat hairline table with three identical grey
+ * squares per row, and direction — the one fact you cannot afford to misread — was a sentence in body
+ * copy. This is the approved redesign: direction as a graphic, the line as the hero of its row, three
+ * visually distinct marks with the boundary set apart, and the actions in a sticky rail.
+ */
+.deck {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* The direction band. Its COLOUR carries the direction, so it reads before anything is read. */
+.band {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-accent-subtle-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.bandHear {
+  background: var(--color-warning-subtle-bg);
+}
+
+.flow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.who {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  padding: 5px 11px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* The speaker is filled, the listener outlined — so the flow reads even in greyscale (§9). */
+.band .me {
+  background: var(--color-accent-solid);
+  color: var(--color-accent-solid-text);
+}
+
+.band .them {
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-strong);
+}
+
+.bandHear .me {
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-strong);
+}
+
+.bandHear .them {
+  background: var(--color-warning);
+  color: #fff;
+  border: 0;
+}
+
+.arrow {
+  color: var(--color-accent-solid);
+  flex: none;
+}
+
+.bandHear .arrow {
+  color: var(--color-warning-subtle-text);
+}
+
+/* Takes the slack so the "change" affordance stays on the same line, right-aligned. Wrapping sent it to
+ * its own line where `margin-left: auto` no longer pushed it anywhere, and an underlined link floating
+ * alone under the pills reads as a stray element rather than an action on the band. */
+.bandText {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.bandSpacer {
+  margin-left: auto;
+}
+
+.change {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--color-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Header: the area name, one slim progress bar, and the save state. */
+.deckHead {
+  padding: var(--space-5) var(--space-5) var(--space-4);
+}
+
+.headTop {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.headSpacer {
+  margin-left: auto;
+}
+
+.track {
+  height: 3px;
+  margin-top: var(--space-4);
+  background: var(--color-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.track > i {
+  display: block;
+  height: 100%;
+  /* At area 1 of 36 the fill is 2.8% — invisible, so the bar read as an empty rule. A floor keeps the
+   * first area legible as "barely started" rather than as nothing at all. */
+  min-width: 10px;
+  background: var(--color-accent-solid);
+  border-radius: 999px;
+  transition: width var(--motion-base) var(--ease-standard);
+}
+
+.areaNote {
+  margin-top: var(--space-3);
+}
+
+/* Rows + rail. */
+.deckBody {
+  display: grid;
+  grid-template-columns: 1fr 232px;
+  gap: var(--space-5);
+  align-items: start;
+  padding: 0 var(--space-5) var(--space-5);
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: border-color var(--motion-fast) var(--ease-standard);
+}
+
+.row:hover {
+  border-color: var(--color-border-strong);
+}
+
+.rowOn {
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle-bg);
+}
+
+.rowNo {
+  background: var(--color-surface-alt);
+  opacity: 0.72;
+}
+
+.line {
+  min-width: 0;
+}
+
+/* The term is the LABEL; the line underneath is what you react to. */
+.term {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: 3px;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.said {
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.4;
+  color: var(--color-text-primary);
+}
+
+/* Intensity: a 3-bar meter, red at the top tier. Never colour alone — it carries a text equivalent. */
+.heat {
+  display: inline-flex;
+  gap: 2px;
+  flex: none;
+}
+
+.heat > i {
+  width: 3px;
+  height: 9px;
+  border-radius: 1px;
+  background: var(--color-border-strong);
+}
+
+.heat > i.lit {
+  background: var(--color-warning);
+}
+
+.heatHi > i.lit {
+  background: var(--color-danger);
+}
+
+/* Three genuinely distinct controls, 44px, the boundary set apart by a divider. */
+.marks {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.mark {
+  width: 44px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  transition: all var(--motion-fast) var(--ease-standard);
+}
+
+.mark:hover {
+  border-color: var(--color-text-tertiary);
+  color: var(--color-text-primary);
+}
+
+.mark:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+.love.markOn {
+  background: var(--color-warning);
+  border-color: var(--color-warning);
+  color: #fff;
+}
+
+.okay.markOn {
+  background: var(--color-accent-solid);
+  border-color: var(--color-accent-solid);
+  color: var(--color-accent-solid-text);
+}
+
+.never.markOn {
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+  color: #fff;
+}
+
+.markGap {
+  width: 1px;
+  height: 26px;
+  margin: 0 4px;
+  background: var(--color-border);
+  flex: none;
+}
+
+/* The rail: the tally + the actions, always in reach. */
+.rail {
+  position: sticky;
+  top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.railCard {
+  padding: var(--space-4);
+}
+
+.railHead {
+  margin-bottom: var(--space-3);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.tally {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tallyRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.tallyRow > b {
+  margin-left: auto;
+  color: var(--color-text-heading);
+  font-variant-numeric: tabular-nums;
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.dot.love {
+  background: var(--color-warning);
+}
+
+.dot.okay {
+  background: var(--color-accent-solid);
+}
+
+.dot.never {
+  background: var(--color-danger);
+}
+
+.railActions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.railActions > button {
+  width: 100%;
+  justify-content: center;
+}
+
+/* Below the rail's own width the two columns stack; the actions stop being sticky so they sit after
+ * the rows rather than floating over them. */
+@media (max-width: 900px) {
+  .deckBody {
+    grid-template-columns: 1fr;
+  }
+
+  .rail {
+    position: static;
+  }
+}
+
+/* Phone: the band wraps, the row puts its marks under the line rather than squeezing both. */
+@media (max-width: 620px) {
+  .band {
+    flex-wrap: wrap;
+  }
+
+  .bandSpacer {
+    display: none;
+  }
+
+  .band,
+  .deckHead,
+  .deckBody {
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+
+  .row {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+
+  .marks {
+    justify-content: flex-start;
+  }
+}
+
+/* ── The identity screen (§3.6.3) ─────────────────────────────────────────────────────────────────
+ * Two answers decide which half of a ~1,000-line bank a person ever sees. So they sit side by side as
+ * a real form, and the PREVIEW below shows what they change — the effect used to be described in a
+ * sentence, which is why the deck then read as arbitrary.
+ */
+.idPair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+@media (max-width: 700px) {
+  .idPair {
+    grid-template-columns: 1fr;
+  }
+}
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--color-surface-alt);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+
+.previewRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.previewRow > em {
+  font-family: var(--font-serif);
+  color: var(--color-text-primary);
+}
+
+/* The same two colours the deck's direction band uses, so the preview teaches the band. */
+.dirTag {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  flex: none;
+}
+
+.tagSay {
+  background: var(--color-accent-solid);
+  color: var(--color-accent-solid-text);
+}
+
+.tagHear {
+  background: var(--color-warning);
+  color: #fff;
 }

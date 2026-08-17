@@ -340,6 +340,8 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.testsDeleteResult, bridge.testsDeleteResult);
   handle(IpcChannels.testsDeleteAll, bridge.testsDeleteAll);
   handle(IpcChannels.testsBank, bridge.testsBank);
+  handle(IpcChannels.testsNames, bridge.testsNames);
+  handle(IpcChannels.testsAdaptiveNames, bridge.testsAdaptiveNames);
   handle(IpcChannels.testsAdaptiveState, bridge.testsAdaptiveState);
   handle(IpcChannels.testsAdaptiveStart, bridge.testsAdaptiveStart);
   handle(IpcChannels.testsAdaptiveBank, bridge.testsAdaptiveBank);

@@ -1277,6 +1277,46 @@ export interface AdaptiveBankEntryView {
   sides: readonly ('hear' | 'say')[];
 }
 
+/** 74 §3.6.8 — one pet-name register, as the phase's opening grid renders it. */
+export interface AdaptiveNameRegisterView {
+  id: string;
+  label: string;
+  note?: string;
+  /** How many names it holds — shown on the card, so scope is never chosen blind. */
+  count: number;
+  /** Its intensity span, for the heat meter on the card. */
+  minTier: number;
+  maxTier: number;
+  /** Three real names from inside it. */
+  samples: string[];
+  /** How many of its names this person has already answered either way. */
+  marked: number;
+}
+
+export interface AdaptiveNameEntryView {
+  key: string;
+  text: string;
+  family: string;
+  tier: number;
+  /** The line showing it in use — always present for a name (74 §3.6.8). */
+  example: string;
+  /** What they have already said, per direction. */
+  hearState?: 'love' | 'okay' | 'never';
+  sayState?: 'love' | 'okay' | 'never';
+  /** A boundary from an EARLIER take, per direction — settled, and not re-offered. */
+  settledHear?: boolean;
+  settledSay?: boolean;
+}
+
+export interface AdaptiveNamesView {
+  testId: string;
+  registers: AdaptiveNameRegisterView[];
+  entries: AdaptiveNameEntryView[];
+  /** Their display name and the partner's, for the two column headers. Absent ⇒ generic labels. */
+  selfName?: string;
+  partnerName?: string;
+}
+
 export interface AdaptiveBankView {
   testId: string;
   families: AdaptiveBankFamilyView[];

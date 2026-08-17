@@ -13,6 +13,9 @@ import { readEncryptedJson, writeEncryptedJson } from '../../vault';
 import {
   applyBankMarks,
   applyDirections,
+  applyNameMarks,
+  clearNameMarks,
+  type NameMarks,
   clearMarks,
   derivedWantsToSay,
   lovedEntries,
@@ -24,6 +27,7 @@ import {
 import { takeCarriesDistress } from './distress';
 import { recordTakeSaturation } from './saturation';
 import { scoreSpine } from './spine';
+import { nameFamilies } from './bank';
 import type { AdaptiveTestDefinition } from './types';
 
 /**
@@ -247,6 +251,48 @@ export async function recordBankPass(
       id: 'bank',
       pack: 'bank',
       text: `${def.bank.entries.length} entries across ${def.bank.families.length} families`,
+      options: [],
+    },
+    answer: Object.keys(input.marks).length,
+    at: now.toISOString(),
+  });
+  return next;
+}
+
+/**
+ * Record the PET-NAME phase (74 §3.6.8) — two marks per name, autosaved a tap at a time like the deck.
+ *
+ * Same shape as `recordBankPass` on purpose: the un-mark is scoped to this take's own marks AND to the take
+ * still being open, because `source` on its own is only as strong as a renderer-supplied string.
+ */
+export async function recordNamePass(
+  fs: FileSystem,
+  key: Uint8Array,
+  def: AdaptiveTestDefinition,
+  input: {
+    personId: string;
+    resultId: string;
+    marks: NameMarks;
+    /** Directions taken back, per key (74 §3.4). */
+    cleared?: Readonly<Record<string, readonly ('hear' | 'say')[]>>;
+    autosave?: boolean;
+  },
+  now: Date,
+): Promise<EroticLexicon> {
+  const lexicon = await readLexicon(fs, key, input.personId, now);
+  const source = `test:${input.resultId}`;
+  const marked = applyNameMarks(lexicon, def.bank, input.marks, source, now);
+  const draft = await openDraft(fs, key, input.personId, def.id);
+  const clearable = draft?.id === input.resultId ? (input.cleared ?? {}) : {};
+  const next = clearNameMarks(marked, clearable, now, source);
+  await writeLexicon(fs, key, next);
+  if (input.autosave) return next;
+  await stampTurn(fs, key, input.personId, input.resultId, {
+    phase: 'names',
+    item: {
+      id: 'names',
+      pack: 'names',
+      text: `${nameFamilies(def.bank).length} registers of names, marked both ways`,
       options: [],
     },
     answer: Object.keys(input.marks).length,

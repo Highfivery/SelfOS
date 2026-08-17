@@ -18,6 +18,8 @@ import {
   suppressedTexts,
   violatesBoundary,
   writeLexicon,
+  applyNameMarks,
+  clearNameMarks,
 } from './lexicon';
 
 const NOW = new Date('2026-08-16T12:00:00.000Z');
@@ -383,3 +385,68 @@ describe('74 §3.6.8 — a name can be ruled out one way and loved the other', (
     expect(violatesBoundary(themed, 'I love using you')).toBe(true);
   });
 });
+
+describe('74 §3.6.8 — the pet-name pass', () => {
+  const now = new Date('2026-08-17T10:00:00.000Z');
+  const start = (): EroticLexicon => emptyLexicon('p1', now);
+  const KEY = 'names-rough-heavy:slut';
+
+  it('writes each direction separately, and derives the ratings the rest of the app reads', () => {
+    const lex = applyNameMarks(
+      start(),
+      DIRTY_TALK.bank,
+      { [KEY]: { hear: 'never', say: 'love' } },
+      'take:1',
+      now,
+    );
+    const entry = lex.entries.find((e) => e.key === KEY);
+    expect(entry).toMatchObject({ hearState: 'never', sayState: 'love', hear: 0 });
+    expect(entry?.say).toBeGreaterThanOrEqual(3);
+    // Both sides were asked — that is what makes it two marks rather than one.
+    expect(entry?.sides).toEqual(['hear', 'say']);
+  });
+
+  it('writes a DIRECTIONAL boundary, so the other direction is untouched', () => {
+    const lex = applyNameMarks(
+      start(),
+      DIRTY_TALK.bank,
+      { [KEY]: { hear: 'never', say: 'love' } },
+      'take:1',
+      now,
+    );
+    expect(lex.boundaries).toEqual([
+      expect.objectContaining({ text: 'slut', direction: 'hear' }),
+    ]);
+    expect(violatesBoundary(lex, 'take it, slut', 'hear')).toBe(true);
+    expect(violatesBoundary(lex, 'take it, slut', 'say')).toBe(false);
+  });
+
+  it('leaves an EARLIER take’s boundary settled — marking over it does not lift it', () => {
+    const first = applyNameMarks(start(), DIRTY_TALK.bank, { [KEY]: { hear: 'never' } }, 'take:1', now);
+    const second = applyNameMarks(first, DIRTY_TALK.bank, { [KEY]: { hear: 'love' } }, 'take:2', now);
+    expect(second.entries.find((e) => e.key === KEY)?.hearState).toBe('never');
+    expect(violatesBoundary(second, 'take it, slut', 'hear')).toBe(true);
+  });
+
+  it('takes back ONE direction, leaving the other standing', () => {
+    const lex = applyNameMarks(
+      start(),
+      DIRTY_TALK.bank,
+      { [KEY]: { hear: 'never', say: 'never' } },
+      'take:1',
+      now,
+    );
+    const cleared = clearNameMarks(lex, { [KEY]: ['hear'] }, now, 'take:1');
+    const entry = cleared.entries.find((e) => e.key === KEY);
+    expect(entry?.hearState).toBeUndefined();
+    expect(entry?.sayState).toBe('never');
+    expect(cleared.boundaries.map((b) => b.direction)).toEqual(['say']);
+  });
+
+  it('never lets a later take un-mark an earlier one', () => {
+    const first = applyNameMarks(start(), DIRTY_TALK.bank, { [KEY]: { say: 'never' } }, 'take:1', now);
+    const attempt = clearNameMarks(first, { [KEY]: ['say'] }, now, 'take:2');
+    expect(attempt.entries.find((e) => e.key === KEY)?.sayState).toBe('never');
+    expect(attempt.boundaries).toHaveLength(1);
+  });
+})

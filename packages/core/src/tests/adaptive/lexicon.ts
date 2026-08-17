@@ -176,6 +176,125 @@ export function applyBankMarks(
   };
 }
 
+/** One name's answer: a mark per direction. Either side may be absent — an unanswered side stays unanswered. */
+export type NameMark = { hear?: BankMark; say?: BankMark };
+export type NameMarks = Record<string, NameMark>;
+
+/** love → 4, okay → 2, never → 0. The ratings stay the currency every existing consumer reads. */
+function ratingFor(mark: BankMark | undefined, current: number): number {
+  if (mark === 'love') return LOVE_SEED >= 4 ? LOVE_SEED : 4;
+  if (mark === 'okay') return 2;
+  if (mark === 'never') return 0;
+  return current;
+}
+
+/**
+ * The PET-NAME pass (74 §3.6.8) — a name answered twice, once per direction.
+ *
+ * The deck's `applyBankMarks` cannot do this: it takes one mark for the whole entry and then a second pass
+ * splits it. A name has no single answer to split — wanting to call her "good girl" says nothing about
+ * wanting to be called it — so both marks arrive together and each writes its own side.
+ *
+ * Three things it does that the deck's version does not:
+ *
+ * 1. **`hear`/`say` stay derived** (love → 4, okay → 2, never → 0), so the spine, the steer, the report and
+ *    every other consumer keep reading the two numbers they always read. `hearState`/`sayState` are what the
+ *    phase itself reads back.
+ * 2. **A `never` writes a DIRECTIONAL boundary.** "Never call me slut" must not stop him calling her slut,
+ *    which is the whole reason `LexiconBoundary.direction` exists.
+ * 3. **A settled boundary from an EARLIER take is not re-marked**, matching the deck: it lifts only by an
+ *    explicit un-mark, never by marking over it.
+ */
+export function applyNameMarks(
+  lexicon: EroticLexicon,
+  bank: Bank,
+  marks: NameMarks,
+  source: string,
+  now: Date,
+): EroticLexicon {
+  const byKey = new Map(lexicon.entries.map((entry) => [entry.key, entry]));
+  const boundaries = [...lexicon.boundaries];
+  for (const [key, mark] of Object.entries(marks)) {
+    const spec = bankEntry(bank, key);
+    const existing = byKey.get(key);
+    if (!spec && !existing) continue;
+    // The same unliftable-boundary rule as the deck (see `applyBankMarks`), per direction.
+    const settled = (side: 'hear' | 'say'): boolean =>
+      existing?.state === 'never' ||
+      (existing?.[side === 'hear' ? 'hearState' : 'sayState'] === 'never' &&
+        existing.source !== source);
+    const base = existing ?? toLexiconEntry(spec as BankEntry, source);
+    const hearState = settled('hear') ? existing?.hearState : (mark.hear ?? base.hearState);
+    const sayState = settled('say') ? existing?.sayState : (mark.say ?? base.sayState);
+    byKey.set(key, {
+      ...base,
+      hear: settled('hear') ? base.hear : ratingFor(mark.hear, base.hear),
+      say: settled('say') ? base.say : ratingFor(mark.say, base.say),
+      ...(hearState ? { hearState } : {}),
+      ...(sayState ? { sayState } : {}),
+      // Both sides are always put to them in this phase — that is what makes it two marks, not one.
+      sides: ['hear', 'say'],
+      state: undefined,
+      source,
+    });
+    for (const side of ['hear', 'say'] as const) {
+      if (mark[side] === 'never' && !settled(side)) {
+        boundaries.push({
+          text: base.text,
+          kind: 'word',
+          at: now.toISOString(),
+          direction: side,
+        });
+      }
+    }
+  }
+  return {
+    ...lexicon,
+    entries: [...byKey.values()],
+    boundaries: dedupeBoundaries(boundaries),
+    updatedAt: now.toISOString(),
+  };
+}
+
+/** Take back a name mark — one direction, or both. The undo path for the phase's autosave (74 §3.4). */
+export function clearNameMarks(
+  lexicon: EroticLexicon,
+  cleared: Readonly<Record<string, readonly ('hear' | 'say')[]>>,
+  now: Date,
+  source: string,
+): EroticLexicon {
+  const entries = lexicon.entries.map((entry) => {
+    const sides = cleared[entry.key];
+    // Scoped to THIS take, exactly like `clearMarks`: an earlier take's settled answer is not un-markable
+    // by a later one.
+    if (!sides || entry.source !== source) return entry;
+    const next = { ...entry };
+    for (const side of sides) {
+      if (side === 'hear') {
+        next.hear = 0;
+        delete next.hearState;
+      } else {
+        next.say = 0;
+        delete next.sayState;
+      }
+    }
+    return next;
+  });
+  const clearedTexts = new Map<string, Set<'hear' | 'say'>>();
+  for (const [key, sides] of Object.entries(cleared)) {
+    const entry = lexicon.entries.find((e) => e.key === key);
+    if (!entry || entry.source !== source) continue;
+    clearedTexts.set(entry.text, new Set(sides));
+  }
+  const boundaries = lexicon.boundaries.filter((boundary) => {
+    const sides = clearedTexts.get(boundary.text);
+    if (!sides) return true;
+    // Only the direction they took back — an un-mark on one side leaves the other side's boundary standing.
+    return !(boundary.direction && sides.has(boundary.direction));
+  });
+  return { ...lexicon, entries, boundaries, updatedAt: now.toISOString() };
+}
+
 /** Pass 2 — the hear/say split, applied only to entries pass 1 marked. */
 export function applyDirections(
   lexicon: EroticLexicon,
@@ -302,7 +421,10 @@ function sameBoundary(a: string, b: string): boolean {
 function dedupeBoundaries(boundaries: readonly LexiconBoundary[]): LexiconBoundary[] {
   const seen = new Map<string, LexiconBoundary>();
   for (const boundary of boundaries) {
-    const key = boundary.text.trim().toLowerCase();
+    // 74 §3.6.8 — text AND direction. Keyed on text alone, a one-way boundary swallowed the other way's:
+    // ruling a name out to HEAR and then to SAY left one record, and taking back the first took both.
+    // An undirected boundary keeps its own slot and stays the strictest (it covers both).
+    const key = `${boundary.text.trim().toLowerCase()}|${boundary.direction ?? 'both'}`;
     // Keep the FIRST recording of a boundary — its original date is the honest one.
     if (!seen.has(key)) seen.set(key, boundary);
   }

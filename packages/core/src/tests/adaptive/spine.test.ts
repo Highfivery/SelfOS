@@ -32,23 +32,23 @@ describe('the spine (74 §4.2)', () => {
   it('OMITS unmarked entries rather than counting them as zero', () => {
     // One loved praise entry and nothing else marked → praise reads high, not 1/900th of high. This is the
     // whole reason the two-pass bank works: unrated means "not marked", never "not interested" (74 §3.2).
-    const scores = score({ 'praise-her:good-girl': 'love' });
+    const scores = score({ 'praise-her:you-re-beautiful': 'love' });
     expect(scores.get('dirtytalk.praise')).toBeGreaterThan(0.7);
   });
 
   it('reads a boundary as a genuine zero, not a missing answer', () => {
     const scores = score({
       'names-rough-heavy:whore': 'never',
-      'degradation:dirty-little-slut': 'never',
+      'degradation:beg-like-the-slut-you-are': 'never',
     });
     expect(scores.get('dirtytalk.degradation')).toBe(0);
   });
 
   it('separates claiming from degradation — the distinction the whole test exists to find', () => {
     const scores = score({
-      'claiming:mine': 'love',
+      'claiming:you-re-mine': 'love',
       'names-praise:good-girl': 'love',
-      'degradation:dirty-little-slut': 'never',
+      'degradation:beg-like-the-slut-you-are': 'never',
       'names-rough-heavy:whore': 'never',
     });
     expect(scores.get('dirtytalk.claiming')).toBeGreaterThan(0.7);
@@ -106,7 +106,7 @@ describe('honesty (74 §3.3)', () => {
     const lex = applyBankMarks(
       emptyLexicon('p1', NOW),
       DIRTY_TALK.bank,
-      { 'praise-her:good-girl': 'love' },
+      { 'praise-her:you-re-beautiful': 'love' },
       'take:1',
       NOW,
     );

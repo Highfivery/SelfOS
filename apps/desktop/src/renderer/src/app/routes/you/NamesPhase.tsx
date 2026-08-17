@@ -84,7 +84,15 @@ function RegisterCard({
   );
 }
 
-export function NamesPhase({ testId }: { testId: string }): JSX.Element | null {
+export function NamesPhase({
+  rail,
+}: {
+  /**
+   * The shared step rail (74 §3.6.9), owned by the take so every step shows the SAME one. This phase used to
+   * render its own, which meant a person's sense of "where am I" changed between two screens of one test.
+   */
+  rail: JSX.Element;
+}): JSX.Element | null {
   const store = useAdaptiveTestStore();
   const names = store.names;
   const openId = store.openRegister;
@@ -102,17 +110,6 @@ export function NamesPhase({ testId }: { testId: string }): JSX.Element | null {
         : [],
     [names, openId],
   );
-
-  const totals = useMemo(() => {
-    const out: Record<BankMark, number> = { love: 0, okay: 0, never: 0 };
-    for (const mark of Object.values(store.nameMarks)) {
-      for (const side of ['hear', 'say'] as const) {
-        const value = mark[side];
-        if (value) out[value] += 1;
-      }
-    }
-    return out;
-  }, [store.nameMarks]);
 
   // Live, not the number the view was loaded with: that one said "0 of 72" while the rail counted two marks.
   const markedHere = rows.filter((entry) => {
@@ -140,27 +137,25 @@ export function NamesPhase({ testId }: { testId: string }): JSX.Element | null {
             order, and you&rsquo;re not meant to. Every tap saves itself.
           </Text>
         </div>
-        <div className={adaptive.regGrid}>
-          {names.registers.map((register) => (
-            <RegisterCard
-              key={register.id}
-              register={register}
-              onOpen={() => store.setOpenRegister(register.id)}
-            />
-          ))}
-        </div>
-        <div className={adaptive.regFoot}>
-          <Text size="sm" tone="tertiary">
-            {openedCount} of {names.registers.length} registers started ·{' '}
-            {Object.keys(store.nameMarks).length} names marked
-          </Text>
-          <Button
-            variant="primary"
-            disabled={store.busy}
-            onClick={() => void store.finishNames(testId)}
-          >
-            Done with names →
-          </Button>
+        <div className={adaptive.deckBody}>
+          <div>
+            <div className={adaptive.regGrid}>
+              {names.registers.map((register) => (
+                <RegisterCard
+                  key={register.id}
+                  register={register}
+                  onOpen={() => store.setOpenRegister(register.id)}
+                />
+              ))}
+            </div>
+            <div className={adaptive.regFoot}>
+              <Text size="sm" tone="tertiary">
+                {openedCount} of {names.registers.length} registers started ·{' '}
+                {Object.keys(store.nameMarks).length} names marked
+              </Text>
+            </div>
+          </div>
+          {rail}
         </div>
       </div>
     );
@@ -204,36 +199,18 @@ export function NamesPhase({ testId }: { testId: string }): JSX.Element | null {
             />
           ))}
         </div>
-        <aside className={adaptive.rail} aria-label="Your marks and where to go next">
-          <Card className={adaptive.railCard}>
-            <div className={adaptive.railHead}>Marked so far</div>
-            <div className={adaptive.tally}>
-              {MARKS.map(({ value, label }) => (
-                <div key={value} className={adaptive.tallyRow} data-testid={`name-tally-${value}`}>
-                  <span className={`${adaptive.dot} ${adaptive[value]}`} aria-hidden="true" />
-                  <span className={adaptive.tallyLabel}>{label}</span>
-                  <b>{totals[value]}</b>
-                </div>
-              ))}
-            </div>
-          </Card>
+        {/* Inside a register the primary is "Done with this one" — walking straight out of the step from here
+            would step past the 23 registers they have not opened (the §3.6.9 walk, finding 3). */}
+        <div className={adaptive.railWrap}>
           <Card className={adaptive.railCard}>
             <div className={adaptive.railActions}>
               <Button variant="primary" onClick={() => store.setOpenRegister(null)}>
                 Done with this one →
               </Button>
-              {/* The SAME action as the grid's, with the same label — two names for one thing is how a
-                  flow starts reading as two different things (the §7 coherence rule). */}
-              <Button
-                variant="ghost"
-                disabled={store.busy}
-                onClick={() => void store.finishNames(testId)}
-              >
-                Done with names →
-              </Button>
             </div>
           </Card>
-        </aside>
+          {rail}
+        </div>
       </div>
     </div>
   );

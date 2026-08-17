@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowRight, Ban, Clock, Contrast, Flame, ListChecks, Lock } from 'lucide-react';
 
 /**
@@ -54,21 +54,6 @@ function previewLines(
 function addressFor(identity: 'man' | 'woman' | 'either'): 'girl' | 'man' | 'either' {
   return identity === 'man' ? 'man' : identity === 'woman' ? 'girl' : 'either';
 }
-
-/**
- * What someone likes being CALLED — the vocative family, not their identity (§3.6.3).
- *
- * This asked it with possessives, and differently in each of its two questions: "their girl / their man" for
- * you, "his girl / her man" for them. Whose "their"? And the second phrasing quietly assumed the other
- * person's gender. The field only has three values, and the concrete way to ask which one is to show the
- * WORDS it decides — all taken from the bank's own `addresses`-tagged entries, so the examples are exactly
- * what will show up.
- */
-const ADDRESS_OPTIONS: { value: 'girl' | 'man' | 'either'; label: string; eg: string }[] = [
-  { value: 'girl', label: 'girl', eg: 'good girl · my girl · princess' },
-  { value: 'man', label: 'man', eg: 'good boy · my man · sir' },
-  { value: 'either', label: 'either, or it depends', eg: 'both sets, nothing ruled out' },
-];
 
 /** The two address answers in one line, for the always-present "change" affordance. */
 function addressSummary(
@@ -165,18 +150,57 @@ import { useAdaptiveTestStore, type BankMark } from '../../../stores/adaptiveTes
 import { AdaptiveHead } from './AdaptiveHead';
 import { PracticeSheet } from './PracticeSheet';
 import { NamesPhase } from './NamesPhase';
+import { TakeMap } from './TakeMap';
+import { StepActions, StepEyebrow, TakeRail, Tally } from './TakeRail';
+import { nextStepAfter, stepStatuses, TAKE_STEPS, type StepId } from './takeSteps';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import styles from './You.module.css';
 import take from './TestTake.module.css';
 import adaptive from './Adaptive.module.css';
 
-/** The contexts the scenario phase walks, in the order a night actually runs. */
-const CONTEXTS: { id: string; label: string }[] = [
-  { id: 'buildUp', label: 'Build-up' },
-  { id: 'during', label: 'During' },
-  { id: 'after', label: 'After' },
+/**
+ * The contexts the scenario phase walks, in the order a night actually runs — each saying what it MEANS. As
+ * three bare labels they were the least explicable screen in the take (§3.6.9): three buttons, no question.
+ */
+const CONTEXTS: { id: string; label: string; blurb: string }[] = [
+  {
+    id: 'buildUp',
+    label: 'Build-up',
+    blurb: 'Before anything has happened — texts, teasing, walking in.',
+  },
+  {
+    id: 'during',
+    label: 'During',
+    blurb: 'Mid-act, when nobody is choosing their words carefully.',
+  },
+  {
+    id: 'after',
+    label: 'After',
+    blurb: 'The come-down — held, talked to, told what just happened.',
+  },
 ];
+
+/**
+ * 74 §3.6.9 — a generating step that does not have enough to work from, saying so with the shortfall and the
+ * way to fix it. Running one on two or three marks gives the model nothing of the person's to draw on, so it
+ * writes from its own defaults — the generic output this test exists to avoid, and charged for.
+ */
+function NotEnoughYet({ reason, onGo }: { reason: string; onGo: () => void }): JSX.Element {
+  return (
+    <>
+      <Banner tone="info">
+        <b>Not enough marked yet.</b> This step writes from your own words, so it needs {reason}{' '}
+        before it can say anything that&rsquo;s actually yours. Nothing has been spent getting here.
+      </Banner>
+      <div className={adaptive.askRow}>
+        <Button variant="primary" onClick={onGo}>
+          Go mark some words →
+        </Button>
+      </div>
+    </>
+  );
+}
 
 /** Elapsed seconds, ticking — the realtime-progress rule (CLAUDE.md §12: never a bare spinner). */
 function useElapsed(startedAt: number | undefined): number {
@@ -251,6 +275,21 @@ export function AdaptiveTake(): JSX.Element {
     };
   }, [load, reset, testId]);
 
+  /**
+   * 74 §3.6.9 — arriving from the profile's "edit the names"/"edit the words" link. Consumed once, after the
+   * take has started, so the deep link lands on the step rather than the map.
+   */
+  const routeStep = (useLocation().state as { step?: string } | null)?.step;
+  const tookRouteStep = useRef(false);
+  useEffect(() => {
+    if (tookRouteStep.current || !routeStep || !store.state?.draft) return;
+    tookRouteStep.current = true;
+    void useAdaptiveTestStore
+      .getState()
+      .start(testId)
+      .then(() => useAdaptiveTestStore.getState().goToStep(routeStep));
+  }, [routeStep, store.state, testId]);
+
   // Quitting or backgrounding the app inside the 700ms debounce would otherwise drop the last taps. The
   // unmount cleanup does not fire on a window close, so this is the only thing covering that path.
   useEffect(() => {
@@ -279,6 +318,12 @@ export function AdaptiveTake(): JSX.Element {
    * new persistence, and a resumed take with marks in it goes straight to the deck.
    */
   const [practice, setPractice] = useState<'unknown' | 'needed' | 'done'>('unknown');
+  /**
+   * 74 §3.6.9 — whether an AI step has been ASKED in this sitting. It distinguishes "you haven't asked yet"
+   * (offer the trigger, state the cost) from "it was asked and came back with nothing" (an honest notice), which
+   * arrival-fires-the-call made impossible to tell apart.
+   */
+  const [askedFor, setAskedFor] = useState<{ lines: boolean }>({ lines: false });
   useEffect(() => {
     if (practice !== 'unknown' || store.phase !== 'bank' || !bank) return;
     setPractice(Object.keys(store.marks).length === 0 ? 'needed' : 'done');
@@ -294,38 +339,16 @@ export function AdaptiveTake(): JSX.Element {
     const last = Math.max(0, store.bank.families.length - 1);
     if (store.bank.resumeArea > 0) setAreaIndex(Math.min(store.bank.resumeArea, last));
   }, [store.bank]);
-  const [selfAddress, setSelfAddress] = useState<'girl' | 'man' | 'either' | null>(null);
-  const [partnerAddress, setPartnerAddress] = useState<'girl' | 'man' | 'either' | null>(null);
   const [selfIdentity, setSelfIdentity] = useState<'man' | 'woman' | 'either' | null>(null);
   const [partnerIdentity, setPartnerIdentity] = useState<'man' | 'woman' | 'either' | null>(null);
-  // The address pair is DERIVED from identity by default and only revealed when someone says it doesn't fit.
-  // Keeping the two separable is what lets a man ask to be called "good girl" (§3.6.3) — collapsing them into
-  // one identity question would have deleted that, which is the same conflation #62 was about.
-  const [addressDiffers, setAddressDiffers] = useState(false);
   // Seed from what they already answered, or re-opening the screen shows an empty form with Start disabled
   // and no way to see the current answer.
   const seededAddress = useRef(false);
   useEffect(() => {
-    if (seededAddress.current || !store.bank) return;
-    const { address, identity } = store.bank;
-    if (!address && !identity) return;
+    if (seededAddress.current || !store.bank?.identity) return;
     seededAddress.current = true;
-    if (identity) {
-      setSelfIdentity(identity.self);
-      setPartnerIdentity(identity.partner);
-    }
-    if (address) {
-      setSelfAddress(address.self);
-      setPartnerAddress(address.partner);
-      // Only open the override when what they're called actually diverges from who they are.
-      if (
-        identity &&
-        (address.self !== addressFor(identity.self) ||
-          address.partner !== addressFor(identity.partner))
-      ) {
-        setAddressDiffers(true);
-      }
-    }
+    setSelfIdentity(store.bank.identity.self);
+    setPartnerIdentity(store.bank.identity.partner);
   }, [store.bank]);
   const area = bank?.families[areaIndex];
   const areaEntries = useMemo(
@@ -357,26 +380,121 @@ export function AdaptiveTake(): JSX.Element {
     [store.marks, bank],
   );
 
-  // Each AI phase starts itself once on entry — otherwise the person lands on an empty screen and has to ask
-  // for the thing they just said yes to. Guarded per phase, so a degraded phase (which moves the take on)
-  // can never loop back into itself.
-  const started = useRef<Record<string, boolean>>({});
-  const { phase: currentPhase, busy } = store;
-  useEffect(() => {
-    if (busy || started.current[currentPhase]) return;
-    // The split screen has nothing to ask when every marked entry is oriented to one side — don't show an
-    // empty screen and make them press Next on it (74 §3.6.4).
-    if (currentPhase === 'split' && splitNeeded.length === 0) {
-      started.current['split'] = true;
-      void useAdaptiveTestStore.getState().submitSplit(testId);
-    } else if (currentPhase === 'lines') {
-      started.current['lines'] = true;
-      void useAdaptiveTestStore.getState().loadLines(testId, 1);
-    } else if (currentPhase === 'probe') {
-      started.current['probe'] = true;
-      void useAdaptiveTestStore.getState().nextProbe(testId);
+  /**
+   * 74 §3.6.9 — the step model, and the one place the rail, the map and every frame read their state from.
+   *
+   * The AI phases used to fire themselves on arrival (`started.current[phase]` → `loadLines`/`nextProbe`). With a
+   * rail you can reach any step from anywhere, so that turned a mis-tap into a billed call — and both
+   * `testsAdaptiveLines` and `testsAdaptiveScenario` will happily write from an empty lexicon. Every AI step now
+   * presents itself and waits to be asked.
+   */
+  const closed = useMemo(
+    () => new Set((store.state?.draft?.turns ?? []).map((turn) => turn.phase)),
+    [store.state],
+  );
+  const statuses = useMemo(
+    () =>
+      stepStatuses({
+        phase: store.phase,
+        closed,
+        skipped: store.skipped as StepId[],
+        nameMarks: Object.keys(store.nameMarks).length,
+        bankMarks: marked.length,
+        splitNeeded: splitNeeded.length,
+        splitAnswered: splitNeeded.filter((key) => {
+          const split = store.splits[key];
+          return split?.hear !== undefined || split?.say !== undefined;
+        }).length,
+        lineReactions: Object.keys(store.lineReactions).length,
+        probesAnswered: (store.state?.draft?.turns ?? []).filter((turn) => turn.phase === 'probe')
+          .length,
+        scenariosAnswered: (store.state?.draft?.turns ?? []).filter(
+          (turn) => turn.phase === 'scenario',
+        ).length,
+        loved:
+          Object.values(store.marks).filter((mark) => mark === 'love').length +
+          Object.values(store.nameMarks).filter(
+            (mark) => mark.hear === 'love' || mark.say === 'love',
+          ).length,
+      }),
+    [
+      store.phase,
+      closed,
+      store.skipped,
+      store.nameMarks,
+      marked.length,
+      splitNeeded,
+      store.splits,
+      store.lineReactions,
+      store.state,
+    ],
+  );
+  /** The two marking steps' tallies, so both render the same card from one place. */
+  const bankTally = useMemo(() => {
+    const out = { love: 0, okay: 0, never: 0 };
+    for (const mark of Object.values(store.marks)) out[mark] += 1;
+    return out;
+  }, [store.marks]);
+  const nameTally = useMemo(() => {
+    const out = { love: 0, okay: 0, never: 0 };
+    for (const mark of Object.values(store.nameMarks)) {
+      if (mark.hear) out[mark.hear] += 1;
+      if (mark.say) out[mark.say] += 1;
     }
-  }, [currentPhase, busy, testId, splitNeeded.length]);
+    return out;
+  }, [store.nameMarks]);
+
+  /**
+   * The names step needs its (free, AI-less) view before it can render anything. Entering it from the rail or the
+   * map may arrive before that read has happened — and `loadNames` is also what moves a bank with no name
+   * families past this step rather than stranding someone on an empty screen.
+   */
+  const { phase: livePhase, busy: liveBusy, names: liveNames } = store;
+  const hasAddress = store.bank?.address !== undefined;
+  useEffect(() => {
+    if (livePhase === 'names' && liveNames === null && !liveBusy) {
+      void useAdaptiveTestStore.getState().loadNames(testId);
+      return;
+    }
+    // The words step's prerequisite, enforced wherever the step is entered from — the rail, the map, a submit,
+    // or the names phase bouncing through a bank with no name families. Without the two taps the deck fails
+    // OPEN and shows everything in both directions (§3.6.3), so one route in must not be able to skip them.
+    if (livePhase === 'bank' && !hasAddress && !liveBusy) {
+      useAdaptiveTestStore.getState().setPhase('address');
+    }
+  }, [livePhase, liveNames, liveBusy, hasAddress, testId]);
+
+  const stepIndex = statuses.findIndex((status) => status.state === 'now');
+  /** The identity taps are the WORDS step's own prerequisite, so the frame wears that step's number. */
+  const wordsStep = statuses.find((status) => status.step.id === 'bank') ?? null;
+  const current = stepIndex >= 0 ? statuses[stepIndex] : null;
+  const upNext = current ? nextStepAfter(statuses, current.step.id) : null;
+
+  /** Going to a step never spends — except the profile, which IS the synthesis. */
+  const goTo = (id: StepId): void => {
+    if (id === 'profile') void store.synthesize(testId);
+    else store.goToStep(id);
+  };
+  const skipCurrent = (): void => {
+    if (!current) return;
+    // Skipping the last step before the profile lands on the MAP, never on a synthesis: a skip is passing
+    // something over, and it must never be the thing that spends. Finishing is its own explicit verb.
+    const next = upNext && upNext.step.id !== 'profile' ? upNext.step.id : null;
+    store.skipStep(current.step.id, next);
+  };
+  const stepActions = (nextLabel?: string, onNext?: () => void): JSX.Element => (
+    <StepActions
+      next={upNext}
+      busy={store.busy}
+      {...(nextLabel !== undefined ? { nextLabel } : {})}
+      onNext={() => {
+        if (onNext) onNext();
+        else if (upNext) goTo(upNext.step.id);
+      }}
+      onSkip={skipCurrent}
+      onFinish={() => void store.synthesize(testId)}
+    />
+  );
   const goToArea = (next: number): void => {
     const last = (bank?.families.length ?? 1) - 1;
     const index = next < 0 ? 0 : next > last ? last : next;
@@ -485,8 +603,8 @@ export function AdaptiveTake(): JSX.Element {
                 {store.state.draft ? (
                   <div className={adaptive.introResume}>
                     <Text size="sm" tone="secondary">
-                      You have a take in progress. Picking up keeps everything you already marked;
-                      starting over just puts you back at the first area.
+                      You have a take in progress — the next screen shows where you got to and lets
+                      you pick up anywhere in it.
                     </Text>
                   </div>
                 ) : null}
@@ -495,186 +613,191 @@ export function AdaptiveTake(): JSX.Element {
                   <Button variant="primary" onClick={() => void store.start(testId)}>
                     {store.state.draft ? 'Pick up where you left off' : 'Begin'}
                   </Button>
-                  {/* The one route back to the top of a long deck — it clears this take's record and its
-                      place in the deck, never the marks, which are their answers. */}
-                  {store.state.draft ? (
-                    <Button variant="ghost" onClick={() => void store.abandon(testId)}>
-                      Start over from the top
-                    </Button>
-                  ) : null}
                 </div>
               </Card>
             </div>
           ) : null}
 
-          {phase === 'address' ? (
-            <Stack gap={4}>
-              <Heading level={2}>Before we start</Heading>
-              <Text tone="secondary">
-                Two questions, so the words you&rsquo;re shown are ones that could actually be said
-                between the two of you — and so &ldquo;what you like to hear&rdquo; means lines
-                about your body, not theirs.
-              </Text>
-              <div className={adaptive.idPair}>
-                <Card className={adaptive.identityCard}>
-                  <span className={adaptive.identityLabel} id="adaptive-self-identity-label">
-                    You are a:
-                  </span>
-                  <div
-                    className={adaptive.pills}
-                    role="group"
-                    aria-labelledby="adaptive-self-identity-label"
-                  >
-                    {IDENTITY_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className={adaptive.pill}
-                        aria-pressed={selfIdentity === option.value}
-                        onClick={() => {
-                          setSelfIdentity(option.value);
-                          if (!addressDiffers) setSelfAddress(addressFor(option.value));
-                        }}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </Card>
-                <Card className={adaptive.identityCard}>
-                  <span className={adaptive.identityLabel} id="adaptive-partner-identity-label">
-                    Your partner is a:
-                  </span>
-                  <div
-                    className={adaptive.pills}
-                    role="group"
-                    aria-labelledby="adaptive-partner-identity-label"
-                  >
-                    {IDENTITY_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className={adaptive.pill}
-                        aria-pressed={partnerIdentity === option.value}
-                        onClick={() => {
-                          setPartnerIdentity(option.value);
-                          if (!addressDiffers) setPartnerAddress(addressFor(option.value));
-                        }}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </Card>
-              </div>
+          {/* 74 §3.6.9 — every step, before the first one and reachable from all of them. */}
+          {phase === 'map' ? (
+            <TakeMap
+              statuses={statuses}
+              resuming={statuses.some((status) => status.count > 0)}
+              busy={store.busy}
+              onGo={goTo}
+              onStart={() => {
+                const target =
+                  statuses.find((status) => status.state === 'open' && status.count === 0) ??
+                  statuses.find((status) => status.state === 'open') ??
+                  statuses[0];
+                if (target) goTo(target.step.id);
+              }}
+              onAbandon={
+                store.state.draft
+                  ? () => void store.abandon(testId).then(() => setPractice('unknown'))
+                  : null
+              }
+            />
+          ) : null}
 
-              {/* The escape hatch. Identity sets what you're CALLED by default, but the two are genuinely
-                  different questions — a man can want "good girl" — so the override stays reachable instead
-                  of being collapsed away. Hidden until asked for, because for most people it never applies. */}
-              {addressDiffers ? (
-                <Card className={adaptive.identityCard}>
-                  <span className={adaptive.identityLabel} id="adaptive-self-address-label">
-                    You like being called:
-                  </span>
-                  <div
-                    className={adaptive.pills}
-                    role="group"
-                    aria-labelledby="adaptive-self-address-label"
-                  >
-                    {ADDRESS_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className={adaptive.pill}
-                        aria-pressed={selfAddress === option.value}
-                        onClick={() => setSelfAddress(option.value)}
-                      >
-                        {option.label}
-                        <span className={adaptive.pillEg}>{option.eg}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <span className={adaptive.identityLabel} id="adaptive-partner-address-label">
-                    They like being called:
-                  </span>
-                  <div
-                    className={adaptive.pills}
-                    role="group"
-                    aria-labelledby="adaptive-partner-address-label"
-                  >
-                    {ADDRESS_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className={adaptive.pill}
-                        aria-pressed={partnerAddress === option.value}
-                        onClick={() => setPartnerAddress(option.value)}
-                      >
-                        {option.label}
-                        <span className={adaptive.pillEg}>{option.eg}</span>
-                      </button>
-                    ))}
-                  </div>
-                </Card>
-              ) : (
-                <div>
-                  <button
-                    type="button"
-                    className={adaptive.textLink}
-                    onClick={() => setAddressDiffers(true)}
-                  >
-                    One of you likes being called something else
-                  </button>
-                </div>
-              )}
-
-              {/* The consequence, visible rather than described — it updates as they pick. */}
-              {previewLines(selfIdentity, partnerIdentity).length > 0 ? (
-                <div className={adaptive.preview}>
-                  <div className={adaptive.railHead}>So you&rsquo;ll be asked things like</div>
-                  {previewLines(selfIdentity, partnerIdentity).map((line) => (
-                    <div key={line.side} className={adaptive.previewRow}>
-                      <span
-                        className={`${adaptive.dirTag} ${line.side === 'say' ? adaptive.tagSay : adaptive.tagHear}`}
-                      >
-                        {line.side === 'say' ? 'YOU SAY' : 'YOU HEAR'}
-                      </span>
-                      <em>&ldquo;{line.text}&rdquo;</em>
+          {phase === 'address' && wordsStep ? (
+            <div className={adaptive.stepFrame}>
+              <div className={adaptive.stepMain}>
+                <StepEyebrow status={wordsStep} index={1} total={TAKE_STEPS.length} />
+                <Heading level={2}>First, who are the two of you?</Heading>
+                <Text tone="secondary">
+                  Two questions, so the words you&rsquo;re shown are ones that could actually be
+                  said between the two of you — and so &ldquo;what you like to hear&rdquo; means
+                  lines about your body, not theirs.
+                </Text>
+                <div className={adaptive.idPair}>
+                  <Card className={adaptive.identityCard}>
+                    <span className={adaptive.identityLabel} id="adaptive-self-identity-label">
+                      You are a:
+                    </span>
+                    <div
+                      className={adaptive.pills}
+                      role="group"
+                      aria-labelledby="adaptive-self-identity-label"
+                    >
+                      {IDENTITY_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={adaptive.pill}
+                          aria-pressed={selfIdentity === option.value}
+                          onClick={() => {
+                            setSelfIdentity(option.value);
+                          }}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
                     </div>
-                  ))}
+                  </Card>
+                  <Card className={adaptive.identityCard}>
+                    <span className={adaptive.identityLabel} id="adaptive-partner-identity-label">
+                      Your partner is a:
+                    </span>
+                    <div
+                      className={adaptive.pills}
+                      role="group"
+                      aria-labelledby="adaptive-partner-identity-label"
+                    >
+                      {IDENTITY_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={adaptive.pill}
+                          aria-pressed={partnerIdentity === option.value}
+                          onClick={() => {
+                            setPartnerIdentity(option.value);
+                          }}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </Card>
+                </div>
+
+                {/* The consequence, visible rather than described — it updates as they pick. */}
+                {previewLines(selfIdentity, partnerIdentity).length > 0 ? (
+                  <div className={adaptive.preview}>
+                    <div className={adaptive.railHead}>So you&rsquo;ll be asked things like</div>
+                    {previewLines(selfIdentity, partnerIdentity).map((line) => (
+                      <div key={line.side} className={adaptive.previewRow}>
+                        <span
+                          className={`${adaptive.dirTag} ${line.side === 'say' ? adaptive.tagSay : adaptive.tagHear}`}
+                        >
+                          {line.side === 'say' ? 'YOU SAY' : 'YOU HEAR'}
+                        </span>
+                        <em>&ldquo;{line.text}&rdquo;</em>
+                      </div>
+                    ))}
+                    <Text size="sm" tone="tertiary">
+                      Change this any time. It only decides what you&rsquo;re shown — nothing is
+                      ruled out, and no mark is lost.
+                    </Text>
+                  </div>
+                ) : (
                   <Text size="sm" tone="tertiary">
                     Change this any time. It only decides what you&rsquo;re shown — nothing is ruled
                     out, and no mark is lost.
                   </Text>
-                </div>
-              ) : (
-                <Text size="sm" tone="tertiary">
-                  Change this any time. It only decides what you&rsquo;re shown — nothing is ruled
-                  out, and no mark is lost.
-                </Text>
-              )}
-              <div className={take.footer}>
-                <Button
-                  variant="primary"
-                  disabled={store.busy || !selfIdentity || !partnerIdentity}
-                  onClick={() => {
-                    if (!selfIdentity || !partnerIdentity) return;
-                    void store.setAddress(
-                      testId,
-                      selfAddress ?? addressFor(selfIdentity),
-                      partnerAddress ?? addressFor(partnerIdentity),
-                      { self: selfIdentity, partner: partnerIdentity },
-                    );
-                  }}
-                >
-                  Start
-                </Button>
+                )}
               </div>
-            </Stack>
+              <TakeRail
+                statuses={statuses}
+                onGo={goTo}
+                actions={
+                  <>
+                    <Button
+                      variant="primary"
+                      disabled={store.busy || !selfIdentity || !partnerIdentity}
+                      onClick={() => {
+                        if (!selfIdentity || !partnerIdentity) return;
+                        void store.setAddress(
+                          testId,
+                          // The address axis is DERIVED from identity now. It only orients four anatomy/praise
+                          // families, and the vocative question it used to ask ("do you like being called
+                          // girl?") is answered far better one step over, by marking 2,215 real names in both
+                          // directions — so asking it here was the wrong axis doing a body job, twice.
+                          addressFor(selfIdentity),
+                          addressFor(partnerIdentity),
+                          { self: selfIdentity, partner: partnerIdentity },
+                        );
+                      }}
+                    >
+                      Start the words →
+                    </Button>
+                    <Button variant="ghost" onClick={() => store.setPhase('map')}>
+                      Back to the steps
+                    </Button>
+                  </>
+                }
+              />
+            </div>
           ) : null}
 
           {/* 74 §3.6.8 — the pet-name phase runs first: what the two of you call each other. */}
-          {phase === 'names' ? <NamesPhase testId={testId} /> : null}
+          {phase === 'names' ? (
+            <NamesPhase
+              rail={
+                <TakeRail
+                  statuses={statuses}
+                  onGo={goTo}
+                  saveState={<SaveState state={store.saveState} />}
+                  extra={
+                    <Tally
+                      counts={nameTally}
+                      label="Names marked"
+                      testIdPrefix="name-tally"
+                      note={`${Object.keys(store.nameMarks).length} names · both directions counted`}
+                    />
+                  }
+                  actions={
+                    <>
+                      <Button
+                        variant="primary"
+                        disabled={store.busy}
+                        onClick={() => void store.finishNames(testId)}
+                      >
+                        Done with names →
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        disabled={store.busy}
+                        onClick={() => void store.synthesize(testId)}
+                      >
+                        Finish — show me my profile
+                      </Button>
+                    </>
+                  }
+                />
+              }
+            />
+          ) : null}
 
           {/*
            * The practice sits OUTSIDE the deck: `.deck` clips to its own radius, and a fixed-position scrim
@@ -686,6 +809,7 @@ export function AdaptiveTake(): JSX.Element {
               entries={bank.entries}
               onMark={(key, mark) => store.mark(key, mark)}
               onDone={() => setPractice('done')}
+              onLeave={() => store.setPhase('map')}
             />
           ) : null}
 
@@ -748,7 +872,6 @@ export function AdaptiveTake(): JSX.Element {
                     Area {areaIndex + 1} of {bank.families.length} · {areaEntries.length} here
                   </Text>
                   <span className={adaptive.headSpacer} />
-                  <SaveState state={store.saveState} />
                 </div>
                 {/* One slim bar, not 36 dashes. */}
                 <div
@@ -969,28 +1092,20 @@ export function AdaptiveTake(): JSX.Element {
                  * an entire area you had already decided about; and the running tally makes a partial pass
                  * visibly worth something, which §3.6.1 #3 says it is.
                  */}
-                <aside className={adaptive.rail} aria-label="Your marks and where to go next">
-                  <Card className={adaptive.railCard}>
-                    <div className={adaptive.railHead}>Marked so far</div>
-                    <div className={adaptive.tally}>
-                      {(['love', 'okay', 'never'] as BankMark[]).map((option) => (
-                        <div
-                          key={option}
-                          className={adaptive.tallyRow}
-                          data-testid={`tally-${option}`}
-                        >
-                          <span
-                            className={`${adaptive.dot} ${adaptive[option]}`}
-                            aria-hidden="true"
-                          />
-                          <span className={adaptive.tallyLabel}>{MARK_META[option].label}</span>
-                          <b>{Object.values(store.marks).filter((m) => m === option).length}</b>
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
-                  <Card className={adaptive.railCard}>
-                    <div className={adaptive.railActions}>
+                <TakeRail
+                  statuses={statuses}
+                  onGo={goTo}
+                  saveState={<SaveState state={store.saveState} />}
+                  extra={
+                    <Tally
+                      counts={bankTally}
+                      label="Marked so far"
+                      testIdPrefix="tally"
+                      note={`${marked.length} of ${bank.entries.length} shown here`}
+                    />
+                  }
+                  actions={
+                    <>
                       {areaIndex + 1 < bank.families.length ? (
                         <Button variant="primary" disabled={store.busy} onClick={() => nextArea()}>
                           Next area →
@@ -1001,7 +1116,7 @@ export function AdaptiveTake(): JSX.Element {
                           disabled={store.busy}
                           onClick={() => void store.submitBank(testId)}
                         >
-                          Done — show me
+                          Done with the words →
                         </Button>
                       )}
                       {areaIndex > 0 ? (
@@ -1025,233 +1140,328 @@ export function AdaptiveTake(): JSX.Element {
                       >
                         {/* The tail is hidden, not dropped, in the narrow action bar — see `.railDone`. */}
                         Done
-                        <span>for now — show me</span>
+                        <span>with the words for now</span>
                       </Button>
-                    </div>
-                  </Card>
-                </aside>
+                    </>
+                  }
+                />
               </div>
             </div>
           ) : null}
 
-          {phase === 'split' ? (
-            <Stack gap={4}>
-              <Heading level={2}>Hearing it, or saying it?</Heading>
-              <Text tone="secondary">
-                Only the ones you marked. What you love to <em>hear</em> and what you can get out of
-                your own mouth are usually different — that gap is the most useful thing here.
-              </Text>
-              <div className={take.statusRow}>
+          {phase === 'split' && current ? (
+            <div className={adaptive.stepFrame}>
+              <div className={adaptive.stepMain}>
+                <StepEyebrow status={current} index={stepIndex} total={TAKE_STEPS.length} />
+                <Heading level={2}>Hearing it, or saying it?</Heading>
+                <Text tone="secondary">
+                  Only the ones you marked. What you love to <em>hear</em> and what you can get out
+                  of your own mouth are usually different — that gap is the most useful thing here.
+                </Text>
+                {splitNeeded.length === 0 ? (
+                  <Banner tone="info">
+                    Nothing to split here — everything you marked was only ever offered one way
+                    round, so its direction is already known.
+                  </Banner>
+                ) : null}
                 <Text size="sm" tone="tertiary">
                   Saved as you go — leave any of these blank and come back to them.
                 </Text>
-                <SaveState state={store.saveState} />
+                {marked.map((key) => {
+                  const entry = bank.entries.find((e) => e.key === key);
+                  if (!entry || store.marks[key] === 'never') return null;
+                  // 74 §3.6.4 — the collapse. An oriented entry was only ever offered on ONE side, so its
+                  // direction is already known and there is nothing to split; only an entry that reaches both
+                  // still needs the question. Rating the unshown side would invent an answer (§3.6.6).
+                  if (entry.sides.length < 2) return null;
+                  return (
+                    <div key={key} className={adaptive.splitRow}>
+                      <span className={adaptive.entryText}>{entry.text}</span>
+                      {(['hear', 'say'] as const).map((direction) => (
+                        <span key={direction} className={adaptive.marks}>
+                          <span className={adaptive.dirLabel}>{direction}</span>
+                          {[0, 1, 2, 3, 4].map((value) => (
+                            <button
+                              key={value}
+                              type="button"
+                              className={adaptive.markButton}
+                              aria-pressed={store.splits[key]?.[direction] === value}
+                              aria-label={`${entry.text} — ${direction} ${value} of 4`}
+                              onClick={() => store.setSplit(key, direction, value)}
+                            >
+                              {value}
+                            </button>
+                          ))}
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })}
               </div>
-              {marked.map((key) => {
-                const entry = bank.entries.find((e) => e.key === key);
-                if (!entry || store.marks[key] === 'never') return null;
-                // 74 §3.6.4 — the collapse. An oriented entry was only ever offered on ONE side, so its
-                // direction is already known and there is nothing to split; only an entry that reaches both
-                // still needs the question. Rating the unshown side would invent an answer (§3.6.6).
-                if (entry.sides.length < 2) return null;
-                return (
-                  <div key={key} className={adaptive.splitRow}>
-                    <span className={adaptive.entryText}>{entry.text}</span>
-                    {(['hear', 'say'] as const).map((direction) => (
-                      <span key={direction} className={adaptive.marks}>
-                        <span className={adaptive.dirLabel}>{direction}</span>
-                        {[0, 1, 2, 3, 4].map((value) => (
-                          <button
-                            key={value}
-                            type="button"
-                            className={adaptive.markButton}
-                            aria-pressed={store.splits[key]?.[direction] === value}
-                            aria-label={`${entry.text} — ${direction} ${value} of 4`}
-                            onClick={() => store.setSplit(key, direction, value)}
-                          >
-                            {value}
-                          </button>
-                        ))}
-                      </span>
-                    ))}
-                  </div>
-                );
-              })}
-              <div className={take.footer}>
-                <Button
-                  variant="primary"
-                  disabled={store.busy}
-                  onClick={() => void store.submitSplit(testId)}
-                >
-                  Next
-                </Button>
-              </div>
-            </Stack>
+              <TakeRail
+                statuses={statuses}
+                onGo={goTo}
+                saveState={<SaveState state={store.saveState} />}
+                actions={stepActions('Save and continue →', () => void store.submitSplit(testId))}
+              />
+            </div>
           ) : null}
 
-          {phase === 'lines' ? (
-            <Stack gap={4}>
-              <Heading level={2}>Does this land?</Heading>
-              <Text tone="secondary">
-                Written for you, from what you just marked. React honestly — this is where the
-                pattern shows.
-              </Text>
-              {store.lines.length === 0 && !store.busy ? (
-                <Stack gap={3}>
-                  <AiUnavailableNotice />
-                  <div>
-                    <Button variant="secondary" onClick={() => void store.loadLines(testId, round)}>
-                      Try again
-                    </Button>
-                  </div>
-                </Stack>
-              ) : null}
-              {store.lines.map((line) => (
-                <div key={line} className={adaptive.lineRow}>
-                  <span className={adaptive.lineText}>
-                    &ldquo;{line}&rdquo;
-                    {/*
-                     * 74 §3.6.2 — the "not like that" escape, and the ONLY place a line becomes a boundary.
-                     *
-                     * A word is loved in one line and hated in another ("fuck your pussy" vs "beat that
-                     * pussy"), and this is the phase built to catch that. But a plain "no" here means "this
-                     * line doesn't land" — it must NOT silently mint a boundary, because a boundary is
-                     * permanent and lifts only by an explicit act (§3.2). So the soft reaction keeps steering
-                     * register, and turning it into a limit takes this second, deliberate tap.
-                     */}
-                    {store.lineReactions[line] === 'no' ? (
-                      <button
-                        type="button"
-                        className={adaptive.textLink}
-                        onClick={() => void store.banLine(line)}
-                        disabled={store.busy}
-                      >
-                        Never anything like this again
-                      </button>
-                    ) : null}
-                  </span>
-                  <span className={adaptive.marks}>
-                    {(['love', 'meh', 'no'] as const).map((reaction) => (
-                      <button
-                        key={reaction}
-                        type="button"
-                        className={adaptive.markButton}
-                        aria-pressed={store.lineReactions[line] === reaction}
-                        aria-label={`${line} — ${reaction}`}
-                        onClick={() => void store.reactToLine(testId, line, reaction)}
-                      >
-                        {reaction === 'love' ? (
-                          <Flame size={16} aria-hidden="true" />
-                        ) : reaction === 'meh' ? (
-                          <Contrast size={16} aria-hidden="true" />
-                        ) : (
-                          <Ban size={16} aria-hidden="true" />
-                        )}
-                      </button>
-                    ))}
-                  </span>
-                </div>
-              ))}
-              <div className={take.footer}>
-                <Button
-                  variant="secondary"
-                  disabled={store.busy}
-                  onClick={() => {
-                    setRound(round + 1);
-                    void store.loadLines(testId, round + 1);
-                  }}
-                >
-                  More like this
-                </Button>
-                <Button variant="primary" onClick={() => void store.nextProbe(testId)}>
-                  Next
-                </Button>
-              </div>
-            </Stack>
-          ) : null}
-
-          {phase === 'probe' ? (
-            <Stack gap={4}>
-              <Heading level={2}>One thing I want to get right</Heading>
-              {store.probeQuestion ? (
-                <>
-                  <Text>{store.probeQuestion}</Text>
-                  <Textarea
-                    value={store.probeAnswer}
-                    onChange={(e) =>
-                      useAdaptiveTestStore.setState({ probeAnswer: e.currentTarget.value })
-                    }
-                    rows={3}
-                    aria-label="Your answer"
-                  />
-                  <div className={take.footer}>
+          {phase === 'lines' && current ? (
+            <div className={adaptive.stepFrame}>
+              <div className={adaptive.stepMain}>
+                <StepEyebrow status={current} index={stepIndex} total={TAKE_STEPS.length} />
+                <Heading level={2}>Does this land?</Heading>
+                <Text tone="secondary">
+                  Real lines in your own register, written from the names and words you&rsquo;ve
+                  marked — never anything you&rsquo;ve ruled out. React honestly; this is where the
+                  pattern shows.
+                </Text>
+                {/*
+                 * 74 §3.6.9 — it waits to be ASKED. This phase used to fire on arrival, which with a rail
+                 * turns any mis-tap into a billed call; and `testsAdaptiveLines` writes from an empty lexicon
+                 * if you let it, so an unasked step also says what it will draw on before spending anything.
+                 */}
+                {current.state === 'now' && current.reason ? (
+                  <NotEnoughYet reason={current.reason} onGo={() => goTo('bank')} />
+                ) : null}
+                {!current.reason && store.lines.length === 0 && !store.busy && !askedFor.lines ? (
+                  <div className={adaptive.askRow}>
                     <Button
                       variant="primary"
-                      disabled={store.busy}
-                      onClick={() => void store.answerProbe(testId)}
+                      onClick={() => {
+                        setAskedFor((prev) => ({ ...prev, lines: true }));
+                        void store.loadLines(testId, round);
+                      }}
                     >
-                      Answer
+                      Write them for me →
                     </Button>
-                    <Button variant="ghost" onClick={() => void store.skipProbe(testId)}>
-                      Skip this
-                    </Button>
+                    <Text size="sm" tone="tertiary">
+                      a little of your AI allowance
+                    </Text>
                   </div>
-                </>
-              ) : (
-                <div className={take.footer}>
-                  <Button variant="primary" onClick={() => void store.nextProbe(testId)}>
-                    Continue
-                  </Button>
-                </div>
-              )}
-            </Stack>
-          ) : null}
-
-          {phase === 'scenario' ? (
-            <Stack gap={4}>
-              <Heading level={2}>In the moment</Heading>
-              <Text tone="secondary">
-                What lands mid-act is wrong at 2pm — so this asks per moment, not in general.
-              </Text>
-              {store.scenario ? (
-                <Card>
+                ) : null}
+                {store.lines.length === 0 && !store.busy && askedFor.lines ? (
                   <Stack gap={3}>
-                    <Text>{store.scenario.scene}</Text>
-                    {store.scenario.options.map((option) => (
+                    <AiUnavailableNotice />
+                    <div>
                       <Button
-                        key={option}
                         variant="secondary"
-                        onClick={() => void store.answerScenario(testId, option)}
+                        onClick={() => void store.loadLines(testId, round)}
                       >
-                        {option}
+                        Try again
                       </Button>
-                    ))}
+                    </div>
                   </Stack>
-                </Card>
-              ) : (
-                <Stack gap={3}>
-                  {CONTEXTS.map((context) => (
+                ) : null}
+                {store.lines.map((line) => (
+                  <div key={line} className={adaptive.lineRow}>
+                    <span className={adaptive.lineText}>
+                      &ldquo;{line}&rdquo;
+                      {/*
+                       * 74 §3.6.2 — the "not like that" escape, and the ONLY place a line becomes a boundary.
+                       *
+                       * A word is loved in one line and hated in another ("fuck your pussy" vs "beat that
+                       * pussy"), and this is the phase built to catch that. But a plain "no" here means "this
+                       * line doesn't land" — it must NOT silently mint a boundary, because a boundary is
+                       * permanent and lifts only by an explicit act (§3.2). So the soft reaction keeps steering
+                       * register, and turning it into a limit takes this second, deliberate tap.
+                       */}
+                      {store.lineReactions[line] === 'no' ? (
+                        <button
+                          type="button"
+                          className={adaptive.textLink}
+                          onClick={() => void store.banLine(line)}
+                          disabled={store.busy}
+                        >
+                          Never anything like this again
+                        </button>
+                      ) : null}
+                    </span>
+                    <span className={adaptive.marks}>
+                      {(['love', 'meh', 'no'] as const).map((reaction) => (
+                        <button
+                          key={reaction}
+                          type="button"
+                          className={adaptive.markButton}
+                          aria-pressed={store.lineReactions[line] === reaction}
+                          aria-label={`${line} — ${reaction}`}
+                          onClick={() => void store.reactToLine(testId, line, reaction)}
+                        >
+                          {reaction === 'love' ? (
+                            <Flame size={16} aria-hidden="true" />
+                          ) : reaction === 'meh' ? (
+                            <Contrast size={16} aria-hidden="true" />
+                          ) : (
+                            <Ban size={16} aria-hidden="true" />
+                          )}
+                        </button>
+                      ))}
+                    </span>
+                  </div>
+                ))}
+                {store.lines.length > 0 ? (
+                  <div className={take.footer}>
                     <Button
-                      key={context.id}
                       variant="secondary"
                       disabled={store.busy}
-                      onClick={() => void store.loadScenario(testId, context.id)}
+                      onClick={() => {
+                        setRound(round + 1);
+                        void store.loadLines(testId, round + 1);
+                      }}
                     >
-                      {context.label}
+                      Write me three more
                     </Button>
-                  ))}
-                </Stack>
-              )}
-              <div className={take.footer}>
-                <Button
-                  variant="primary"
-                  disabled={store.busy}
-                  onClick={() => void store.synthesize(testId)}
-                >
-                  I&rsquo;m done — show me my profile
-                </Button>
+                  </div>
+                ) : null}
               </div>
-            </Stack>
+              <TakeRail statuses={statuses} onGo={goTo} actions={stepActions()} />
+            </div>
+          ) : null}
+
+          {phase === 'probe' && current ? (
+            <div className={adaptive.stepFrame}>
+              <div className={adaptive.stepMain}>
+                <StepEyebrow status={current} index={stepIndex} total={TAKE_STEPS.length} />
+                <Heading level={2}>The questions it still has</Heading>
+                {current.state === 'now' && current.reason ? (
+                  <NotEnoughYet reason={current.reason} onGo={() => goTo('bank')} />
+                ) : store.probeQuestion ? (
+                  <>
+                    <Text tone="secondary">
+                      Somewhere your marks could mean two different things. Answer in your own
+                      words, or skip it — nothing you write here is shown to anyone.
+                    </Text>
+                    <Card className={adaptive.probeCard}>
+                      <Text className={adaptive.probeAsk}>{store.probeQuestion}</Text>
+                      <Textarea
+                        value={store.probeAnswer}
+                        onChange={(e) =>
+                          useAdaptiveTestStore.setState({ probeAnswer: e.currentTarget.value })
+                        }
+                        rows={3}
+                        aria-label="Your answer"
+                      />
+                      <div className={adaptive.askRow}>
+                        <Button
+                          variant="primary"
+                          disabled={store.busy}
+                          onClick={() => void store.answerProbe(testId)}
+                        >
+                          Answer →
+                        </Button>
+                        <Button variant="ghost" onClick={() => void store.skipProbe(testId)}>
+                          Skip this one
+                        </Button>
+                      </div>
+                    </Card>
+                  </>
+                ) : store.probeDone ? (
+                  /* Asked, and it had nothing left — which is a real outcome, not a failure. It used to
+                     return the same `done` whether it had exhausted the ambiguities or had nothing to work
+                     from at all, so the screen flashed past either way and never said which. */
+                  <Banner tone="info">
+                    Nothing left it can&rsquo;t work out from what you marked. That&rsquo;s this
+                    step finished.
+                  </Banner>
+                ) : (
+                  <>
+                    <Text tone="secondary">
+                      It looks for places your marks could mean two things, and asks about those —
+                      in words, not buttons.
+                    </Text>
+                    <div className={adaptive.askRow}>
+                      <Button
+                        variant="primary"
+                        disabled={store.busy}
+                        onClick={() => void store.nextProbe(testId)}
+                      >
+                        Ask me →
+                      </Button>
+                      <Text size="sm" tone="tertiary">
+                        a little of your AI allowance
+                      </Text>
+                    </div>
+                  </>
+                )}
+              </div>
+              <TakeRail statuses={statuses} onGo={goTo} actions={stepActions()} />
+            </div>
+          ) : null}
+
+          {phase === 'scenario' && current ? (
+            <div className={adaptive.stepFrame}>
+              <div className={adaptive.stepMain}>
+                <StepEyebrow status={current} index={stepIndex} total={TAKE_STEPS.length} />
+                <Heading level={2}>In the moment</Heading>
+                {current.state === 'now' && current.reason ? (
+                  <NotEnoughYet reason={current.reason} onGo={() => goTo('bank')} />
+                ) : store.scenario ? (
+                  <>
+                    <Text tone="secondary">
+                      {CONTEXTS.find((c) => c.id === store.scenario?.context)?.label ??
+                        'This moment'}{' '}
+                      — pick the one closest to what you&rsquo;d want.
+                    </Text>
+                    <Card className={adaptive.probeCard}>
+                      <Text className={adaptive.probeAsk}>{store.scenario.scene}</Text>
+                      <Stack gap={2}>
+                        {store.scenario.options.map((option) => (
+                          <Button
+                            key={option}
+                            variant="secondary"
+                            disabled={store.busy}
+                            onClick={() => void store.answerScenario(testId, option)}
+                          >
+                            {option}
+                          </Button>
+                        ))}
+                      </Stack>
+                    </Card>
+                  </>
+                ) : (
+                  <>
+                    {/*
+                     * 74 §3.6.9 — this used to be three bare buttons labelled Build-up / During / After, with
+                     * no statement of what they were, what tapping one would do, or that it would spend. The
+                     * three moments are the QUESTION here, so they say what they mean, and picking one is
+                     * plainly the thing that writes a scene.
+                     */}
+                    <Text tone="secondary">
+                      The same words land differently depending on when they arrive. Pick a moment
+                      and it writes one short scene from your own register, with a few ways it could
+                      go.
+                    </Text>
+                    <div className={adaptive.momentGrid}>
+                      {CONTEXTS.map((context) => {
+                        const answered = (store.state?.draft?.turns ?? []).some(
+                          (turn) => turn.phase === 'scenario' && turn.item.id === context.id,
+                        );
+                        return (
+                          <button
+                            key={context.id}
+                            type="button"
+                            className={`${adaptive.moment} ${answered ? adaptive.momentDone : ''}`}
+                            disabled={store.busy}
+                            onClick={() => void store.loadScenario(testId, context.id)}
+                          >
+                            <span className={adaptive.momentTop}>
+                              <b>{context.label}</b>
+                              {answered ? <span className={adaptive.momentState}>done</span> : null}
+                            </span>
+                            <span className={adaptive.momentBlurb}>{context.blurb}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <Text size="sm" tone="tertiary">
+                      Each one is a little of your AI allowance. Do one, all three, or none.
+                    </Text>
+                  </>
+                )}
+              </div>
+              <TakeRail statuses={statuses} onGo={goTo} actions={stepActions()} />
+            </div>
           ) : null}
 
           {phase === 'done' ? (

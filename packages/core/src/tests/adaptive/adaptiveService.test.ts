@@ -25,7 +25,7 @@ const KEY = new Uint8Array(32).fill(9);
 const P = 'angel';
 
 const GOOD_GIRL = 'names-praise:good-girl';
-const MINE = 'claiming:mine';
+const MINE = 'claiming:you-re-mine';
 const WHORE = 'names-rough-heavy:whore';
 const CUNT = 'anatomy-her:cunt';
 

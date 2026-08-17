@@ -42,7 +42,7 @@ async function seedPair(): Promise<{ fs: FileSystem; ben: string; angel: string;
     DIRTY_TALK.bank,
     {
       'names-praise:good-girl': 'love',
-      'claiming:mine': 'love',
+      'claiming:you-re-mine': 'love',
       'names-rough-heavy:whore': 'never',
     },
     'take:1',

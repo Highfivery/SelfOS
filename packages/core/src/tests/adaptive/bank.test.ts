@@ -209,3 +209,23 @@ describe('74 §3.6.8 — the pet-name bank', () => {
     expect(offenders.map((e) => e.text)).toEqual([]);
   });
 });
+
+describe('§3.6.9 — the deck and the pet-name phase never ask the same thing twice', () => {
+  it('shares no term between the two phases', () => {
+    // Nine did, when the names phase landed: "good girl", "mine", "my girl", "dirty little slut" and the rest
+    // were in a deck family AND a name register. They are two different lexicon keys, so the person marked the
+    // same words twice and the profile could hold both a loved-to-hear and a hard no for one term. The names
+    // phase asks each of them in BOTH directions, which is strictly better, so the deck gave them up.
+    const nameIds = new Set(nameFamilies(DIRTY_TALK.bank).map((family) => family.id));
+    const deckIds = new Set(deckFamilies(DIRTY_TALK.bank).map((family) => family.id));
+    const inNames = new Set(
+      DIRTY_TALK.bank.entries
+        .filter((entry) => nameIds.has(entry.family))
+        .map((entry) => entry.text.toLowerCase()),
+    );
+    const twice = DIRTY_TALK.bank.entries
+      .filter((entry) => deckIds.has(entry.family) && inNames.has(entry.text.toLowerCase()))
+      .map((entry) => `${entry.family}:${entry.text}`);
+    expect(twice).toEqual([]);
+  });
+});

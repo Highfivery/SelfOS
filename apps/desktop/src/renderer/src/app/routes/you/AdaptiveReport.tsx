@@ -328,7 +328,18 @@ export function AdaptiveReport(): JSX.Element {
                */}
               {registers.length > 0 || contexts.length > 0 ? (
                 <section>
-                  <Heading level={2}>Register &amp; timing</Heading>
+                  <div className={adaptive.sectionHead}>
+                    <Heading level={2}>Register &amp; timing</Heading>
+                    <button
+                      type="button"
+                      className={adaptive.textLink}
+                      onClick={() =>
+                        navigate(`/tests/${testId}/take`, { state: { step: 'scenario' } })
+                      }
+                    >
+                      Redo “in the moment”
+                    </button>
+                  </div>
                   <Stack gap={4}>
                     {registers.length > 0 ? (
                       <div>
@@ -382,7 +393,18 @@ export function AdaptiveReport(): JSX.Element {
                */}
               {names.callMe.length + names.iCall.length + names.neverCalled.length > 0 ? (
                 <section>
-                  <Heading level={2}>What to call each other</Heading>
+                  <div className={adaptive.sectionHead}>
+                    <Heading level={2}>What to call each other</Heading>
+                    <button
+                      type="button"
+                      className={adaptive.textLink}
+                      onClick={() =>
+                        navigate(`/tests/${testId}/take`, { state: { step: 'names' } })
+                      }
+                    >
+                      Edit the names
+                    </button>
+                  </div>
                   <div className={adaptive.nameCols}>
                     <div>
                       <Text size="sm" tone="secondary">
@@ -441,7 +463,16 @@ export function AdaptiveReport(): JSX.Element {
               ) : null}
 
               <section>
-                <Heading level={2}>Your words</Heading>
+                <div className={adaptive.sectionHead}>
+                  <Heading level={2}>Your words</Heading>
+                  <button
+                    type="button"
+                    className={adaptive.textLink}
+                    onClick={() => navigate(`/tests/${testId}/take`, { state: { step: 'bank' } })}
+                  >
+                    Edit the words
+                  </button>
+                </div>
                 <Stack gap={4}>
                   <div>
                     <Text size="sm" tone="secondary">

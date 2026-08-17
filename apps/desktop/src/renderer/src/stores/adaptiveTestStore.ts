@@ -20,7 +20,15 @@ import type {
 
 export type TakePhase =
   | 'intro'
-  /** 74 §3.6.4 — the two address taps, before the deck. Skipped once answered (a retake never re-asks). */
+  /**
+   * 74 §3.6.9 — the map: every step, its state, and a tap into any of them. Shown on the way in and reachable
+   * from every step, so the take is never a one-way chain.
+   */
+  | 'map'
+  /**
+   * 74 §3.6.4 — the two identity taps. A prerequisite of the WORDS step (it decides which half of the bank is
+   * shown), so it is entered from there rather than sprung on someone before they know what the test contains.
+   */
   | 'address'
   /** 74 §3.6.8 — the pet-name phase, which runs FIRST: what the two of you call each other. */
   | 'names'
@@ -226,7 +234,15 @@ interface AdaptiveTestState {
    *  been asked (without it the same ambiguity is returned forever). */
   probeAmbiguityId: string | null;
   probeAnswer: string;
+  /** The probe has nothing left to ask — a real outcome, shown as one, not a silent hop to the next phase. */
+  probeDone: boolean;
   scenario: { context: string; scene: string; options: string[] } | null;
+  /**
+   * 74 §3.6.9 — steps passed over in THIS sitting, so the rail and the profile can say so instead of quietly
+   * filling the gap. Deliberately not persisted: a skip is a decision about this sitting, and on a later one the
+   * step should simply be open again rather than carrying a stale refusal forward.
+   */
+  skipped: string[];
 
   load(testId: string): Promise<void>;
   start(testId: string): Promise<void>;
@@ -270,6 +286,15 @@ interface AdaptiveTestState {
   abandon(testId: string): Promise<void>;
   editLexicon(edit: AdaptiveLexiconEdit): Promise<void>;
   setPhase(phase: TakePhase): void;
+  /**
+   * 74 §3.6.9 — go to a step from the rail or the map. Entering an AI step must NOT fire its call: with a rail
+   * you can reach any step from anywhere, so arrival-fires-the-call would turn a mis-tap into a billed request
+   * (and `testsAdaptiveLines`/`Scenario` will write from an empty lexicon if asked). The step frame presents
+   * itself and waits to be asked.
+   */
+  goToStep(id: string): void;
+  /** Pass over a step, recording that it was passed over rather than silently jumping. */
+  skipStep(id: string, next: string | null): void;
   reset(): void;
 }
 
@@ -294,7 +319,9 @@ const EMPTY = {
   probeQuestion: null,
   probeAmbiguityId: null,
   probeAnswer: '',
+  probeDone: false,
   scenario: null,
+  skipped: [] as string[],
 };
 
 /**
@@ -365,6 +392,33 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
     },
     setPhase: (phase) => set({ phase }),
 
+    goToStep: (id) => {
+      // The words need the two identity taps first — they decide which half of the bank is ever shown, so
+      // entering the step without them would show everything in both directions (the §3.6.3 fail-open).
+      if (id === 'bank' && get().bank?.address === undefined) {
+        set({ phase: 'address', error: null });
+        return;
+      }
+      // Re-entering a step un-skips it: arriving at it IS taking it back, and a row that still read "skipped"
+      // while you were standing on it would be the app disagreeing with itself.
+      set((prev) => ({
+        phase: id as TakePhase,
+        error: null,
+        skipped: prev.skipped.filter((step) => step !== id),
+        // The scenario's scene and the probe's question belong to the visit that fetched them; leaving and
+        // coming back must present the step's own "ask me" state rather than a stale paid answer.
+        ...(id === 'scenario' ? { scenario: null } : {}),
+      }));
+    },
+
+    skipStep: (id, next) =>
+      set((prev) => ({
+        skipped: prev.skipped.includes(id) ? prev.skipped : [...prev.skipped, id],
+        // No next step left ⇒ back to the map, never a blank screen.
+        phase: (next ?? 'map') as TakePhase,
+        error: null,
+      })),
+
     load: async (testId) => {
       set({ activeTestId: testId });
       const [bank, state] = await Promise.all([
@@ -389,12 +443,12 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
     start: async (testId) => {
       set({ busy: true, error: null, activeTestId: testId });
       const state = await (window.selfos?.testsAdaptiveStart({ testId }) ?? Promise.resolve(null));
-      const resumed = resumePhase(state?.draft?.turns);
-      // The address taps come first, and only once: a retake with them already answered goes straight in.
-      const needsAddress = resumed === 'names' && get().bank?.address === undefined;
-      set({ state, busy: false, phase: needsAddress ? 'address' : resumed });
-      // Free (no AI), so it can load eagerly whenever the phase might need it.
-      if (!needsAddress && resumed === 'names') await get().loadNames(testId);
+      // 74 §3.6.9 — the map, not a phase. Both a first take and a resumed one land here: the whole reason it
+      // exists is that "pick up where you left off" used to drop into whichever AI phase had been reached, with
+      // no route back to the person's own words.
+      set({ state, busy: false, phase: 'map' });
+      // Free (no AI), so the map can show the names step's real count without asking for anything.
+      await get().loadNames(testId);
     },
 
     mark: (key, mark) => {
@@ -523,9 +577,9 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       });
       // The bank is oriented HOST-SIDE, so it has to be re-read for the new answers to take effect.
       const bank = await (window.selfos?.testsBank({ testId }) ?? Promise.resolve(null));
-      // Names come first (74 §3.6.8) — the address taps only ever governed the deck.
-      set({ bank: bank ?? get().bank, busy: false, phase: 'names' });
-      await get().loadNames(testId);
+      // Straight into the words: these two taps are that step's prerequisite (74 §3.6.9), not a gate on the
+      // whole take — they only ever governed which half of the deck is shown.
+      set({ bank: bank ?? get().bank, busy: false, phase: 'bank' });
     },
 
     banLine: async (line) => {
@@ -590,13 +644,10 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       const fallback: AdaptivePhaseView = { ok: false, degraded: true };
       const out = await (window.selfos?.testsAdaptiveLines({ testId, resultId, round }) ??
         Promise.resolve(fallback));
-      set({
-        lines: out.lines ?? [],
-        busy: false,
-        progress: null,
-        // A degraded phase is SKIPPED, never fatal — the take moves on with what it has (74 §7).
-        ...(out.degraded ? { phase: 'probe' as TakePhase } : {}),
-      });
+      // A degraded phase no longer JUMPS the person to the next one (74 §3.6.9): the rail owns navigation, so a
+      // phase that couldn't produce anything says so and leaves them standing somewhere they recognise. Silently
+      // relocating them was indistinguishable from the step having worked.
+      set({ lines: out.lines ?? [], busy: false, progress: null });
     },
 
     reactToLine: async (testId, line, reaction) => {
@@ -629,7 +680,10 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         probeAnswer: '',
         busy: false,
         progress: null,
-        ...(out.done || out.degraded ? { phase: 'scenario' as TakePhase } : {}),
+        // "Nothing left to ask" is an OUTCOME, not a reason to relocate them. It used to jump to the scenario,
+        // which made it indistinguishable from the step never having run — and the bridge returns the same
+        // `done` whether it exhausted the ambiguities or had nothing to work from at all.
+        probeDone: out.done || out.degraded,
       });
     },
 

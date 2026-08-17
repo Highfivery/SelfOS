@@ -468,6 +468,8 @@ import type {
   AdaptiveStateView,
   EroticLexicon,
 } from '@selfos/core/schemas';
+// A value, not a type — the readiness numbers are shared with the renderer so the two cannot drift.
+import { generationReadiness } from '@selfos/core/schemas';
 import {
   backfillPartnerSharing,
   deleteInsight,
@@ -1756,6 +1758,20 @@ async function loadDeployableRelayBundle(relay: BridgeHost['relay']): Promise<Re
 }
 
 /** Build the renderer-facing `SelfosBridge` from a platform `BridgeHost`. */
+/**
+ * 74 §3.6.9 — is there enough of the person's own material for a generating step to be worth running?
+ *
+ * Reads the same two numbers the renderer greys the step out on (`generationReadiness`), so the UI's "3 more
+ * marks" and the bridge's refusal can never disagree. A LOVED count is counted separately on purpose: a lexicon
+ * of nothing but hard nos gives a step whose job is "write something they would want" no material at all.
+ */
+function lexiconReadyForGeneration(lexicon: EroticLexicon): { ready: boolean } {
+  const loved = lexicon.entries.filter(
+    (entry) => entry.state !== 'never' && Math.max(entry.hear, entry.say) >= 3,
+  ).length;
+  return generationReadiness(lexicon.entries.length, loved);
+}
+
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
   const activePersonId = async (): Promise<string | null> =>
     (await host.readDeviceState()).activePersonId ?? null;
@@ -4426,10 +4442,17 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const parsed = AdaptiveRoundSchema.parse(input);
       const gate = await adaptiveGate(parsed.testId);
       if (!gate) return { ok: false, degraded: true, message: 'Not available.' };
+      const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
+      // 74 §3.6.9 — never write from nothing, and never from almost nothing. The renderer greys this step out
+      // below the threshold, but the bridge is the boundary: run on two or three marks and the model has no
+      // material of theirs to draw on, so it writes from its own defaults — the generic output this test exists
+      // to avoid, charged for.
+      if (!lexiconReadyForGeneration(lexicon).ready) {
+        return { ok: false, degraded: true, message: 'Mark a few more names or words first.' };
+      }
       const deps = await aiDeps('tests.own');
       if (!deps)
         return { ok: false, degraded: true, message: 'Turn on AI in Settings to use this.' };
-      const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
       const out = await runLinesPhase(deps, lexicon, parsed.round);
       // Every phase's spend accrues onto the draft, or the take's own cost figure is only its last call.
       await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
@@ -4477,9 +4500,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const parsed = AdaptiveScenarioInputSchema.parse(input);
       const gate = await adaptiveGate(parsed.testId);
       if (!gate) return { ok: false, context: parsed.context, degraded: true };
+      const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
+      // Same rule as the lines phase: a scene built from a near-empty lexicon is the model's invention, not
+      // theirs.
+      if (!lexiconReadyForGeneration(lexicon).ready) {
+        return { ok: false, context: parsed.context, degraded: true };
+      }
       const deps = await aiDeps('tests.own');
       if (!deps) return { ok: false, context: parsed.context, degraded: true };
-      const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
       const out = await runScenarioPhase(deps, lexicon, parsed.context);
       await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
       return {

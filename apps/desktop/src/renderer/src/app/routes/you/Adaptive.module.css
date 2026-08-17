@@ -698,10 +698,25 @@
   flex-direction: column;
   gap: var(--space-3);
   min-width: 0;
+  /* 74 §3.6.9 — the rail grew a tally AND seven step rows AND the verbs. Sticky alone is not enough once its
+     own content is taller than the window: the actions card scrolls off the bottom and finishing means
+     scrolling the area again, which is the exact thing the rail exists to prevent. So the column is bounded
+     to the viewport and the STEP LIST is the part that gives, keeping the verbs always in view. */
+  max-height: calc(100dvh - var(--space-6));
 }
 
 .railCard {
   padding: var(--space-4);
+}
+/* The one card allowed to give. `min-height: 0` is what lets a flex child shrink below its content. */
+.railSteps {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.railSteps .stepList {
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .railHead {
@@ -1584,4 +1599,341 @@
   gap: var(--space-3);
   flex-wrap: wrap;
   padding: 0 var(--space-5) var(--space-5);
+}
+
+/* ── 74 §3.6.9 — the step rail, the map, and the per-step frames ───────────────────────────────────────────
+ *
+ * The take used to be a one-way chain of phases: no indication of what followed, no route back, and a resumed
+ * take dropped straight into whichever AI phase it had reached. These are the surfaces that fix it — one rail on
+ * every step, one map on the way in and back.
+ */
+
+/* A step's frame: content left, the shared rail right. Same shape as `.deckBody`, so the marking steps and the
+   AI steps read as one test rather than two designs. */
+.stepFrame {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 244px;
+  gap: var(--space-5);
+  align-items: start;
+}
+.stepMain {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+/* Where the names phase's own primary sits above the shared rail. */
+.railWrap {
+  position: sticky;
+  top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.stepEyebrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.aiTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-accent-solid-text-on-subtle, var(--color-accent-strong));
+  background: var(--color-accent-subtle-bg);
+  border-radius: var(--radius-pill);
+  padding: 2px 7px;
+  flex: none;
+}
+
+/* The steps, in the rail. */
+.stepList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.stepRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 6px 7px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.stepRow:hover:not(:disabled) {
+  background: var(--color-surface-alt);
+}
+.stepRow:disabled {
+  cursor: default;
+  color: var(--color-text-tertiary);
+}
+.stepPip {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--color-border-strong);
+  display: grid;
+  place-items: center;
+  font-size: 0.625rem;
+  color: var(--color-text-tertiary);
+}
+.stepLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stepAi {
+  flex: none;
+  color: var(--color-accent-strong);
+}
+.stepCount {
+  margin-left: auto;
+  flex: none;
+  font-size: 0.6875rem;
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+.step_done {
+  color: var(--color-text-primary);
+}
+.step_done .stepPip {
+  background: var(--color-accent-solid);
+  border-color: var(--color-accent-solid);
+  color: var(--color-accent-solid-text);
+}
+.step_now {
+  background: var(--color-accent-subtle-bg);
+  color: var(--color-accent-strong);
+  font-weight: 500;
+}
+.step_now .stepPip {
+  border-color: var(--color-accent-solid);
+  border-width: 2px;
+  color: var(--color-accent-strong);
+}
+.step_skipped,
+.step_blocked {
+  color: var(--color-text-tertiary);
+}
+.step_skipped .stepCount,
+.step_blocked .stepCount {
+  color: var(--color-warning-subtle-text);
+}
+.railSaved {
+  margin-top: var(--space-2);
+  text-align: center;
+}
+
+/* The map. */
+.mapWrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: 100%;
+}
+.mapHead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.mapList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.mapRow {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+.mapRow:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-alt);
+}
+.mapRow:disabled {
+  cursor: default;
+  background: var(--color-surface-alt);
+  color: var(--color-text-tertiary);
+}
+.mapPip {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-pill);
+  border: 1.5px solid var(--color-border-strong);
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+  flex: none;
+}
+.map_done .mapPip {
+  background: var(--color-accent-solid);
+  border-color: var(--color-accent-solid);
+  color: var(--color-accent-solid-text);
+}
+.map_now {
+  border-color: var(--color-accent-solid);
+  background: var(--color-accent-subtle-bg);
+}
+.map_now .mapPip {
+  border-color: var(--color-accent-solid);
+  border-width: 2px;
+  color: var(--color-accent-strong);
+}
+.mapBody {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.mapTop {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.mapState {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+  flex: none;
+}
+.mapBlurb {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+.mapNote {
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+}
+.mapActions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+}
+/* Out of the rail, quiet, and last — it wipes everything for this person including their hard nos. */
+.mapDanger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* An AI step's "ask me" row: the trigger and what it costs, side by side. */
+.askRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.probeCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.probeAsk {
+  font-family: var(--font-serif);
+  font-size: 1.125rem;
+  line-height: 1.35;
+  color: var(--color-text-primary);
+}
+
+/* The three moments, as cards that say what they are. */
+.momentGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+}
+.moment {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  font: inherit;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+.moment:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-alt);
+}
+.momentDone {
+  border-color: var(--color-accent-solid);
+}
+.momentTop {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.momentState {
+  margin-left: auto;
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-accent-strong);
+}
+.momentBlurb {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 900px) {
+  .stepFrame {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .railWrap {
+    position: static;
+  }
+}
+
+/* A report section's head: its title, and the route back to the step that produced it (74 §3.6.9, finding 10).
+   Nothing linked the profile to its own source before, so changing one name meant re-running a step. */
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* A blocked step's marker in the rail. The sentence lives on the map and in the row's accessible name — as
+   trailing text it won the row and squashed the labels it was attached to down to "Li…". */
+.stepLock {
+  margin-left: auto;
+  flex: none;
+  color: var(--color-text-tertiary);
 }

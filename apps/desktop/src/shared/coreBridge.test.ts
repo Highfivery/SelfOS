@@ -7607,11 +7607,28 @@ describe('update awareness (36)', () => {
           resultId: resultId!,
           marks: {
             'names-praise:good-girl': 'love',
-            'claiming:mine': 'love',
+            'claiming:you-re-mine': 'love',
             'names-rough-heavy:whore': 'never',
           },
         });
         expect(marked?.lexicon.boundaries.map((b) => b.text)).toEqual(['whore']);
+
+        // 74 §3.6.9 — three marks is not material. A generating step refuses BEFORE any model call, so a
+        // crafted request cannot spend on a lexicon the person has barely started; the renderer greys the same
+        // step out on the same numbers, so the two can never disagree.
+        const thinLines = await bridge.testsAdaptiveLines({
+          testId: 'dirty-talk',
+          resultId: resultId!,
+          round: 1,
+        });
+        expect(thinLines).toMatchObject({ ok: false, degraded: true });
+        expect(thinLines?.message).toMatch(/a few more/i);
+        const thinScene = await bridge.testsAdaptiveScenario({
+          testId: 'dirty-talk',
+          resultId: resultId!,
+          context: 'during',
+        });
+        expect(thinScene).toMatchObject({ ok: false, degraded: true });
 
         // Pass 2 — the hear/say split.
         await bridge.testsAdaptiveSplit({

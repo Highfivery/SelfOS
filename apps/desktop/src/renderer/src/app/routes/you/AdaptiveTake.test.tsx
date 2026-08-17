@@ -98,6 +98,24 @@ async function pastPractice(): Promise<void> {
   await userEvent.click(screen.getByRole('button', { name: 'Start marking' }));
 }
 
+/**
+ * 74 §3.6.9 — Begin now lands on the MAP, which is the take's front door: every step, its state, and a tap into
+ * any of them. From there its primary enters the first step that has nothing in it yet. Fixtures here mock no
+ * name registers, so the names step bounces straight through to the words (free — `loadNames` makes no AI call).
+ */
+async function beginTake(label: RegExp = /^Begin$/): Promise<void> {
+  await userEvent.click(await screen.findByRole('button', { name: label }));
+  await userEvent.click(await screen.findByRole('button', { name: /^(Start|Pick up):/ }));
+}
+
+/**
+ * Enough marked material for a generating step to be worth running (74 §3.6.9). Below this the AI steps are
+ * deliberately blocked — running one on two or three marks gives the model nothing of the person's to draw on.
+ */
+const ENOUGH_MARKS: Record<string, 'love' | 'okay' | 'never'> = Object.fromEntries(
+  Array.from({ length: 16 }, (_, i) => [`seed:${i}`, i < 5 ? 'love' : 'okay'] as const),
+);
+
 function renderTake(): void {
   render(
     <MemoryRouter initialEntries={['/tests/dirty-talk/take']}>
@@ -141,7 +159,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
       testsAdaptiveBank: bankPass as never,
     });
     renderTake();
-    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    await beginTake();
     await pastPractice();
 
     // The marking rules live behind one link now, instead of four paragraphs on every one of 36 areas.
@@ -160,7 +178,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     expect(screen.getByTestId('tally-love')).toHaveTextContent('1');
     expect(screen.getByTestId('tally-never')).toHaveTextContent('1');
 
-    await userEvent.click(screen.getByRole('button', { name: /Done — show me/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Done with the words →/ }));
     await waitFor(() =>
       expect(bankPass).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -178,14 +196,14 @@ describe('AdaptiveTake (74 §3.2)', () => {
       testsAdaptiveBank: () => Promise.resolve(state({ draft: DRAFT })),
     });
     renderTake();
-    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    await beginTake();
     await pastPractice();
     await userEvent.click(screen.getByRole('button', { name: 'good girl — hear & say — love it' }));
     await userEvent.click(screen.getByRole('button', { name: /Next area/ }));
     await userEvent.click(
       screen.getByRole('button', { name: 'run (primal) — hear & say — never' }),
     );
-    await userEvent.click(screen.getByRole('button', { name: /Done — show me/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Done with the words →/ }));
 
     expect(await screen.findByText(/Hearing it, or saying it\?/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'good girl — hear 4 of 4' })).toBeInTheDocument();
@@ -210,10 +228,8 @@ describe('AdaptiveTake (74 §3.2)', () => {
     });
     renderTake();
     // A draft is already in flight, so the intro offers to pick it up rather than begin.
-    await userEvent.click(
-      await screen.findByRole('button', { name: /Pick up where you left off/i }),
-    );
-    useAdaptiveTestStore.setState({ phase: 'lines' });
+    await beginTake(/Pick up where you left off/i);
+    useAdaptiveTestStore.setState({ phase: 'lines', marks: ENOUGH_MARKS });
     void useAdaptiveTestStore.getState().loadLines('dirty-talk', 1);
 
     const status = await screen.findByRole('status');
@@ -234,7 +250,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
       testsAdaptiveBank: bankPass as never,
     });
     renderTake();
-    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    await beginTake();
 
     // The rule is the FIRST thing on the sheet and the largest — three attempts at saying it in body copy
     // were skimmed, so it leads as the heading.
@@ -288,9 +304,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
       testsAdaptiveStart: () => Promise.resolve(resumed),
     });
     renderTake();
-    await userEvent.click(
-      await screen.findByRole('button', { name: /Pick up where you left off/i }),
-    );
+    await beginTake(/Pick up where you left off/i);
     expect(await screen.findByText(/Area 1 of 2/)).toBeInTheDocument();
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
@@ -306,7 +320,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
       testsAdaptiveBank: bankPass as never,
     });
     renderTake();
-    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    await beginTake();
     await pastPractice();
     expect(screen.getByText(/Every tap saves itself/i)).toBeInTheDocument();
 
@@ -332,7 +346,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
       testsAdaptiveBank: bankPass as never,
     });
     renderTake();
-    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    await beginTake();
     await pastPractice();
 
     await userEvent.click(screen.getByRole('button', { name: /Next area/ }));
@@ -381,9 +395,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
       testsAdaptiveStart: () => Promise.resolve(withBoundary),
     });
     renderTake();
-    await userEvent.click(
-      await screen.findByRole('button', { name: /Pick up where you left off/i }),
-    );
+    await beginTake(/Pick up where you left off/i);
     // No practice sheet here: a boundary from an earlier take IS a mark, so this person has practised.
     // The boundary lives in the taboo family — the deck shows one area at a time (74 §3.6.4).
     await userEvent.click(await screen.findByRole('button', { name: /Next area/ }));
@@ -406,19 +418,23 @@ describe('AdaptiveTake (74 §3.2)', () => {
       testsLexiconEdit: edit as never,
     });
     renderTake();
-    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    await beginTake();
 
-    expect(await screen.findByText(/Before we start/i)).toBeInTheDocument();
-    // Two plain identity questions, each with its own group of options — scoped, because "a man" is an
-    // option in both.
+    expect(await screen.findByText(/who are the two of you/i)).toBeInTheDocument();
+    // TWO questions, not four. The "you like being called girl/man" pair is gone: it only ever oriented four
+    // anatomy/praise families — a body job — while the vocative question it appeared to ask is answered one
+    // step over, by marking 2,215 real names in both directions (74 §3.6.9).
+    expect(screen.queryByText(/You like being called/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/likes being called something else/i)).not.toBeInTheDocument();
     const you = screen.getByRole('group', { name: 'You are a:' });
     const them = screen.getByRole('group', { name: 'Your partner is a:' });
     await userEvent.click(within(you).getByRole('button', { name: 'a man' }));
     await userEvent.click(within(them).getByRole('button', { name: 'a woman' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Start' }));
+    await userEvent.click(screen.getByRole('button', { name: /Start the words/i }));
 
-    // Identity is stored AND drives the address by default — the body axis depends on it when onboarding
-    // has no anatomy answer, which is the whole reason a straight man was being shown "your pussy" to hear.
+    // Identity is stored AND now DERIVES the address axis outright — the body axis depends on it when
+    // onboarding has no anatomy answer, which is the whole reason a straight man was being shown "your pussy"
+    // to hear.
     await waitFor(() =>
       expect(edit).toHaveBeenCalledWith({
         kind: 'setAddress',
@@ -436,9 +452,9 @@ describe('AdaptiveTake (74 §3.2)', () => {
       testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
     });
     renderTake();
-    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    await beginTake();
     expect(await screen.findByText(/Area 1 of 2/)).toBeInTheDocument();
-    expect(screen.queryByText(/Before we start/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/who are the two of you/i)).not.toBeInTheDocument();
   });
 
   it('STATES what it withheld, with a route back — never a silently thinner list', async () => {
@@ -448,7 +464,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
       testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
     });
     renderTake();
-    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    await beginTake();
     expect(await screen.findByText(/14 terms are hidden here/i)).toBeInTheDocument();
     // …and the way back is a control, not just a sentence.
     await userEvent.click(screen.getByRole('button', { name: /Before we start/i }));
@@ -462,7 +478,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
       testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
     });
     renderTake();
-    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    await beginTake();
     await pastPractice();
     // The quote wraps the marked word in a <b>, so it is no longer one text node — which is the point.
     expect(await screen.findByText(/such a/)).toBeInTheDocument();
@@ -470,7 +486,10 @@ describe('AdaptiveTake (74 §3.2)', () => {
     expect(screen.getByText(/for me/)).toBeInTheDocument();
   });
 
-  it('moves on rather than dead-ending when an AI phase degrades (74 §7)', async () => {
+  it('says so and stays put when an AI phase degrades — never relocates them silently (74 §3.6.9)', async () => {
+    // It used to JUMP to the next phase on a degraded call, which is indistinguishable from the step having
+    // worked: you asked for lines, the screen changed, and nothing said the request had failed. Now the rail
+    // owns navigation, so a phase that could not produce anything stays where it is and says why.
     installMockBridge({
       testsBank: () => Promise.resolve(BANK),
       testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
@@ -478,13 +497,94 @@ describe('AdaptiveTake (74 §3.2)', () => {
     });
     renderTake();
     await useAdaptiveTestStore.getState().load('dirty-talk');
-    useAdaptiveTestStore.setState({ phase: 'lines' });
-    await useAdaptiveTestStore.getState().loadLines('dirty-talk', 1);
-    // It moved ON, which is the whole point — not to a fixed phase. With the component mounted, the phase
-    // it lands in keeps degrading forward under the same mock bridge (probe → scenario), so pinning one
-    // name would assert the mock's depth rather than the rule: a degraded phase is skipped, never fatal.
-    expect(useAdaptiveTestStore.getState().phase).not.toBe('lines');
+    // Something marked, or the step is blocked before it can be asked at all.
+    useAdaptiveTestStore.setState({ phase: 'lines', marks: ENOUGH_MARKS });
+    await userEvent.click(await screen.findByRole('button', { name: /Write them for me/i }));
+
+    expect(useAdaptiveTestStore.getState().phase).toBe('lines');
     expect(useAdaptiveTestStore.getState().busy).toBe(false);
+    expect(await screen.findByRole('button', { name: /Try again/i })).toBeInTheDocument();
+    // …and the way onward is the rail, not a silent hop.
+    expect(
+      screen.getByRole('button', { name: /Next: the questions it still has/i }),
+    ).toBeInTheDocument();
+  });
+
+  it('will not ASK an AI step on arrival — a rail makes that a billed mis-tap (74 §3.6.9)', async () => {
+    const lines = vi.fn(() => Promise.resolve({ ok: true, lines: ['x'], degraded: false }));
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveLines: lines as never,
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'lines', marks: ENOUGH_MARKS });
+    // Arriving is not asking. It also says what it will draw on, and that it costs something.
+    expect(await screen.findByRole('button', { name: /Write them for me/i })).toBeInTheDocument();
+    expect(screen.getByText(/a little of your AI allowance/i)).toBeInTheDocument();
+    expect(lines).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: /Write them for me/i }));
+    await waitFor(() => expect(lines).toHaveBeenCalled());
+  });
+
+  it('blocks an AI step that has nothing to work from, with the reason and no spend', async () => {
+    const lines = vi.fn(() => Promise.resolve({ ok: true, lines: ['x'], degraded: false }));
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveLines: lines as never,
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'map' });
+    const rail = await screen.findByRole('button', { name: /Lines written for you/i });
+    // Greyed with its reason rather than a live tap into a paid call that can only come back empty.
+    expect(rail).toBeDisabled();
+    expect(rail).toHaveTextContent(/marks first/i);
+    expect(lines).not.toHaveBeenCalled();
+  });
+
+  it('shows every step from the front door, so nothing about the test is a surprise', async () => {
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state()),
+      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    // The reported gap: opening the take said "What do you call each other?" and gave no indication that six
+    // more things followed.
+    const map = await screen.findByRole('list');
+    for (const label of [
+      /What you call each other/i,
+      /The words/i,
+      /Hearing it, or saying it/i,
+      /Lines written for you/i,
+      /The questions it still has/i,
+      /In the moment/i,
+      /Your profile/i,
+    ]) {
+      expect(within(map).getByRole('button', { name: label })).toBeInTheDocument();
+    }
+    // …and the ones that spend say so up front.
+    expect(screen.getAllByText(/uses AI/i).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('is navigable BOTH ways from any step — a resumed take is not a one-way door', async () => {
+    // The reported dead end: coming back through "pick up where you left off" landed in the AI phase it had
+    // reached, with no route back to the words or the names. `setPhase` was called exactly twice in the whole
+    // screen, both times to return to `address`.
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'probe', marks: ENOUGH_MARKS });
+    const rail = await screen.findByRole('complementary', { name: /The steps/i });
+    await userEvent.click(within(rail).getByRole('button', { name: /The words/i }));
+    expect(useAdaptiveTestStore.getState().phase).toBe('bank');
   });
 
   it('says so and stays usable when a call fails — never a frozen take (74 §7)', async () => {
@@ -564,17 +664,24 @@ describe('AdaptiveTake (74 §3.2)', () => {
     }
   });
 
-  it('offers a way back to the top of the deck — resume must not be a one-way door', async () => {
+  it('offers a way back to the top — quiet, and off the button everybody taps', async () => {
     const abandon = vi.fn(() => Promise.resolve());
     const setArea = vi.fn(() => Promise.resolve());
     installMockBridge({
       testsBank: () => Promise.resolve(BANK),
       testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
       testsAdaptiveAbandon: abandon as never,
       testsAdaptiveSetArea: setArea as never,
     });
     renderTake();
-    await userEvent.click(await screen.findByRole('button', { name: /Start over from the top/i }));
+    // It wipes every mark and every hard no for this person, so it does not sit shoulder to shoulder with
+    // "pick up where you left off" — it is at the bottom of the map, with what it clears spelled out.
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Pick up where you left off/i }),
+    );
+    expect(await screen.findByText(/every hard no for this test/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Start over from the top/i }));
     // Honest about what it does and does not touch: the marks are their answers, not this take's state.
     expect(abandon).toHaveBeenCalled();
     await waitFor(() => expect(setArea).toHaveBeenCalledWith({ testId: 'dirty-talk', area: 0 }));
@@ -647,7 +754,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
       testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
     });
     renderTake();
-    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    await beginTake();
     await userEvent.click(
       within(screen.getByRole('group', { name: 'You are a:' })).getByRole('button', {
         name: 'a man',
@@ -673,9 +780,11 @@ describe('AdaptiveTake (74 §3.2)', () => {
     renderTake();
     await useAdaptiveTestStore.getState().load('dirty-talk');
     useAdaptiveTestStore.setState({ phase: 'bank' });
-    const rail = await screen.findByRole('complementary', { name: /Your marks/i });
+    const rail = await screen.findByRole('complementary', { name: /The steps/i });
     expect(within(rail).getByRole('button', { name: /Next area/ })).toBeInTheDocument();
-    expect(within(rail).getByRole('button', { name: /Done for now/ })).toBeInTheDocument();
+    expect(
+      within(rail).getByRole('button', { name: /Done with the words for now/ }),
+    ).toBeInTheDocument();
     // Progress is one bar, not 36 dashes.
     expect(screen.getByRole('progressbar', { name: /Area 1 of 2/ })).toBeInTheDocument();
   });
@@ -693,7 +802,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     });
     renderTake();
     await useAdaptiveTestStore.getState().load('dirty-talk');
-    useAdaptiveTestStore.setState({ phase: 'lines' });
+    useAdaptiveTestStore.setState({ phase: 'lines', marks: ENOUGH_MARKS });
     await useAdaptiveTestStore.getState().loadLines('dirty-talk', 1);
 
     // Before the reaction there is no escape at all.

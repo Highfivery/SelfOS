@@ -73,12 +73,6 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
       3: [
         { text: 'cunt', ex: 'your cunt is dripping for me', body: 'vulva' },
         { text: 'asshole', ex: 'I want to feel your asshole tighten' },
-        {
-          text: 'hole',
-          ex: "that's all you are tonight \u2014 a hole for me to use",
-          body: 'vulva',
-          addresses: 'either',
-        },
         { text: 'that ass', ex: 'bend over, I want that ass' },
         { text: 'those tits', ex: 'I want to come all over those tits' },
         { text: 'your slit', ex: 'running the tip up your slit', body: 'vulva' },
@@ -291,13 +285,7 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
       'Belonging to someone, said plainly. Often the line people are most surprised to want.',
     ),
     {
-      2: [
-        { text: 'mine', ex: "say it \u2014 say you're mine" },
-        "you're mine",
-        { text: 'my girl', ex: "that's my girl", addresses: 'girl' },
-        { text: 'my boy', ex: "that's my boy", addresses: 'man' },
-        { text: 'all mine', ex: 'every part of you, all mine' },
-      ],
+      2: ["you're mine"],
       3: [
         'you belong to me',
         'nobody else gets this',
@@ -347,7 +335,6 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
         "you're amazing",
       ],
       2: [
-        'good girl',
         "that's it",
         'just like that',
         "you're doing so well",
@@ -400,8 +387,6 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
         "you can't help yourself",
       ],
       4: [
-        'dirty little slut',
-        'filthy girl',
         'look how wet you get for me',
         "you're leaking everywhere",
         'beg like the slut you are',
@@ -870,7 +855,6 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
         'thank you',
       ],
       2: [
-        'good girl',
         'you were so good',
         'are you okay',
         'let me hold you',

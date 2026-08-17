@@ -61,7 +61,9 @@ const NAMES: AdaptiveNamesView = {
 };
 
 function renderPhase(): void {
-  render(<NamesPhase testId="dirty-talk" />);
+  // The verbs live in the shared step rail (74 §3.6.9), which the take owns — this stands in for it, so the
+  // phase's own controls are the only thing under test here.
+  render(<NamesPhase rail={<div data-testid="step-rail" />} />);
 }
 
 describe('NamesPhase (74 §3.6.8)', () => {
@@ -157,15 +159,17 @@ describe('NamesPhase (74 §3.6.8)', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('leaves the phase by the SAME control from either screen', async () => {
+  it('shows the shared step rail on BOTH screens, and only the register has its own primary', async () => {
     await load();
     renderPhase();
-    // From the grid…
-    expect(screen.getByRole('button', { name: /Done with names/i })).toBeInTheDocument();
+    // The grid: the rail is the only navigation — the phase's verbs used to be a bottom bar here and a side
+    // rail one screen over, so "where am I" changed between two screens of one test.
+    expect(screen.getByTestId('step-rail')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Done with this one/i })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /praise/i }));
-    // …and from inside a register, with the same label. Two names for one action is how a flow starts
-    // reading as two different things.
-    expect(screen.getByRole('button', { name: /Done with names/i })).toBeInTheDocument();
+    expect(screen.getByTestId('step-rail')).toBeInTheDocument();
+    // Inside a register the primary closes the REGISTER — walking out of the step from here would step past
+    // the registers they have not opened (the §3.6.9 walk, finding 3).
     expect(screen.getByRole('button', { name: /Done with this one/i })).toBeInTheDocument();
   });
 });

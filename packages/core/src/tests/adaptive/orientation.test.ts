@@ -23,7 +23,16 @@ const STRAIGHT_MAN: Orientation = {
   partnerBody: 'vulva',
 };
 
-const entry = (key: string) => bankEntry(DIRTY_TALK_BANK, key)!;
+/**
+ * A real bank entry, or a loud failure. This was `bankEntry(...)!`, so retiring a term left every fixture
+ * holding `undefined` and the suite failed six tests deep inside the resolver with "cannot read 'includes'"
+ * instead of naming the key that had gone (CLAUDE.md §4 — never `!` to silence).
+ */
+const entry = (key: string): BankEntry => {
+  const found = bankEntry(DIRTY_TALK_BANK, key);
+  if (!found) throw new Error(`no such bank entry: ${key}`);
+  return found;
+};
 
 describe('orientation', () => {
   it('maps the intake ANSWER LABELS, and anything non-committal fails open', () => {
@@ -40,7 +49,7 @@ describe('orientation', () => {
   });
 
   it('shows an untagged entry on both sides for everyone', () => {
-    const base = entry('claiming:mine');
+    const base = entry('claiming:you-re-mine');
     const universal = { ...base };
     delete universal.addresses;
     delete universal.body;
@@ -48,34 +57,50 @@ describe('orientation', () => {
   });
 
   it('puts a line aimed at a girl on the SAY side for a straight man, and never the hear side', () => {
-    const e = { ...entry('claiming:mine'), addresses: 'girl' as const };
+    const e = { ...entry('claiming:you-re-mine'), addresses: 'girl' as const };
     expect(shownSides(e, STRAIGHT_MAN)).toEqual(['say']);
   });
 
   it('puts a line about his own body on the HEAR side only', () => {
-    const e = { ...entry('claiming:mine'), body: 'penis' as const, addresses: 'man' as const };
+    const e = {
+      ...entry('claiming:you-re-mine'),
+      body: 'penis' as const,
+      addresses: 'man' as const,
+    };
     expect(shownSides(e, STRAIGHT_MAN)).toEqual(['hear']);
   });
 
   it('WITHHOLDS what reaches neither of them', () => {
     // Addressed to a man, about a vulva: neither he nor she is on either side of that line.
-    const e = { ...entry('claiming:mine'), addresses: 'man' as const, body: 'vulva' as const };
+    const e = {
+      ...entry('claiming:you-re-mine'),
+      addresses: 'man' as const,
+      body: 'vulva' as const,
+    };
     expect(shownSides(e, STRAIGHT_MAN)).toEqual([]);
   });
 
   it('an `either/either` person is shown everything, on both sides', () => {
-    const e = { ...entry('claiming:mine'), addresses: 'girl' as const, body: 'vulva' as const };
+    const e = {
+      ...entry('claiming:you-re-mine'),
+      addresses: 'girl' as const,
+      body: 'vulva' as const,
+    };
     expect(shownSides(e, OPEN_ORIENTATION)).toEqual(['hear', 'say']);
   });
 
   it('never withholds when the person declined to answer — an unknown axis widens', () => {
     const declined: Orientation = { ...STRAIGHT_MAN, selfBody: 'either', selfAddress: 'either' };
-    const e = { ...entry('claiming:mine'), addresses: 'man' as const, body: 'vulva' as const };
+    const e = {
+      ...entry('claiming:you-re-mine'),
+      addresses: 'man' as const,
+      body: 'vulva' as const,
+    };
     expect(shownSides(e, declined)).toEqual(['hear']);
   });
 
   it("respects an entry's own directions — orientation can only ever narrow, never widen", () => {
-    const hearOnly = { ...entry('claiming:mine'), directions: ['hear'] as const };
+    const hearOnly = { ...entry('claiming:you-re-mine'), directions: ['hear'] as const };
     expect(shownSides(hearOnly, OPEN_ORIENTATION)).toEqual(['hear']);
   });
 

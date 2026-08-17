@@ -386,6 +386,48 @@ async function expectNoInnerOverflow(w: Page): Promise<void> {
 }
 
 // Deterministic AI: passthrough secret encryption (no keychain prompt) + offline Claude client.
+/**
+ * 74 §3.6.1 — clear the two-tap practice that stands between the address taps and the deck.
+ *
+ * In a real browser its scrim genuinely covers the rows, so a deck walk CANNOT proceed without doing it — which
+ * is the point, and is why this helper exists rather than the walks reaching past it. It marks "it's okay" on
+ * each beat, and those are REAL marks: the tallies and the vault below count them.
+ */
+async function clearPractice(w: Page): Promise<void> {
+  const sheet = w.getByRole('dialog');
+  await expect(sheet).toBeVisible();
+  // ON SCREEN, not merely in the DOM: an area is 47 rows tall, so a scrim scoped to the deck centres the sheet
+  // thousands of pixels down and every `toBeVisible` still passes (#207).
+  await expect(sheet.getByRole('heading', { name: /marking the word/i })).toBeInViewport();
+  const start = sheet.getByRole('button', { name: 'Start marking' });
+  const okay = sheet.getByRole('button', { name: /— it.s okay$/ }).first();
+  // Required, not dismissible.
+  await expect(start).toBeDisabled();
+  await okay.click();
+  // §12 — the new surface at phone width, mid-beat (a horizontal scrollbar in a 480px sheet is the likeliest
+  // way this breaks). The scrim may scroll VERTICALLY on a short window; that is by design.
+  await w.setViewportSize({ width: 360, height: 900 });
+  await expectNoInnerOverflow(w);
+  await w.screenshot({ path: 'e2e-artifacts/74-practice-360.png' });
+  await w.setViewportSize({ width: 1280, height: 900 });
+  // One beat or two depends on the orientation, so wait for whichever settles: the second beat's prompt, or
+  // the button unlocking. (Clicking on a fixed interval instead re-taps the SAME beat inside its dwell, which
+  // schedules a second advance and lands past the end with nothing marked.)
+  await expect
+    .poll(async () =>
+      (await start.isEnabled()) ? 'done' : await sheet.getByText(/Once more/i).count(),
+    )
+    .not.toBe(0);
+  if (!(await start.isEnabled())) {
+    // Beat two: the band has flipped to the other direction, which is the whole lesson.
+    await w.screenshot({ path: 'e2e-artifacts/74-practice-beat2.png' });
+    await okay.click();
+  }
+  await expect(start).toBeEnabled();
+  await start.click();
+  await expect(sheet).toHaveCount(0);
+}
+
 function e2eEnv(): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
@@ -16083,6 +16125,8 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
       .click();
     await w.screenshot({ path: 'e2e-artifacts/74-identity.png' });
     await w.getByRole('button', { name: 'Start', exact: true }).click();
+    // The practice comes first, and its own row would otherwise be the one measured below.
+    await clearPractice(w);
     // The direction is STATED, not implied — rating "you say" as though it were "you hear" would silently
     // poison the profile, and the answer used to live only in the aria-label.
     await expect(w.getByText(/Things YOU SAY TO THEM/i)).toBeVisible();
@@ -16226,6 +16270,8 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
       .getByRole('button', { name: /neither/ })
       .click();
     await w.getByRole('button', { name: 'Start', exact: true }).click();
+    await w.screenshot({ path: 'e2e-artifacts/74-practice.png' });
+    await clearPractice(w);
 
     // The deck: one area per screen. Walk to whichever area holds each entry we want to mark.
     const markInDeck = async (name: string): Promise<void> => {
@@ -16321,7 +16367,9 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     await expect(w.getByTestId('tally-love')).toContainText('2');
     // The middle mark. It used to be recorded and then invisible everywhere — asserted on the report below.
     await markInDeck("all mine — hear & say — it's okay");
-    await expect(w.getByTestId('tally-okay')).toContainText('1');
+    // 3, not 1: the two practice taps were real marks. That count IS the assertion that the practice is not
+    // a demo — a sheet that threw its taps away would read '1' here.
+    await expect(w.getByTestId('tally-okay')).toContainText('3');
 
     // The rail carries the running tally and the actions, so finishing never means scrolling the area.
     await expect(w.getByTestId('tally-never')).toContainText('1');
@@ -16382,6 +16430,8 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
       entries: { key: string; state?: string }[];
     };
     expect(lexicon.boundaries.map((b) => b.text)).toEqual(['whore']);
+    // The practice's two taps persisted alongside "all mine" — three middle marks, none of them invented.
+    expect(lexicon.entries.filter((e) => e.state === 'okay')).toHaveLength(3);
     expect(lexicon.entries.find((e) => e.key === 'names-degrading:whore')?.state).toBe('never');
 
     // The Insight feeds the coach — and carries no boundary (suppression is structural, 74 §5.5).

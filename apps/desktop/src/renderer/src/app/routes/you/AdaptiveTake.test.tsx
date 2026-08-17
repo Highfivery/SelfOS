@@ -86,6 +86,18 @@ const DRAFT = {
   updatedAt: 'now',
 };
 
+/**
+ * 74 §3.6.1 — clear the two-tap practice, which stands between Begin and the deck.
+ *
+ * The fixture bank has exactly one word-with-a-quote entry, so the practice is a single beat. Its tap is a REAL
+ * mark (that is the point), so it marks "it's okay" — the deck tests then set their own mark over it, and no
+ * assertion about a final payload is disturbed.
+ */
+async function pastPractice(): Promise<void> {
+  await userEvent.click(await screen.findByRole('button', { name: "good girl — it's okay" }));
+  await userEvent.click(screen.getByRole('button', { name: 'Start marking' }));
+}
+
 function renderTake(): void {
   render(
     <MemoryRouter initialEntries={['/tests/dirty-talk/take']}>
@@ -130,6 +142,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     });
     renderTake();
     await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    await pastPractice();
 
     // The marking rules live behind one link now, instead of four paragraphs on every one of 36 areas.
     await userEvent.click(await screen.findByRole('button', { name: /How marking works/i }));
@@ -166,6 +179,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     });
     renderTake();
     await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    await pastPractice();
     await userEvent.click(screen.getByRole('button', { name: 'good girl — hear & say — love it' }));
     await userEvent.click(screen.getByRole('button', { name: /Next area/ }));
     await userEvent.click(
@@ -209,6 +223,78 @@ describe('AdaptiveTake (74 §3.2)', () => {
     expect(await screen.findByText(/good girl, just like that/)).toBeInTheDocument();
   });
 
+  // --- 74 §3.6.1 — the practice sheet ---
+
+  it('will not open the deck until the practice tap lands, and counts that tap', async () => {
+    const bankPass = vi.fn(() => Promise.resolve(state({ draft: DRAFT })));
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state()),
+      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveBank: bankPass as never,
+    });
+    renderTake();
+    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+
+    // The rule is the FIRST thing on the sheet and the largest — three attempts at saying it in body copy
+    // were skimmed, so it leads as the heading.
+    const sheet = await screen.findByRole('dialog');
+    expect(within(sheet).getByRole('heading', { level: 2 })).toHaveTextContent(
+      /marking the word, not the phrase/i,
+    );
+    // Required, not dismissible: no way into the deck until a mark actually lands.
+    expect(within(sheet).getByRole('button', { name: 'Start marking' })).toBeDisabled();
+
+    await userEvent.click(within(sheet).getByRole('button', { name: "good girl — it's okay" }));
+    // The practice tap is a REAL mark — it is autosaved like any other, not a throwaway demo.
+    await waitFor(() =>
+      expect(bankPass).toHaveBeenCalledWith(
+        expect.objectContaining({ marks: { 'names-power:good-girl': 'okay' }, autosave: true }),
+      ),
+    );
+
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Start marking' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // …and it does not come back mid-take, because the tap it required is itself a mark.
+    await userEvent.click(screen.getByRole('button', { name: /Next area/ }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('is skipped once ANY term has been marked — practised once ever, not every sitting', async () => {
+    // What "already marked" means in the store: the lexicon carries an entry for the term (74 §3.5 seeds the
+    // deck from it), so a retake or a resumed sitting skips the practice — it is done once, ever.
+    const resumed = state({
+      draft: DRAFT,
+      lexicon: {
+        ...state().lexicon,
+        entries: [
+          {
+            key: 'names-power:good-girl',
+            text: 'good girl',
+            kind: 'word' as const,
+            family: 'names-power',
+            tier: 2,
+            hear: 4,
+            say: 4,
+            // A loved entry carries no `state` — the ratings ARE the love (only never/okay are stamped).
+            source: 'test:r1',
+          },
+        ],
+      },
+    });
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(resumed),
+      testsAdaptiveStart: () => Promise.resolve(resumed),
+    });
+    renderTake();
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Pick up where you left off/i }),
+    );
+    expect(await screen.findByText(/Area 1 of 2/)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   // --- 74 §3.4 — every tap saves itself ---
 
   it('autosaves each mark without waiting for Next, and says so', async () => {
@@ -221,6 +307,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     });
     renderTake();
     await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    await pastPractice();
     expect(screen.getByText(/Every tap saves itself/i)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'good girl — hear & say — love it' }));
@@ -246,6 +333,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     });
     renderTake();
     await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    await pastPractice();
 
     await userEvent.click(screen.getByRole('button', { name: /Next area/ }));
     const never = screen.getByRole('button', { name: 'run (primal) — hear & say — never' });
@@ -296,6 +384,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     await userEvent.click(
       await screen.findByRole('button', { name: /Pick up where you left off/i }),
     );
+    // No practice sheet here: a boundary from an earlier take IS a mark, so this person has practised.
     // The boundary lives in the taboo family — the deck shows one area at a time (74 §3.6.4).
     await userEvent.click(await screen.findByRole('button', { name: /Next area/ }));
     expect(await screen.findByText(/off the table/i)).toBeInTheDocument();
@@ -374,6 +463,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     });
     renderTake();
     await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    await pastPractice();
     // The quote wraps the marked word in a <b>, so it is no longer one text node — which is the point.
     expect(await screen.findByText(/such a/)).toBeInTheDocument();
     expect(screen.getByText('good girl', { selector: 'b' })).toBeInTheDocument();
@@ -630,10 +720,13 @@ describe('AdaptiveTake (74 §3.2)', () => {
     installMockBridge({
       testsBank: () => Promise.resolve(BANK),
       testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveBank: () => Promise.resolve(state({ draft: DRAFT })),
     });
     renderTake();
     await useAdaptiveTestStore.getState().load('dirty-talk');
     useAdaptiveTestStore.setState({ phase: 'bank' });
+    // The practice sheet demonstrates the same row, so clear it before measuring the deck's own.
+    await pastPractice();
 
     const word = await screen.findByText('good girl', { selector: 'div' });
     const quote = screen.getByText('as in');

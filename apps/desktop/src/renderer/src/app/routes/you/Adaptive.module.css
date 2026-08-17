@@ -959,3 +959,148 @@
 .pill[aria-pressed='true'] .pillEg {
   color: var(--color-accent-text);
 }
+
+/* ══ 74 §3.6.1 — the practice sheet ════════════════════════════════════════════════════════════════
+ * Two taps before the deck opens. Deliberately small: everything it says must fit without scrolling,
+ * because a sheet you scroll is a paragraph again.
+ */
+.practiceScrim {
+  /*
+   * FIXED, not absolute. An area is up to 47 rows, so `.deck` is thousands of pixels tall — an absolute scrim
+   * spans all of it and `align-items: center` then centres the sheet halfway DOWN the deck, off screen. It
+   * passed every "is it visible" assertion while being invisible to a person (the #207 lesson: assert
+   * `toBeInViewport`, not `toBeVisible`).
+   */
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5);
+  background: var(--color-scrim);
+  /* If a window is ever shorter than the sheet, scroll the scrim rather than clipping the sheet. */
+  overflow: auto;
+}
+
+.practiceSheet {
+  width: 100%;
+  max-width: 480px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
+  overflow: hidden;
+}
+
+.practiceTop {
+  padding: var(--space-5) var(--space-5) var(--space-4);
+}
+
+/* THE rule. First thing read, largest thing on the sheet, and identical on both beats — it is the standing
+ * fact about every one of ~1,000 rows, not a caption on one demo. */
+.practiceRule {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-serif);
+  font-size: 1.4375rem;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.practiceRule em {
+  font-style: normal;
+  border-bottom: 3px solid var(--color-warning);
+}
+
+.practiceAsk {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+  font-size: 0.9375rem;
+  color: var(--color-text-secondary);
+}
+
+.practiceAsk b {
+  color: var(--color-text-heading);
+  font-weight: 500;
+}
+
+.askNum {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-accent-solid);
+  color: var(--color-accent-solid-text);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.practiceDemo {
+  margin: var(--space-4) var(--space-5) 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.practiceBand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-accent-subtle-bg);
+  font-size: 0.75rem;
+  transition:
+    background var(--motion-base) var(--ease-standard),
+    color var(--motion-base) var(--ease-standard);
+}
+
+.practiceBandWhat {
+  margin-left: var(--space-1);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+/* The row inside the sheet reuses `.row` / `.rated` / `.said` / `.marks` verbatim, so the practice IS the
+ * thing they are about to do rather than a picture of it. Only its border is dropped. */
+.practiceDemo .row {
+  border: 0;
+  border-radius: 0;
+}
+
+.practiceMark {
+  display: inline-flex;
+  align-items: center;
+}
+
+.practiceNote {
+  display: block;
+  margin: var(--space-3) var(--space-5) 0;
+}
+
+.practiceFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-5);
+}
+
+@media (max-width: 620px) {
+  .practiceTop,
+  .practiceFoot {
+    padding: var(--space-4);
+  }
+
+  .practiceDemo,
+  .practiceNote {
+    margin-left: var(--space-4);
+    margin-right: var(--space-4);
+  }
+
+  .practiceRule {
+    font-size: 1.25rem;
+  }
+}

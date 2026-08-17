@@ -16,6 +16,7 @@ import {
   Text,
 } from '../../../design-system/components';
 import { useAdaptiveTestStore } from '../../../stores/adaptiveTestStore';
+import { AdaptiveHead } from './AdaptiveHead';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import styles from './You.module.css';
 import take from './TestTake.module.css';
@@ -198,25 +199,17 @@ export function AdaptiveReport(): JSX.Element {
             ← Tests
           </button>
 
-          <header className={styles.header}>
-            <span className={styles.eyebrow}>
-              SelfOS
-              <span className={styles.privateTag}>
-                <Lock size={11} aria-hidden="true" /> yours
-              </span>
-            </span>
-            <Heading level={1}>{state.title}</Heading>
-            <Text size="sm" tone="tertiary" className={styles.framing}>
-              {state.framing}
-            </Text>
-            {/* The same disclosure the take's intro carries — the report is the screen they come BACK to, so
-                it must not quietly contradict it with a "private, only you" badge (74 §8.4). */}
-            <Text size="sm" tone="tertiary">
-              Nobody else reads this. It shapes how SelfOS talks to you — and, if you have a partner
-              here, it quietly shapes what their coach suggests to them, without ever telling them
-              what you said.
-            </Text>
-          </header>
+          {/* ONE head for both screens (`AdaptiveHead`). This one had drifted into its own typography —
+              a bare eyebrow, a small full-width lead, the framing line above the content instead of under
+              it — so the same test looked like two different features one screen apart. The disclosure is
+              the LEAD here because the report is the screen they come back to: it must not quietly
+              contradict what the take's intro promised (74 §8.4). */}
+          <AdaptiveHead
+            title={state.title}
+            lead="Nobody else reads this. It shapes how SelfOS talks to you — and, if you have a partner here, it quietly shapes what their coach suggests to them, without ever telling them what you said."
+            framing={state.framing}
+            yours
+          />
 
           {/* §8.3 — a take that carried a disclosure leads with support, before anything erotic. */}
           {latest?.crisisFlag ? (

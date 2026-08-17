@@ -486,6 +486,30 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-17 — **Fix (one head for both adaptive screens; the row's HIERARCHY says what you're rating;
+  owner-reported; SPEC 74 §3.6.1/§3.6.4; on `fix/adaptive-consistent-head-and-hierarchy`).** Two reports.
+  **(1) "Styling inconsistencies between these two screens… I like the second screen styling better."** Right:
+  the take's invitation used a `SELFOS · DIRTY TALK` eyebrow, a 1.0625rem lead and a bounded reading measure,
+  while the report used a bare `SELFOS` eyebrow, a small full-width lead, and put its framing line ABOVE the
+  content instead of under it — the same test wearing two typographic systems one screen apart, because I
+  redesigned one and left its neighbour. Extracted **`AdaptiveHead`**, used by both, so a change to the head is
+  a change to both. The reading measure is bounded THERE and nowhere else — the report's own body (bars, chips,
+  charts) still fills the width per §12. **(2) "The text that tells the user they're rating the word vs the
+  phrase is still unclear and will get overlooked."** The real cause was that I had the hierarchy BACKWARDS: the
+  quote was the serif hero and the word a tiny uppercase label, so the row visually said _rate this sentence_ —
+  the opposite of what the mark does — and I had answered it with a sentence of prose, which is exactly what
+  gets skimmed. Inverted: **the word leads at reading size**, its quote sits underneath prefixed `AS IN` and
+  visibly smaller, with the word still bolded inside it. That also distinguishes the two row kinds with no
+  explanation at all — a word row is a big word over a small "as in …", a whole-line row is just the line.
+  The intensity meter moved inline with the word (it was orphaned on its own line between the two). Gate green:
+  typecheck (4 pkgs), lint, format, **2324 core + 13 relay + 1645 desktop** unit, both 74 E2E, visual QA of
+  both screens. **Lessons: (1) two screens of one feature drift the moment you redesign one — extract the
+  shared head rather than matching it by hand, or the next change re-splits them. (2) When the answer to
+  "people will miss this" is a sentence, it's the wrong answer: make the thing being acted on the biggest
+  thing in its row and the layout explains itself. (3) A computed-font-size assertion CANNOT live in RTL —
+  jsdom doesn't apply CSS modules, so it passes on nothing; assert structure in RTL and measure type in the
+  real-Chromium E2E (and check you reverted against the test that actually holds the guard).**
+
 - 2026-08-17 — **Owner decision + Build (word-level marking stays; REGISTER carries the rest; SPEC 74 §3.6.2;
   on `feat/adaptive-register-steer`).** The owner asked, from a case word-level can't answer alone — _"they
   could like I want to fuck your pussy but not like I want to beat that pussy"_ — whether the bank should be

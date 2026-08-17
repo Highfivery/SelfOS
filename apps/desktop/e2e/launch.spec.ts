@@ -16086,6 +16086,22 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
     // The direction is STATED, not implied — rating "you say" as though it were "you hear" would silently
     // poison the profile, and the answer used to live only in the aria-label.
     await expect(w.getByText(/Things YOU SAY TO THEM/i)).toBeVisible();
+    // The clarity fix that isn't prose: the thing being MARKED is the biggest thing in its row, and the quote
+    // is visibly subordinate. Measured in real Chromium — jsdom doesn't apply CSS modules, so RTL can only
+    // assert the structure.
+    const typeSizes = await w.evaluate(() => {
+      const asIn = Array.from(document.querySelectorAll('*')).find(
+        (el) => el.textContent?.trim() === 'as in',
+      );
+      const row = asIn?.closest('div')?.parentElement;
+      const word = row?.firstElementChild;
+      const quote = asIn?.closest('div');
+      return {
+        word: word ? Number.parseFloat(getComputedStyle(word).fontSize) : 0,
+        quote: quote ? Number.parseFloat(getComputedStyle(quote).fontSize) : 0,
+      };
+    });
+    expect(typeSizes.word).toBeGreaterThan(typeSizes.quote);
     await w.screenshot({ path: 'e2e-artifacts/74-direction.png' });
     // ONE vertical scrollbar, ever. The route used to add its own on top of the shell's, which puts two
     // bars side by side — worst on the deck, where an area is 47 rows tall.

@@ -9,9 +9,13 @@ import { resumePhase } from './adaptiveTestStore';
  * it, a second sitting lands at the top of a ~1,100-entry bank the person already walked.
  */
 describe('resumePhase', () => {
-  it('starts a fresh take at the bank', () => {
-    expect(resumePhase(undefined)).toBe('bank');
-    expect(resumePhase([])).toBe('bank');
+  it('starts a fresh take at the pet names — the first phase (74 §3.6.8)', () => {
+    expect(resumePhase(undefined)).toBe('names');
+    expect(resumePhase([])).toBe('names');
+  });
+
+  it('moves past a closed NAMES pass into the deck', () => {
+    expect(resumePhase([{ phase: 'names' }])).toBe('bank');
   });
 
   it('moves PAST a closed pass — a stamped turn means that phase finished', () => {

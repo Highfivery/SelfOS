@@ -1277,6 +1277,46 @@ export interface AdaptiveBankEntryView {
   sides: readonly ('hear' | 'say')[];
 }
 
+/** 74 §3.6.8 — one pet-name register, as the phase's opening grid renders it. */
+export interface AdaptiveNameRegisterView {
+  id: string;
+  label: string;
+  note?: string;
+  /** How many names it holds — shown on the card, so scope is never chosen blind. */
+  count: number;
+  /** Its intensity span, for the heat meter on the card. */
+  minTier: number;
+  maxTier: number;
+  /** Three real names from inside it. */
+  samples: string[];
+  /** How many of its names this person has already answered either way. */
+  marked: number;
+}
+
+export interface AdaptiveNameEntryView {
+  key: string;
+  text: string;
+  family: string;
+  tier: number;
+  /** The line showing it in use — always present for a name (74 §3.6.8). */
+  example: string;
+  /** What they have already said, per direction. */
+  hearState?: 'love' | 'okay' | 'never';
+  sayState?: 'love' | 'okay' | 'never';
+  /** A boundary from an EARLIER take, per direction — settled, and not re-offered. */
+  settledHear?: boolean;
+  settledSay?: boolean;
+}
+
+export interface AdaptiveNamesView {
+  testId: string;
+  registers: AdaptiveNameRegisterView[];
+  entries: AdaptiveNameEntryView[];
+  /** Their display name and the partner's, for the two column headers. Absent ⇒ generic labels. */
+  selfName?: string;
+  partnerName?: string;
+}
+
 export interface AdaptiveBankView {
   testId: string;
   families: AdaptiveBankFamilyView[];
@@ -4358,6 +4398,37 @@ export type TogetherYnmInput = z.infer<typeof TogetherYnmInputSchema>;
 // ── Phase G: Pulse (§3.10a — absorbs spec 11) ─────────────────────────────────────────────────────
 
 /** The pulse metric starter set (§11 #4): a 1-3 tap check-in logs a subset of these (each normalized 0..1). */
+/**
+ * 74 §3.6.9 — how much a person has to have marked before an AI step is worth running.
+ *
+ * The steps that GENERATE (lines, the probe's questions, a scene) write from the person's own marks. Run on two
+ * or three of them and the model has nothing to work from, so it falls back on its own defaults — which is
+ * exactly the generic output this whole test exists to avoid, charged for. Both numbers matter: a total, so
+ * there is a register to draw on at all, and a LOVED count, because a lexicon of nothing but hard nos gives a
+ * step whose job is "write something they would want" no material whatsoever.
+ *
+ * Lives here rather than in `@selfos/core/tests` so the renderer (which greys the step out and says how many
+ * more are needed) and the bridge (which refuses the call) read the SAME numbers and cannot drift.
+ */
+export const MIN_MARKS_FOR_GENERATION = 15;
+export const MIN_LOVED_FOR_GENERATION = 3;
+
+export interface GenerationReadiness {
+  ready: boolean;
+  marks: number;
+  loved: number;
+  /** How many more of each are needed — so the UI can say it instead of just refusing. */
+  moreMarks: number;
+  moreLoved: number;
+}
+
+/** Whether there is enough marked material to generate from, and what is still missing. */
+export function generationReadiness(marks: number, loved: number): GenerationReadiness {
+  const moreMarks = Math.max(0, MIN_MARKS_FOR_GENERATION - marks);
+  const moreLoved = Math.max(0, MIN_LOVED_FOR_GENERATION - loved);
+  return { ready: moreMarks === 0 && moreLoved === 0, marks, loved, moreMarks, moreLoved };
+}
+
 export const PULSE_METRICS = ['connection', 'desire', 'satisfaction'] as const;
 export type PulseMetric = (typeof PULSE_METRICS)[number];
 /** The single source of truth for each metric's display label — used by the trend assembly AND the check-in UI. */

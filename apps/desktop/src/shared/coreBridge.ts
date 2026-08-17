@@ -460,6 +460,7 @@ import { readImagePrefs, readFeatureImagePrefs, setFeatureImagePrefs } from '@se
 import type {
   FeatureImagePrefs,
   AdaptiveBankView,
+  AdaptiveNamesView,
   AdaptivePhaseView,
   AdaptiveProbeView,
   AdaptiveProfile,
@@ -467,6 +468,8 @@ import type {
   AdaptiveStateView,
   EroticLexicon,
 } from '@selfos/core/schemas';
+// A value, not a type — the readiness numbers are shared with the renderer so the two cannot drift.
+import { generationReadiness } from '@selfos/core/schemas';
 import {
   backfillPartnerSharing,
   deleteInsight,
@@ -889,6 +892,10 @@ import {
   bodyFromAnatomyAnswer,
   orientArea,
   shownSides,
+  deckFamilies,
+  nameFamilies,
+  openDraft,
+  recordNamePass,
   type AdaptiveTestDefinition,
   type Orientation,
 } from '@selfos/core/tests';
@@ -1149,6 +1156,22 @@ const TestTakeSchema = z.object({
   answers: z.record(z.string(), z.unknown()),
 });
 // 74 — the adaptive-test inputs. Validated HERE, at the trust boundary; the renderer is never it.
+const AdaptiveNamesInputSchema = z.object({
+  testId: z.string().min(1),
+  resultId: z.string().min(1),
+  marks: z
+    .record(
+      z.string(),
+      z.object({
+        hear: z.enum(['love', 'okay', 'never']).optional(),
+        say: z.enum(['love', 'okay', 'never']).optional(),
+      }),
+    )
+    .default({}),
+  cleared: z.record(z.string(), z.array(z.enum(['hear', 'say']))).optional(),
+  autosave: z.boolean().optional(),
+});
+
 const AdaptiveRefSchema = z.object({
   testId: z.string().min(1),
   resultId: z.string().min(1),
@@ -1735,6 +1758,20 @@ async function loadDeployableRelayBundle(relay: BridgeHost['relay']): Promise<Re
 }
 
 /** Build the renderer-facing `SelfosBridge` from a platform `BridgeHost`. */
+/**
+ * 74 §3.6.9 — is there enough of the person's own material for a generating step to be worth running?
+ *
+ * Reads the same two numbers the renderer greys the step out on (`generationReadiness`), so the UI's "3 more
+ * marks" and the bridge's refusal can never disagree. A LOVED count is counted separately on purpose: a lexicon
+ * of nothing but hard nos gives a step whose job is "write something they would want" no material at all.
+ */
+function lexiconReadyForGeneration(lexicon: EroticLexicon): { ready: boolean } {
+  const loved = lexicon.entries.filter(
+    (entry) => entry.state !== 'never' && Math.max(entry.hear, entry.say) >= 3,
+  ).length;
+  return generationReadiness(lexicon.entries.length, loved);
+}
+
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
   const activePersonId = async (): Promise<string | null> =>
     (await host.readDeviceState()).activePersonId ?? null;
@@ -4179,7 +4216,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const who = await personOrientation(gate);
       const shownByKey = new Map<string, readonly ('hear' | 'say')[]>();
       const withheldByFamily: Record<string, number> = {};
-      for (const family of gate.def.bank.families) {
+      // The pet names are marked in their own phase, both ways per name (74 §3.6.8) — they would otherwise
+      // add 24 areas of vocabulary to a deck that has already asked them.
+      const families = deckFamilies(gate.def.bank);
+      for (const family of families) {
         const area = orientArea(
           family.id,
           gate.def.bank.entries.filter((entry) => entry.family === family.id),
@@ -4191,7 +4231,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
       return {
         testId,
-        families: gate.def.bank.families.map((family) => ({
+        families: families.map((family) => ({
           id: family.id,
           label: family.label,
           kind: family.kind,
@@ -4229,6 +4269,110 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           },
         },
       });
+    },
+    testsNames: async (input): Promise<AdaptiveNamesView | null> => {
+      const { testId } = TestIdSchema.parse(input);
+      const gate = await adaptiveGate(testId);
+      if (!gate) return null;
+      // No orientation filter here, deliberately (74 §3.6.8): whether a name is "for a girl" is a convention,
+      // and the whole point of the phase is that the person decides rather than the app. The body axis still
+      // governs the DECK, where a line naming a body either fits or doesn't.
+      const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
+      const byKey = new Map((lexicon?.entries ?? []).map((entry) => [entry.key, entry]));
+      const draftId = (await openDraft(gate.ctx.fs, gate.ctx.key, gate.personId, testId))?.id;
+      const families = nameFamilies(gate.def.bank);
+      const entriesFor = (familyId: string) =>
+        gate.def.bank.entries.filter((entry) => entry.family === familyId);
+      const people = await listPeople(gate.ctx.fs, gate.ctx.key);
+      const self = people.find((person) => person.id === gate.personId);
+      // The column headers read better with real names ("Angel → you"), so find a live partner edge; the
+      // renderer falls back to generic labels when there isn't one.
+      const rels = await listRelationships(gate.ctx.fs, gate.ctx.key);
+      const partnerId = rels.find(
+        (rel) =>
+          rel.type === 'partner' &&
+          (rel.fromPersonId === gate.personId || rel.toPersonId === gate.personId),
+      );
+      const partner = partnerId
+        ? people.find(
+            (person) =>
+              person.id ===
+              (partnerId.fromPersonId === gate.personId
+                ? partnerId.toPersonId
+                : partnerId.fromPersonId),
+          )
+        : undefined;
+      return {
+        testId,
+        registers: families.map((family) => {
+          const own = entriesFor(family.id);
+          const tiers = own.map((entry) => entry.tier);
+          return {
+            id: family.id,
+            label: family.label,
+            ...(family.note !== undefined ? { note: family.note } : {}),
+            count: own.length,
+            minTier: Math.min(...tiers, 5),
+            maxTier: Math.max(...tiers, 1),
+            samples: own.slice(0, 3).map((entry) => entry.text),
+            marked: own.filter((entry) => {
+              const mark = byKey.get(entry.key);
+              return mark?.hearState !== undefined || mark?.sayState !== undefined;
+            }).length,
+          };
+        }),
+        entries: families.flatMap((family) =>
+          entriesFor(family.id).map((entry) => {
+            const mark = byKey.get(entry.key);
+            // Settled = ruled out in an EARLIER take. One made in this sitting stays editable, exactly as the
+            // deck treats a boundary made a minute ago (74 §3.4).
+            const settled = (side: 'hearState' | 'sayState'): boolean =>
+              mark?.[side] === 'never' && mark.source !== `test:${draftId ?? ''}`;
+            return {
+              key: entry.key,
+              text: entry.text,
+              family: entry.family,
+              tier: entry.tier,
+              example: entry.example ?? entry.text,
+              ...(mark?.hearState ? { hearState: mark.hearState } : {}),
+              ...(mark?.sayState ? { sayState: mark.sayState } : {}),
+              ...(settled('hearState') ? { settledHear: true } : {}),
+              ...(settled('sayState') ? { settledSay: true } : {}),
+            };
+          }),
+        ),
+        ...(self?.displayName ? { selfName: self.displayName } : {}),
+        ...(partner?.displayName ? { partnerName: partner.displayName } : {}),
+      };
+    },
+    testsAdaptiveNames: async (input): Promise<AdaptiveStateView | null> => {
+      const parsed = AdaptiveNamesInputSchema.parse(input);
+      const gate = await adaptiveGate(parsed.testId);
+      if (!gate) return null;
+      await recordNamePass(
+        gate.ctx.fs,
+        gate.ctx.key,
+        gate.def,
+        {
+          personId: gate.personId,
+          resultId: parsed.resultId,
+          // `exactOptionalPropertyTypes`: an explicitly-undefined side is a different type from an absent
+          // one, and "absent" is what "they didn't answer this way" means.
+          marks: Object.fromEntries(
+            Object.entries(parsed.marks).map(([key, mark]) => [
+              key,
+              {
+                ...(mark.hear ? { hear: mark.hear } : {}),
+                ...(mark.say ? { say: mark.say } : {}),
+              },
+            ]),
+          ),
+          ...(parsed.cleared ? { cleared: parsed.cleared } : {}),
+          ...(parsed.autosave ? { autosave: true } : {}),
+        },
+        new Date(),
+      );
+      return adaptiveState(gate);
     },
     testsAdaptiveState: async (input): Promise<AdaptiveStateView | null> => {
       const { testId } = TestIdSchema.parse(input);
@@ -4298,10 +4442,17 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const parsed = AdaptiveRoundSchema.parse(input);
       const gate = await adaptiveGate(parsed.testId);
       if (!gate) return { ok: false, degraded: true, message: 'Not available.' };
+      const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
+      // 74 §3.6.9 — never write from nothing, and never from almost nothing. The renderer greys this step out
+      // below the threshold, but the bridge is the boundary: run on two or three marks and the model has no
+      // material of theirs to draw on, so it writes from its own defaults — the generic output this test exists
+      // to avoid, charged for.
+      if (!lexiconReadyForGeneration(lexicon).ready) {
+        return { ok: false, degraded: true, message: 'Mark a few more names or words first.' };
+      }
       const deps = await aiDeps('tests.own');
       if (!deps)
         return { ok: false, degraded: true, message: 'Turn on AI in Settings to use this.' };
-      const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
       const out = await runLinesPhase(deps, lexicon, parsed.round);
       // Every phase's spend accrues onto the draft, or the take's own cost figure is only its last call.
       await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
@@ -4349,9 +4500,14 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const parsed = AdaptiveScenarioInputSchema.parse(input);
       const gate = await adaptiveGate(parsed.testId);
       if (!gate) return { ok: false, context: parsed.context, degraded: true };
+      const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
+      // Same rule as the lines phase: a scene built from a near-empty lexicon is the model's invention, not
+      // theirs.
+      if (!lexiconReadyForGeneration(lexicon).ready) {
+        return { ok: false, context: parsed.context, degraded: true };
+      }
       const deps = await aiDeps('tests.own');
       if (!deps) return { ok: false, context: parsed.context, degraded: true };
-      const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
       const out = await runScenarioPhase(deps, lexicon, parsed.context);
       await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
       return {

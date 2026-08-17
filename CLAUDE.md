@@ -484,6 +484,44 @@ placing anything. Specifically:
 
 ## Changelog
 
+- 2026-08-17 — **Build (the take gets a MAP, a step rail, and a real readiness gate; owner-reported three ways;
+  SPEC 74 §3.6.9; PR [#511] on `feat/pet-names-model`).** _"it shows What do you call each other?, but doesnt give
+  any indication whats after that"_ · _"IT IMMEDIATELY GOES TO THE AI GENERATING WITH NO WAY TO GO BACK TO THE
+  WORDS"_ · _"they can answer none or just a few and run it which isnt helpful"_. **Audited in the code, not by
+  looking:** `setPhase` was called exactly **twice** in the whole screen, both to return to the identity taps — so
+  from the split onward there was **no route back at all**; every AI phase fired its call **on arrival**
+  (`started.current[phase]`); `testsAdaptiveLines` and `testsAdaptiveScenario` reached the model with **no check
+  that anything had been marked**; the probe returned the same `done` whether it had exhausted its ambiguities or
+  had nothing to work from; and a degraded phase **silently relocated** the person, which is indistinguishable from
+  that phase having worked. Built: **seven named steps from one pure model** (`takeSteps.ts`) that the map, the rail
+  and every frame read, so they cannot disagree; a **map** on the way in and on the way back; a **rail on every
+  step** with any reachable one a tap away — **verbs FIRST in the column**, because an area runs to 47 rows and
+  actions under a tally plus seven rows are below the fold before any scrolling has happened; **three verbs**
+  everywhere (Next / Skip / Finish) where a skip is recorded, shown, and **never spends** (skipping the last step
+  lands on the map, not on a synthesis). **The readiness gate:** an AI step waits to be **asked**, and needs
+  **15 marks and 3 that were a yes** (`generationReadiness` in crypto-free `schemas.ts`, read by the renderer AND
+  the bridge so they cannot drift) — below that it greys with the shortfall ("14 more marks"), because a model given
+  three marks writes from its own defaults, which is the generic output this test exists to avoid, charged for; a
+  page of hard nos is the same problem, hence the separate loved count. The **profile is deliberately NOT gated** —
+  being unable to finish is worse than a thin profile. **Two clean-ups the names phase made necessary:** the
+  _"you like being called girl / man"_ pair is **gone** — measured, it oriented **four anatomy/praise families** (a
+  body job) while the question it appeared to ask is answered one step over by marking 2,215 real names both ways,
+  so `address` now derives from identity (same orientation, no migration); and **nine terms sat in BOTH a deck
+  family and a name register** as two separate lexicon keys, so the same words were marked twice and one term could
+  hold a loved-to-hear AND a hard no — the deck gave them up, with a guard. Also: the profile **links back to the
+  step that produced each section** (the real answer to "easy to update"), and the practice sheet gained a way out
+  that isn't doing it. Gate green: typecheck (4 pkgs), lint, format, **2349 core + 13 relay + 1668 desktop** unit,
+  **216 E2E**, visual QA of the map / rail / blocked step / identity step. Both new guards **verified to fail when
+  reverted**. **Lessons: (1) a persistent step rail changes the cost model of every AI phase — arrival-fires-the-call
+  is survivable in a one-way chain and becomes a billed mis-tap the moment any step is one tap away, so "waits to be
+  asked" is a consequence of the navigation, not a nicety. (2) "Enough to generate from" needs TWO numbers: a total
+  and a positive count, because a page of hard nos passes any volume threshold and still leaves a generator nothing
+  to write. (3) A test fixture that reaches into the real bank via `bankEntry(...)!` turns a retired term into
+  `undefined` and fails six tests deep inside the resolver with "cannot read 'includes'" instead of naming the key —
+  make the helper throw (§4: never `!` to silence). (4) When one feature absorbs another\'s question, grep for what
+  the old one still DOES before deleting it: the address axis looked dead and in fact still oriented four families,
+  so the fix was to derive it, not drop it.**
+
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
 - 2026-08-17 — **Fix (the TWO SCROLLBARS, found by measuring the document rather than counting elements;
@@ -689,6 +727,48 @@ clientHeight <= 2`** AND exactly one overflowing element, on the FULL bank at th
   the person operates hundreds of times for nothing, and it only shows up if you ask "where does each stored
   value get READ?" rather than "does the screen work?" (3) A per-branch crisis footer is a latent regression
   in any surface that later gets restructured — render it once, outside.**
+
+- 2026-08-17 — **Build (pet names become a first-class phase of the Dirty Talk test — 2,215 names, marked BOTH
+  ways; owner-directed after a measured design round; SPEC 74 §3.6.8; on `feat/pet-names-model`).** The owner:
+  _"i think pet names would be useful in this test and analysis… a user can, like words, mark pet names they like,
+  ok, not ok for what they like to me called and what they like to call their partner."_ Then, on my first list:
+  _"youre adding things that ARE NOT pet names like used, well used"_ — correct, and the criterion I should have
+  applied from the start is now enforced in the generator: **a pet name has to finish "come here, \_\_\_"**; a state
+  or an adjective can only live inside a line, which is what the `degradation` family already exists for. That
+  removed 30 entries and dissolved two whole registers, and flagged three names **already mis-filed in the bank**
+  (`cock hungry`, `worthless`, `my everything`).
+  **What the measurement showed before anything was designed** (asked for, then measured rather than assumed):
+  `lexicon.address` is read in exactly ONE place — the orientation resolver — never by the synthesis, the report,
+  or either coach prompt, and on the real bank it withholds **0 of 1,033** entries; it only assigns direction. And
+  **44 of the 78 pet names mapped to no spine dimension at all** — marked, then dropped on the floor. So the
+  address screen was a direction filter dressed as a preference question, and the names themselves were the most
+  usable output of the test and the least used thing in it.
+  **Built:** a register-first phase that runs FIRST (24 cards with counts, tier spans and three real names — scope
+  is the person's move, an unopened register is simply unasked, and inside one the whole register is on the page
+  because the tier lines are signposts, not doors, which the owner asked for explicitly); **two marks per name** in
+  columns that cannot be confused (full-strength tint, own edge, sticky headers carrying both real names, in the
+  two colours §3.6.3 already teaches); a **"Names & address" spine dimension**; a **report section** that is the
+  most directly usable thing the test produces; **vocative blocks in both coach prompts** (a name goes into any
+  generated line, where a phrase can only be quoted); and the three superseded name families deleted from the deck.
+  **The load-bearing model change: boundaries are now DIRECTIONAL.** "Never call me slut" must not stop him calling
+  her slut, and the old model had one global list — so `LexiconEntry.hearState`/`sayState` and
+  `LexiconBoundary.direction` exist, with **absent meaning BOTH** (the strictest reading, so nothing written before
+  today loosens) and `violatesBoundary` still refusing anything ruled out either way when the caller cannot say
+  which way its line runs. `hear`/`say` stay derived, so the spine, steer and report read exactly what they always
+  did. Gate green: typecheck (4 pkgs), lint, format, **2350 core + 13 relay + 1653 desktop** unit, **214 E2E**.
+  **Three real defects found by my own guards or by measuring, not by looking:** (1) `dedupeBoundaries` keyed on
+  text alone, so ruling a name out to HEAR then to SAY left one record and taking back the first took both — now
+  keyed on text + direction. (2) The row's `1fr 148px 148px` grid gave the NAME column **105px** at a 1100px window,
+  so "my good boy" wrapped over three lines and the second column's 44px buttons literally intercepted clicks meant
+  for the first — found by measuring `gridTemplateColumns` and the child boxes, not by squinting; the phase now
+  gives its rows the full width and puts the tally + actions in a fixed bottom bar. (3) The register header read
+  "0 of 72 marked" while the rail counted two — a stale server number where a live one belongs.
+  **Lessons: (1) when the owner says an item "is not" the thing you're collecting, the criterion is missing, not
+  the item — write the test into the generator so it cannot drift back. (2) A two-directional answer turns one
+  global boundary list into a correctness problem: make absence mean the strictest reading and every existing
+  record keeps its meaning. (3) Two 44px tap targets per row do not fit beside a 232px rail — measure the computed
+  grid, because the symptom (a wrapped name) looks like a typography problem and the cause is a click-stealing
+  overlap.**
 
 - 2026-08-17 — **Fix (the rail actually follows you now, and becomes a bar on a phone; owner-reported; SPEC 74
   §3.6.4; on `fix/adaptive-sticky-rail`).** The owner, on a screenshot of the rail stranded at the top of a 47-row

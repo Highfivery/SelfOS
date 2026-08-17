@@ -101,6 +101,56 @@ function registerLines(lexicon: EroticLexicon): string[] {
   return out;
 }
 
+/**
+ * 74 §3.6.8 — what to CALL them, and what they like calling their partner.
+ *
+ * Separate from the loved-lines list on purpose: a name is a **vocative**, so a model can drop it into any
+ * line it writes, where a loved phrase can only be quoted. Folding names into the general list wasted the
+ * most usable thing the test produces — 44 of the 78 original names reached nothing at all.
+ *
+ * Directional throughout, because a name is answered twice: "never call me slut" is stated as a limit on
+ * lines aimed AT them, and does not touch what they like calling someone else.
+ */
+export function nameLines(lexicon: EroticLexicon): string[] {
+  const isName = (entry: LexiconEntry): boolean => entry.family.startsWith('names-');
+  const named = lexicon.entries.filter(isName);
+  if (named.length === 0) return [];
+  const pick = (side: 'hearState' | 'sayState', mark: 'love' | 'okay' | 'never'): string[] =>
+    named.filter((entry) => entry[side] === mark).map((entry) => entry.text);
+  const out: string[] = [];
+  const callThem = pick('hearState', 'love');
+  const theyCall = pick('sayState', 'love');
+  const okayCalled = pick('hearState', 'okay');
+  const okaySaying = pick('sayState', 'okay');
+  const neverCalled = pick('hearState', 'never');
+  const neverSay = pick('sayState', 'never');
+  if (callThem.length > 0) {
+    out.push(
+      `CALL THEM: ${callThem.slice(0, CAP).join(' · ')} — use these by name, not just as a topic.`,
+    );
+  }
+  if (okayCalled.length > 0) {
+    out.push(`Fine being called, second-tier: ${okayCalled.slice(0, CAP).join(' · ')}.`);
+  }
+  if (theyCall.length > 0) {
+    out.push(`What they like CALLING their partner: ${theyCall.slice(0, CAP).join(' · ')}.`);
+  }
+  // The middle mark on the saying side. Without this it was write-only — the same defect §3.6.2 fixed for
+  // the deck's middle mark, one direction over.
+  if (okaySaying.length > 0) {
+    out.push(`Fine saying, not favourites: ${okaySaying.slice(0, CAP).join(' · ')}.`);
+  }
+  // Stated per direction so a one-way limit is never read as a two-way one, which would silently delete
+  // something they actively want.
+  if (neverCalled.length > 0) {
+    out.push(`NEVER call them: ${neverCalled.join(' · ')} — however well it would fit.`);
+  }
+  if (neverSay.length > 0) {
+    out.push(`Never put these in THEIR mouth: ${neverSay.join(' · ')}.`);
+  }
+  return out;
+}
+
 /** The person's own vocabulary, for their own coach. Gated by the caller on the 18+ ack. */
 export function buildOwnLexiconBlock(lexicon: EroticLexicon): string {
   const hear = lovedEntries(lexicon, 'hear');
@@ -133,6 +183,7 @@ export function buildOwnLexiconBlock(lexicon: EroticLexicon): string {
         .join(' · ')}.`,
     );
   }
+  parts.push(...nameLines(lexicon));
   parts.push(...registerLines(lexicon));
   if (lexicon.voice) parts.push(`How they want it said: ${lexicon.voice}`);
   if (lexicon.themes.length > 0) parts.push(`In their words: ${lexicon.themes.join(' · ')}.`);
@@ -200,7 +251,17 @@ export async function buildPartnerSteer(
 
   const lexicon = await readLexicon(fs, key, partnerId);
   const hear = lovedEntries(lexicon, 'hear');
-  if (hear.length === 0 && lexicon.themes.length === 0 && registerLines(lexicon).length === 0) {
+  // 74 §3.6.8 — the names their partner likes being CALLED, which is the most directly usable thing here: a
+  // name can go into any line the coach writes, where a loved phrase can only be quoted.
+  const callThem = lexicon.entries
+    .filter((entry) => entry.family.startsWith('names-') && entry.hearState === 'love')
+    .map((entry) => entry.text);
+  if (
+    hear.length === 0 &&
+    callThem.length === 0 &&
+    lexicon.themes.length === 0 &&
+    registerLines(lexicon).length === 0
+  ) {
     return '';
   }
 
@@ -210,6 +271,11 @@ export async function buildPartnerSteer(
       ' anything about what their partner likes. Never mention a test, a profile, or a source of any kind.',
     `Language that lands for their partner: ${list(hear)}.`,
   ];
+  if (callThem.length > 0) {
+    parts.push(
+      `Names their partner likes being called — use them by name: ${callThem.slice(0, CAP).join(' · ')}.`,
+    );
+  }
   if (lexicon.themes.length > 0) parts.push(`What they respond to: ${lexicon.themes.join(' · ')}.`);
   // Register matters MORE here than in their own block: this is the half that hands their partner words to
   // say, and the same word in the wrong register is the failure the owner reported.

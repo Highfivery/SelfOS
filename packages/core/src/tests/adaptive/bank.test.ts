@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
-import { bankByFamily, bankEntry, bankSlug, toLexiconEntry } from './bank';
+import {
+  bankByFamily,
+  bankEntry,
+  bankSlug,
+  deckFamilies,
+  nameFamilies,
+  toLexiconEntry,
+} from './bank';
 import { DIRTY_TALK_BANK } from './instruments/dirtyTalkBank';
+import { DIRTY_TALK } from './instruments/dirtyTalk';
 
 describe('the dirty-talk bank (74 §13)', () => {
   it('is comprehensive — hundreds of entries across every family', () => {
     expect(DIRTY_TALK_BANK.entries.length).toBeGreaterThan(600);
-    expect(DIRTY_TALK_BANK.families.length).toBeGreaterThanOrEqual(36);
+    expect(DIRTY_TALK_BANK.families.length).toBeGreaterThanOrEqual(33);
     // Every declared family actually has entries — a family header with nothing under it is a bug.
     const byFamily = bankByFamily(DIRTY_TALK_BANK);
     for (const family of DIRTY_TALK_BANK.families) {
@@ -80,7 +88,7 @@ describe('the dirty-talk bank (74 §13)', () => {
   });
 
   it('builds an unrated lexicon entry from a bank entry', () => {
-    const spec = bankEntry(DIRTY_TALK_BANK, 'names-power:good-girl');
+    const spec = bankEntry(DIRTY_TALK.bank, 'names-praise:good-girl');
     expect(spec).toBeDefined();
     const entry = toLexiconEntry(spec!, 'test:1');
     expect(entry).toMatchObject({
@@ -146,5 +154,78 @@ describe('§3.6.3 — the identity preview only promises lines the bank actually
     const examples = DIRTY_TALK_BANK.entries.map((entry) => entry.example).filter(Boolean);
     expect(examples).toContain('your pussy is so wet for me');
     expect(examples).toContain('I can feel your hard cock through your jeans');
+  });
+});
+
+describe('74 §3.6.8 — the pet-name bank', () => {
+  const names = nameFamilies(DIRTY_TALK.bank);
+  const deck = deckFamilies(DIRTY_TALK.bank);
+  const nameEntries = DIRTY_TALK.bank.entries.filter((e) => names.some((f) => f.id === e.family));
+
+  it('splits every family into exactly one phase — never both, never neither', () => {
+    expect(names.length + deck.length).toBe(DIRTY_TALK.bank.families.length);
+    expect(names.some((f) => deck.some((d) => d.id === f.id))).toBe(false);
+    expect(names.length).toBeGreaterThan(20);
+  });
+
+  it('gives every name a line showing it in use — a bare word is never the whole row', () => {
+    const bare = nameEntries.filter((e) => !e.example || e.example.trim() === '');
+    expect(bare).toEqual([]);
+  });
+
+  it("puts the name inside its own example, so the row's bolding always has something to bold", () => {
+    const missing = nameEntries.filter(
+      (e) => !e.example?.toLowerCase().includes(e.text.toLowerCase()),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it('keys every name uniquely, including the ones that appear in two registers', () => {
+    const keys = nameEntries.map((e) => e.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    // "my everything" is warm AND worship; each copy is its own row with its own line.
+    expect(keys.filter((k) => k.endsWith(':my-everything')).length).toBeGreaterThan(1);
+  });
+
+  it('asks every name BOTH ways — the whole point of the phase', () => {
+    expect(
+      nameEntries.every((e) => e.directions.includes('hear') && e.directions.includes('say')),
+    ).toBe(true);
+  });
+
+  it('carries the roleplay framing on every register that needs it', () => {
+    for (const id of ['names-kinship', 'names-roleplay', 'names-innocence', 'names-agegap']) {
+      const family = names.find((f) => f.id === id);
+      expect(family?.note?.toLowerCase()).toMatch(/adult|roleplay/);
+    }
+  });
+
+  it('never names a minor in any roleplay register', () => {
+    const forbidden =
+      /\b(child|kid|kids|minor|teen|teenage|schoolgirl|schoolboy|underage|toddler|infant)\b/i;
+    const offenders = nameEntries.filter(
+      (e) => forbidden.test(e.text) || forbidden.test(e.example ?? ''),
+    );
+    expect(offenders.map((e) => e.text)).toEqual([]);
+  });
+});
+
+describe('§3.6.9 — the deck and the pet-name phase never ask the same thing twice', () => {
+  it('shares no term between the two phases', () => {
+    // Nine did, when the names phase landed: "good girl", "mine", "my girl", "dirty little slut" and the rest
+    // were in a deck family AND a name register. They are two different lexicon keys, so the person marked the
+    // same words twice and the profile could hold both a loved-to-hear and a hard no for one term. The names
+    // phase asks each of them in BOTH directions, which is strictly better, so the deck gave them up.
+    const nameIds = new Set(nameFamilies(DIRTY_TALK.bank).map((family) => family.id));
+    const deckIds = new Set(deckFamilies(DIRTY_TALK.bank).map((family) => family.id));
+    const inNames = new Set(
+      DIRTY_TALK.bank.entries
+        .filter((entry) => nameIds.has(entry.family))
+        .map((entry) => entry.text.toLowerCase()),
+    );
+    const twice = DIRTY_TALK.bank.entries
+      .filter((entry) => deckIds.has(entry.family) && inNames.has(entry.text.toLowerCase()))
+      .map((entry) => `${entry.family}:${entry.text}`);
+    expect(twice).toEqual([]);
   });
 });

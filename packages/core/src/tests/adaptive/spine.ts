@@ -64,7 +64,48 @@ export const DIRTY_TALK_SPINE: readonly SpineDimension[] = [
     key: 'dirtytalk.degradation',
     label: 'Degradation',
     description: 'Being talked down to — the register, not the crudeness.',
-    families: ['degradation', 'names-degrading'],
+    families: [
+      'degradation',
+      'names-rough-mild',
+      'names-rough-heavy',
+      'names-worthless',
+      'names-object',
+    ],
+  },
+  {
+    key: 'dirtytalk.names',
+    label: 'Names & address',
+    description: 'What the two of you want to be called — and to call each other.',
+    /**
+     * 74 §3.6.8 — added when pet names became their own phase. Before it, the warm and role registers mapped
+     * to NO dimension at all: 44 of 78 names were marked and then reached nothing. The rough ones keep
+     * feeding Degradation, which is the register they actually belong to.
+     *
+     * The spine is fixed so retakes stay comparable, so an older take simply has no score here — the report
+     * lists it as "nothing yet" rather than plotting a false zero.
+     */
+    families: [
+      'names-warm',
+      'names-yours',
+      'names-praise',
+      'names-soft-power',
+      'names-hard-power',
+      'names-masculine',
+      'names-playful',
+      'names-aftercare',
+      'names-worship',
+      'names-other-tongues',
+      'names-body',
+      'names-service',
+      'names-petplay',
+      'names-feminising',
+      'names-innocence',
+      'names-kinship',
+      'names-roleplay',
+      'names-agegap',
+      'names-sharing',
+      'names-breeding',
+    ],
   },
   {
     key: 'dirtytalk.begging',

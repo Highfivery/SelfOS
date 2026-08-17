@@ -11,8 +11,10 @@ import {
   deleteAdaptiveResult,
   latestCompleteResult,
   listAdaptiveResults,
+  getAdaptiveResult,
   openDraft,
   recordBankPass,
+  recordNamePass,
   recordSplitPass,
   startAdaptiveTake,
 } from './adaptiveService';
@@ -22,9 +24,9 @@ const LATER = new Date('2026-11-20T12:00:00.000Z');
 const KEY = new Uint8Array(32).fill(9);
 const P = 'angel';
 
-const GOOD_GIRL = 'names-power:good-girl';
-const MINE = 'claiming:mine';
-const WHORE = 'names-degrading:whore';
+const GOOD_GIRL = 'names-praise:good-girl';
+const MINE = 'claiming:you-re-mine';
+const WHORE = 'names-rough-heavy:whore';
 const CUNT = 'anatomy-her:cunt';
 
 async function fullTake(fs = memFileSystem(), now = NOW) {
@@ -354,7 +356,7 @@ describe('74 §3.6.8 — start over from the top', () => {
       {
         personId: 'p1',
         resultId: draft.id,
-        marks: { 'names-power:good-girl': 'love', 'names-degrading:whore': 'never' },
+        marks: { 'names-praise:good-girl': 'love', 'names-rough-heavy:whore': 'never' },
       },
       NOW,
     );
@@ -385,7 +387,7 @@ describe('74 §3.6.8 — start over from the top', () => {
       {
         personId: 'p1',
         resultId: draft.id,
-        marks: { 'names-power:good-girl': 'love' },
+        marks: { 'names-praise:good-girl': 'love' },
       },
       NOW,
     );
@@ -401,5 +403,79 @@ describe('74 §3.6.8 — start over from the top', () => {
     const after = await readLexicon(fs, key, 'p1');
     expect(after?.address).toEqual({ self: 'man', partner: 'girl' });
     expect(after?.identity).toEqual({ self: 'man', partner: 'woman' });
+  });
+});
+
+describe('74 §3.6.8 — recording the pet-name phase', () => {
+  it('marks a name both ways, autosaves, and takes one direction back', async () => {
+    const fs = memFileSystem();
+    const key = new Uint8Array(32).fill(9);
+    const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', NOW);
+    const KEY = 'names-praise:good-girl';
+
+    await recordNamePass(
+      fs,
+      key,
+      DIRTY_TALK,
+      {
+        personId: 'p1',
+        resultId: draft.id,
+        marks: { [KEY]: { hear: 'never', say: 'love' } },
+        autosave: true,
+      },
+      NOW,
+    );
+    const lex = await readLexicon(fs, key, 'p1');
+    expect(lex?.entries.find((e) => e.key === KEY)).toMatchObject({
+      hearState: 'never',
+      sayState: 'love',
+    });
+    // The boundary it wrote is one-way, so his own coach can still put it in his mouth.
+    expect(lex?.boundaries).toEqual([
+      expect.objectContaining({ text: 'good girl', direction: 'hear' }),
+    ]);
+    // An autosave leaves no turn — 2,000 names would otherwise write 2,000 of them.
+    const afterAutosave = await getAdaptiveResult(fs, key, 'p1', draft.id);
+    expect(afterAutosave?.turns ?? []).toHaveLength(0);
+
+    await recordNamePass(
+      fs,
+      key,
+      DIRTY_TALK,
+      { personId: 'p1', resultId: draft.id, marks: {}, cleared: { [KEY]: ['hear'] } },
+      NOW,
+    );
+    const cleared = await readLexicon(fs, key, 'p1');
+    expect(cleared?.entries.find((e) => e.key === KEY)?.hearState).toBeUndefined();
+    expect(cleared?.entries.find((e) => e.key === KEY)?.sayState).toBe('love');
+    expect(cleared?.boundaries).toEqual([]);
+    // …and closing the pass stamps exactly one turn.
+    const closed = await getAdaptiveResult(fs, key, 'p1', draft.id);
+    expect(closed?.turns).toHaveLength(1);
+  });
+
+  it('refuses an un-mark aimed at a take that is no longer open', async () => {
+    const fs = memFileSystem();
+    const key = new Uint8Array(32).fill(9);
+    const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', NOW);
+    const KEY = 'names-rough-heavy:whore';
+    await recordNamePass(
+      fs,
+      key,
+      DIRTY_TALK,
+      { personId: 'p1', resultId: draft.id, marks: { [KEY]: { hear: 'never' } }, autosave: true },
+      NOW,
+    );
+    // A result id the renderer legitimately holds, for a take that is not the open draft.
+    await recordNamePass(
+      fs,
+      key,
+      DIRTY_TALK,
+      { personId: 'p1', resultId: 'some-other-take', marks: {}, cleared: { [KEY]: ['hear'] } },
+      NOW,
+    );
+    const lex = await readLexicon(fs, key, 'p1');
+    expect(lex?.entries.find((e) => e.key === KEY)?.hearState).toBe('never');
+    expect(lex?.boundaries).toHaveLength(1);
   });
 });

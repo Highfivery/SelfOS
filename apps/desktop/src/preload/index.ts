@@ -140,6 +140,8 @@ const bridge: SelfosBridge = {
   testsDeleteAll: (input) => ipcRenderer.invoke(IpcChannels.testsDeleteAll, input),
   // 74 — adaptive tests.
   testsBank: (input) => ipcRenderer.invoke(IpcChannels.testsBank, input),
+  testsNames: (input) => ipcRenderer.invoke(IpcChannels.testsNames, input),
+  testsAdaptiveNames: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveNames, input),
   testsAdaptiveState: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveState, input),
   testsAdaptiveStart: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveStart, input),
   testsAdaptiveBank: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveBank, input),

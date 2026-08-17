@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { DIRTY_TALK } from './instruments/dirtyTalk';
+
 import { memFileSystem } from '../../host/memFileSystem';
 import type { EroticLexicon } from '../../schemas';
-import { DIRTY_TALK_BANK } from './instruments/dirtyTalkBank';
 import {
   addBoundary,
   addCustomEntry,
@@ -17,20 +18,22 @@ import {
   suppressedTexts,
   violatesBoundary,
   writeLexicon,
+  applyNameMarks,
+  clearNameMarks,
 } from './lexicon';
 
 const NOW = new Date('2026-08-16T12:00:00.000Z');
 const LATER = new Date('2026-08-17T12:00:00.000Z');
 const KEY = new Uint8Array(32).fill(7);
 
-const GOOD_GIRL = 'names-power:good-girl';
-const WHORE = 'names-degrading:whore';
+const GOOD_GIRL = 'names-praise:good-girl';
+const WHORE = 'names-rough-heavy:whore';
 const CUNT = 'anatomy-her:cunt';
 
 function seeded(): EroticLexicon {
   return applyBankMarks(
     emptyLexicon('p1', NOW),
-    DIRTY_TALK_BANK,
+    DIRTY_TALK.bank,
     { [GOOD_GIRL]: 'love', [WHORE]: 'never', [CUNT]: 'okay' },
     'take:1',
     NOW,
@@ -58,7 +61,7 @@ describe('the erotic lexicon (74 §4.4)', () => {
 
   it('never lets a mark or a split lift a hard no', () => {
     const lex = seeded();
-    const reMarked = applyBankMarks(lex, DIRTY_TALK_BANK, { [WHORE]: 'love' }, 'take:2', LATER);
+    const reMarked = applyBankMarks(lex, DIRTY_TALK.bank, { [WHORE]: 'love' }, 'take:2', LATER);
     expect(reMarked.entries.find((e) => e.key === WHORE)).toMatchObject({
       state: 'never',
       hear: 0,
@@ -87,7 +90,7 @@ describe('the erotic lexicon (74 §4.4)', () => {
     const theirs = addBoundary(
       applyBankMarks(
         emptyLexicon('p1', LATER),
-        DIRTY_TALK_BANK,
+        DIRTY_TALK.bank,
         { [GOOD_GIRL]: 'love', 'anatomy-her:tits': 'love' },
         'take:2',
         LATER,
@@ -181,7 +184,7 @@ describe('a hard no is unliftable (74 §3.2 — the invariant the feature rests 
   it('cannot be downgraded by ANY mark, not just by love', () => {
     const lex = seeded();
     for (const mark of ['love', 'okay'] as const) {
-      const after = applyBankMarks(lex, DIRTY_TALK_BANK, { [WHORE]: mark }, 'take:2', LATER);
+      const after = applyBankMarks(lex, DIRTY_TALK.bank, { [WHORE]: mark }, 'take:2', LATER);
       expect(after.entries.find((e) => e.key === WHORE)?.state).toBe('never');
       expect(suppressedTexts(after)).toContain('whore');
     }
@@ -190,7 +193,7 @@ describe('a hard no is unliftable (74 §3.2 — the invariant the feature rests 
   it('never appears in the goal list, however it was marked', () => {
     // The path that used to leak: never → notYet put the word in `wantsToSay`, which reaches their own coach
     // prompt as something to PRACTISE, two lines under "never use this".
-    const downgraded = applyBankMarks(seeded(), DIRTY_TALK_BANK, { [WHORE]: 'okay' }, 'e', LATER);
+    const downgraded = applyBankMarks(seeded(), DIRTY_TALK.bank, { [WHORE]: 'okay' }, 'e', LATER);
     expect(derivedWantsToSay(downgraded)).not.toContain('whore');
   });
 
@@ -204,7 +207,7 @@ describe('a hard no is unliftable (74 §3.2 — the invariant the feature rests 
 
 describe('74 §3.6.6 — a side that was never asked is not a refusal', () => {
   const base = {
-    key: 'names-power:good-girl',
+    key: 'names-praise:good-girl',
     text: 'good girl',
     kind: 'word' as const,
     family: 'names-power',
@@ -239,11 +242,11 @@ describe('74 §3.6.6 — a side that was never asked is not a refusal', () => {
   it('records the sides it showed, so the take is the record of what was asked', () => {
     const marked = applyBankMarks(
       emptyLexicon('p1', NOW),
-      DIRTY_TALK_BANK,
-      { 'names-power:good-girl': 'love' },
+      DIRTY_TALK.bank,
+      { 'names-praise:good-girl': 'love' },
       'test:r1',
       NOW,
-      { 'names-power:good-girl': ['say'] },
+      { 'names-praise:good-girl': ['say'] },
     );
     expect(marked.entries[0]?.sides).toEqual(['say']);
   });
@@ -257,7 +260,7 @@ describe('mergeLexicons keeps what was ASKED (74 §3.6.6)', () => {
       ...emptyLexicon('p1', new Date('2026-08-01T00:00:00.000Z')),
       entries: [
         {
-          key: 'names-power:good-girl',
+          key: 'names-praise:good-girl',
           text: 'good girl',
           kind: 'word',
           family: 'names-power',
@@ -283,7 +286,7 @@ describe('mergeLexicons keeps what was ASKED (74 §3.6.6)', () => {
   it('takes the newer answer when BOTH sides recorded one', () => {
     const base = emptyLexicon('p1', new Date('2026-08-01T00:00:00.000Z'));
     const entry = {
-      key: 'names-power:good-girl',
+      key: 'names-praise:good-girl',
       text: 'good girl',
       kind: 'word' as const,
       family: 'names-power',
@@ -322,7 +325,7 @@ describe('74 §3.6.8 — a name can be ruled out one way and loved the other', (
   const withSlut = base({
     entries: [
       {
-        key: 'names-degrading:slut',
+        key: 'names-rough-heavy:slut',
         text: 'slut',
         kind: 'word',
         family: 'names-degrading',
@@ -352,7 +355,7 @@ describe('74 §3.6.8 — a name can be ruled out one way and loved the other', (
     const legacy = base({
       entries: [
         {
-          key: 'names-degrading:whore',
+          key: 'names-rough-heavy:whore',
           text: 'whore',
           kind: 'word',
           family: 'names-degrading',
@@ -380,5 +383,86 @@ describe('74 §3.6.8 — a name can be ruled out one way and loved the other', (
     expect(violatesBoundary(themed, 'I love using you', 'hear')).toBe(true);
     expect(violatesBoundary(themed, 'I love using you', 'say')).toBe(false);
     expect(violatesBoundary(themed, 'I love using you')).toBe(true);
+  });
+});
+
+describe('74 §3.6.8 — the pet-name pass', () => {
+  const now = new Date('2026-08-17T10:00:00.000Z');
+  const start = (): EroticLexicon => emptyLexicon('p1', now);
+  const KEY = 'names-rough-heavy:slut';
+
+  it('writes each direction separately, and derives the ratings the rest of the app reads', () => {
+    const lex = applyNameMarks(
+      start(),
+      DIRTY_TALK.bank,
+      { [KEY]: { hear: 'never', say: 'love' } },
+      'take:1',
+      now,
+    );
+    const entry = lex.entries.find((e) => e.key === KEY);
+    expect(entry).toMatchObject({ hearState: 'never', sayState: 'love', hear: 0 });
+    expect(entry?.say).toBeGreaterThanOrEqual(3);
+    // Both sides were asked — that is what makes it two marks rather than one.
+    expect(entry?.sides).toEqual(['hear', 'say']);
+  });
+
+  it('writes a DIRECTIONAL boundary, so the other direction is untouched', () => {
+    const lex = applyNameMarks(
+      start(),
+      DIRTY_TALK.bank,
+      { [KEY]: { hear: 'never', say: 'love' } },
+      'take:1',
+      now,
+    );
+    expect(lex.boundaries).toEqual([expect.objectContaining({ text: 'slut', direction: 'hear' })]);
+    expect(violatesBoundary(lex, 'take it, slut', 'hear')).toBe(true);
+    expect(violatesBoundary(lex, 'take it, slut', 'say')).toBe(false);
+  });
+
+  it('leaves an EARLIER take’s boundary settled — marking over it does not lift it', () => {
+    const first = applyNameMarks(
+      start(),
+      DIRTY_TALK.bank,
+      { [KEY]: { hear: 'never' } },
+      'take:1',
+      now,
+    );
+    const second = applyNameMarks(
+      first,
+      DIRTY_TALK.bank,
+      { [KEY]: { hear: 'love' } },
+      'take:2',
+      now,
+    );
+    expect(second.entries.find((e) => e.key === KEY)?.hearState).toBe('never');
+    expect(violatesBoundary(second, 'take it, slut', 'hear')).toBe(true);
+  });
+
+  it('takes back ONE direction, leaving the other standing', () => {
+    const lex = applyNameMarks(
+      start(),
+      DIRTY_TALK.bank,
+      { [KEY]: { hear: 'never', say: 'never' } },
+      'take:1',
+      now,
+    );
+    const cleared = clearNameMarks(lex, { [KEY]: ['hear'] }, now, 'take:1');
+    const entry = cleared.entries.find((e) => e.key === KEY);
+    expect(entry?.hearState).toBeUndefined();
+    expect(entry?.sayState).toBe('never');
+    expect(cleared.boundaries.map((b) => b.direction)).toEqual(['say']);
+  });
+
+  it('never lets a later take un-mark an earlier one', () => {
+    const first = applyNameMarks(
+      start(),
+      DIRTY_TALK.bank,
+      { [KEY]: { say: 'never' } },
+      'take:1',
+      now,
+    );
+    const attempt = clearNameMarks(first, { [KEY]: ['say'] }, now, 'take:2');
+    expect(attempt.entries.find((e) => e.key === KEY)?.sayState).toBe('never');
+    expect(attempt.boundaries).toHaveLength(1);
   });
 });

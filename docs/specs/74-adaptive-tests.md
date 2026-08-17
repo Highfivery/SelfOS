@@ -525,7 +525,7 @@ Its scrim is `position: fixed`. An area is up to 47 rows, so a scrim scoped to `
 and centres the sheet halfway down it — off screen, while every `toBeVisible` assertion passes. The E2E asserts
 `toBeInViewport` for exactly that reason (the #207 lesson).
 
-### 3.6.8 Pet names as their own phase — APPROVED (2026-08-17, owner-directed), BUILD IN PROGRESS
+### 3.6.8 Pet names as their own phase — APPROVED + **BUILT** (2026-08-17, owner-directed)
 
 The owner, on the address screen: _"i think pet names would be useful in this test and analysis… a user can, like
 words, mark pet names they like, ok, not ok for what they like to me called and what they like to call their
@@ -560,9 +560,67 @@ most directly usable output the test could produce — were the least used thing
 7. **Two people's answers can collide**, and the boundary wins: if she has ruled out being called something he
    loves calling her, it is suppressed silently and his own report says only "Angel has ruled this one out" —
    never a list of her answers.
-8. **"Start over from the top" clears everything for that person**, hard nos included (owner-directed). A `never`
-   left behind renders as a settled row, which is the state they are trying to leave; the confirm says the
-   suppression list goes with it. Identity and address survive — starting over is not answering the setup again.
+8. **2,215 names across 24 registers**, each with a line showing it in use. The lines are composed from
+   per-register frames rather than written one at a time — at this size that is the honest way to keep one
+   voice, and it is stated rather than implied. Guards: every name has an example, the example contains the
+   name, keys are unique across registers, both directions are always asked, every roleplay register carries
+   its adults-only framing, and **no entry in any register names a minor** (that guard caught `wild child`,
+   which was removed rather than exempted).
+9. **The three original name families are GONE from the deck.** The new registers carry all 78 of their names,
+   so leaving them would have duplicated every one under two keys with split marks. `cock hungry` fell out
+   entirely — it is an adjective, not a name — and belongs in the degradation family as a line.
+10. **"Start over from the top" clears everything for that person**, hard nos included (owner-directed). A `never`
+    left behind renders as a settled row, which is the state they are trying to leave; the confirm says the
+    suppression list goes with it. Identity and address survive — starting over is not answering the setup again.
+
+### 3.6.9 The take's navigation — APPROVED + **BUILT** (2026-08-17, owner-requested, mockup approved)
+
+The owner: _"there should also be clear to the user for this test the different sections and questions that will be
+asked. for instance when opening it, it shows What do you call each other?, but doesn't give any indication whats
+after that, also they should be able to skip or answer some then move on to the next, in general we need a much
+better navigation workflow"_ — and separately, on the AI phases: _"WHEN THEY GET TO THAT STEP, LEAVE AND COME BACK
+USING THE PICK UP WHERE YOU LEFT OFF, IT IMMEDIATELY GOES TO THE AI GENERATING WITH NO WAY TO GO BACK TO THE WORDS
+OR WHAT YOU LIKE TO BE CALLED."_
+
+**What the audit found, in the code rather than by looking.** `setPhase` was called exactly TWICE in the whole
+screen, both times to return to the identity taps — so from the split onward there was no route back at all. Every
+AI phase fired its own call on arrival (`started.current[phase]`). `testsAdaptiveLines` and `testsAdaptiveScenario`
+reached the model with **no check that anything had been marked**. The probe returned the same `done` whether it had
+exhausted its ambiguities or had nothing to work from. A degraded phase silently relocated the person to the next
+one, which is indistinguishable from that phase having worked.
+
+1. **Seven named steps**, one pure model (`takeSteps.ts`) that the map, the rail and every frame read, so they can
+   never disagree about where someone is (§7 coherence).
+2. **A map** on the way in and on the way back: every step, what it asks, whether it spends, what is done in it.
+   It replaces "Begin" dropping you straight into a phase with no sense of what follows.
+3. **A rail on every step**, carrying the same seven rows and any reachable one a tap away. Its verbs come FIRST in
+   the column — an area runs to 47 rows, so actions under a tally and seven rows are below the fold before any
+   scrolling has happened.
+4. **Three verbs**: `Next: ‹step›` · `Skip this step` · `Finish — show me my profile`. A skip is recorded and shown
+   as a skip; it never spends, so skipping the last step lands on the map rather than on a synthesis.
+5. **An AI step waits to be asked.** Arrival never fires the call, and the step says what it will draw on and that
+   it costs something before the tap.
+6. **Enough to work FROM, not merely something** (`generationReadiness`, shared by the renderer and the bridge so
+   they cannot drift): **15 marks and 3 that were a yes**. Below that a generating step is greyed with the
+   shortfall — "14 more marks" — because a model given two or three marks writes from its own defaults, which is
+   the generic output this test exists to avoid, charged for. A lexicon of nothing but hard nos is the same
+   problem, hence the separate loved count. The bridge refuses independently of the UI.
+7. **The profile is deliberately NOT gated on that threshold** — being unable to finish is worse than a thin
+   profile, and the report already says when it is working from little.
+8. **The identity taps are the WORDS step's prerequisite**, entered from that step rather than sprung on someone
+   before they know what the test contains, and enforced wherever the step is entered from (the deck fails OPEN
+   without them, §3.6.3).
+9. **The two vocative questions are GONE.** "You like being called: girl / man" oriented four anatomy/praise
+   families — a body job — while the question it appeared to ask is answered one step over by marking 2,215 real
+   names in both directions. `address` is now derived from identity, so those four families orient exactly as
+   before with no migration.
+10. **Nothing is asked twice.** Nine terms sat in both a deck family and a name register as two separate lexicon
+    keys, so the same words were marked twice and the profile could hold both a loved-to-hear and a hard no for
+    one of them. The deck gave them up; a guard pins it.
+11. **The profile links back to what produced it** — every section to its step, which is the whole answer to
+    "easy to update": changing one name is two taps from the chip that shows it.
+12. **The practice sheet has a way out that is not doing it** ("Not now — back to the steps"): required to reach
+    the deck, never a modal someone who wandered in from the map cannot leave.
 
 ## 4. Data model
 

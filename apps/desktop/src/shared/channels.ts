@@ -243,6 +243,7 @@ import type {
 import type { TestForm, TestNarrateResponse, TestSummary } from '@selfos/core/tests';
 import type {
   AdaptiveBankView,
+  AdaptiveNamesView,
   AdaptiveLexiconEdit,
   AdaptivePhaseView,
   AdaptiveProbeView,
@@ -718,6 +719,9 @@ export const IpcChannels = {
   // Adaptive tests (74). Same gates as above — `tests.own` + active-person scope + the 18+ ack, all enforced
   // in the bridge. The bank + the scoring are FREE; only the four `adaptive*` AI phases spend.
   testsBank: 'tests:bank',
+  // 74 §3.6.8 — the pet-name phase: its registers + entries, and the two-marks-per-name recorder.
+  testsNames: 'tests:names',
+  testsAdaptiveNames: 'tests:adaptiveNames',
   testsAdaptiveState: 'tests:adaptiveState',
   testsAdaptiveStart: 'tests:adaptiveStart',
   testsAdaptiveBank: 'tests:adaptiveBank',
@@ -2396,6 +2400,16 @@ export interface SelfosBridge {
   // --- Adaptive tests (74). Gated `tests.own` + active-person-scoped + 18+-withheld IN THE BRIDGE. ---
   /** The bank an adaptive instrument works through: families + entries. Display data, no scoring spec. */
   testsBank(input: { testId: string }): Promise<AdaptiveBankView | null>;
+  testsNames(input: { testId: string }): Promise<AdaptiveNamesView | null>;
+  testsAdaptiveNames(input: {
+    testId: string;
+    resultId: string;
+    /** Two marks per name; either side may be absent. */
+    marks: Record<string, { hear?: 'love' | 'okay' | 'never'; say?: 'love' | 'okay' | 'never' }>;
+    /** Directions taken back, per key. */
+    cleared?: Record<string, ('hear' | 'say')[]>;
+    autosave?: boolean;
+  }): Promise<AdaptiveStateView | null>;
   /** Everything the take screen needs: the instrument, an in-flight draft, the person's lexicon so far. */
   testsAdaptiveState(input: { testId: string }): Promise<AdaptiveStateView | null>;
   /** Start (or resume) a take. Free — no AI, no budget. */

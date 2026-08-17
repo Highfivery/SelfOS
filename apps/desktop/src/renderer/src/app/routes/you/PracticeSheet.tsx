@@ -78,11 +78,18 @@ export function PracticeSheet({
   entries,
   onMark,
   onDone,
+  onLeave,
 }: {
   entries: readonly AdaptiveBankEntryView[];
   /** Records a GENUINE mark — the practice taps are real answers, not a demo. */
   onMark: (key: string, mark: 'love' | 'okay' | 'never') => void;
   onDone: () => void;
+  /**
+   * 74 §3.6.9 — the way out that isn't doing it. The sheet is required to reach the DECK, but once any step is a
+   * tap away, someone who wandered into the words from the map would otherwise be trapped here with no route
+   * back — a modal you cannot leave is a dead end however good its content is.
+   */
+  onLeave: () => void;
 }): JSX.Element | null {
   const beats = useMemo(() => pickBeats(entries), [entries]);
   const [step, setStep] = useState(0);
@@ -195,6 +202,9 @@ export function PracticeSheet({
            */}
           <Button variant="primary" disabled={!(last && tapped)} onClick={onDone}>
             Start marking
+          </Button>
+          <Button variant="ghost" onClick={onLeave}>
+            Not now — back to the steps
           </Button>
         </div>
       </div>

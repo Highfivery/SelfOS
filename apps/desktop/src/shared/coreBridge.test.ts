@@ -7593,7 +7593,9 @@ describe('update awareness (36)', () => {
 
         const bank = await bridge.testsBank({ testId: 'dirty-talk' });
         expect(bank?.entries.length).toBeGreaterThan(600);
-        expect(bank?.families.length).toBeGreaterThanOrEqual(36);
+        // The deck sheds its three name families to the pet-name phase (74 §3.6.8) and keeps the rest.
+        expect(bank?.families.length).toBeGreaterThanOrEqual(33);
+        expect(bank?.families.some((f) => f.id.startsWith('names-'))).toBe(false);
 
         const started = await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
         const resultId = started?.draft?.id;
@@ -7604,18 +7606,35 @@ describe('update awareness (36)', () => {
           testId: 'dirty-talk',
           resultId: resultId!,
           marks: {
-            'names-power:good-girl': 'love',
-            'claiming:mine': 'love',
-            'names-degrading:whore': 'never',
+            'names-praise:good-girl': 'love',
+            'claiming:you-re-mine': 'love',
+            'names-rough-heavy:whore': 'never',
           },
         });
         expect(marked?.lexicon.boundaries.map((b) => b.text)).toEqual(['whore']);
+
+        // 74 §3.6.9 — three marks is not material. A generating step refuses BEFORE any model call, so a
+        // crafted request cannot spend on a lexicon the person has barely started; the renderer greys the same
+        // step out on the same numbers, so the two can never disagree.
+        const thinLines = await bridge.testsAdaptiveLines({
+          testId: 'dirty-talk',
+          resultId: resultId!,
+          round: 1,
+        });
+        expect(thinLines).toMatchObject({ ok: false, degraded: true });
+        expect(thinLines?.message).toMatch(/a few more/i);
+        const thinScene = await bridge.testsAdaptiveScenario({
+          testId: 'dirty-talk',
+          resultId: resultId!,
+          context: 'during',
+        });
+        expect(thinScene).toMatchObject({ ok: false, degraded: true });
 
         // Pass 2 — the hear/say split.
         await bridge.testsAdaptiveSplit({
           testId: 'dirty-talk',
           resultId: resultId!,
-          splits: { 'names-power:good-girl': { hear: 4, say: 0 } },
+          splits: { 'names-praise:good-girl': { hear: 4, say: 0 } },
         });
 
         // Synthesize + complete. AI is off in this host, so it degrades — and STILL completes.
@@ -7644,14 +7663,14 @@ describe('update awareness (36)', () => {
         await bridge.testsAdaptiveBank({
           testId: 'dirty-talk',
           resultId: started!.draft!.id,
-          marks: { 'names-degrading:whore': 'never' },
+          marks: { 'names-rough-heavy:whore': 'never' },
         });
 
         expect((await bridge.testsLexicon())?.boundaries).toHaveLength(1);
         // Only an explicit act by the person lifts a boundary (74 §3.2).
         const cleared = await bridge.testsLexiconEdit({
           kind: 'setState',
-          key: 'names-degrading:whore',
+          key: 'names-rough-heavy:whore',
           state: null,
         });
         expect(cleared?.boundaries).toHaveLength(0);

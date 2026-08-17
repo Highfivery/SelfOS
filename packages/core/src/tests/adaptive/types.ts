@@ -13,7 +13,14 @@ import type { SpineDimension } from './spine';
  */
 
 /** The phases an instrument runs, in order. `bank` is deterministic + free; the rest are metered AI calls. */
-export type AdaptivePhaseId = 'bank' | 'split' | 'lines' | 'probe' | 'scenario' | 'synthesis';
+export type AdaptivePhaseId =
+  | 'names'
+  | 'bank'
+  | 'split'
+  | 'lines'
+  | 'probe'
+  | 'scenario'
+  | 'synthesis';
 
 export interface AdaptiveTestDefinition {
   id: string;

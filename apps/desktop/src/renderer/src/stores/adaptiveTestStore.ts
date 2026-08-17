@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type {
   AdaptiveBankView,
+  AdaptiveNamesView,
   AdaptiveLexiconEdit,
   AdaptivePhaseView,
   AdaptiveProbeView,
@@ -19,8 +20,18 @@ import type {
 
 export type TakePhase =
   | 'intro'
-  /** 74 §3.6.4 — the two address taps, before the deck. Skipped once answered (a retake never re-asks). */
+  /**
+   * 74 §3.6.9 — the map: every step, its state, and a tap into any of them. Shown on the way in and reachable
+   * from every step, so the take is never a one-way chain.
+   */
+  | 'map'
+  /**
+   * 74 §3.6.4 — the two identity taps. A prerequisite of the WORDS step (it decides which half of the bank is
+   * shown), so it is entered from there rather than sprung on someone before they know what the test contains.
+   */
   | 'address'
+  /** 74 §3.6.8 — the pet-name phase, which runs FIRST: what the two of you call each other. */
+  | 'names'
   | 'bank'
   | 'split'
   | 'lines'
@@ -41,6 +52,9 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let dirtyMarks = new Set<string>();
 let dirtyCleared = new Set<string>();
 let dirtySplits = new Set<string>();
+/** 74 §3.6.8 — pending pet-name work: which sides of which names changed, and which were taken back. */
+let dirtyNames = new Map<string, Set<'hear' | 'say'>>();
+let dirtyNameCleared = new Map<string, Set<'hear' | 'say'>>();
 
 /** Serializes the writes — see `flush`. */
 let inFlight: Promise<void> = Promise.resolve();
@@ -63,6 +77,8 @@ function resetPending(): void {
   dirtyMarks = new Set();
   dirtyCleared = new Set();
   dirtySplits = new Set();
+  dirtyNames = new Map();
+  dirtyNameCleared = new Map();
   clearedThisTake = new Set();
 }
 
@@ -80,7 +96,7 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = null;
   const mine = generation;
-  const { state, marks, splits } = get();
+  const { state, marks, splits, nameMarks } = get();
   const resultId = state?.draft?.id;
   const marksDelta: Record<string, BankMark> = {};
   for (const key of dirtyMarks) {
@@ -93,10 +109,24 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
     const value = splits[key];
     if (value) splitsDelta[key] = value;
   }
+  const namesDelta: Record<string, { hear?: BankMark; say?: BankMark }> = {};
+  for (const [key, sides] of dirtyNames) {
+    const current = nameMarks[key];
+    const mark: { hear?: BankMark; say?: BankMark } = {};
+    for (const side of sides) {
+      const value = current?.[side];
+      if (value) mark[side] = value;
+    }
+    if (Object.keys(mark).length > 0) namesDelta[key] = mark;
+  }
+  const nameCleared: Record<string, ('hear' | 'say')[]> = {};
+  for (const [key, sides] of dirtyNameCleared) nameCleared[key] = [...sides];
   const nothing =
     Object.keys(marksDelta).length === 0 &&
     cleared.length === 0 &&
-    Object.keys(splitsDelta).length === 0;
+    Object.keys(splitsDelta).length === 0 &&
+    Object.keys(namesDelta).length === 0 &&
+    Object.keys(nameCleared).length === 0;
   if (nothing) {
     set({ saveState: 'saved' });
     return;
@@ -110,6 +140,8 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
   dirtyMarks = new Set();
   dirtyCleared = new Set();
   dirtySplits = new Set();
+  dirtyNames = new Map();
+  dirtyNameCleared = new Map();
   let ok = true;
   try {
     if (Object.keys(marksDelta).length > 0 || cleared.length > 0) {
@@ -118,6 +150,16 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
         resultId,
         marks: marksDelta,
         cleared,
+        autosave: true,
+      });
+      ok = res !== null && res !== undefined;
+    }
+    if (ok && (Object.keys(namesDelta).length > 0 || Object.keys(nameCleared).length > 0)) {
+      const res = await window.selfos?.testsAdaptiveNames({
+        testId,
+        resultId,
+        marks: namesDelta,
+        cleared: nameCleared,
         autosave: true,
       });
       ok = res !== null && res !== undefined;
@@ -144,6 +186,14 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
   for (const key of Object.keys(marksDelta)) dirtyMarks.add(key);
   for (const key of cleared) dirtyCleared.add(key);
   for (const key of Object.keys(splitsDelta)) dirtySplits.add(key);
+  for (const [key, mark] of Object.entries(namesDelta)) {
+    const sides = dirtyNames.get(key) ?? new Set<'hear' | 'say'>();
+    for (const side of ['hear', 'say'] as const) if (mark[side]) sides.add(side);
+    dirtyNames.set(key, sides);
+  }
+  for (const [key, sides] of Object.entries(nameCleared)) {
+    dirtyNameCleared.set(key, new Set(sides));
+  }
   set({ saveState: 'unsaved', error: "Couldn't save that just now — it'll retry." });
 }
 
@@ -172,6 +222,11 @@ interface AdaptiveTestState {
   touched: string[];
   marks: Record<string, BankMark>;
   splits: Record<string, { hear?: number; say?: number }>;
+  /** 74 §3.6.8 — the pet-name phase: its registers + names, and two marks per name. */
+  names: AdaptiveNamesView | null;
+  nameMarks: Record<string, { hear?: BankMark; say?: BankMark }>;
+  /** Which register is open. `null` ⇒ the grid, which is where the phase starts. */
+  openRegister: string | null;
   lines: string[];
   lineReactions: Record<string, 'love' | 'meh' | 'no'>;
   probeQuestion: string | null;
@@ -179,11 +234,26 @@ interface AdaptiveTestState {
    *  been asked (without it the same ambiguity is returned forever). */
   probeAmbiguityId: string | null;
   probeAnswer: string;
+  /** The probe has nothing left to ask — a real outcome, shown as one, not a silent hop to the next phase. */
+  probeDone: boolean;
   scenario: { context: string; scene: string; options: string[] } | null;
+  /**
+   * 74 §3.6.9 — steps passed over in THIS sitting, so the rail and the profile can say so instead of quietly
+   * filling the gap. Deliberately not persisted: a skip is a decision about this sitting, and on a later one the
+   * step should simply be open again rather than carrying a stale refusal forward.
+   */
+  skipped: string[];
 
   load(testId: string): Promise<void>;
   start(testId: string): Promise<void>;
   mark(key: string, mark: BankMark | null): void;
+  /** Load the pet-name phase (free — no AI). */
+  loadNames(testId: string): Promise<void>;
+  /** Mark one direction of one name. Passing the same mark again takes it back (74 §3.4). */
+  markName(key: string, side: 'hear' | 'say', mark: BankMark): void;
+  setOpenRegister(id: string | null): void;
+  /** Close the phase and move on to the deck. */
+  finishNames(testId: string): Promise<void>;
   /** Write whatever is pending right now — on leaving the take, and before closing a pass. */
   flush(testId: string): Promise<void>;
   /** 74 §3.6.4 — record the two address taps, then re-read the bank so it comes back oriented. */
@@ -216,6 +286,15 @@ interface AdaptiveTestState {
   abandon(testId: string): Promise<void>;
   editLexicon(edit: AdaptiveLexiconEdit): Promise<void>;
   setPhase(phase: TakePhase): void;
+  /**
+   * 74 §3.6.9 — go to a step from the rail or the map. Entering an AI step must NOT fire its call: with a rail
+   * you can reach any step from anywhere, so arrival-fires-the-call would turn a mis-tap into a billed request
+   * (and `testsAdaptiveLines`/`Scenario` will write from an empty lexicon if asked). The step frame presents
+   * itself and waits to be asked.
+   */
+  goToStep(id: string): void;
+  /** Pass over a step, recording that it was passed over rather than silently jumping. */
+  skipStep(id: string, next: string | null): void;
   reset(): void;
 }
 
@@ -232,12 +311,17 @@ const EMPTY = {
   touched: [] as string[],
   marks: {},
   splits: {},
+  names: null,
+  nameMarks: {},
+  openRegister: null,
   lines: [],
   lineReactions: {},
   probeQuestion: null,
   probeAmbiguityId: null,
   probeAnswer: '',
+  probeDone: false,
   scenario: null,
+  skipped: [] as string[],
 };
 
 /**
@@ -254,7 +338,9 @@ export function resumePhase(turns: readonly { phase: string }[] | undefined): Ta
   if (seen.has('lines')) return 'lines';
   if (seen.has('split')) return 'lines';
   if (seen.has('bank')) return 'split';
-  return 'bank';
+  // A stamped `names` turn means the pet-name phase closed, so the deck is next (74 §3.6.8).
+  if (seen.has('names')) return 'bank';
+  return 'names';
 }
 
 /**
@@ -306,6 +392,33 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
     },
     setPhase: (phase) => set({ phase }),
 
+    goToStep: (id) => {
+      // The words need the two identity taps first — they decide which half of the bank is ever shown, so
+      // entering the step without them would show everything in both directions (the §3.6.3 fail-open).
+      if (id === 'bank' && get().bank?.address === undefined) {
+        set({ phase: 'address', error: null });
+        return;
+      }
+      // Re-entering a step un-skips it: arriving at it IS taking it back, and a row that still read "skipped"
+      // while you were standing on it would be the app disagreeing with itself.
+      set((prev) => ({
+        phase: id as TakePhase,
+        error: null,
+        skipped: prev.skipped.filter((step) => step !== id),
+        // The scenario's scene and the probe's question belong to the visit that fetched them; leaving and
+        // coming back must present the step's own "ask me" state rather than a stale paid answer.
+        ...(id === 'scenario' ? { scenario: null } : {}),
+      }));
+    },
+
+    skipStep: (id, next) =>
+      set((prev) => ({
+        skipped: prev.skipped.includes(id) ? prev.skipped : [...prev.skipped, id],
+        // No next step left ⇒ back to the map, never a blank screen.
+        phase: (next ?? 'map') as TakePhase,
+        error: null,
+      })),
+
     load: async (testId) => {
       set({ activeTestId: testId });
       const [bank, state] = await Promise.all([
@@ -330,10 +443,12 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
     start: async (testId) => {
       set({ busy: true, error: null, activeTestId: testId });
       const state = await (window.selfos?.testsAdaptiveStart({ testId }) ?? Promise.resolve(null));
-      const resumed = resumePhase(state?.draft?.turns);
-      // The address taps come first, and only once: a retake with them already answered goes straight in.
-      const needsAddress = resumed === 'bank' && get().bank?.address === undefined;
-      set({ state, busy: false, phase: needsAddress ? 'address' : resumed });
+      // 74 §3.6.9 — the map, not a phase. Both a first take and a resumed one land here: the whole reason it
+      // exists is that "pick up where you left off" used to drop into whichever AI phase had been reached, with
+      // no route back to the person's own words.
+      set({ state, busy: false, phase: 'map' });
+      // Free (no AI), so the map can show the names step's real count without asking for anything.
+      await get().loadNames(testId);
     },
 
     mark: (key, mark) => {
@@ -367,6 +482,78 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       saveTimer = setTimeout(() => void get().flush(get().activeTestId), AUTOSAVE_DELAY_MS);
     },
 
+    loadNames: async (testId) => {
+      const names = await (window.selfos?.testsNames({ testId }) ?? Promise.resolve(null));
+      // No registers to ask about (a bank with no name families, or a refused gate) — move on rather than
+      // stranding them on an empty phase. A dead end is never the right answer to missing content.
+      if (!names || names.registers.length === 0) {
+        set({ names: null, phase: get().phase === 'names' ? 'bank' : get().phase });
+        return;
+      }
+      // Seed from what they have already said, exactly as the deck seeds from the lexicon — a retake must not
+      // present every answered name blank, and "pick up where you left off" must look like it did.
+      const nameMarks: Record<string, { hear?: BankMark; say?: BankMark }> = {};
+      for (const entry of names.entries) {
+        if (entry.hearState || entry.sayState) {
+          nameMarks[entry.key] = {
+            ...(entry.hearState ? { hear: entry.hearState } : {}),
+            ...(entry.sayState ? { say: entry.sayState } : {}),
+          };
+        }
+      }
+      set({ names, nameMarks });
+    },
+
+    markName: (key, side, mark) => {
+      set((prev) => {
+        const entry = prev.names?.entries.find((item) => item.key === key);
+        // A hard no from an EARLIER take is settled, per direction — same rule as the deck's rows.
+        if (side === 'hear' ? entry?.settledHear : entry?.settledSay) return prev;
+        const current = prev.nameMarks[key] ?? {};
+        const next = { ...current };
+        const cleared = current[side] === mark;
+        if (cleared) delete next[side];
+        else next[side] = mark;
+        const nameMarks = { ...prev.nameMarks };
+        if (Object.keys(next).length === 0) delete nameMarks[key];
+        else nameMarks[key] = next;
+
+        const sides = dirtyNames.get(key) ?? new Set<'hear' | 'say'>();
+        const clearedSides = dirtyNameCleared.get(key) ?? new Set<'hear' | 'say'>();
+        if (cleared) {
+          sides.delete(side);
+          clearedSides.add(side);
+        } else {
+          clearedSides.delete(side);
+          sides.add(side);
+        }
+        if (sides.size > 0) dirtyNames.set(key, sides);
+        else dirtyNames.delete(key);
+        if (clearedSides.size > 0) dirtyNameCleared.set(key, clearedSides);
+        else dirtyNameCleared.delete(key);
+        return { nameMarks, saveState: 'saving' };
+      });
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => void get().flush(get().activeTestId), AUTOSAVE_DELAY_MS);
+    },
+
+    setOpenRegister: (id) => set({ openRegister: id }),
+
+    finishNames: async (testId) => {
+      // Flush first, then close the pass so it stamps its one turn — the same order the deck uses.
+      await get().flush(testId);
+      const resultId = get().state?.draft?.id;
+      if (resultId) {
+        const next = await (window.selfos?.testsAdaptiveNames({
+          testId,
+          resultId,
+          marks: {},
+        }) ?? Promise.resolve(null));
+        if (next) set({ state: next });
+      }
+      set({ phase: 'bank', openRegister: null });
+    },
+
     /**
      * Persist the delta. Autosave never touches `phase` and never re-reads `state.lexicon` into the store: a
      * refresh mid-pass would re-lock rows they are still working on, and the grid would jump under their hands.
@@ -390,6 +577,8 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       });
       // The bank is oriented HOST-SIDE, so it has to be re-read for the new answers to take effect.
       const bank = await (window.selfos?.testsBank({ testId }) ?? Promise.resolve(null));
+      // Straight into the words: these two taps are that step's prerequisite (74 §3.6.9), not a gate on the
+      // whole take — they only ever governed which half of the deck is shown.
       set({ bank: bank ?? get().bank, busy: false, phase: 'bank' });
     },
 
@@ -455,13 +644,10 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       const fallback: AdaptivePhaseView = { ok: false, degraded: true };
       const out = await (window.selfos?.testsAdaptiveLines({ testId, resultId, round }) ??
         Promise.resolve(fallback));
-      set({
-        lines: out.lines ?? [],
-        busy: false,
-        progress: null,
-        // A degraded phase is SKIPPED, never fatal — the take moves on with what it has (74 §7).
-        ...(out.degraded ? { phase: 'probe' as TakePhase } : {}),
-      });
+      // A degraded phase no longer JUMPS the person to the next one (74 §3.6.9): the rail owns navigation, so a
+      // phase that couldn't produce anything says so and leaves them standing somewhere they recognise. Silently
+      // relocating them was indistinguishable from the step having worked.
+      set({ lines: out.lines ?? [], busy: false, progress: null });
     },
 
     reactToLine: async (testId, line, reaction) => {
@@ -494,7 +680,10 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         probeAnswer: '',
         busy: false,
         progress: null,
-        ...(out.done || out.degraded ? { phase: 'scenario' as TakePhase } : {}),
+        // "Nothing left to ask" is an OUTCOME, not a reason to relocate them. It used to jump to the scenario,
+        // which made it indistinguishable from the step never having run — and the bridge returns the same
+        // `done` whether it exhausted the ambiguities or had nothing to work from at all.
+        probeDone: out.done || out.degraded,
       });
     },
 

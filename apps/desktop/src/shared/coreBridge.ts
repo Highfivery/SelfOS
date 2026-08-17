@@ -4433,7 +4433,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const parsed = AdaptiveRefSchema.parse(input);
       const gate = await adaptiveGate(parsed.testId);
       if (!gate) return;
-      await abandonAdaptiveTake(gate.ctx.fs, gate.personId, parsed.resultId);
+      // The key makes it a real reset: the lexicon is wiped too, hard nos included (74 §3.6.8).
+      await abandonAdaptiveTake(gate.ctx.fs, gate.personId, parsed.resultId, gate.ctx.key);
     },
     testsLexicon: async (): Promise<EroticLexicon | null> => {
       // The SAME gate as every other adaptive handler, the 18+ ack included (§6) — these two checked only

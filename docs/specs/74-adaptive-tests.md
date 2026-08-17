@@ -864,6 +864,29 @@ inner scroller — the deck is a single column at every width, so nothing collap
 
 ## 12. Changelog
 
+- 2026-08-17 — **The deck, redesigned for real (§3.6.4; mockup approved before any code).** The owner, on the
+  fourth round of "improve the UI/UX" being answered with copy edits: _"WHEN I SAY IMPROVE SOMETHING FROM THE
+  UI/UX, THAT MEANS DESIGN, NOT A LINE OF TEXT"_ — and they were right. Direction had become a sentence, the
+  address screen a relabel, the chrome a moved paragraph. The deck was still four stacked paragraphs above a
+  flat hairline table with three identical grey squares per row. What changed now:
+  **Direction is a graphic.** A coloured band above every area with a `You → Them` flow, and the whole band's
+  colour changes with the direction, so it is legible before anything is read. The same two colours tag the
+  identity screen's preview, so the preview teaches the band.
+  **The line is the hero of its row.** The example moves to serif at reading size; the term drops to a quiet
+  uppercase label above it. You react to the line, so the line is what you see first.
+  **The marks are three distinct controls** — warm / accent / danger, filling when active, 44px, with the
+  boundary set apart by a divider so a hard no can never be a mis-tap neighbour.
+  **Intensity is a 3-bar meter** (red at the top tier) with a text equivalent, replacing an unexplained 5px dot.
+  **Progress is one slim bar** with a floor so area 1 of 36 still reads, replacing 36 dashes.
+  **Actions and the running tally live in a sticky rail**, so finishing never means scrolling past 47 rows a
+  person has already decided about, and a partial pass visibly counts (§3.6.1 #3).
+  **The marking rules collapse to one link** on every area instead of four paragraphs on each of 36.
+  **The identity screen shows its consequence** — two real bank lines, tagged YOU SAY / YOU HEAR, chosen by the
+  same rule the resolver uses, so the preview can never promise a line the deck then withholds.
+  Two defects the render caught that the CSS alone would not have: a stale pre-redesign `.deckHead { display:
+flex }` made the progress bar a content-sized flex item parked mid-header (measured at 10px wide, not
+  assumed), and the band's long change label wrapped its own sentence onto three lines.
+
 - 2026-08-17 — **Fourth audit + the owner's UI/UX corrections (§3.3/§3.6.3/§6).** Two of these were reported
   by the owner from screenshots, and both were things the audits had missed by only ever looking at the
   _taken_ state of a _fully-onboarded_ person.

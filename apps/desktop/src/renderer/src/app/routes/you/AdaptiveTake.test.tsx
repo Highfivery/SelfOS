@@ -131,7 +131,9 @@ describe('AdaptiveTake (74 §3.2)', () => {
     renderTake();
     await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
 
-    expect(await screen.findByText(/nothing in SelfOS will suggest it again/i)).toBeInTheDocument();
+    // The marking rules live behind one link now, instead of four paragraphs on every one of 36 areas.
+    await userEvent.click(await screen.findByRole('button', { name: /How marking works/i }));
+    expect(screen.getByText(/nothing in SelfOS will suggest it again/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'good girl — hear & say — love it' }));
 
     await userEvent.click(screen.getByRole('button', { name: /Next area/ }));
@@ -140,7 +142,10 @@ describe('AdaptiveTake (74 §3.2)', () => {
     await userEvent.click(
       screen.getByRole('button', { name: 'run (primal) — hear & say — never' }),
     );
-    expect(screen.getByText(/2 marked/)).toBeInTheDocument();
+    // The rail tallies per mark now, rather than one "N marked so far" line.
+    // The rail tallies per mark now, rather than one "N marked so far" line.
+    expect(screen.getByTestId('tally-love')).toHaveTextContent('1');
+    expect(screen.getByTestId('tally-never')).toHaveTextContent('1');
 
     await userEvent.click(screen.getByRole('button', { name: /Done — show me/i }));
     await waitFor(() =>
@@ -259,7 +264,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
         expect.objectContaining({ cleared: ['taboo:run-primal'], autosave: true }),
       ),
     );
-    expect(screen.getByText(/0 marked/)).toBeInTheDocument();
+    expect(screen.getByTestId('tally-never')).toHaveTextContent('0');
   });
 
   it('a boundary from an EARLIER take is still settled, not re-offered', async () => {
@@ -510,7 +515,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     renderTake();
     await useAdaptiveTestStore.getState().load('dirty-talk');
     useAdaptiveTestStore.setState({ phase: 'bank' });
-    expect(await screen.findByText(/These are things YOU SAY TO THEM/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Things YOU SAY TO THEM/i)).toBeInTheDocument();
   });
 
   it('states the direction for a hear-only area too, not just say', async () => {
@@ -537,6 +542,48 @@ describe('AdaptiveTake (74 §3.2)', () => {
     renderTake();
     await useAdaptiveTestStore.getState().load('dirty-talk');
     useAdaptiveTestStore.setState({ phase: 'bank' });
-    expect(await screen.findByText(/These are things THEY SAY TO YOU/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Things THEY SAY TO YOU/i)).toBeInTheDocument();
+  });
+
+  it('shows the flow as a graphic, and what the identity answers change', async () => {
+    // The approved redesign: direction is a coloured band with a You → Them flow, not a sentence buried in
+    // body copy; and the identity screen previews the two lines it will actually ask, tagged by side.
+    installMockBridge({
+      testsBank: () => Promise.resolve({ ...BANK, address: undefined } as never),
+      testsAdaptiveState: () => Promise.resolve(state()),
+      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    await userEvent.click(
+      within(screen.getByRole('group', { name: 'You are a:' })).getByRole('button', {
+        name: 'a man',
+      }),
+    );
+    await userEvent.click(
+      within(screen.getByRole('group', { name: 'Your partner is a:' })).getByRole('button', {
+        name: 'a woman',
+      }),
+    );
+    // The consequence is on screen, tagged, before they commit to it.
+    expect(screen.getByText('YOU SAY')).toBeInTheDocument();
+    expect(screen.getByText('YOU HEAR')).toBeInTheDocument();
+    expect(screen.getByText(/your pussy is so wet for me/)).toBeInTheDocument();
+    expect(screen.getByText(/how hard your cock gets/)).toBeInTheDocument();
+  });
+
+  it('puts the deck actions in a rail, so finishing never means scrolling 47 rows', async () => {
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'bank' });
+    const rail = await screen.findByRole('complementary', { name: /Your marks/i });
+    expect(within(rail).getByRole('button', { name: /Next area/ })).toBeInTheDocument();
+    expect(within(rail).getByRole('button', { name: /Done for now/ })).toBeInTheDocument();
+    // Progress is one bar, not 36 dashes.
+    expect(screen.getByRole('progressbar', { name: /Area 1 of 2/ })).toBeInTheDocument();
   });
 });

@@ -270,6 +270,29 @@ export async function stampTurn(
 }
 
 /**
+ * Add one AI phase's spend to the draft (74 §6). Every phase already records its own `UsageEvent`, so the
+ * Usage dashboard was always right — but `TestResult.costUsd` carried only the SYNTHESIS call, which makes the
+ * per-take figure understate a take that ran several rounds of lines and probes. The bridge redacts that field
+ * for non-admins, so it is a money figure the app is going to show: it has to be the whole cost, not the last
+ * call's.
+ *
+ * A no-op on anything that isn't the open draft, and never fatal — a lost accrual costs an accurate figure,
+ * never the take.
+ */
+export async function accruePhaseCost(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  resultId: string,
+  costUsd: number,
+): Promise<void> {
+  if (!Number.isFinite(costUsd) || costUsd <= 0) return;
+  const draft = await getAdaptiveResult(fs, key, personId, resultId);
+  if (!draft || draft.status !== 'draft') return;
+  await saveResult(fs, key, { ...draft, costUsd: (draft.costUsd ?? 0) + costUsd });
+}
+
+/**
  * Complete a take: score the lexicon on the fixed spine, persist the result, write the derived Insight, and
  * mark the ground worked-through. `profile`/`narrative` come from the AI synthesis when it ran; a take that
  * never reached it still completes with the deterministic scores and an honest, thinner report.
@@ -319,7 +342,11 @@ export async function completeAdaptiveTake(
     scores: scoreSpine(lexicon, def.spine),
     ...(input.profile ? { profile: input.profile } : {}),
     ...(input.narrative ? { narrative: input.narrative } : {}),
-    ...(input.costUsd !== undefined ? { costUsd: input.costUsd } : {}),
+    // ADD, never replace: the phases before this one accrued their spend onto the draft, and overwriting
+    // would silently drop it — leaving an admin reading the synthesis call's price as the take's price.
+    ...(input.costUsd !== undefined || draft.costUsd !== undefined
+      ? { costUsd: (draft.costUsd ?? 0) + (input.costUsd ?? 0) }
+      : {}),
     insightId: draft.insightId ?? uuid(),
     takenAt: at,
     updatedAt: at,

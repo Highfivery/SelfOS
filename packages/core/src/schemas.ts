@@ -1192,6 +1192,23 @@ export const EroticLexiconSchema = z.object({
     })
     .catch(undefined as never)
     .optional(),
+  /**
+   * 74 §3.6.3 — who the two of you ARE, asked in the same two taps. Distinct from `address`, which is what you
+   * like being CALLED: a man can want "good girl", so identity can never be read off the address.
+   *
+   * It exists because the BODY axis had exactly one source — the onboarding anatomy answers — and that source
+   * FAILS OPEN. Someone who skipped onboarding, or answered "rather not say", was shown the whole bank in both
+   * directions: a straight man rating "your pussy is so wet for me" as something he'd like to HEAR. The intake
+   * answer still wins where it exists (it was asked directly, and #62 forbids overriding it by inference);
+   * this is the stated, changeable fallback for when it doesn't. Additive + tolerant: absent ⇒ unchanged.
+   */
+  identity: z
+    .object({
+      self: z.enum(['man', 'woman', 'either']),
+      partner: z.enum(['man', 'woman', 'either']),
+    })
+    .catch(undefined as never)
+    .optional(),
   updatedAt: z.string(),
 });
 export type EroticLexicon = z.infer<typeof EroticLexiconSchema>;
@@ -1246,6 +1263,8 @@ export interface AdaptiveBankView {
    * the take opens on phase 0a.
    */
   address?: { self: 'girl' | 'man' | 'either'; partner: 'girl' | 'man' | 'either' };
+  /** Who the two of you are (§3.6.3) — seeds the two taps, and tells the take whether the address diverges. */
+  identity?: { self: 'man' | 'woman' | 'either'; partner: 'man' | 'woman' | 'either' };
   /** Which area of the deck this person left off on (74 §3.6.4). Device-local; 0 for a fresh take. */
   resumeArea: number;
 }
@@ -1309,6 +1328,8 @@ export type AdaptiveLexiconEdit =
       kind: 'setAddress';
       self: 'girl' | 'man' | 'either';
       partner: 'girl' | 'man' | 'either';
+      /** Who the two of you are. Sets the address above by default and backs the body axis (see `identity`). */
+      identity?: { self: 'man' | 'woman' | 'either'; partner: 'man' | 'woman' | 'either' };
     }
   | { kind: 'addWord'; text: string; family: string; wordKind: 'word' | 'phrase' }
   | { kind: 'addBoundary'; text: string; boundaryKind: 'word' | 'theme' };

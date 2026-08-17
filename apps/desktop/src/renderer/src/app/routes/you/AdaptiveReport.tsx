@@ -4,6 +4,7 @@ import { Lock } from 'lucide-react';
 import { NO_SIGNAL_BAND, type LexiconEntry } from '@shared/schemas';
 
 import {
+  AdminOnlyBadge,
   Banner,
   Button,
   Card,
@@ -152,7 +153,16 @@ export function AdaptiveReport(): JSX.Element {
   // The middle mark. It used to appear nowhere: recorded, restored in the deck, then absent from the report
   // AND from every prompt — so hundreds of taps bought the person nothing, and their own profile silently
   // omitted their own answers. Shown last, plainly second-tier, so it can't be read as a favourite.
-  const okay = lexicon.entries.filter((e) => e.state === 'okay');
+  // Two ways to land here, and both were invisible before. `state === 'okay'` is the middle mark. The other
+  // is an entry marked LOVE in the deck and then dialled DOWN to 1–2 in the split — which is a normal thing
+  // to do ("I like it a little"), and it fell out of every bucket: below the >= 3 bar for loved, not a
+  // boundary, not the middle mark. Recorded, and shown nowhere. It reads exactly as "fine, not a favourite",
+  // so it belongs here. Prompts still take only >= 3 — a 1 should not lead.
+  const okay = lexicon.entries.filter(
+    (e) =>
+      e.state === 'okay' ||
+      (e.state === undefined && Math.max(e.hear, e.say) > 0 && Math.max(e.hear, e.say) < 3),
+  );
 
   // Oldest → newest, so the chart reads left-to-right like time does. `history` arrives newest-first.
   const takes = [...state.history].reverse();
@@ -217,241 +227,262 @@ export function AdaptiveReport(): JSX.Element {
             </Banner>
           ) : null}
 
+          {/*
+           * Nothing taken yet. This used to render a "you haven't taken this" banner + a Take it button, and
+           * then carry on into the rest of the report — an empty "Your words" section with "Love to hear" and
+           * "Comfortable saying" headings and nothing under either, and a SECOND Take it button in the footer.
+           * One invitation, and everything downstream of a take stops here.
+           */}
           {!latest ? (
             <Stack gap={3}>
-              <Banner tone="info">You haven&rsquo;t taken this yet.</Banner>
+              <Text tone="secondary">
+                Nothing here yet. The test walks you through the words themselves — you mark what
+                lands, skip the rest, and it saves as you go.
+              </Text>
               <div>
                 <Button variant="primary" onClick={() => navigate(`/tests/${testId}/take`)}>
                   Take it
                 </Button>
               </div>
+              <CrisisFooter />
             </Stack>
-          ) : null}
-
-          {latest?.narrative ? (
-            <Card className={adaptive.reportSection}>
-              <Markdown>{latest.narrative}</Markdown>
-            </Card>
-          ) : latest ? (
-            <Banner tone="info">
-              The written read didn&rsquo;t come through this time — everything below is from your
-              own answers, and it&rsquo;s all still yours.
-            </Banner>
-          ) : null}
-
-          {latest ? (
-            <section>
-              <Heading level={2}>The shape of it</Heading>
-              <Stack gap={2}>
-                {/* A dimension with no signal is LISTED, not charted: a 0% bar next to "not their thing"
-                    would tell them something about themselves they never actually said (74 §3.3). */}
-                {latest.scores
-                  .filter((score) => score.band !== NO_SIGNAL_BAND)
-                  .map((score) => (
-                    <SubscaleBar
-                      key={score.key}
-                      label={SPINE_LABELS[score.key] ?? score.key}
-                      normalized={score.normalized}
-                      {...(score.band !== undefined ? { band: score.band } : {})}
-                      signed={false}
-                    />
-                  ))}
-              </Stack>
-              {latest.scores.some((score) => score.band === NO_SIGNAL_BAND) ? (
-                <Text size="sm" tone="tertiary">
-                  Not covered this time:{' '}
-                  {latest.scores
-                    .filter((score) => score.band === NO_SIGNAL_BAND)
-                    .map((score) => SPINE_LABELS[score.key] ?? score.key)
-                    .join(' · ')}
-                  .
-                </Text>
+          ) : (
+            <>
+              {latest?.narrative ? (
+                <Card className={adaptive.reportSection}>
+                  <Markdown>{latest.narrative}</Markdown>
+                </Card>
+              ) : latest ? (
+                <Banner tone="info">
+                  The written read didn&rsquo;t come through this time — everything below is from
+                  your own answers, and it&rsquo;s all still yours.
+                </Banner>
               ) : null}
-            </section>
-          ) : null}
 
-          {/*
-           * Across takes. The whole reason the spine is FIXED (74 §4.2) is that a retake stays comparable —
-           * the report was throwing that away and showing only the newest take, so nothing in the app ever
-           * answered "has this moved?". The chart's text equivalents come from `LineChart` itself (§9).
-           */}
-          {trendSeries.length > 0 ? (
-            <section>
-              <Heading level={2}>Across your takes</Heading>
-              <LineChart
-                series={trendSeries}
-                ariaLabel="How each dimension has moved across your takes"
-                yMin={0}
-                yMax={1}
-                yLowLabel="Low"
-                yHighLabel="High"
-                emphasizeLast
-              />
-            </section>
-          ) : null}
-
-          {/*
-           * What the synthesis actually said about REGISTER and TIMING. It has been scoring both on every
-           * take and nothing read them — generated, stored, discarded. This is the person's own profile, and
-           * the timing read is the most usable thing in it.
-           */}
-          {registers.length > 0 || contexts.length > 0 ? (
-            <section>
-              <Heading level={2}>Register &amp; timing</Heading>
-              <Stack gap={4}>
-                {registers.length > 0 ? (
-                  <div>
-                    <Text size="sm" tone="secondary">
-                      Which register lands
-                    </Text>
-                    <Stack gap={2}>
-                      {registers.map(([key, value]) => (
+              {latest ? (
+                <section>
+                  <Heading level={2}>The shape of it</Heading>
+                  <Stack gap={2}>
+                    {/* A dimension with no signal is LISTED, not charted: a 0% bar next to "not their thing"
+                    would tell them something about themselves they never actually said (74 §3.3). */}
+                    {latest.scores
+                      .filter((score) => score.band !== NO_SIGNAL_BAND)
+                      .map((score) => (
                         <SubscaleBar
-                          key={key}
-                          label={REGISTER_LABELS[key] ?? key}
-                          normalized={value}
+                          key={score.key}
+                          label={SPINE_LABELS[score.key] ?? score.key}
+                          normalized={score.normalized}
+                          {...(score.band !== undefined ? { band: score.band } : {})}
                           signed={false}
                         />
                       ))}
-                    </Stack>
-                  </div>
-                ) : null}
-                {contexts.length > 0 ? (
+                  </Stack>
+                  {latest.scores.some((score) => score.band === NO_SIGNAL_BAND) ? (
+                    <Text size="sm" tone="tertiary">
+                      Not covered this time:{' '}
+                      {latest.scores
+                        .filter((score) => score.band === NO_SIGNAL_BAND)
+                        .map((score) => SPINE_LABELS[score.key] ?? score.key)
+                        .join(' · ')}
+                      .
+                    </Text>
+                  ) : null}
+                </section>
+              ) : null}
+
+              {/*
+               * Across takes. The whole reason the spine is FIXED (74 §4.2) is that a retake stays comparable —
+               * the report was throwing that away and showing only the newest take, so nothing in the app ever
+               * answered "has this moved?". The chart's text equivalents come from `LineChart` itself (§9).
+               */}
+              {trendSeries.length > 0 ? (
+                <section>
+                  <Heading level={2}>Across your takes</Heading>
+                  <LineChart
+                    series={trendSeries}
+                    ariaLabel="How each dimension has moved across your takes"
+                    yMin={0}
+                    yMax={1}
+                    yLowLabel="Low"
+                    yHighLabel="High"
+                    emphasizeLast
+                  />
+                </section>
+              ) : null}
+
+              {/*
+               * What the synthesis actually said about REGISTER and TIMING. It has been scoring both on every
+               * take and nothing read them — generated, stored, discarded. This is the person's own profile, and
+               * the timing read is the most usable thing in it.
+               */}
+              {registers.length > 0 || contexts.length > 0 ? (
+                <section>
+                  <Heading level={2}>Register &amp; timing</Heading>
+                  <Stack gap={4}>
+                    {registers.length > 0 ? (
+                      <div>
+                        <Text size="sm" tone="secondary">
+                          Which register lands
+                        </Text>
+                        <Stack gap={2}>
+                          {registers.map(([key, value]) => (
+                            <SubscaleBar
+                              key={key}
+                              label={REGISTER_LABELS[key] ?? key}
+                              normalized={value}
+                              signed={false}
+                            />
+                          ))}
+                        </Stack>
+                      </div>
+                    ) : null}
+                    {contexts.length > 0 ? (
+                      <div>
+                        <Text size="sm" tone="secondary">
+                          When it lands
+                        </Text>
+                        <Stack gap={2}>
+                          {contexts.map(([key, ctx]) => (
+                            <div key={key}>
+                              <SubscaleBar
+                                label={CONTEXT_LABELS[key] ?? key}
+                                normalized={ctx.heat}
+                                signed={false}
+                              />
+                              {ctx.note ? (
+                                <Text size="sm" tone="tertiary">
+                                  {ctx.note}
+                                </Text>
+                              ) : null}
+                            </div>
+                          ))}
+                        </Stack>
+                      </div>
+                    ) : null}
+                  </Stack>
+                </section>
+              ) : null}
+
+              <section>
+                <Heading level={2}>Your words</Heading>
+                <Stack gap={4}>
                   <div>
                     <Text size="sm" tone="secondary">
-                      When it lands
+                      Love to hear
                     </Text>
-                    <Stack gap={2}>
-                      {contexts.map(([key, ctx]) => (
-                        <div key={key}>
-                          <SubscaleBar
-                            label={CONTEXT_LABELS[key] ?? key}
-                            normalized={ctx.heat}
-                            signed={false}
-                          />
-                          {ctx.note ? (
-                            <Text size="sm" tone="tertiary">
-                              {ctx.note}
-                            </Text>
-                          ) : null}
-                        </div>
-                      ))}
-                    </Stack>
+                    <Chips entries={loves} />
                   </div>
-                ) : null}
-              </Stack>
-            </section>
-          ) : null}
-
-          <section>
-            <Heading level={2}>Your words</Heading>
-            <Stack gap={4}>
-              <div>
-                <Text size="sm" tone="secondary">
-                  Love to hear
-                </Text>
-                <Chips entries={loves} />
-              </div>
-              <div>
-                <Text size="sm" tone="secondary">
-                  Comfortable saying
-                </Text>
-                <Chips entries={says} />
-              </div>
-              {notYet.length > 0 ? (
-                <div>
-                  <Text size="sm" tone="secondary">
-                    Want to, and freeze — worth practising
-                  </Text>
-                  <Chips entries={notYet} />
-                  <div className={take.footer}>
-                    <Button
-                      variant="secondary"
-                      onClick={() =>
-                        // Straight into the guided practice session with the goal already loaded — the whole
-                        // point of deriving `wantsToSay` is that it stops asking what they want to say (§3.5).
-                        navigate('/sessions', {
-                          state: {
-                            startGuideId: 'dirty-talk-practice',
-                            seedText: `I want to be able to say: ${notYet
-                              .map((e) => e.text)
-                              .join(', ')}.`,
-                          },
-                        })
-                      }
-                    >
-                      Practise this
-                    </Button>
+                  <div>
+                    <Text size="sm" tone="secondary">
+                      Comfortable saying
+                    </Text>
+                    <Chips entries={says} />
                   </div>
-                </div>
-              ) : null}
-              {okay.length > 0 ? (
-                <div>
-                  <Text size="sm" tone="secondary">
-                    Fine either way — usable, not favourites
-                  </Text>
-                  <Chips entries={okay} />
-                </div>
-              ) : null}
-              {never.length > 0 ? (
-                <div>
-                  <Text size="sm" tone="secondary">
-                    Off the table — nothing in SelfOS will suggest these
-                  </Text>
-                  <Chips entries={never} never />
-                  <Stack gap={2}>
-                    {never.map((entry) => (
-                      <Button
-                        key={entry.key}
-                        variant="ghost"
-                        onClick={() =>
-                          void editLexicon({ kind: 'setState', key: entry.key, state: null })
-                        }
-                      >
-                        Changed my mind about &ldquo;{entry.text}&rdquo;
-                      </Button>
-                    ))}
-                  </Stack>
-                </div>
-              ) : null}
-            </Stack>
-          </section>
+                  {notYet.length > 0 ? (
+                    <div>
+                      <Text size="sm" tone="secondary">
+                        Want to, and freeze — worth practising
+                      </Text>
+                      <Chips entries={notYet} />
+                      <div className={take.footer}>
+                        <Button
+                          variant="secondary"
+                          onClick={() =>
+                            // Straight into the guided practice session with the goal already loaded — the whole
+                            // point of deriving `wantsToSay` is that it stops asking what they want to say (§3.5).
+                            navigate('/sessions', {
+                              state: {
+                                startGuideId: 'dirty-talk-practice',
+                                seedText: `I want to be able to say: ${notYet
+                                  .map((e) => e.text)
+                                  .join(', ')}.`,
+                              },
+                            })
+                          }
+                        >
+                          Practise this
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                  {okay.length > 0 ? (
+                    <div>
+                      <Text size="sm" tone="secondary">
+                        Fine either way — usable, not favourites
+                      </Text>
+                      <Chips entries={okay} />
+                    </div>
+                  ) : null}
+                  {never.length > 0 ? (
+                    <div>
+                      <Text size="sm" tone="secondary">
+                        Off the table — nothing in SelfOS will suggest these
+                      </Text>
+                      <Chips entries={never} never />
+                      <Stack gap={2}>
+                        {never.map((entry) => (
+                          <Button
+                            key={entry.key}
+                            variant="ghost"
+                            onClick={() =>
+                              void editLexicon({ kind: 'setState', key: entry.key, state: null })
+                            }
+                          >
+                            Changed my mind about &ldquo;{entry.text}&rdquo;
+                          </Button>
+                        ))}
+                      </Stack>
+                    </div>
+                  ) : null}
+                </Stack>
+              </section>
 
-          {state.staleForRetake ? (
-            <Banner tone="info">
-              It&rsquo;s been a while — worth a fresh look? What you want changes.
-            </Banner>
-          ) : null}
+              {/* The take's own cost — accrued across every AI phase, not just the synthesis. The bridge already
+              redacts it for anyone without `budgets.manage` (the durable §06 rule: the $ boundary is the
+              bridge, not the UI), so its presence IS the permission — no second check here. */}
+              {latest?.costUsd !== undefined ? (
+                <Text size="sm" tone="tertiary">
+                  <AdminOnlyBadge /> This take cost ${latest.costUsd.toFixed(3)}
+                </Text>
+              ) : null}
 
-          <div className={take.footer}>
-            <Button variant="secondary" onClick={() => navigate(`/tests/${testId}/take`)}>
-              {latest ? 'Take it again' : 'Take it'}
-            </Button>
-            {latest ? (
-              confirmingDelete ? (
-                <>
-                  <Button variant="danger" onClick={() => void onDelete()}>
-                    Delete it all
-                  </Button>
-                  <Button variant="ghost" onClick={() => setConfirmingDelete(false)}>
-                    Keep it
-                  </Button>
-                </>
-              ) : (
-                <Button variant="ghost" onClick={() => setConfirmingDelete(true)}>
-                  Delete this profile
+              {state.staleForRetake ? (
+                <Banner tone="info">
+                  It&rsquo;s been a while — worth a fresh look? What you want changes.
+                </Banner>
+              ) : null}
+
+              <div className={take.footer}>
+                <Button variant="secondary" onClick={() => navigate(`/tests/${testId}/take`)}>
+                  Take it again
                 </Button>
-              )
-            ) : null}
-          </div>
-          {confirmingDelete ? (
-            <Text size="sm" tone="secondary">
-              This removes every take, the profile, and the words you rated — everywhere in SelfOS.
-              Anything you marked <strong>off the table</strong> stays off the table.
-            </Text>
-          ) : null}
+                {latest ? (
+                  confirmingDelete ? (
+                    <>
+                      <Button variant="danger" onClick={() => void onDelete()}>
+                        Delete it all
+                      </Button>
+                      <Button variant="ghost" onClick={() => setConfirmingDelete(false)}>
+                        Keep it
+                      </Button>
+                    </>
+                  ) : (
+                    <Button variant="ghost" onClick={() => setConfirmingDelete(true)}>
+                      Delete this profile
+                    </Button>
+                  )
+                ) : null}
+              </div>
+              {confirmingDelete ? (
+                <Text size="sm" tone="secondary">
+                  This removes every take, the profile, and the words you rated — everywhere in
+                  SelfOS. Anything you marked <strong>off the table</strong> stays off the table.
+                </Text>
+              ) : null}
 
-          <CrisisFooter />
+              <CrisisFooter />
+            </>
+          )}
         </Stack>
       </div>
     </div>

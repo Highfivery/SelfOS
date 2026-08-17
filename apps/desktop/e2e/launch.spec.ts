@@ -16070,12 +16070,23 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
     await w.getByRole('button', { name: 'Start' }).click();
     await w.getByRole('button', { name: 'Begin' }).click();
 
-    // The two address taps (§3.6.4). "boy" is deliberately NOT an option here — it is a term you can mark,
-    // not an identity, so the identity answer is "man".
+    // The two identity taps (§3.6.3). "boy" is deliberately NOT an option here — it is a term you can mark,
+    // not an identity. Each question is its own labelled group, because "a man" appears in both.
     await expect(w.getByText(/Before we start/i)).toBeVisible();
-    await w.getByRole('button', { name: 'their man' }).click();
-    await w.getByRole('button', { name: 'a girl' }).click();
+    await w
+      .getByRole('group', { name: 'You are a:' })
+      .getByRole('button', { name: 'a man' })
+      .click();
+    await w
+      .getByRole('group', { name: 'Your partner is a:' })
+      .getByRole('button', { name: 'a woman' })
+      .click();
+    await w.screenshot({ path: 'e2e-artifacts/74-identity.png' });
     await w.getByRole('button', { name: 'Start', exact: true }).click();
+    // The direction is STATED, not implied — rating "you say" as though it were "you hear" would silently
+    // poison the profile, and the answer used to live only in the aria-label.
+    await expect(w.getByText(/These are things YOU SAY TO THEM/i)).toBeVisible();
+    await w.screenshot({ path: 'e2e-artifacts/74-direction.png' });
 
     // Walk to the names families and check both directions of the orientation.
     const goTo = async (heading: string): Promise<void> => {
@@ -16179,8 +16190,14 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     // 74 §3.6.4 — the two address taps come first. Answering "neither · both · depends" on both sides means
     // nothing is oriented away, so this walk still sees the whole bank (the ORIENTED case is its own test).
     await expect(w.getByText(/Before we start/i)).toBeVisible();
-    await w.getByRole('button', { name: 'neither · both · depends' }).first().click();
-    await w.getByRole('button', { name: 'neither · both · depends' }).last().click();
+    await w
+      .getByRole('group', { name: 'You are a:' })
+      .getByRole('button', { name: /neither/ })
+      .click();
+    await w
+      .getByRole('group', { name: 'Your partner is a:' })
+      .getByRole('button', { name: /neither/ })
+      .click();
     await w.getByRole('button', { name: 'Start', exact: true }).click();
 
     // The deck: one area per screen. Walk to whichever area holds each entry we want to mark.

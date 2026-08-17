@@ -864,6 +864,35 @@ inner scroller — the deck is a single column at every width, so nothing collap
 
 ## 12. Changelog
 
+- 2026-08-17 — **Fourth audit + the owner's UI/UX corrections (§3.3/§3.6.3/§6).** Two of these were reported
+  by the owner from screenshots, and both were things the audits had missed by only ever looking at the
+  _taken_ state of a _fully-onboarded_ person.
+  **The direction was not clear** — a screen of "your pussy is so wet for me" with three marks and nothing
+  saying whether you were rating hearing it or saying it. Orientation had already resolved it (that area is
+  say-only for a man who dates women), but the answer lived in the **aria-label**, where a sighted person
+  never sees it. Rating the wrong direction silently poisons the whole profile, so it is now stated in the
+  area header as an instruction, with a per-row marker when an area mixes the two.
+  **The body axis had exactly one source and it fails open.** `selfBody`/`partnerBody` came only from the
+  onboarding anatomy answers, so someone who skipped onboarding or answered "rather not say" was shown the
+  entire bank in both directions — a straight man rating lines about a vulva as things he'd like to HEAR. The
+  two taps now also ask **who the two of you are** ("You are a: / Your partner is a:", the owner's wording) and
+  that backs the body axis; the intake answer still wins wherever it exists, because it was asked directly and
+  #62 forbids overriding it by inference. Identity and address stay separable behind an escape — a man can
+  want "good girl", and collapsing them would be the same conflation #62 was about.
+  **The not-yet-taken report was broken:** a banner, a Take it button, then the whole report rendered empty —
+  "Love to hear" and "Comfortable saying" headings with nothing under either — and a second Take it button.
+  **A dialled-down entry vanished:** marked love in the deck and then rated 1–2 in the split, it fell below the
+  loved bar, wasn't a boundary and wasn't the middle mark, so it appeared nowhere. It reads as "fine, not a
+  favourite" and is shown there.
+  **`TestResult.costUsd` carried only the synthesis call** while the bridge redacted it as a money figure; each
+  AI phase now accrues onto the draft, and the true per-take cost is shown to `budgets.manage` (the spec-50
+  precedent).
+  **Also:** an area change moved no focus, so a keyboard or screen-reader user got 36 silent screen changes.
+  **Checked and found sound:** the saturation write-back closes real topic ids (`Intimacy:dirty-talk` at 3
+  asks = `SATURATION_ASKS`), and a take's own Insight cannot re-open the ground it just closed, because
+  `topicsWithNewMaterial` ignores material at-or-older-than the last ask and both are stamped at the same
+  instant.
+
 - 2026-08-16 — **Third audit + visual / workflow / usability passes (§3.3/§3.6.4/§5.3).** This one went at the
   AI phases' own prompts, the scoring math, the sync merge, and then at the rendered screens.
   **Correctness:** the probe QUESTION and the scenario SCENE were the only model prose reaching the person

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { DIRTY_TALK_BANK } from './instruments/dirtyTalkBank';
-import { bankEntry } from './bank';
+import { bankEntry, type BankEntry } from './bank';
 import {
   OPEN_ORIENTATION,
   addressFromAnswer,
@@ -84,5 +84,46 @@ describe('orientation', () => {
     const area = orientArea('anatomy-her', all, STRAIGHT_MAN);
     expect(area.shown.length + area.withheld).toBe(all.length);
     expect(all.length).toBeGreaterThan(0);
+  });
+});
+describe('§3.6.3 — the body axis has a fallback, so it no longer fails open into nonsense', () => {
+  it('uses the identity taps when onboarding never asked about anatomy', () => {
+    // This is the reported bug: with no intake answer both bodies resolved to `either`, so a straight man was
+    // shown "your pussy is so wet for me" as a line to HEAR. The intake answer still wins where it exists.
+    expect(bodyFromAnatomyAnswer(undefined, 'man')).toBe('penis');
+    expect(bodyFromAnatomyAnswer(undefined, 'woman')).toBe('vulva');
+    expect(bodyFromAnatomyAnswer('', 'woman')).toBe('vulva');
+    expect(bodyFromAnatomyAnswer(undefined, 'either')).toBe('either');
+    expect(bodyFromAnatomyAnswer(undefined)).toBe('either');
+  });
+
+  it('never lets identity override what they actually told onboarding', () => {
+    // #62's rule: body comes from the direct answer, never from an inference about gender.
+    expect(bodyFromAnatomyAnswer('Pussy (vulva)', 'man')).toBe('vulva');
+    expect(bodyFromAnatomyAnswer('Cock (penis)', 'woman')).toBe('penis');
+    // An explicit non-committal answer is an ANSWER — identity must not quietly narrow it.
+    expect(bodyFromAnatomyAnswer('Rather not say', 'man')).toBe('either');
+    expect(bodyFromAnatomyAnswer('Both or intersex', 'woman')).toBe('either');
+  });
+
+  it('a straight man with no onboarding answer hears about his body and says lines about hers', () => {
+    const who = {
+      selfAddress: 'man' as const,
+      partnerAddress: 'girl' as const,
+      selfBody: bodyFromAnatomyAnswer(undefined, 'man'),
+      partnerBody: bodyFromAnatomyAnswer(undefined, 'woman'),
+    };
+    const hers: BankEntry = {
+      key: 'anatomy-her:pussy',
+      text: 'pussy',
+      kind: 'word',
+      family: 'anatomy-her',
+      tier: 3,
+      directions: ['hear', 'say'],
+      body: 'vulva',
+    };
+    const his: BankEntry = { ...hers, key: 'anatomy-him:cock', text: 'cock', body: 'penis' };
+    expect(shownSides(hers, who)).toEqual(['say']);
+    expect(shownSides(his, who)).toEqual(['hear']);
   });
 });

@@ -551,8 +551,16 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
 
     abandon: async (testId) => {
       const resultId = get().state?.draft?.id;
+      // Flush first, or the debounce would land the last taps back onto a draft that is about to be deleted.
+      // The marks themselves are kept on purpose — they live in the lexicon, which is the person's answers,
+      // not this take's scratch state. Only the take's own record and its place in the deck go.
+      await get().flush(testId);
       if (resultId) await window.selfos?.testsAdaptiveAbandon({ testId, resultId });
+      // Without this, "start over" would drop them back at the area they stopped in, which is the one thing
+      // it is supposed to undo.
+      await window.selfos?.testsAdaptiveSetArea({ testId, area: 0 });
       set({ ...EMPTY });
+      await get().load(testId);
     },
 
     editLexicon: async (edit) => {

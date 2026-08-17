@@ -326,14 +326,22 @@ export async function completeAdaptiveTake(
   };
   await saveResult(fs, key, result);
   await saveInsight(fs, key, await buildAdaptiveInsight(fs, key, def, result, lexicon, at));
-  await recordTakeSaturation(fs, key, {
-    personId: input.personId,
-    resultId: result.id,
-    testId: def.id,
-    topicIds: def.saturates,
-    gist: def.saturationGist,
-    at,
-  });
+  // Best-effort, as `recordTakeSaturation` itself states: the result and the Insight are already written, so
+  // letting a ledger failure throw here would report a take that SUCCEEDED as failed — and the person would
+  // be looking at a "that didn't go through" over a completed profile. A retry heals it (the ledger write is
+  // idempotent by construction), and so does the next completed take.
+  try {
+    await recordTakeSaturation(fs, key, {
+      personId: input.personId,
+      resultId: result.id,
+      testId: def.id,
+      topicIds: def.saturates,
+      gist: def.saturationGist,
+      at,
+    });
+  } catch {
+    // The take stands. The planner simply hasn't been told yet.
+  }
   return result;
 }
 

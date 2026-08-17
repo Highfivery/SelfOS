@@ -111,3 +111,95 @@ describe('the couples block (74 §5.8)', () => {
     expect(block).not.toMatch(/freezes|PRACTISE/);
   });
 });
+
+describe('the middle mark is not write-only (74 §3.6.2)', () => {
+  it('names what they marked "It\'s okay" as usable, and keeps it out of the loved list', async () => {
+    const { fs, angel } = await seedPair();
+    const { readLexicon } = await import('./lexicon');
+    const lex = await readLexicon(fs, KEY, angel);
+    await writeLexicon(fs, KEY, {
+      ...lex,
+      entries: [
+        ...lex.entries,
+        {
+          key: 'taboo:filthy',
+          text: 'filthy',
+          kind: 'word' as const,
+          family: 'taboo',
+          tier: 3 as const,
+          hear: 0,
+          say: 0,
+          state: 'okay' as const,
+        },
+      ],
+    });
+    const block = buildOwnLexiconBlock(await readLexicon(fs, KEY, angel));
+    expect(block).toContain('filthy');
+    // Second-tier by construction — a mild yes must never read as a want.
+    expect(block).toMatch(/not favourites/i);
+    const loved = block.slice(block.indexOf('Loves to hear'), block.indexOf('Fine with'));
+    expect(loved).not.toContain('filthy');
+  });
+
+  it('builds a block for someone whose ONLY answers were "It\'s okay"', async () => {
+    // The early return used to check loved + banned only, so a person who marked nothing else got nothing.
+    const fs = memFileSystem();
+    const lex = {
+      ...emptyLexicon('solo', NOW),
+      entries: [
+        {
+          key: 'taboo:filthy',
+          text: 'filthy',
+          kind: 'word' as const,
+          family: 'taboo',
+          tier: 3 as const,
+          hear: 0,
+          say: 0,
+          state: 'okay' as const,
+        },
+      ],
+    };
+    await writeLexicon(fs, KEY, lex);
+    expect(buildOwnLexiconBlock(lex)).toContain('filthy');
+  });
+
+  it('keeps the mild yes OUT of the partner steer — it is not what lands', async () => {
+    const { fs, ben, angel } = await seedPair();
+    const { readLexicon } = await import('./lexicon');
+    const lex = await readLexicon(fs, KEY, angel);
+    await writeLexicon(fs, KEY, {
+      ...lex,
+      entries: [
+        ...lex.entries,
+        {
+          key: 'taboo:filthy',
+          text: 'filthy',
+          kind: 'word' as const,
+          family: 'taboo',
+          tier: 3 as const,
+          hear: 0,
+          say: 0,
+          state: 'okay' as const,
+        },
+      ],
+    });
+    const steer = await buildPartnerSteer(fs, KEY, ben, angel, true);
+    expect(steer).toContain('good girl');
+    expect(steer).not.toContain('filthy');
+  });
+});
+
+describe('the hard-no list is never truncated (74 §8.4)', () => {
+  it('carries EVERY boundary, however many there are — no cap, deliberately', async () => {
+    // Every other list here is capped at 20 to keep the prompt cheap. The boundary list is the one that must
+    // not be: a dropped hard no is not a smaller prompt, it is a limit the coach never learns. This is the
+    // tripwire for someone "tidying up" by giving `banned` the same `.slice(0, CAP)` as its neighbours.
+    const many = Array.from({ length: 120 }, (_, i) => `never-word-${i}`);
+    const lex = {
+      ...emptyLexicon('solo', NOW),
+      boundaries: many.map((text) => ({ text, kind: 'word' as const, at: NOW.toISOString() })),
+    };
+    const block = buildOwnLexiconBlock(lex);
+    for (const text of many) expect(block).toContain(text);
+  });
+});

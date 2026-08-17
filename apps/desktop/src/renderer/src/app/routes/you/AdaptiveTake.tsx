@@ -299,12 +299,25 @@ export function AdaptiveTake(): JSX.Element {
                   It saves as you go, so you can stop anywhere and come back.
                 </Text>
               )}
-              <div>
+              <div className={take.footer}>
                 <Button variant="primary" onClick={() => void store.start(testId)}>
                   {store.state.draft ? 'Pick up where you left off' : 'Begin'}
                 </Button>
+                {/* The one route back to the top of a long deck. It clears THIS take's record and its place
+                    in the deck — never the marks, which are their answers and live in the lexicon. Without
+                    it, "resume where you stopped" was a one-way door: nothing could take you back to area 1. */}
+                {store.state.draft ? (
+                  <Button variant="ghost" onClick={() => void store.abandon(testId)}>
+                    Start over from the top
+                  </Button>
+                ) : null}
               </div>
-              <CrisisFooter />
+              {store.state.draft ? (
+                <Text size="sm" tone="tertiary">
+                  Starting over keeps everything you marked — it just puts you back at the first
+                  area.
+                </Text>
+              ) : null}
             </Stack>
           ) : null}
 
@@ -364,7 +377,6 @@ export function AdaptiveTake(): JSX.Element {
                   Start
                 </Button>
               </div>
-              <CrisisFooter />
             </Stack>
           ) : null}
 
@@ -566,7 +578,6 @@ export function AdaptiveTake(): JSX.Element {
                   )}
                 </span>
               </div>
-              <CrisisFooter />
             </Stack>
           ) : null}
 
@@ -779,6 +790,15 @@ export function AdaptiveTake(): JSX.Element {
               </div>
             </Stack>
           ) : null}
+
+          {/*
+           * ONE footer for every phase, not one per phase. It used to be rendered inside the intro, address
+           * and bank branches only — so it disappeared exactly where a disclosure happens: the probe and
+           * scenario phases are the free-text ones (`readsAsDistress` runs on a probe answer), and `done` is
+           * where someone lands after a heavy take. The Together lesson, one level down: a crisis affordance
+           * belongs OUTSIDE the pane that changes, or a restructure silently drops it from most views.
+           */}
+          <CrisisFooter />
         </Stack>
       </div>
     </div>

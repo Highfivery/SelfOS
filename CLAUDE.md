@@ -486,6 +486,34 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-16 — **Second audit (deeper sweep: data lifecycle, seam, consumers; SPEC 74 §3.6.2/§8.3; on
+  `fix/adaptive-audit-two`).** The owner asked for another, more thorough pass after the first one found real
+  defects. This one swept the LIFECYCLE (create → resume → complete → delete → person-delete) and every
+  consumer of the lexicon rather than the take's screens. Four findings, each fixed + guarded (**every guard
+  verified to fail when reverted**): **(1) SAFETY — the crisis footer was missing from most of the take.** It
+  was rendered inside the intro/address/bank branches only, so it disappeared on `probe` and `scenario` — the
+  free-text phases the distress detector actually reads — and on `done`, where someone lands after a heavy
+  take. Hoisted to ONE footer outside the phase branches (the Together lesson, one level down: a crisis
+  affordance belongs outside the pane that changes, or a restructure silently drops it). **(2) the middle mark
+  was WRITE-ONLY** — `It's okay` was recorded, restored in the deck, and then absent from the report AND from
+  every prompt, so hundreds of taps bought nothing and the person's own profile omitted their own answers; it
+  now shows as "Fine either way" and reaches their own coach as second-tier, while staying OUT of the partner
+  steer (which answers "what lands") and out of the goal derivation. **(3) a ledger failure reported a
+  COMPLETED take as failed** — `recordTakeSaturation` documents itself as best-effort but was awaited
+  unguarded after the result + Insight were written. **(4) resume was a ONE-WAY DOOR** — `abandon` existed
+  end-to-end and was rendered nowhere, so nothing could take someone back to area 1 of a 36-area deck; now
+  "Start over from the top", honest that the marks are kept. **Checked and found sound** (so the next audit
+  doesn't re-tread): person-delete reaps the lexicon with the folder; the Insight is `restricted` +
+  `lifeArea:'Intimacy'` and inherits its id across retakes so delete can't orphan one; the adult-book lexicon
+  block sits behind a bridge-side ack re-check; the delete copy already says hard nos survive. Gate green:
+  typecheck (4 pkgs), lint, format, **2315 core + 13 relay + 1634 desktop** unit, both 74 E2E. **Lessons:
+  (1) a "no cap" is a decision that needs a TRIPWIRE, not a comment — every list beside the hard-no list caps
+  at 20, so the next tidy-up will cap it too unless a test fails; the guard asserts 120 boundaries all survive.
+  (2) When a mark exists in the model and the deck but in no output, it is not a small gap — it is a control
+  the person operates hundreds of times for nothing, and it only shows up if you ask "where does each stored
+  value get READ?" rather than "does the screen work?" (3) A per-branch crisis footer is a latent regression
+  in any surface that later gets restructured — render it once, outside.**
+
 - 2026-08-16 — **Audit close-out (adaptive tests / Dirty Talk; SPEC 74 §3.5/§3.6/§8.4; on
   `fix/adaptive-audit-closeout`).** A full audit of the shipped feature after the deck redesign — model, seam,
   renderer, and the surfaces the lexicon feeds. Five user-facing defects, each fixed + guarded (every guard

@@ -5,7 +5,13 @@ import {
   livePartnerIds,
 } from '../../people/relationshipService';
 import type { EroticLexicon, LexiconEntry } from '../../schemas';
-import { derivedWantsToSay, lovedEntries, readLexicon, suppressedTexts } from './lexicon';
+import {
+  derivedWantsToSay,
+  lovedEntries,
+  okayEntries,
+  readLexicon,
+  suppressedTexts,
+} from './lexicon';
 
 /**
  * 74 §5.7/§5.8 — where the lexicon goes.
@@ -49,7 +55,8 @@ export function buildOwnLexiconBlock(lexicon: EroticLexicon): string {
   const hear = lovedEntries(lexicon, 'hear');
   const say = lovedEntries(lexicon, 'say');
   const banned = suppressedTexts(lexicon);
-  if (hear.length === 0 && say.length === 0 && banned.length === 0) return '';
+  const okay = okayEntries(lexicon);
+  if (hear.length === 0 && say.length === 0 && banned.length === 0 && okay.length === 0) return '';
 
   const parts = ['THEIR OWN EROTIC LANGUAGE (from the Dirty Talk test — use it, in their words):'];
   if (hear.length > 0) parts.push(`Loves to hear: ${list(hear)}.`);
@@ -61,6 +68,17 @@ export function buildOwnLexiconBlock(lexicon: EroticLexicon): string {
     parts.push(
       `Wants to be able to say but freezes — treat as something to PRACTISE, never a failing: ${goals
         .slice(0, CAP)
+        .join(' · ')}.`,
+    );
+  }
+  // The middle mark, which is a mild yes (§3.6.2) — usable, not a favourite. It is the difference between
+  // "they said fine, use it" and "never asked", and dropping it made every one of those taps write-only.
+  // Named as second-tier so it can never be mistaken for the loved list.
+  if (okay.length > 0) {
+    parts.push(
+      `Fine with, but not favourites — usable, never lead with them: ${okay
+        .slice(0, CAP)
+        .map((entry) => entry.text)
         .join(' · ')}.`,
     );
   }

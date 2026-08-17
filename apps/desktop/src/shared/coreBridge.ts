@@ -881,6 +881,7 @@ import {
   runProbePhase,
   runScenarioPhase,
   runSynthesis,
+  accruePhaseCost,
   stampTurn,
   startAdaptiveTake,
   writeLexicon,
@@ -1203,6 +1204,12 @@ const AdaptiveLexiconEditSchema = z.discriminatedUnion('kind', [
     kind: z.literal('setAddress'),
     self: z.enum(['girl', 'man', 'either']),
     partner: z.enum(['girl', 'man', 'either']),
+    identity: z
+      .object({
+        self: z.enum(['man', 'woman', 'either']),
+        partner: z.enum(['man', 'woman', 'either']),
+      })
+      .optional(),
   }),
   z.object({
     kind: z.literal('addWord'),
@@ -2223,9 +2230,18 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     return {
       selfAddress: addressFromAnswer(lexicon.address?.self),
       partnerAddress: addressFromAnswer(lexicon.address?.partner),
-      selfBody: bodyFromAnatomyAnswer(anatomy.ownAnatomy),
+      // The intake anatomy answer WINS: it was asked directly, and #62 is explicit that body must never be
+      // overridden by an inference from gender. But it FAILS OPEN, and the fallback used to be "show
+      // everything" — which put "your pussy is so wet for me" in front of a straight man as a line to HEAR.
+      // The identity taps are the stated, changeable fallback for when onboarding has nothing to say.
+      selfBody: bodyFromAnatomyAnswer(anatomy.ownAnatomy, lexicon.identity?.self),
       // More than one answer means "either" by construction — two bodies is not one body.
-      partnerBody: partner.length === 1 ? bodyFromAnatomyAnswer(partner[0]) : 'either',
+      partnerBody:
+        partner.length === 1
+          ? bodyFromAnatomyAnswer(partner[0], lexicon.identity?.partner)
+          : partner.length > 1
+            ? 'either'
+            : bodyFromAnatomyAnswer(undefined, lexicon.identity?.partner),
     };
   };
 
@@ -4195,6 +4211,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           })),
         withheldByFamily,
         ...(lexicon.address ? { address: lexicon.address } : {}),
+        ...(lexicon.identity ? { identity: lexicon.identity } : {}),
         resumeArea: (await host.readDeviceState()).adaptiveDeckArea?.[gate.personId]?.[testId] ?? 0,
       };
     },
@@ -4286,6 +4303,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         return { ok: false, degraded: true, message: 'Turn on AI in Settings to use this.' };
       const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
       const out = await runLinesPhase(deps, lexicon, parsed.round);
+      // Every phase's spend accrues onto the draft, or the take's own cost figure is only its last call.
+      await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
       return {
         ok: out.ok,
         ...(out.value ? { lines: out.value } : {}),
@@ -4317,6 +4336,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const deps = await aiDeps('tests.own');
       if (!deps) return { ok: false, done: false, degraded: true };
       const out = await runProbePhase(deps, lexicon, next);
+      await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
       return {
         ok: out.ok,
         ...(out.value ? { question: out.value } : {}),
@@ -4333,6 +4353,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!deps) return { ok: false, context: parsed.context, degraded: true };
       const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
       const out = await runScenarioPhase(deps, lexicon, parsed.context);
+      await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
       return {
         ok: out.ok,
         context: parsed.context,
@@ -4451,7 +4472,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
               : applyBankMarks(lexicon, DIRTY_TALK_BANK, { [edit.key]: edit.state }, 'edit', now);
           break;
         case 'setAddress':
-          lexicon = { ...lexicon, address: { self: edit.self, partner: edit.partner } };
+          lexicon = {
+            ...lexicon,
+            address: { self: edit.self, partner: edit.partner },
+            // Identity backs the BODY axis when onboarding has no anatomy answer (§3.6.3). Preserve any
+            // prior value when this edit doesn't carry one, so changing only the address never erases it.
+            ...(edit.identity ? { identity: edit.identity } : {}),
+          };
           break;
         case 'addWord':
           lexicon = addCustomEntry(

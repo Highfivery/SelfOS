@@ -118,4 +118,51 @@ describe('AdaptiveReport (74 §3.3)', () => {
     expect(screen.queryByText('buildUp')).not.toBeInTheDocument();
     expect(screen.getByText('teasing, no filth')).toBeInTheDocument();
   });
+
+  it('shows ONE invitation when nothing is taken — not empty headings and two Take it buttons', async () => {
+    // It used to render the "you haven't taken this" banner, a Take it button, and then carry on into the
+    // rest of the report: an empty "Your words" section with "Love to hear" and "Comfortable saying"
+    // headings and nothing under either, plus a SECOND Take it button in the footer.
+    installMockBridge({ testsAdaptiveState: () => Promise.resolve(state()) });
+    renderReport();
+    expect(await screen.findByRole('button', { name: 'Take it' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /Take it/ })).toHaveLength(1);
+    expect(screen.queryByText('Your words')).not.toBeInTheDocument();
+    expect(screen.queryByText('Love to hear')).not.toBeInTheDocument();
+    expect(screen.queryByText('The shape of it')).not.toBeInTheDocument();
+    // The crisis affordance is still present on an empty state.
+    expect(screen.getByRole('button', { name: /get help now/i })).toBeInTheDocument();
+  });
+
+  it('shows an entry dialled DOWN in the split, instead of losing it entirely', async () => {
+    // Marked love in the deck, then rated 1 in the split: below the >= 3 bar for loved, not a boundary, not
+    // the middle mark. Recorded and shown nowhere. It reads as "fine, not a favourite".
+    const one = [result('r1', '2026-06-01T00:00:00Z', 0.4)];
+    installMockBridge({
+      testsAdaptiveState: () =>
+        Promise.resolve(
+          state({
+            latest: one[0]!,
+            history: one,
+            lexicon: {
+              ...state().lexicon,
+              entries: [
+                {
+                  key: 'names-power:good-girl',
+                  text: 'good girl',
+                  kind: 'word',
+                  family: 'names-power',
+                  tier: 2,
+                  hear: 1,
+                  say: 0,
+                },
+              ],
+            },
+          }),
+        ),
+    });
+    renderReport();
+    expect(await screen.findByText(/Fine either way/i)).toBeInTheDocument();
+    expect(screen.getByText('good girl')).toBeInTheDocument();
+  });
 });

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -315,12 +315,23 @@ describe('AdaptiveTake (74 §3.2)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
 
     expect(await screen.findByText(/Before we start/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'their man' }));
-    await userEvent.click(screen.getByRole('button', { name: 'a girl' }));
+    // Two plain identity questions, each with its own group of options — scoped, because "a man" is an
+    // option in both.
+    const you = screen.getByRole('group', { name: 'You are a:' });
+    const them = screen.getByRole('group', { name: 'Your partner is a:' });
+    await userEvent.click(within(you).getByRole('button', { name: 'a man' }));
+    await userEvent.click(within(them).getByRole('button', { name: 'a woman' }));
     await userEvent.click(screen.getByRole('button', { name: 'Start' }));
 
+    // Identity is stored AND drives the address by default — the body axis depends on it when onboarding
+    // has no anatomy answer, which is the whole reason a straight man was being shown "your pussy" to hear.
     await waitFor(() =>
-      expect(edit).toHaveBeenCalledWith({ kind: 'setAddress', self: 'man', partner: 'girl' }),
+      expect(edit).toHaveBeenCalledWith({
+        kind: 'setAddress',
+        self: 'man',
+        partner: 'girl',
+        identity: { self: 'man', partner: 'woman' },
+      }),
     );
   });
 
@@ -347,7 +358,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     expect(await screen.findByText(/14 terms are hidden here/i)).toBeInTheDocument();
     // …and the way back is a control, not just a sentence.
     await userEvent.click(screen.getByRole('button', { name: /Before we start/i }));
-    expect(await screen.findByText(/When someone talks to you like this/i)).toBeInTheDocument();
+    expect(await screen.findByText(/You are a:/i)).toBeInTheDocument();
   });
 
   it('shows the example under a term — you react to the line, not the word', async () => {
@@ -469,5 +480,63 @@ describe('AdaptiveTake (74 §3.2)', () => {
     // Honest about what it does and does not touch: the marks are their answers, not this take's state.
     expect(abandon).toHaveBeenCalled();
     await waitFor(() => expect(setArea).toHaveBeenCalledWith({ testId: 'dirty-talk', area: 0 }));
+  });
+
+  it('says on screen whether a line is one you SAY or one you HEAR', async () => {
+    // The reported confusion: a screen of "your pussy is so wet for me" with three marks and nothing saying
+    // which direction is being rated. Orientation already resolved it; the answer lived in the aria-label,
+    // where a sighted person never sees it. Rating the wrong direction silently poisons the profile.
+    const sayOnly: AdaptiveBankView = {
+      ...BANK,
+      families: [{ id: 'anatomy-her', label: 'Anatomy — her body', kind: 'word' }],
+      entries: [
+        {
+          key: 'anatomy-her:pussy',
+          text: 'pussy',
+          kind: 'word',
+          family: 'anatomy-her',
+          tier: 3,
+          directions: ['hear', 'say'],
+          sides: ['say'],
+          example: 'your pussy is so wet for me',
+        },
+      ],
+      withheldByFamily: {},
+    };
+    installMockBridge({
+      testsBank: () => Promise.resolve(sayOnly),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'bank' });
+    expect(await screen.findByText(/These are things YOU SAY TO THEM/i)).toBeInTheDocument();
+  });
+
+  it('states the direction for a hear-only area too, not just say', async () => {
+    const hearOnly: AdaptiveBankView = {
+      ...BANK,
+      families: [{ id: 'anatomy-him', label: 'Anatomy — his body', kind: 'word' }],
+      entries: [
+        {
+          key: 'anatomy-him:cock',
+          text: 'cock',
+          kind: 'word',
+          family: 'anatomy-him',
+          tier: 3,
+          directions: ['hear', 'say'],
+          sides: ['hear'],
+        },
+      ],
+      withheldByFamily: {},
+    };
+    installMockBridge({
+      testsBank: () => Promise.resolve(hearOnly),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'bank' });
+    expect(await screen.findByText(/These are things THEY SAY TO YOU/i)).toBeInTheDocument();
   });
 });

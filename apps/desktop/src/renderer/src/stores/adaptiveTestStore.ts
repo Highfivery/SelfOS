@@ -191,6 +191,8 @@ interface AdaptiveTestState {
     testId: string,
     self: 'girl' | 'man' | 'either',
     partner: 'girl' | 'man' | 'either',
+    /** Who the two of you are — backs the BODY axis when onboarding has no anatomy answer (§3.6.3). */
+    identity?: { self: 'man' | 'woman' | 'either'; partner: 'man' | 'woman' | 'either' },
   ): Promise<void>;
   /** Remember the deck position so resuming lands where they stopped (74 §3.6.4). */
   rememberArea(area: number): Promise<void>;
@@ -372,9 +374,14 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       await inFlight;
     },
 
-    setAddress: async (testId, self, partner) => {
+    setAddress: async (testId, self, partner, identity) => {
       set({ busy: true });
-      await window.selfos?.testsLexiconEdit({ kind: 'setAddress', self, partner });
+      await window.selfos?.testsLexiconEdit({
+        kind: 'setAddress',
+        self,
+        partner,
+        ...(identity ? { identity } : {}),
+      });
       // The bank is oriented HOST-SIDE, so it has to be re-read for the new answers to take effect.
       const bank = await (window.selfos?.testsBank({ testId }) ?? Promise.resolve(null));
       set({ bank: bank ?? get().bank, busy: false, phase: 'bank' });

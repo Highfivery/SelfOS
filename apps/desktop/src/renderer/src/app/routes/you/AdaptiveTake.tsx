@@ -7,9 +7,27 @@ import { Ban, Contrast, Flame, Lock } from 'lucide-react';
  * boundary is not a "close"; `Contrast` (a half-filled circle) reads as "partly", which is what "it's okay"
  * is. Each carries a text label + `aria-pressed`, so state is never conveyed by icon or colour alone (§9).
  */
+/**
+ * 74 §3.6.3 — who the two of you are. Two plain questions, because this is the screen that decides which half
+ * of a 1,000-line bank a person ever sees, and it used to ask it sideways ("When someone talks to you like
+ * this, you're…"), which reads as a riddle. It also used to set only the ADDRESS axis and lean on onboarding
+ * for the body axis — and onboarding fails open, so someone who skipped it was shown everything in both
+ * directions.
+ */
+const IDENTITY_OPTIONS: { value: 'man' | 'woman' | 'either'; label: string }[] = [
+  { value: 'man', label: 'a man' },
+  { value: 'woman', label: 'a woman' },
+  { value: 'either', label: 'neither · both · it depends' },
+];
+
+/** What someone of this identity is called by default. Overridable below — a man can want "good girl". */
+function addressFor(identity: 'man' | 'woman' | 'either'): 'girl' | 'man' | 'either' {
+  return identity === 'man' ? 'man' : identity === 'woman' ? 'girl' : 'either';
+}
+
 const ADDRESS_OPTIONS: { value: 'girl' | 'man' | 'either'; self: string; partner: string }[] = [
-  { value: 'girl', self: 'their girl', partner: 'a girl' },
-  { value: 'man', self: 'their man', partner: 'a man' },
+  { value: 'girl', self: 'their girl', partner: 'his girl' },
+  { value: 'man', self: 'their man', partner: 'her man' },
   { value: 'either', self: 'neither · both · depends', partner: 'neither · both · depends' },
 ];
 
@@ -31,6 +49,24 @@ function addressSummary(
 function sideLabel(sides: readonly ('hear' | 'say')[]): string {
   if (sides.length >= 2) return 'hear & say';
   return sides[0] === 'say' ? 'you say' : 'you hear';
+}
+
+/**
+ * The direction, as a sentence, for a whole area.
+ *
+ * This was the single most confusing thing on the screen: "your pussy is so wet for me" with three marks and
+ * NOTHING saying whether you're rating hearing it or saying it. The orientation already resolves it per entry
+ * — most areas come out uniform (her body is say-only for a man who dates women) — but the answer lived in the
+ * aria-label, where a sighted person never sees it. Rating the wrong direction silently poisons the whole
+ * profile, so it is stated, not implied.
+ */
+function directionSentence(sides: readonly ('hear' | 'say')[]): string {
+  if (sides.length >= 2) {
+    return 'Rate these BOTH ways at once — hearing it from them and saying it to them. You split the two apart in the next step.';
+  }
+  return sides[0] === 'say'
+    ? 'These are things YOU SAY TO THEM. Rate how much you want to say it.'
+    : 'These are things THEY SAY TO YOU. Rate how much you want to hear it.';
 }
 
 const MARK_META: Record<BankMark, { label: string; Icon: typeof Flame }> = {
@@ -152,6 +188,7 @@ export function AdaptiveTake(): JSX.Element {
   // lie the second time they open it: someone who stopped at area 22 comes back to area 1 with 21 areas of
   // already-marked terms to page through (the §3.4 argument, one level down).
   const [areaIndex, setAreaIndex] = useState(0);
+  const areaHeadingRef = useRef<HTMLHeadingElement>(null);
   // Adopt the saved position once the bank arrives (it is device-local, so it comes with the bank read).
   const adopted = useRef(false);
   useEffect(() => {
@@ -165,14 +202,36 @@ export function AdaptiveTake(): JSX.Element {
   }, [store.bank]);
   const [selfAddress, setSelfAddress] = useState<'girl' | 'man' | 'either' | null>(null);
   const [partnerAddress, setPartnerAddress] = useState<'girl' | 'man' | 'either' | null>(null);
+  const [selfIdentity, setSelfIdentity] = useState<'man' | 'woman' | 'either' | null>(null);
+  const [partnerIdentity, setPartnerIdentity] = useState<'man' | 'woman' | 'either' | null>(null);
+  // The address pair is DERIVED from identity by default and only revealed when someone says it doesn't fit.
+  // Keeping the two separable is what lets a man ask to be called "good girl" (§3.6.3) — collapsing them into
+  // one identity question would have deleted that, which is the same conflation #62 was about.
+  const [addressDiffers, setAddressDiffers] = useState(false);
   // Seed from what they already answered, or re-opening the screen shows an empty form with Start disabled
   // and no way to see the current answer.
   const seededAddress = useRef(false);
   useEffect(() => {
-    if (seededAddress.current || !store.bank?.address) return;
+    if (seededAddress.current || !store.bank) return;
+    const { address, identity } = store.bank;
+    if (!address && !identity) return;
     seededAddress.current = true;
-    setSelfAddress(store.bank.address.self);
-    setPartnerAddress(store.bank.address.partner);
+    if (identity) {
+      setSelfIdentity(identity.self);
+      setPartnerIdentity(identity.partner);
+    }
+    if (address) {
+      setSelfAddress(address.self);
+      setPartnerAddress(address.partner);
+      // Only open the override when what they're called actually diverges from who they are.
+      if (
+        identity &&
+        (address.self !== addressFor(identity.self) ||
+          address.partner !== addressFor(identity.partner))
+      ) {
+        setAddressDiffers(true);
+      }
+    }
   }, [store.bank]);
   const area = bank?.families[areaIndex];
   const areaEntries = useMemo(
@@ -180,6 +239,16 @@ export function AdaptiveTake(): JSX.Element {
     [bank, area],
   );
   const withheld = area ? (bank?.withheldByFamily[area.id] ?? 0) : 0;
+  /**
+   * The direction this area is actually being rated in. Orientation resolves it per entry, and in practice an
+   * area comes out uniform — so when it is, the whole area gets ONE clear sentence; when it isn't, each row
+   * carries its own visible marker. Either way the person is never left guessing.
+   */
+  const areaSides = useMemo(() => {
+    const shapes = new Set(areaEntries.map((entry) => [...entry.sides].sort().join('+')));
+    if (shapes.size !== 1) return null;
+    return areaEntries[0]?.sides ?? null;
+  }, [areaEntries]);
   /**
    * 74 §3.6.4 — what still needs the hear/say question after the collapse: only entries this person was
    * offered on BOTH sides. Everything oriented to one side already knows its direction.
@@ -223,6 +292,10 @@ export function AdaptiveTake(): JSX.Element {
     // the app's own scroll container rather than every element in the document.
     const scroller = document.querySelector('[data-app-scroll]') ?? document.scrollingElement;
     if (scroller) scroller.scrollTop = 0;
+    // …and move FOCUS to the new area's name. Everything below the button changed, and a keyboard or screen
+    // reader user was left focused on Next with 36 silent screen changes and no idea what they were looking
+    // at. The Together wrap-up precedent: on a transition this large, focus the thing that changed.
+    requestAnimationFrame(() => areaHeadingRef.current?.focus());
   };
   const nextArea = (): void => goToArea(areaIndex + 1);
 
@@ -329,53 +402,135 @@ export function AdaptiveTake(): JSX.Element {
             <Stack gap={4}>
               <Heading level={2}>Before we start</Heading>
               <Text tone="secondary">
-                Two quick things, so you&rsquo;re only shown what could actually be said in your
-                bed. We already know the bodies involved from your profile — this is about how you
-                like to be <em>talked to</em>.
+                Two questions, so the words you&rsquo;re shown are ones that could actually be said
+                between the two of you — and so &ldquo;what you like to hear&rdquo; means lines
+                about your body, not theirs.
               </Text>
-              <Card className={adaptive.family}>
-                <Text>When someone talks to you like this, you&rsquo;re…</Text>
-                <div className={adaptive.pills}>
-                  {ADDRESS_OPTIONS.map((option) => (
+              <Card className={adaptive.identityCard}>
+                <span className={adaptive.identityLabel} id="adaptive-self-identity-label">
+                  You are a:
+                </span>
+                <div
+                  className={adaptive.pills}
+                  role="group"
+                  aria-labelledby="adaptive-self-identity-label"
+                >
+                  {IDENTITY_OPTIONS.map((option) => (
                     <button
                       key={option.value}
                       type="button"
                       className={adaptive.pill}
-                      aria-pressed={selfAddress === option.value}
-                      onClick={() => setSelfAddress(option.value)}
+                      aria-pressed={selfIdentity === option.value}
+                      onClick={() => {
+                        setSelfIdentity(option.value);
+                        if (!addressDiffers) setSelfAddress(addressFor(option.value));
+                      }}
                     >
-                      {option.self}
+                      {option.label}
                     </button>
                   ))}
                 </div>
               </Card>
-              <Card className={adaptive.family}>
-                <Text>And the person you&rsquo;re saying it to is…</Text>
-                <div className={adaptive.pills}>
-                  {ADDRESS_OPTIONS.map((option) => (
+              <Card className={adaptive.identityCard}>
+                <span className={adaptive.identityLabel} id="adaptive-partner-identity-label">
+                  Your partner is a:
+                </span>
+                <div
+                  className={adaptive.pills}
+                  role="group"
+                  aria-labelledby="adaptive-partner-identity-label"
+                >
+                  {IDENTITY_OPTIONS.map((option) => (
                     <button
                       key={option.value}
                       type="button"
                       className={adaptive.pill}
-                      aria-pressed={partnerAddress === option.value}
-                      onClick={() => setPartnerAddress(option.value)}
+                      aria-pressed={partnerIdentity === option.value}
+                      onClick={() => {
+                        setPartnerIdentity(option.value);
+                        if (!addressDiffers) setPartnerAddress(addressFor(option.value));
+                      }}
                     >
-                      {option.partner}
+                      {option.label}
                     </button>
                   ))}
                 </div>
               </Card>
+
+              {/* The escape hatch. Identity sets what you're CALLED by default, but the two are genuinely
+                  different questions — a man can want "good girl" — so the override stays reachable instead
+                  of being collapsed away. Hidden until asked for, because for most people it never applies. */}
+              {addressDiffers ? (
+                <Card className={adaptive.identityCard}>
+                  <span className={adaptive.identityLabel} id="adaptive-self-address-label">
+                    What you like being called:
+                  </span>
+                  <div
+                    className={adaptive.pills}
+                    role="group"
+                    aria-labelledby="adaptive-self-address-label"
+                  >
+                    {ADDRESS_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={adaptive.pill}
+                        aria-pressed={selfAddress === option.value}
+                        onClick={() => setSelfAddress(option.value)}
+                      >
+                        {option.self}
+                      </button>
+                    ))}
+                  </div>
+                  <span className={adaptive.identityLabel} id="adaptive-partner-address-label">
+                    What they like being called:
+                  </span>
+                  <div
+                    className={adaptive.pills}
+                    role="group"
+                    aria-labelledby="adaptive-partner-address-label"
+                  >
+                    {ADDRESS_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={adaptive.pill}
+                        aria-pressed={partnerAddress === option.value}
+                        onClick={() => setPartnerAddress(option.value)}
+                      >
+                        {option.partner}
+                      </button>
+                    ))}
+                  </div>
+                </Card>
+              ) : (
+                <div>
+                  <button
+                    type="button"
+                    className={adaptive.textLink}
+                    onClick={() => setAddressDiffers(true)}
+                  >
+                    One of you likes being called something else
+                  </button>
+                </div>
+              )}
+
               <Text size="sm" tone="tertiary">
                 Change this any time. It only decides what you&rsquo;re shown — nothing is ruled
                 out, and no mark is lost.
               </Text>
-              <div>
+              <div className={take.footer}>
                 <Button
                   variant="primary"
-                  disabled={store.busy || !selfAddress || !partnerAddress}
+                  disabled={store.busy || !selfIdentity || !partnerIdentity}
                   onClick={() => {
-                    if (selfAddress && partnerAddress)
-                      void store.setAddress(testId, selfAddress, partnerAddress);
+                    if (!selfIdentity || !partnerIdentity) return;
+                    void store.setAddress(
+                      testId,
+                      selfAddress ?? addressFor(selfIdentity),
+                      partnerAddress ?? addressFor(partnerIdentity),
+                      { self: selfIdentity, partner: partnerIdentity },
+                    );
                   }}
                 >
                   Start
@@ -412,7 +567,12 @@ export function AdaptiveTake(): JSX.Element {
               </div>
 
               <div className={adaptive.deckHead}>
-                <Heading level={2}>{area.label}</Heading>
+                {/* Focus target for an area change (see `goToArea`). `tabIndex={-1}` makes it programmatically
+                    focusable without adding a tab stop, and the ref lives here rather than on `Heading`
+                    because that primitive doesn't forward one. */}
+                <div ref={areaHeadingRef} tabIndex={-1} className={adaptive.deckHeadTitle}>
+                  <Heading level={2}>{area.label}</Heading>
+                </div>
                 {/* §3.6.5 promises a route back. Burying it in the withheld note made it unreachable, since
                     that note usually doesn't render — so it lives here, always, beside the area title. */}
                 <button
@@ -423,6 +583,16 @@ export function AdaptiveTake(): JSX.Element {
                   Shown for: {addressSummary(bank.address)} — change
                 </button>
               </div>
+              {areaSides ? (
+                <Text tone="secondary" className={adaptive.direction}>
+                  {directionSentence(areaSides)}
+                </Text>
+              ) : (
+                <Text tone="secondary" className={adaptive.direction}>
+                  These are mixed — each line says whether it&rsquo;s one you&rsquo;d hear or one
+                  you&rsquo;d say.
+                </Text>
+              )}
               {area.note ? (
                 <Text tone="secondary" className={styles.framing}>
                   {area.note}
@@ -505,6 +675,11 @@ export function AdaptiveTake(): JSX.Element {
                             </span>
                             <span className={adaptive.example}>
                               {entry.example ? `“${entry.example}”` : ''}
+                              {/* Only when the area is mixed — repeating "you say" on 47 uniform rows is
+                                  noise, and the area sentence above already carries it. */}
+                              {areaSides === null ? (
+                                <span className={adaptive.sideChip}>{sideLabel(entry.sides)}</span>
+                              ) : null}
                             </span>
                             {locked ? (
                               <span className={adaptive.lockedMark}>

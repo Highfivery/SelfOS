@@ -486,6 +486,33 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-17 — **Fourth audit + owner UI/UX corrections (SPEC 74 §3.3/§3.6.3/§6; on `fix/adaptive-audit-four`).**
+  The owner reported two of these from screenshots, and both were things three audits had missed **because I
+  only ever looked at the taken state of a fully-onboarded person**. **(1) The direction was not clear** — a
+  screen of "your pussy is so wet for me" with three marks and nothing saying whether you were rating HEARING
+  it or SAYING it. Orientation had resolved it correctly (that area is say-only for a man who dates women) but
+  the answer lived in the **aria-label**, invisible to a sighted user; rating the wrong direction silently
+  poisons the whole profile, so it is now an instruction in the area header, with a per-row marker when an area
+  mixes the two. **(2) The body axis had ONE source and it fails open** — `selfBody`/`partnerBody` came only
+  from the onboarding anatomy answers, so anyone who skipped onboarding or answered "rather not say" was shown
+  the whole bank in both directions. The two taps now also ask **who the two of you are** ("You are a: / Your
+  partner is a:", the owner's wording), which backs the body axis; the intake answer still WINS where it exists
+  (asked directly; #62 forbids overriding it by inference), and identity stays separable from address behind an
+  escape, because a man can want "good girl" and collapsing them is the same conflation #62 was about.
+  **(3) The not-yet-taken report was broken** — a banner + Take it, then the entire report rendered empty
+  ("Love to hear"/"Comfortable saying" headings with nothing under them) plus a SECOND Take it button.
+  **(4) A dialled-down entry vanished** — marked love then rated 1–2 in the split, it fell below the loved bar,
+  wasn't a boundary, wasn't the middle mark, and appeared nowhere. **(5) `TestResult.costUsd` carried only the
+  synthesis call** while the bridge redacted it as a money figure; every phase now accrues, and the true cost
+  shows to `budgets.manage`. **(6)** An area change moved no focus — 36 silent screen changes for a keyboard or
+  screen-reader user. Gate green: typecheck (4 pkgs), lint, format, **2322 core + 13 relay + 1641 desktop**
+  unit, both 74 E2E, visual QA of both reported screens. **Lessons: (1) an audit that always loads the happy
+  fixture never sees the empty state — the not-taken report had been broken since it shipped, and one
+  screenshot found it. (2) When a resolver FAILS OPEN, "open" is a real user experience, not a neutral default:
+  here it meant showing a straight man half a bank of lines that could never be said to him. Ask what the
+  fail-open case actually looks like on screen. (3) Putting an answer in an `aria-label` is not surfacing it —
+  if a sighted user needs the fact to answer correctly, it has to be visible text.**
+
 - 2026-08-16 — **Third audit + visual / workflow / usability passes (SPEC 74 §3.3/§3.6.4/§5.3; on
   `fix/adaptive-audit-three`).** Went at the AI phases' own prompts, the scoring math and the sync merge, then
   at the rendered screens. **Correctness:** the probe QUESTION and the scenario SCENE were the only model

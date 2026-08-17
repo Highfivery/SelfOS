@@ -340,3 +340,72 @@
 }
 
 /* `Stack` already spaces the sections apart; only the heading-to-content gap was missing. */
+
+/* The area-name focus target. It takes focus programmatically on an area change, so it needs a visible ring
+ * when it does — but never the default outline offset that would box the whole header row. */
+.deckHeadTitle:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 4px;
+  border-radius: var(--radius-sm);
+}
+
+/*
+ * The direction statement. It is the one thing on the deck a person cannot afford to misread — rating "you
+ * say" as though it were "you hear" silently poisons the profile — so it reads as an instruction, not a note.
+ */
+.direction {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+/* Per-row direction, shown only when an area mixes the two. */
+.sideChip {
+  margin-left: var(--space-2);
+  padding: 1px var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+/*
+ * The identity questions. This screen decides which half of a ~1,000-line bank a person ever sees, so it gets
+ * a real label-above-controls form rather than a sentence with pills trailing off it.
+ */
+.identityCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+}
+
+.identityLabel {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.identityCard .identityLabel + .pills {
+  margin-bottom: var(--space-2);
+}
+
+/*
+ * An inline action inside body copy. The back-link style it borrowed rendered as plain dark text at body
+ * size — visually indistinguishable from the sentence above it, so the one escape hatch on the screen didn't
+ * read as tappable at all.
+ */
+.textLink {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--color-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.textLink:hover {
+  color: var(--color-text-primary);
+}

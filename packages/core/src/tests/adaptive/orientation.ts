@@ -45,10 +45,24 @@ export const OPEN_ORIENTATION: Orientation = {
  * Withholding by default would give someone who declined to answer a quietly thinner test with no way to know
  * why, which is the exact failure §3.6.5 exists to prevent. It mirrors `resolveOral`'s "never guess → neutral".
  */
-export function bodyFromAnatomyAnswer(answer: string | undefined): BankBody {
+export function bodyFromAnatomyAnswer(
+  answer: string | undefined,
+  /**
+   * The identity fallback (§3.6.3), used ONLY when the intake answer says nothing. The intake answer wins
+   * wherever it exists, because it was asked directly and #62 forbids overriding it with an inference from
+   * gender. This exists because "says nothing" used to mean "show everything in both directions", which is
+   * how a straight man ended up rating lines about a vulva as things he'd like to HEAR.
+   */
+  identity?: 'man' | 'woman' | 'either',
+): BankBody {
   const normalized = (answer ?? '').toLowerCase();
   if (normalized.includes('penis')) return 'penis';
   if (normalized.includes('vulva')) return 'vulva';
+  // An explicit non-committal intake answer ("Both or intersex", "Rather not say") is an ANSWER, and it means
+  // either — identity must not override it. Only a genuinely absent answer falls through.
+  if (normalized.trim() !== '') return 'either';
+  if (identity === 'man') return 'penis';
+  if (identity === 'woman') return 'vulva';
   return 'either';
 }
 

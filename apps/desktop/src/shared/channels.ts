@@ -2408,7 +2408,7 @@ export interface SelfosBridge {
   testsAdaptiveBank(input: {
     testId: string;
     resultId: string;
-    marks: Record<string, 'love' | 'never' | 'notYet'>;
+    marks: Record<string, 'love' | 'never' | 'okay'>;
     cleared?: string[];
     autosave?: boolean;
   }): Promise<AdaptiveStateView | null>;

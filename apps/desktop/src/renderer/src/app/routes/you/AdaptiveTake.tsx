@@ -1,6 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Lock } from 'lucide-react';
+import { Ban, Contrast, Flame, Lock } from 'lucide-react';
+
+/**
+ * 74 §3.6.1 #5 — the three marks, as lucide icons. `Ban` (a circle-slash) rather than a bare X because a
+ * boundary is not a "close"; `Contrast` (a half-filled circle) reads as "partly", which is what "it's okay"
+ * is. Each carries a text label + `aria-pressed`, so state is never conveyed by icon or colour alone (§9).
+ */
+const ADDRESS_OPTIONS: { value: 'girl' | 'man' | 'either'; self: string; partner: string }[] = [
+  { value: 'girl', self: 'their girl', partner: 'a girl' },
+  { value: 'man', self: 'their man', partner: 'a man' },
+  { value: 'either', self: 'neither · both · depends', partner: 'neither · both · depends' },
+];
+
+const MARK_META: Record<BankMark, { label: string; Icon: typeof Flame }> = {
+  love: { label: 'love it', Icon: Flame },
+  okay: { label: "it's okay", Icon: Contrast },
+  never: { label: 'never', Icon: Ban },
+};
 import {
   Banner,
   Button,
@@ -74,8 +91,8 @@ function SaveState({
 /**
  * 74 §3.2 — taking the Dirty Talk test.
  *
- * Pass 1 walks the WHOLE bank and they mark only what lands (🔥 / ✗ / ~); pass 2 asks the hear/say split on
- * just what they marked. ~1,100 entries without ~1,000 taps. Then the AI phases chase what the bank left
+ * The bank is walked ONE AREA AT A TIME (74 §3.6.4), oriented to who is speaking to whom, with a
+ * hand-written example under every fragment. Marking is three lucide marks — love it / it's okay / never. Then the AI phases chase what the bank left
  * ambiguous, and every one of them degrades rather than failing — a take that never reaches them still
  * completes with an honest, thinner profile.
  */
@@ -107,6 +124,33 @@ export function AdaptiveTake(): JSX.Element {
     return () => document.removeEventListener('visibilitychange', onHide);
   }, [testId]);
 
+  const bank = store.bank;
+  const marked = useMemo(() => Object.keys(store.marks), [store.marks]);
+
+  // 74 §3.6.4 — the deck. One area per screen, in the bank's own (broad-first) family order.
+  const [areaIndex, setAreaIndex] = useState(0);
+  const [selfAddress, setSelfAddress] = useState<'girl' | 'man' | 'either' | null>(null);
+  const [partnerAddress, setPartnerAddress] = useState<'girl' | 'man' | 'either' | null>(null);
+  const area = bank?.families[areaIndex];
+  const areaEntries = useMemo(
+    () => (bank && area ? bank.entries.filter((entry) => entry.family === area.id) : []),
+    [bank, area],
+  );
+  const withheld = area ? (bank?.withheldByFamily[area.id] ?? 0) : 0;
+  /**
+   * 74 §3.6.4 — what still needs the hear/say question after the collapse: only entries this person was
+   * offered on BOTH sides. Everything oriented to one side already knows its direction.
+   */
+  const splitNeeded = useMemo(
+    () =>
+      Object.keys(store.marks).filter((key) => {
+        if (store.marks[key] === 'never') return false;
+        const entry = bank?.entries.find((e) => e.key === key);
+        return (entry?.sides.length ?? 0) >= 2;
+      }),
+    [store.marks, bank],
+  );
+
   // Each AI phase starts itself once on entry — otherwise the person lands on an empty screen and has to ask
   // for the thing they just said yes to. Guarded per phase, so a degraded phase (which moves the take on)
   // can never loop back into itself.
@@ -114,17 +158,26 @@ export function AdaptiveTake(): JSX.Element {
   const { phase: currentPhase, busy } = store;
   useEffect(() => {
     if (busy || started.current[currentPhase]) return;
-    if (currentPhase === 'lines') {
+    // The split screen has nothing to ask when every marked entry is oriented to one side — don't show an
+    // empty screen and make them press Next on it (74 §3.6.4).
+    if (currentPhase === 'split' && splitNeeded.length === 0) {
+      started.current['split'] = true;
+      void useAdaptiveTestStore.getState().submitSplit(testId);
+    } else if (currentPhase === 'lines') {
       started.current['lines'] = true;
       void useAdaptiveTestStore.getState().loadLines(testId, 1);
     } else if (currentPhase === 'probe') {
       started.current['probe'] = true;
       void useAdaptiveTestStore.getState().nextProbe(testId);
     }
-  }, [currentPhase, busy, testId]);
-
-  const bank = store.bank;
-  const marked = useMemo(() => Object.keys(store.marks), [store.marks]);
+  }, [currentPhase, busy, testId, splitNeeded.length]);
+  const nextArea = (): void => {
+    setAreaIndex((index) => Math.min(index + 1, (bank?.families.length ?? 1) - 1));
+    // A new area starts at the top; otherwise you land mid-list on a screen you have never seen.
+    document.querySelectorAll('*').forEach((el) => {
+      if (el.scrollTop > 0) el.scrollTop = 0;
+    });
+  };
 
   // Withheld in the bridge until the 18+ ack — the hub is where that ack lives.
   if (store.loaded && !bank) {
@@ -207,105 +260,215 @@ export function AdaptiveTake(): JSX.Element {
             </Stack>
           ) : null}
 
-          {phase === 'bank' ? (
+          {phase === 'address' ? (
             <Stack gap={4}>
-              <Heading level={2}>What lands?</Heading>
+              <Heading level={2}>Before we start</Heading>
               <Text tone="secondary">
-                Everything is here, tame to extreme. Only tap what actually does something for you —
-                skip the rest. <strong>🔥</strong> if you love it, <strong>~</strong> if it makes
-                you cringe, <strong>✗</strong> if it&rsquo;s a no. A <strong>✗</strong> is a
+                Two quick things, so you&rsquo;re only shown what could actually be said in your
+                bed. We already know the bodies involved from your profile — this is about how you
+                like to be <em>talked to</em>.
+              </Text>
+              <Card className={adaptive.family}>
+                <Text>When someone talks to you like this, you&rsquo;re…</Text>
+                <div className={adaptive.pills}>
+                  {ADDRESS_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={adaptive.pill}
+                      aria-pressed={selfAddress === option.value}
+                      onClick={() => setSelfAddress(option.value)}
+                    >
+                      {option.self}
+                    </button>
+                  ))}
+                </div>
+              </Card>
+              <Card className={adaptive.family}>
+                <Text>And the person you&rsquo;re saying it to is…</Text>
+                <div className={adaptive.pills}>
+                  {ADDRESS_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={adaptive.pill}
+                      aria-pressed={partnerAddress === option.value}
+                      onClick={() => setPartnerAddress(option.value)}
+                    >
+                      {option.partner}
+                    </button>
+                  ))}
+                </div>
+              </Card>
+              <Text size="sm" tone="tertiary">
+                Change this any time. It only decides what you&rsquo;re shown — nothing is ruled
+                out, and no mark is lost.
+              </Text>
+              <div>
+                <Button
+                  variant="primary"
+                  disabled={store.busy || !selfAddress || !partnerAddress}
+                  onClick={() => {
+                    if (selfAddress && partnerAddress)
+                      void store.setAddress(testId, selfAddress, partnerAddress);
+                  }}
+                >
+                  Start
+                </Button>
+              </div>
+              <CrisisFooter />
+            </Stack>
+          ) : null}
+
+          {phase === 'bank' && area ? (
+            <Stack gap={4}>
+              <div className={adaptive.deckHead}>
+                <Text size="sm" tone="tertiary">
+                  Area {areaIndex + 1} of {bank.families.length}
+                </Text>
+                <span
+                  className={adaptive.dots}
+                  role="img"
+                  aria-label={`Area ${areaIndex + 1} of ${bank.families.length}`}
+                >
+                  {bank.families.map((family, index) => (
+                    <i
+                      key={family.id}
+                      className={
+                        index === areaIndex
+                          ? adaptive.now
+                          : index < areaIndex
+                            ? adaptive.done
+                            : undefined
+                      }
+                    />
+                  ))}
+                </span>
+                <SaveState state={store.saveState} />
+              </div>
+
+              <Heading level={2}>{area.label}</Heading>
+              {area.note ? (
+                <Text tone="secondary" className={styles.framing}>
+                  {area.note}
+                </Text>
+              ) : null}
+              <Text tone="secondary">
+                Only tap what actually does something for you — skip the rest.{' '}
+                <Flame size={14} aria-hidden="true" /> if you love it,{' '}
+                <Contrast size={14} aria-hidden="true" /> if it&rsquo;s okay,{' '}
+                <Ban size={14} aria-hidden="true" /> if it&rsquo;s a no. A <em>never</em> is a
                 boundary: nothing in SelfOS will suggest it again.
               </Text>
               <Banner tone="info" role="none">
-                <strong>Every tap saves itself.</strong> There&rsquo;s no finishing this in one go
-                &mdash; mark what you feel like marking and close it whenever; it picks up exactly
-                here, with everything you already marked. Move on when you&rsquo;ve had enough of
-                this list.
+                <strong>Every tap saves itself.</strong> Mark what you feel like marking and close
+                it whenever — it picks up on this area, with everything you already marked. Skip a
+                whole area in one tap.
               </Banner>
-              <div className={take.statusRow}>
-                <Text size="sm" tone="tertiary">
-                  {marked.length} marked
-                </Text>
-                <SaveState state={store.saveState} />
-              </div>
-              {bank.families.map((family) => (
-                <Card key={family.id} className={adaptive.family}>
-                  <Heading level={3}>{family.label}</Heading>
-                  {family.note ? (
-                    <Text size="sm" tone="tertiary" className={styles.framing}>
-                      {family.note}
-                    </Text>
-                  ) : null}
-                  <ul className={adaptive.grid}>
-                    {bank.entries
-                      .filter((entry) => entry.family === family.id)
-                      .map((entry) => {
-                        const mark = store.marks[entry.key];
-                        // A hard no from an EARLIER take is shown as settled, not re-offered as a fresh choice
-                        // (74 §3.5) — it lifts only from the report. One tapped in this sitting stays
-                        // editable: autosave writes it immediately, and a mis-tap must not be permanent.
-                        // Settled = a boundary from an EARLIER take. One made in THIS take stays editable,
-                        // whether it was tapped a minute ago (`touched`) or in a previous sitting of the same
-                        // take (its lexicon entry carries this take's `source`) — core allows both, and a
-                        // stricter UI would strand a mis-tap noticed tomorrow with no way to fix it.
-                        const mineThisTake =
-                          store.touched.includes(entry.key) ||
-                          store.state?.lexicon.entries.some(
-                            (e) =>
-                              e.key === entry.key && e.source === `test:${store.state?.draft?.id}`,
-                          );
-                        const locked =
-                          !mineThisTake &&
-                          store.state?.lexicon.entries.some(
-                            (e) => e.key === entry.key && e.state === 'never',
-                          );
-                        if (locked) {
-                          return (
-                            <li key={entry.key} className={adaptive.row}>
-                              <span className={adaptive.entryText}>{entry.text}</span>
-                              <span className={adaptive.lockedMark}>✗ off the table</span>
-                            </li>
-                          );
-                        }
-                        return (
-                          <li key={entry.key} className={adaptive.row}>
-                            <span className={adaptive.entryText}>{entry.text}</span>
-                            <span className={adaptive.marks}>
-                              {(['love', 'notYet', 'never'] as BankMark[]).map((option) => (
+              <Text size="sm" tone="tertiary">
+                {areaEntries.length} here · {marked.length} marked so far
+              </Text>
+
+              <Card className={adaptive.family}>
+                <ul className={adaptive.grid} style={{ display: 'block' }}>
+                  {areaEntries.map((entry) => {
+                    // Settled = a boundary from an EARLIER take. One made in THIS take stays editable,
+                    // whether it was tapped a minute ago (`touched`) or in a previous sitting of the same
+                    // take (its lexicon entry carries this take's `source`) — core allows both, and a
+                    // stricter UI would strand a mis-tap noticed tomorrow with no way to fix it.
+                    const mark = store.marks[entry.key];
+                    const mineThisTake =
+                      store.touched.includes(entry.key) ||
+                      store.state?.lexicon.entries.some(
+                        (e) => e.key === entry.key && e.source === `test:${store.state?.draft?.id}`,
+                      );
+                    const locked =
+                      !mineThisTake &&
+                      store.state?.lexicon.entries.some(
+                        (e) => e.key === entry.key && e.state === 'never',
+                      );
+                    return (
+                      <li key={entry.key} className={adaptive.entryRow}>
+                        <span className={adaptive.entryText}>
+                          {entry.text}
+                          <span
+                            className={`${adaptive.tierPip} ${entry.tier >= 4 ? adaptive.hot : ''}`}
+                            aria-hidden="true"
+                          />
+                        </span>
+                        <span className={adaptive.example}>
+                          {entry.example ? `“${entry.example}”` : ''}
+                        </span>
+                        {locked ? (
+                          <span className={adaptive.lockedMark}>
+                            <Ban size={13} aria-hidden="true" /> off the table
+                          </span>
+                        ) : (
+                          <span className={adaptive.marks}>
+                            {(['love', 'okay', 'never'] as BankMark[]).map((option) => {
+                              const { label, Icon } = MARK_META[option];
+                              return (
                                 <button
                                   key={option}
                                   type="button"
-                                  className={adaptive.markButton}
-                                  aria-pressed={mark === option}
-                                  aria-label={`${entry.text} — ${
-                                    option === 'love'
-                                      ? 'love it'
-                                      : option === 'notYet'
-                                        ? 'makes me cringe'
-                                        : 'never'
+                                  className={`${adaptive.markButton} ${
+                                    option === 'never' ? adaptive.markNo : ''
                                   }`}
+                                  aria-pressed={mark === option}
+                                  aria-label={`${entry.text} — ${label}`}
                                   onClick={() =>
                                     store.mark(entry.key, mark === option ? null : option)
                                   }
                                 >
-                                  {option === 'love' ? '🔥' : option === 'notYet' ? '~' : '✗'}
+                                  <Icon size={17} aria-hidden="true" />
                                 </button>
-                              ))}
-                            </span>
-                          </li>
-                        );
-                      })}
-                  </ul>
-                </Card>
-              ))}
-              <div className={take.footer}>
-                <Button
-                  variant="primary"
-                  disabled={store.busy}
-                  onClick={() => void store.submitBank(testId)}
-                >
-                  Next — how you want them
-                </Button>
+                              );
+                            })}
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Card>
+
+              {withheld > 0 ? (
+                <div className={adaptive.withheld}>
+                  <Text size="sm" tone="tertiary">
+                    {withheld} {withheld === 1 ? 'term is' : 'terms are'} hidden here —
+                    they&rsquo;re aimed at a body or a role that isn&rsquo;t yours or theirs. Change
+                    that in{' '}
+                    <button
+                      type="button"
+                      className={take.back}
+                      onClick={() => store.setPhase('address')}
+                    >
+                      Before we start
+                    </button>
+                    .
+                  </Text>
+                </div>
+              ) : null}
+
+              <div className={adaptive.deckFoot}>
+                <Text size="sm" tone="tertiary">
+                  Saves as you go — stop anywhere.
+                </Text>
+                <span style={{ display: 'inline-flex', gap: 'var(--space-3)' }}>
+                  <Button variant="secondary" disabled={store.busy} onClick={() => nextArea()}>
+                    Skip this area
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={store.busy}
+                    onClick={() => {
+                      if (areaIndex + 1 >= bank.families.length) void store.submitBank(testId);
+                      else nextArea();
+                    }}
+                  >
+                    {areaIndex + 1 >= bank.families.length ? 'Done — show me' : 'Next area →'}
+                  </Button>
+                </span>
               </div>
               <CrisisFooter />
             </Stack>
@@ -327,6 +490,10 @@ export function AdaptiveTake(): JSX.Element {
               {marked.map((key) => {
                 const entry = bank.entries.find((e) => e.key === key);
                 if (!entry || store.marks[key] === 'never') return null;
+                // 74 §3.6.4 — the collapse. An oriented entry was only ever offered on ONE side, so its
+                // direction is already known and there is nothing to split; only an entry that reaches both
+                // still needs the question. Rating the unshown side would invent an answer (§3.6.6).
+                if (entry.sides.length < 2) return null;
                 return (
                   <div key={key} className={adaptive.splitRow}>
                     <span className={adaptive.entryText}>{entry.text}</span>
@@ -392,7 +559,13 @@ export function AdaptiveTake(): JSX.Element {
                         aria-label={`${line} — ${reaction}`}
                         onClick={() => void store.reactToLine(testId, line, reaction)}
                       >
-                        {reaction === 'love' ? '🔥' : reaction === 'meh' ? '😐' : '🚫'}
+                        {reaction === 'love' ? (
+                          <Flame size={16} aria-hidden="true" />
+                        ) : reaction === 'meh' ? (
+                          <Contrast size={16} aria-hidden="true" />
+                        ) : (
+                          <Ban size={16} aria-hidden="true" />
+                        )}
                       </button>
                     ))}
                   </span>

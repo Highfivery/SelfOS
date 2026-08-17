@@ -77,8 +77,11 @@ export async function writeLexicon(
   await writeEncryptedJson(fs, lexiconPath(lexicon.personId), lexicon, key);
 }
 
-/** How one entry landed in pass 1 of the bank (74 §3.2): loved it, a boundary, or a cringe. */
-export type BankMark = 'love' | 'never' | 'notYet';
+/**
+ * How one entry landed in the bank pass (74 §3.6.2): loved it, it's okay, or it's a boundary. `okay` is a
+ * MILD YES — fine, works, not a favourite — not the superseded "makes me cringe".
+ */
+export type BankMark = 'love' | 'never' | 'okay';
 
 /** Pass 1 — the whole bank, marking only what lands. Everything untouched stays genuinely unrated. */
 export interface BankMarks {
@@ -87,6 +90,19 @@ export interface BankMarks {
 
 /** The rating a `love` mark seeds before pass 2 splits it into hear/say. */
 const LOVE_SEED = 3;
+
+/**
+ * Were both directions actually put to this person? Absent `sides` ⇒ yes, which is true of every entry
+ * written before orientation existed (74 §3.6.6). Used wherever a `0` would otherwise be read as a refusal.
+ */
+export function bothSidesAsked(entry: LexiconEntry): boolean {
+  return entry.sides === undefined || (entry.sides.includes('hear') && entry.sides.includes('say'));
+}
+
+/** Was this person ever asked to rate saying it? A say-direction signal must not count entries that weren't. */
+export function saySideAsked(entry: LexiconEntry): boolean {
+  return entry.sides === undefined || entry.sides.includes('say');
+}
 
 /**
  * Apply pass-1 marks onto a lexicon (pure). An entry marked `love` is seeded at {@link LOVE_SEED} in BOTH
@@ -102,6 +118,8 @@ export function applyBankMarks(
   marks: BankMarks,
   source: string,
   now: Date,
+  /** Which sides each key was SHOWN on (74 §3.6.6). Absent for a key ⇒ both, the pre-orientation behaviour. */
+  sidesByKey: Readonly<Record<string, readonly ('hear' | 'say')[]>> = {},
 ): EroticLexicon {
   const byKey = new Map(lexicon.entries.map((entry) => [entry.key, entry]));
   const boundaries = [...lexicon.boundaries];
@@ -118,7 +136,10 @@ export function applyBankMarks(
     // source scoping cannot be walked around by re-marking a hard no and then clearing it. Deleting this
     // line silently unlocks un-marking someone else's settled boundary too.
     if (existing?.state === 'never') continue;
-    const base = existing ?? toLexiconEntry(spec as BankEntry, source);
+    const shownSides = sidesByKey[key];
+    // Record what was ASKED, so a `0` on a side that was never offered is distinguishable from a refusal.
+    const withSides = shownSides ? { sides: [...shownSides] } : {};
+    const base = { ...(existing ?? toLexiconEntry(spec as BankEntry, source)), ...withSides };
     if (mark === 'love') {
       // Seed ONLY when there is nothing to preserve. Re-sending the whole pass (which closing it does) would
       // otherwise reset a hear:4/say:1 split back to 3/3 — and quitting between the two passes, which the
@@ -418,14 +439,20 @@ export function lovedEntries(
 }
 
 /**
- * The GOAL list, derived rather than asked: things they clearly want to HEAR (or that landed) but rate low to
- * SAY. That gap is the coachable material the practice session runs on (74 §3.3). A `notYet` entry is included
- * regardless of its ratings — "I'd feel like an idiot" is exactly this.
+ * The GOAL list, derived rather than asked: things they clearly want to HEAR but rate low to SAY. That gap is
+ * the coachable material the practice session runs on (74 §3.3).
+ *
+ * **Only when BOTH sides were actually asked** (74 §3.6.6). `say: 0` means "cannot say it", so an entry the
+ * orientation only ever offered on the hear side would otherwise become a goal the person never declined —
+ * and goals reach their own coach prompt AND a partner-shared Insight fact. A fabricated goal is worse than a
+ * missing one. Entries predating orientation carry no `sides` and are treated as both-asked, which is true.
+ *
+ * The middle mark no longer contributes: `okay` is a mild yes, not a thing they wish they could say (§3.6.2).
  */
 export function derivedWantsToSay(lexicon: EroticLexicon): string[] {
   const gap = lexicon.entries
     .filter((entry) => entry.state !== 'never')
-    .filter((entry) => entry.state === 'notYet' || (entry.hear >= 3 && entry.say <= 1))
+    .filter((entry) => bothSidesAsked(entry) && entry.hear >= 3 && entry.say <= 1)
     .map((entry) => entry.text);
   // Belt and braces on top of the mark guard: a goal is something to PRACTISE, so a suppressed text can
   // never appear here — it would read as encouragement to say the one thing they ruled out.

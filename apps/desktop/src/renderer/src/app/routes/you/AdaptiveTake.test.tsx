@@ -26,6 +26,8 @@ const BANK: AdaptiveBankView = {
       family: 'names-power',
       tier: 2,
       directions: ['hear', 'say'],
+      sides: ['hear', 'say'],
+      example: 'that’s it — such a good girl for me',
     },
     {
       key: 'taboo:run-primal',
@@ -34,8 +36,11 @@ const BANK: AdaptiveBankView = {
       family: 'taboo',
       tier: 5,
       directions: ['hear', 'say'],
+      sides: ['hear', 'say'],
     },
   ],
+  withheldByFamily: {},
+  address: { self: 'girl', partner: 'man' },
 };
 
 function state(overrides: Partial<AdaptiveStateView> = {}): AdaptiveStateView {
@@ -126,14 +131,15 @@ describe('AdaptiveTake (74 §3.2)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
 
     expect(await screen.findByText(/nothing in SelfOS will suggest it again/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'good girl — love it' }));
+
+    await userEvent.click(screen.getByRole('button', { name: /Next area/ }));
     // The taboo family carries its roleplay framing wherever it appears (74 §8.1).
     expect(screen.getByText(/PRE-AGREED, SAFEWORDED ROLEPLAY/)).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'good girl — love it' }));
     await userEvent.click(screen.getByRole('button', { name: 'run (primal) — never' }));
-    expect(screen.getByText('2 marked')).toBeInTheDocument();
+    expect(screen.getByText(/2 marked/)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: /Next — how you want them/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Done — show me/i }));
     await waitFor(() =>
       expect(bankPass).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -153,8 +159,9 @@ describe('AdaptiveTake (74 §3.2)', () => {
     renderTake();
     await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
     await userEvent.click(screen.getByRole('button', { name: 'good girl — love it' }));
+    await userEvent.click(screen.getByRole('button', { name: /Next area/ }));
     await userEvent.click(screen.getByRole('button', { name: 'run (primal) — never' }));
-    await userEvent.click(screen.getByRole('button', { name: /Next — how you want them/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Done — show me/i }));
 
     expect(await screen.findByText(/Hearing it, or saying it\?/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'good girl — hear 4 of 4' })).toBeInTheDocument();
@@ -230,6 +237,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     renderTake();
     await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
 
+    await userEvent.click(screen.getByRole('button', { name: /Next area/ }));
     const never = screen.getByRole('button', { name: 'run (primal) — never' });
     await userEvent.click(never);
     await waitFor(() => expect(bankPass).toHaveBeenCalled());
@@ -242,7 +250,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
         expect.objectContaining({ cleared: ['taboo:run-primal'], autosave: true }),
       ),
     );
-    expect(screen.getByText('0 marked')).toBeInTheDocument();
+    expect(screen.getByText(/0 marked/)).toBeInTheDocument();
   });
 
   it('a boundary from an EARLIER take is still settled, not re-offered', async () => {
@@ -274,8 +282,72 @@ describe('AdaptiveTake (74 §3.2)', () => {
     await userEvent.click(
       await screen.findByRole('button', { name: /Pick up where you left off/i }),
     );
+    // The boundary lives in the taboo family — the deck shows one area at a time (74 §3.6.4).
+    await userEvent.click(await screen.findByRole('button', { name: /Next area/ }));
     expect(await screen.findByText(/off the table/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'run (primal) — never' })).not.toBeInTheDocument();
+  });
+
+  // --- 74 §3.6.3/§3.6.4/§3.6.5 — orientation ---
+
+  it('asks the two address taps first, then opens the deck oriented', async () => {
+    const edit = vi.fn(() => Promise.resolve(null));
+    const unoriented = { ...BANK };
+    delete (unoriented as { address?: unknown }).address;
+    installMockBridge({
+      testsBank: () => Promise.resolve(unoriented),
+      testsAdaptiveState: () => Promise.resolve(state()),
+      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
+      testsLexiconEdit: edit as never,
+    });
+    renderTake();
+    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+
+    expect(await screen.findByText(/Before we start/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'their man' }));
+    await userEvent.click(screen.getByRole('button', { name: 'a girl' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }));
+
+    await waitFor(() =>
+      expect(edit).toHaveBeenCalledWith({ kind: 'setAddress', self: 'man', partner: 'girl' }),
+    );
+  });
+
+  it('skips the address taps on a retake — they are asked once, not every time', async () => {
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK), // BANK already carries an address
+      testsAdaptiveState: () => Promise.resolve(state()),
+      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    expect(await screen.findByText(/Area 1 of 2/)).toBeInTheDocument();
+    expect(screen.queryByText(/Before we start/i)).not.toBeInTheDocument();
+  });
+
+  it('STATES what it withheld, with a route back — never a silently thinner list', async () => {
+    installMockBridge({
+      testsBank: () => Promise.resolve({ ...BANK, withheldByFamily: { 'names-power': 14 } }),
+      testsAdaptiveState: () => Promise.resolve(state()),
+      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    expect(await screen.findByText(/14 terms are hidden here/i)).toBeInTheDocument();
+    // …and the way back is a control, not just a sentence.
+    await userEvent.click(screen.getByRole('button', { name: /Before we start/i }));
+    expect(await screen.findByText(/When someone talks to you like this/i)).toBeInTheDocument();
+  });
+
+  it('shows the example under a term — you react to the line, not the word', async () => {
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state()),
+      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    expect(await screen.findByText(/such a good girl for me/)).toBeInTheDocument();
   });
 
   it('moves on rather than dead-ending when an AI phase degrades (74 §7)', async () => {

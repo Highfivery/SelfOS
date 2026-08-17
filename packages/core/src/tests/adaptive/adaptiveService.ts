@@ -186,6 +186,12 @@ export async function recordBankPass(
     /** Marks the person took back — un-marked in the same sitting (74 §3.4). */
     cleared?: readonly string[];
     /**
+     * Which sides each key was SHOWN on for this person (74 §3.6.6). Resolved by the caller, which knows the
+     * orientation. Recorded on the entry so a side that was never offered is never read as a refusal —
+     * without it, every loved hear-only entry becomes a goal the person never declined.
+     */
+    sides?: Readonly<Record<string, readonly ('hear' | 'say')[]>>;
+    /**
      * An AUTOSAVE, not the end of the pass. The lexicon is written either way — that is the point, so nothing
      * is lost — but only completing the pass stamps a turn. A turn per tap would put ~1,100 of them in the
      * result and make `turns` useless as a record of what was actually asked.
@@ -196,7 +202,7 @@ export async function recordBankPass(
 ): Promise<EroticLexicon> {
   const lexicon = await readLexicon(fs, key, input.personId, now);
   const source = `test:${input.resultId}`;
-  const marked = applyBankMarks(lexicon, def.bank, input.marks, source, now);
+  const marked = applyBankMarks(lexicon, def.bank, input.marks, source, now, input.sides ?? {});
   // Un-marking is scoped to THIS take's own marks, and only while the take is still OPEN. Without the draft
   // check, `source` scoping is only as strong as a renderer-supplied string: passing a COMPLETED take's id
   // makes `source` match its entries and lifts a boundary that take settled. Result ids are handed to the

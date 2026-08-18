@@ -479,17 +479,28 @@ export function AdaptiveTake(): JSX.Element {
   const current = stepIndex >= 0 ? statuses[stepIndex] : null;
   const upNext = current ? nextStepAfter(statuses, current.step.id) : null;
 
-  /** Going to a step never spends — except the profile, which IS the synthesis. */
+  /**
+   * Going to a step never spends — except the profile, which IS the synthesis.
+   *
+   * It FLUSHES first. The readiness gate and every AI phase read the LEXICON, not the store, so marks still
+   * sitting in the 700ms debounce are marks the next step cannot see: mark fifteen names, tap into "Lines for
+   * you", and it refuses with "mark a few more" over work you just did. Measured, not guessed — waiting for the
+   * save to land is what made a live run produce lines instead of that refusal. Same class as the synthesize
+   * bug one level up: leaving a step is a save point, and only finishing was treating it as one.
+   */
   const goTo = (id: StepId): void => {
-    if (id === 'profile') void store.synthesize(testId);
-    else store.goToStep(phaseForStep(id));
+    void store.flush(testId).then(() => {
+      if (id === 'profile') return store.synthesize(testId);
+      store.goToStep(phaseForStep(id));
+      return undefined;
+    });
   };
   const skipCurrent = (): void => {
     if (!current) return;
     // Skipping the last step before the profile lands on the MAP, never on a synthesis: a skip is passing
     // something over, and it must never be the thing that spends. Finishing is its own explicit verb.
     const next = upNext && upNext.step.id !== 'profile' ? phaseForStep(upNext.step.id) : null;
-    store.skipStep(current.step.id, next);
+    void store.flush(testId).then(() => store.skipStep(current.step.id, next));
   };
   const stepActions = (nextLabel?: string, onNext?: () => void): JSX.Element => (
     <StepActions
@@ -1184,14 +1195,33 @@ export function AdaptiveTake(): JSX.Element {
                   of your own mouth are usually different — that gap is the most useful thing here.
                 </Text>
                 {splitNeeded.length === 0 ? (
-                  <Banner tone="info">
-                    Nothing to split here — everything you marked was only ever offered one way
-                    round, so its direction is already known.
-                  </Banner>
-                ) : null}
-                <Text size="sm" tone="tertiary">
-                  Saved as you go — leave any of these blank and come back to them.
-                </Text>
+                  /* A banner alone on an otherwise empty screen reads as a broken step. This one is a normal
+                     outcome — an oriented mark already knows its direction — so it says what happened, what it
+                     means, and what to do next, instead of leaving the person on a blank page. */
+                  <Card className={adaptive.probeCard}>
+                    <Text>
+                      <b>Nothing to split here.</b> Everything you marked was only ever offered one
+                      way round, so its direction is already known — there is no second question to
+                      ask about it.
+                    </Text>
+                    <Text size="sm" tone="secondary">
+                      This step fills up when you mark something that could go either way: a name,
+                      or a line that works spoken and heard. Mark more and it will be waiting.
+                    </Text>
+                    <div className={adaptive.askRow}>
+                      <Button variant="primary" onClick={() => goTo('bank')}>
+                        Back to the words →
+                      </Button>
+                      <Button variant="ghost" onClick={() => goTo('names')}>
+                        Or the names
+                      </Button>
+                    </div>
+                  </Card>
+                ) : (
+                  <Text size="sm" tone="tertiary">
+                    Saved as you go — leave any of these blank and come back to them.
+                  </Text>
+                )}
                 {marked.map((key) => {
                   const entry = bank.entries.find((e) => e.key === key);
                   if (!entry || store.marks[key] === 'never') return null;

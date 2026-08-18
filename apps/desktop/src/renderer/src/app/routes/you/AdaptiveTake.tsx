@@ -479,17 +479,28 @@ export function AdaptiveTake(): JSX.Element {
   const current = stepIndex >= 0 ? statuses[stepIndex] : null;
   const upNext = current ? nextStepAfter(statuses, current.step.id) : null;
 
-  /** Going to a step never spends — except the profile, which IS the synthesis. */
+  /**
+   * Going to a step never spends — except the profile, which IS the synthesis.
+   *
+   * It FLUSHES first. The readiness gate and every AI phase read the LEXICON, not the store, so marks still
+   * sitting in the 700ms debounce are marks the next step cannot see: mark fifteen names, tap into "Lines for
+   * you", and it refuses with "mark a few more" over work you just did. Measured, not guessed — waiting for the
+   * save to land is what made a live run produce lines instead of that refusal. Same class as the synthesize
+   * bug one level up: leaving a step is a save point, and only finishing was treating it as one.
+   */
   const goTo = (id: StepId): void => {
-    if (id === 'profile') void store.synthesize(testId);
-    else store.goToStep(phaseForStep(id));
+    void store.flush(testId).then(() => {
+      if (id === 'profile') return store.synthesize(testId);
+      store.goToStep(phaseForStep(id));
+      return undefined;
+    });
   };
   const skipCurrent = (): void => {
     if (!current) return;
     // Skipping the last step before the profile lands on the MAP, never on a synthesis: a skip is passing
     // something over, and it must never be the thing that spends. Finishing is its own explicit verb.
     const next = upNext && upNext.step.id !== 'profile' ? phaseForStep(upNext.step.id) : null;
-    store.skipStep(current.step.id, next);
+    void store.flush(testId).then(() => store.skipStep(current.step.id, next));
   };
   const stepActions = (nextLabel?: string, onNext?: () => void): JSX.Element => (
     <StepActions

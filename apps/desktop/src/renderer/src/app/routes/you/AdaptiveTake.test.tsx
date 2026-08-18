@@ -232,8 +232,9 @@ describe('AdaptiveTake (74 §3.2)', () => {
     useAdaptiveTestStore.setState({ phase: 'lines', marks: ENOUGH_MARKS });
     void useAdaptiveTestStore.getState().loadLines('dirty-talk', 1);
 
-    const status = await screen.findByRole('status');
-    expect(status).toHaveTextContent(/Writing lines for you/);
+    // Two live regions can be on screen at once now — the autosave's "Saved" and this — so match the progress
+    // one by its own text rather than taking whichever `status` comes first.
+    const status = await screen.findByText(/Writing lines for you/);
     expect(status).toHaveTextContent(/elapsed/);
     resolveLines({ ok: true, lines: ['good girl, just like that'], degraded: false });
     expect(await screen.findByText(/good girl, just like that/)).toBeInTheDocument();

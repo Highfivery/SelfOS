@@ -812,6 +812,11 @@
     z-index: 20;
     flex-direction: row;
     align-items: center;
+    /* The deck's verbs are two words; the names phase's are whole sentences ("Finish — show me my profile"),
+       and a one-line bar cannot hold them — which is what pushed its tally card past the pane. Wrapping keeps
+       every action reachable and on screen; nothing here may spill instead. */
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
     gap: var(--space-3);
     padding: var(--space-2) var(--space-3);
     padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
@@ -825,6 +830,22 @@
     border: 0;
     background: none;
     box-shadow: none;
+  }
+
+  /* The bar is ONE line of tally + actions — what it was designed for, and what keeps the deck's primary
+     action on screen at the bottom of a 47-row area. The step list joined the rail later and cannot fit here:
+     eight rows in a one-line bar is what pushed the names phase's cards past the pane. Stacking the whole rail
+     in the flow instead fixed that and broke the bar — "Next area" fell below the fold, which is the exact
+     thing the bar exists to prevent. So the bar keeps its shape and drops the list; the verbs are the part
+     that has to be reachable, and the map is one of them. */
+  .rail .railSteps {
+    display: none;
+  }
+
+  /* The tally's note is a whole sentence — fine in a column, too wide for a one-line bar, and it is what
+     pushed the names phase's tally card past the pane. The counts beside it already say the same thing. */
+  .rail .tallyNote {
+    display: none;
   }
 
   .railHead {

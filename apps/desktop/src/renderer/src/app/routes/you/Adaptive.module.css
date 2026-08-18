@@ -827,6 +827,51 @@
     box-shadow: none;
   }
 
+  /* The fixed bar is ONE line of tally + actions — what the DECK's rail was designed for. The names phase
+     wraps its rail in `.railWrap`, and the shared rail carries eight step rows besides, which no one-line bar
+     can hold: that is what pushed its cards past the pane at 390px. There it stays in the flow and stacks. */
+  .rail:has(.railSteps) {
+    position: static;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0;
+    background: none;
+    border-top: 0;
+    box-shadow: none;
+  }
+
+  .rail:has(.railSteps) .railCard {
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+  }
+
+  .rail:has(.railSteps) .railHead {
+    display: block;
+  }
+
+  .rail:has(.railSteps) .railActions {
+    flex-direction: column;
+    align-items: stretch;
+    margin-left: 0;
+  }
+
+  .rail:has(.railSteps) .railActions > button {
+    width: 100%;
+  }
+
+  .rail:has(.railSteps) .tally {
+    flex-direction: column;
+  }
+
+  .rail:has(.railSteps) .tallyRow > .tallyLabel {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    clip-path: none;
+  }
+
   .railHead {
     display: none;
   }

@@ -238,6 +238,14 @@ interface AdaptiveTestState {
   probeDone: boolean;
   scenario: { context: string; scene: string; options: string[] } | null;
   /**
+   * 74 §3.6.9 — how many marks were already on record when this sitting opened, per marking step.
+   *
+   * Marks live in ONE lexicon across takes, so a retake opens with everything from last time already seeded.
+   * Without this the rail says "68" whether they marked 68 today or 68 last month — one number pretending to be
+   * the other. Where the two differ the rail shows both.
+   */
+  seeded: { names: number; bank: number };
+  /**
    * 74 §3.6.9 — steps passed over in THIS sitting, so the rail and the profile can say so instead of quietly
    * filling the gap. Deliberately not persisted: a skip is a decision about this sitting, and on a later one the
    * step should simply be open again rather than carrying a stale refusal forward.
@@ -322,6 +330,7 @@ const EMPTY = {
   probeDone: false,
   scenario: null,
   skipped: [] as string[],
+  seeded: { names: 0, bank: 0 },
 };
 
 /**
@@ -437,7 +446,14 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         if (entry.hear > 0 || entry.say > 0)
           splits[entry.key] = { hear: entry.hear, say: entry.say };
       }
-      set({ bank, state, loaded: true, marks, splits });
+      set((prev) => ({
+        bank,
+        state,
+        loaded: true,
+        marks,
+        splits,
+        seeded: { ...prev.seeded, bank: Object.keys(marks).length },
+      }));
     },
 
     start: async (testId) => {
@@ -501,7 +517,11 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
           };
         }
       }
-      set({ names, nameMarks });
+      set((prev) => ({
+        names,
+        nameMarks,
+        seeded: { ...prev.seeded, names: Object.keys(nameMarks).length },
+      }));
     },
 
     markName: (key, side, mark) => {
@@ -577,9 +597,9 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       });
       // The bank is oriented HOST-SIDE, so it has to be re-read for the new answers to take effect.
       const bank = await (window.selfos?.testsBank({ testId }) ?? Promise.resolve(null));
-      // Straight into the words: these two taps are that step's prerequisite (74 §3.6.9), not a gate on the
-      // whole take — they only ever governed which half of the deck is shown.
-      set({ bank: bank ?? get().bank, busy: false, phase: 'bank' });
+      // Step 1 → step 2. These two taps are the take's FIRST step now (74 §3.6.9), so answering them moves to
+      // the pet names rather than jumping into the deck they happen to orient.
+      set({ bank: bank ?? get().bank, busy: false, phase: 'names' });
     },
 
     banLine: async (line) => {
@@ -755,6 +775,11 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
     synthesize: async (testId) => {
       const resultId = get().state?.draft?.id;
       if (!resultId) return;
+      // Flush FIRST. Every other closing call does (`submitBank`, `submitSplit`, `finishNames`), and this one
+      // did not — which was survivable while finishing meant walking through them, and became a data-loss bug
+      // the moment "Finish — show me my profile" appeared on every step's rail (74 §3.6.9): tap it inside the
+      // 700ms debounce and the profile is built without the marks you just made.
+      await get().flush(testId);
       set({ busy: true, progress: { phase: 'Writing your profile', startedAt: Date.now() } });
       const next = await (window.selfos?.testsAdaptiveSynthesize({ testId, resultId }) ??
         Promise.resolve(null));

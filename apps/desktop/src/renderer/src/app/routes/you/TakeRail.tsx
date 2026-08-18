@@ -30,6 +30,8 @@ function trailing(status: StepStatus): string | null {
   if (status.state === 'skipped') return 'skipped';
   if (status.state === 'blocked') return null;
   if (status.outstanding) return `${status.outstanding} new to do`;
+  // A retake opens with last time's marks already on record, so one number would be standing for the other.
+  if (status.fresh !== undefined) return `${status.count} · ${status.fresh} today`;
   if (status.count > 0) return String(status.count);
   return null;
 }

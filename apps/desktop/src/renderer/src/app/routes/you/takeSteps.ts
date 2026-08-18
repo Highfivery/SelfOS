@@ -13,7 +13,16 @@ import type { TakePhase } from '../../../stores/adaptiveTestStore';
  * and the per-step frames can never disagree about it (the §7 coherence rule).
  */
 
-export type StepId = Exclude<TakePhase, 'intro' | 'map' | 'address' | 'done'> | 'profile';
+export type StepId =
+  | Exclude<TakePhase, 'intro' | 'map' | 'address' | 'done'>
+  /** The two identity taps. Its phase is `address` — the id reads as what it asks. */
+  | 'identity'
+  | 'profile';
+
+/** The phase a step enters. Only the first one differs from its id. */
+export function phaseForStep(id: StepId): TakePhase {
+  return id === 'identity' ? 'address' : (id as TakePhase);
+}
 
 export interface TakeStep {
   id: StepId;
@@ -34,6 +43,18 @@ export interface TakeStep {
 
 export const TAKE_STEPS: readonly TakeStep[] = [
   {
+    /**
+     * 74 §3.6.9 — the FIRST step, not a prerequisite hidden behind the second one. It was reachable only by
+     * tapping "The words", which buried the one screen that decides which half of a 1,000-line bank a person
+     * ever sees: "IT SHOULD BE THE FIRST STEP IN THE WHOLE PROCESS".
+     */
+    id: 'identity',
+    label: 'Who you two are',
+    short: 'Who you are',
+    blurb: 'Two taps, so the words you see are ones that could be said between the two of you.',
+    ai: false,
+  },
+  {
     id: 'names',
     label: 'What you call each other',
     short: 'Pet names',
@@ -46,7 +67,7 @@ export const TAKE_STEPS: readonly TakeStep[] = [
     short: 'The words',
     blurb: 'The vocabulary, one area at a time. Mark what lands; skip the rest.',
     ai: false,
-    note: 'Asks who you both are first, then two practice taps.',
+    note: 'Starts with two practice taps.',
   },
   {
     id: 'split',
@@ -103,6 +124,11 @@ export interface StepStatus {
   state: StepState;
   /** Marks made in this step — the SAME unit for every step, so the rail's numbers are comparable. */
   count: number;
+  /**
+   * How many of those were made in THIS sitting. Marks live in one lexicon across takes, so a retake opens with
+   * last time's already on record; where the two differ, both are shown rather than one standing for the other.
+   */
+  fresh?: number;
   /** Work that appeared after they left the step (marks added later still need splitting). */
   outstanding?: number;
   /** Why it is blocked, in their terms. */
@@ -122,6 +148,10 @@ export interface StepInput {
   lineReactions: number;
   probesAnswered: number;
   scenariosAnswered: number;
+  /** What was already on record when this sitting opened, for the two marking steps. */
+  seeded: { names: number; bank: number };
+  /** Whether the two identity taps have been answered — that step's "done", since it stamps no turn. */
+  identityAnswered: boolean;
   /** Marks that were a yes — a lexicon of nothing but hard nos gives a generator nothing to write from. */
   loved: number;
 }
@@ -155,13 +185,23 @@ export function stepStatuses(input: StepInput): StepStatus[] {
         return input.probesAnswered;
       case 'scenario':
         return input.scenariosAnswered;
+      case 'identity':
       case 'profile':
         return 0;
     }
   };
 
+  const freshOf = (id: StepId): number | undefined => {
+    if (id === 'names') return Math.max(0, input.nameMarks - input.seeded.names);
+    if (id === 'bank') return Math.max(0, input.bankMarks - input.seeded.bank);
+    return undefined;
+  };
+
   return TAKE_STEPS.map((step) => {
     const count = countOf(step.id);
+    const freshCount = freshOf(step.id);
+    // Only worth saying when it differs — on a first take every mark IS this sitting's.
+    const fresh = freshCount !== undefined && freshCount !== count ? { fresh: freshCount } : {};
     // Blocked beats everything except being the step you are actually on: a rail that lets you jump anywhere
     // must not offer a tap whose only outcome is an empty screen (or, for an AI step, a paid call that can only
     // come back empty — `testsAdaptiveLines`/`Scenario` reach the model with no marks-guard of their own).
@@ -171,7 +211,7 @@ export function stepStatuses(input: StepInput): StepStatus[] {
     const gate =
       step.id === 'split' || step.id === 'profile'
         ? marked > 0
-        : step.id === 'names' || step.id === 'bank'
+        : step.id === 'identity' || step.id === 'names' || step.id === 'bank'
           ? true
           : readiness.ready;
     if (!gate) {
@@ -187,10 +227,17 @@ export function stepStatuses(input: StepInput): StepStatus[] {
               : shortfall(readiness),
       };
     }
-    if (input.phase === step.id || (step.id === 'profile' && input.phase === 'done')) {
-      return { step, state: 'now', count };
+    if (
+      input.phase === phaseForStep(step.id) ||
+      (step.id === 'profile' && input.phase === 'done')
+    ) {
+      return { step, state: 'now', count, ...fresh };
     }
-    if (input.skipped.includes(step.id)) return { step, state: 'skipped', count };
+    // The identity step stamps no turn — its "done" is simply having answered it.
+    if (step.id === 'identity') {
+      return { step, state: input.identityAnswered ? 'done' : 'open', count };
+    }
+    if (input.skipped.includes(step.id)) return { step, state: 'skipped', count, ...fresh };
     if (step.id === 'split' && input.closed.has('split')) {
       // The split is recomputed from the marks every time, so going back to the words and marking twenty more
       // leaves a "closed" step with real work in it. A tick there would be quietly out of date.
@@ -199,8 +246,8 @@ export function stepStatuses(input: StepInput): StepStatus[] {
         ? { step, state: 'open', count, outstanding }
         : { step, state: 'done', count };
     }
-    if (input.closed.has(step.id)) return { step, state: 'done', count };
-    return { step, state: 'open', count };
+    if (input.closed.has(step.id)) return { step, state: 'done', count, ...fresh };
+    return { step, state: 'open', count, ...fresh };
   });
 }
 

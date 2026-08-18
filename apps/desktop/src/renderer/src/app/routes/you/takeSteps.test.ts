@@ -19,6 +19,8 @@ const BASE: StepInput = {
   probesAnswered: 0,
   scenariosAnswered: 0,
   loved: 0,
+  seeded: { names: 0, bank: 0 },
+  identityAnswered: false,
 };
 
 /** Enough marked material for a generating step to be worth running (74 §3.6.9). */
@@ -30,6 +32,9 @@ const byId = (input: StepInput) =>
 describe('stepStatuses', () => {
   it('names every step, in order, with the AI ones marked', () => {
     expect(TAKE_STEPS.map((step) => step.id)).toEqual([
+      // Who you both are is the FIRST step, not a prerequisite hidden behind the second one — it decides which
+      // half of a 1,000-line bank a person ever sees.
+      'identity',
       'names',
       'bank',
       'split',
@@ -146,6 +151,29 @@ describe('stepStatuses', () => {
     const steps = byId({ ...BASE, phase: 'lines' });
     expect(steps.lines?.state).toBe('now');
     expect(steps.lines?.reason).toMatch(/marks first/i);
+  });
+});
+
+describe('this sitting vs on record', () => {
+  it("separates a retake's carried-over marks from what was marked today", () => {
+    // Marks live in ONE lexicon across takes, so a retake opens with last time's already seeded. One number
+    // would be standing for the other — "68" whether they marked 68 today or 68 last month.
+    const steps = byId({
+      ...BASE,
+      phase: 'bank',
+      nameMarks: 68,
+      bankMarks: 216,
+      loved: 30,
+      seeded: { names: 60, bank: 200 },
+    });
+    expect(steps.names).toMatchObject({ count: 68, fresh: 8 });
+    expect(steps.bank).toMatchObject({ count: 216, fresh: 16 });
+  });
+
+  it("says nothing about it on a FIRST take, where every mark is this sitting's", () => {
+    const steps = byId({ ...BASE, phase: 'bank', nameMarks: 4, bankMarks: 20, loved: 6 });
+    expect(steps.names?.fresh).toBeUndefined();
+    expect(steps.bank?.fresh).toBeUndefined();
   });
 });
 

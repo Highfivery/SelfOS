@@ -348,8 +348,7 @@ export function resumePhase(turns: readonly { phase: string }[] | undefined): Ta
   if (seen.has('scenario')) return 'scenario';
   if (seen.has('probe')) return 'probe';
   if (seen.has('lines')) return 'lines';
-  if (seen.has('split')) return 'lines';
-  if (seen.has('bank')) return 'split';
+  if (seen.has('bank')) return 'lines';
   // A stamped `names` turn means the pet-name phase closed, so the deck is next (74 §3.6.8).
   if (seen.has('names')) return 'bank';
   return 'names';
@@ -636,7 +635,21 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         marks,
         cleared: [...clearedThisTake],
       }) ?? Promise.resolve(null));
-      set({ state: next ?? state, busy: false, phase: 'split', saveState: 'saved' });
+      // 74 §3.6.13 — the split is folded into the words: the hear/say question is asked ON the row, so closing
+      // the deck also closes that pass. It only ever asked about DECK marks, and the pet-name phase already
+      // asks both directions per row, so for anyone marking mostly names it was a step that never had
+      // anything in it — a screen you landed on and could do nothing with.
+      const withSplit = await (window.selfos?.testsAdaptiveSplit({
+        testId,
+        resultId,
+        splits: get().splits,
+      }) ?? Promise.resolve(null));
+      set({
+        state: withSplit ?? next ?? state,
+        busy: false,
+        phase: 'lines',
+        saveState: 'saved',
+      });
     },
 
     setSplit: (key, direction, value) => {

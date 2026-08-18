@@ -1099,6 +1099,39 @@ export function AdaptiveTake(): JSX.Element {
                               </button>
                             </span>
                           )}
+                          {/*
+                           * 74 §3.6.13 — the hear/say question, asked HERE rather than as a step of its own.
+                           *
+                           * It was a separate pass over everything already marked, and for anyone who marked
+                           * mostly pet names — which are asked both ways on their own rows — it was a screen
+                           * you landed on with nothing on it. Asked inline it costs one extra tap on the rows
+                           * where it actually applies: an entry offered only one way already knows its
+                           * direction, and an entry they ruled out is not rated at all.
+                           */}
+                          {!locked && mark === 'love' && entry.sides.length >= 2 ? (
+                            <div className={adaptive.rowSplit}>
+                              <span className={adaptive.rowSplitLead}>How much…</span>
+                              {(['hear', 'say'] as const).map((direction) => (
+                                <span key={direction} className={adaptive.marks}>
+                                  <span className={adaptive.dirLabel}>
+                                    {direction === 'hear' ? 'to hear' : 'to say'}
+                                  </span>
+                                  {[0, 1, 2, 3, 4].map((value) => (
+                                    <button
+                                      key={value}
+                                      type="button"
+                                      className={adaptive.markButton}
+                                      aria-pressed={store.splits[entry.key]?.[direction] === value}
+                                      aria-label={`${entry.text} — ${direction} ${value} of 4`}
+                                      onClick={() => store.setSplit(entry.key, direction, value)}
+                                    >
+                                      {value}
+                                    </button>
+                                  ))}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                       );
                     })
@@ -1178,87 +1211,15 @@ export function AdaptiveTake(): JSX.Element {
                         Done
                         <span>with the words for now</span>
                       </Button>
+                      {/* Three verbs on every step (74 §3.6.9). "Done for now" is not a skip — it closes the
+                          pass and stamps it; passing over the words entirely is a different thing. */}
+                      <Button variant="ghost" disabled={store.busy} onClick={skipCurrent}>
+                        Skip this step
+                      </Button>
                     </>
                   }
                 />
               </div>
-            </div>
-          ) : null}
-
-          {phase === 'split' && current ? (
-            <div className={adaptive.stepFrame}>
-              <div className={adaptive.stepMain}>
-                <StepEyebrow status={current} index={stepIndex} total={TAKE_STEPS.length} />
-                <Heading level={2}>Hearing it, or saying it?</Heading>
-                <Text tone="secondary">
-                  Only the ones you marked. What you love to <em>hear</em> and what you can get out
-                  of your own mouth are usually different — that gap is the most useful thing here.
-                </Text>
-                {splitNeeded.length === 0 ? (
-                  /* A banner alone on an otherwise empty screen reads as a broken step. This one is a normal
-                     outcome — an oriented mark already knows its direction — so it says what happened, what it
-                     means, and what to do next, instead of leaving the person on a blank page. */
-                  <Card className={adaptive.probeCard}>
-                    <Text>
-                      <b>Nothing to split here.</b> Everything you marked was only ever offered one
-                      way round, so its direction is already known — there is no second question to
-                      ask about it.
-                    </Text>
-                    <Text size="sm" tone="secondary">
-                      This step fills up when you mark something that could go either way: a name,
-                      or a line that works spoken and heard. Mark more and it will be waiting.
-                    </Text>
-                    <div className={adaptive.askRow}>
-                      <Button variant="primary" onClick={() => goTo('bank')}>
-                        Back to the words →
-                      </Button>
-                      <Button variant="ghost" onClick={() => goTo('names')}>
-                        Or the names
-                      </Button>
-                    </div>
-                  </Card>
-                ) : (
-                  <Text size="sm" tone="tertiary">
-                    Saved as you go — leave any of these blank and come back to them.
-                  </Text>
-                )}
-                {marked.map((key) => {
-                  const entry = bank.entries.find((e) => e.key === key);
-                  if (!entry || store.marks[key] === 'never') return null;
-                  // 74 §3.6.4 — the collapse. An oriented entry was only ever offered on ONE side, so its
-                  // direction is already known and there is nothing to split; only an entry that reaches both
-                  // still needs the question. Rating the unshown side would invent an answer (§3.6.6).
-                  if (entry.sides.length < 2) return null;
-                  return (
-                    <div key={key} className={adaptive.splitRow}>
-                      <span className={adaptive.entryText}>{entry.text}</span>
-                      {(['hear', 'say'] as const).map((direction) => (
-                        <span key={direction} className={adaptive.marks}>
-                          <span className={adaptive.dirLabel}>{direction}</span>
-                          {[0, 1, 2, 3, 4].map((value) => (
-                            <button
-                              key={value}
-                              type="button"
-                              className={adaptive.markButton}
-                              aria-pressed={store.splits[key]?.[direction] === value}
-                              aria-label={`${entry.text} — ${direction} ${value} of 4`}
-                              onClick={() => store.setSplit(key, direction, value)}
-                            >
-                              {value}
-                            </button>
-                          ))}
-                        </span>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-              <TakeRail
-                statuses={statuses}
-                onGo={goTo}
-                saveState={<SaveState state={store.saveState} />}
-                actions={stepActions('Save and continue →', () => void store.submitSplit(testId))}
-              />
             </div>
           ) : null}
 

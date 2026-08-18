@@ -16241,7 +16241,7 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
     await w.getByRole('button', { name: 'Begin' }).click();
 
     // 74 §3.6.9 — the map: every step and its state, before any of them. Step 1 is who you both are.
-    await expect(w.getByRole('button', { name: /Hearing it, or saying it/i })).toBeVisible();
+    await expect(w.getByRole('button', { name: /Lines written for you/i })).toBeVisible();
     await w.getByRole('button', { name: /^Start: who you two are/i }).click();
 
     // The two identity taps (§3.6.3). "boy" is deliberately NOT an option here — it is a term you can mark,
@@ -16487,6 +16487,10 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     // un-mark round trip below happens while the ruled-out row is still on screen. ("mine", "my girl", "all
     // mine" and "dirty little slut" moved to the pet-name phase — nothing is asked twice, §3.6.9.)
     await markInDeck("you're mine — hear & say — love it");
+    // 74 §3.6.13 — the hear/say question is asked ON the row now, the moment a both-sided entry is marked,
+    // rather than as a second pass over a screen that was empty for anyone marking mostly names.
+    await w.getByRole('button', { name: "you're mine — hear 4 of 4", exact: true }).first().click();
+    await w.getByRole('button', { name: "you're mine — say 0 of 4", exact: true }).first().click();
     await markInDeck('you belong to me — hear & say — love it');
     await expect(w.getByTestId('tally-love')).toContainText('2');
     // The middle mark. It used to be recorded and then invisible everywhere — asserted on the report below.
@@ -16614,15 +16618,7 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
       await w.getByRole('button', { name: /Next area/ }).click();
     }
 
-    // Pass 2 asks the split only for what was marked, and never for the one they ruled out.
-    await expect(w.getByRole('heading', { name: /hearing it, or saying it\?/i })).toBeVisible();
-    await w.getByRole('button', { name: "you're mine — hear 4 of 4", exact: true }).first().click();
-    await w.getByRole('button', { name: "you're mine — say 0 of 4", exact: true }).first().click();
-    await expect(
-      w.getByRole('button', { name: 'beg like the slut you are — hear 4 of 4', exact: true }),
-    ).toHaveCount(0);
-    await w.getByRole('button', { name: /Save and continue/i }).click();
-
+    // Closing the deck also closes the hear/say pass — there is no separate step to land on.
     // AI is off in this vault, so the AI steps have nothing to give — and the take still COMPLETES with the
     // deterministic profile (74 §7). It no longer relocates them through three phases to get there: the AI
     // step says what it would do, and the rail's own verb finishes.
@@ -16725,7 +16721,6 @@ test('74 §3.6.9: every step is reachable both ways, and an AI step waits to be 
     for (const label of [
       /What you call each other/i,
       /^The words/i,
-      /Hearing it, or saying it/i,
       /Lines written for you/i,
       /The questions it still has/i,
       /In the moment/i,
@@ -16766,32 +16761,28 @@ test('74 §3.6.9: every step is reachable both ways, and an AI step waits to be 
     // attached to down to "Li…".
     const linesRail = rail.getByRole('button', { name: /Lines written for you — 14 more marks/i });
     await expect(linesRail).toBeDisabled();
-    // The split re-asks about marks that already exist rather than generating, so ONE is enough for it.
-    await expect(rail.getByRole('button', { name: /Hearing it, or saying it/i })).toBeEnabled();
 
     // …and back to the person's own words from another step, which is the dead end that was reported. It
     // returns to the register they had open, with the mark still on it — not to the top of the step.
-    await rail.getByRole('button', { name: /Hearing it, or saying it/i }).click();
-    await expect(w.getByRole('heading', { name: /hearing it, or saying it/i })).toBeVisible();
     await rail.getByRole('button', { name: /What you call each other/i }).click();
     await expect(w.getByRole('heading', { name: /^praise$/i })).toBeVisible();
     await expect(
       w.getByRole('button', { name: /^good girl — Tester →.*— love it$/i }).first(),
     ).toHaveAttribute('aria-pressed', 'true');
 
-    // A skipped step reads as skipped rather than quietly vanishing.
-    await rail.getByRole('button', { name: /Hearing it, or saying it/i }).click();
+    // A skipped step reads as skipped rather than quietly vanishing. The words open on their owed practice,
+    // which is required to reach the deck — clear it, then pass the step over.
+    await rail.getByRole('button', { name: /^The words/i }).click();
+    await clearPractice(w);
     // Nothing generatable is left open at one mark, so skipping lands on the map rather than on a synthesis:
     // a skip must never be the thing that spends.
     await w.getByRole('button', { name: /Skip this step/i }).click();
     await expect(w.getByRole('heading', { name: /Where you got to/i })).toBeVisible();
-    await expect(map.getByRole('button', { name: /Hearing it, or saying it/i })).toContainText(
-      /skipped/i,
-    );
+    await expect(map.getByRole('button', { name: /^The words/i })).toContainText(/skipped/i);
 
-    // Step 1 is answered, so the words open on their own owed practice rather than back on the identity taps.
+    // Step 1 is answered, so the words open straight onto the deck — the practice is owed once, not per visit.
     await map.getByRole('button', { name: /^The words/i }).click();
-    await expect(w.getByRole('dialog')).toBeVisible();
+    await expect(w.getByText(/Area 1 of/)).toBeVisible();
 
     // Phone width: the frame stacks and nothing scrolls sideways (§12).
     await w.setViewportSize({ width: 390, height: 900 });
@@ -16862,14 +16853,15 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
     await w.getByRole('button', { name: 'Begin' }).click();
     await shot('03-map');
     await noMachineIds('the map');
-    // Eight steps, and the first one is who you both are.
+    // Seven steps, and the first one is who you both are. (The hear/say split is no longer a step of its
+    // own — 74 §3.6.13 folded it onto the deck row, where the entry it asks about is on screen.)
     const map = w.getByRole('list', { name: 'Every step' });
-    await expect(map.getByRole('listitem')).toHaveCount(8);
+    await expect(map.getByRole('listitem')).toHaveCount(7);
     await expect(map.getByRole('listitem').first()).toContainText(/Who you two are/i);
 
     // Step 1 — identity.
     await w.getByRole('button', { name: /^Start: who you two are/i }).click();
-    await expect(w.getByText(/Step 1 of 8/)).toBeVisible();
+    await expect(w.getByText(/Step 1 of 7/)).toBeVisible();
     await shot('04-step1-identity');
     await w
       .getByRole('group', { name: 'You are a:' })
@@ -16882,7 +16874,7 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
     await w.getByRole('button', { name: /Next: what you call each other/i }).click();
 
     // Step 2 — the pet names, both screens.
-    await expect(w.getByText(/Step 2 of 8|what do you call each other/i).first()).toBeVisible();
+    await expect(w.getByText(/Step 2 of 7|what do you call each other/i).first()).toBeVisible();
     await shot('05-step2-registers');
     await noMachineIds('the name registers');
     await w.getByRole('button', { name: /^praise/i }).click();
@@ -16904,11 +16896,6 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
     await clearPractice(w);
     await shot('08-step3-deck');
     await noMachineIds('the deck');
-
-    // Step 4 — the split.
-    await rail.getByRole('button', { name: /Hearing it, or saying it/i }).click();
-    await shot('09-step4-split');
-    await noMachineIds('the split');
 
     // Every AI prompt this walk triggers, captured for reading. What a phase SENDS is the thing that decides
     // whether its output is any good, and it is the one part no screenshot can show.

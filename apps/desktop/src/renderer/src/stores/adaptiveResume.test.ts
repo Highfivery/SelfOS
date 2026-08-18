@@ -19,12 +19,13 @@ describe('resumePhase', () => {
   });
 
   it('moves PAST a closed pass — a stamped turn means that phase finished', () => {
-    expect(resumePhase([{ phase: 'bank' }])).toBe('split');
+    // The split is folded into the words (74 §3.6.13), so a closed deck goes straight to the lines.
+    expect(resumePhase([{ phase: 'bank' }])).toBe('lines');
     expect(resumePhase([{ phase: 'bank' }, { phase: 'split' }])).toBe('lines');
   });
 
   it('resumes an AI phase where it is — those are many-turned and advance themselves', () => {
-    expect(resumePhase([{ phase: 'bank' }, { phase: 'split' }, { phase: 'lines' }])).toBe('lines');
+    expect(resumePhase([{ phase: 'bank' }, { phase: 'lines' }])).toBe('lines');
     expect(resumePhase([{ phase: 'bank' }, { phase: 'probe' }])).toBe('probe');
   });
 

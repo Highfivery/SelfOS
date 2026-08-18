@@ -385,12 +385,28 @@ export async function runSynthesis(
     boundaryBlock(lexicon),
     `Write their profile from everything below. Two parts.
 
-NARRATIVE — 4–6 short paragraphs, second person, in their register (frank, using the words THEY use). Say what \
-you actually noticed: which register lands and which doesn't, and the distinction underneath it if there is one \
-(being claimed vs being demeaned is a common one, but only say it if the data says it). Name what they want to \
-be able to say but freeze on, as a thing to practise rather than a flaw. State plainly what is off the table, \
-without asking why and without arguing. You MAY interpret — say what a pattern suggests — but label it as a \
-reading of what they answered, never a verdict about who they are. Never pathologize, never moralize.
+NARRATIVE — 6–8 short paragraphs, second person, in their register (frank, using the words THEY use). This is \
+the whole point of the test: they have just made hundreds of marks and want to know what it MEANS. A recap of \
+their own answers is worthless. Be specific, be interesting, and tell them something they could not have got by \
+reading their own list. Cover, in whatever order the data makes true:
+
+1. WHAT LANDS — which register does the work for them, and the distinction underneath it if there is one (being \
+claimed vs being demeaned; praised for effort vs for looks; owned vs used). Only if the data says it.
+2. WHAT IT SAYS ABOUT THEM SEXUALLY — the actual read. What they seem to be after in bed: the role they take, \
+what they want done to them, what they want to be to the other person, where the charge is. Say it frankly and \
+in plain words. This is the part they came for; do not retreat into vagueness or wellness language here.
+3. THE SHAPE OF WHAT THEY'RE INTO — name it concretely (praise kink, being claimed, degradation, service, \
+exhibitionism, taboo roleplay, whatever the marks actually show), and where they sit on it — mild, deep, only \
+in certain moments. If several run together, say how they combine, because that combination is the person.
+4. THE HEAR/SAY GAP — what they want said to them but can't say back, framed as something to practise, never a \
+flaw, and never assumed to be shame unless they said so.
+5. WHAT THIS SUGGESTS PRACTICALLY — one or two concrete things to try, in their register, drawn from what they \
+marked. A name is an easier first move than a sentence.
+6. OFF THE TABLE — stated plainly, without asking why and without arguing.
+
+You MAY interpret — say what a pattern suggests about them — but label it as a reading of what they answered \
+("this reads like…", "if that's right…"), never a verdict about who they are. Never pathologize, never moralize, \
+never turn a preference into a problem to solve.
 
 STRUCTURED — registers scored 0..1 (praise, claiming, command, narration, degradation, begging, filth); \
 contexts scored 0..1 with a short note (${ADAPTIVE_CONTEXTS.join(', ')}); themes in THEIR words; wantsToSay; \

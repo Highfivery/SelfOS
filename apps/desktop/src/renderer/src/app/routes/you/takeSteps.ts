@@ -65,16 +65,10 @@ export const TAKE_STEPS: readonly TakeStep[] = [
     id: 'bank',
     label: 'The words',
     short: 'The words',
-    blurb: 'The vocabulary, one area at a time. Mark what lands; skip the rest.',
+    blurb:
+      'The vocabulary, one area at a time — marked both ways at once: hearing it, and saying it.',
     ai: false,
     note: 'Starts with two practice taps.',
-  },
-  {
-    id: 'split',
-    label: 'Hearing it, or saying it',
-    short: 'Hear or say',
-    blurb: 'For what you marked: how much you want to hear it, and how much to say it.',
-    ai: false,
   },
   {
     id: 'lines',
@@ -177,16 +171,17 @@ export function stepStatuses(input: StepInput): StepStatus[] {
         return input.nameMarks;
       case 'bank':
         return input.bankMarks;
-      case 'split':
-        return input.splitAnswered;
       case 'lines':
         return input.lineReactions;
       case 'probe':
         return input.probesAnswered;
       case 'scenario':
         return input.scenariosAnswered;
+      // `split` is folded into the words (74 §3.6.13) — still a phase in the union, no longer a step of
+      // its own — so it counts nothing here, same as the two steps that have nothing to tally.
       case 'identity':
       case 'profile':
+      case 'split':
         return 0;
     }
   };
@@ -209,7 +204,7 @@ export function stepStatuses(input: StepInput): StepStatus[] {
     // gated on the threshold — being unable to finish is worse than a thin profile, and the report already says
     // when it is working from little (it just needs SOMETHING).
     const gate =
-      step.id === 'split' || step.id === 'profile'
+      step.id === 'profile'
         ? marked > 0
         : step.id === 'identity' || step.id === 'names' || step.id === 'bank'
           ? true
@@ -222,7 +217,7 @@ export function stepStatuses(input: StepInput): StepStatus[] {
         reason:
           marked === 0
             ? 'Needs some marks first'
-            : step.id === 'split' || step.id === 'profile'
+            : step.id === 'profile'
               ? 'Needs some marks first'
               : shortfall(readiness),
       };
@@ -238,14 +233,6 @@ export function stepStatuses(input: StepInput): StepStatus[] {
       return { step, state: input.identityAnswered ? 'done' : 'open', count };
     }
     if (input.skipped.includes(step.id)) return { step, state: 'skipped', count, ...fresh };
-    if (step.id === 'split' && input.closed.has('split')) {
-      // The split is recomputed from the marks every time, so going back to the words and marking twenty more
-      // leaves a "closed" step with real work in it. A tick there would be quietly out of date.
-      const outstanding = Math.max(0, input.splitNeeded - input.splitAnswered);
-      return outstanding > 0
-        ? { step, state: 'open', count, outstanding }
-        : { step, state: 'done', count };
-    }
     if (input.closed.has(step.id)) return { step, state: 'done', count, ...fresh };
     return { step, state: 'open', count, ...fresh };
   });

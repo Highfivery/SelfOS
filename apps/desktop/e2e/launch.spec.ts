@@ -474,7 +474,14 @@ async function auditScreen(w: Page, where: string): Promise<string[]> {
       const parent = el.parentElement;
       if (parent && vis(parent) && getComputedStyle(parent).overflow === 'visible') {
         const pr = parent.getBoundingClientRect();
-        const offCanvas = cs.transform !== 'none' || getComputedStyle(parent).transform !== 'none';
+        // Taken OUT of the flow on purpose: a fixed scrim covers the viewport, and the phone rail is a bar
+        // fixed to the window. Neither is inside its parent's box, and neither is a defect.
+        const outOfFlow =
+          cs.position === 'fixed' ||
+          cs.position === 'absolute' ||
+          cs.transform !== 'none' ||
+          getComputedStyle(parent).transform !== 'none';
+        const offCanvas = outOfFlow;
         if (!offCanvas && (r.right - pr.right > 2 || pr.left - r.left > 2)) {
           if (getComputedStyle(parent).display !== 'inline')
             add(`spills past its parent: ${name(el)}`);

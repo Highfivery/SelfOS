@@ -1,5 +1,6 @@
 import type { FileSystem } from '../host';
 import type {
+  EmailAnswerStance,
   EmailFamily,
   EmailSuggestionType,
   Goal,
@@ -7,7 +8,7 @@ import type {
   SentSuggestion,
   UsageEvent,
 } from '../schemas';
-import { SentSuggestionSchema } from '../schemas';
+import { EmailAnswerStanceSchema, SentSuggestionSchema } from '../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { uuid } from '../id';
 import { listInsightsForPerson, ownSubjectInsights } from '../insights/insightStore';
@@ -38,6 +39,9 @@ import { listEmailResponses } from './emailResponse';
 /** ≤2 suggestion emails/week per person (67 §3.3), with a minimum spacing so they never bunch. */
 export const SUGGESTION_MAX_PER_WEEK = 2;
 export const SUGGESTION_MIN_GAP_DAYS = 3;
+/** The tappable answers a suggestion email may carry (67 §3.3a) — the prompt asks for 2–5 short ones. */
+export const MAX_ANSWERS = 5;
+const MAX_ANSWER_LABEL_CHARS = 60;
 /** A "maybe later" subject is avoided for this long, then allowed to resurface (67 §3.6). */
 export const RESURFACE_WEEKS = 3;
 /** How far back the new-data gate looks when there's no prior suggestion. */
@@ -164,13 +168,62 @@ export async function buildAvoidSet(
     if (r.family !== family || !r.suggestionId) continue;
     const subject = byId.get(r.suggestionId)?.subjectKey;
     if (!subject) continue;
-    if (r.answer === 'not-for-me') subjects.add(subject);
-    else if (r.answer === 'maybe-later') {
+    // The MEANING, not the wording (67 §3.3a): answers are written per email now, so `stance` is what says
+    // "rule this out" / "not now". The two legacy values are still honoured — responses recorded before
+    // stances existed carried their meaning in the fixed `answer` value, and must not silently lose it.
+    const ruledOut = r.stance === 'no' || r.answer === 'not-for-me';
+    const resting = r.stance === 'maybe' || r.answer === 'maybe-later';
+    if (ruledOut) subjects.add(subject);
+    else if (resting) {
       const ageMs = now.getTime() - new Date(r.respondedAt).getTime();
       if (ageMs < RESURFACE_WEEKS * 7 * DAY_MS) subjects.add(subject); // still resting; resurface later
     }
   }
   return { texts: sent.map((s) => s.text), subjects };
+}
+
+/**
+ * One tappable answer on a suggestion email (67 §3.3a): the words the person reads, plus what tapping them
+ * MEANS. The label is written for this body and this body only; the stance is what the response loop reads,
+ * so dynamic wording never costs us the rule-it-out / rest-it / mutual-green-light behaviour.
+ */
+export interface SuggestionAnswer {
+  label: string;
+  stance: EmailAnswerStance;
+}
+
+/**
+ * The one fixed set this feature must never emit again (#523). A model handed "options" will sometimes echo
+ * the engagement labels it has seen; a set made ENTIRELY of them is the defect wearing a model's output, so
+ * it is refused rather than sent.
+ */
+const GENERIC_ENGAGEMENT_LABELS = new Set(
+  [
+    "i'm game",
+    'im game',
+    'we’re into it',
+    "we're into it",
+    'maybe later',
+    'not for me',
+    'not for us',
+    'sounds good',
+    'more like this',
+    'less like this',
+  ].map((l) => l.replace(/’/g, "'")),
+);
+
+const normalizeLabel = (label: string): string => label.trim().toLowerCase().replace(/’/g, "'");
+
+/**
+ * True when the generic labels are the MAJORITY of the set — i.e. the set is the reported email wearing a
+ * model's byline. Not "every": a single honest decline among several specific answers ("Yes, Thursday" /
+ * "Another day" / "Not for me") is a real answer to a real proposal, while three of four generic is the
+ * defect with a word added.
+ */
+export function isGenericEngagementSet(labels: readonly string[]): boolean {
+  if (labels.length === 0) return false;
+  const generic = labels.filter((l) => GENERIC_ENGAGEMENT_LABELS.has(normalizeLabel(l))).length;
+  return generic * 2 > labels.length;
 }
 
 /** A generated suggestion, ready to mint tokens + compose an email around (67 §3.3). */
@@ -179,10 +232,13 @@ export interface EmailSuggestion {
   suggestionType: EmailSuggestionType;
   headline: string;
   body: string;
-  /** Tappable answers to `body` when it asks something (67 §3.3a / #459). Empty when it does not, and empty
-   *  when the model's options failed the shared shape rules — the email then links into the app instead of
-   *  offering buttons that cannot answer the question. */
-  options: string[];
+  /**
+   * The tappable answers to THIS body (67 §3.3a). Never empty: a suggestion whose answers are missing or
+   * unusable is not sent at all, because the alternative — falling through to one fixed set of engagement
+   * buttons — is the reported defect (#459, #523): an emailed question arrived under "I'm game / Maybe later
+   * / Not for me", which answers a question nobody asked.
+   */
+  options: SuggestionAnswer[];
   subjectKey?: string;
   partnerPersonId?: string;
   sharedSuggestionKey?: string;
@@ -233,6 +289,8 @@ interface GenerateInput {
  * usage metering all come from `runClaude` (it records the `email.suggest` event itself — the caller must NOT
  * re-record `usage`, which is returned only for assertions). The caller persists the returned `SentSuggestion`.
  */
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
+
 /**
  * The hard-no list as a negative constraint. Mirrors the wording `buildSuppressionBlock` uses so the same
  * rule reads the same way in every prompt that carries it.
@@ -276,19 +334,30 @@ export async function generateSuggestion(
     // what someone has ruled out — a person who marked a word `never` could be emailed it.
     intimacy && lexicon ? suppressionLine(lexicon) : '',
     'You write ONE short, warm coaching suggestion to email a person, in their own SelfOS space. Return ' +
-      'ONLY a JSON object {"headline": string, "body": string, "options": string[]}. The headline is a ' +
-      'short subject line (≤ 8 words). The body is 1–3 plain sentences — specific, kind, never clinical, ' +
-      'never a re-phrasing of anything in AVOID. No markdown, no lists, no links.',
-    // The email renders `options` as tappable buttons directly under the body, so they must ANSWER the body.
-    // Reported defect (#459): a question was emailed with generic engagement buttons ("I'm game / Maybe
-    // later / Not for me"), which read as "do you want to answer this?" and did not answer the question at
-    // all. Same rule as questionnaire generation (08 §32.8): options are direct, plausible answers to the
-    // exact prompt, distinct, mutually exclusive, and covering the honest range.
-    'If the body ASKS the person something, `options` must be 2–5 short answers to THAT question — direct, ' +
-      'plausible, distinct from each other, and covering the honest range (including an "it depends" or ' +
-      '"not sure yet" where that is a real answer). They are answers, NOT reactions: never "I\'m game", ' +
-      '"Maybe later", "Sounds good", or anything about whether they want to answer. If the body does NOT ' +
-      'ask a question, return an empty `options` array.',
+      'ONLY a JSON object {"headline": string, "body": string, "options": [{"label": string, "stance": ' +
+      '"yes"|"maybe"|"no"|"other"}]}. The headline is a short subject line (≤ 8 words). The body is 1–3 ' +
+      'plain sentences — specific, kind, never clinical, never a re-phrasing of anything in AVOID. No ' +
+      'markdown, no lists, no links.',
+    // The email renders `options` as the ONLY tappable buttons under the body, so they are the whole reply.
+    // Reported twice (#459, #523): a question was emailed under "I'm game / Maybe later / Not for me",
+    // which reads as "do you want to answer this?" and answers the question not at all. Same rule as
+    // questionnaire generation (08 §32.8): direct, plausible answers to the exact prompt, distinct,
+    // mutually exclusive, covering the honest range.
+    '`options` is REQUIRED and must be 2–5 short answers to THIS body, written for THIS body — a person ' +
+      'reading them should be able to tell which email they belong to. Direct, plausible, distinct from ' +
+      'each other, and covering the honest range (include a "not sure" or "it depends" where that is a ' +
+      'real answer). NEVER a generic set that would fit any email: never "I\'m game", "Maybe later", ' +
+      '"Not for me", "Sounds good". Keep each label under about 5 words so it fits a button.',
+    // The label is the words; the stance is what tapping it MEANS, and it is what the response loop reads.
+    'Set `stance` on each answer: "no" only for an answer that rules this subject out for good, "maybe" ' +
+      'only for one that puts it off for now, "yes" for one that takes it up, and "other" for an answer ' +
+      'that simply answers the question and expresses no such preference (most answers to an open question ' +
+      'are "other" — answering is not declining).',
+    // Ask for a body a person can actually answer in a tap. A question with no short honest answers ends up
+    // unsendable (the app refuses to fabricate options), so the body has to be shaped for its own answers.
+    'Write a body whose answers can be honest short buttons. If your first idea cannot be answered that ' +
+      'way — an open memory question like "when did you first learn that?" — narrow it until it can, or ' +
+      'suggest something concrete to try instead.',
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -352,13 +421,44 @@ export async function generateSuggestion(
   if (lexicon && (violatesBoundary(lexicon, headline) || violatesBoundary(lexicon, body)))
     return null;
   // Run the SAME shape rules as questionnaire generation (08 §32.8) — trim, drop blanks, reject
-  // case-insensitive duplicates, require at least two. An unusable set degrades to NO buttons rather than to
-  // buttons that cannot answer the question, which is the #459 failure. `normalizeOptions` is the single
-  // shared validator, so the email surface can no longer drift from the in-app one.
-  const rawOptions = Array.isArray(parsed?.options)
-    ? parsed.options.filter((o): o is string => typeof o === 'string')
-    : [];
-  const options = rawOptions.length > 0 ? (normalizeOptions(rawOptions) ?? []) : [];
+  // case-insensitive duplicates, require at least two. `normalizeOptions` is the single shared validator, so
+  // the email surface can no longer drift from the in-app one.
+  //
+  // An unusable set means NO EMAIL (#523). The previous shape — degrade to "no buttons" — was not what the
+  // delivery path then did: it fell through to one fixed engagement set, which is exactly the email a person
+  // reported twice. An answerless suggestion is a suggestion this feature cannot deliver, so it is skipped;
+  // there will be another next cycle, and none of the material is consumed.
+  const raw = Array.isArray(parsed?.options) ? parsed.options : [];
+  const answers = raw
+    .map((o) => {
+      // Tolerant on shape: a bare string is read as a stance-free answer rather than dropped.
+      const label =
+        typeof o === 'string' ? o : isRecord(o) && typeof o.label === 'string' ? o.label : '';
+      const stance = isRecord(o) ? EmailAnswerStanceSchema.safeParse(o.stance) : null;
+      return { label, stance: stance?.success ? stance.data : ('other' as EmailAnswerStance) };
+    })
+    .filter((a) => a.label.trim() !== '');
+  // The prompt asks for 2–5 short answers; a model that returns eight long ones would otherwise ship eight
+  // buttons and eight tokens. Clamp before validating, so an over-long set still yields a usable email.
+  const labels = normalizeOptions(
+    answers
+      .filter((a) => a.label.trim().length <= MAX_ANSWER_LABEL_CHARS)
+      .slice(0, MAX_ANSWERS)
+      .map((a) => a.label),
+  );
+  if (!labels) return null; // fewer than two usable answers → not sendable
+  // A set made entirely of the engagement labels answers no particular question — refuse it outright rather
+  // than ship the reported email under a model's byline.
+  if (isGenericEngagementSet(labels)) return null;
+  // The labels are model-written prose that both reaches the person AND is quoted into their coaching
+  // context, so they carry the same boundary guarantee as the headline and body (74 §8.4). A hard-no term
+  // in a button is exactly as unsendable as one in the sentence above it.
+  if (lexicon && labels.some((l) => violatesBoundary(lexicon, l))) return null;
+  const stanceOf = new Map(answers.map((a) => [a.label.trim(), a.stance]));
+  const options: SuggestionAnswer[] = labels.map((label) => ({
+    label,
+    stance: stanceOf.get(label) ?? 'other',
+  }));
 
   const dedupKey = `${headline} ${body}`;
   if (isNearDuplicate(dedupKey, input.avoid.texts)) return null; // a re-phrasing → skip

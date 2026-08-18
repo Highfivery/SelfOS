@@ -13,7 +13,7 @@ import {
   type IntimacyInventoryOffer,
 } from '../schemas';
 import { listSentSuggestions } from './emailSuggestionService';
-import { listEmailResponses } from './emailResponse';
+import { listEmailResponses, isTakenUp } from './emailResponse';
 
 /**
  * The intimacy slot of the email suggestion engine (67 §8.2). An E-int email is gated, shared-data-only, and
@@ -141,8 +141,7 @@ export async function listIntimacyInventoryOffers(
   const seen = new Set<string>();
   const offers: IntimacyInventoryOffer[] = [];
   for (const r of responses) {
-    if (r.family !== 'ai-suggestion-intimacy' || r.answer !== 'im-game' || !r.suggestionId)
-      continue;
+    if (r.family !== 'ai-suggestion-intimacy' || !isTakenUp(r) || !r.suggestionId) continue;
     const actKey = byId.get(r.suggestionId)?.subjectKey;
     if (!actKey || seen.has(actKey)) continue;
     seen.add(actKey);

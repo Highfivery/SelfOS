@@ -2726,6 +2726,17 @@ export const EmailActivityEntrySchema = z.object({
 export type EmailActivityEntry = z.infer<typeof EmailActivityEntrySchema>;
 
 /** The kind of a one-click email interaction (67 §4.5 / Phase 4). */
+/**
+ * What a tapped email answer MEANS, independent of the words on the button (67 §3.3a). Every emailed
+ * suggestion now carries answers written for THAT body — "Pretty young" or "I'll try it this week" rather
+ * than one fixed set on every email — so the label can no longer carry the meaning the response loop needs.
+ * The stance rides alongside it: `no` rules the subject out for good, `maybe` rests it for a few weeks, and
+ * `yes` is what a mutual green light matches on. `other` (an answer that expresses no stance at all, which
+ * most answers to an open question are) is inert by design — answering a question is not a rejection of it.
+ */
+export const EmailAnswerStanceSchema = z.enum(['yes', 'maybe', 'no', 'other']);
+export type EmailAnswerStance = z.infer<typeof EmailAnswerStanceSchema>;
+
 export const EmailTokenKindSchema = z.enum([
   'reaction',
   'intimacy-reaction',
@@ -2750,8 +2761,13 @@ export const EmailTokenSchema = z.object({
   /** The auto check-in assignment an embedded check-in tap answers (67 §3.5, kind `checkin-answer`). */
   assignmentId: z.string().optional(),
   kind: EmailTokenKindSchema,
-  /** 'im-here'|'pause'|'im-game'|'maybe-later'|'not-for-me'|'more'|'less'|<answer value>. */
+  /** 'im-here'|'pause'|'more'|'less'|<answer value>. The suggestion families write a per-email answer
+   *  label here and put its meaning in `stance` (67 §3.3a); 'im-game'|'maybe-later'|'not-for-me' are
+   *  legacy values, still read by the response loop but no longer minted. */
   answer: z.string(),
+  /** What this answer means, when its words don't say (67 §3.3a). Absent on a pre-§3.3a token, whose fixed
+   *  `answer` value carried the meaning itself. */
+  stance: EmailAnswerStanceSchema.optional(),
   sharedSuggestionKey: z.string().optional(),
   mintedAt: z.string().datetime(),
 });
@@ -2774,6 +2790,8 @@ export const EmailResponseSchema = z.object({
   sharedSuggestionKey: z.string().optional(),
   kind: EmailTokenKindSchema,
   answer: z.string(),
+  /** Carried over from the tapped token (67 §3.3a) — what the answer means, when its words don't say. */
+  stance: EmailAnswerStanceSchema.optional(),
   sensitivity: z.enum(['standard', 'restricted', 'intimacy']).default('standard'),
   respondedAt: z.string().datetime(),
   source: z.enum(['relay-tap', 'deep-link']),

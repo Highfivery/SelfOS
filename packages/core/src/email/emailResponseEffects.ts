@@ -9,7 +9,7 @@ import type { AiDeps } from '../questionnaires/aiCall';
 import { allAdultAcknowledged } from '../together/adultGate';
 import { getYnmOptIn } from '../together/ynmService';
 import { pairKeyFor } from '../together/togetherService';
-import { listEmailResponses } from './emailResponse';
+import { isTakenUp, listEmailResponses } from './emailResponse';
 import { listEmailPartners } from './emailIntimacy';
 import { listSentSuggestions } from './emailSuggestionService';
 
@@ -39,7 +39,7 @@ export async function computeMutualGreenLights(
   const myById = new Map(mySuggestions.map((s) => [s.id, s]));
   const greenBySharedKey = new Map<string, { partnerId: string; text: string }>();
   for (const r of myResponses) {
-    if (r.answer !== 'im-game' || !r.suggestionId) continue;
+    if (!isTakenUp(r) || !r.suggestionId) continue;
     const s = myById.get(r.suggestionId);
     if (s?.sharedSuggestionKey && s.partnerPersonId)
       greenBySharedKey.set(s.sharedSuggestionKey, { partnerId: s.partnerPersonId, text: s.text });
@@ -69,7 +69,7 @@ export async function computeMutualGreenLights(
       partnerSuggestions.filter((s) => s.sharedSuggestionKey === sharedKey).map((s) => s.id),
     );
     const partnerSaidYes = partnerResponses.some(
-      (r) => r.answer === 'im-game' && r.suggestionId && partnerSharedIds.has(r.suggestionId),
+      (r) => isTakenUp(r) && r.suggestionId && partnerSharedIds.has(r.suggestionId),
     );
     if (partnerSaidYes)
       out.push({

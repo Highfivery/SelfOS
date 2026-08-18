@@ -56,6 +56,10 @@ export function anthropicClient(): ClaudeClient {
       { apiKey, model, system, messages, maxTokens, extendedThinking },
       onDelta,
     ): Promise<ClaudeStreamResult> {
+      const options = (sys: string | undefined, msgs: typeof messages): string =>
+        `SYSTEM:\n${sys ?? ''}\n\nUSER:\n${msgs
+          .map((m) => `${m.role}: ${typeof m.content === 'string' ? m.content : '[blocks]'}`)
+          .join('\n')}`;
       const client = new Anthropic({ apiKey });
       const stream = client.messages.stream({
         model,
@@ -78,6 +82,11 @@ export function anthropicClient(): ClaudeClient {
         if (block.type === 'text') text += block.text;
       }
       const usage = final.usage;
+      // The REAL client captures too, when asked. A prompt on its own says what we sent; diagnosing "it keeps
+      // saying nothing came back" needs what came BACK — the reply and its `stop_reason`, which is the only
+      // thing that separates a refusal from a truncation from prose-instead-of-JSON. Same env hook as the
+      // fake's prompt capture, so a live audit run leaves both halves on disk.
+      captureReply(options(system, messages), text, final.stop_reason ?? null);
       return {
         text,
         usage: {
@@ -178,6 +187,28 @@ function capturePrompt(system: string, user: string): void {
     );
   } catch {
     // Capture is a test aid — never let it break the turn.
+  }
+}
+
+/**
+ * Capture a live model REPLY alongside the prompt. Diagnosing a phase that reports "nothing came back" is
+ * impossible from the prompt alone: the reply plus `stop_reason` is what distinguishes a content refusal from
+ * a truncation from valid-but-unusable output, and the offline fakes can never show any of them.
+ */
+let replySeq = 0;
+
+function captureReply(prompt: string, text: string, stopReason: string | null): void {
+  const dir = process.env['SELFOS_FAKE_PROMPT_DIR'];
+  if (!dir) return;
+  try {
+    mkdirSync(dir, { recursive: true });
+    replySeq += 1;
+    writeFileSync(
+      join(dir, `reply-${String(replySeq).padStart(2, '0')}.txt`),
+      `STOP_REASON: ${stopReason ?? '(none)'}\nREPLY LENGTH: ${text.length}\n\n${prompt}\n\n--- REPLY ---\n${text}\n`,
+    );
+  } catch {
+    // Capture is a diagnostic aid — never let it break the turn.
   }
 }
 

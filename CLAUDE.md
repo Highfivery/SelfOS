@@ -524,6 +524,31 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-18 — **Fix (naming it, making the failure diagnosable, and the words/trends redesign; owner-reported
+  a second time; SPEC 74 §3.6.14; on `fix/analysis-diagnosable`).** The owner, after the first pass: the read
+  still fails, _"ASLO DONT'T CALL IT WRTTEN READ, THAT MAKES NO SESNE"_, the words+trends block _"looks
+  awufle"_, and — fairly — _"YOU MUST TEST USING REAL AI AND WHY I GAVE YOU THE KEY BEFORE"_. **The reason the
+  second report carried no more information than the first is my own doing:** `runLinesPhase`,
+  `runProbePhase` and `runScenarioPhase` each collapsed TWO opposite causes into a bare `degraded` with no
+  message — a reply that never parsed (the MODEL: a refusal, a truncation, prose instead of JSON, all of which
+  `classifyParseOutcome` already names) and a reply that parsed and then lost everything to
+  `violatesBoundary` (OURS: the app filtering out its own output). So "That didn't come through" was the
+  store's generic fallback firing because the bridge had nothing to pass on. Each phase now names which, and
+  the **real** Claude client captures its reply + `stop_reason` under the existing `SELFOS_FAKE_PROMPT_DIR`
+  hook — a prompt says what we sent, and diagnosing "nothing came back" needs what came BACK, which no offline
+  fake can ever show. Renamed to **Psychological analysis** ("the written read" said nothing about what it is).
+  Redesigned the block: three bands of identical grey chips under three quiet labels → banded groups with a
+  left rule + a count; the four-series line chart (capped at 440px inside a full-width section, most of the row
+  empty, unreadable without matching a colour to a legend) → **one labelled row per dimension** with its own
+  sparkline and its change in words. Gate green: typecheck (4 pkgs), lint, format, **2370 core + 13 relay +
+  1676 desktop** unit, 74 E2E, 0 audit findings. **Lessons: (1) the reason a repeat bug report tells you
+  nothing new is usually that the first fix did not improve the DIAGNOSTIC — when two opposite causes share one
+  code path, separate them before fixing either, or the next report is as blind as the last. (2) The offline
+  fake can never show a refusal, a truncation, or a stop_reason, so the real client needs the capture hook too —
+  it is not a test aid, it is the only way to see the half of the exchange that fails. (3) An audit screenshot
+  taken straight after an action that now REDIRECTS photographs the blank frame mid-navigation, and the auditor
+  then reports zero findings for an empty page — a pass that measured nothing. Wait for the destination.**
+
 - 2026-08-18 — **Fix (six owner reports, three of them one root cause: a pet name that is also an everyday
   word; SPEC 74 §3.6.13; on `fix/pet-name-vocative`).** The owner, testing the real app, reported the AI steps
   dead: _"Does this land doesnt appear to be working, nor does The questions it still has… And the In the

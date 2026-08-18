@@ -80,7 +80,15 @@ describe('AdaptiveReport (74 §3.3)', () => {
     });
     renderReport();
     expect(await screen.findByText('Across your takes')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: /moved across your takes/i })).toBeInTheDocument();
+    // One labelled ROW per dimension, each with its own sparkline and its change in words — not four
+    // overlapping lines on one axis behind a colour legend (74 §3.6.13).
+    expect(
+      screen.getByRole('img', { name: /How explicit across your takes/i }),
+    ).toBeInTheDocument();
+    // Named twice on the page — once in "the shape of it", once as this row's label.
+    expect(screen.getAllByText('How explicit').length).toBeGreaterThanOrEqual(2);
+    // The change as text is the §9 equivalent, and the thing you actually want from a trend.
+    expect(screen.getByText('+50')).toBeInTheDocument();
   });
 
   it('does not chart a single take — one point is not a trend', async () => {

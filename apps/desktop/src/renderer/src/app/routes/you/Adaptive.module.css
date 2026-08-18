@@ -2184,3 +2184,92 @@
 .tail {
   font-weight: inherit;
 }
+
+/* ── The words, banded ────────────────────────────────────────────────────────────────────────────────
+   Three bands of identical grey chips under three quiet labels said nothing about which mattered. A left
+   rule + a count gives each band an identity at a glance, without colour carrying the meaning alone. */
+
+.wordBand {
+  border-left: 2px solid var(--color-border);
+  padding-left: var(--space-4);
+}
+
+.bandLove {
+  border-left-color: var(--color-accent-solid);
+}
+
+.bandSay {
+  border-left-color: var(--color-border-strong);
+}
+
+.bandHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.bandCount {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-tertiary);
+  background: var(--color-surface-alt);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+/* ── Across your takes ────────────────────────────────────────────────────────────────────────────────
+   One labelled row per dimension. The old chart put four near-flat lines on one axis in a 440px box inside
+   a full-width section — most of the row empty, nothing readable without matching a colour to a legend. */
+
+.trendRows {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.trendRow {
+  display: grid;
+  grid-template-columns: minmax(0, 10rem) 1fr auto;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.trendRow:first-child {
+  border-top: none;
+}
+
+.trendLabel {
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The change in words — the §9 text equivalent, and the thing you actually want from a trend. */
+.trendDelta {
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-tertiary);
+}
+
+.trendDelta.up {
+  color: var(--color-accent-text);
+}
+
+.trendDelta.down {
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 560px) {
+  .trendRow {
+    grid-template-columns: 1fr auto;
+    row-gap: var(--space-1);
+  }
+
+  .trendRow > :nth-child(2) {
+    grid-column: 1 / -1;
+  }
+}

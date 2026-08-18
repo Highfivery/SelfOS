@@ -6,6 +6,8 @@ import {
 } from '../ai/jsonSalvage';
 import { SAFETY } from '../conversations/promptBuilder';
 import { runClaude, type AiDeps } from '../questionnaires/aiCall';
+import { buildOwnSuppressionBlock, buildPracticeGroundBlock } from '../tests/adaptive/steer';
+import { profileReadBlock } from '../tests/adaptive/adaptiveService';
 import { gatherGenerationContext, isThinContext } from '../questionnaires/contextProviders';
 import {
   GoalSuggestionSchema,
@@ -73,9 +75,20 @@ export async function suggestGoals(deps: AiDeps): Promise<GoalSuggestResult> {
     .filter((g) => g.status === 'open' || g.status === 'inProgress')
     .map((g) => g.text);
 
+  // 74 §5.8 — the profile reaches the one feature it most obviously belongs in, and did not.
+  //
+  // `wantsToSay` IS a goal list the person never had to write: it is the hear/say gap, derived the moment
+  // the bank is marked. Goals was proposing commitments from their profile and insights while the app held
+  // an explicit, self-authored list of things they had said they wanted to work up to, and never looked.
+  // Suppression rides along unconditionally, because a suggested goal is prose they read.
+  const [suppression, practice, read] = await Promise.all([
+    buildOwnSuppressionBlock(deps.fs, deps.key, deps.personId),
+    buildPracticeGroundBlock(deps.fs, deps.key, deps.personId),
+    profileReadBlock(deps.fs, deps.key, deps.personId),
+  ]);
   const call = await runClaude(
     deps,
-    GOAL_SUGGEST_SYSTEM,
+    [GOAL_SUGGEST_SYSTEM, read, practice, suppression].filter(Boolean).join('\n\n'),
     buildGoalSuggestUserMessage({ context, existingGoals }),
     'goal.suggest',
     900,

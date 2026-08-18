@@ -29,6 +29,9 @@ import { recordTakeSaturation } from './saturation';
 import { scoreSpine } from './spine';
 import { nameFamilies } from './bank';
 import type { AdaptiveTestDefinition } from './types';
+import { getGuidancePrefs } from '../../conversations/guidanceService';
+import { buildProfileReadBlock } from './steer';
+import { DIRTY_TALK } from './instruments/dirtyTalk';
 
 /**
  * 74-adaptive-tests §5 — the adaptive take's lifecycle: start a draft, record each phase, complete it.
@@ -114,6 +117,27 @@ export async function latestCompleteResult(
 ): Promise<TestResult | null> {
   const all = await listAdaptiveResults(fs, key, personId, testId);
   return all.find((result) => result.status !== 'draft') ?? null;
+}
+
+/**
+ * The person's own profile READING (74 §3.3a), for their own coach — or `''` when they have not taken it.
+ *
+ * The async half of `buildProfileReadBlock`: the interpretation lives on the latest complete take, not on the
+ * merged lexicon, so a caller that only holds `fs`/`key`/`personId` had no way to reach it. That is why the
+ * lede and readings were write-once until now.
+ */
+export async function profileReadBlock(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+): Promise<string> {
+  // The 18+ gate lives HERE, not in each caller. Three of them (their coach, goals, the weekly reflection)
+  // would each have had to remember it, and the fourth would not have — which is exactly how the profile
+  // ended up reaching six paths and not the other dozen. A profile can only exist behind the ack anyway; this
+  // makes withdrawing it take effect on the next call rather than depending on who is asking.
+  if ((await getGuidancePrefs(fs, key, personId)).adultAcknowledged !== true) return '';
+  const latest = await latestCompleteResult(fs, key, personId, DIRTY_TALK.id);
+  return latest ? buildProfileReadBlock(latest) : '';
 }
 
 /** An in-progress take to resume, if there is one. */

@@ -27,6 +27,7 @@ import {
   saveAgreement,
   saveReport,
 } from './agreementService';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 
 // ── Together wrap-up (58 §3.8) — a sibling of `endAndSummarize` (09 §5), never a change to it ────────
 // One metered `together.analyze` pass (initiator-billed, extendedThinking:false) over the MUTUALLY-VISIBLE
@@ -251,7 +252,16 @@ export async function runTogetherWrapUp(deps: TogetherWrapUpDeps): Promise<Toget
   const existingActive = priorAgreements.filter((a) => a.status !== 'retired');
   const existingTexts = new Set(existingActive.map((a) => normalizeAgreementText(a.text)));
 
-  const system = [PERSONA, SAFETY, TOGETHER_WRAPUP_GUIDANCE].filter(Boolean).join('\n\n');
+  // Both partners read this report, so the union of both hard-no lists applies — the same rule the couples
+  // TURN already follows. It was the only half of Together that did not.
+  const suppression = (
+    await Promise.all(session.participantIds.map((id) => buildOwnSuppressionBlock(fs, key, id)))
+  )
+    .filter(Boolean)
+    .join('\n');
+  const system = [PERSONA, SAFETY, TOGETHER_WRAPUP_GUIDANCE, suppression]
+    .filter(Boolean)
+    .join('\n\n');
   // Attribute each shared human line so the model can write per-partner reflections; coach lines pass through.
   const messages = [
     ...shared.map((m) => ({

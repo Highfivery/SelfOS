@@ -20,6 +20,7 @@ import {
   listInsightsForPerson,
 } from '../insights';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 
 /**
  * The **relationship-insights** synthesis (54-memory-redesign §5) — the AI pass behind Memory's "Relationships"
@@ -242,13 +243,22 @@ export async function synthesizeRelationship(
     .join('\n\n');
   const at = now.toISOString();
 
+  // Prose about the two of them that one of them reads back.
+  // BOTH lists: the viewer reads it, and it is about the two of them, so a term either has ruled out is off.
+  const suppression = (
+    await Promise.all(
+      [viewerPersonId, partnerPersonId].map((id) => buildOwnSuppressionBlock(fs, key, id)),
+    )
+  )
+    .filter(Boolean)
+    .join('\n');
   let result;
   try {
     result = await client.stream(
       {
         apiKey,
         model,
-        system: [PERSONA, SAFETY, GUIDANCE].join('\n\n'),
+        system: [PERSONA, SAFETY, GUIDANCE, suppression].filter(Boolean).join('\n\n'),
         messages: [{ role: 'user', content: digest }],
         maxTokens: 700,
         extendedThinking: false,

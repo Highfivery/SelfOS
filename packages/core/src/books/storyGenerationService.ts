@@ -21,7 +21,7 @@ import { resolvePersonOptionNames } from './castRegister';
 import { CHAPTER_CORPUS_TOKEN_BUDGET, budgetCorpus, sliceCorpusForChapter } from './corpusBudget';
 import type { FileSystem } from '../host';
 import { readLexicon } from '../tests/adaptive/lexicon';
-import { buildOwnLexiconBlock } from '../tests/adaptive/steer';
+import { buildOwnLexiconBlock, buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 import { buildStoryCorpus, type CorpusItem, type StoryCorpus } from './storyCorpus';
 import { critiqueChapter, planChapter, reviseChapter } from './storyCraft';
 import { computeSourceSignature } from './storyFreshness';
@@ -144,8 +144,14 @@ export async function subjectLexiconBlock(
   bookType: BookType,
   personId: string,
 ): Promise<string | undefined> {
-  if (bookType.gates?.adult !== true) return undefined;
-  const block = buildOwnLexiconBlock(await readLexicon(fs, key, personId));
+  // The two halves have different rules. The positive steer — their explicit vocabulary — is for an
+  // adult-gated book only. SUPPRESSION is for every book: a biography chapter about a marriage can reach the
+  // same ground, and a hard no can only ever PREVENT a line. Gating both together meant that the moment a
+  // non-adult book went near intimacy it had no idea what was off.
+  const block =
+    bookType.gates?.adult === true
+      ? buildOwnLexiconBlock(await readLexicon(fs, key, personId))
+      : await buildOwnSuppressionBlock(fs, key, personId);
   return block === '' ? undefined : block;
 }
 
@@ -162,6 +168,9 @@ export async function generateFoundations(
     corpus.personName,
     undefined,
     await resolvePersonOptionNames(deps.fs, deps.key, opts.bookType, opts.config.typeOptions),
+    // The chapters written FROM this outline already carried the block; the outline itself did not, so the
+    // book was planned without it and then written with it.
+    await subjectLexiconBlock(deps.fs, deps.key, opts.bookType, deps.personId),
   );
   const user = buildFoundationsUserMessage(corpus, opts.bookType, opts.config);
 
@@ -814,6 +823,7 @@ export async function answerAuthorQuestion(
     corpus.personName,
     undefined,
     await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
+    await subjectLexiconBlock(deps.fs, deps.key, bookType, deps.personId),
   );
   const user = buildAnswerAuthorMessage({
     personName: corpus.personName,

@@ -31,6 +31,7 @@ import {
 } from './aiPrompts';
 import { normalizeOptions } from './questionnaireService';
 import { runClaude, type AiDeps } from './aiCall';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 import { emptyLedger, readLedger } from './askLedger';
 import { gatherGenerationContext, type GenerationContextRequest } from './contextProviders';
 import { isNearDuplicate } from './dedup';
@@ -676,7 +677,18 @@ export async function generateVariant(
       ...(q.options ? { options: q.options } : {}),
     })),
   });
-  const call = await runClaude(deps, VARIANT_SYSTEM, user, 'questionnaire.generate', 1500);
+  // The person this variant is FOR reads every word of it, and a rewrite is free to introduce a term the
+  // canonical question never used — so their hard nos apply here as they do to the original draft.
+  const suppression = input.targetContext.targetPersonId
+    ? await buildOwnSuppressionBlock(deps.fs, deps.key, input.targetContext.targetPersonId)
+    : '';
+  const call = await runClaude(
+    deps,
+    [VARIANT_SYSTEM, suppression].filter(Boolean).join('\n\n'),
+    user,
+    'questionnaire.generate',
+    1500,
+  );
   if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
 
   // The model returns one object per question: { prompt, options }. Both the prompt AND options are

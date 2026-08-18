@@ -37,6 +37,7 @@ import {
 import { getConversation, saveConversation } from './conversationService';
 import { PERSONA, SAFETY } from './promptBuilder';
 import { getExercise } from './guidedCatalog';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 
 /**
  * Session-analysis service (09-session-analysis §5). When a coaching session is completed, AI reads the
@@ -232,7 +233,16 @@ export async function endAndSummarize(deps: EndAndSummarizeDeps): Promise<Sessio
     unfilled.length > 0
       ? `${ANALYSIS_INSTRUCTION}\n${DEPTH_INVITATION_INSTRUCTION}`
       : ANALYSIS_INSTRUCTION;
-  const system = [PERSONA, SAFETY, SESSION_ANALYSIS_GUIDANCE, guideNote, context, depthContext]
+  const suppression = await buildOwnSuppressionBlock(fs, key, personId);
+  const system = [
+    PERSONA,
+    SAFETY,
+    SESSION_ANALYSIS_GUIDANCE,
+    suppression,
+    guideNote,
+    context,
+    depthContext,
+  ]
     .filter(Boolean)
     .join('\n\n');
   const messages = [

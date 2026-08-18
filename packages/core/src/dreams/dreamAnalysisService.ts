@@ -31,6 +31,7 @@ import { extractGoals } from '../goals/goalService';
 import { mintDreamQuestionnaires } from './dreamQuestionnaireService';
 import type { RewindResult } from '../schemas';
 import { deleteInsight, getInsight, producedFactShare, saveInsight } from '../insights';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 import {
   getAnalysis,
   getDream,
@@ -244,10 +245,14 @@ async function buildDreamPrompt(
   // Foreground the linked people (shareable data only — never their private notes) so the coach can connect
   // the dream's figures to real relationships.
   const dreamPeople = await buildLinkedPeopleContext(fs, key, personId, linkedIds);
+  // 74 §8.4 — a dream can be sexual, and this coach reads it back in the person's own words. Suppression is
+  // unconditional here for the same reason it is everywhere: it can only ever prevent a suggestion.
+  const suppression = await buildOwnSuppressionBlock(fs, key, personId);
   return [
     PERSONA,
     SAFETY,
     DREAM_ANALYSIS_GUIDANCE,
+    suppression,
     `The dream:\n"${dream.narrative}"`,
     context,
     dreamPeople,

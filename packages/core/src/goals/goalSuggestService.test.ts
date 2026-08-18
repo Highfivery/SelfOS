@@ -150,3 +150,66 @@ describe('goalSuggestService.suggestGoals (60 §3.1.3)', () => {
     expect(seenPrompt).toContain('Call your sister this week');
   });
 });
+
+describe('goals finally read the goal list the profile derives (74 §5.8)', () => {
+  it('carries what they want to be able to SAY, their reading, and their hard nos', async () => {
+    const { applyBankMarks, applyDirections, emptyLexicon, writeLexicon } =
+      await import('../tests/adaptive/lexicon');
+    const { DIRTY_TALK } = await import('../tests/adaptive/instruments/dirtyTalk');
+    const { acknowledgeAdult } = await import('../conversations/guidanceService');
+    const { completeAdaptiveTake, startAdaptiveTake } =
+      await import('../tests/adaptive/adaptiveService');
+
+    const fs = memFileSystem();
+    const personId = await seedRichPerson(fs);
+    await acknowledgeAdult(fs, key, personId);
+
+    // Loved to HEAR, would not say — which IS the hear/say gap, i.e. a goal they never had to write down.
+    let lex = applyBankMarks(
+      emptyLexicon(personId, now),
+      DIRTY_TALK.bank,
+      { 'names-praise:good-girl': 'love', 'names-rough-heavy:whore': 'never' },
+      'take:1',
+      now,
+    );
+    lex = applyDirections(lex, { 'names-praise:good-girl': { hear: 4, say: 0 } }, now);
+    await writeLexicon(fs, key, lex);
+
+    const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, personId, now);
+    await completeAdaptiveTake(
+      fs,
+      key,
+      DIRTY_TALK,
+      {
+        personId,
+        resultId: draft!.id,
+        lede: 'You want to be claimed, not pushed around.',
+        readings: [{ kind: 'pattern', text: 'The praise is about effort, not looks.' }],
+      },
+      now,
+    );
+
+    let system = '';
+    const capture: ClaudeClient = {
+      send: () => Promise.resolve('[]'),
+      stream: (options, onDelta) => {
+        system = options.system;
+        onDelta('[]');
+        return Promise.resolve({
+          text: '[]',
+          usage: { inputTokens: 5, outputTokens: 2, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    await suggestGoals(deps(fs, capture, personId));
+
+    // The derived practice ground — the single most obvious thing goals should have been reading.
+    expect(system).toContain('good girl');
+    expect(system).toMatch(/PRACTISE, never a failing/);
+    // The READING, which until now was written once and consumed by nothing.
+    expect(system).toContain('not pushed around');
+    // And a suggested goal can never name something they ruled out.
+    expect(system).toContain('whore');
+    expect(system).toMatch(/NEVER use or suggest/);
+  });
+});

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generateMasterKey } from '../crypto';
 import { memFileSystem } from '../host/memFileSystem';
 import type { EmailClient } from '../host';
-import { writeEncryptedJson } from '../vault';
+import { readEncryptedJson, writeEncryptedJson } from '../vault';
 import { saveGoal } from '../goals/goalService';
 import { upsertPerson } from '../people/peopleService';
 import { upsertRelationship } from '../people/relationshipService';
@@ -10,12 +10,14 @@ import { acknowledgeAdult } from '../conversations/guidanceService';
 import { setYnmOptIn } from '../together/ynmService';
 import { submitSectionForm } from '../intake/intakeService';
 import type { IntakeAnswerValue } from '../schemas';
+import { EmailTokenSchema } from '../schemas';
+import { listAssignments } from '../questionnaires/assignmentService';
 import { emptyLedger, writeLedger } from '../questionnaires/askLedger';
 import { SATURATION_ASKS } from '../questionnaires/topicMap';
 import { updateEmailConfig } from './emailConfig';
 import { setEmailPrefs } from './emailPrefs';
 import { listEmailActivity, sendFamilyEmail } from './emailSend';
-import { mintEmailToken } from './emailResponse';
+import { drainEmailTaps, mintEmailToken } from './emailResponse';
 import { buildDigestEmail, buildReEngagementEmail, buildWelcomeEmail } from './emailComposer';
 import {
   gatherDigestContent,
@@ -504,5 +506,286 @@ describe('the intimacy suggestion draws on the person’s OWN open ground (71 §
     // …and the worked-through family does not. Falling back to the seeded list would list every family here,
     // which is precisely how an intimacy email came to nudge toward exhausted ground.
     expect(ground).not.toMatch(/\boral\b/i);
+  });
+});
+
+describe('a suggestion email carries answers to ITS OWN body (#459, #523)', () => {
+  /**
+   * The caller-side guard the first fix never had. #459 was guarded at `generateSuggestion` alone, so
+   * nothing asserted what buttons the EMAIL carries — and the delivery path kept a fixed engagement set
+   * below the answer path, which every answerless suggestion fell onto. That is the email the reporter
+   * received twice. These drive the real `reconcileEmailSchedule` and read the sent HTML.
+   */
+  const buttonsOf = (html: string): string[] =>
+    [...html.matchAll(/>([^<>]{1,40})<\/a>/g)].map((m) => (m[1] as string).trim());
+
+  /** A reconcile whose model reply is `reply`, returning every button label the email actually carried. */
+  async function sendSuggestion(reply: string): Promise<string[]> {
+    const fs = await configured();
+    await seedSynthesis(fs, 'A thread of carrying the hard things alone.');
+    const prefs = await setEmailPrefs(
+      fs,
+      key,
+      PERSON,
+      { address: 'me@inbox.example', families: { 'ai-suggestion': true } },
+      false,
+      new Date('2026-08-05T00:00:00.000Z'),
+    );
+    const fake = schedulingFake();
+    let html = '';
+    const email: EmailClient = {
+      ...fake.client,
+      send: (req) => {
+        html += req.html;
+        return fake.client.send(req);
+      },
+    };
+    const client = {
+      send: () => Promise.resolve(''),
+      stream: (_o: { system?: string }, onDelta: (s: string) => void) => {
+        onDelta(reply);
+        return Promise.resolve({
+          text: reply,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    await reconcileEmailSchedule(
+      baseReconcile(fs, {
+        email,
+        prefs,
+        relay: { drainTaps: () => Promise.resolve([]) },
+        relayEndpoint: 'https://relay.example',
+        ai: { client, apiKey: 'sk-x', model: 'claude-sonnet-4-6' },
+      }),
+    );
+    return buttonsOf(html);
+  }
+
+  const GENERIC = ['I’m game', 'Maybe later', 'Not for me'];
+
+  it('emails the model’s own answers, and never the fixed engagement set', async () => {
+    const buttons = await sendSuggestion(
+      JSON.stringify({
+        headline: 'The habit of holding it alone',
+        body: 'When did you first notice you carry the hard things alone?',
+        options: [
+          { label: 'As far back as I remember', stance: 'other' },
+          { label: 'Somewhere in my teens', stance: 'other' },
+          { label: 'More recently than that', stance: 'other' },
+          { label: 'Not sure', stance: 'other' },
+        ],
+      }),
+    );
+    expect(buttons).toEqual([
+      'As far back as I remember',
+      'Somewhere in my teens',
+      'More recently than that',
+      'Not sure',
+      // "More / less like this" is about the email, never a stand-in for an answer.
+      'More like this',
+      'Less like this',
+    ]);
+    for (const generic of GENERIC) expect(buttons).not.toContain(generic);
+  });
+
+  it('sends NOTHING rather than an email whose buttons answer a different question', async () => {
+    // The reported email, exactly: a question, and a model reply with no answers to it. The old fallback
+    // turned this into "I’m game / Maybe later / Not for me". There is no fallback now.
+    const buttons = await sendSuggestion(
+      JSON.stringify({
+        headline: 'The habit of holding it alone',
+        body: 'When did you first learn that holding it alone was the safer thing to do?',
+      }),
+    );
+    expect(buttons).toEqual([]); // no email at all
+  });
+
+  it('a body that PROPOSES is answered, not filed as a question in the Inbox', async () => {
+    // Only a question earns a real check-in. A statement ("Notice one good moment today.") filed as one
+    // would put a non-question in the Inbox and bill an analysis for answering it — its answers are still
+    // the model's own, written for this body; only the capture differs.
+    const fs = await configured();
+    await seedSynthesis(fs, 'A thread of carrying the hard things alone.');
+    const prefs = await setEmailPrefs(
+      fs,
+      key,
+      PERSON,
+      { address: 'me@inbox.example', families: { 'ai-suggestion': true } },
+      false,
+      new Date('2026-08-05T00:00:00.000Z'),
+    );
+    const reply = JSON.stringify({
+      headline: 'A small step',
+      body: 'Notice one good moment today and name it.',
+      options: [
+        { label: 'I will try that', stance: 'yes' },
+        { label: 'Some other week', stance: 'maybe' },
+      ],
+    });
+    const client = {
+      send: () => Promise.resolve(''),
+      stream: (_o: { system?: string }, onDelta: (s: string) => void) => {
+        onDelta(reply);
+        return Promise.resolve({
+          text: reply,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    await reconcileEmailSchedule(
+      baseReconcile(fs, {
+        email: schedulingFake().client,
+        prefs,
+        relay: { drainTaps: () => Promise.resolve([]) },
+        relayEndpoint: 'https://relay.example',
+        ai: { client, apiKey: 'sk-x', model: 'claude-sonnet-4-6' },
+      }),
+    );
+    expect(await listAssignments(fs, key, { recipientPersonId: PERSON })).toHaveLength(0);
+    const names = await fs.list(`people/${PERSON}/email/tokens`);
+    const minted = await Promise.all(
+      names.map((n) => readEncryptedJson(fs, `people/${PERSON}/email/tokens/${n}`, key)),
+    );
+    const parsed = minted.map((t) => EmailTokenSchema.parse(t));
+    // Still the model's own answers — a proposal is not a licence for the fixed trio.
+    expect(
+      parsed
+        .filter((t) => t.kind === 'reaction')
+        .map((t) => t.answer)
+        .sort(),
+    ).toEqual(['I will try that', 'Some other week']);
+  });
+
+  it('tapping "More like this" does not spend the answer to the question', async () => {
+    // A tap spends its siblings — the other answers to the SAME question. Tuning is a different
+    // interaction (it is about the email, not the body), so it must not take the answers down with it:
+    // the minted check-in would be left unanswerable from the email, with nothing said about why.
+    const fs = await configured();
+    await seedSynthesis(fs, 'A thread of carrying the hard things alone.');
+    const prefs = await setEmailPrefs(
+      fs,
+      key,
+      PERSON,
+      { address: 'me@inbox.example', families: { 'ai-suggestion': true } },
+      false,
+      new Date('2026-08-05T00:00:00.000Z'),
+    );
+    const reply = JSON.stringify({
+      headline: 'One small thing',
+      body: 'Would a short walk on Thursday help?',
+      options: [
+        { label: 'Yes, Thursday works', stance: 'yes' },
+        { label: 'Another day maybe', stance: 'maybe' },
+      ],
+    });
+    const client = {
+      send: () => Promise.resolve(''),
+      stream: (_o: { system?: string }, onDelta: (s: string) => void) => {
+        onDelta(reply);
+        return Promise.resolve({
+          text: reply,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    const at = new Date('2026-08-05T12:00:00.000Z');
+    await reconcileEmailSchedule(
+      baseReconcile(fs, {
+        email: schedulingFake().client,
+        prefs,
+        relay: { drainTaps: () => Promise.resolve([]) },
+        relayEndpoint: 'https://relay.example',
+        ai: { client, apiKey: 'sk-x', model: 'claude-sonnet-4-6' },
+      }),
+    );
+    const read = async (): Promise<{ token: string; kind: string }[]> => {
+      const names = await fs.list(`people/${PERSON}/email/tokens`);
+      const raw = await Promise.all(
+        names.map((n) => readEncryptedJson(fs, `people/${PERSON}/email/tokens/${n}`, key)),
+      );
+      return raw.map((t) => EmailTokenSchema.parse(t));
+    };
+    const before = await read();
+    const moreToken = before.find((t) => t.kind === 'tuning')?.token as string;
+    expect(moreToken).toBeDefined();
+    // Tap "More like this"…
+    await drainEmailTaps(
+      fs,
+      key,
+      PERSON,
+      {
+        drainTaps: (tokens) =>
+          Promise.resolve(
+            tokens.filter((t) => t === moreToken).map((t) => ({ token: t, at: at.toISOString() })),
+          ),
+      },
+      at,
+    );
+    // …and the answers to the question are all still there to tap.
+    const after = await read();
+    expect(after.filter((t) => t.kind === 'checkin-answer')).toHaveLength(2);
+  });
+
+  it('an answered tap lands as a real check-in answer, with its meaning attached', async () => {
+    // The answer buttons are a genuine one-question check-in, so a tap is submitted + analyzed like any
+    // in-app answer — and the token carries the stance, which is what rules a subject out now that the
+    // words on the button are written per email.
+    const fs = await configured();
+    await seedSynthesis(fs, 'A thread of carrying the hard things alone.');
+    const prefs = await setEmailPrefs(
+      fs,
+      key,
+      PERSON,
+      { address: 'me@inbox.example', families: { 'ai-suggestion': true } },
+      false,
+      new Date('2026-08-05T00:00:00.000Z'),
+    );
+    const reply = JSON.stringify({
+      headline: 'One small thing',
+      body: 'Would a short walk on Thursday help?',
+      options: [
+        { label: 'Yes, Thursday works', stance: 'yes' },
+        { label: 'Another day maybe', stance: 'maybe' },
+        { label: 'Walks aren’t it for me', stance: 'no' },
+      ],
+    });
+    const client = {
+      send: () => Promise.resolve(''),
+      stream: (_o: { system?: string }, onDelta: (s: string) => void) => {
+        onDelta(reply);
+        return Promise.resolve({
+          text: reply,
+          usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+    await reconcileEmailSchedule(
+      baseReconcile(fs, {
+        email: schedulingFake().client,
+        prefs,
+        relay: { drainTaps: () => Promise.resolve([]) },
+        relayEndpoint: 'https://relay.example',
+        ai: { client, apiKey: 'sk-x', model: 'claude-sonnet-4-6' },
+      }),
+    );
+    // Decrypt what was actually minted: one token per answer, each a real check-in answer to a real
+    // assignment, each carrying what tapping it means.
+    const names = await fs.list(`people/${PERSON}/email/tokens`);
+    const tokens = await Promise.all(
+      names.map((n) => readEncryptedJson(fs, `people/${PERSON}/email/tokens/${n}`, key)),
+    );
+    const parsed = tokens.map((t) => EmailTokenSchema.parse(t));
+    const answers = parsed.filter((t) => t.kind === 'checkin-answer');
+    expect(answers.map((t) => t.answer).sort()).toEqual(
+      ['Another day maybe', 'Walks aren’t it for me', 'Yes, Thursday works'].sort(),
+    );
+    expect(answers.every((t) => t.assignmentId !== undefined && t.questionId !== undefined)).toBe(
+      true,
+    );
+    expect(answers.find((t) => t.answer === 'Walks aren’t it for me')?.stance).toBe('no');
+    // …and the question really is answerable in the app, not just in the email.
+    const assignments = await listAssignments(fs, key, { recipientPersonId: PERSON });
+    expect(assignments).toHaveLength(1);
   });
 });

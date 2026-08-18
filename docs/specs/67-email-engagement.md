@@ -212,8 +212,33 @@ delivers it (scheduled). Flow:
   gap-finder + `generateQuestions`), one-tap to send from the email or to open the builder.
 - **A something-to-try** — surfaced from the recommendation providers ([`53`](53-home-encouragement.md);
   they already carry person-specific copy + `dismissKey`s).
-- **A question to sit with** — a single reflective prompt, tap to react.
+- **A question to sit with** — a single reflective prompt, tap to answer (§3.3a).
 - **The gated intimacy suggestion** (E-int, §3.5).
+
+#### 3.3a Every suggestion carries answers written for ITS OWN body
+
+The buttons under a suggestion email are the model's **own answers to its own body**, and nothing else.
+`generateSuggestion` returns `options` as `{ label, stance }[]`: the **label** is the words a person reads —
+2–5 of them, written for this email, validated by the SAME `normalizeOptions` as in-app generation
+([`08 §32.8`](08-questionnaires.md)) — and the **stance** (`yes` / `maybe` / `no` / `other`) is what the
+tap MEANS, which is what §3.6's response loop reads. Splitting the two is what lets the wording be
+per-email without losing rule-it-out / rest-it / mutual-green-light: an open question's answers are almost
+all `other`, and **answering a question is never a rejection of it**.
+
+There is **no fallback set**. A suggestion whose answers are missing, unusable, or **dominated by** the
+generic engagement labels (a majority of them — one honest "Not for me" among specific answers is a real
+answer to a real proposal) is **not sent at all** — there will be another next cycle and none of its material is
+consumed. This is a hard rule because the two reports against this feature (#459, #523) were both the same
+email: a question delivered under one fixed trio that answers no particular question.
+
+**Delivery follows the body, then the family** (§3.5). A body that ASKS something is minted as a real
+one-question self check-in, so the tap is submitted + analyzed like any in-app answer — a question is worth
+capturing. A body that PROPOSES is answered but not filed: minting a check-in for it would put a statement
+in the Inbox as a question and bill an analysis for answering it. An intimacy suggestion always stays
+reactions, so nothing explicit lands in the Inbox and the drained response keeps its `intimacy` sensitivity
+tier (§8.2). "More like this / less like this" is about the EMAIL, not the body: it rides alongside every
+suggestion, never stands in for an answer, and is minted under its **own** interaction id — a tap spends
+its siblings, so sharing one would make "More like this" throw the answers away.
 
 ### 3.4 Delivery & scheduling (no backend)
 
@@ -262,8 +287,10 @@ running SelfOS, it's logged locally with no relay round-trip.
 
 **Four interactive elements** (all in scope):
 
-1. **Intimacy reactions** — on an E-int suggestion: e.g. _I'm game_ / _Maybe later_ / _Not for me_.
-2. **AI-suggestion reactions** — same three on any E suggestion.
+1. **Intimacy answers** — on an E-int suggestion: the model's own answers to that suggestion, each
+   carrying a stance (§3.3a). Minted as `intimacy-reaction` taps so the response keeps its sensitivity tier.
+2. **AI-suggestion answers** — on any E suggestion, the model's own answers to that body, minted as a real
+   one-question check-in (element 3). **Never a fixed set** — see §3.3a.
 3. **An embedded one-question check-in** — tappable answer options (multiple-choice / scale / yes-no;
    **free-text opens the app**). This can **deliver an auto check-in** ([`63`](63-auto-checkins.md)) as a
    one-tap email — the answer drains back and is analyzed exactly as an in-app answer.
@@ -274,10 +301,12 @@ running SelfOS, it's logged locally with no relay round-trip.
 
 A drained tap becomes an `EmailResponse` (§4.5) and feeds five things:
 
-- **De-dup** — a _Not for me_ removes that subject from future suggestions (added to the avoid-set the
-  §3.3 de-dup reads).
-- **Resurface** — a _Maybe later_ returns the subject in a few weeks (a scheduled resurface).
-- **Mutual green light** — when **both** partners tap _I'm game_ on the **same** shared suggestion
+- **De-dup** — an answer whose **stance is `no`** removes that subject from future suggestions (added to
+  the avoid-set the §3.3 de-dup reads). The wording is per-email now, so the loop reads the stance, not the
+  label; the pre-§3.3a fixed values (`not-for-me` / `maybe-later` / `im-game`) are still honoured so a
+  response recorded before stances existed keeps its meaning.
+- **Resurface** — a **`maybe`** returns the subject in a few weeks (a scheduled resurface).
+- **Mutual green light** — when **both** partners tap a **`yes`** on the **same** shared suggestion
   (matched by `sharedSuggestionKey`), SelfOS surfaces **"you're both up for this"** to both — in
   Together and/or the next email.
 - **Intimacy responses are a soft signal** — they feed suggestions/context/de-dup **and offer, in-app**,
@@ -1092,6 +1121,20 @@ prefs.enc`, fail-closed, unsubscribe token minted once, intimacy opt-in coerced 
   `normalizeOptions` as in-app generation; a question-shaped suggestion is delivered as a real one-question
   check-in using them; an unusable set degrades to NO buttons rather than buttons that cannot answer; and the
   producer now validates its own draft. Guards pin all three, the validator guard verified to FAIL on revert.
+
+- 2026-08-18 — **Fix: the answers are written per email, and there is no fixed set left to fall back on
+  (#523; §3.3a).** Reported a second time, with the same screenshot: a reflective question emailed under
+  _I'm game / Maybe later / Not for me_. The #459 fix added the answer path and left the fixed set BELOW it
+  as a fallback — so every suggestion whose answers were missing (an open question, the common case) fell
+  straight back onto the reported email. Its guard could not see this: it tested `generateSuggestion` in
+  isolation, so nothing ever asserted what buttons the EMAIL carries. Reproduced first at the delivery level
+  (the test emitted the reported trio byte for byte), then fixed by deleting the fallback outright: answers
+  are REQUIRED, the fixed `CHECKIN_OPTIONS` trio is gone, and a suggestion without usable answers is not
+  sent. Owner's rule: _"it should ONLY be tappable answers, but dynamic based on the question"_ — so
+  `options` became `{ label, stance }`, dynamic wording with the meaning riding alongside it, and the
+  response loop (rule-out / rest / green light) reads the stance. **Lesson: a guard written one layer below
+  the defect proves nothing about the layer that ships — the #459 fix was correct at the service and wrong at
+  the delivery path, and a fallback left in place underneath a fix is the fix's undoing.**
 
 - 2026-08-06 — reviewed with the owner; separate engagement address, Resend-poll open tracking, activity
   view as a Settings subsection, remaining questions resolved; **Approved.**

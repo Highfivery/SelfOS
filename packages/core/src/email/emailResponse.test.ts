@@ -10,6 +10,7 @@ import {
   mintEmailToken,
   type TapDrainer,
 } from './emailResponse';
+import { buildAvoidSet, recordSentSuggestion } from './emailSuggestionService';
 
 const key = generateMasterKey();
 const PERSON = 'me';
@@ -200,5 +201,94 @@ describe('drainEmailTaps (67 §3.5/§3.6 / Phase 4)', () => {
     };
     expect(await drainEmailTaps(fs, key, PERSON, relay, now)).toHaveLength(0);
     expect(called).toBe(false);
+  });
+});
+
+describe('an answer keeps its MEANING across the drain (67 §3.3a)', () => {
+  /**
+   * The end-to-end guard the `{ label, stance }` split exists for. Answers are written per email now, so
+   * every behaviour that used to key on the fixed labels — rule-it-out, rest-it, mutual green light — reads
+   * `stance` instead. A drain that dropped it would leave the whole loop silently dead while every unit
+   * that seeds a response by hand kept passing.
+   */
+  it('carries the stance from the tapped token onto the response, and the avoid-set reads it', async () => {
+    const fs = memFileSystem();
+    const at = new Date('2026-08-18T12:00:00.000Z');
+    const suggestionId = 's-1';
+    await recordSentSuggestion(fs, key, PERSON, {
+      id: suggestionId,
+      schemaVersion: 1,
+      family: 'ai-suggestion',
+      suggestionType: 'something-to-try',
+      text: 'A walk on Thursday A walk on Thursday?',
+      subjectKey: 'goal-1',
+      tokens: ['T-no'],
+      sentAt: at.toISOString(),
+    });
+    await mintEmailToken(fs, key, PERSON, {
+      token: 'T-no',
+      schemaVersion: 1,
+      interactionId: 'ix-1',
+      family: 'ai-suggestion',
+      suggestionId,
+      kind: 'reaction',
+      // Per-email wording — nothing here spells "not-for-me"; only the stance says what it means.
+      answer: 'Walks aren’t it for me',
+      stance: 'no',
+      mintedAt: at.toISOString(),
+    });
+
+    const drained = await drainEmailTaps(
+      fs,
+      key,
+      PERSON,
+      {
+        drainTaps: (tokens) =>
+          Promise.resolve(tokens.map((t) => ({ token: t, at: at.toISOString() }))),
+      },
+      at,
+    );
+    expect(drained[0]?.stance).toBe('no');
+
+    // …and the subject really is ruled out of future suggestions, which is what the tap promised.
+    const avoid = await buildAvoidSet(fs, key, PERSON, 'ai-suggestion', at);
+    expect(avoid.subjects.has('goal-1')).toBe(true);
+  });
+
+  it('still honours a pre-§3.3a response, whose fixed answer value carried the meaning itself', async () => {
+    const fs = memFileSystem();
+    const at = new Date('2026-08-18T12:00:00.000Z');
+    await recordSentSuggestion(fs, key, PERSON, {
+      id: 's-legacy',
+      schemaVersion: 1,
+      family: 'ai-suggestion',
+      suggestionType: 'something-to-try',
+      text: 'An older suggestion',
+      subjectKey: 'goal-legacy',
+      tokens: [],
+      sentAt: '2026-07-01T00:00:00.000Z',
+    });
+    await mintEmailToken(fs, key, PERSON, {
+      token: 'T-legacy',
+      schemaVersion: 1,
+      interactionId: 'ix-legacy',
+      family: 'ai-suggestion',
+      suggestionId: 's-legacy',
+      kind: 'reaction',
+      answer: 'not-for-me', // no stance — recorded before stances existed
+      mintedAt: '2026-08-17T00:00:00.000Z',
+    });
+    await drainEmailTaps(
+      fs,
+      key,
+      PERSON,
+      {
+        drainTaps: (tokens) =>
+          Promise.resolve(tokens.map((t) => ({ token: t, at: at.toISOString() }))),
+      },
+      at,
+    );
+    const avoid = await buildAvoidSet(fs, key, PERSON, 'ai-suggestion', at);
+    expect(avoid.subjects.has('goal-legacy')).toBe(true);
   });
 });

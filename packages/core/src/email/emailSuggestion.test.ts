@@ -94,7 +94,8 @@ describe('generateSuggestion (67 §3.3)', () => {
   it('composes a de-dup-checked suggestion from a fresh signal', async () => {
     const fs = memFileSystem();
     const client = clientReturning(
-      '{"headline":"A small step","body":"Notice one good moment today."}',
+      '{"headline":"A small step","body":"Notice one good moment today.",' +
+        '"options":[{"label":"Yes, one thing","stance":"yes"},{"label":"Not this week","stance":"maybe"}]}',
     );
     const out = await generateSuggestion(deps(fs, client), {
       openGround: [],
@@ -321,7 +322,8 @@ describe('generateSuggestion — shared steering (spec 69 P4: email joins the on
   it('feeds the coverage/feedback guidance + covered-topics avoid into the prompt, author-blind', async () => {
     const fs = memFileSystem();
     const { client, seen } = capturingClient(
-      '{"headline":"A fresh angle","body":"Notice something new this week."}',
+      '{"headline":"A fresh angle","body":"Notice something new this week.",' +
+        '"options":[{"label":"Yes, one thing","stance":"yes"},{"label":"Not this week","stance":"maybe"}]}',
     );
     const out = await generateSuggestion(deps(fs, client), {
       openGround: [],
@@ -361,18 +363,21 @@ describe('generateSuggestion — shared steering (spec 69 P4: email joins the on
   });
 });
 
-describe('emailed questions carry answers, not reactions (#459)', () => {
-  it('keeps options that answer the question, and drops a set that cannot', async () => {
-    // Reported: an emailed question arrived with "I'm game / Maybe later / Not for me", which reads as
-    // "do you want to answer this?" and answers nothing. Options must answer the exact prompt (08 §32.8) —
+describe('emailed answers are written for the email (#459, #523)', () => {
+  it('keeps answers that answer the question, and refuses a set that cannot', async () => {
+    // Reported twice: an emailed question arrived with "I'm game / Maybe later / Not for me", which reads as
+    // "do you want to answer this?" and answers nothing. Answers must answer the exact prompt (08 §32.8) —
     // the rule already enforced for in-app generation, which the email surface bypassed entirely.
     const fs = memFileSystem();
     const good = await generateSuggestion(
       deps(
         fs,
         clientReturning(
-          '{"headline":"A question","body":"What would make this week feel different?",' +
-            '"options":["More time alone","Fewer obligations","Something to look forward to","Not sure yet"]}',
+          '{"headline":"A question","body":"What would make this week feel different?","options":[' +
+            '{"label":"More time alone","stance":"other"},' +
+            '{"label":"Fewer obligations","stance":"other"},' +
+            '{"label":"Not for me right now","stance":"no"},' +
+            '{"label":"Not sure yet","stance":"other"}]}',
         ),
       ),
       {
@@ -382,15 +387,23 @@ describe('emailed questions carry answers, not reactions (#459)', () => {
         avoid: { texts: [], subjects: new Set() },
       },
     );
-    expect(good?.suggestion.options).toEqual([
+    expect(good?.suggestion.options.map((o) => o.label)).toEqual([
       'More time alone',
       'Fewer obligations',
-      'Something to look forward to',
+      'Not for me right now',
       'Not sure yet',
     ]);
+    // The words are per-email; the MEANING rides alongside them, so ruling a subject out still works.
+    expect(good?.suggestion.options.map((o) => o.stance)).toEqual([
+      'other',
+      'other',
+      'no',
+      'other',
+    ]);
 
-    // An unusable set (blank + a case-insensitive duplicate leaves one real option) degrades to NO buttons.
-    // Better an email that links into the app than buttons that cannot answer the question.
+    // An unusable set (blank + a case-insensitive duplicate leaves one real answer) means NO suggestion.
+    // The old shape — "degrade to no buttons" — is what the delivery path turned back into the reported
+    // engagement trio; a suggestion this feature cannot deliver honestly is simply not sent (#523).
     const bad = await generateSuggestion(
       deps(
         fs,
@@ -405,10 +418,56 @@ describe('emailed questions carry answers, not reactions (#459)', () => {
         avoid: { texts: [], subjects: new Set() },
       },
     );
-    expect(bad?.suggestion.options).toEqual([]);
+    expect(bad).toBeNull();
   });
 
-  it('tells the model the options are ANSWERS, never engagement reactions', async () => {
+  it('refuses a set the generic engagement labels DOMINATE (#523)', async () => {
+    // The exact reported email, this time proposed by the model itself. A set that would fit ANY email
+    // answers no particular one, so it is refused rather than sent under a model's byline.
+    const fs = memFileSystem();
+    const echoed = await generateSuggestion(
+      deps(
+        fs,
+        clientReturning(
+          '{"headline":"The habit of holding it alone","body":"When did you first learn that holding it ' +
+            'alone was the safer thing to do?","options":[{"label":"I\'m game","stance":"yes"},' +
+            '{"label":"Maybe later","stance":"maybe"},{"label":"Not for me","stance":"no"}]}',
+        ),
+      ),
+      {
+        openGround: [],
+        family: 'ai-suggestion',
+        signals: { ...emptySignals, observation: 'A thread of carrying things alone.' },
+        avoid: { texts: [], subjects: new Set() },
+      },
+    );
+    expect(echoed).toBeNull();
+
+    // …but one honest decline among specific answers is a real answer to a real proposal, not the defect.
+    const mixed = await generateSuggestion(
+      deps(
+        fs,
+        clientReturning(
+          '{"headline":"A walk Thursday","body":"Would a short walk on Thursday help?","options":[' +
+            '{"label":"Yes, Thursday works","stance":"yes"},{"label":"Another day","stance":"maybe"},' +
+            '{"label":"Not for me","stance":"no"}]}',
+        ),
+      ),
+      {
+        openGround: [],
+        family: 'ai-suggestion',
+        signals: { ...emptySignals, observation: 'Something else entirely, to dodge the de-dup.' },
+        avoid: { texts: [], subjects: new Set() },
+      },
+    );
+    expect(mixed?.suggestion.options.map((o) => o.label)).toEqual([
+      'Yes, Thursday works',
+      'Another day',
+      'Not for me',
+    ]);
+  });
+
+  it('tells the model the answers are per-email, never one set that fits any email', async () => {
     // A prompt rule with no assertion silently rots — and this is the exact wording the defect came from.
     const fs = memFileSystem();
     let system = '';
@@ -426,9 +485,12 @@ describe('emailed questions carry answers, not reactions (#459)', () => {
       signals: { ...emptySignals, observation: 'Fresh ground.' },
       avoid: { texts: [], subjects: new Set() },
     });
-    expect(system).toMatch(/must be 2–5 short answers to THAT question/);
-    expect(system).toMatch(/They are answers, NOT reactions/);
+    expect(system).toMatch(/`options` is REQUIRED/);
+    expect(system).toMatch(/written for THIS body/);
+    expect(system).toMatch(/NEVER a generic set that would fit any email/);
     expect(system).toMatch(/I'm game/);
+    // The stance contract — dynamic wording is only safe because the meaning travels with it.
+    expect(system).toMatch(/Set `stance` on each answer/);
   });
 });
 
@@ -475,6 +537,18 @@ describe('74 §8.4 — the intimacy email carries the hard nos', () => {
     const fs = memFileSystem();
     await withBoundary(fs);
     const client = clientReturning('{"headline":"Tonight","body":"Tell him you are his whore."}');
+    expect(await generateSuggestion(deps(fs, client), intimacyInput)).toBeNull();
+  });
+
+  it('refuses when a ruled-out word is in a BUTTON, not just the sentence above it', async () => {
+    // The answers are model-written prose too (67 §3.3a) — they reach the person on the button AND are
+    // quoted into their coaching context. A hard no in a label is exactly as unsendable as one in the body.
+    const fs = memFileSystem();
+    await withBoundary(fs);
+    const client = clientReturning(
+      '{"headline":"Tonight","body":"What sounds good tonight?","options":[' +
+        '{"label":"Call me your whore","stance":"yes"},{"label":"Something slower","stance":"other"}]}',
+    );
     expect(await generateSuggestion(deps(fs, client), intimacyInput)).toBeNull();
   });
 });

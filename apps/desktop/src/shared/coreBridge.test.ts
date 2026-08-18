@@ -207,15 +207,32 @@ function makeHost(): {
           usage: { inputTokens: 1, outputTokens: 1, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
       }
-      // Email AI Coach Suggestion (67 §3.3 / Phase 5): the system asks for {"headline","body"} and the user
-      // text carries "Suggestion type:". Return a distinct suggestion so the reconcile schedules an E email.
+      // Email AI Coach Suggestion (67 §3.3 / Phase 5): the system asks for {"headline","body","options"}
+      // and the user text carries "Suggestion type:". The answers are per-body with a stance (67 §3.3a) —
+      // a fake that returned none would exercise the "not sendable" path, never the delivered one.
       if (userText.includes('Suggestion type:')) {
         const intimacy = userText.includes('couple suggestion');
         return Promise.resolve({
           text: JSON.stringify(
             intimacy
-              ? { headline: 'A shared idea', body: 'Something you both said you are into.' }
-              : { headline: 'A small step', body: 'Notice one good moment today and name it.' },
+              ? {
+                  headline: 'A shared idea',
+                  body: 'Something you both said you are into — this week?',
+                  options: [
+                    { label: 'Yes, this week', stance: 'yes' },
+                    { label: 'Another week', stance: 'maybe' },
+                    { label: 'Not this one', stance: 'no' },
+                  ],
+                }
+              : {
+                  headline: 'A small step',
+                  body: 'Could you notice one good moment today and name it?',
+                  options: [
+                    { label: 'Yes', stance: 'yes' },
+                    { label: 'I can try', stance: 'other' },
+                    { label: 'Not today', stance: 'maybe' },
+                  ],
+                },
           ),
           usage: { inputTokens: 4, outputTokens: 6, cacheWriteTokens: 0, cacheReadTokens: 0 },
         });
@@ -921,6 +938,24 @@ describe('createCoreBridge', () => {
       if (raw.kind === 'checkin-answer' && raw.answer === 'Yes') yesToken = raw.token;
     }
     expect(yesToken).not.toBe('');
+    // #523, at the seam: the ONLY answer buttons are the model's own answers to its own body. The fixed
+    // engagement trio is gone from this feature — nothing may mint it again, from any layer.
+    const minted = await Promise.all(
+      tokenNames.map(
+        (n) =>
+          readEncryptedJson(ctx.fs, `people/${ownerId}/email/tokens/${n}`, ctx.key) as Promise<{
+            answer: string;
+            kind: string;
+            stance?: string;
+          }>,
+      ),
+    );
+    const answerLabels = minted.filter((t) => t.kind !== 'tuning').map((t) => t.answer);
+    expect(answerLabels.sort()).toEqual(['I can try', 'Not today', 'Yes']);
+    for (const generic of ['im-game', 'maybe-later', 'not-for-me'])
+      expect(answerLabels).not.toContain(generic);
+    // …and each carries what tapping it MEANS, since the words are written per email now.
+    expect(minted.find((t) => t.answer === 'Not today')?.stance).toBe('maybe');
     await host.host.relay.fetch(`https://relay.example/t/${yesToken}`);
 
     // Next reconcile drains the tap → a checkin-answer response + the auto check-in is recorded (submitted).

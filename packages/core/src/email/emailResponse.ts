@@ -63,6 +63,14 @@ async function listTokens(
   return out;
 }
 
+/**
+ * "They took this up" — the signal a mutual green light matches on (67 §3.3a/§3.6). Answers are written per
+ * email now, so the meaning lives in `stance`; the fixed `im-game` value is still read so a response
+ * recorded before stances existed keeps counting.
+ */
+export const isTakenUp = (r: EmailResponse): boolean =>
+  r.stance === 'yes' || r.answer === 'im-game';
+
 /** Read a person's email responses, newest first (67 §3.6 — the own-only in-app history). */
 export async function listEmailResponses(
   fs: FileSystem,
@@ -115,7 +123,13 @@ export async function summarizeEmailResponsesForContext(
       case 'less':
         return 'wants fewer suggestions like a recent one';
       default:
-        return r.kind === 'checkin-answer' ? `answered a quick email check-in "${r.answer}"` : null;
+        // A per-email answer (67 §3.3a) — the label IS the content, so it is quoted either way. Only the
+        // operational re-engagement taps fall through to null.
+        return r.kind === 'checkin-answer'
+          ? `answered a quick email check-in "${r.answer}"`
+          : r.kind === 'reaction' || r.kind === 'intimacy-reaction'
+            ? `answered an emailed suggestion "${r.answer}"`
+            : null;
     }
   };
   const items = responses
@@ -138,7 +152,10 @@ export async function editEmailResponse(
   if (!raw) return null;
   const parsed = EmailResponseSchema.safeParse(raw);
   if (!parsed.success) return null;
+  // The stance described the words that were there; new words carry their own meaning, and we have no way
+  // to read it — so an edited answer becomes stance-free rather than keeping a stale one.
   const next: EmailResponse = { ...parsed.data, answer, edited: true };
+  delete next.stance;
   await writeEncryptedJson(fs, responsePath(personId, id), next, key);
   return next;
 }
@@ -215,6 +232,9 @@ export async function drainEmailTaps(
       ...(token.sharedSuggestionKey ? { sharedSuggestionKey: token.sharedSuggestionKey } : {}),
       kind: token.kind,
       answer: token.answer,
+      // The MEANING travels with the answer (67 §3.3a). Dropping it here would silently kill every
+      // behaviour that used to key on the fixed labels — rule-it-out, rest-it, mutual green light.
+      ...(token.stance ? { stance: token.stance } : {}),
       sensitivity,
       respondedAt: tap.at,
       source: 'relay-tap',

@@ -524,6 +524,50 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-18 — **Fix (an emailed question got the same three buttons every time; owner-reported a SECOND
+  time; SPEC 67 §3.3a; on `fix/suggestion-email-answerable`).** The screenshot: a reflective question — _"When
+  did you first learn that holding it alone was the safer thing to do?"_ — under **I'm game · Maybe later ·
+  Not for me**. **Reproduced before touching anything:** a test drove the real `reconcileEmailSchedule` and
+  emitted those five buttons byte for byte. **The cause is my own earlier fix.** #459 added a path that mints
+  the model's answers — and left the fixed engagement trio in place BELOW it as a fallback, so every
+  suggestion whose answers were missing fell straight back onto the reported email. Since an open memory
+  question has no honest short answers, that was not an edge case, it was the common one. Its guard could not
+  see this: it tested `generateSuggestion` in ISOLATION, so nothing in the suite ever asserted what buttons
+  the EMAIL carries — and the commit message's claim ("degrades to NO buttons") was true of the service and
+  false of the thing that ships. Same class, also still live: `CHECKIN_OPTIONS = ['Yes','Somewhat','Not
+really']` stapled onto an arbitrary AI-written body. **Owner's rule:** _"it should ONLY be tappable answers,
+  but dynamic based on the question"_ — so `options` became **`{ label, stance }`**: the label is written for
+  that one body (2–5, validated by the same `normalizeOptions` as in-app generation), and the stance
+  (`yes`/`maybe`/`no`/`other`) is what the §3.6 response loop reads. That split is load-bearing — the
+  rule-it-out / rest-it-3-weeks / mutual-green-light machinery all keyed on the FIXED label values, so
+  dynamic wording without a stance would have silently killed it (legacy values still honoured, so responses
+  recorded before today keep their meaning). **The fallback is deleted, not re-gated**: answers are required,
+  an unusable or all-generic set means the email is not sent at all, and a non-intimacy suggestion's answers
+  are minted as a real one-question check-in so a tap is submitted + analyzed like any in-app answer (the
+  intimacy family stays reactions — nothing explicit should land in the Inbox, and the drained response keeps
+  its `intimacy` tier), and a body that PROPOSES rather than asks is answered but not filed — minting a
+  check-in for a statement would put a non-question in the Inbox and bill an analysis for answering it.
+  **My own code-reviewer then caught two regressions I had introduced, both invisible to a green suite:**
+  `drainEmailTaps` copied every token field onto the response EXCEPT `stance`, so the whole split was inert
+  — and because the fixed labels were now gone, the legacy fallbacks could never fire either, leaving the
+  avoid-set, the mutual green light and the intimacy inventory offer silently dead (every test for those
+  seeds a response by hand, so all of them passed); and the tuning taps shared the answers' `interactionId`,
+  which a tap SPENDS, so "More like this" would have thrown away the answer buttons and left the minted
+  check-in unanswerable. Both fixed, both guarded end to end (tap → drain → avoid-set), both **verified to
+  FAIL when reverted** — as is the delivery guard, which emits the reported trio. Also from the review: the
+  answer LABELS are model prose too (they reach the person AND are quoted into coaching context), so they
+  now pass the same `violatesBoundary` check as the headline and body. Gate green: typecheck (4 pkgs), lint,
+  format, **2379 core + 13 relay + desktop** unit, full E2E.
+  **Lessons: (1) a guard written one layer below the defect proves nothing about the layer that ships; #459
+  was correct at the service and wrong at delivery, and no amount of green tests at the wrong altitude would
+  ever have caught it. (2) Leaving the old behaviour as a fallback UNDER a fix is the fix's undoing — if the
+  fallback is the bug, delete it; "it only fires when the new path can't" described the common case here.
+  (3) Moving meaning from a fixed value onto a new field is only half done when the field is written — trace
+  it to every READER, because the old value disappearing at the same moment kills the legacy fallback that
+  would otherwise have masked the gap. (4) An offline fake that returns the minimum valid shape
+  (`{headline, body}` with no options) exercises the refusal path and never the delivered one — the fake has
+  to produce what a real reply produces, or the richest path in the feature is untested.**
+
 - 2026-08-18 — **LIVE-MODEL verification (the owner supplied a key; the model was never the problem — my TESTS
   were; SPEC 74 §3.6.14).** Ran the §3.6.9 audit walk against **real Claude** end to end. All three AI phases
   returned `stop_reason: end_turn` with valid JSON: lines (12 explicit lines), the scenario (a scene + 4

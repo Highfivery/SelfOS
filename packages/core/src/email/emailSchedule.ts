@@ -1,6 +1,7 @@
 import type { EmailClient, FileSystem } from '../host';
 import type {
   EmailActivityEntry,
+  EmailAnswerStance,
   EmailDeliveryStatus,
   EmailFamily,
   EmailPrefs,
@@ -347,13 +348,9 @@ async function cancelScheduled(
 
 /** How far ahead an AI suggestion is scheduled (67 §3.4) — a gentle delay so it reaches a closed app. */
 const SUGGESTION_SCHEDULE_HOURS = 20;
-/** The tappable options an embedded email check-in offers (67 §3.5). */
-/**
- * Fallback options for a check-in whose model reply carried none. Only ever used for a body the model was
- * asked to phrase as a yes/somewhat/no check-in — NEVER stapled onto an arbitrary question, which is the
- * #459 defect: options must be plausible answers to the exact prompt (08 §32.8).
- */
-const CHECKIN_OPTIONS = ['Yes', 'Somewhat', 'Not really'];
+
+/** Whether a suggestion body ASKS something — the bodies worth capturing as a real check-in (67 §3.3a). */
+const asksAQuestion = (body: string): boolean => body.includes('?');
 
 /**
  * Try to compose + schedule ONE AI Coach Suggestion for a family (67 §3.3 / Phase 5). Returns 1 when it
@@ -447,6 +444,11 @@ async function trySuggestion(ctx: {
 
   const { suggestion, sent } = generated;
   const interactionId = uuid();
+  // A tap spends every token minted for the SAME interaction (its siblings are the other answers to one
+  // question). "More / less like this" is a different interaction entirely — it says nothing about the
+  // body — so it gets its own id; otherwise tapping "More like this" would throw away the answer buttons
+  // and leave the minted check-in unanswerable from the email.
+  const tuningInteractionId = uuid();
   const endpoint = ctx.relayEndpoint?.replace(/\/+$/, '');
   const mintedTokens: string[] = [];
 
@@ -456,20 +458,22 @@ async function trySuggestion(ctx: {
     kind: 'reaction' | 'intimacy-reaction' | 'checkin-answer' | 'tuning',
     answer: string,
     label: string,
-    extra?: { questionId?: string; assignmentId?: string },
+    extra?: { questionId?: string; assignmentId?: string; stance?: EmailAnswerStance },
   ): Promise<{ label: string; url: string } | null> => {
     if (!ctx.relay || !endpoint) return null;
     const token = generateRelayToken();
     await mintEmailToken(fs, key, personId, {
       token,
       schemaVersion: 1,
-      interactionId,
+      interactionId: kind === 'tuning' ? tuningInteractionId : interactionId,
       family,
       suggestionId: sent.id,
       ...(extra?.questionId ? { questionId: extra.questionId } : {}),
       ...(extra?.assignmentId ? { assignmentId: extra.assignmentId } : {}),
       kind,
       answer,
+      // What the tap MEANS, since the words on it are written per email now (67 §3.3a).
+      ...(extra?.stance ? { stance: extra.stance } : {}),
       ...(suggestion.sharedSuggestionKey
         ? { sharedSuggestionKey: suggestion.sharedSuggestionKey }
         : {}),
@@ -479,71 +483,93 @@ async function trySuggestion(ctx: {
     return { label, url: `${endpoint}/t/${token}` };
   };
 
-  let reactions: { label: string; url: string }[] = [];
+  let answers: { label: string; url: string }[] = [];
   let tuning: { label: string; url: string }[] = [];
 
-  // A suggestion whose body ASKS something is delivered as a real one-question check-in with options that
-  // answer it — not with engagement reactions. Reported (#459): a question arrived with "I'm game / Maybe
-  // later / Not for me", which reads as "do you want to answer this?" and answers nothing.
-  const answerable = suggestion.options.length >= 2;
-  const asksSomething =
-    suggestion.suggestionType === 'check-in' ||
-    (suggestion.suggestionType === 'question-to-sit-with' && answerable);
-  if (asksSomething && ctx.relay && endpoint) {
-    // Deliver a real self auto check-in: a one-question assignment whose tappable options drain back (§3.5).
-    const questionId = uuid();
-    // The model's own answers to its own question; the fixed set only backstops a plain check-in.
-    const answerOptions = answerable ? suggestion.options : CHECKIN_OPTIONS;
-    const draft: QuestionnaireInput = {
-      title: suggestion.headline,
-      type: 'general',
-      sensitivity: 'standard',
-      recipient: { kind: 'person', personId },
-      questions: [
-        {
-          id: questionId,
-          type: 'singleChoice',
-          prompt: suggestion.body,
-          required: false,
-          options: answerOptions,
-        },
-      ],
-    };
-    try {
-      // Defense in depth at the PRODUCER (#459). The options are already validated upstream by
-      // `normalizeOptions` in the suggestion service, but this was the one questionnaire producer that ran no
-      // validator of its own — every other (`autoCheckins`, `dreams`, `story`, the bridge) goes through
-      // `generateQuestions`, which validates. A malformed draft is dropped rather than emailed as buttons
-      // that cannot answer the question.
-      if (validateQuestionnaire(draft).length > 0) throw new Error('invalid check-in draft');
-      const questionnaire = await saveQuestionnaire(fs, key, draft, personId);
-      const assignment = await createAssignment(fs, key, {
-        questionnaireId: questionnaire.id,
-        senderPersonId: personId,
-        recipient: { kind: 'person', personId },
-        channel: 'inApp',
-        privacy: 'standard',
-        senderVisibleToRecipient: true,
-      });
-      for (const option of answerOptions) {
-        const tap = await mintTap('checkin-answer', option, option, {
-          questionId,
-          assignmentId: assignment.id,
+  // The ONLY buttons a suggestion email carries are the model's own answers to its own body (67 §3.3a).
+  // Reported twice (#459, #523): a question went out under "I'm game / Maybe later / Not for me". The first
+  // fix added this answer path but left the fixed set as a fallback BELOW it, so any suggestion whose
+  // answers were missing — every open question, the common case — fell straight back onto the reported
+  // email. There is no fallback now: `generateSuggestion` refuses to return a suggestion without usable
+  // answers, so by here there are always at least two, written for this body.
+  if (ctx.relay && endpoint) {
+    if (intimacy) {
+      // An intimacy suggestion keeps its taps as reactions rather than minting a questionnaire: nothing
+      // explicit should land in the Inbox as a check-in, and the drained response must stay at the
+      // `intimacy` sensitivity tier (§8.2), which is derived from this kind.
+      for (const answer of suggestion.options) {
+        const tap = await mintTap('intimacy-reaction', answer.label, answer.label, {
+          stance: answer.stance,
         });
-        if (tap) reactions.push(tap);
+        if (tap) answers.push(tap);
       }
-    } catch {
-      reactions = []; // minting the assignment failed → fall through to a plain reaction suggestion
+    } else if (!asksAQuestion(suggestion.body)) {
+      // A body that proposes rather than asks ("Notice one good moment today.") is answered, not filed:
+      // minting a check-in for it would put a statement in the Inbox as a question, and bill an analysis
+      // for it. Its answers are still the model's own, written for this body — only the capture differs.
+      for (const answer of suggestion.options) {
+        const tap = await mintTap('reaction', answer.label, answer.label, {
+          stance: answer.stance,
+        });
+        if (tap) answers.push(tap);
+      }
+    } else {
+      // A QUESTION is worth capturing: delivered as a real one-question self check-in, so the tap submits
+      // a genuine answer that is analyzed like any other rather than merely acknowledged (§3.5).
+      const questionId = uuid();
+      const labels = suggestion.options.map((o) => o.label);
+      const draft: QuestionnaireInput = {
+        title: suggestion.headline,
+        type: 'general',
+        sensitivity: 'standard',
+        recipient: { kind: 'person', personId },
+        questions: [
+          {
+            id: questionId,
+            type: 'singleChoice',
+            prompt: suggestion.body,
+            required: false,
+            options: labels,
+          },
+        ],
+      };
+      try {
+        // Defense in depth at the PRODUCER (#459). The options are already validated upstream by
+        // `normalizeOptions` in the suggestion service, but this was the one questionnaire producer that ran
+        // no validator of its own — every other (`autoCheckins`, `dreams`, `story`, the bridge) goes through
+        // `generateQuestions`, which validates. A malformed draft is dropped rather than emailed.
+        if (validateQuestionnaire(draft).length > 0) throw new Error('invalid check-in draft');
+        const questionnaire = await saveQuestionnaire(fs, key, draft, personId);
+        const assignment = await createAssignment(fs, key, {
+          questionnaireId: questionnaire.id,
+          senderPersonId: personId,
+          recipient: { kind: 'person', personId },
+          channel: 'inApp',
+          privacy: 'standard',
+          senderVisibleToRecipient: true,
+        });
+        for (const answer of suggestion.options) {
+          const tap = await mintTap('checkin-answer', answer.label, answer.label, {
+            questionId,
+            assignmentId: assignment.id,
+            stance: answer.stance,
+          });
+          if (tap) answers.push(tap);
+        }
+      } catch {
+        // Minting the check-in failed. The answers still go out — as plain reactions carrying the SAME
+        // labels, so the email always answers its own body; only the in-app capture is lost.
+        answers = [];
+        for (const answer of suggestion.options) {
+          const tap = await mintTap('reaction', answer.label, answer.label, {
+            stance: answer.stance,
+          });
+          if (tap) answers.push(tap);
+        }
+      }
     }
-  }
-
-  if (reactions.length === 0) {
-    // Standard reactions (intimacy uses the same three at the intimacy tier) + more/less tuning.
-    const reactionKind = intimacy ? 'intimacy-reaction' : 'reaction';
-    const r1 = await mintTap(reactionKind, 'im-game', intimacy ? 'We’re into it' : 'I’m game');
-    const r2 = await mintTap(reactionKind, 'maybe-later', 'Maybe later');
-    const r3 = await mintTap(reactionKind, 'not-for-me', 'Not for me');
-    reactions = [r1, r2, r3].filter((t): t is { label: string; url: string } => t !== null);
+    // "More / less like this" is about the EMAIL, not the body — it never stands in for an answer, so it
+    // rides alongside every suggestion rather than only the ones that had no answers.
     const t1 = await mintTap('tuning', 'more', 'More like this');
     const t2 = await mintTap('tuning', 'less', 'Less like this');
     tuning = [t1, t2].filter((t): t is { label: string; url: string } => t !== null);
@@ -562,7 +588,7 @@ async function trySuggestion(ctx: {
             'Built only from what you and your partner have both said you’re into — you can turn these off in Settings → Email.',
         }
       : {}),
-    ...(reactions.length > 0 ? { reactions } : {}),
+    ...(answers.length > 0 ? { reactions: answers } : {}),
     ...(tuning.length > 0 ? { tuning } : {}),
   });
   const res = await sendFamilyEmail({

@@ -524,6 +524,28 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-18 — **LIVE-MODEL verification (the owner supplied a key; the model was never the problem — my TESTS
+  were; SPEC 74 §3.6.14).** Ran the §3.6.9 audit walk against **real Claude** end to end. All three AI phases
+  returned `stop_reason: end_turn` with valid JSON: lines (12 explicit lines), the scenario (a scene + 4
+  options), and the synthesis (**6,223 chars** — lede, an 8-paragraph analysis that says what the marks mean
+  sexually, and keyed readings). **No refusal, no truncation, at any point.** So every "nothing came back" was
+  the boundary over-match (#521) and the missing failure reasons (#522) — not the model, which is exactly what
+  the never-assume-a-refusal rule says and what I could not prove until the key existed. **Three of my own test
+  bugs surfaced in the process, and one is the reason a whole phase shipped broken: the audit's moment locator
+  was `/^Build-up$/`, but a moment button's accessible name is its label PLUS its blurb — so it never matched,
+  and the SCENARIO phase had never been exercised by any test, offline or live.** That is why "the In the moment
+  buttons don't do anything" reached the owner at all. Also: the report assertion was `{ name: 'Your words' }`,
+  which substring-matches the redesigned hero "What your words say" — a strict-mode violation that failed on a
+  report which had rendered perfectly; and the walk asserted the report 10s after Finish, when a live synthesis
+  takes ~40s, so a working app read as a broken one. **Lessons: (1) an accessible name is the label AND
+  everything nested inside the control — `/^Label$/` silently matches nothing on any button with a blurb, and a
+  never-matching locator inside `if (await x.isVisible().catch(() => false))` is a test that passes by skipping
+  the thing it exists to check. Prefer a prefix match, and assert the control was actually found. (2) Offline
+  fakes return instantly, so every timeout in a walk is tuned to a fake; the first live run is where they all
+  come due — give the longest call a real budget. (3) The live capture (`captureReply` + `stop_reason`) answered
+  in one run a question two rounds of code reading could not: it is worth building the moment a model failure
+  is reported.**
+
 - 2026-08-18 — **Fix (naming it, making the failure diagnosable, and the words/trends redesign; owner-reported
   a second time; SPEC 74 §3.6.14; on `fix/analysis-diagnosable`).** The owner, after the first pass: the read
   still fails, _"ASLO DONT'T CALL IT WRTTEN READ, THAT MAKES NO SESNE"_, the words+trends block _"looks

@@ -9,10 +9,10 @@ import {
   Button,
   Card,
   Heading,
-  LineChart,
   Markdown,
   Stack,
   Text,
+  TrendLine,
 } from '../../../design-system/components';
 import { useAdaptiveTestStore } from '../../../stores/adaptiveTestStore';
 import { AdaptiveHead } from './AdaptiveHead';
@@ -115,19 +115,27 @@ function FoldedChips({
   entries,
   never,
   label,
+  tone,
 }: {
   entries: LexiconEntry[];
   never?: boolean;
   label: string;
+  /** Which band this is. The three used to be identical grey chips in three loose rows — the same words in
+   *  the same style under three quiet labels, so nothing about the shape said which mattered. */
+  tone?: 'love' | 'say';
 }): JSX.Element | null {
   if (entries.length === 0) return null;
   const head = entries.slice(0, FOLD_AFTER);
   const rest = entries.slice(FOLD_AFTER);
+  const band = tone === 'love' ? adaptive.bandLove : tone === 'say' ? adaptive.bandSay : '';
   return (
-    <div>
-      <Text size="sm" tone="secondary">
-        {label}
-      </Text>
+    <div className={`${adaptive.wordBand} ${band}`}>
+      <div className={adaptive.bandHead}>
+        <Text size="sm" tone="secondary">
+          {label}
+        </Text>
+        <span className={adaptive.bandCount}>{entries.length}</span>
+      </div>
       <Chips entries={head} {...(never ? { never: true } : {})} />
       {rest.length > 0 ? (
         <details className={adaptive.fold}>
@@ -384,8 +392,8 @@ export function AdaptiveReport(): JSX.Element {
                 <Banner tone="info">
                   <Stack gap={2}>
                     <span>
-                      The written read didn&rsquo;t come through this time — everything below is
-                      from your own answers, and it&rsquo;s all still yours.
+                      The psychological analysis didn&rsquo;t come through this time — everything
+                      below is from your own answers, and it&rsquo;s all still yours.
                     </span>
                     {/* It used to say this and stop, which left the one part that needs a model with no way
                         to try again short of retaking the whole thing. Re-running is idempotent — the take
@@ -396,7 +404,7 @@ export function AdaptiveReport(): JSX.Element {
                         disabled={busy}
                         onClick={() => void synthesize(testId, latest.id)}
                       >
-                        {busy ? 'Writing…' : 'Try the written read again'}
+                        {busy ? 'Analysing…' : 'Run the analysis again'}
                       </Button>
                     </span>
                   </Stack>
@@ -435,7 +443,9 @@ export function AdaptiveReport(): JSX.Element {
               {/* The full read, after the claim rather than instead of it. */}
               {rest ? (
                 <section>
-                  <Heading level={2}>The read</Heading>
+                  {/* "The read" / "the written read" said nothing about what it IS. This is an analysis of
+                      what their answers say about them — name it that. */}
+                  <Heading level={2}>Psychological analysis</Heading>
                   <Card className={adaptive.reportSection}>
                     <Markdown>{rest}</Markdown>
                   </Card>
@@ -648,7 +658,7 @@ export function AdaptiveReport(): JSX.Element {
                 </Card>
               ) : null}
 
-              <section>
+              <Card>
                 <div className={adaptive.sectionHead}>
                   <Heading level={2}>Your words</Heading>
                   <button
@@ -663,8 +673,8 @@ export function AdaptiveReport(): JSX.Element {
                   {/* A heading with nothing under it is the empty-report defect one level down: it reads as
                       a broken screen, and it says "we have nothing" in the voice of "here is your answer".
                       Each band appears only when it holds something, and if none of them do it says so. */}
-                  <FoldedChips entries={loves} label="Love to hear" />
-                  <FoldedChips entries={says} label="Comfortable saying" />
+                  <FoldedChips entries={loves} label="Love to hear" tone="love" />
+                  <FoldedChips entries={says} label="Comfortable saying" tone="say" />
                   {loves.length + says.length + notYet.length + never.length + okay.length === 0 ? (
                     <Text tone="secondary">
                       Nothing from the words yet — this fills in as you mark them.
@@ -695,7 +705,7 @@ export function AdaptiveReport(): JSX.Element {
                     </div>
                   ) : null}
                 </Stack>
-              </section>
+              </Card>
 
               {/*
                * What the synthesis actually said about REGISTER and TIMING. It has been scoring both on every
@@ -754,18 +764,48 @@ export function AdaptiveReport(): JSX.Element {
                * ever answered "has this moved?". The chart's text equivalents come from `LineChart` (§9).
                */}
               {trendSeries.length > 0 ? (
-                <section>
+                <Card>
                   <Heading level={2}>Across your takes</Heading>
-                  <LineChart
-                    series={trendSeries}
-                    ariaLabel="How each dimension has moved across your takes"
-                    yMin={0}
-                    yMax={1}
-                    yLowLabel="Low"
-                    yHighLabel="High"
-                    emphasizeLast
-                  />
-                </section>
+                  <Text size="sm" tone="tertiary">
+                    The spine is fixed, so a retake is comparable. {takes.length} takes so far.
+                  </Text>
+                  {/*
+                   * One labelled row per dimension, not four overlapping lines in a small box with a colour
+                   * legend underneath. The old chart was capped at 440px inside a full-width section, so most
+                   * of the row was empty; nothing could be read without matching a colour to a legend; and
+                   * four near-flat lines on one axis is the least legible way to show four separate trends.
+                   * A row per dimension is scannable, fills the width, needs no legend, and says the change
+                   * in words — which is also the §9 text equivalent.
+                   */}
+                  <div className={adaptive.trendRows}>
+                    {trendSeries.map((series) => {
+                      const first = series.points[0]?.y ?? 0;
+                      const last = series.points[series.points.length - 1]?.y ?? 0;
+                      const delta = Math.round((last - first) * 100);
+                      return (
+                        <div key={series.label} className={adaptive.trendRow}>
+                          <span className={adaptive.trendLabel}>{series.label}</span>
+                          <TrendLine
+                            points={series.points.map((point) => ({
+                              date: String(point.x),
+                              value: point.y,
+                            }))}
+                            min={0}
+                            max={1}
+                            aria-label={`${series.label} across your takes`}
+                          />
+                          <span
+                            className={`${adaptive.trendDelta} ${
+                              delta > 0 ? adaptive.up : delta < 0 ? adaptive.down : ''
+                            }`}
+                          >
+                            {delta === 0 ? 'unchanged' : `${delta > 0 ? '+' : ''}${delta}`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
               ) : null}
 
               {/* The profile is not a page you visit — say so, on the page. */}

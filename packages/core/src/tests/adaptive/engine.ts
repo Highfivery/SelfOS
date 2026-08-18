@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
-import { extractJsonArray, extractJsonObject, tolerantArray } from '../../ai/jsonSalvage';
+import {
+  classifyParseOutcome,
+  extractJsonArray,
+  extractJsonObject,
+  tolerantArray,
+} from '../../ai/jsonSalvage';
 import { PERSONA, SAFETY } from '../../conversations/promptBuilder';
 import type {
   AdaptiveProfile,
@@ -158,6 +163,30 @@ export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
   return out;
 }
 
+/**
+ * Why a phase produced nothing — and it matters which, because the two causes are opposite problems.
+ *
+ * A reply that never parsed is the MODEL's outcome (a refusal, a truncation, prose instead of JSON), and
+ * `classifyParseOutcome` already names those. A reply that parsed and then lost everything to
+ * `violatesBoundary` is OURS: the app filtered out its own output, which is a very different thing to tell
+ * someone — and the one that was indistinguishable. All three phases collapsed both into a bare `degraded`
+ * with no message at all, so a real report of "it doesn't work" carried no information about which half was
+ * at fault, and there was nothing to diagnose from.
+ */
+function nothingUsable(
+  text: string,
+  noun: string,
+  parsedSomething: boolean,
+): { reason: AiFailureReason; message: string } {
+  if (!parsedSomething) return classifyParseOutcome(text, noun);
+  return {
+    reason: 'MALFORMED',
+    message:
+      "Everything it wrote touched something you've ruled out, so none of it could be shown. Try again — or" +
+      ' take back a hard no you have changed your mind about.',
+  };
+}
+
 // ── Phase: line reactions ──────────────────────────────────────────────────────────────────────────
 
 const LinesSchema = z.object({
@@ -221,18 +250,17 @@ we know. Return ONLY {"lines": string[]}.`,
       ...(out.message ? { message: out.message } : {}),
     };
   const parsed = LinesSchema.safeParse(extractJsonObject(out.text));
-  const lines = (parsed.success ? parsed.data.lines : [])
+  const written = parsed.success ? parsed.data.lines : [];
+  const lines = written
     // Belt and braces: the prompt forbids their hard nos, and anything that slips through is dropped here.
     .filter((line) => !violatesBoundary(lexicon, line))
     .slice(0, LINES_PER_ROUND);
-  // A reply that parsed to nothing is its own outcome — not a missing key, which is what it used to look like.
   if (lines.length === 0) {
     return {
       ok: false,
       degraded: true,
       costUsd: out.usage.costUsd,
-      reason: 'MALFORMED',
-      message: 'Nothing usable came back this time — try again.',
+      ...nothingUsable(out.text, 'lines', written.length > 0),
     };
   }
   return { ok: true, value: lines, degraded: false, costUsd: out.usage.costUsd };
@@ -280,12 +308,15 @@ ask why something is a hard no. Return ONLY {"question": string}.`,
   // ("never ask them to justify a boundary") — the instruction is belt, this is braces. Dropping it degrades
   // the phase, which the caller already handles, rather than showing them the question.
   const question = violatesBoundary(lexicon, raw) ? '' : raw;
-  return {
-    ok: question !== '',
-    ...(question !== '' ? { value: question } : {}),
-    degraded: question === '',
-    costUsd: out.usage.costUsd,
-  };
+  if (question === '') {
+    return {
+      ok: false,
+      degraded: true,
+      costUsd: out.usage.costUsd,
+      ...nothingUsable(out.text, 'question', raw !== ''),
+    };
+  }
+  return { ok: true, value: question, degraded: false, costUsd: out.usage.costUsd };
 }
 
 // ── Phase: scenario ────────────────────────────────────────────────────────────────────────────────
@@ -347,10 +378,19 @@ at 2pm. Return ONLY {"scene": string, "options": string[]}.`,
   // The SCENE is prose shown to them too, and it was passing through unchecked while its options were
   // filtered — a scene that sets up a boundary is the same failure as an option that names one.
   const clean = options.length > 0 && !violatesBoundary(lexicon, parsed.data.scene);
+  if (!clean) {
+    return {
+      ok: false,
+      degraded: true,
+      costUsd: out.usage.costUsd,
+      // It parsed, so this is OUR filter, not the model — say which.
+      ...nothingUsable(out.text, 'scene', true),
+    };
+  }
   return {
-    ok: clean,
-    ...(clean ? { value: { context, scene: parsed.data.scene, options } } : {}),
-    degraded: !clean,
+    ok: true,
+    value: { context, scene: parsed.data.scene, options },
+    degraded: false,
     costUsd: out.usage.costUsd,
   };
 }

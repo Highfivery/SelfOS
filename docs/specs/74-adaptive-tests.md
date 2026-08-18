@@ -938,7 +938,30 @@ child now. And a synthesis that produced nothing was a dead end — the report o
 (idempotent: the take keeps its insight id).
 
 **Left as designed:** the profile step is still not gated on the readiness threshold. Being unable to finish
-is worse than a thin profile, and now that a failed read is retryable the thin case has a way forward.
+is worse than a thin profile, and now that a failed analysis is retryable the thin case has a way forward.
+
+#### 3.6.14 Naming it, and making a failure diagnosable (2026-08-18, second pass)
+
+The first pass fixed the over-matching but the phases still reported failure generically, so a second round of
+"it still doesn't work" carried no more information than the first. Three changes:
+
+- **"The written read" → "Psychological analysis".** The old name said nothing about what the thing IS; this
+  is an analysis of what their answers say about them.
+- **Every phase now says WHICH failure it was.** `runLinesPhase`, `runProbePhase` and `runScenarioPhase`
+  collapsed two opposite causes into a bare `degraded`: a reply that never parsed (the MODEL — a refusal, a
+  truncation, prose instead of JSON, all of which `classifyParseOutcome` already names) and a reply that
+  parsed and then lost everything to `violatesBoundary` (OURS — the app filtering out its own output). They
+  are different sentences to a person and different bugs to fix, and neither was distinguishable from the
+  other or from "AI isn't set up".
+- **The real client captures its replies** when `SELFOS_FAKE_PROMPT_DIR` is set, with `stop_reason`. A prompt
+  says what was sent; diagnosing "nothing came back" needs what came back, and the offline fakes can never
+  show a refusal or a truncation.
+
+**And the words + trends block was redesigned.** Three bands of identical grey chips under three quiet labels
+became banded groups with a left rule and a count; the four-series line chart — capped at 440px inside a
+full-width section, so most of the row was empty, and unreadable without matching a colour to a legend —
+became one labelled row per dimension with its own sparkline and its change stated in words (which is also
+the §9 text equivalent, and the thing you actually want from a trend).
 
 ## 6. IPC / API contracts
 

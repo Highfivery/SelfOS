@@ -16952,6 +16952,10 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
     // `done` is not a screen (74 §3.6.13): it used to render a banner and a button whose only job was to
     // leave, so finishing now lands straight on the report.
     await expect(w.getByRole('button', { name: 'Read it' })).toHaveCount(0);
+    // WAIT for the report. `done` redirects now (74 §3.6.13), so shooting straight after Finish photographed
+    // the blank frame mid-navigation — and the auditor then reported zero findings for an empty page, which
+    // is a pass that measured nothing.
+    await expect(w.getByRole('heading', { name: 'Your words' })).toBeVisible();
     await shot('13-step8-profile');
     await noMachineIds('the profile');
 

@@ -74,7 +74,7 @@ export function TakeMap({
                       </span>
                     ) : null}
                     <span className={adaptive.mapState}>
-                      {state === 'done'
+                      {state === 'done' && status.fresh === undefined
                         ? `done · ${status.count}`
                         : state === 'skipped'
                           ? 'skipped'
@@ -82,9 +82,11 @@ export function TakeMap({
                             ? (status.reason ?? 'not yet')
                             : status.outstanding
                               ? `${status.outstanding} new to do`
-                              : status.count > 0
-                                ? `${status.count} so far`
-                                : 'not started'}
+                              : status.fresh !== undefined
+                                ? `${status.count} on record · ${status.fresh} today`
+                                : status.count > 0
+                                  ? `${status.count} so far`
+                                  : 'not started'}
                     </span>
                   </span>
                   <span className={adaptive.mapBlurb}>{step.blurb}</span>

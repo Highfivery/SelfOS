@@ -152,7 +152,7 @@ import { PracticeSheet } from './PracticeSheet';
 import { NamesPhase } from './NamesPhase';
 import { TakeMap } from './TakeMap';
 import { StepActions, StepEyebrow, TakeRail, Tally } from './TakeRail';
-import { nextStepAfter, stepStatuses, TAKE_STEPS, type StepId } from './takeSteps';
+import { nextStepAfter, phaseForStep, stepStatuses, TAKE_STEPS, type StepId } from './takeSteps';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { AiUnavailableNotice } from '../../AiUnavailableNotice';
 import styles from './You.module.css';
@@ -411,6 +411,8 @@ export function AdaptiveTake(): JSX.Element {
         scenariosAnswered: (store.state?.draft?.turns ?? []).filter(
           (turn) => turn.phase === 'scenario',
         ).length,
+        seeded: store.seeded,
+        identityAnswered: store.bank?.address !== undefined,
         loved:
           Object.values(store.marks).filter((mark) => mark === 'love').length +
           Object.values(store.nameMarks).filter(
@@ -427,6 +429,8 @@ export function AdaptiveTake(): JSX.Element {
       store.splits,
       store.lineReactions,
       store.state,
+      store.seeded,
+      store.bank,
     ],
   );
   /** The two marking steps' tallies, so both render the same card from one place. */
@@ -465,21 +469,20 @@ export function AdaptiveTake(): JSX.Element {
   }, [livePhase, liveNames, liveBusy, hasAddress, testId]);
 
   const stepIndex = statuses.findIndex((status) => status.state === 'now');
-  /** The identity taps are the WORDS step's own prerequisite, so the frame wears that step's number. */
-  const wordsStep = statuses.find((status) => status.step.id === 'bank') ?? null;
+  const identityStep = statuses.find((status) => status.step.id === 'identity') ?? null;
   const current = stepIndex >= 0 ? statuses[stepIndex] : null;
   const upNext = current ? nextStepAfter(statuses, current.step.id) : null;
 
   /** Going to a step never spends — except the profile, which IS the synthesis. */
   const goTo = (id: StepId): void => {
     if (id === 'profile') void store.synthesize(testId);
-    else store.goToStep(id);
+    else store.goToStep(phaseForStep(id));
   };
   const skipCurrent = (): void => {
     if (!current) return;
     // Skipping the last step before the profile lands on the MAP, never on a synthesis: a skip is passing
     // something over, and it must never be the thing that spends. Finishing is its own explicit verb.
-    const next = upNext && upNext.step.id !== 'profile' ? upNext.step.id : null;
+    const next = upNext && upNext.step.id !== 'profile' ? phaseForStep(upNext.step.id) : null;
     store.skipStep(current.step.id, next);
   };
   const stepActions = (nextLabel?: string, onNext?: () => void): JSX.Element => (
@@ -640,11 +643,11 @@ export function AdaptiveTake(): JSX.Element {
             />
           ) : null}
 
-          {phase === 'address' && wordsStep ? (
+          {phase === 'address' && identityStep ? (
             <div className={adaptive.stepFrame}>
               <div className={adaptive.stepMain}>
-                <StepEyebrow status={wordsStep} index={1} total={TAKE_STEPS.length} />
-                <Heading level={2}>First, who are the two of you?</Heading>
+                <StepEyebrow status={identityStep} index={0} total={TAKE_STEPS.length} />
+                <Heading level={2}>Who are the two of you?</Heading>
                 <Text tone="secondary">
                   Two questions, so the words you&rsquo;re shown are ones that could actually be
                   said between the two of you — and so &ldquo;what you like to hear&rdquo; means
@@ -749,7 +752,7 @@ export function AdaptiveTake(): JSX.Element {
                         );
                       }}
                     >
-                      Start the words →
+                      Next: what you call each other →
                     </Button>
                     <Button variant="ghost" onClick={() => store.setPhase('map')}>
                       Back to the steps

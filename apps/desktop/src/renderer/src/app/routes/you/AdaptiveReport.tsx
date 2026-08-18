@@ -20,6 +20,7 @@ import { AdaptiveHead } from './AdaptiveHead';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import styles from './You.module.css';
 import take from './TestTake.module.css';
+import { DIRTY_TALK_SPINE } from '@selfos/core/adaptive-spine';
 import adaptive from './Adaptive.module.css';
 
 /**
@@ -46,19 +47,17 @@ const CONTEXT_LABELS: Record<string, string> = {
   phone: 'On the phone',
 };
 
-const SPINE_LABELS: Record<string, string> = {
-  'dirtytalk.explicitness': 'How explicit',
-  'dirtytalk.praise': 'Praise',
-  'dirtytalk.claiming': 'Being claimed',
-  'dirtytalk.command': 'Being told',
-  'dirtytalk.narration': 'Narration',
-  'dirtytalk.degradation': 'Degradation',
-  'dirtytalk.begging': 'Begging',
-  'dirtytalk.taboo': 'Taboo & roleplay',
-  'dirtytalk.receiving-voice': 'The receiving voice',
-  'dirtytalk.giving-voice': 'The giving voice',
-  'dirtytalk.say-confidence': 'Saying it out loud',
-};
+/**
+ * The dimension labels, taken from the spine ITSELF rather than copied here.
+ *
+ * This used to be a hand-maintained second list, and adding "Names & address" to the spine without also adding
+ * it here put the raw key `dirtytalk.names` on screen in the person's own profile. Two lists of the same thing
+ * drift the moment one of them is edited — so there is one list now, and an unmapped key still falls back to
+ * itself rather than being hidden.
+ */
+const SPINE_LABELS: Record<string, string> = Object.fromEntries(
+  DIRTY_TALK_SPINE.map((dimension) => [dimension.key, dimension.label]),
+);
 
 function Chips({
   entries,
@@ -410,6 +409,12 @@ export function AdaptiveReport(): JSX.Element {
                       <Text size="sm" tone="secondary">
                         Call me
                       </Text>
+                      {names.callMe.length + names.okayCalled.length + names.neverCalled.length ===
+                      0 ? (
+                        <Text size="sm" tone="tertiary">
+                          Nothing marked this way yet.
+                        </Text>
+                      ) : null}
                       <div className={adaptive.chipRow}>
                         {names.callMe.map((text) => (
                           <span key={text} className={`${adaptive.nameChip} ${adaptive.chipLove}`}>
@@ -436,6 +441,14 @@ export function AdaptiveReport(): JSX.Element {
                       <Text size="sm" tone="secondary">
                         What you call them
                       </Text>
+                      {/* A column heading with nothing under it reads as a broken screen — and it is entirely
+                          normal to answer one direction and not the other. */}
+                      {names.iCall.length + names.okaySaying.length + names.neverSaying.length ===
+                      0 ? (
+                        <Text size="sm" tone="tertiary">
+                          Nothing marked this way yet.
+                        </Text>
+                      ) : null}
                       <div className={adaptive.chipRow}>
                         {names.iCall.map((text) => (
                           <span key={text} className={`${adaptive.nameChip} ${adaptive.chipLove}`}>
@@ -474,18 +487,30 @@ export function AdaptiveReport(): JSX.Element {
                   </button>
                 </div>
                 <Stack gap={4}>
-                  <div>
-                    <Text size="sm" tone="secondary">
-                      Love to hear
+                  {/* A heading with nothing under it is the empty-report defect one level down: it reads as a
+                      broken screen, and it says "we have nothing" in the voice of "here is your answer". Each
+                      band appears only when it holds something, and if none of them do the section says so. */}
+                  {loves.length > 0 ? (
+                    <div>
+                      <Text size="sm" tone="secondary">
+                        Love to hear
+                      </Text>
+                      <Chips entries={loves} />
+                    </div>
+                  ) : null}
+                  {says.length > 0 ? (
+                    <div>
+                      <Text size="sm" tone="secondary">
+                        Comfortable saying
+                      </Text>
+                      <Chips entries={says} />
+                    </div>
+                  ) : null}
+                  {loves.length + says.length + notYet.length + never.length + okay.length === 0 ? (
+                    <Text tone="secondary">
+                      Nothing from the words yet — this fills in as you mark them.
                     </Text>
-                    <Chips entries={loves} />
-                  </div>
-                  <div>
-                    <Text size="sm" tone="secondary">
-                      Comfortable saying
-                    </Text>
-                    <Chips entries={says} />
-                  </div>
+                  ) : null}
                   {notYet.length > 0 ? (
                     <div>
                       <Text size="sm" tone="secondary">

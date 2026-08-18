@@ -430,7 +430,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     const them = screen.getByRole('group', { name: 'Your partner is a:' });
     await userEvent.click(within(you).getByRole('button', { name: 'a man' }));
     await userEvent.click(within(them).getByRole('button', { name: 'a woman' }));
-    await userEvent.click(screen.getByRole('button', { name: /Start the words/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Next: what you call each other/i }));
 
     // Identity is stored AND now DERIVES the address axis outright — the body axis depends on it when
     // onboarding has no anatomy answer, which is the whole reason a straight man was being shown "your pussy"
@@ -557,8 +557,9 @@ describe('AdaptiveTake (74 §3.2)', () => {
     // more things followed.
     const map = await screen.findByRole('list');
     for (const label of [
+      /Who you two are/i,
       /What you call each other/i,
-      /The words/i,
+      /^The words/i,
       /Hearing it, or saying it/i,
       /Lines written for you/i,
       /The questions it still has/i,

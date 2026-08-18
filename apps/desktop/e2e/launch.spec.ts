@@ -16112,16 +16112,9 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
     await w.getByRole('button', { name: 'Start' }).click();
     await w.getByRole('button', { name: 'Begin' }).click();
 
-    // 74 §3.6.9 — the map: every step and its state, before any of them. Then into the first one.
+    // 74 §3.6.9 — the map: every step and its state, before any of them. Step 1 is who you both are.
     await expect(w.getByRole('button', { name: /Hearing it, or saying it/i })).toBeVisible();
-    await w.getByRole('button', { name: /^Start: what you call each other/i }).click();
-
-    // The identity taps are the WORDS step's prerequisite now, so they arrive with the deck rather than
-    // before the person knows what the test contains. Reached here by opening that step from the rail.
-    await w
-      .getByRole('complementary', { name: /The steps/i })
-      .getByRole('button', { name: /^The words/i })
-      .click();
+    await w.getByRole('button', { name: /^Start: who you two are/i }).click();
 
     // The two identity taps (§3.6.3). "boy" is deliberately NOT an option here — it is a term you can mark,
     // not an identity. Each question is its own labelled group, because "a man" appears in both.
@@ -16135,15 +16128,8 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
       .getByRole('button', { name: 'a woman' })
       .click();
     await w.screenshot({ path: 'e2e-artifacts/74-identity.png', fullPage: true });
-    await w.getByRole('button', { name: /Start the words/i }).click();
-    // Answering them lands in the words, where the two-tap practice is owed. It is required to reach the deck,
-    // but never a trap: it has its own way back to the steps.
-    await clearPractice(w);
-    // Back to the names from the rail — every step is reachable from every other one, which is the point.
-    await w
-      .getByRole('complementary', { name: /The steps/i })
-      .getByRole('button', { name: /What you call each other/i })
-      .click();
+    // Step 1 → step 2: answering who you both are lands on the pet names.
+    await w.getByRole('button', { name: /Next: what you call each other/i }).click();
     // 74 §3.6.8 — the pet names are NOT oriented: "good girl" is offered to this
     // straight man in BOTH directions, because whether a name is "for a girl" is a convention and the point
     // of the phase is that he decides. (The deck stays oriented — that is what the rest of this walk checks.)
@@ -16152,6 +16138,8 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
     await expect(w.getByRole('button', { name: /^good girl — .*→ Tester/i }).first()).toBeVisible();
     await expect(w.getByRole('button', { name: /^good girl — Tester →/i }).first()).toBeVisible();
     await w.getByRole('button', { name: /Done with names/i }).click();
+    // The words are next, and they open on their owed two-tap practice.
+    await clearPractice(w);
     // The direction is STATED, not implied — rating "you say" as though it were "you hear" would silently
     // poison the profile, and the answer used to live only in the aria-label.
     await expect(w.getByText(/Things YOU SAY TO THEM/i)).toBeVisible();
@@ -16280,14 +16268,9 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     // that six more things followed; every step, what it asks, and whether it spends is now on this screen.
     await expect(w.getByRole('button', { name: /The questions it still has/i })).toBeVisible();
     await w.screenshot({ path: 'e2e-artifacts/74-map.png' });
-    await w.getByRole('button', { name: /^Start: what you call each other/i }).click();
-    // Into the words from the rail, which is where the identity taps live now.
-    await w
-      .getByRole('complementary', { name: /The steps/i })
-      .getByRole('button', { name: /^The words/i })
-      .click();
+    await w.getByRole('button', { name: /^Start: who you two are/i }).click();
 
-    // 74 §3.6.4 — the two address taps come first. Answering "neither · both · depends" on both sides means
+    // 74 §3.6.9 — step 1: who you both are. Answering "neither · both · depends" on both sides means
     // nothing is oriented away, so this walk still sees the whole bank (the ORIENTED case is its own test).
     await expect(w.getByText(/who are the two of you/i)).toBeVisible();
     await w
@@ -16298,15 +16281,8 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
       .getByRole('group', { name: 'Your partner is a:' })
       .getByRole('button', { name: /neither/ })
       .click();
-    await w.getByRole('button', { name: /Start the words/i }).click();
-    // Answering the identity taps lands in the words, where the practice is owed. Clear it, then take the rail
-    // back to the names — the take is navigable in both directions now (§3.6.9).
-    await w.screenshot({ path: 'e2e-artifacts/74-practice.png' });
-    await clearPractice(w);
-    await w
-      .getByRole('complementary', { name: /The steps/i })
-      .getByRole('button', { name: /What you call each other/i })
-      .click();
+    // Step 1 → step 2: the pet names.
+    await w.getByRole('button', { name: /Next: what you call each other/i }).click();
 
     const LEXICON = 'people/owner-1/tests/lexicon.enc';
 
@@ -16352,6 +16328,9 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
 
     await w.getByRole('button', { name: /Done with this one/i }).click();
     await w.getByRole('button', { name: /Done with names/i }).click();
+    // The words open on their owed two-tap practice.
+    await w.screenshot({ path: 'e2e-artifacts/74-practice.png' });
+    await clearPractice(w);
 
     // The deck: one area per screen. Walk to whichever area holds each entry we want to mark.
     const markInDeck = async (name: string): Promise<void> => {
@@ -16636,7 +16615,16 @@ test('74 §3.6.9: every step is reachable both ways, and an AI step waits to be 
     // Into the names and mark one. A single mark is NOT enough to generate from — the reported problem was
     // being able to answer two or three things and run the AI on them, which gives the model nothing of yours
     // to draw on. So the step stays blocked and now says how much more it needs.
-    await w.getByRole('button', { name: /^Start: what you call each other/i }).click();
+    await w.getByRole('button', { name: /^Start: who you two are/i }).click();
+    await w
+      .getByRole('group', { name: 'You are a:' })
+      .getByRole('button', { name: /neither/ })
+      .click();
+    await w
+      .getByRole('group', { name: 'Your partner is a:' })
+      .getByRole('button', { name: /neither/ })
+      .click();
+    await w.getByRole('button', { name: /Next: what you call each other/i }).click();
     await w.getByRole('button', { name: /^praise/i }).click();
     await w
       .getByRole('button', { name: /^good girl — Tester →.*— love it$/i })
@@ -16673,15 +16661,149 @@ test('74 §3.6.9: every step is reachable both ways, and an AI step waits to be 
       /skipped/i,
     );
 
-    // The words' own prerequisite holds wherever the step is entered from — without the two identity taps the
-    // deck fails OPEN and shows everything in both directions (§3.6.3).
+    // Step 1 is answered, so the words open on their own owed practice rather than back on the identity taps.
     await map.getByRole('button', { name: /^The words/i }).click();
-    await expect(w.getByText(/who are the two of you/i)).toBeVisible();
+    await expect(w.getByRole('dialog')).toBeVisible();
 
     // Phone width: the frame stacks and nothing scrolls sideways (§12).
     await w.setViewportSize({ width: 390, height: 900 });
     await expectNoInnerOverflow(w);
     await w.screenshot({ path: 'e2e-artifacts/74-step-390.png' });
+  } finally {
+    await app.close();
+  }
+});
+
+/**
+ * 74 §3.6.9 — the AUDIT walk: every step of the take, screenshotted, at desktop and at phone width.
+ *
+ * Not an assertion suite so much as a camera. The owner has now caught three things by looking that no test was
+ * pointed at — a raw `dirtytalk.names` key in his own profile, an identity screen buried behind a link, a bottom
+ * bar inconsistent with the rail one screen over — so the walk exists to put every screen in front of a reviewer
+ * in one run, and to fail loudly on the classes a screenshot cannot show (a raw key, an overflow, a dead end).
+ */
+test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async () => {
+  test.setTimeout(180_000);
+  const { userData } = await seedReadyVault();
+
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    const shot = async (name: string): Promise<void> => {
+      await w.screenshot({ path: `e2e-artifacts/audit-74-${name}.png`, fullPage: true });
+    };
+    /** Nothing on any screen may show a raw machine id — the class the owner caught in his own profile. */
+    const noMachineIds = async (where: string): Promise<void> => {
+      const text = await w.evaluate(() => document.body.innerText);
+      const raw = text.match(/\b[a-z]+\.[a-z-]{3,}\b/g)?.filter((m) => !m.includes('selfos')) ?? [];
+      expect(raw, `raw machine id on ${where}: ${raw.join(', ')}`).toEqual([]);
+    };
+
+    await w.getByRole('link', { name: 'Tests' }).click();
+    await w.getByRole('button', { name: /I.m 18 or older/i }).click();
+    await shot('01-hub');
+    await w.getByRole('button', { name: 'Start' }).click();
+    await shot('02-intro');
+    await noMachineIds('the intro');
+
+    await w.getByRole('button', { name: 'Begin' }).click();
+    await shot('03-map');
+    await noMachineIds('the map');
+    // Eight steps, and the first one is who you both are.
+    const map = w.getByRole('list', { name: 'Every step' });
+    await expect(map.getByRole('listitem')).toHaveCount(8);
+    await expect(map.getByRole('listitem').first()).toContainText(/Who you two are/i);
+
+    // Step 1 — identity.
+    await w.getByRole('button', { name: /^Start: who you two are/i }).click();
+    await expect(w.getByText(/Step 1 of 8/)).toBeVisible();
+    await shot('04-step1-identity');
+    await w
+      .getByRole('group', { name: 'You are a:' })
+      .getByRole('button', { name: /neither/ })
+      .click();
+    await w
+      .getByRole('group', { name: 'Your partner is a:' })
+      .getByRole('button', { name: /neither/ })
+      .click();
+    await w.getByRole('button', { name: /Next: what you call each other/i }).click();
+
+    // Step 2 — the pet names, both screens.
+    await expect(w.getByText(/Step 2 of 8|what do you call each other/i).first()).toBeVisible();
+    await shot('05-step2-registers');
+    await noMachineIds('the name registers');
+    await w.getByRole('button', { name: /^praise/i }).click();
+    await shot('06-step2-marking');
+    // Mark enough that every AI step is genuinely reachable — 15 distinct names with a yes on one side clears
+    // the readiness gate, and walking the take with it blocked would only ever photograph one state.
+    const loveButtons = w.getByRole('button', { name: /— love it$/ });
+    for (let i = 0; i < 30 && (await loveButtons.count()) > i; i += 2) {
+      await loveButtons.nth(i).click();
+    }
+    await w.getByRole('button', { name: /Done with this one/i }).click();
+
+    // Scoped to the step LIST, not the whole rail: the verbs card sits in the same aside, so "Next: the
+    // questions it still has" matches a step row's name too.
+    const rail = w.getByRole('list', { name: 'Steps' });
+    // Step 3 — the words: identity is answered, so this opens straight into the practice.
+    await rail.getByRole('button', { name: /^The words/i }).click();
+    await shot('07-step3-practice');
+    await clearPractice(w);
+    await shot('08-step3-deck');
+    await noMachineIds('the deck');
+
+    // Step 4 — the split.
+    await rail.getByRole('button', { name: /Hearing it, or saying it/i }).click();
+    await shot('09-step4-split');
+    await noMachineIds('the split');
+
+    // Steps 5–7 — the AI ones. Each must present itself and WAIT, never fire on arrival.
+    for (const [file, name] of [
+      ['10-step5-lines', /Lines written for you/i],
+      ['11-step6-questions', /The questions it still has/i],
+      ['12-step7-moment', /In the moment/i],
+    ] as const) {
+      const row = rail.getByRole('button', { name });
+      await expect(row, `${String(name)} should be reachable once there is material`).toBeEnabled();
+      await row.click();
+      await expect(w.getByText(/allowance/i).first()).toBeVisible();
+      await shot(file);
+      await noMachineIds(String(name));
+    }
+
+    // Step 8 — the profile, from a thin take: it must still be reachable and honest.
+    await w
+      .getByRole('button', { name: /Finish — show me my profile|Next: your profile/i })
+      .first()
+      .click();
+    await w.getByRole('button', { name: 'Read it' }).click();
+    await shot('13-step8-profile');
+    await noMachineIds('the profile');
+
+    // …and at phone width, where the frame stacks. The nav is a hidden drawer below 768px, so navigate at
+    // desktop width and resize to measure (the standing §12 lesson).
+    await w.setViewportSize({ width: 390, height: 900 });
+    await shot('14-390-profile');
+    await expectNoInnerOverflow(w);
+
+    await w.setViewportSize({ width: 1280, height: 900 });
+    await w.getByRole('link', { name: 'Tests' }).click();
+    await w
+      .getByRole('button', { name: /Retake|Start/ })
+      .first()
+      .click();
+    await w.getByRole('button', { name: /Pick up where you left off|Begin/ }).click();
+    await w.setViewportSize({ width: 390, height: 900 });
+    await shot('15-390-map');
+    await expectNoInnerOverflow(w);
+    await w.setViewportSize({ width: 1280, height: 900 });
+    await w
+      .getByRole('list', { name: 'Every step' })
+      .getByRole('button', { name: /What you call each other/i })
+      .click();
+    await w.setViewportSize({ width: 390, height: 900 });
+    await shot('16-390-names');
+    await expectNoInnerOverflow(w);
   } finally {
     await app.close();
   }

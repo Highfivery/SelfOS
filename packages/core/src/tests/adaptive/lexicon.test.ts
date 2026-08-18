@@ -476,10 +476,10 @@ describe('a pet name is a boundary when it ADDRESSES them, not whenever the word
     schemaVersion: 1,
     personId: 'p1',
     entries: bans.map((text, i) => ({
-      key: `names-affection:${i}`,
+      key: `names-warm:${i}`,
       text,
       kind: 'word' as const,
-      family: 'names-affection',
+      family: 'names-warm',
       tier: 1,
       hear: 0,
       say: 0,
@@ -517,6 +517,46 @@ describe('a pet name is a boundary when it ADDRESSES them, not whenever the word
     const lex = lexiconWith(['good girl']);
     expect(violatesBoundary(lex, 'you were such a good girl for me')).toBe(true);
     expect(violatesBoundary(lex, 'good girl')).toBe(true);
+  });
+
+  it('keeps a CRUDE name family matching anywhere — the word IS the slur', () => {
+    const lex: EroticLexicon = {
+      ...lexiconWith(['whore']),
+      entries: [
+        {
+          key: 'names-rough-heavy:whore',
+          text: 'whore',
+          kind: 'word',
+          family: 'names-rough-heavy',
+          tier: 4,
+          hear: 0,
+          say: 0,
+          state: 'never',
+        },
+      ],
+    };
+    expect(violatesBoundary(lex, 'You filthy whore')).toBe(true);
+  });
+
+  it('fails CLOSED for a family it has never heard of — a new family must not relax a hard no', () => {
+    const lex: EroticLexicon = {
+      ...lexiconWith(['gutterslut']),
+      entries: [
+        {
+          key: 'names-brand-new:gutterslut',
+          text: 'gutterslut',
+          kind: 'word',
+          family: 'names-brand-new',
+          tier: 5,
+          hear: 0,
+          say: 0,
+          state: 'never',
+        },
+      ],
+    };
+    // The relaxation is opt-in by family, so a family added to the bank tomorrow keeps the plain match rather
+    // than quietly loosening what someone ruled out.
+    expect(violatesBoundary(lex, 'nothing but a gutterslut in the end')).toBe(true);
   });
 
   it('leaves a non-name ban matching anywhere — only pet names are forms of address', () => {

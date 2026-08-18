@@ -279,7 +279,8 @@ export function AdaptiveTake(): JSX.Element {
    * 74 §3.6.9 — arriving from the profile's "edit the names"/"edit the words" link. Consumed once, after the
    * take has started, so the deep link lands on the step rather than the map.
    */
-  const routeStep = (useLocation().state as { step?: string } | null)?.step;
+  const routeState = useLocation().state as { step?: string; retake?: boolean } | null;
+  const routeStep = routeState?.step;
   const tookRouteStep = useRef(false);
   useEffect(() => {
     if (tookRouteStep.current || !routeStep || !store.state?.draft) return;
@@ -289,6 +290,25 @@ export function AdaptiveTake(): JSX.Element {
       .start(testId)
       .then(() => useAdaptiveTestStore.getState().goToStep(routeStep));
   }, [routeStep, store.state, testId]);
+
+  /*
+   * Retake goes STRAIGHT to the retake choice.
+   *
+   * It used to land on the intro — a screen explaining a test they have already taken, with a button reading
+   * "Pick up where you left off", which then led to "Taking it again". Three screens and two of them wrong:
+   * they did not ask to pick anything up, they asked to take it again, and the question that actually needs
+   * answering (keep what you marked, or start fresh?) was two taps behind an explanation they had read
+   * before.
+   */
+  const tookRetake = useRef(false);
+  useEffect(() => {
+    if (tookRetake.current || !routeState?.retake || !store.state?.latest) return;
+    tookRetake.current = true;
+    void useAdaptiveTestStore
+      .getState()
+      .start(testId)
+      .then(() => useAdaptiveTestStore.getState().setPhase('map'));
+  }, [routeState, store.state, testId]);
 
   // Quitting or backgrounding the app inside the 700ms debounce would otherwise drop the last taps. The
   // unmount cleanup does not fire on a window close, so this is the only thing covering that path.
@@ -1481,6 +1501,11 @@ export function AdaptiveTake(): JSX.Element {
                           <Button
                             key={option}
                             variant="secondary"
+                            // A scenario option is a whole spoken line, not a label. `Button` is
+                            // `white-space: nowrap` with a fixed height, so a real one from the live model
+                            // ran straight out of its own box — which the offline fake's short canned
+                            // options could never show.
+                            className={adaptive.optionButton}
                             disabled={store.busy}
                             onClick={() => void store.answerScenario(testId, option)}
                           >

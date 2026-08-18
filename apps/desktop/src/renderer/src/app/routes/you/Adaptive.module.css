@@ -2273,3 +2273,14 @@
     grid-column: 1 / -1;
   }
 }
+
+/* A scenario option is a whole line someone would say, so it wraps and grows. `Button` is nowrap with a fixed
+   height, which is right for a label and wrong for a sentence — a live option ran out of its own box. */
+.optionButton {
+  white-space: normal;
+  height: auto;
+  min-height: 36px;
+  padding-block: var(--space-2);
+  text-align: left;
+  justify-content: flex-start;
+}

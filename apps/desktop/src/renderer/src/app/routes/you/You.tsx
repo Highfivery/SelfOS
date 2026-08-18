@@ -88,7 +88,11 @@ function ProfileCard({ test, results }: { test: TestSummary; results: TestResult
           <Button variant="secondary" onClick={() => navigate(`/tests/${test.id}`)}>
             Open
           </Button>
-          <Button variant="ghost" onClick={() => navigate(`/tests/${test.id}/take`)}>
+          <Button
+            variant="ghost"
+            // Straight to "keep what you marked, or start fresh?" — the question a retake actually poses.
+            onClick={() => navigate(`/tests/${test.id}/take`, { state: { retake: true } })}
+          >
             {test.wellbeing ? 'Check in again' : 'Retake'}
           </Button>
         </div>

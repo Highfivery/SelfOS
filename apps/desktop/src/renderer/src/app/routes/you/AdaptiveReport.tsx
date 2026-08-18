@@ -842,7 +842,11 @@ export function AdaptiveReport(): JSX.Element {
               ) : null}
 
               <div className={take.footer}>
-                <Button variant="secondary" onClick={() => navigate(`/tests/${testId}/take`)}>
+                <Button
+                  variant="secondary"
+                  // Same as the card's Retake: the choice, not the intro (74 §3.6.15).
+                  onClick={() => navigate(`/tests/${testId}/take`, { state: { retake: true } })}
+                >
                   Take it again
                 </Button>
                 {latest ? (

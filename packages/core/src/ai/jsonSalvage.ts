@@ -140,6 +140,25 @@ export function salvageJsonObjectField(text: string, field: string): string | nu
 }
 
 /**
+ * Recover a single string field from an object whose inner quotes were never escaped.
+ *
+ * A model asked for `{"question": string}` will sometimes write
+ * `{"question": "When you hear "baby" land right — is it …?"}`, which is not valid JSON and which
+ * `salvageJsonObjectField` also can't rescue: its pattern stops at the first unescaped quote and returns the
+ * fragment before it. Observed on roughly half of live replies for a one-string payload, and it looked
+ * exactly like the model failing when the answer was sitting right there.
+ *
+ * Greedy to the LAST quote before the close, so an inner `"…"` is kept as part of the value.
+ */
+export function salvageLooseStringField(text: string, field: string): string | null {
+  const stripped = stripFences(text).trim();
+  const safe = field.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = stripped.match(new RegExp(`"${safe}"\\s*:\\s*"([\\s\\S]+)"\\s*\\}?\\s*$`));
+  const value = match?.[1]?.trim();
+  return value ? value : null;
+}
+
+/**
  * A per-element-salvaging array validator: each element is `.catch(sentinel)` (a bad element becomes the
  * sentinel instead of failing the whole array), the array itself `.catch([])`, then the sentinels are
  * dropped via `keep`. So one malformed question/fact/suggestion never discards the rest (37 §3.1).

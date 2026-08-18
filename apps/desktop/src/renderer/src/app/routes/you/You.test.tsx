@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import type { TestSummary } from '@selfos/core/tests';
 import type { TestResult } from '@shared/schemas';
 import { You } from './You';
@@ -261,5 +261,58 @@ describe('You hub', () => {
     expect(await screen.findByText('Dirty talk')).toBeInTheDocument();
     expect(screen.getByText('yours')).toBeInTheDocument();
     expect(screen.queryByText(/private — only you/)).not.toBeInTheDocument();
+  });
+});
+
+describe('retake goes where a retake goes (74 §3.6.15)', () => {
+  it('sends Retake to the choice, not through an intro for a test they have taken', async () => {
+    const seen: { pathname: string; state: unknown }[] = [];
+    function Probe(): JSX.Element {
+      const loc = useLocation();
+      seen.push({ pathname: loc.pathname, state: loc.state });
+      return <p>take screen</p>;
+    }
+    const dirtyTalk: TestSummary = {
+      id: 'dirty-talk',
+      kind: 'adaptive',
+      group: 'intimacy',
+      title: 'Dirty talk',
+      instrument: 'SelfOS',
+      blurb: 'What you want said to you.',
+      framing: 'A map, not a verdict.',
+      estimatedMinutes: 15,
+      itemCount: 0,
+      adult: true,
+      sensitive: true,
+      subscales: [{ key: 'dirty.filth', label: 'Filthiness', signed: false }],
+      wellbeing: false,
+    };
+    installMockBridge({
+      testsList: () => Promise.resolve({ tests: [dirtyTalk], adultAcknowledged: true }),
+      testsResults: () =>
+        Promise.resolve([
+          {
+            ...bigFiveResult(),
+            id: 'a1',
+            testId: 'dirty-talk',
+            scores: [{ key: 'dirty.filth', raw: 4, normalized: 0.8, band: 'high' }],
+          },
+        ]),
+    });
+    render(
+      <MemoryRouter initialEntries={['/tests']}>
+        <Routes>
+          <Route path="/tests" element={<You />} />
+          <Route path="/tests/:testId/take" element={<Probe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Retake' }));
+
+    // It used to land on the intro — an explanation of a test they have already taken, with a button reading
+    // "Pick up where you left off", which then led to the actual question two taps later.
+    const last = seen[seen.length - 1];
+    expect(last?.pathname).toBe('/tests/dirty-talk/take');
+    expect(last?.state).toEqual({ retake: true });
   });
 });

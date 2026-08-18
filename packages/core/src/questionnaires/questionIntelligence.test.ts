@@ -1209,3 +1209,38 @@ describe('prompt composition stays bounded (spec 71 §1/§5.7)', () => {
     expect(msg).toContain('GROUND TO OPEN THIS TIME'); // the planner's chosen ground
   });
 });
+
+describe("the recipient's hard nos reach EVERY tier (74 §8.4)", () => {
+  // The suppression used to be threaded inside `explicitFraming`, so it applied ONLY to intimacy/scenario at
+  // the explicit + unfiltered tiers. The gentle 18+ tier (`intimacyGeneral`) — a real, commonly-used one —
+  // and every non-sensitive type dropped it entirely, and nobody reviews a generated question before it is
+  // sent. There is no tier at which it is correct to ask about a term someone has ruled out.
+  const tiers = ['standard', 'intimacyGeneral', 'explicit', 'unfiltered'] as const;
+  for (const sensitivity of tiers) {
+    it(`carries them at the ${sensitivity} tier`, () => {
+      const msg = buildGenerationUserMessage({
+        type: sensitivity === 'standard' ? 'general' : 'intimacy',
+        sensitivity,
+        context: '',
+        existingPrompts: [],
+        count: 5,
+        suppressedTexts: ['being called a whore'],
+      });
+      expect(msg).toContain('being called a whore');
+      expect(msg).toMatch(/NEVER use any of these/);
+      // And it never explains itself — saying "I avoided X" restates X.
+      expect(msg).toMatch(/Never mention that anything was ruled out/);
+    });
+  }
+
+  it('adds nothing when they have ruled nothing out', () => {
+    const msg = buildGenerationUserMessage({
+      type: 'intimacy',
+      sensitivity: 'intimacyGeneral',
+      context: '',
+      existingPrompts: [],
+      count: 5,
+    });
+    expect(msg).not.toMatch(/NEVER use any of these/);
+  });
+});

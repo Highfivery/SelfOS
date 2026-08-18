@@ -4,6 +4,7 @@ import { uuid } from '../id';
 import type { TestResult, UsageEvent } from '../schemas';
 import { costOf, recordUsage } from '../usage';
 import type { TestDefinition } from './types';
+import { buildOwnSuppressionBlock } from './adaptive/steer';
 
 /**
  * 50-self-assessments §3.3/§6 — the OPTIONAL "what this means for you" narrative. Explicitly user-triggered
@@ -120,11 +121,15 @@ export async function narrateResult(deps: NarrateDeps): Promise<NarrateResult> {
   if (deps.overBudget)
     return { ok: false, reason: 'BUDGET', message: 'AI budget reached for this period.' };
 
+  // A sensitive instrument (the kink inventory) writes prose back about their sexuality. It had an adult
+  // BOUNDARY but no idea what they had ruled out — the boundary makes the register appropriate, the hard-no
+  // list is what makes the content correct.
+  const suppression = await buildOwnSuppressionBlock(fs, key, personId);
   const system = [
     PERSONA,
     SAFETY,
     NARRATIVE_GUIDANCE,
-    ...(def.sensitive ? [ADULT_BOUNDARY] : []),
+    ...(def.sensitive ? [ADULT_BOUNDARY, suppression] : []),
     ...(def.wellbeing ? [WELLBEING_BOUNDARY] : []),
     ...(result.crisisFlag ? [CRISIS_LEAD] : []),
   ].join('\n\n');

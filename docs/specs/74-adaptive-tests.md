@@ -868,6 +868,46 @@ like any other ask, so the planner treats the ground as worked-through and moves
 | **Erotica book**                | The `filthyTalk` register + the vocabulary substitution lists become person-tuned. **Same slice** (owner decision) — landed as the LAST commit, rebased immediately before, and purely ADDITIVE (a lexicon block appended after the existing register directives, never an edit of them) so it cannot clobber the register work in flight |
 | Partner's coach                 | §5.7, plus the **unconditional suppression**: a `boundaries` entry can never appear in a suggestion to their partner, with or without any steer                                                                                                                                                                                           |
 
+#### 5.8a One rule, applied everywhere (2026-08-18)
+
+The table above is what was designed; what was BUILT was six paths wired by hand as each was written, and a
+dozen that were never wired at all. An audit of every generation path in the app found the inconsistency was
+not a matter of taste — it produced two real fail-open holes:
+
+- The questionnaire suppression was threaded **inside `explicitFraming`**, so the gentle 18+ tier
+  (`intimacyGeneral`) and every non-sensitive type dropped it. A gentle intimacy questionnaire could ask
+  about the one term a person had ruled out, and nobody reviews a generated question before it is sent.
+- The **challenge coach** took `CHALLENGE_INTIMACY_REGISTER` — an explicit sexual register on the same 18+
+  ack — while the topic gate withheld the person's own vocabulary. It was the one place in the app
+  deliberately speaking explicitly TO them with their own words held back.
+
+The rule now, stated once and applied uniformly:
+
+> **Suppression is unconditional on any path that writes prose a person reads. The positive steer stays
+> gated** (the 18+ ack, and the context being intimate at all).
+
+Suppression can only ever PREVENT a suggestion, so there is no tier, topic or relationship state at which
+withholding it is correct. The steer is the opposite — it hands a model explicit vocabulary — so its gates
+stay exactly where they were.
+
+Three shared helpers make adding a path one line, so the next one has an obvious thing to call:
+`buildOwnSuppressionBlock` (the hard nos), `buildPracticeGroundBlock` (the derived hear/say gap — a goal list
+the person never had to write), and `buildProfileReadBlock` / `profileReadBlock` (the report's `lede` +
+`readings`, which were **written once and read by nothing** until now; the 18+ gate lives inside the helper
+rather than in each caller).
+
+**Now wired:** goals · dream analysis + patterns · weekly coaching synthesis · relationship synthesis ·
+session wrap-up · Together wrap-up · memory reconciliation · questionnaire analysis · compatibility alignment
+· compatibility variant rewrite · fact correction · every questionnaire tier · book foundations,
+answer-the-author, interview gap questions, continuity + line-edit · the sensitive self-assessment narrative ·
+the challenge coach's own vocabulary.
+
+**Deliberately NOT wired,** so the next audit does not re-tread them: the topic classifier, semantic dedup,
+ask-ledger backfill, the questionnaire planner/gap-finder/coverage passes and guided-session suggestions —
+these classify or select, they do not write prose in the person's register; and the whole-book structural
+reads (manuscript, structure, title, essence, placement) plus image-prompt distillations, which operate on
+text already generated with the block rather than producing new material in that register.
+
 ## 6. IPC / API contracts
 
 All gated `tests.own` + active-person-scoped + 18+-withheld **in the bridge** (the trust boundary), with the

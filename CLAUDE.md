@@ -524,6 +524,41 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-18 — **Audit + build (the profile reaches the whole app; one rule instead of a dozen hand-wirings;
+  SPEC 74 §5.8a; on `feat/profile-everywhere`).** The owner: _"wire the profile into books, goals and
+  questionnaires and any other areas (MAKE SURE TO REVIEW FIRST TO ENSURE YOUVE CAUGHT EVERYWHERE)"_. **Mapped
+  every AI generation path in the app before touching anything** (my own greps + a parallel explore agent, which
+  found four things I had missed). Six paths were wired, a dozen were not — and the inconsistency was not a
+  matter of taste, it had produced **two fail-open holes**: (1) the questionnaire suppression was threaded
+  INSIDE `explicitFraming`, so the gentle 18+ tier (`intimacyGeneral`) and every non-sensitive type dropped the
+  hard-no list entirely — a gentle intimacy questionnaire could ask about the one term the recipient had ruled
+  out, and nobody reviews a generated question before it sends; (2) the **challenge coach** took
+  `CHALLENGE_INTIMACY_REGISTER` — an explicit sexual register on the same 18+ ack — while the topic gate
+  withheld the person's own vocabulary, making it the one place in the app deliberately speaking explicitly TO
+  someone with their own words held back. **The rule, stated once and applied uniformly: suppression is
+  UNCONDITIONAL on any path that writes prose a person reads; the positive steer stays gated.** Suppression can
+  only ever PREVENT, so no tier/topic/relationship state makes withholding it correct. Three shared helpers make
+  a new path one line — `buildOwnSuppressionBlock`, `buildPracticeGroundBlock` (the derived hear/say gap, which
+  IS a goal list the person never had to write), and `profileReadBlock` (the report's `lede` + `readings`,
+  **written once and read by NOTHING** until now — the difference between a coach that knows which words to use
+  and one that knows what the person is after). The 18+ gate lives INSIDE `profileReadBlock`, not in its three
+  callers, because "each caller remembers" is exactly how six-of-eighteen happened. Wired: goals · dreams
+  (analysis + patterns) · weekly + relationship synthesis · session and Together wrap-ups · memory reconciliation
+  · questionnaire analysis + alignment + variant + fact correction + every tier · book foundations,
+  answer-the-author, interview gaps, continuity/line-edit · the sensitive self-assessment narrative. **Also
+  fixed:** the book block was adult-gated as a WHOLE, so a biography that went near a marriage had no
+  suppression at all — split, steer adult-only, suppression always. **Deliberately NOT wired and recorded as
+  such** (classifiers, dedup, planners, whole-book structural reads, image distillations) so the next audit
+  doesn't re-tread them. Gate green: typecheck (4 pkgs), lint, format, **2365 core + 13 relay + 1674 desktop**
+  unit, **216/216 E2E**. Both hole-guards **verified to fail when reverted**. **Lessons: (1) when N sibling paths
+  need the same safety block and each is wired by hand as it is built, the count of wired paths only ever goes
+  DOWN as a share of the total — extract the helper the first time, not the seventh. (2) A gate shared between a
+  "prevent" and a "suggest" block is wrong in both directions: it withheld the hard-no list from the one coach
+  speaking most explicitly, and withheld the vocabulary from the same coach for the same reason. Separate them
+  by what they DO, not by where they are used. (3) Two E2E failed on a full run and passed alone; re-running the
+  whole suite (216/216) is what distinguished the documented load flake from a regression I had caused — running
+  only the two in isolation would not have.**
+
 - 2026-08-18 — **Build (the report redesigned, and an AI read worth reading; mockup approved FIRST; SPEC 74
   §3.3a; on `feat/report-redesign`).** The owner: _"improve the UI/UX GREATLY (which MEANS REDESIGN!!!)… Right
   now its resulting in a very lonfg useless page"_, and separately _"the final report should also use AI to

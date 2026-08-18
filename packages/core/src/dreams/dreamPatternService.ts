@@ -15,6 +15,7 @@ import { checkBudget, costOf, recordUsage } from '../usage';
 import { PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { deleteInsight, producedFactShare, saveInsight } from '../insights';
 import { getAnalysis, getPatternSummary, listDreams, savePatternSummary } from './dreamService';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 
 /**
  * Cross-dream patterns (12-dreams §3.5/§5.1). Two halves:
@@ -300,13 +301,15 @@ export async function generatePatternNarrative(
   const digested = ordered.slice(0, NARRATIVE_MAX_DREAMS);
 
   const at = now.toISOString();
+  // A dream can be sexual, and this writes a narrative across all of them.
+  const suppression = await buildOwnSuppressionBlock(fs, key, personId);
   let result;
   try {
     result = await client.stream(
       {
         apiKey,
         model,
-        system: [PERSONA, SAFETY, PATTERNS_GUIDANCE].join('\n\n'),
+        system: [PERSONA, SAFETY, PATTERNS_GUIDANCE, suppression].filter(Boolean).join('\n\n'),
         messages: [{ role: 'user', content: buildDigest(digested) }],
         // Bounded narrative: disable adaptive thinking so it keeps the whole budget for the prose
         // (left on, thinking shares `maxTokens` and can starve the narrative to empty).

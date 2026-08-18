@@ -1004,3 +1004,64 @@ describe('74 §8.4 — a hard no suppresses in EVERY session, not just an intima
     expect(system).toContain('whore');
   });
 });
+
+describe('the challenge coach speaks in their words too (74 §5.8)', () => {
+  it('gives a challenge session the own-lexicon steer it was speaking explicitly without', async () => {
+    const { upsertPerson } = await import('../people/peopleService');
+    const { applyBankMarks, applyDirections, emptyLexicon, writeLexicon } =
+      await import('../tests/adaptive/lexicon');
+    const { DIRTY_TALK } = await import('../tests/adaptive/instruments/dirtyTalk');
+    const { acknowledgeAdult } = await import('./guidanceService');
+    const { CHALLENGE_COACH_ID } = await import('./challengeCoach');
+    const { startGuided } = await import('./guidedSessionService');
+    const now = new Date('2026-08-18T10:00:00.000Z');
+
+    const person = (await upsertPerson(fs, key, { displayName: 'Ben', isSubject: true, tags: [] }))
+      .id;
+    await acknowledgeAdult(fs, key, person);
+    let lex = applyBankMarks(
+      emptyLexicon(person, now),
+      DIRTY_TALK.bank,
+      { 'names-praise:good-girl': 'love', 'names-rough-heavy:whore': 'never' },
+      'take:1',
+      now,
+    );
+    lex = applyDirections(lex, { 'names-praise:good-girl': { hear: 4, say: 4 } }, now);
+    await writeLexicon(fs, key, lex);
+
+    let system = '';
+    const capture: ClaudeClient = {
+      send: () => Promise.resolve('ok'),
+      stream: (options, onDelta) => {
+        system = options.system;
+        onDelta('ok');
+        return Promise.resolve({
+          text: 'ok',
+          usage: { inputTokens: 10, outputTokens: 2, cacheWriteTokens: 0, cacheReadTokens: 0 },
+        });
+      },
+    };
+
+    const convo = await startGuided({
+      fs,
+      key,
+      personId: person,
+      guideId: CHALLENGE_COACH_ID,
+      now,
+    });
+    await runChatTurn(
+      turn({
+        client: capture,
+        personId: person,
+        conversationId: convo!.conversationId,
+        userText: 'give me something to try',
+      }),
+    );
+
+    // The challenge coach takes CHALLENGE_INTIMACY_REGISTER on the same 18+ ack, so it was the one place in
+    // the app deliberately speaking explicitly with the person's own words withheld.
+    expect(system).toContain('good girl');
+    // Suppression was already unconditional and stays so.
+    expect(system).toContain('whore');
+  });
+});

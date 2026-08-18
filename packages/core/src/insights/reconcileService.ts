@@ -8,6 +8,7 @@ import { checkBudget, costOf, recordUsage } from '../usage';
 import { normalizeCategories } from './categories';
 import { getInsight, listInsightsForPerson, saveInsight } from './insightStore';
 import { queueMergeProposals } from './mergeProposals';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 
 /**
  * "Refresh memory" reconciliation (20-memory-dashboard §3.5/§4.3/§5.2). The MANUAL, budget-gated AI pass
@@ -116,12 +117,14 @@ export async function reconcileInsights(deps: ReconcileDeps): Promise<MemoryReco
 
   const at = now.toISOString();
   let streamed;
+  // Reconciliation REWRITES the person's own insight text, so it can restate a term they ruled out.
+  const suppression = await buildOwnSuppressionBlock(fs, key, personId);
   try {
     streamed = await client.stream(
       {
         apiKey,
         model,
-        system: RECONCILE_SYSTEM,
+        system: [RECONCILE_SYSTEM, suppression].filter(Boolean).join('\n\n'),
         messages: [{ role: 'user', content: JSON.stringify(active.map(digestInsight)) }],
         maxTokens: 1500,
         // A bounded structured-JSON call — disable adaptive thinking so it can't eat the budget and truncate

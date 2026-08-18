@@ -20,6 +20,7 @@ import { aboutFromRecipient } from './aboutResolver';
 import { getAssignment, getAssignmentSnapshot } from './assignmentService';
 import { runClaude, type AiDeps } from './generationService';
 import { getResponse } from './responseService';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 
 // Re-exported so existing importers (alignmentService, tests) keep one source of truth for the extractor.
 export { extractJsonObject } from '../ai/jsonSalvage';
@@ -153,9 +154,18 @@ export async function analyzeAssignment(
   // explicit analysis framing so the model synthesizes frank sexual answers into an insight instead of
   // returning valid-but-EMPTY JSON (the "unexpected shape" bug the #340 hardening couldn't fix — the answers
   // were substantive, the empty came from the missing register); standard questionnaires are unchanged.
+  // The insight this writes is read back by the person whose answers it summarizes, so their hard nos apply
+  // here exactly as they do to the questions themselves — generation had suppression, the read side did not.
+  // An external recipient has no vault and so no lexicon — nothing known, nothing to suppress.
+  const suppression =
+    assignment.recipient.kind === 'person'
+      ? await buildOwnSuppressionBlock(deps.fs, deps.key, assignment.recipient.personId)
+      : '';
   const call = await runClaude(
     deps,
-    buildAnalysisSystem(snapshot.type, snapshot.sensitivity),
+    [buildAnalysisSystem(snapshot.type, snapshot.sensitivity), suppression]
+      .filter(Boolean)
+      .join('\n\n'),
     buildAnalysisUserMessage({ title: snapshot.title, qa }),
     'questionnaire.analyze',
     // A summary + up to 6 facts + the JSON scaffolding can exceed a tight ceiling; give it real headroom so

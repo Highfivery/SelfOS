@@ -17,7 +17,10 @@ import {
 } from './lexicon';
 import {
   buildOwnLexiconBlock,
+  buildOwnSuppressionBlock,
   buildPartnerSteer,
+  buildPracticeGroundBlock,
+  buildProfileReadBlock,
   buildSuppressionBlock,
   livePartnerOf,
   nameLines,
@@ -290,5 +293,51 @@ describe('74 §3.6.8 — names reach both prompts as vocatives', () => {
 
   it('says nothing about names when none were marked', () => {
     expect(nameLines(emptyLexicon('p1', now))).toEqual([]);
+  });
+});
+
+describe('the shared blocks every generation path can call (74 §5.8)', () => {
+  it("gives a person's OWN hard nos to any path, with no partner and no ack needed", async () => {
+    const { fs, angel } = await seedPair();
+    const block = await buildOwnSuppressionBlock(fs, KEY, angel);
+    expect(block).toContain('whore');
+    expect(block).toMatch(/NEVER use or suggest/);
+    // The whole point: it does not depend on a relationship, a topic, or a tier. It can only prevent.
+    expect(block).not.toBe('');
+  });
+
+  it('is empty for someone with nothing ruled out, so a prompt is byte-unchanged', async () => {
+    const fs = memFileSystem();
+    const ben = (await upsertPerson(fs, KEY, { displayName: 'Ben', isSubject: true, tags: [] })).id;
+    expect(await buildOwnSuppressionBlock(fs, KEY, ben)).toBe('');
+    expect(await buildPracticeGroundBlock(fs, KEY, ben)).toBe('');
+  });
+
+  it('hands the hear/say gap to anything that proposes what to work on, framed as practice', async () => {
+    const { fs, angel } = await seedPair();
+    const block = await buildPracticeGroundBlock(fs, KEY, angel);
+    // Loved to hear at 4, would say 0 — the derived goal list, which the person never had to write.
+    expect(block).toContain('good girl');
+    expect(block).toMatch(/PRACTISE, never a failing/);
+    // It must never say where it came from: a coach that cites the test has told them they were profiled.
+    expect(block).toMatch(/never name where you learned it/);
+  });
+
+  it('carries the READING, not the vocabulary — and says it is a reading', () => {
+    const block = buildProfileReadBlock({
+      lede: 'You want to be claimed, not pushed around.',
+      readings: [{ kind: 'pattern', text: 'The praise is about effort, not looks.' }],
+    });
+    expect(block).toContain('not pushed around');
+    expect(block).toContain('about effort');
+    expect(block).toMatch(/a reading of what they answered, not a verdict/);
+    // Never quoted at them, and never named as a test — this is an interpretation of their sexuality.
+    expect(block).toMatch(/never quote it at them/);
+    expect(block).toMatch(/never mention a test or a report/);
+  });
+
+  it('is empty when the synthesis wrote no reading, so nothing is invented to fill it', () => {
+    expect(buildProfileReadBlock({})).toBe('');
+    expect(buildProfileReadBlock({ readings: [] })).toBe('');
   });
 });

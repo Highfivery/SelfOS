@@ -19,6 +19,7 @@ import {
 } from './conversationService';
 import { regenerateIndexFor, type MessageStamp } from './rewindService';
 import { readLexicon } from '../tests/adaptive/lexicon';
+import { profileReadBlock } from '../tests/adaptive/adaptiveService';
 import {
   buildOwnLexiconBlock,
   buildPartnerSteer,
@@ -316,12 +317,28 @@ async function generateCoachReply(
   // challenge coach is `group: 'challenge'`, so it took an explicit sexual register (`CHALLENGE_INTIMACY_REGISTER`)
   // while being denied the hard-no list; and a free-start session's topic comes from a probabilistic classifier
   // that fails open, so "I want to be more vocal with my partner" could classify as Relationships and drop it.
+  //
+  // The STEER's gate had the mirror of the same hole. The challenge coach is `group: 'challenge'`, so it took
+  // `CHALLENGE_INTIMACY_REGISTER` — an explicit sexual register, gated on the same 18+ ack — while the topic
+  // gate withheld the person's own vocabulary. It was the one place in the app deliberately speaking
+  // explicitly TO them with their own words held back, which is precisely backwards: the register is the
+  // thing that makes the vocabulary appropriate, so wherever one applies the other should.
   const intimateTopic =
     conversation.guideId !== undefined
-      ? INTIMACY_GUIDE_GROUPS.has(getExercise(conversation.guideId)?.group ?? '')
+      ? INTIMACY_GUIDE_GROUPS.has(getExercise(conversation.guideId)?.group ?? '') ||
+        conversation.guideId === CHALLENGE_COACH_ID
       : (topicOverride?.lifeAreas ?? []).includes('Intimacy');
   if (adultAcked) {
-    const own = intimateTopic ? buildOwnLexiconBlock(await readLexicon(fs, key, personId)) : '';
+    // Their words AND the reading of them (74 §3.3a). The vocabulary tells the coach WHICH words; the
+    // reading tells it what they are actually after — it was written once and read by nothing.
+    const own = intimateTopic
+      ? [
+          buildOwnLexiconBlock(await readLexicon(fs, key, personId)),
+          await profileReadBlock(fs, key, personId),
+        ]
+          .filter(Boolean)
+          .join('\n\n')
+      : '';
     const partnerId = await livePartnerOf(fs, key, personId);
     let partnerSteer = '';
     let partnerSuppression = '';

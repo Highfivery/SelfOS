@@ -41,6 +41,7 @@ import { getAssignmentSnapshot, listAssignments } from './assignmentService';
 import { alignmentReportPath, compatDir } from './paths';
 import { runClaude, type AiDeps } from './generationService';
 import { getResponse } from './responseService';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 
 /**
  * Compatibility alignment (08-questionnaires §3.6/§13.5d). Once both answerers of a compatibility send
@@ -170,9 +171,22 @@ export async function generateAlignment(
   // Register-aware system prompt (08 §22.7): an intimacy/scenario compatibility questionnaire at an explicit
   // tier gets the explicit register so the report isn't valid-but-EMPTY for frank answers (the same gap the
   // one-person analysis fix closes); standard reports are unchanged.
+  // BOTH participants read the report, so the union of both hard-no lists applies (the Together rule).
+  const suppression = (
+    await Promise.all(
+      [first, second]
+        .map((assignment) =>
+          assignment.recipient.kind === 'person' ? assignment.recipient.personId : null,
+        )
+        .filter((id): id is string => id !== null)
+        .map((id) => buildOwnSuppressionBlock(deps.fs, deps.key, id)),
+    )
+  )
+    .filter(Boolean)
+    .join('\n');
   const call = await runClaude(
     deps,
-    buildAlignmentSystem(aSnap.type, aSnap.sensitivity),
+    [buildAlignmentSystem(aSnap.type, aSnap.sensitivity), suppression].filter(Boolean).join('\n\n'),
     buildAlignmentUserMessage({ title: aSnap.title, personAName, personBName, items: aligned }),
     'questionnaire.analyze',
     1200,

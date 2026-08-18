@@ -285,6 +285,80 @@ export async function buildPartnerSteer(
 }
 
 /**
+ * The **reading** the report gives them, for their own coach (74 §3.3a).
+ *
+ * Everything else here travels as vocabulary — the words themselves. The synthesis also writes an
+ * interpretation (`lede` + keyed `readings`: what lands, where it stops, what to try) and until now nothing
+ * read it back: it was written once, rendered on one screen, and invisible to every other part of the app.
+ * That is the difference between a coach that knows which words to use and one that knows what the person is
+ * actually after.
+ *
+ * Own-context ONLY, and gated by the caller on the 18+ ack — this is an interpretation of someone's sexuality
+ * and it never travels to a partner, where the silent steer carries vocabulary and nothing else.
+ */
+export function buildProfileReadBlock(result: {
+  lede?: string | undefined;
+  readings?: readonly { kind: string; text: string }[] | undefined;
+}): string {
+  const readings = result.readings ?? [];
+  if (!result.lede && readings.length === 0) return '';
+  const parts = [
+    'WHAT THEIR OWN PROFILE SAYS ABOUT THEM — a reading of what they answered, not a verdict. Use it to' +
+      ' understand what they are after; never quote it at them, never say they were "profiled", and never' +
+      ' mention a test or a report.',
+  ];
+  if (result.lede) parts.push(result.lede);
+  for (const reading of readings.slice(0, CAP)) parts.push(`- ${reading.text}`);
+  return parts.join('\n');
+}
+
+/**
+ * The person's OWN hard nos, as a negative constraint — for any path that writes prose they will read.
+ *
+ * The one rule that makes this consistent: **suppression is unconditional, the steer is gated.** A hard no can
+ * only ever PREVENT a suggestion, so it costs nothing to apply everywhere and there is no version of "they
+ * are not 18+-acked" or "this is not an intimate topic" that makes it correct to suggest a term they ruled
+ * out. The positive steer is the opposite — it hands a coach explicit vocabulary — so it stays gated on the
+ * ack and on the context being intimate at all.
+ *
+ * Six paths had this and a dozen did not, because each was wired by hand as it was built. This exists so
+ * adding it to a path is one line, and so the NEXT generation path has an obvious thing to call.
+ */
+export async function buildOwnSuppressionBlock(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+): Promise<string> {
+  const banned = suppressedTexts(await readLexicon(fs, key, personId));
+  if (banned.length === 0) return '';
+  return (
+    'NEVER use or suggest any of the following, in any form — not as a line, an idea, or an example. These' +
+    ' are their hard limits. Do not explain that you are avoiding anything, and never say why: ' +
+    `${banned.join(' · ')}.`
+  );
+}
+
+/**
+ * What they have said they want to be able to SAY but freeze on (the derived hear/say gap, 74 §3.3).
+ *
+ * This is a goal list the person never had to write: it exists the moment the bank is marked. Anything that
+ * proposes what to work on can draw on it — and must frame it as practice, never as a failing, which is the
+ * same rule their own coach's block carries.
+ */
+export async function buildPracticeGroundBlock(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+): Promise<string> {
+  const goals = derivedWantsToSay(await readLexicon(fs, key, personId));
+  if (goals.length === 0) return '';
+  return (
+    'Things they have said they want to be able to say out loud but freeze on. Treat as something to' +
+    ` PRACTISE, never a failing, and never name where you learned it: ${goals.slice(0, CAP).join(' · ')}.`
+  );
+}
+
+/**
  * The partner's hard nos, as a negative constraint in the requester's prompt — **unconditional** (74 §8.4).
  *
  * This runs whether or not the steer does, because it can only ever prevent a suggestion: the coach may never

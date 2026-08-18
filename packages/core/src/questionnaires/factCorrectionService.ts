@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { classifyParseOutcome, extractJsonObject } from '../ai/jsonSalvage';
 import type { CorrectableProfileField, Question } from '../schemas';
 import { runClaude, type AiDeps } from './aiCall';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
 import { SAFETY } from './aiPrompts';
 import { sanitizeCorrectedQuestion } from './questionCorrection';
 
@@ -107,7 +108,16 @@ export async function resolveFactCorrection(
   ].join('\n\n');
 
   // A whole-question rewrite is a larger reply than the §29 prompt-only one.
-  const call = await runClaude(deps, CORRECTION_SYSTEM, user, 'questionnaire.generate', 2000);
+  // The rewrite REPLACES a question this person then answers, so it can introduce a term the original never
+  // used. `deps.personId` is the objector — the recipient — which is exactly whose limits apply.
+  const suppression = await buildOwnSuppressionBlock(deps.fs, deps.key, deps.personId);
+  const call = await runClaude(
+    deps,
+    [CORRECTION_SYSTEM, suppression].filter(Boolean).join('\n\n'),
+    user,
+    'questionnaire.generate',
+    2000,
+  );
   if (!call.ok) return { ok: false, reason: call.reason, message: call.message };
 
   const parsed = CorrectionSchema.safeParse(extractJsonObject(call.text)).data;

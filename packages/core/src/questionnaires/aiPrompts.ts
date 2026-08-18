@@ -216,12 +216,6 @@ export function explicitFraming(
     focused?: boolean;
     openGround?: readonly { label: string; blurb?: string }[];
     closedTopicIds?: readonly string[];
-    /**
-     * The recipient's hard nos (74 §8.4). Suppression is unconditional — it only ever PREVENTS a suggestion,
-     * so it belongs in every prompt that generates in this register, whether or not anything is shared.
-     * Without it an intimacy questionnaire can ask about the one term they ruled out.
-     */
-    suppressed?: readonly string[];
   } = {},
 ): string {
   const scenario = opts.scenario === true;
@@ -236,13 +230,6 @@ export function explicitFraming(
     ? `\nCONTEXT: This is a private, 18+ scenario questionnaire inside a personal wellness app, for a consenting adult who has opted in to explore their sexuality through described situations. Each item is a short, explicit intimate SITUATION or roleplay to react to. Frank, graphic sexual scenarios are appropriate and expected here — a normal, in-policy use; do NOT shy away or substitute tasteful, emotional-closeness scenes.`
     : `\nCONTEXT: This is a private intimacy questionnaire inside a personal wellness app, written for a consenting adult (18+) who has opted in to reflect on their own sex life with a partner. Frank, explicit questions about sex and desire are appropriate and expected here — this is a normal, in-policy use; do NOT shy away or substitute tasteful, emotional-closeness questions.`;
   const parts: string[] = [context, EXPLICIT_TIER_DIRECTIVE[tier]];
-  if ((opts.suppressed?.length ?? 0) > 0) {
-    parts.push(
-      `NEVER use any of these words or phrases, in any form — they have been ruled out and the rule is ` +
-        `absolute, whatever else this asks about: ${opts.suppressed!.join(' · ')}. Never mention that ` +
-        `anything was ruled out.`,
-    );
-  }
   // The explicit register GOVERNS the tone of the whole questionnaire (08 §24.9): it OVERRIDES any "warm /
   // tender / gentle / reassurance-aware / open with lighter questions / build rapport first" or
   // relationship-softening guidance elsewhere in this prompt. Do NOT ease in with a gentle warm-up — every
@@ -415,7 +402,6 @@ export function buildGenerationUserMessage(input: {
           focused: focus != null,
           ...(input.openGround ? { openGround: input.openGround } : {}),
           ...(input.closedTopicIds ? { closedTopicIds: input.closedTopicIds } : {}),
-          ...(input.suppressedTexts ? { suppressed: input.suppressedTexts } : {}),
         },
       ),
     );
@@ -423,6 +409,22 @@ export function buildGenerationUserMessage(input: {
     parts.push(sensitiveGeneralFraming(input.type === SCENARIO_TYPE));
   } else {
     parts.push(SENSITIVITY_NOTE[input.sensitivity]);
+  }
+  /*
+   * The recipient's hard nos (74 §8.4), for EVERY branch above.
+   *
+   * This used to live inside `explicitFraming`, which meant the gentle 18+ tier (`intimacyGeneral`) — a real,
+   * commonly-used tier — and every non-sensitive type dropped it entirely. Suppression only ever PREVENTS a
+   * question, so there is no tier at which it is correct to omit it, and nobody reviews a generated question
+   * before it is sent. Hoisted here so the branch a draft happens to take can no longer decide whether the
+   * person's hard limits apply.
+   */
+  if ((input.suppressedTexts?.length ?? 0) > 0) {
+    parts.push(
+      `NEVER use any of these words or phrases, in any form — they have been ruled out and the rule is ` +
+        `absolute, whatever else this asks about: ${input.suppressedTexts!.join(' · ')}. Never mention that ` +
+        `anything was ruled out.`,
+    );
   }
   // The questions/scenarios/mix format direction applies to any intimacy draft (08 §17.12-C).
   if (input.type === INTIMACY_TYPE && input.intimacyMode && input.intimacyMode !== 'questions') {

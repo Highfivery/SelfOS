@@ -21,6 +21,8 @@ import {
 } from '../insights';
 import { getPatternStats } from '../dreams';
 import { readEncryptedJson, writeEncryptedJson } from '../vault';
+import { buildOwnSuppressionBlock } from '../tests/adaptive/steer';
+import { profileReadBlock } from '../tests/adaptive/adaptiveService';
 
 /**
  * The cross-feature synthesis pass (40-proactive-coaching §3.3/§3.4) — the ONE extra AI spend this spec
@@ -279,6 +281,12 @@ export async function synthesize(deps: SynthesizeDeps): Promise<CoachingSynthesi
     }
   }
 
+  // The weekly reflection reads every insight the person has, the adaptive-test one included, and writes
+  // prose they read. Suppression is unconditional here as everywhere: it can only prevent.
+  const [suppression, read] = await Promise.all([
+    buildOwnSuppressionBlock(fs, key, personId),
+    profileReadBlock(fs, key, personId),
+  ]);
   const stats = await getPatternStats(fs, key, personId, 'all', now);
   const digest = buildDigest(recent, dreamPatternLine(stats));
   const at = now.toISOString();
@@ -289,7 +297,9 @@ export async function synthesize(deps: SynthesizeDeps): Promise<CoachingSynthesi
       {
         apiKey,
         model,
-        system: [PERSONA, SAFETY, SYNTHESIS_GUIDANCE].join('\n\n'),
+        system: [PERSONA, SAFETY, SYNTHESIS_GUIDANCE, read, suppression]
+          .filter(Boolean)
+          .join('\n\n'),
         messages: [{ role: 'user', content: digest }],
         maxTokens: 600,
         extendedThinking: false, // a bounded structured-JSON call — keep the whole budget for output

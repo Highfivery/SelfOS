@@ -16936,7 +16936,10 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
         await settle();
         await shot(`${file}-asked`);
       }
-      const moment = w.getByRole('button', { name: /^Build-up$/ }).first();
+      // NOT `/^Build-up$/`. A moment button's accessible name is its label PLUS its blurb, so an exact match
+      // never hit it — which is why the scenario phase had never been exercised by any test, offline or live,
+      // and why "the In the moment buttons don't do anything" shipped.
+      const moment = w.getByRole('button', { name: /^Build-up/ }).first();
       if (await moment.isVisible().catch(() => false)) {
         await moment.click();
         await settle();
@@ -16955,7 +16958,15 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
     // WAIT for the report. `done` redirects now (74 §3.6.13), so shooting straight after Finish photographed
     // the blank frame mid-navigation — and the auditor then reported zero findings for an empty page, which
     // is a pass that measured nothing.
-    await expect(w.getByRole('heading', { name: 'Your words' })).toBeVisible();
+    // …and give the synthesis time. It is the longest call in the feature (a 6–8 paragraph analysis), so
+    // against a LIVE model the default 10s assertion times out on a working app — the audit's own bug, which
+    // is exactly the kind that reads as the feature being broken.
+    // `exact` matters: the redesigned hero is "What your words say", which a substring match also hits — so
+    // the un-exact version failed on a report that had rendered perfectly, which reads as the app being
+    // broken when it is the assertion that is.
+    await expect(w.getByRole('heading', { name: 'Your words', exact: true })).toBeVisible({
+      timeout: 180_000,
+    });
     await shot('13-step8-profile');
     await noMachineIds('the profile');
 

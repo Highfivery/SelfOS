@@ -163,6 +163,24 @@ function fakeTruncation(
  * "captured prompt" assert (restricted-absence, register-absence, contract order, deflection phrase). Writes a
  * per-turn numbered file + a stable `-latest.txt`. Best-effort; never throws into the turn.
  */
+let promptSeq = 0;
+
+/** Any prompt at all, numbered in order, for an audit that needs to read what a phase really sends. */
+function capturePrompt(system: string, user: string): void {
+  const dir = process.env['SELFOS_FAKE_PROMPT_DIR'];
+  if (!dir) return;
+  try {
+    mkdirSync(dir, { recursive: true });
+    promptSeq += 1;
+    writeFileSync(
+      join(dir, `prompt-${String(promptSeq).padStart(2, '0')}.txt`),
+      `SYSTEM:\n${system}\n\nUSER:\n${user}\n`,
+    );
+  } catch {
+    // Capture is a test aid — never let it break the turn.
+  }
+}
+
 function captureTogetherPrompt(system: string, transcript: string): void {
   const dir = process.env['SELFOS_FAKE_PROMPT_DIR'];
   if (!dir) return;
@@ -290,6 +308,10 @@ export function fakeClaudeClient(): ClaudeClient {
       const userText = options.messages
         .map((message) => flattenContent(message.content))
         .join('\n');
+      // Every prompt, numbered, whenever the capture dir is set. The per-feature captures below predate this
+      // and stay; this one exists so an audit can read what ANY phase actually sends without first threading a
+      // bespoke hook through it — the assert-the-prompt rule, made cheap.
+      capturePrompt(options.system ?? '', userText);
 
       // Compatibility variant personalization (08 §3.6/§17.12/§17.14e) asks for a JSON array of objects
       // { prompt, options } — one per question, prompt + options both personalized. Echo each prompt tagged

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { EroticLexicon, LexiconEntry } from '../../schemas';
 import { DIRTY_TALK } from './instruments/dirtyTalk';
 
 import type { ClaudeClient } from '../../host';
@@ -264,5 +265,52 @@ describe('74 §3.6.6 — an unasked side is never read as a refusal', () => {
       ],
     };
     expect(openAmbiguities(lex).map((a) => a.id)).toContain('frozen');
+  });
+});
+
+describe('§3.6.11 — an unanswered side is not a rated zero', () => {
+  /** A pet name marked one way and left blank the other. Every name row offers BOTH directions. */
+  const name = (over: Partial<LexiconEntry> = {}): LexiconEntry => ({
+    key: 'names-praise:good-girl',
+    text: 'good girl',
+    kind: 'word',
+    family: 'names-praise',
+    tier: 2,
+    hear: 4,
+    say: 0,
+    hearState: 'love',
+    sides: ['hear', 'say'],
+    source: 'test:r1',
+    ...over,
+  });
+  const lexicon = (entries: LexiconEntry[]): EroticLexicon => ({
+    schemaVersion: 1,
+    personId: 'p1',
+    entries,
+    registers: {},
+    contexts: {},
+    themes: [],
+    wantsToSay: [],
+    boundaries: [],
+    updatedAt: 'now',
+  });
+
+  it('does not invent a hear/say GAP from a side they never answered', () => {
+    // The reported prompt, verbatim from a capture: "They love hearing 'good girl' but rated it 0 to say" —
+    // they rated nothing. `sides` says both were OFFERED, which is true of every name row, so the old
+    // asked-based guard could never catch this.
+    const open = openAmbiguities(lexicon([name()]));
+    expect(open.map((a) => a.id)).not.toContain('frozen');
+    expect(open.map((a) => a.id)).not.toContain('cringe');
+    expect(lexiconDigest(lexicon([name()]))).not.toMatch(/low on saying/i);
+  });
+
+  it('still finds the gap when they DID answer both ways', () => {
+    // A real "I love hearing it and I can't say it" — answered on both sides, and the most coachable signal
+    // in the take. The fix must not silence it.
+    const answered = name({ sayState: 'never', say: 0 });
+    const open = openAmbiguities(lexicon([answered]));
+    expect(open.map((a) => a.id)).toContain('frozen');
+    expect(lexiconDigest(lexicon([answered]))).toMatch(/low on saying/i);
   });
 });

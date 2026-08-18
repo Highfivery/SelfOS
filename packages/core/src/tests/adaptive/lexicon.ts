@@ -105,6 +105,35 @@ export function saySideAsked(entry: LexiconEntry): boolean {
 }
 
 /**
+ * 74 §3.6.11 — did they actually ANSWER this side, as opposed to being offered it?
+ *
+ * For a deck entry the two are the same: a both-sides row rated in the split has a real 0. For a PET NAME they
+ * are not. Every name row offers both directions, so `sides` is trivially satisfied — but marking one side and
+ * leaving the other blank is not a rating of zero, and reading it as one put a false statement in front of the
+ * person ("you love hearing 'good girl' but rated it 0 to say" — they rated nothing) and fed the same invented
+ * gap to `wantsToSay`, the probe and the lines phase.
+ *
+ * A name is recognised by carrying per-direction marks at all; `hear`/`say` are derived from them.
+ */
+function directionAnswered(entry: LexiconEntry, side: 'hear' | 'say'): boolean {
+  const perDirection = entry.hearState !== undefined || entry.sayState !== undefined;
+  if (perDirection) return (side === 'hear' ? entry.hearState : entry.sayState) !== undefined;
+  return side === 'hear'
+    ? entry.sides === undefined || entry.sides.includes('hear')
+    : saySideAsked(entry);
+}
+
+/** Was saying it actually answered? Use wherever a low/zero `say` is read as a signal. */
+export function saySideAnswered(entry: LexiconEntry): boolean {
+  return directionAnswered(entry, 'say');
+}
+
+/** Were BOTH directions actually answered? The gap between them is only real when they were. */
+export function bothSidesAnswered(entry: LexiconEntry): boolean {
+  return directionAnswered(entry, 'hear') && directionAnswered(entry, 'say');
+}
+
+/**
  * Apply pass-1 marks onto a lexicon (pure). An entry marked `love` is seeded at {@link LOVE_SEED} in BOTH
  * directions and refined in pass 2; `never`/`notYet` set the state and zero the ratings, and a `never`
  * additionally records a global {@link LexiconBoundary}.
@@ -628,7 +657,7 @@ export function okayEntries(lexicon: EroticLexicon): LexiconEntry[] {
 export function derivedWantsToSay(lexicon: EroticLexicon): string[] {
   const gap = lexicon.entries
     .filter((entry) => entry.state !== 'never')
-    .filter((entry) => bothSidesAsked(entry) && entry.hear >= 3 && entry.say <= 1)
+    .filter((entry) => bothSidesAnswered(entry) && entry.hear >= 3 && entry.say <= 1)
     .map((entry) => entry.text);
   // Belt and braces on top of the mark guard: a goal is something to PRACTISE, so a suppressed text can
   // never appear here — it would read as encouragement to say the one thing they ruled out.

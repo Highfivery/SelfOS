@@ -1268,7 +1268,15 @@ export function AdaptiveTake(): JSX.Element {
                 ) : null}
                 {store.lines.length === 0 && !store.busy && askedFor.lines ? (
                   <Stack gap={3}>
-                    <AiUnavailableNotice />
+                    {/* The phase's OWN account of what happened. It used to fall through to the generic
+                        "AI isn't set up yet — set up Claude in Settings", which is a lie whenever a key is
+                        present and the call simply failed, and sends the person to fix something that isn't
+                        broken (74 §3.6.12). */}
+                    {store.linesMessage ? (
+                      <Banner tone="warning">{store.linesMessage}</Banner>
+                    ) : (
+                      <AiUnavailableNotice />
+                    )}
                     <div>
                       <Button
                         variant="secondary"

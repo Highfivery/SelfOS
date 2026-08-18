@@ -487,6 +487,31 @@ async function auditScreen(w: Page, where: string): Promise<string[]> {
             add(`spills past its parent: ${name(el)}`);
         }
       }
+      // --- reads-as-broken, rather than measures-wrong ---------------------------------------------------
+      // A heading with nothing under it. This is the class that produced "Love to hear" over empty space and
+      // a "What you call them" column with no chips: it says "we have nothing" in the voice of "here is your
+      // answer", and every geometry check passes while it does.
+      if (/^H[1-4]$/.test(el.tagName)) {
+        const section = el.parentElement;
+        if (section) {
+          const after = Array.from(section.children).filter(
+            (c) =>
+              c !== el &&
+              vis(c) &&
+              ((c.textContent ?? '').trim() || c.querySelector('input,button')),
+          );
+          if (after.length === 0 && section.children.length > 1)
+            add(`heading with nothing under it: ${name(el)}`);
+        }
+      }
+      // A card whose whole content is one line and nothing to do — a bordered box that looks like it should
+      // hold something.
+      if (parseFloat(cs.borderTopWidth) > 0 && r.height > 60 && r.width > 200) {
+        const text = (el.textContent ?? '').trim();
+        if (text.length > 0 && text.length < 3 && !el.querySelector('button,input,img,svg')) {
+          add(`card with almost nothing in it: ${name(el)}`);
+        }
+      }
       if (el.tagName === 'BUTTON') {
         // Tap target (§12) — 44px, except a deliberately small inline text link.
         const inlineLink = cs.background === 'none' || cs.backgroundColor === 'rgba(0, 0, 0, 0)';
@@ -510,6 +535,21 @@ async function auditScreen(w: Page, where: string): Promise<string[]> {
           const lh = parseFloat(cs.lineHeight);
           if (Number.isFinite(lh) && lh > r.height) add(`glyph sits low in its badge: ${name(el)}`);
         }
+      }
+    }
+    // The screen-level version of the same question, and the one no box measurement answers: is there
+    // anything to DO here? A "mostly blank" step is not low density — the main column simply shrinks to a
+    // heading, a sentence and a banner (117-280px in a 900px window, where the deck is 3,687px). What
+    // separates that from a legitimately spare screen is whether it offers an action: the lines step is short
+    // too, but it has "Write them for me". A short column with no control in it is the reported defect.
+    const main = document.querySelector('[class*="stepMain"]');
+    if (main) {
+      const mr = main.getBoundingClientRect();
+      const canDo = main.querySelector('button, a, input, textarea, select');
+      if (mr.height < window.innerHeight * 0.45 && !canDo) {
+        add(
+          `nothing to do on this screen — ${Math.round(mr.height)}px of content in a ${window.innerHeight}px window, and no control in it`,
+        );
       }
     }
     return out;

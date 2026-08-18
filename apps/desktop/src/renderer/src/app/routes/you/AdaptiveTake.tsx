@@ -1423,10 +1423,33 @@ export function AdaptiveTake(): JSX.Element {
                   /* Asked, and it had nothing left — which is a real outcome, not a failure. It used to
                      return the same `done` whether it had exhausted the ambiguities or had nothing to work
                      from at all, so the screen flashed past either way and never said which. */
-                  <Banner tone="info">
-                    Nothing left it can&rsquo;t work out from what you marked. That&rsquo;s this
-                    step finished.
-                  </Banner>
+                  <Card className={adaptive.probeCard}>
+                    {/* Finished is a real outcome, but a screen that only ANNOUNCES one is a dead end — this
+                        had 117px of content and not a single control on it. */}
+                    <Text>
+                      <b>Nothing left it can&rsquo;t work out.</b> Everything you marked was clear
+                      enough that it has no question to ask — that&rsquo;s this step finished.
+                    </Text>
+                    <Text size="sm" tone="secondary">
+                      Mark more and it may find something new to ask; otherwise carry on.
+                    </Text>
+                    <div className={adaptive.askRow}>
+                      <Button
+                        variant="primary"
+                        disabled={store.busy}
+                        onClick={() =>
+                          upNext ? goTo(upNext.step.id) : void store.synthesize(testId)
+                        }
+                      >
+                        {upNext
+                          ? `Next: ${upNext.step.label.toLowerCase()} →`
+                          : 'Show me my profile →'}
+                      </Button>
+                      <Button variant="ghost" onClick={() => goTo('bank')}>
+                        Back to the words
+                      </Button>
+                    </div>
+                  </Card>
                 ) : (
                   <>
                     <Text tone="secondary">

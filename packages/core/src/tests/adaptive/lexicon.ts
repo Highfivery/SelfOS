@@ -573,6 +573,118 @@ function contentStems(text: string): string[] {
 }
 
 /**
+ * Pet names that are also **everyday words** (74 §8.4).
+ *
+ * Ruling one of these out means "don't call me that" — it cannot mean "never use this word", or ruling out
+ * being called `love` suppresses every line containing the word love. Dozens of the name bank's entries are
+ * ordinary English, so someone who rules out most of the bank was suppressing so much of the language that
+ * the lines phase filtered out everything it generated and the synthesis discarded whole narratives — all of
+ * which reached them as "nothing usable came back".
+ *
+ * The criterion is narrow on purpose: the word has a common non-address meaning in the kind of prose this
+ * app writes. It is a RELAXATION, so anything not on it — `whore`, `slut`, `cumdump`, `sissy` — keeps the
+ * plain substring match and is off wherever it appears. Multi-word names ("good girl") are never on it
+ * either: they have no innocent use, so there is nothing to disambiguate.
+ */
+const EVERYDAY_WORDS: ReadonlySet<string> = new Set([
+  // verbs + adjectives, the class that breaks prose outright
+  'love',
+  'beautiful',
+  'gorgeous',
+  'lovely',
+  'precious',
+  'sweet',
+  'sweets',
+  'sweetest',
+  'dear',
+  'dearest',
+  'silly',
+  'useless',
+  'pathetic',
+  'worthless',
+  // everyday nouns of affection
+  'baby',
+  'babe',
+  'honey',
+  'sugar',
+  'angel',
+  'treasure',
+  'star',
+  'starlight',
+  'sunshine',
+  'flower',
+  'rose',
+  'peach',
+  'cookie',
+  'muffin',
+  'gem',
+  'jewel',
+  'doll',
+  'mine',
+  'trouble',
+  // people, roles + relations
+  'girl',
+  'boy',
+  'king',
+  'queen',
+  'boss',
+  'master',
+  'owner',
+  'hero',
+  'champion',
+  'champ',
+  'winner',
+  'doctor',
+  'nurse',
+  'teacher',
+  'professor',
+  'coach',
+  'officer',
+  'stranger',
+  'sister',
+  'brother',
+  'cousin',
+  'twin',
+  'uncle',
+  'auntie',
+  'wife',
+  'husband',
+  // animals
+  'cat',
+  'dog',
+  'mouse',
+  'bunny',
+  'rabbit',
+  'pup',
+  'puppy',
+  'kitten',
+  'cow',
+  'pony',
+  'tiger',
+  'wolf',
+  'bear',
+  'lion',
+  'goose',
+  'monkey',
+  'dove',
+  'lamb',
+  'pet',
+  'animal',
+  'beast',
+  'monster',
+  // the discard register, where the words are ordinary nouns
+  'trash',
+  'garbage',
+  'bug',
+  'worm',
+  'insect',
+  'failure',
+  'loser',
+  'reject',
+  'nobody',
+]);
+
+/**
  * Whether a candidate line touches a boundary. Two different checks, because the two kinds of boundary are
  * different things:
  *
@@ -592,12 +704,48 @@ export function violatesBoundary(
 ): boolean {
   const text = candidate.toLowerCase();
   const stems = new Set(contentStems(candidate));
+  // Which banned terms are pet names that are ALSO everyday words. Derived from the bank at match time
+  // rather than stored on the boundary, so it applies to every record already written — a name ruled out
+  // before this existed needs no migration to stop over-matching.
+  const vocatives = new Set(
+    lexicon.entries
+      .filter(
+        (entry) =>
+          entry.family.startsWith('names-') && EVERYDAY_WORDS.has(entry.text.trim().toLowerCase()),
+      )
+      .map((entry) => entry.text.trim().toLowerCase()),
+  );
   const literal = suppressedTexts(lexicon, direction).some((banned) => {
     const needle = banned.trim().toLowerCase();
     if (needle === '') return false;
-    // Word-boundaried, or a short banned word suppresses every line containing it ("ass" → "pass", "class").
     const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(text);
+    /*
+     * A single-word PET NAME is only a boundary when it is used to ADDRESS them.
+     *
+     * Ruling out being called "love" must not suppress every line containing the word love — and dozens of
+     * the bank's names are ordinary words (love · baby · beautiful · angel · treasure · honey · sweet).
+     * Someone who rules out most of the name bank was, before this, suppressing so much ordinary English
+     * that the lines phase filtered out everything it generated and the synthesis discarded whole narratives
+     * for containing the word "love". The feature reported that as "nothing usable came back".
+     *
+     * A MULTI-WORD name ("good girl") keeps the plain substring match: it has no innocent use, so there is
+     * nothing to disambiguate and nothing is loosened.
+     */
+    if (!vocatives.has(needle)) {
+      // Word-boundaried, or a short banned word suppresses every line containing it ("ass" → "pass", "class").
+      return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i').test(text);
+    }
+    // Address: comma-adjacent ("come here, love" / "love, come here"), possessive or exclamatory ("my love",
+    // "oh love"), the bare word on its own, or stated as what they ARE ("you're my love").
+    return [
+      // Opens the line, or follows a comma: "love, come here" · "come here, love".
+      new RegExp(`(^|[,;]\\s*)${escaped}([^a-z0-9]|$)`, 'i'),
+      // Carries a vocative comma: "that's it baby, just like that". A full stop is NOT enough — "you look
+      // beautiful." is a compliment, not a name, and that is exactly the false positive being removed.
+      new RegExp(`(^|[^a-z0-9])${escaped}\\s*,`, 'i'),
+      // Named as theirs, or as what they are: "my love" · "you're my baby" · "such a doll".
+      new RegExp(`\\b(my|oh|hey|you're|youre|such an?|a|an)\\s+${escaped}([^a-z0-9]|$)`, 'i'),
+    ].some((re) => re.test(text));
   });
   if (literal) return true;
   return lexicon.boundaries.some((boundary) => {

@@ -171,6 +171,8 @@ export function AdaptiveReport(): JSX.Element {
   const loaded = useAdaptiveTestStore((s) => s.loaded);
   const load = useAdaptiveTestStore((s) => s.load);
   const editLexicon = useAdaptiveTestStore((s) => s.editLexicon);
+  const synthesize = useAdaptiveTestStore((s) => s.synthesize);
+  const busy = useAdaptiveTestStore((s) => s.busy);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const onDelete = async (): Promise<void> => {
     const next = await window.selfos?.testsAdaptiveDeleteAll({ testId });
@@ -380,8 +382,24 @@ export function AdaptiveReport(): JSX.Element {
 
               {!latest.narrative ? (
                 <Banner tone="info">
-                  The written read didn&rsquo;t come through this time — everything below is from
-                  your own answers, and it&rsquo;s all still yours.
+                  <Stack gap={2}>
+                    <span>
+                      The written read didn&rsquo;t come through this time — everything below is
+                      from your own answers, and it&rsquo;s all still yours.
+                    </span>
+                    {/* It used to say this and stop, which left the one part that needs a model with no way
+                        to try again short of retaking the whole thing. Re-running is idempotent — the take
+                        keeps its insight id — so this is safe to offer. */}
+                    <span>
+                      <Button
+                        variant="secondary"
+                        disabled={busy}
+                        onClick={() => void synthesize(testId, latest.id)}
+                      >
+                        {busy ? 'Writing…' : 'Try the written read again'}
+                      </Button>
+                    </span>
+                  </Stack>
                 </Banner>
               ) : null}
 

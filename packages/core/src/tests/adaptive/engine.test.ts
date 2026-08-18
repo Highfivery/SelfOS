@@ -366,3 +366,38 @@ describe('§3.6.11 — an unanswered side is not a rated zero', () => {
     expect(lexiconDigest(lexicon([answered]))).toMatch(/low on saying/i);
   });
 });
+
+describe('a heavy no-marker still gets lines (74 §8.4)', () => {
+  it('does not filter out everything the model writes', async () => {
+    const { DIRTY_TALK } = await import('./instruments/dirtyTalk');
+    const { applyBankMarks, emptyLexicon } = await import('./lexicon');
+    const now = new Date('2026-08-18T00:00:00.000Z');
+
+    // The reported state: went through the pet-name pass and ruled out most of it. Dozens of those names are
+    // ordinary English (love · baby · beautiful · angel · treasure), so before the vocative rule the filter
+    // killed most of what the model wrote — and a whole round landing on the floor was reported to them as
+    // "Nothing usable came back this time".
+    const names = DIRTY_TALK.bank.entries
+      .filter((e) => e.family.startsWith('names-'))
+      .slice(0, 130);
+    const marks = Object.fromEntries(names.map((e) => [e.key, 'never' as const]));
+    const lexicon = applyBankMarks(emptyLexicon('p1', now), DIRTY_TALK.bank, marks, 'take:1', now);
+
+    const written = [
+      'I love the sound you make',
+      'you look beautiful like that',
+      'stay just like that',
+      'I have wanted this all day',
+      'you take it so well',
+      'come here, love', // a real vocative — this one SHOULD be dropped
+    ];
+    const { client } = fakeClient([JSON.stringify({ lines: written })]);
+    const out = await runLinesPhase(deps(client), lexicon, 1);
+
+    expect(out.ok).toBe(true);
+    expect(out.value).toContain('I love the sound you make');
+    expect(out.value).toContain('you look beautiful like that');
+    // The boundary still holds where it means something: being CALLED love is off.
+    expect(out.value).not.toContain('come here, love');
+  });
+});

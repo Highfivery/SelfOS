@@ -902,8 +902,8 @@
     padding-right: var(--space-2);
   }
 
-  .railActions > .railBack > span,
-  .railActions > .railDone > span {
+  .railActions > .railBack .tail,
+  .railActions > .railDone .tail {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -2176,4 +2176,11 @@
   border-radius: var(--radius-md);
   background: var(--color-danger-subtle-bg);
   color: var(--color-danger);
+}
+
+/* The hideable tail of a rail button's label. It lives inside ONE span with the rest of the label, because
+   `Button` is a flex container with a gap: two children (a text node and a span) get the gap AND the JSX
+   space between them, which read as an odd double gap mid-word. */
+.tail {
+  font-weight: inherit;
 }

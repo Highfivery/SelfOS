@@ -16310,6 +16310,9 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
           .catch(() => false);
         if (found) return;
         await w.getByRole('button', { name: /Next area/ }).click();
+        // Past the first area there is a way BACK to the previous one — reported missing, so asserted rather
+        // than assumed. It is hidden on area 1 because there is nothing behind it.
+        await expect(w.getByRole('button', { name: /Previous area/i })).toBeVisible();
       }
       throw new Error(`never reached ${heading}`);
     };
@@ -16631,7 +16634,9 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     // both "Next: your profile" and "Finish", which would be one action wearing two labels.
     await expect(w.getByRole('button', { name: /Finish — show me my profile/i })).toHaveCount(0);
     await w.getByRole('button', { name: /Next: your profile/i }).click();
-    await w.getByRole('button', { name: 'Read it' }).click();
+    // `done` is not a screen (74 §3.6.13): it used to render a banner and a button whose only job was to
+    // leave, so finishing now lands straight on the report.
+    await expect(w.getByRole('button', { name: 'Read it' })).toHaveCount(0);
 
     // The report renders from the deterministic scores, honestly labelled as the short version.
     await expect(w.getByText(/didn.t come through this time/i)).toBeVisible();
@@ -16944,7 +16949,9 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
       .getByRole('button', { name: /Finish — show me my profile|Next: your profile/i })
       .first()
       .click();
-    await w.getByRole('button', { name: 'Read it' }).click();
+    // `done` is not a screen (74 §3.6.13): it used to render a banner and a button whose only job was to
+    // leave, so finishing now lands straight on the report.
+    await expect(w.getByRole('button', { name: 'Read it' })).toHaveCount(0);
     await shot('13-step8-profile');
     await noMachineIds('the profile');
 

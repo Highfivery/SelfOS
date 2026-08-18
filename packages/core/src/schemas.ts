@@ -1378,6 +1378,8 @@ export interface AdaptiveProbeView {
   /** Nothing left ambiguous — the probes are finished. */
   done: boolean;
   degraded: boolean;
+  /** Why it couldn't ask, when it couldn't. `done` is the SUCCESS state and must not stand in for this. */
+  message?: string;
 }
 
 export interface AdaptiveScenarioView {
@@ -1386,6 +1388,8 @@ export interface AdaptiveScenarioView {
   scene?: string;
   options?: string[];
   degraded: boolean;
+  /** Why no scene came back. Without it a failed tap is indistinguishable from a button that does nothing. */
+  message?: string;
 }
 
 /** The edits a person may make to their own lexicon (74 §3.4). */

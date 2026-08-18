@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowRight, Ban, Clock, Contrast, Flame, ListChecks, Lock } from 'lucide-react';
 
 /**
@@ -1195,8 +1195,12 @@ export function AdaptiveTake(): JSX.Element {
                           disabled={store.busy}
                           onClick={() => goToArea(areaIndex - 1)}
                         >
-                          {/* The label is hidden (not dropped) in the narrow action bar — see `.railBack`. */}
-                          ←<span> Previous</span>
+                          {/* ONE flex child. `Button` is a flex container with a gap, so a bare text node
+                              beside a span got the gap AND the JSX space — which is the odd double gap.
+                              The label is hidden, not dropped, in the narrow bar (see `.railBack`). */}
+                          <span>
+                            ←<span className={adaptive.tail}> Previous area</span>
+                          </span>
                         </Button>
                       ) : null}
                       {/* A partial pass is designed to be worth something, so finishing must never require
@@ -1207,9 +1211,10 @@ export function AdaptiveTake(): JSX.Element {
                         disabled={store.busy}
                         onClick={() => void store.submitBank(testId)}
                       >
-                        {/* The tail is hidden, not dropped, in the narrow action bar — see `.railDone`. */}
-                        Done
-                        <span>with the words for now</span>
+                        {/* One flex child — see the Previous button above for why. */}
+                        <span>
+                          Done<span className={adaptive.tail}> with the words for now</span>
+                        </span>
                       </Button>
                       {/* Three verbs on every step (74 §3.6.9). "Done for now" is not a skip — it closes the
                           pass and stamps it; passing over the words entirely is a different thing. */}
@@ -1380,6 +1385,25 @@ export function AdaptiveTake(): JSX.Element {
                       </div>
                     </Card>
                   </>
+                ) : store.probeMessage ? (
+                  /* It FAILED. This used to be folded into `probeDone` below, so a failed call was reported
+                     in the words of a success — "everything you marked was clear enough that it has no
+                     question to ask" — and the only honest reading of the screen was that the step worked. */
+                  <Card className={adaptive.probeCard}>
+                    <Banner tone="warning">{store.probeMessage}</Banner>
+                    <div className={adaptive.askRow}>
+                      <Button
+                        variant="secondary"
+                        disabled={store.busy}
+                        onClick={() => void store.nextProbe(testId)}
+                      >
+                        Try again
+                      </Button>
+                      <Button variant="ghost" onClick={() => goTo('bank')}>
+                        Back to the words
+                      </Button>
+                    </div>
+                  </Card>
                 ) : store.probeDone ? (
                   /* Asked, and it had nothing left — which is a real outcome, not a failure. It used to
                      return the same `done` whether it had exhausted the ambiguities or had nothing to work
@@ -1479,6 +1503,12 @@ export function AdaptiveTake(): JSX.Element {
                       and it writes one short scene from your own register, with a few ways it could
                       go.
                     </Text>
+                    {/* A moment that produced nothing used to clear `busy` and set no scene — so the tap
+                        showed a thinking state and then returned to this same grid, silently. It read as a
+                        button that does nothing at all. */}
+                    {store.scenarioMessage ? (
+                      <Banner tone="warning">{store.scenarioMessage}</Banner>
+                    ) : null}
                     <div className={adaptive.momentGrid}>
                       {CONTEXTS.map((context) => {
                         const answered = (store.state?.draft?.turns ?? []).some(
@@ -1511,16 +1541,12 @@ export function AdaptiveTake(): JSX.Element {
             </div>
           ) : null}
 
-          {phase === 'done' ? (
-            <Stack gap={4}>
-              <Banner tone="info">Your profile is ready.</Banner>
-              <div>
-                <Button variant="primary" onClick={() => navigate(`/tests/${testId}`)}>
-                  Read it
-                </Button>
-              </div>
-            </Stack>
-          ) : null}
+          {/*
+           * `done` is not a screen. It used to render a banner saying the profile was ready and a button to
+           * go and read it — an entire screen whose only content was an instruction to leave it. The
+           * synthesis has already finished by the time this renders, so this goes straight to the report.
+           */}
+          {phase === 'done' ? <Navigate to={`/tests/${testId}`} replace /> : null}
 
           {/*
            * ONE footer for every phase, not one per phase. It used to be rendered inside the intro, address

@@ -238,7 +238,11 @@ interface AdaptiveTestState {
   probeAnswer: string;
   /** The probe has nothing left to ask — a real outcome, shown as one, not a silent hop to the next phase. */
   probeDone: boolean;
+  /** Why the probe couldn't ask — kept apart from `probeDone`, which is the SUCCESS state. */
+  probeMessage: string | null;
   scenario: { context: string; scene: string; options: string[] } | null;
+  /** Why a moment produced no scene. Without it the tap read as doing nothing at all. */
+  scenarioMessage: string | null;
   /**
    * 74 §3.6.9 — how many marks were already on record when this sitting opened, per marking step.
    *
@@ -292,7 +296,7 @@ interface AdaptiveTestState {
   skipProbe(testId: string): Promise<void>;
   loadScenario(testId: string, context: string): Promise<void>;
   answerScenario(testId: string, option: string): Promise<void>;
-  synthesize(testId: string): Promise<void>;
+  synthesize(testId: string, resultId?: string): Promise<void>;
   abandon(testId: string): Promise<void>;
   editLexicon(edit: AdaptiveLexiconEdit): Promise<void>;
   setPhase(phase: TakePhase): void;
@@ -331,7 +335,9 @@ const EMPTY = {
   probeAmbiguityId: null,
   probeAnswer: '',
   probeDone: false,
+  probeMessage: null,
   scenario: null,
+  scenarioMessage: null,
   skipped: [] as string[],
   seeded: { names: 0, bank: 0 },
 };
@@ -723,10 +729,16 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         probeAnswer: '',
         busy: false,
         progress: null,
-        // "Nothing left to ask" is an OUTCOME, not a reason to relocate them. It used to jump to the scenario,
-        // which made it indistinguishable from the step never having run — and the bridge returns the same
-        // `done` whether it exhausted the ambiguities or had nothing to work from at all.
-        probeDone: out.done || out.degraded,
+        // "Nothing left to ask" is an OUTCOME, not a reason to relocate them. It used to jump to the
+        // scenario, which made it indistinguishable from the step never having run.
+        //
+        // A DEGRADED pass is NOT that outcome, and folding it in here reported a failure in the words of a
+        // success: "everything you marked was clear enough that it has no question to ask — that's this step
+        // finished." The bridge returns the same `done` either way, so the two are separated here.
+        probeDone: out.done && !out.degraded,
+        probeMessage: out.degraded
+          ? (out.message ?? 'That didn’t come through — try again.')
+          : null,
       });
     },
 
@@ -770,13 +782,17 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       const fallback: AdaptiveScenarioView = { ok: false, context, degraded: true };
       const out = await (window.selfos?.testsAdaptiveScenario({ testId, resultId, context }) ??
         Promise.resolve(fallback));
+      const scene = out.scene && out.options ? out : null;
       set({
-        scenario:
-          out.scene && out.options
-            ? { context: out.context, scene: out.scene, options: out.options }
-            : null,
+        scenario: scene
+          ? { context: scene.context, scene: scene.scene!, options: scene.options! }
+          : null,
         busy: false,
         progress: null,
+        // A moment that produced nothing used to set `scenario: null` and clear `busy` — so the tap showed a
+        // thinking state and then returned to the same grid with no scene, no error, and nothing to react
+        // to. It read as a button that does nothing.
+        scenarioMessage: scene ? null : (out.message ?? 'That didn’t come through — try again.'),
       });
     },
 
@@ -792,11 +808,14 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         text: scenario.scene,
         answer: option,
       });
-      set({ scenario: null });
+      set({ scenario: null, scenarioMessage: null });
     },
 
-    synthesize: async (testId) => {
-      const resultId = get().state?.draft?.id;
+    synthesize: async (testId, resultIdOverride) => {
+      // The override re-runs the read for a take that is already COMPLETE. A synthesis that produced nothing
+      // used to leave the report saying so with no way to try again — the honest message, and a dead end.
+      // `completeAdaptiveTake` is idempotent (it reuses the insight id), so re-running is safe.
+      const resultId = resultIdOverride ?? get().state?.draft?.id;
       if (!resultId) return;
       // Flush FIRST. Every other closing call does (`submitBank`, `submitSplit`, `finishNames`), and this one
       // did not — which was survivable while finishing meant walking through them, and became a data-loss bug

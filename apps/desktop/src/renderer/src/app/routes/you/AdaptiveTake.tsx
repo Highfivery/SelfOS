@@ -324,6 +324,12 @@ export function AdaptiveTake(): JSX.Element {
    * arrival-fires-the-call made impossible to tell apart.
    */
   const [askedFor, setAskedFor] = useState<{ lines: boolean }>({ lines: false });
+  /**
+   * 74 §3.6.10 — whether the retake choice has been made in this sitting. A retake is any take opened when a
+   * finished profile already exists: it silently loaded every previous answer, and the only route to a clean
+   * run was a destructive button at the bottom of a screen nobody scrolls to.
+   */
+  const [retakeChoice, setRetakeChoice] = useState(false);
   useEffect(() => {
     if (practice !== 'unknown' || store.phase !== 'bank' || !bank) return;
     setPractice(Object.keys(store.marks).length === 0 ? 'needed' : 'done');
@@ -637,7 +643,23 @@ export function AdaptiveTake(): JSX.Element {
               }}
               onAbandon={
                 store.state.draft
-                  ? () => void store.abandon(testId).then(() => setPractice('unknown'))
+                  ? () =>
+                      void store.abandon(testId).then(() => {
+                        setPractice('unknown');
+                        return store.start(testId);
+                      })
+                  : null
+              }
+              retake={
+                !retakeChoice && store.state.latest
+                  ? {
+                      onKeep: () => setRetakeChoice(true),
+                      onFresh: () => {
+                        setRetakeChoice(true);
+                        setPractice('unknown');
+                        void store.abandon(testId).then(() => store.start(testId));
+                      },
+                    }
                   : null
               }
             />

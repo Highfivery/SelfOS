@@ -16780,6 +16780,22 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
     await shot('13-step8-profile');
     await noMachineIds('the profile');
 
+    // 74 §3.6.10 — the retake asks FIRST, before the steps: keep what is on record, or start from an empty
+    // sheet. Owner-directed, because tapping Retake used to silently reload every previous answer.
+    await w.getByRole('link', { name: 'Tests' }).click();
+    await w
+      .getByRole('button', { name: /Retake|Take it again|Start/ })
+      .first()
+      .click();
+    await w.getByRole('button', { name: /Pick up where you left off|Begin/ }).click();
+    await expect(w.getByRole('heading', { name: /Taking it again/i })).toBeVisible();
+    await expect(w.getByRole('list', { name: 'Every step' })).toHaveCount(0);
+    await expect(w.getByText(/every hard no/i)).toBeVisible();
+    await shot('17-retake-choice');
+    // Keeping is one tap and clears nothing.
+    await w.getByRole('button', { name: /Keep and edit/i }).click();
+    await expect(w.getByRole('list', { name: 'Every step' })).toBeVisible();
+
     // …and at phone width, where the frame stacks. The nav is a hidden drawer below 768px, so navigate at
     // desktop width and resize to measure (the standing §12 lesson).
     await w.setViewportSize({ width: 390, height: 900 });
@@ -16793,6 +16809,11 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
       .first()
       .click();
     await w.getByRole('button', { name: /Pick up where you left off|Begin/ }).click();
+    // Entering a retake asks again — the choice is per entry, not once ever.
+    await w
+      .getByRole('button', { name: /Keep and edit/i })
+      .click()
+      .catch(() => undefined);
     await w.setViewportSize({ width: 390, height: 900 });
     await shot('15-390-map');
     await expectNoInnerOverflow(w);

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Check, Minus, Sparkles } from 'lucide-react';
 import { Button, Card, Heading, Text } from '../../../design-system/components';
 import type { StepId, StepStatus } from './takeSteps';
@@ -18,6 +19,7 @@ export function TakeMap({
   onStart,
   onAbandon,
   busy,
+  retake,
 }: {
   statuses: readonly StepStatus[];
   /** A take with work already in it — the copy leads with picking up rather than beginning. */
@@ -26,12 +28,21 @@ export function TakeMap({
   onStart: () => void;
   onAbandon: (() => void) | null;
   busy: boolean;
+  /**
+   * 74 §3.6.10 — a RETAKE (a finished profile already exists) asks first, before anything else: keep what is
+   * on record and edit it, or start from an empty sheet. Owner-directed. Without it, tapping Retake silently
+   * loaded every previous answer and the only way to a clean run was a destructive button at the bottom of a
+   * screen nobody scrolls to.
+   */
+  retake: { onKeep: () => void; onFresh: () => void } | null;
 }): JSX.Element {
   const nextUp =
     statuses.find((status) => status.state === 'now') ??
     statuses.find((status) => status.state === 'open') ??
     statuses[0];
   const marked = statuses.reduce((sum, status) => sum + status.count, 0);
+
+  if (retake) return <RetakeChoice marked={marked} busy={busy} {...retake} />;
 
   return (
     <div className={adaptive.mapWrap}>
@@ -120,6 +131,72 @@ export function TakeMap({
           </Button>
         </Card>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The first thing a retake shows. Two real options, each saying what it does to what is on record — the
+ * destructive one is never the default and never one tap.
+ */
+function RetakeChoice({
+  marked,
+  busy,
+  onKeep,
+  onFresh,
+}: {
+  marked: number;
+  busy: boolean;
+  onKeep: () => void;
+  onFresh: () => void;
+}): JSX.Element {
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <div className={adaptive.mapWrap}>
+      <div className={adaptive.mapHead}>
+        <Heading level={2}>Taking it again</Heading>
+        <Text tone="secondary">
+          You have {marked} marks on record from last time. Build on them, or start from an empty
+          sheet — either way this is a new take, so your profile can show what changed.
+        </Text>
+      </div>
+
+      <Card className={adaptive.retakeCard}>
+        <div>
+          <Heading level={3}>Keep what you marked</Heading>
+          <Text size="sm" tone="secondary">
+            Everything you said last time is already filled in. Change your mind about any of it,
+            add what you skipped, and leave the rest alone.
+          </Text>
+        </div>
+        <Button variant="primary" disabled={busy} onClick={onKeep}>
+          Keep and edit →
+        </Button>
+      </Card>
+
+      <Card className={adaptive.retakeCard}>
+        <div>
+          <Heading level={3}>Start fresh</Heading>
+          <Text size="sm" tone="secondary">
+            Clears every mark, every split and <b>every hard no</b> for this test — the suppression
+            list goes with them. Who you both are stays; you won&rsquo;t answer that again.
+          </Text>
+        </div>
+        {confirming ? (
+          <div className={adaptive.retakeConfirm}>
+            <Button variant="secondary" disabled={busy} onClick={onFresh}>
+              Yes, clear it all
+            </Button>
+            <Button variant="ghost" disabled={busy} onClick={() => setConfirming(false)}>
+              Never mind
+            </Button>
+          </div>
+        ) : (
+          <Button variant="ghost" disabled={busy} onClick={() => setConfirming(true)}>
+            Start fresh
+          </Button>
+        )}
+      </Card>
     </div>
   );
 }

@@ -4460,6 +4460,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ok: out.ok,
         ...(out.value ? { lines: out.value } : {}),
         degraded: out.degraded,
+        // 74 §3.6.12 — the real reason, so a failed call cannot read as "you never set this up".
+        ...(out.message ? { message: out.message } : {}),
       };
     },
     testsAdaptiveProbe: async (input): Promise<AdaptiveProbeView> => {

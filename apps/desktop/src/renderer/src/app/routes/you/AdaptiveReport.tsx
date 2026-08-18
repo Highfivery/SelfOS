@@ -20,7 +20,7 @@ import { AdaptiveHead } from './AdaptiveHead';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import styles from './You.module.css';
 import take from './TestTake.module.css';
-import { DIRTY_TALK_SPINE } from '@selfos/core/adaptive-spine';
+import { bothSidesAnswered, DIRTY_TALK_SPINE } from '@selfos/core/adaptive-spine';
 import adaptive from './Adaptive.module.css';
 
 /**
@@ -155,12 +155,11 @@ export function AdaptiveReport(): JSX.Element {
   const says = lexicon.entries.filter((e) => e.state === undefined && e.say >= 3 && askedSay(e));
   // 74 §3.6.2/§3.6.6 — sourced from the hear/say GAP, not the middle mark (which is a mild yes now), and only
   // where BOTH sides were actually asked: a side the orientation never offered is not a thing they freeze on.
+  // 74 §3.6.11 — ANSWERED, not merely offered. This had its own inlined copy of the rule and so its own copy
+  // of the bug: every pet-name row offers both directions, so leaving one blank read as a rated zero and put
+  // "want to, and freeze" in front of someone who had simply not answered that side.
   const notYet = lexicon.entries.filter(
-    (e) =>
-      e.state === undefined &&
-      e.hear >= 3 &&
-      e.say <= 1 &&
-      (e.sides === undefined || (e.sides.includes('hear') && e.sides.includes('say'))),
+    (e) => e.state === undefined && e.hear >= 3 && e.say <= 1 && bothSidesAnswered(e),
   );
   const never = lexicon.entries.filter((e) => e.state === 'never');
   // The middle mark. It used to appear nowhere: recorded, restored in the deck, then absent from the report

@@ -16687,14 +16687,23 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
   // AI on with a stub key, or every AI step degrades before it ever reaches the model — and the whole point of
   // this walk is to read what those steps SEND.
   const { userData } = await seedReadyVault({ 'ai.enabled': true });
-  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-audit');
+  // A REAL key when one is supplied (`SELFOS_AUDIT_KEY`), so the audit can be run against live Claude and the
+  // model's actual replies read — otherwise a stub, and the offline fake answers.
+  const auditKey = process.env['SELFOS_AUDIT_KEY'];
+  await createNodeSecretStore(userData, passthrough).set(
+    'anthropic.apiKey',
+    auditKey ?? 'sk-ant-audit',
+  );
   // Capture every AI prompt this walk triggers. What a phase SENDS decides whether its output is any good, and
   // it is the one part no screenshot can show (the assert-the-prompt rule).
   const promptDir = await mkdtemp(join(tmpdir(), 'selfos-audit-prompts-'));
 
+  const liveEnv = { ...e2eEnv(), SELFOS_FAKE_PROMPT_DIR: promptDir };
+  // With a real key, take the fake OFF so the audit exercises live Claude end to end.
+  if (auditKey) delete liveEnv.SELFOS_FAKE_CLAUDE;
   const app = await electron.launch({
     args: [`--user-data-dir=${userData}`, MAIN],
-    env: { ...e2eEnv(), SELFOS_FAKE_PROMPT_DIR: promptDir },
+    env: liveEnv,
   });
   try {
     const w = await app.firstWindow();
@@ -16782,15 +16791,20 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
       await noMachineIds(String(name));
       // Run it, so the prompt it builds from this person's real marks is captured and can be read.
       const ask = w.getByRole('button', { name: /Write them for me|Ask me →/i }).first();
+      // Wait for the call to SETTLE — a live model takes seconds, and a shot taken mid-flight photographs the
+      // progress bar rather than the thing being audited.
+      const settle = async (): Promise<void> => {
+        await expect(w.getByText(/usually under a minute/)).toHaveCount(0, { timeout: 90_000 });
+      };
       if (await ask.isVisible().catch(() => false)) {
         await ask.click();
-        await w.waitForTimeout(400);
+        await settle();
         await shot(`${file}-asked`);
       }
       const moment = w.getByRole('button', { name: /^Build-up$/ }).first();
       if (await moment.isVisible().catch(() => false)) {
         await moment.click();
-        await w.waitForTimeout(400);
+        await settle();
         await shot(`${file}-asked`);
       }
     }
@@ -16854,7 +16868,11 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
     const prompts = await readdir(promptDir);
 
     console.log(`AUDIT captured ${prompts.length} AI prompts in ${promptDir}`);
-    expect(prompts.length, 'no AI prompt was captured — did a phase run?').toBeGreaterThan(0);
+    // The capture lives in the offline fake, so a LIVE run legitimately records none — there the evidence is
+    // the model's replies on screen, not the prompt on disk.
+    if (!auditKey) {
+      expect(prompts.length, 'no AI prompt was captured — did a phase run?').toBeGreaterThan(0);
+    }
   } finally {
     await app.close();
   }

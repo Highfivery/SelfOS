@@ -228,6 +228,8 @@ interface AdaptiveTestState {
   /** Which register is open. `null` ⇒ the grid, which is where the phase starts. */
   openRegister: string | null;
   lines: string[];
+  /** What the lines phase said when it could not produce anything — its words, not a guess. */
+  linesMessage: string | null;
   lineReactions: Record<string, 'love' | 'meh' | 'no'>;
   probeQuestion: string | null;
   /** The ambiguity the current question resolves — stamped as the turn's item id so the engine knows it has
@@ -323,6 +325,7 @@ const EMPTY = {
   nameMarks: {},
   openRegister: null,
   lines: [],
+  linesMessage: null,
   lineReactions: {},
   probeQuestion: null,
   probeAmbiguityId: null,
@@ -667,7 +670,14 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       // A degraded phase no longer JUMPS the person to the next one (74 §3.6.9): the rail owns navigation, so a
       // phase that couldn't produce anything says so and leaves them standing somewhere they recognise. Silently
       // relocating them was indistinguishable from the step having worked.
-      set({ lines: out.lines ?? [], busy: false, progress: null });
+      // 74 §3.6.12 — keep the phase's OWN account of what went wrong. Without it the screen fell back to the
+      // generic "AI isn't set up yet", which is a lie whenever a key is present and the call simply failed.
+      set({
+        lines: out.lines ?? [],
+        busy: false,
+        progress: null,
+        linesMessage: out.message ?? null,
+      });
     },
 
     reactToLine: async (testId, line, reaction) => {

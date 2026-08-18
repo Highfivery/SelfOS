@@ -2,9 +2,9 @@ import { z } from 'zod';
 
 import { extractJsonArray, extractJsonObject, tolerantArray } from '../../ai/jsonSalvage';
 import { PERSONA, SAFETY } from '../../conversations/promptBuilder';
-import type { AdaptiveProfile, EroticLexicon, LexiconEntry } from '../../schemas';
+import type { AdaptiveProfile, AiFailureReason, EroticLexicon, LexiconEntry } from '../../schemas';
 import { runClaude, type AiDeps } from '../../questionnaires/aiCall';
-import { bothSidesAsked, suppressedTexts, violatesBoundary } from './lexicon';
+import { bothSidesAnswered, suppressedTexts, violatesBoundary } from './lexicon';
 
 /**
  * 74-adaptive-tests §5.1/§5.3 — the **adaptive half**: the phases that chase what the bank left ambiguous,
@@ -76,7 +76,7 @@ export function lexiconDigest(lexicon: EroticLexicon): string {
   // Re-sourced from the GAP, not the middle mark: `okay` is a mild yes now, so the old `notYet` filter would
   // be permanently empty and this context line would silently stop existing (74 §3.6.2).
   const stuck = lexicon.entries.filter(
-    (e) => e.state === undefined && bothSidesAsked(e) && e.hear >= 3 && e.say <= 1,
+    (e) => e.state === undefined && bothSidesAnswered(e) && e.hear >= 3 && e.say <= 1,
   );
   return [
     line('They marked these as landing', loved),
@@ -127,7 +127,7 @@ export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
   // as a refusal — and once seeding stopped filling the unshown side, it fired for essentially every oriented
   // person, putting a FALSE statement in front of them ("rated it 0 to say") whose answer then feeds synthesis.
   const frozen = lexicon.entries.filter(
-    (e) => e.state !== 'never' && bothSidesAsked(e) && e.hear >= 3 && e.say === 0,
+    (e) => e.state !== 'never' && bothSidesAnswered(e) && e.hear >= 3 && e.say === 0,
   );
   if (frozen.length > 0) {
     out.push({
@@ -140,7 +140,7 @@ export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
   // the middle mark stopped meaning "cringe" (74 §3.6.2); an empty probe pack is invisible, so a filter that
   // can never match again would have removed this silently.
   const cringe = lexicon.entries.filter(
-    (e) => e.state === undefined && bothSidesAsked(e) && e.hear >= 3 && e.say <= 1,
+    (e) => e.state === undefined && bothSidesAnswered(e) && e.hear >= 3 && e.say <= 1,
   );
   if (cringe.length > 0) {
     out.push({
@@ -164,6 +164,16 @@ export interface PhaseResult<T> {
   /** True when the phase could not run (AI off / budget / parse) and the take proceeds without it. */
   degraded: boolean;
   costUsd: number;
+  /**
+   * 74 §3.6.12 — WHY it could not run, carried instead of discarded.
+   *
+   * `runClaude` already classifies every failure (NO_KEY / BUDGET / ERROR / REFUSED / TRUNCATED / MALFORMED),
+   * and every phase threw that away — so a live call that failed on auth or transport reached the person as
+   * "AI isn't set up yet. Set up Claude in Settings → AI", sending them to fix something that was not broken.
+   */
+  reason?: AiFailureReason;
+  /** The classified failure in their words. */
+  message?: string;
 }
 
 /**
@@ -196,18 +206,30 @@ we know. Return ONLY {"lines": string[]}.`,
     'test.adaptive.lines',
     1200,
   );
-  if (!out.ok) return { ok: false, degraded: true, costUsd: 0 };
+  if (!out.ok)
+    return {
+      ok: false,
+      degraded: true,
+      costUsd: 0,
+      ...(out.reason ? { reason: out.reason } : {}),
+      ...(out.message ? { message: out.message } : {}),
+    };
   const parsed = LinesSchema.safeParse(extractJsonObject(out.text));
   const lines = (parsed.success ? parsed.data.lines : [])
     // Belt and braces: the prompt forbids their hard nos, and anything that slips through is dropped here.
     .filter((line) => !violatesBoundary(lexicon, line))
     .slice(0, LINES_PER_ROUND);
-  return {
-    ok: lines.length > 0,
-    ...(lines.length > 0 ? { value: lines } : {}),
-    degraded: lines.length === 0,
-    costUsd: out.usage.costUsd,
-  };
+  // A reply that parsed to nothing is its own outcome — not a missing key, which is what it used to look like.
+  if (lines.length === 0) {
+    return {
+      ok: false,
+      degraded: true,
+      costUsd: out.usage.costUsd,
+      reason: 'MALFORMED',
+      message: 'Nothing usable came back this time — try again.',
+    };
+  }
+  return { ok: true, value: lines, degraded: false, costUsd: out.usage.costUsd };
 }
 
 // ── Phase: probe ───────────────────────────────────────────────────────────────────────────────────
@@ -237,7 +259,14 @@ ask why something is a hard no. Return ONLY {"question": string}.`,
     'test.adaptive.probe',
     400,
   );
-  if (!out.ok) return { ok: false, degraded: true, costUsd: 0 };
+  if (!out.ok)
+    return {
+      ok: false,
+      degraded: true,
+      costUsd: 0,
+      ...(out.reason ? { reason: out.reason } : {}),
+      ...(out.message ? { message: out.message } : {}),
+    };
   const parsed = z.object({ question: z.string().min(1) }).safeParse(extractJsonObject(out.text));
   const raw = parsed.success ? parsed.data.question : '';
   // Every other phase filters what the model wrote; this one didn't, and it is the phase that puts free
@@ -296,7 +325,14 @@ at 2pm. Return ONLY {"scene": string, "options": string[]}.`,
     .join('\n\n');
 
   const out = await runClaude(deps, system, lexiconDigest(lexicon), 'test.adaptive.scenario', 700);
-  if (!out.ok) return { ok: false, degraded: true, costUsd: 0 };
+  if (!out.ok)
+    return {
+      ok: false,
+      degraded: true,
+      costUsd: 0,
+      ...(out.reason ? { reason: out.reason } : {}),
+      ...(out.message ? { message: out.message } : {}),
+    };
   const parsed = ScenarioSchema.safeParse(extractJsonObject(out.text));
   if (!parsed.success || parsed.data.options.length === 0) {
     return { ok: false, degraded: true, costUsd: out.usage.costUsd };
@@ -373,7 +409,14 @@ Return ONLY {"narrative": string, "registers": object, "contexts": object, "them
     'test.adaptive.synthesize',
     3000,
   );
-  if (!out.ok) return { ok: false, degraded: true, costUsd: 0 };
+  if (!out.ok)
+    return {
+      ok: false,
+      degraded: true,
+      costUsd: 0,
+      ...(out.reason ? { reason: out.reason } : {}),
+      ...(out.message ? { message: out.message } : {}),
+    };
   const parsed = SynthesisSchema.safeParse(extractJsonObject(out.text) ?? {});
   if (!parsed.success) return { ok: false, degraded: true, costUsd: out.usage.costUsd };
   const data = parsed.data;

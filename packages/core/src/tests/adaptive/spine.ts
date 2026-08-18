@@ -4,7 +4,10 @@ import {
   type LexiconEntry,
   type TestSubscaleScore,
 } from '../../schemas';
-import { saySideAsked } from './lexicon';
+import { saySideAnswered } from './lexicon';
+// Re-exported so the renderer's report reads the SAME predicate through the lean `adaptive-spine` subpath. It
+// had its own inlined copy — a third one — and therefore the same bug.
+export { bothSidesAnswered } from './lexicon';
 
 /**
  * 74-adaptive-tests §4.2 — the **spine**: the FIXED set of scored dimensions an adaptive instrument maps onto.
@@ -184,7 +187,7 @@ function meanOf(
     // A say-direction dimension must not count an entry whose SAY side was never put to them: `say: 0` reads
     // as "cannot say it", so a hear-only mark would drag the dimension to the floor and the report would say
     // "not their thing, 0%" about something they were never asked (74 §3.6.6).
-    .filter((entry) => direction !== 'say' || saySideAsked(entry));
+    .filter((entry) => direction !== 'say' || saySideAnswered(entry));
   if (marked.length === 0) return { value: 0, signal: false };
   const total = marked.reduce((sum, entry) => sum + value(entry, direction), 0);
   return { value: total / marked.length, signal: true };
@@ -209,7 +212,7 @@ function sayConfidence(lexicon: EroticLexicon): number {
   // Only entries whose SAY side was actually asked — otherwise every hear-only entry contributes a 0 and the
   // dimension floors for everyone the moment orientation ships (74 §3.6.6).
   const wanted = lexicon.entries.filter(
-    (entry) => entry.state !== 'never' && entry.hear >= 3 && saySideAsked(entry),
+    (entry) => entry.state !== 'never' && entry.hear >= 3 && saySideAnswered(entry),
   );
   if (wanted.length === 0) return 0;
   const total = wanted.reduce((sum, entry) => sum + entry.say / 4, 0);
@@ -246,7 +249,7 @@ export function scoreSpine(
       normalized = sayConfidence(lexicon);
       // No signal ⇒ NO_SIGNAL_BAND ("nothing yet"), never a 0% that reads as a verdict.
       signal = lexicon.entries.some(
-        (entry) => entry.state !== 'never' && entry.hear >= 3 && saySideAsked(entry),
+        (entry) => entry.state !== 'never' && entry.hear >= 3 && saySideAnswered(entry),
       );
     } else {
       const entries = dimension.families.flatMap((family) => byFamily.get(family) ?? []);

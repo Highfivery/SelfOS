@@ -16684,9 +16684,18 @@ test('74 §3.6.9: every step is reachable both ways, and an AI step waits to be 
  */
 test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async () => {
   test.setTimeout(180_000);
-  const { userData } = await seedReadyVault();
+  // AI on with a stub key, or every AI step degrades before it ever reaches the model — and the whole point of
+  // this walk is to read what those steps SEND.
+  const { userData } = await seedReadyVault({ 'ai.enabled': true });
+  await createNodeSecretStore(userData, passthrough).set('anthropic.apiKey', 'sk-ant-audit');
+  // Capture every AI prompt this walk triggers. What a phase SENDS decides whether its output is any good, and
+  // it is the one part no screenshot can show (the assert-the-prompt rule).
+  const promptDir = await mkdtemp(join(tmpdir(), 'selfos-audit-prompts-'));
 
-  const app = await launch(userData);
+  const app = await electron.launch({
+    args: [`--user-data-dir=${userData}`, MAIN],
+    env: { ...e2eEnv(), SELFOS_FAKE_PROMPT_DIR: promptDir },
+  });
   try {
     const w = await app.firstWindow();
     const shot = async (name: string): Promise<void> => {
@@ -16757,6 +16766,8 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
     await shot('09-step4-split');
     await noMachineIds('the split');
 
+    // Every AI prompt this walk triggers, captured for reading. What a phase SENDS is the thing that decides
+    // whether its output is any good, and it is the one part no screenshot can show.
     // Steps 5–7 — the AI ones. Each must present itself and WAIT, never fire on arrival.
     for (const [file, name] of [
       ['10-step5-lines', /Lines written for you/i],
@@ -16769,6 +16780,19 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
       await expect(w.getByText(/allowance/i).first()).toBeVisible();
       await shot(file);
       await noMachineIds(String(name));
+      // Run it, so the prompt it builds from this person's real marks is captured and can be read.
+      const ask = w.getByRole('button', { name: /Write them for me|Ask me →/i }).first();
+      if (await ask.isVisible().catch(() => false)) {
+        await ask.click();
+        await w.waitForTimeout(400);
+        await shot(`${file}-asked`);
+      }
+      const moment = w.getByRole('button', { name: /^Build-up$/ }).first();
+      if (await moment.isVisible().catch(() => false)) {
+        await moment.click();
+        await w.waitForTimeout(400);
+        await shot(`${file}-asked`);
+      }
     }
 
     // Step 8 — the profile, from a thin take: it must still be reachable and honest.
@@ -16825,6 +16849,12 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
     await w.setViewportSize({ width: 390, height: 900 });
     await shot('16-390-names');
     await expectNoInnerOverflow(w);
+
+    // Read back what each AI phase actually sent.
+    const prompts = await readdir(promptDir);
+
+    console.log(`AUDIT captured ${prompts.length} AI prompts in ${promptDir}`);
+    expect(prompts.length, 'no AI prompt was captured — did a phase run?').toBeGreaterThan(0);
   } finally {
     await app.close();
   }

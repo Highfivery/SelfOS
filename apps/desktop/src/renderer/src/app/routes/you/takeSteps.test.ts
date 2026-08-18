@@ -37,7 +37,6 @@ describe('stepStatuses', () => {
       'identity',
       'names',
       'bank',
-      'split',
       'lines',
       'probe',
       'scenario',
@@ -56,7 +55,7 @@ describe('stepStatuses', () => {
     // The two marking steps are always reachable: they are where the material comes from.
     expect(steps.names?.state).toBe('now');
     expect(steps.bank?.state).toBe('open');
-    for (const id of ['split', 'lines', 'probe', 'scenario', 'profile'] as const) {
+    for (const id of ['lines', 'probe', 'scenario', 'profile'] as const) {
       expect(steps[id]?.state).toBe('blocked');
       expect(steps[id]?.reason).toMatch(/marks first/i);
     }
@@ -69,8 +68,6 @@ describe('stepStatuses', () => {
     expect(thin.lines?.state).toBe('blocked');
     expect(thin.lines?.reason).toMatch(/14 more marks/);
     expect(thin.scenario?.state).toBe('blocked');
-    // The split only needs SOMETHING — it re-asks about marks that already exist rather than generating.
-    expect(thin.split?.state).toBe('open');
     // …and so does the profile: being unable to finish is worse than a thin profile, and the report is honest
     // about working from little.
     expect(thin.profile?.state).toBe('open');
@@ -102,35 +99,6 @@ describe('stepStatuses', () => {
     expect(steps.names).toMatchObject({ state: 'done', count: 68 });
     expect(steps.bank).toMatchObject({ state: 'done', count: 216 });
     expect(steps.lines).toMatchObject({ state: 'now', count: 2 });
-  });
-
-  it('re-opens a CLOSED split when marks were added after it — a tick there would be out of date', () => {
-    // The split is recomputed from the marks every time, so going back to the words and marking twenty more
-    // leaves real work inside a step that already stamped its turn.
-    const steps = byId({
-      ...BASE,
-      phase: 'bank',
-      closed: new Set(['names', 'bank', 'split']),
-      nameMarks: 4,
-      bankMarks: 30,
-      loved: 12,
-      splitNeeded: 14,
-      splitAnswered: 2,
-    });
-    expect(steps.split).toMatchObject({ state: 'open', outstanding: 12 });
-
-    // …and stays ticked when there is genuinely nothing outstanding.
-    const settled = byId({
-      ...BASE,
-      phase: 'lines',
-      closed: new Set(['split']),
-      bankMarks: 30,
-      loved: 12,
-      splitNeeded: 3,
-      splitAnswered: 3,
-    });
-    expect(settled.split).toMatchObject({ state: 'done' });
-    expect(settled.split?.outstanding).toBeUndefined();
   });
 
   it('shows a skip as a skip, and never as the step you are standing on', () => {
@@ -186,8 +154,8 @@ describe('nextStepAfter', () => {
   });
 
   it('walks in order once there is material', () => {
-    const statuses = stepStatuses({ ...BASE, phase: 'split', ...ENOUGH });
-    expect(nextStepAfter(statuses, 'split')?.step.id).toBe('lines');
+    const statuses = stepStatuses({ ...BASE, phase: 'bank', ...ENOUGH });
+    expect(nextStepAfter(statuses, 'bank')?.step.id).toBe('lines');
     expect(nextStepAfter(statuses, 'scenario')?.step.id).toBe('profile');
     expect(nextStepAfter(statuses, 'profile')).toBeNull();
   });

@@ -188,29 +188,6 @@ describe('AdaptiveTake (74 §3.2)', () => {
     );
   });
 
-  it('asks the hear/say split ONLY for what was marked, and never for a boundary', async () => {
-    installMockBridge({
-      testsBank: () => Promise.resolve(BANK),
-      testsAdaptiveState: () => Promise.resolve(state()),
-      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
-      testsAdaptiveBank: () => Promise.resolve(state({ draft: DRAFT })),
-    });
-    renderTake();
-    await beginTake();
-    await pastPractice();
-    await userEvent.click(screen.getByRole('button', { name: 'good girl — hear & say — love it' }));
-    await userEvent.click(screen.getByRole('button', { name: /Next area/ }));
-    await userEvent.click(
-      screen.getByRole('button', { name: 'run (primal) — hear & say — never' }),
-    );
-    await userEvent.click(screen.getByRole('button', { name: /Done with the words →/ }));
-
-    expect(await screen.findByText(/Hearing it, or saying it\?/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'good girl — hear 4 of 4' })).toBeInTheDocument();
-    // The one they ruled out is not re-rated.
-    expect(screen.queryByRole('button', { name: /run \(primal\) — hear/ })).not.toBeInTheDocument();
-  });
-
   it('shows live progress on an AI phase — never a bare spinner (CLAUDE.md §12)', async () => {
     let resolveLines: (value: {
       ok: boolean;
@@ -561,7 +538,6 @@ describe('AdaptiveTake (74 §3.2)', () => {
       /Who you two are/i,
       /What you call each other/i,
       /^The words/i,
-      /Hearing it, or saying it/i,
       /Lines written for you/i,
       /The questions it still has/i,
       /In the moment/i,

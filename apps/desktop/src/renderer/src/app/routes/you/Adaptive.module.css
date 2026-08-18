@@ -58,6 +58,8 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+  /* The inline hear/say control is a third child that must sit on its own line (74 §3.6.13). */
+  flex-wrap: wrap;
   padding: var(--space-1) 0;
   border-bottom: 1px solid var(--color-border);
   /* The classic flexbox footgun (CLAUDE.md §12): without this the text overflows its pane. */
@@ -2013,4 +2015,21 @@
   display: flex;
   gap: var(--space-2);
   flex-wrap: wrap;
+}
+
+/* 74 §3.6.13 — the hear/say question, asked on the row instead of as a step of its own. It sits on its own
+   line under the word so the row's two halves (what it is / how it lands) stay legible. */
+.rowSplit {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-2) 0 var(--space-1);
+  margin-top: var(--space-1);
+  border-top: 1px dashed var(--color-border);
+}
+.rowSplitLead {
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
 }

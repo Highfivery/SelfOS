@@ -622,6 +622,24 @@ one, which is indistinguishable from that phase having worked.
 12. **The practice sheet has a way out that is not doing it** ("Not now — back to the steps"): required to reach
     the deck, never a modal someone who wandered in from the map cannot leave.
 
+### 3.6.10 The retake choice — APPROVED + **BUILT** (2026-08-17, owner-directed)
+
+_"RETAKE SHOULD PROVIDE AN OPTION TO RESET OR KEEP CURRENT AND EDIT!"_ — and, in the same breath, _"STOP GUESSING
+AND ASSUMING AND ASK AND CONFIRM"_, so the three forks were put to the owner before anything was written.
+
+Tapping Retake silently reloaded every previous answer (§3.5 seeds the deck from the lexicon, by design), and the
+only route to a clean run was a destructive button at the bottom of a screen nobody scrolls to. Confirmed:
+
+1. **The choice is the FIRST thing a retake shows** — before the map's step list, not after it.
+2. **"Start fresh" clears everything, hard nos included** — identical to the existing start-over, so there is one
+   behaviour rather than two similar ones. Who you both are survives; starting over is not answering setup again.
+3. **"Keep and edit" is still a NEW take**, so "Across your takes" gets its second point. This needed no code:
+   `startAdaptiveTake` already opens a fresh draft stamped `reTakeOf` whenever a completed result exists —
+   verified rather than assumed.
+
+The destructive option is never the default and never one tap: it names what it clears, then confirms. The choice
+is per ENTRY, not once ever — leaving the take and coming back asks again, because the answer can change.
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

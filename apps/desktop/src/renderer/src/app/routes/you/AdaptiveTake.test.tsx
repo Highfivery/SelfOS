@@ -846,4 +846,83 @@ describe('AdaptiveTake (74 §3.2)', () => {
     // The word comes FIRST in the row, and the quote is explicitly labelled as illustration.
     expect(word.compareDocumentPosition(quote) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  // --- 74 §3.6.10 — the retake choice ---
+
+  it('asks FIRST on a retake: keep and edit, or start fresh', async () => {
+    const abandon = vi.fn(() => Promise.resolve());
+    const done = state({
+      draft: DRAFT,
+      latest: { ...DRAFT, status: 'complete' as const },
+      lexicon: {
+        ...state().lexicon,
+        entries: [
+          {
+            key: 'names-power:good-girl',
+            text: 'good girl',
+            kind: 'word' as const,
+            family: 'names-power',
+            tier: 2,
+            hear: 4,
+            say: 4,
+            source: 'test:r0',
+          },
+        ],
+      },
+    });
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(done),
+      testsAdaptiveStart: () => Promise.resolve(done),
+      testsAdaptiveAbandon: abandon as never,
+    });
+    renderTake();
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Pick up where you left off/i }),
+    );
+
+    // Before anything else — not the step list, and not a destructive button at the bottom of a screen
+    // nobody scrolls to.
+    expect(await screen.findByRole('heading', { name: /Taking it again/i })).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Every step' })).not.toBeInTheDocument();
+    // What "start fresh" costs is stated, and it takes two taps.
+    expect(screen.getByText(/every hard no/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /^Start fresh$/ }));
+    expect(abandon).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: /Yes, clear it all/i }));
+    await waitFor(() => expect(abandon).toHaveBeenCalled());
+  });
+
+  it('keeps everything when they choose to edit — and does not ask twice', async () => {
+    const abandon = vi.fn(() => Promise.resolve());
+    const done = state({ draft: DRAFT, latest: { ...DRAFT, status: 'complete' as const } });
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(done),
+      testsAdaptiveStart: () => Promise.resolve(done),
+      testsAdaptiveAbandon: abandon as never,
+    });
+    renderTake();
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Pick up where you left off/i }),
+    );
+    await userEvent.click(await screen.findByRole('button', { name: /Keep and edit/i }));
+
+    // Straight to the map, with nothing cleared.
+    expect(await screen.findByRole('list', { name: 'Every step' })).toBeInTheDocument();
+    expect(abandon).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading', { name: /Taking it again/i })).not.toBeInTheDocument();
+  });
+
+  it('never asks on a FIRST take — there is nothing to keep or clear', async () => {
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state()),
+      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    await userEvent.click(await screen.findByRole('button', { name: 'Begin' }));
+    expect(await screen.findByRole('list', { name: 'Every step' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: /Taking it again/i })).not.toBeInTheDocument();
+  });
 });

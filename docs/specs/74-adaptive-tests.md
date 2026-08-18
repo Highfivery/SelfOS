@@ -908,6 +908,38 @@ these classify or select, they do not write prose in the person's register; and 
 reads (manuscript, structure, title, essence, placement) plus image-prompt distillations, which operate on
 text already generated with the block rather than producing new material in that register.
 
+#### 3.6.13 Six reports from one afternoon (2026-08-18)
+
+All six came from the owner using the real app, and three of them were one root cause.
+
+**The root cause: a pet name that is also an everyday word.** Dozens of the name bank's entries are ordinary
+English — `love` · `baby` · `beautiful` · `angel` · `treasure` · `honey`. `violatesBoundary` matched a banned
+single word anywhere it appeared, so someone who went through the pet-name pass and ruled out most of it was
+suppressing that much of the language. Measured: **40% of ordinary intimate lines** were being discarded, and
+an 8-paragraph synthesis narrative is near-certain to contain one — so the whole read was thrown away. The
+person saw "Nothing usable came back this time" on the lines step and "the written read didn't come through"
+on their profile, and had no way to tell that the app had done it to itself.
+
+Fixed by making a single-word name a boundary **when it is used to ADDRESS them** — comma-adjacent, after
+`my`/`oh`/`you're`, or the bare word — and only for a curated list of names that are also everyday words
+(`EVERYDAY_WORDS`). It is a RELAXATION, so anything not on that list (`whore`, `slut`, `cumdump`) keeps the
+plain substring match, and multi-word names ("good girl") keep it too: they have no innocent use.
+
+**Failures wearing a success.** `AdaptiveProbeView.done` means "nothing left to ask", and the store folded
+`degraded` into it — so a failed call printed _"everything you marked was clear enough that it has no question
+to ask — that's this step finished."_ And `loadScenario` set `scenario: null` with no message, so tapping a
+moment showed a thinking state and returned to the same grid in silence: a button that does nothing. Both
+views now carry the phase's own `message`, and `done` is the success state alone.
+
+**Three smaller ones.** The `done` phase was a whole screen whose only content was a banner and a button to
+leave it — it now redirects to the report. A rail button's label was a bare text node beside a span, and
+`Button` is a flex container with a gap, so the label rendered with a double gap mid-phrase; the label is one
+child now. And a synthesis that produced nothing was a dead end — the report offers to run the read again
+(idempotent: the take keeps its insight id).
+
+**Left as designed:** the profile step is still not gated on the readiness threshold. Being unable to finish
+is worse than a thin profile, and now that a failed read is retryable the thin case has a way forward.
+
 ## 6. IPC / API contracts
 
 All gated `tests.own` + active-person-scoped + 18+-withheld **in the bridge** (the trust boundary), with the

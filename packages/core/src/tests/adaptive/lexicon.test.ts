@@ -466,3 +466,76 @@ describe('74 §3.6.8 — the pet-name pass', () => {
     expect(attempt.boundaries).toHaveLength(1);
   });
 });
+
+describe('a pet name is a boundary when it ADDRESSES them, not whenever the word appears (74 §8.4)', () => {
+  // The bank's name families are full of ordinary English: love · baby · beautiful · angel · treasure ·
+  // honey · sweet. Someone who rules out most of the name bank was suppressing so much ordinary language
+  // that the lines phase filtered out everything it generated and the synthesis threw away whole narratives
+  // for containing the word "love" — reported to them as "nothing usable came back".
+  const lexiconWith = (bans: string[]): EroticLexicon => ({
+    schemaVersion: 1,
+    personId: 'p1',
+    entries: bans.map((text, i) => ({
+      key: `names-affection:${i}`,
+      text,
+      kind: 'word' as const,
+      family: 'names-affection',
+      tier: 1,
+      hear: 0,
+      say: 0,
+      state: 'never' as const,
+    })),
+    registers: {},
+    contexts: {},
+    themes: [],
+    wantsToSay: [],
+    boundaries: bans.map((text) => ({
+      text,
+      kind: 'word' as const,
+      at: '2026-08-18T00:00:00.000Z',
+    })),
+    updatedAt: '2026-08-18T00:00:00.000Z',
+  });
+
+  it('does not suppress the ordinary word', () => {
+    const lex = lexiconWith(['love', 'beautiful', 'baby']);
+    expect(violatesBoundary(lex, 'I love the sound you make')).toBe(false);
+    expect(violatesBoundary(lex, 'you look beautiful like that')).toBe(false);
+    expect(violatesBoundary(lex, 'I have wanted this all day')).toBe(false);
+  });
+
+  it('still suppresses it as a form of address', () => {
+    const lex = lexiconWith(['love', 'baby']);
+    expect(violatesBoundary(lex, 'come here, love')).toBe(true);
+    expect(violatesBoundary(lex, 'love, come here')).toBe(true);
+    expect(violatesBoundary(lex, 'my love')).toBe(true);
+    expect(violatesBoundary(lex, "that's it baby, just like that")).toBe(true);
+    expect(violatesBoundary(lex, "you're my baby")).toBe(true);
+  });
+
+  it('leaves a MULTI-WORD name matching anywhere — it has no innocent use', () => {
+    const lex = lexiconWith(['good girl']);
+    expect(violatesBoundary(lex, 'you were such a good girl for me')).toBe(true);
+    expect(violatesBoundary(lex, 'good girl')).toBe(true);
+  });
+
+  it('leaves a non-name ban matching anywhere — only pet names are forms of address', () => {
+    const lex: EroticLexicon = {
+      ...lexiconWith(['slut']),
+      entries: [
+        {
+          key: 'degradation:slut',
+          text: 'slut',
+          kind: 'word',
+          family: 'degradation',
+          tier: 4,
+          hear: 0,
+          say: 0,
+          state: 'never',
+        },
+      ],
+    };
+    // Not a name family, so nothing is loosened: the word is off wherever it appears.
+    expect(violatesBoundary(lex, 'you little slut of a thing')).toBe(true);
+  });
+});

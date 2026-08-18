@@ -524,6 +524,35 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-18 — **Fix (six owner reports, three of them one root cause: a pet name that is also an everyday
+  word; SPEC 74 §3.6.13; on `fix/pet-name-vocative`).** The owner, testing the real app, reported the AI steps
+  dead: _"Does this land doesnt appear to be working, nor does The questions it still has… And the In the
+  moment buttons dont do anything after clicking and thinking"_, plus a profile with no AI analysis — and told
+  me plainly I was not testing enough. **Diagnosed by measuring, not guessing:** he had ruled out ~123 pet
+  names, and dozens of the name bank's entries are ORDINARY ENGLISH (`love` · `baby` · `beautiful` · `angel` ·
+  `treasure`). `violatesBoundary` matched a banned single word anywhere, so a reproduction over the real bank
+  showed **40% of ordinary intimate lines discarded** — and an 8-paragraph narrative is near-certain to contain
+  one, so the entire written read was thrown away every time. The app was doing it to itself and reporting it
+  as the model's failure. Fixed by making a single-word name a boundary **only where it ADDRESSES them**
+  (comma-adjacent · after my/oh/you're · the bare word), scoped to a curated `EVERYDAY_WORDS` list — a
+  RELAXATION, so `whore`/`slut`/`cumdump` and every multi-word name keep the plain substring match. **Two
+  failures were wearing a success:** `probeDone` folded in `degraded`, so a failed call printed "everything you
+  marked was clear enough that it has no question to ask — that's this step finished"; and `loadScenario` set
+  `scenario: null` with no message, so a tap showed a thinking state and returned to the same grid in silence —
+  literally a button that does nothing. Both views now carry the phase's own `message` (I had added exactly
+  this for the LINES phase in #514 and only for lines). Plus: the `done` phase was a screen whose only content
+  was a button to leave it (now a redirect), a rail label rendered with a double gap because `Button` is a flex
+  container with a `gap` and my label was a text node beside a span (one child now), and a failed read is
+  retryable instead of a dead end. Gate green: typecheck (4 pkgs), lint, format, **2370 core + 13 relay + 1676
+  desktop** unit, **216/216 E2E**, 0 audit findings. All four new guards **verified to fail when reverted**.
+  **Lessons: (1) a suppression list built from a NAME bank will contain ordinary words, and matching them
+  literally silently guts every generator that reads it — the boundary is about being CALLED the word, so match
+  it positionally. (2) When two states share a flag (`done` for "exhausted" and for "failed"), the copy for one
+  will eventually be shown for the other; separate them at the seam, not in the renderer. (3) I fixed exactly
+  this reason-threading for the lines phase and not its two siblings — when a view type gains a `message`, give
+  it to every sibling view in the same change. (4) A `Button` that is a flex container with a `gap` turns a
+  two-node label into a double gap; keep a label one child.**
+
 - 2026-08-18 — **Audit + build (the profile reaches the whole app; one rule instead of a dozen hand-wirings;
   SPEC 74 §5.8a; on `feat/profile-everywhere`).** The owner: _"wire the profile into books, goals and
   questionnaires and any other areas (MAKE SURE TO REVIEW FIRST TO ENSURE YOUVE CAUGHT EVERYWHERE)"_. **Mapped

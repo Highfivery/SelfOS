@@ -1782,6 +1782,10 @@ function lexiconReadyForGeneration(lexicon: EroticLexicon): { ready: boolean } {
  */
 const MAX_SYNTHESIS_SIGNALS = 40;
 
+/** Why an adaptive AI phase produced nothing, in the person's words. Shared so the phases can't disagree. */
+const AI_UNAVAILABLE_FOR_PHASE = 'AI isn’t available right now — check Settings, then try again.';
+const NOT_ENOUGH_MARKED = 'There isn’t enough marked yet for this to be worth running.';
+
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
   const activePersonId = async (): Promise<string | null> =>
     (await host.readDeviceState()).activePersonId ?? null;
@@ -4497,7 +4501,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         return { ok: true, done: true, degraded: false };
       }
       const deps = await aiDeps('tests.own');
-      if (!deps) return { ok: false, done: false, degraded: true };
+      if (!deps)
+        return { ok: false, done: false, degraded: true, message: AI_UNAVAILABLE_FOR_PHASE };
       const out = await runProbePhase(deps, lexicon, next);
       await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
       return {
@@ -4506,6 +4511,9 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         ambiguityId: next.id,
         done: false,
         degraded: out.degraded,
+        // The phase's OWN account of what went wrong. Without it the renderer had only `degraded`, which it
+        // folded into `done` — reporting a failure in the words of a success.
+        ...(out.message ? { message: out.message } : {}),
       };
     },
     testsAdaptiveScenario: async (input): Promise<AdaptiveScenarioView> => {
@@ -4516,10 +4524,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // Same rule as the lines phase: a scene built from a near-empty lexicon is the model's invention, not
       // theirs.
       if (!lexiconReadyForGeneration(lexicon).ready) {
-        return { ok: false, context: parsed.context, degraded: true };
+        return { ok: false, context: parsed.context, degraded: true, message: NOT_ENOUGH_MARKED };
       }
       const deps = await aiDeps('tests.own');
-      if (!deps) return { ok: false, context: parsed.context, degraded: true };
+      if (!deps)
+        return {
+          ok: false,
+          context: parsed.context,
+          degraded: true,
+          message: AI_UNAVAILABLE_FOR_PHASE,
+        };
       const out = await runScenarioPhase(deps, lexicon, parsed.context);
       await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
       return {
@@ -4527,6 +4541,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         context: parsed.context,
         ...(out.value ? { scene: out.value.scene, options: out.value.options } : {}),
         degraded: out.degraded,
+        ...(out.message ? { message: out.message } : {}),
       };
     },
     testsAdaptiveTurn: async (input): Promise<void> => {

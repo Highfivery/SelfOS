@@ -903,3 +903,54 @@ describe('AdaptiveTake (74 §3.2)', () => {
     expect(screen.queryByRole('heading', { name: /Taking it again/i })).not.toBeInTheDocument();
   });
 });
+
+describe('a failed AI phase says so — it never wears a success (74 §3.6.12)', () => {
+  it('does not report a failed probe as "nothing left to ask"', async () => {
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+      // The bridge returns `done` whether it exhausted the ambiguities or the call failed. Folding the two
+      // together printed a failure in the words of a success: "everything you marked was clear enough that
+      // it has no question to ask — that's this step finished."
+      testsAdaptiveProbe: () =>
+        Promise.resolve({
+          ok: false,
+          done: true,
+          degraded: true,
+          message: 'Nothing usable came back this time — try again.',
+        }),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'probe', marks: ENOUGH_MARKS });
+    await userEvent.click(await screen.findByRole('button', { name: /Ask me/i }));
+
+    expect(await screen.findByText(/Nothing usable came back/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing left it can/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Try again/i })).toBeInTheDocument();
+    // The split itself, not just which branch renders: `done` is the SUCCESS state and a degraded pass must
+    // not set it. Asserting only the copy passes even when the two are folded back together.
+    expect(useAdaptiveTestStore.getState().probeDone).toBe(false);
+  });
+
+  it('says a moment produced nothing instead of returning to the grid in silence', async () => {
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveScenario: () =>
+        Promise.resolve({
+          ok: false,
+          context: 'buildUp',
+          degraded: true,
+          message: 'Nothing usable came back this time — try again.',
+        }),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'scenario', marks: ENOUGH_MARKS });
+    // Tapping a moment used to clear the thinking state and set no scene — the same grid, no scene, no
+    // error. It read as a button that does nothing.
+    await userEvent.click(await screen.findByRole('button', { name: /Build-up/i }));
+    expect(await screen.findByText(/Nothing usable came back/i)).toBeInTheDocument();
+  });
+});

@@ -428,6 +428,87 @@ async function clearPractice(w: Page): Promise<void> {
   await expect(sheet).toHaveCount(0);
 }
 
+/**
+ * 74 §3.6.9 — a machine UI audit of whatever is on screen.
+ *
+ * Written because three rounds of "I looked at the screenshots" missed a number sitting low in its circle, a
+ * label running to a button's edges, sample text spilling past a card, and a ghost action that read as a
+ * caption. A person squinting at a PNG is not an audit; measuring every box is. Returns the findings rather
+ * than asserting, so one run reports EVERYTHING wrong on a screen instead of stopping at the first.
+ */
+async function auditScreen(w: Page, where: string): Promise<string[]> {
+  return w.evaluate((label: string) => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const add = (msg: string): void => {
+      const key = `${label}: ${msg}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(key);
+      }
+    };
+    const vis = (el: Element): boolean => {
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.opacity !== '0';
+    };
+    const name = (el: Element): string => {
+      const t = (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 40);
+      return t ? `"${t}"` : `<${el.tagName.toLowerCase()}>`;
+    };
+
+    for (const el of Array.from(document.querySelectorAll('body *'))) {
+      if (!vis(el)) continue;
+      const cs = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+
+      // Content wider than its own box with no way to see it — the class that let card samples spill out.
+      if (
+        el.scrollWidth - el.clientWidth > 1 &&
+        cs.overflowX === 'visible' &&
+        el.children.length === 0
+      ) {
+        add(`text overflows its box: ${name(el)}`);
+      }
+      // A child painting outside its parent's box.
+      const parent = el.parentElement;
+      if (parent && vis(parent) && getComputedStyle(parent).overflow === 'visible') {
+        const pr = parent.getBoundingClientRect();
+        const offCanvas = cs.transform !== 'none' || getComputedStyle(parent).transform !== 'none';
+        if (!offCanvas && (r.right - pr.right > 2 || pr.left - r.left > 2)) {
+          if (getComputedStyle(parent).display !== 'inline')
+            add(`spills past its parent: ${name(el)}`);
+        }
+      }
+      if (el.tagName === 'BUTTON') {
+        // Tap target (§12) — 44px, except a deliberately small inline text link.
+        const inlineLink = cs.background === 'none' || cs.backgroundColor === 'rgba(0, 0, 0, 0)';
+        if (r.height < 32 && !inlineLink)
+          add(`tap target only ${Math.round(r.height)}px: ${name(el)}`);
+        // A label with no breathing room either side.
+        const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+        const looksLikeLink = inlineLink && cs.borderStyle === 'none';
+        if (
+          !looksLikeLink &&
+          pad < 12 &&
+          r.width > 80 &&
+          (el.textContent ?? '').trim().length > 3
+        ) {
+          add(`button label has ${Math.round(pad)}px of horizontal padding: ${name(el)}`);
+        }
+      }
+      // A round badge whose glyph is not centred in it.
+      if (cs.borderRadius.includes('50%') || parseFloat(cs.borderRadius) > r.height / 2 - 1) {
+        if (r.height > 12 && r.height < 40 && (el.textContent ?? '').trim().length === 1) {
+          const lh = parseFloat(cs.lineHeight);
+          if (Number.isFinite(lh) && lh > r.height) add(`glyph sits low in its badge: ${name(el)}`);
+        }
+      }
+    }
+    return out;
+  }, where);
+}
+
 function e2eEnv(): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
@@ -16707,8 +16788,15 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
   });
   try {
     const w = await app.firstWindow();
+    const findings: string[] = [];
     const shot = async (name: string): Promise<void> => {
       await w.screenshot({ path: `e2e-artifacts/audit-74-${name}.png`, fullPage: true });
+      findings.push(...(await auditScreen(w, name)));
+      // The same screen in DARK, which is where three of the reported defects were actually visible.
+      await w.emulateMedia({ colorScheme: 'dark' });
+      await w.screenshot({ path: `e2e-artifacts/audit-74-${name}-dark.png`, fullPage: true });
+      findings.push(...(await auditScreen(w, `${name} (dark)`)));
+      await w.emulateMedia({ colorScheme: 'light' });
     };
     /** Nothing on any screen may show a raw machine id — the class the owner caught in his own profile. */
     const noMachineIds = async (where: string): Promise<void> => {
@@ -16863,6 +16951,10 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
     await w.setViewportSize({ width: 390, height: 900 });
     await shot('16-390-names');
     await expectNoInnerOverflow(w);
+
+    // The whole measured picture, in one place, rather than one assertion stopping at the first problem.
+
+    console.log(`\n=== UI AUDIT: ${findings.length} findings ===\n${findings.join('\n')}\n`);
 
     // Read back what each AI phase actually sent.
     const prompts = await readdir(promptDir);

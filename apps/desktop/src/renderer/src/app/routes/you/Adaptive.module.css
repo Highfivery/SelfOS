@@ -775,6 +775,16 @@
 .railActions > button {
   width: 100%;
   justify-content: center;
+  /* A full-width button still needs breathing room: the label was running edge to edge. */
+  padding-inline: var(--space-4);
+}
+/* A ghost action in the rail is still an action — without an edge it reads as a caption. */
+.railActions > button[class*='ghost'] {
+  border: 1px solid var(--color-border);
+}
+.railActions > button[class*='ghost']:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-alt);
 }
 
 /*
@@ -1133,6 +1143,11 @@
   font-size: 1.4375rem;
   line-height: 1.25;
   letter-spacing: -0.01em;
+  /* The underline on `em` is a border, which is painted OUTSIDE the text's own box — so at some widths the
+     headline measured wider than the card it sits in. Let it wrap and keep it inside. */
+  max-width: 100%;
+  overflow-wrap: break-word;
+  text-wrap: balance;
 }
 
 .practiceRule em {
@@ -1300,6 +1315,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* The ellipsis cannot apply while the flex/grid item can grow to its content — this is what let the sample
+     names run past the card edge. */
+  min-width: 0;
+  max-width: 100%;
+}
+.regCard {
+  min-width: 0;
 }
 
 .regState {
@@ -1690,6 +1712,9 @@
   display: grid;
   place-items: center;
   font-size: 0.625rem;
+  /* Without this the digit's line box is taller than the 17px circle and the number rides low inside it. */
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
   color: var(--color-text-tertiary);
 }
 .stepLabel {
@@ -1917,6 +1942,16 @@
   }
   .railWrap {
     position: static;
+  }
+  /* The names phase keeps the deck's two-column body, so below 900px its rail must stack too — it was still a
+     fixed-width column beside the rows, which is what pushed the rail's cards past the pane at 390px. */
+  .deckBody {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rail,
+  .railWrap {
+    max-height: none;
+    min-width: 0;
   }
 }
 

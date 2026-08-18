@@ -93,7 +93,7 @@ export function TakeMap({
                             ? (status.reason ?? 'not yet')
                             : status.outstanding
                               ? `${status.outstanding} new to do`
-                              : status.fresh !== undefined
+                              : status.fresh
                                 ? `${status.count} on record · ${status.fresh} today`
                                 : status.count > 0
                                   ? `${status.count} so far`

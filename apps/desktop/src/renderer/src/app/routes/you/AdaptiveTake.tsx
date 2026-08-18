@@ -1195,14 +1195,33 @@ export function AdaptiveTake(): JSX.Element {
                   of your own mouth are usually different — that gap is the most useful thing here.
                 </Text>
                 {splitNeeded.length === 0 ? (
-                  <Banner tone="info">
-                    Nothing to split here — everything you marked was only ever offered one way
-                    round, so its direction is already known.
-                  </Banner>
-                ) : null}
-                <Text size="sm" tone="tertiary">
-                  Saved as you go — leave any of these blank and come back to them.
-                </Text>
+                  /* A banner alone on an otherwise empty screen reads as a broken step. This one is a normal
+                     outcome — an oriented mark already knows its direction — so it says what happened, what it
+                     means, and what to do next, instead of leaving the person on a blank page. */
+                  <Card className={adaptive.probeCard}>
+                    <Text>
+                      <b>Nothing to split here.</b> Everything you marked was only ever offered one
+                      way round, so its direction is already known — there is no second question to
+                      ask about it.
+                    </Text>
+                    <Text size="sm" tone="secondary">
+                      This step fills up when you mark something that could go either way: a name,
+                      or a line that works spoken and heard. Mark more and it will be waiting.
+                    </Text>
+                    <div className={adaptive.askRow}>
+                      <Button variant="primary" onClick={() => goTo('bank')}>
+                        Back to the words →
+                      </Button>
+                      <Button variant="ghost" onClick={() => goTo('names')}>
+                        Or the names
+                      </Button>
+                    </div>
+                  </Card>
+                ) : (
+                  <Text size="sm" tone="tertiary">
+                    Saved as you go — leave any of these blank and come back to them.
+                  </Text>
+                )}
                 {marked.map((key) => {
                   const entry = bank.entries.find((e) => e.key === key);
                   if (!entry || store.marks[key] === 'never') return null;

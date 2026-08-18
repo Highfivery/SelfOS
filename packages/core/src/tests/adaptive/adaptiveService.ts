@@ -381,6 +381,8 @@ export async function completeAdaptiveTake(
     resultId: string;
     profile?: TestResult['profile'];
     narrative?: string;
+    lede?: string;
+    readings?: TestResult['readings'];
     costUsd?: number;
   },
   now: Date,
@@ -417,6 +419,8 @@ export async function completeAdaptiveTake(
     scores: scoreSpine(lexicon, def.spine),
     ...(input.profile ? { profile: input.profile } : {}),
     ...(input.narrative ? { narrative: input.narrative } : {}),
+    ...(input.lede ? { lede: input.lede } : {}),
+    ...(input.readings && input.readings.length > 0 ? { readings: input.readings } : {}),
     // ADD, never replace: the phases before this one accrued their spend onto the draft, and overwriting
     // would silently drop it — leaving an admin reading the synthesis call's price as the take's price.
     ...(input.costUsd !== undefined || draft.costUsd !== undefined

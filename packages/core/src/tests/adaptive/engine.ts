@@ -2,7 +2,13 @@ import { z } from 'zod';
 
 import { extractJsonArray, extractJsonObject, tolerantArray } from '../../ai/jsonSalvage';
 import { PERSONA, SAFETY } from '../../conversations/promptBuilder';
-import type { AdaptiveProfile, AiFailureReason, EroticLexicon, LexiconEntry } from '../../schemas';
+import type {
+  AdaptiveProfile,
+  AdaptiveReading,
+  AiFailureReason,
+  EroticLexicon,
+  LexiconEntry,
+} from '../../schemas';
 import { runClaude, type AiDeps } from '../../questionnaires/aiCall';
 import { bothSidesAnswered, suppressedTexts, violatesBoundary } from './lexicon';
 
@@ -353,6 +359,16 @@ at 2pm. Return ONLY {"scene": string, "options": string[]}.`,
 
 const SynthesisSchema = z.object({
   narrative: z.string().catch(''),
+  lede: z.string().catch(''),
+  readings: tolerantArray(
+    z.object({
+      kind: z.enum(['pattern', 'gap', 'suggestion']),
+      text: z.string().min(1),
+      source: z.string().optional(),
+    }),
+    { kind: 'pattern' as const, text: '' },
+    (v) => v.text.trim() !== '',
+  ),
   registers: z.record(z.string(), z.number()).catch({}),
   contexts: z
     .record(z.string(), z.object({ heat: z.number(), note: z.string().optional() }))
@@ -365,6 +381,8 @@ const SynthesisSchema = z.object({
 export interface SynthesisResult {
   profile: AdaptiveProfile;
   narrative: string;
+  lede: string;
+  readings: AdaptiveReading[];
 }
 
 /**
@@ -377,6 +395,13 @@ export async function runSynthesis(
   deps: AiDeps,
   lexicon: EroticLexicon,
   transcript: string,
+  /**
+   * A bounded digest of what SelfOS already knows about this person from elsewhere — onboarding, sessions,
+   * earlier insights. It exists so a reading can be checked against something rather than asserted: without
+   * it the model has only the marks, and "why this, probably" would be a guess wearing a citation. Empty is
+   * the normal case for a new person, and the prompt says so, so nothing is invented to fill it.
+   */
+  signals: string[] = [],
 ): Promise<PhaseResult<SynthesisResult>> {
   const system = [
     PERSONA,
@@ -408,12 +433,29 @@ You MAY interpret — say what a pattern suggests about them — but label it as
 ("this reads like…", "if that's right…"), never a verdict about who they are. Never pathologize, never moralize, \
 never turn a preference into a problem to solve.
 
+LEDE — 2–3 sentences, the single most interesting true thing about them from all of this. It is printed at \
+display size at the top of their report, so it must be the finding, not a preamble and not a summary of what \
+the test is. Second person, their register, specific.
+
+READINGS — 2–4 keyed blocks answering "why this, probably". Each is {kind, text, source?}. "kind" is one of \
+"pattern" (something the marks show that they may not have noticed), "gap" (where it stops, stated without \
+judgement) or "suggestion" (one concrete next move). Two to three sentences each, hedged — these are readings, \
+not verdicts. "source" names where ELSE in SelfOS this shows, and you may ONLY set it when the signals below \
+actually support it; quote or name the real thing (an onboarding answer, a session). If there are no signals, \
+or none are relevant, omit "source" — a reading from the marks alone is honest, an invented source is not.
+
 STRUCTURED — registers scored 0..1 (praise, claiming, command, narration, degradation, begging, filth); \
 contexts scored 0..1 with a short note (${ADAPTIVE_CONTEXTS.join(', ')}); themes in THEIR words; wantsToSay; \
 and voice — one short line on how it should sound (e.g. "low, close, certain. not loud.").
 
-Return ONLY {"narrative": string, "registers": object, "contexts": object, "themes": string[], \
-"wantsToSay": string[], "voice": string}.`,
+Return ONLY {"narrative": string, "lede": string, "readings": [{"kind": string, "text": string, \
+"source": string}], "registers": object, "contexts": object, "themes": string[], "wantsToSay": string[], \
+"voice": string}.`,
+    signals.length > 0
+      ? `What SelfOS already knows about them from elsewhere. Use it only where it genuinely bears on what \
+they marked:\n${signals.map((line) => `- ${line}`).join('\n')}`
+      : 'There is nothing else on file about them yet, so every reading comes from their marks alone. Do not \
+set a source on any reading.',
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -438,10 +480,23 @@ Return ONLY {"narrative": string, "registers": object, "contexts": object, "them
   const data = parsed.data;
   // A narrative that quotes a boundary back at them is worse than no narrative.
   const narrative = violatesBoundary(lexicon, data.narrative) ? '' : data.narrative;
+  // The lede is the loudest line on the report and the readings sit right under it, so both go through the
+  // same filter as the prose — a boundary quoted back at display size is the worst version of that failure.
+  const lede = violatesBoundary(lexicon, data.lede) ? '' : data.lede;
+  const readings = data.readings
+    .filter((r) => !violatesBoundary(lexicon, r.text))
+    // A source is a claim about the person's own records; one that names a boundary is dropped with its
+    // reading rather than quietly stripped, since the reading was reasoned FROM it.
+    .filter((r) => r.source === undefined || !violatesBoundary(lexicon, r.source))
+    // With no signals there is nothing a source could honestly cite, so any the model set anyway is dropped
+    // rather than shown — the instruction is not the enforcement.
+    .map((r) => (signals.length === 0 ? { kind: r.kind, text: r.text } : r));
   return {
     ok: narrative !== '',
     value: {
       narrative,
+      lede,
+      readings,
       profile: {
         registers: data.registers,
         contexts: data.contexts,

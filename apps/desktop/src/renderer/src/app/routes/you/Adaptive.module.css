@@ -1521,7 +1521,9 @@
 /* 74 §3.6.8 — the report's "what to call each other": two directions, side by side. */
 .nameCols {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  /* `min()` is load-bearing: a bare 260px minimum is wider than a 390px screen minus the page padding, so
+     the track refuses to shrink and the card spills past its parent instead of stacking. */
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
   gap: var(--space-4);
   margin-top: var(--space-2);
 }
@@ -2032,4 +2034,146 @@
 .rowSplitLead {
   font-size: 0.75rem;
   color: var(--color-text-tertiary);
+}
+
+/* ── The report (74 §3.3, redesigned) ─────────────────────────────────────────────────────────────────
+   The old page led with a wall of several hundred chips under two thin bars. This leads with what it MEANS
+   and keeps every list behind a disclosure, so the longest thing the test produces stops being the least
+   useful thing it produces. */
+
+.hero {
+  padding: var(--space-6) var(--space-6) var(--space-5);
+}
+
+.heroTitle {
+  margin-bottom: var(--space-3);
+}
+
+/* The one line on the page set at reading size. Serif, because it is prose about them and everything around
+   it is data — the contrast is what makes it read as the finding rather than another label. */
+.lede {
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+}
+
+.reportGrid {
+  display: grid;
+  /* See `.nameCols` — the minimum must cap at the container or the two cards overflow a phone. */
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: var(--space-4);
+}
+
+/* A compact ranked strip. `SubscaleBar` is right for a self-assessment's twelve dimensions on their own
+   screen; here twelve of them stacked WAS the wall, so the report shows the ones with a real reading and
+   folds the rest away. */
+.dimRow {
+  display: grid;
+  grid-template-columns: minmax(0, 8rem) 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+  font-size: 0.8125rem;
+  margin-bottom: var(--space-2);
+}
+
+.dimTrack {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-surface-alt);
+  overflow: hidden;
+}
+
+.dimTrack > i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-accent-solid);
+}
+
+.dimRow.muted .dimTrack > i {
+  background: var(--color-border-strong);
+}
+
+.dimValue {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+
+/* A disclosure, used everywhere a long list used to sit inline. */
+.fold {
+  margin-top: var(--space-3);
+}
+
+.fold > summary {
+  cursor: pointer;
+  color: var(--color-accent-text);
+  font-size: 0.8125rem;
+}
+
+.fold > summary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Open state needs air between the summary and its body (§12). */
+.fold[open] > summary {
+  margin-bottom: var(--space-3);
+}
+
+/* "Why this, probably" — a keyed row, so the kind of claim is readable before the claim is. */
+.whyRow {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+  margin-bottom: var(--space-2);
+}
+
+.whyKey {
+  flex: none;
+  width: 5rem;
+  padding-top: 2px;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.whySource {
+  margin-top: var(--space-1);
+}
+
+/* Where the profile is actually used — the point being that it is not a page you visit. */
+.useGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.useTile {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-alt);
+}
+
+.useTile > b {
+  display: block;
+  color: var(--color-text-primary);
+  margin-bottom: 2px;
+}
+
+/* The hard-no line. One sentence and a disclosure, not a field of struck-through chips: a boundary is a
+   boundary, not a result to display at length. */
+.noBox {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-subtle-bg);
+  color: var(--color-danger);
 }

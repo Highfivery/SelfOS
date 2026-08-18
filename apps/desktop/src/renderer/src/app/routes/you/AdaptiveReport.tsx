@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Lock } from 'lucide-react';
-import { NO_SIGNAL_BAND, type LexiconEntry } from '@shared/schemas';
+import { NO_SIGNAL_BAND, type AdaptiveReading, type LexiconEntry } from '@shared/schemas';
 
 import {
   AdminOnlyBadge,
@@ -12,7 +12,6 @@ import {
   LineChart,
   Markdown,
   Stack,
-  SubscaleBar,
   Text,
 } from '../../../design-system/components';
 import { useAdaptiveTestStore } from '../../../stores/adaptiveTestStore';
@@ -77,6 +76,87 @@ function Chips({
     </ul>
   );
 }
+
+/** A row of the ranked strip. Muted below the midpoint, so "mostly doesn't land" reads without a legend. */
+function DimRow({
+  label,
+  value,
+  display,
+}: {
+  label: string;
+  value: number;
+  display?: string;
+}): JSX.Element {
+  const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
+  // A floor, or a real-but-small reading paints nothing and reads as "not measured" — which is the one thing
+  // this bar must never say, since a dimension with no signal is deliberately not charted at all. A genuine
+  // zero keeps an empty track: that IS the honest picture, and the number beside it says so.
+  const width = pct === 0 ? 0 : Math.max(pct, 3);
+  return (
+    <div className={`${adaptive.dimRow} ${value < 0.5 ? adaptive.muted : ''}`}>
+      <span>{label}</span>
+      {/* The bar is decoration; the number beside it is the text equivalent (§9), so no aria is needed. */}
+      <span className={adaptive.dimTrack} aria-hidden="true">
+        <i style={{ width: `${width}%` }} />
+      </span>
+      <span className={adaptive.dimValue}>{display ?? `${pct}%`}</span>
+    </div>
+  );
+}
+
+/**
+ * A list that folds. The report's whole problem was length: every list here can run to dozens of entries,
+ * and a person scrolling past 60 chips to reach the next section learns nothing from chips 13–60. The first
+ * few are the signal; the rest are on record and one tap away.
+ */
+const FOLD_AFTER = 12;
+
+function FoldedChips({
+  entries,
+  never,
+  label,
+}: {
+  entries: LexiconEntry[];
+  never?: boolean;
+  label: string;
+}): JSX.Element | null {
+  if (entries.length === 0) return null;
+  const head = entries.slice(0, FOLD_AFTER);
+  const rest = entries.slice(FOLD_AFTER);
+  return (
+    <div>
+      <Text size="sm" tone="secondary">
+        {label}
+      </Text>
+      <Chips entries={head} {...(never ? { never: true } : {})} />
+      {rest.length > 0 ? (
+        <details className={adaptive.fold}>
+          <summary>See the other {rest.length}</summary>
+          <Chips entries={rest} {...(never ? { never: true } : {})} />
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+const READING_LABELS: Record<AdaptiveReading['kind'], string> = {
+  pattern: 'Pattern',
+  gap: 'Gap',
+  suggestion: 'Try',
+};
+
+/**
+ * Where the profile is used. On the page because the profile is not a document — it changes what the rest of
+ * the app says to them, and a person who cannot see that reads this screen as a long record of what they
+ * tapped. Each line states something that is actually true of the wiring, not an aspiration.
+ */
+const USED_IN: { where: string; what: string }[] = [
+  { where: 'Sessions', what: 'Your coach uses your register, and never what you ruled out.' },
+  { where: 'Questionnaires', what: "Stops asking about ground you've already settled here." },
+  { where: 'Together', what: "Quietly steers your partner's coach toward what lands for you." },
+  { where: 'Practice', what: 'The things you want to say become a session you can run.' },
+  { where: 'Everywhere', what: 'A hard no is suppressed app-wide, with or without a partner.' },
+];
 
 /**
  * 74 §3.3 — the report. Written to them, in their register, with the machine-usable lexicon underneath it.
@@ -196,6 +276,30 @@ export function AdaptiveReport(): JSX.Element {
           .map(([key, points]) => ({ label: SPINE_LABELS[key] ?? key, points }))
       : [];
 
+  /**
+   * The claim the report leads with, and the rest of the prose under it.
+   *
+   * `lede` is its own field for a reason (74 §3.3): pulling the first paragraph out of the narrative works
+   * until the model opens with a throat-clear, and then the loudest line on the page is filler. A take from
+   * BEFORE the field existed has no lede, so the first paragraph is the fallback rather than nothing —
+   * that take's report still opens on a sentence instead of a heading.
+   */
+  const paragraphs = (latest?.narrative ?? '').split(/\n{2,}/).filter((p) => p.trim() !== '');
+  const lede = latest?.lede ?? paragraphs[0] ?? '';
+  const rest = (latest?.lede ? paragraphs : paragraphs.slice(1)).join('\n\n');
+  const readings = latest?.readings ?? [];
+
+  // Strongest first, and only what was actually scored — the no-signal ones are listed, never charted.
+  const scored = latest?.scores ?? [];
+  const ranked = scored
+    .filter((score) => score.band !== NO_SIGNAL_BAND)
+    .slice()
+    .sort((a, b) => b.normalized - a.normalized);
+  const unscored = scored.filter((score) => score.band === NO_SIGNAL_BAND);
+  // The two hear/say bars are counts, not scores, so they share a scale rather than each filling its track —
+  // two full bars reading "41" and "9" would say the opposite of what the numbers say.
+  const sideMax = Math.max(loves.length, says.length);
+
   // The synthesis scores these on every take. Strongest first, and only what it actually returned.
   const registers = Object.entries(lexicon.registers)
     .filter(([, value]) => Number.isFinite(value))
@@ -257,52 +361,379 @@ export function AdaptiveReport(): JSX.Element {
             </div>
           ) : (
             <>
-              {latest?.narrative ? (
-                <Card className={adaptive.reportSection}>
-                  <Markdown>{latest.narrative}</Markdown>
+              {/*
+               * The hero. The report used to open on a Markdown wall, so the first thing a person met after
+               * hundreds of marks was more reading. It opens on ONE claim now, set at reading size: the
+               * model's `lede` when it wrote one, otherwise the narrative's own opening paragraph so a take
+               * from before this existed still leads with something rather than a heading.
+               */}
+              {lede ? (
+                <Card className={adaptive.hero}>
+                  <Heading level={2} className={adaptive.heroTitle}>
+                    What your words say
+                  </Heading>
+                  <div className={adaptive.lede}>
+                    <Markdown>{lede}</Markdown>
+                  </div>
                 </Card>
-              ) : latest ? (
+              ) : null}
+
+              {!latest.narrative ? (
                 <Banner tone="info">
                   The written read didn&rsquo;t come through this time — everything below is from
                   your own answers, and it&rsquo;s all still yours.
                 </Banner>
               ) : null}
 
-              {latest ? (
+              {/*
+               * "Why this, probably" — the keyed readings. Each names its own kind before it makes its
+               * claim, and cites where else in SelfOS the pattern shows when the synthesis had a real
+               * source for it. Hedged on purpose: this is an inference about a person, not a verdict.
+               */}
+              {readings.length > 0 ? (
                 <section>
-                  <Heading level={2}>The shape of it</Heading>
-                  <Stack gap={2}>
-                    {/* A dimension with no signal is LISTED, not charted: a 0% bar next to "not their thing"
-                    would tell them something about themselves they never actually said (74 §3.3). */}
-                    {latest.scores
-                      .filter((score) => score.band !== NO_SIGNAL_BAND)
-                      .map((score) => (
-                        <SubscaleBar
-                          key={score.key}
-                          label={SPINE_LABELS[score.key] ?? score.key}
-                          normalized={score.normalized}
-                          {...(score.band !== undefined ? { band: score.band } : {})}
-                          signed={false}
-                        />
-                      ))}
-                  </Stack>
-                  {latest.scores.some((score) => score.band === NO_SIGNAL_BAND) ? (
-                    <Text size="sm" tone="tertiary">
-                      Not covered this time:{' '}
-                      {latest.scores
-                        .filter((score) => score.band === NO_SIGNAL_BAND)
-                        .map((score) => SPINE_LABELS[score.key] ?? score.key)
-                        .join(' · ')}
-                      .
+                  <Heading level={2}>Why this, probably</Heading>
+                  <Text size="sm" tone="tertiary">
+                    Read against the rest of what SelfOS knows about you. Offered, not asserted.
+                  </Text>
+                  <div>
+                    {readings.map((reading, i) => (
+                      <div key={`${reading.kind}-${i}`} className={adaptive.whyRow}>
+                        <span className={adaptive.whyKey}>{READING_LABELS[reading.kind]}</span>
+                        <div>
+                          <Text>{reading.text}</Text>
+                          {reading.source ? (
+                            <Text size="sm" tone="tertiary" className={adaptive.whySource}>
+                              {reading.source}
+                            </Text>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
+              {/* The full read, after the claim rather than instead of it. */}
+              {rest ? (
+                <section>
+                  <Heading level={2}>The read</Heading>
+                  <Card className={adaptive.reportSection}>
+                    <Markdown>{rest}</Markdown>
+                  </Card>
+                </section>
+              ) : null}
+
+              <div className={adaptive.reportGrid}>
+                {/* The shape of it — the strongest few, the rest folded. Twelve stacked bars WAS the wall. */}
+                <Card>
+                  <Heading level={3}>The shape of it</Heading>
+                  <Text size="sm" tone="tertiary">
+                    Only what you gave a real signal on. The rest is listed, not charted.
+                  </Text>
+                  {ranked.length === 0 ? (
+                    <Text tone="secondary">
+                      Nothing scored yet — this fills in as you mark things.
                     </Text>
                   ) : null}
+                  {ranked.slice(0, 5).map((score) => (
+                    <DimRow
+                      key={score.key}
+                      label={SPINE_LABELS[score.key] ?? score.key}
+                      value={score.normalized}
+                    />
+                  ))}
+                  {ranked.length > 5 ? (
+                    <details className={adaptive.fold}>
+                      <summary>See the other {ranked.length - 5}</summary>
+                      {ranked.slice(5).map((score) => (
+                        <DimRow
+                          key={score.key}
+                          label={SPINE_LABELS[score.key] ?? score.key}
+                          value={score.normalized}
+                        />
+                      ))}
+                    </details>
+                  ) : null}
+                  {/* A dimension with no signal is LISTED, never charted: a 0% bar next to "not their thing"
+                      would tell them something about themselves they never actually said (74 §3.3). */}
+                  {unscored.length > 0 ? (
+                    <details className={adaptive.fold}>
+                      <summary>{unscored.length} with nothing to go on yet</summary>
+                      <Text size="sm" tone="tertiary">
+                        {unscored.map((score) => SPINE_LABELS[score.key] ?? score.key).join(' · ')}{' '}
+                        — these had no marks this time, so there is nothing to say about them. They
+                        are not zero.
+                      </Text>
+                    </details>
+                  ) : null}
+                </Card>
+
+                {/* The hear/say gap: the thing the test exists to find, and it was buried in a chip list. */}
+                <Card>
+                  <Heading level={3}>Hearing vs saying</Heading>
+                  <Text size="sm" tone="tertiary">
+                    The gap the test exists to find.
+                  </Text>
+                  <DimRow
+                    label="Love to hear"
+                    value={sideMax === 0 ? 0 : loves.length / sideMax}
+                    display={String(loves.length)}
+                  />
+                  <DimRow
+                    label="Would say"
+                    value={sideMax === 0 ? 0 : says.length / sideMax}
+                    display={String(says.length)}
+                  />
+                  {notYet.length > 0 ? (
+                    <>
+                      <Text size="sm" tone="tertiary" className={adaptive.whySource}>
+                        {notYet.length} you want said to you that you wouldn&rsquo;t say back —
+                        worth practising, not a flaw.
+                      </Text>
+                      <details className={adaptive.fold}>
+                        <summary>See the {notYet.length}</summary>
+                        <Chips entries={notYet} />
+                      </details>
+                      <div className={take.footer}>
+                        <Button
+                          variant="secondary"
+                          onClick={() =>
+                            // Straight into the guided practice session with the goal already loaded — the
+                            // whole point of deriving `wantsToSay` is that it stops asking what they want
+                            // to say (§3.5).
+                            navigate('/sessions', {
+                              state: {
+                                startGuideId: 'dirty-talk-practice',
+                                seedText: `I want to be able to say: ${notYet
+                                  .map((e) => e.text)
+                                  .join(', ')}.`,
+                              },
+                            })
+                          }
+                        >
+                          Practise this
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <Text size="sm" tone="tertiary" className={adaptive.whySource}>
+                      Nothing sitting in the gap right now — what you like hearing, you&rsquo;d say.
+                    </Text>
+                  )}
+                </Card>
+              </div>
+
+              {/*
+               * 74 §3.6.8 — the most directly usable thing the test produces, and it produced none of it
+               * before: what the two of you want to be called. Loved names lead; the middle mark is a plain
+               * second-tier line; the hard nos are ONE line with a disclosure rather than a field of
+               * struck-through chips — a boundary is a boundary, not a result to display at length.
+               */}
+              {names.callMe.length + names.iCall.length + names.neverCalled.length > 0 ? (
+                <Card>
+                  <div className={adaptive.sectionHead}>
+                    <Heading level={2}>What to call each other</Heading>
+                    <button
+                      type="button"
+                      className={adaptive.textLink}
+                      onClick={() =>
+                        navigate(`/tests/${testId}/take`, { state: { step: 'names' } })
+                      }
+                    >
+                      Edit the names
+                    </button>
+                  </div>
+                  <div className={adaptive.nameCols}>
+                    {(
+                      [
+                        {
+                          head: 'Call me',
+                          love: names.callMe,
+                          okay: names.okayCalled,
+                          no: names.neverCalled,
+                        },
+                        {
+                          head: 'What you call them',
+                          love: names.iCall,
+                          okay: names.okaySaying,
+                          no: names.neverSaying,
+                        },
+                      ] as const
+                    ).map((col) => (
+                      <div key={col.head}>
+                        <Text size="sm" tone="secondary">
+                          {col.head}
+                        </Text>
+                        {/* A column heading with nothing under it reads as a broken screen — and it is
+                            entirely normal to answer one direction and not the other. */}
+                        {col.love.length + col.okay.length + col.no.length === 0 ? (
+                          <Text size="sm" tone="tertiary">
+                            Nothing marked this way yet.
+                          </Text>
+                        ) : null}
+                        {/* Folded like every other list here. The bank holds thousands of names, so a
+                            person who marked freely had the same wall of chips this redesign exists to
+                            remove — just in a nicer colour. */}
+                        <div className={adaptive.chipRow}>
+                          {col.love.slice(0, FOLD_AFTER).map((text) => (
+                            <span
+                              key={text}
+                              className={`${adaptive.nameChip} ${adaptive.chipLove}`}
+                            >
+                              {text}
+                            </span>
+                          ))}
+                        </div>
+                        {col.love.length > FOLD_AFTER ? (
+                          <details className={adaptive.fold}>
+                            <summary>See the other {col.love.length - FOLD_AFTER}</summary>
+                            <div className={adaptive.chipRow}>
+                              {col.love.slice(FOLD_AFTER).map((text) => (
+                                <span
+                                  key={text}
+                                  className={`${adaptive.nameChip} ${adaptive.chipLove}`}
+                                >
+                                  {text}
+                                </span>
+                              ))}
+                            </div>
+                          </details>
+                        ) : null}
+                        {col.okay.length > 0 ? (
+                          <Text size="sm" tone="tertiary" className={adaptive.tier2}>
+                            Fine either way: {col.okay.join(' · ')}
+                          </Text>
+                        ) : null}
+                        {col.no.length > 0 ? (
+                          <div className={adaptive.noBox}>
+                            <strong>{col.no.length} off the table.</strong> Never suggested anywhere
+                            in SelfOS.
+                            <details className={adaptive.fold}>
+                              <summary>See them</summary>
+                              <div className={adaptive.chipRow}>
+                                {col.no.map((text) => (
+                                  <span
+                                    key={text}
+                                    className={`${adaptive.nameChip} ${adaptive.chipNo}`}
+                                  >
+                                    {text}
+                                  </span>
+                                ))}
+                              </div>
+                            </details>
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              ) : null}
+
+              <section>
+                <div className={adaptive.sectionHead}>
+                  <Heading level={2}>Your words</Heading>
+                  <button
+                    type="button"
+                    className={adaptive.textLink}
+                    onClick={() => navigate(`/tests/${testId}/take`, { state: { step: 'bank' } })}
+                  >
+                    Edit the words
+                  </button>
+                </div>
+                <Stack gap={4}>
+                  {/* A heading with nothing under it is the empty-report defect one level down: it reads as
+                      a broken screen, and it says "we have nothing" in the voice of "here is your answer".
+                      Each band appears only when it holds something, and if none of them do it says so. */}
+                  <FoldedChips entries={loves} label="Love to hear" />
+                  <FoldedChips entries={says} label="Comfortable saying" />
+                  {loves.length + says.length + notYet.length + never.length + okay.length === 0 ? (
+                    <Text tone="secondary">
+                      Nothing from the words yet — this fills in as you mark them.
+                    </Text>
+                  ) : null}
+                  <FoldedChips entries={okay} label="Fine either way — usable, not favourites" />
+                  {never.length > 0 ? (
+                    <div className={adaptive.noBox}>
+                      <strong>{never.length} off the table.</strong> Nothing in SelfOS will suggest
+                      these — and lifting one is yours alone to do.
+                      <details className={adaptive.fold}>
+                        <summary>See them, and change your mind</summary>
+                        <Chips entries={never} never />
+                        <Stack gap={2}>
+                          {never.map((entry) => (
+                            <Button
+                              key={entry.key}
+                              variant="ghost"
+                              onClick={() =>
+                                void editLexicon({ kind: 'setState', key: entry.key, state: null })
+                              }
+                            >
+                              Changed my mind about &ldquo;{entry.text}&rdquo;
+                            </Button>
+                          ))}
+                        </Stack>
+                      </details>
+                    </div>
+                  ) : null}
+                </Stack>
+              </section>
+
+              {/*
+               * What the synthesis actually said about REGISTER and TIMING. It has been scoring both on every
+               * take and nothing read them — generated, stored, discarded. The timing read is the most usable
+               * thing in it.
+               */}
+              {registers.length > 0 || contexts.length > 0 ? (
+                <section>
+                  <div className={adaptive.sectionHead}>
+                    <Heading level={2}>Register &amp; timing</Heading>
+                    <button
+                      type="button"
+                      className={adaptive.textLink}
+                      onClick={() =>
+                        navigate(`/tests/${testId}/take`, { state: { step: 'scenario' } })
+                      }
+                    >
+                      Redo “in the moment”
+                    </button>
+                  </div>
+                  <div className={adaptive.reportGrid}>
+                    {registers.length > 0 ? (
+                      <Card>
+                        <Text size="sm" tone="secondary">
+                          Which register lands
+                        </Text>
+                        {registers.map(([key, value]) => (
+                          <DimRow key={key} label={REGISTER_LABELS[key] ?? key} value={value} />
+                        ))}
+                      </Card>
+                    ) : null}
+                    {contexts.length > 0 ? (
+                      <Card>
+                        <Text size="sm" tone="secondary">
+                          When it lands
+                        </Text>
+                        {contexts.map(([key, ctx]) => (
+                          <div key={key}>
+                            <DimRow label={CONTEXT_LABELS[key] ?? key} value={ctx.heat} />
+                            {ctx.note ? (
+                              <Text size="sm" tone="tertiary">
+                                {ctx.note}
+                              </Text>
+                            ) : null}
+                          </div>
+                        ))}
+                      </Card>
+                    ) : null}
+                  </div>
                 </section>
               ) : null}
 
               {/*
-               * Across takes. The whole reason the spine is FIXED (74 §4.2) is that a retake stays comparable —
-               * the report was throwing that away and showing only the newest take, so nothing in the app ever
-               * answered "has this moved?". The chart's text equivalents come from `LineChart` itself (§9).
+               * Across takes. The whole reason the spine is FIXED (74 §4.2) is that a retake stays comparable
+               * — the report was throwing that away and showing only the newest take, so nothing in the app
+               * ever answered "has this moved?". The chart's text equivalents come from `LineChart` (§9).
                */}
               {trendSeries.length > 0 ? (
                 <section>
@@ -319,255 +750,23 @@ export function AdaptiveReport(): JSX.Element {
                 </section>
               ) : null}
 
-              {/*
-               * What the synthesis actually said about REGISTER and TIMING. It has been scoring both on every
-               * take and nothing read them — generated, stored, discarded. This is the person's own profile, and
-               * the timing read is the most usable thing in it.
-               */}
-              {registers.length > 0 || contexts.length > 0 ? (
-                <section>
-                  <div className={adaptive.sectionHead}>
-                    <Heading level={2}>Register &amp; timing</Heading>
-                    <button
-                      type="button"
-                      className={adaptive.textLink}
-                      onClick={() =>
-                        navigate(`/tests/${testId}/take`, { state: { step: 'scenario' } })
-                      }
-                    >
-                      Redo “in the moment”
-                    </button>
-                  </div>
-                  <Stack gap={4}>
-                    {registers.length > 0 ? (
-                      <div>
-                        <Text size="sm" tone="secondary">
-                          Which register lands
-                        </Text>
-                        <Stack gap={2}>
-                          {registers.map(([key, value]) => (
-                            <SubscaleBar
-                              key={key}
-                              label={REGISTER_LABELS[key] ?? key}
-                              normalized={value}
-                              signed={false}
-                            />
-                          ))}
-                        </Stack>
-                      </div>
-                    ) : null}
-                    {contexts.length > 0 ? (
-                      <div>
-                        <Text size="sm" tone="secondary">
-                          When it lands
-                        </Text>
-                        <Stack gap={2}>
-                          {contexts.map(([key, ctx]) => (
-                            <div key={key}>
-                              <SubscaleBar
-                                label={CONTEXT_LABELS[key] ?? key}
-                                normalized={ctx.heat}
-                                signed={false}
-                              />
-                              {ctx.note ? (
-                                <Text size="sm" tone="tertiary">
-                                  {ctx.note}
-                                </Text>
-                              ) : null}
-                            </div>
-                          ))}
-                        </Stack>
-                      </div>
-                    ) : null}
-                  </Stack>
-                </section>
-              ) : null}
-
-              {/*
-               * 74 §3.6.8 — the most directly usable thing the test produces, and it produced none of it
-               * before: what the two of you want to be called. Loved names lead; the middle mark is listed
-               * plainly as second-tier; a hard no is shown struck through, because seeing it recorded is
-               * the point. Per direction, since a name is answered twice.
-               */}
-              {names.callMe.length + names.iCall.length + names.neverCalled.length > 0 ? (
-                <section>
-                  <div className={adaptive.sectionHead}>
-                    <Heading level={2}>What to call each other</Heading>
-                    <button
-                      type="button"
-                      className={adaptive.textLink}
-                      onClick={() =>
-                        navigate(`/tests/${testId}/take`, { state: { step: 'names' } })
-                      }
-                    >
-                      Edit the names
-                    </button>
-                  </div>
-                  <div className={adaptive.nameCols}>
-                    <div>
+              {/* The profile is not a page you visit — say so, on the page. */}
+              <Card>
+                <Heading level={2}>Where this gets used</Heading>
+                <Text size="sm" tone="tertiary">
+                  This changes what the rest of SelfOS says to you. Nobody is shown your answers.
+                </Text>
+                <div className={adaptive.useGrid}>
+                  {USED_IN.map((row) => (
+                    <div key={row.where} className={adaptive.useTile}>
+                      <b>{row.where}</b>
                       <Text size="sm" tone="secondary">
-                        Call me
+                        {row.what}
                       </Text>
-                      {names.callMe.length + names.okayCalled.length + names.neverCalled.length ===
-                      0 ? (
-                        <Text size="sm" tone="tertiary">
-                          Nothing marked this way yet.
-                        </Text>
-                      ) : null}
-                      <div className={adaptive.chipRow}>
-                        {names.callMe.map((text) => (
-                          <span key={text} className={`${adaptive.nameChip} ${adaptive.chipLove}`}>
-                            {text}
-                          </span>
-                        ))}
-                      </div>
-                      {names.okayCalled.length > 0 ? (
-                        <Text size="sm" tone="tertiary" className={adaptive.tier2}>
-                          Fine either way: {names.okayCalled.join(' · ')}
-                        </Text>
-                      ) : null}
-                      {names.neverCalled.length > 0 ? (
-                        <div className={adaptive.chipRow}>
-                          {names.neverCalled.map((text) => (
-                            <span key={text} className={`${adaptive.nameChip} ${adaptive.chipNo}`}>
-                              {text}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
                     </div>
-                    <div>
-                      <Text size="sm" tone="secondary">
-                        What you call them
-                      </Text>
-                      {/* A column heading with nothing under it reads as a broken screen — and it is entirely
-                          normal to answer one direction and not the other. */}
-                      {names.iCall.length + names.okaySaying.length + names.neverSaying.length ===
-                      0 ? (
-                        <Text size="sm" tone="tertiary">
-                          Nothing marked this way yet.
-                        </Text>
-                      ) : null}
-                      <div className={adaptive.chipRow}>
-                        {names.iCall.map((text) => (
-                          <span key={text} className={`${adaptive.nameChip} ${adaptive.chipLove}`}>
-                            {text}
-                          </span>
-                        ))}
-                      </div>
-                      {names.okaySaying.length > 0 ? (
-                        <Text size="sm" tone="tertiary" className={adaptive.tier2}>
-                          Fine either way: {names.okaySaying.join(' · ')}
-                        </Text>
-                      ) : null}
-                      {names.neverSaying.length > 0 ? (
-                        <div className={adaptive.chipRow}>
-                          {names.neverSaying.map((text) => (
-                            <span key={text} className={`${adaptive.nameChip} ${adaptive.chipNo}`}>
-                              {text}
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                </section>
-              ) : null}
-
-              <section>
-                <div className={adaptive.sectionHead}>
-                  <Heading level={2}>Your words</Heading>
-                  <button
-                    type="button"
-                    className={adaptive.textLink}
-                    onClick={() => navigate(`/tests/${testId}/take`, { state: { step: 'bank' } })}
-                  >
-                    Edit the words
-                  </button>
+                  ))}
                 </div>
-                <Stack gap={4}>
-                  {/* A heading with nothing under it is the empty-report defect one level down: it reads as a
-                      broken screen, and it says "we have nothing" in the voice of "here is your answer". Each
-                      band appears only when it holds something, and if none of them do the section says so. */}
-                  {loves.length > 0 ? (
-                    <div>
-                      <Text size="sm" tone="secondary">
-                        Love to hear
-                      </Text>
-                      <Chips entries={loves} />
-                    </div>
-                  ) : null}
-                  {says.length > 0 ? (
-                    <div>
-                      <Text size="sm" tone="secondary">
-                        Comfortable saying
-                      </Text>
-                      <Chips entries={says} />
-                    </div>
-                  ) : null}
-                  {loves.length + says.length + notYet.length + never.length + okay.length === 0 ? (
-                    <Text tone="secondary">
-                      Nothing from the words yet — this fills in as you mark them.
-                    </Text>
-                  ) : null}
-                  {notYet.length > 0 ? (
-                    <div>
-                      <Text size="sm" tone="secondary">
-                        Want to, and freeze — worth practising
-                      </Text>
-                      <Chips entries={notYet} />
-                      <div className={take.footer}>
-                        <Button
-                          variant="secondary"
-                          onClick={() =>
-                            // Straight into the guided practice session with the goal already loaded — the whole
-                            // point of deriving `wantsToSay` is that it stops asking what they want to say (§3.5).
-                            navigate('/sessions', {
-                              state: {
-                                startGuideId: 'dirty-talk-practice',
-                                seedText: `I want to be able to say: ${notYet
-                                  .map((e) => e.text)
-                                  .join(', ')}.`,
-                              },
-                            })
-                          }
-                        >
-                          Practise this
-                        </Button>
-                      </div>
-                    </div>
-                  ) : null}
-                  {okay.length > 0 ? (
-                    <div>
-                      <Text size="sm" tone="secondary">
-                        Fine either way — usable, not favourites
-                      </Text>
-                      <Chips entries={okay} />
-                    </div>
-                  ) : null}
-                  {never.length > 0 ? (
-                    <div>
-                      <Text size="sm" tone="secondary">
-                        Off the table — nothing in SelfOS will suggest these
-                      </Text>
-                      <Chips entries={never} never />
-                      <Stack gap={2}>
-                        {never.map((entry) => (
-                          <Button
-                            key={entry.key}
-                            variant="ghost"
-                            onClick={() =>
-                              void editLexicon({ kind: 'setState', key: entry.key, state: null })
-                            }
-                          >
-                            Changed my mind about &ldquo;{entry.text}&rdquo;
-                          </Button>
-                        ))}
-                      </Stack>
-                    </div>
-                  ) : null}
-                </Stack>
-              </section>
+              </Card>
 
               {/* The take's own cost — accrued across every AI phase, not just the synthesis. The bridge already
               redacts it for anyone without `budgets.manage` (the durable §06 rule: the $ boundary is the

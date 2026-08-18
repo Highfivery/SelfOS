@@ -16636,9 +16636,17 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     // The report renders from the deterministic scores, honestly labelled as the short version.
     await expect(w.getByText(/didn.t come through this time/i)).toBeVisible();
     await expect(w.getByText('Being claimed')).toBeVisible();
-    await expect(w.getByText(/Off the table/i)).toBeVisible();
+    // A hard no is ONE line with a disclosure now, not a field of struck-through chips (74 §3.3). Two of
+    // them can be on screen — the names card and the words section each state their own — so this counts
+    // rather than assuming one.
+    await expect(w.getByText(/off the table\./i).first()).toBeVisible();
     // Their own answers, all of them: a mild yes is shown, plainly second-tier, never as a favourite.
-    await expect(w.getByText(/Fine either way/i)).toBeVisible();
+    await expect(w.getByText(/Fine either way/i).first()).toBeVisible();
+    // The redesign's own shape: the profile says where it is USED, because it is not a page you visit.
+    await expect(w.getByText('Where this gets used')).toBeVisible();
+    await expect(w.getByRole('heading', { name: 'The shape of it' })).toBeVisible();
+    // …and the boundary is behind the disclosure rather than printed across the page.
+    await expect(w.getByText('beg like the slut you are', { exact: true })).not.toBeVisible();
     await w.screenshot({ path: 'e2e-artifacts/74-report.png' });
 
     // Decrypt the vault: the lexicon is encrypted, carries the boundary, and the derived Insight NEVER does.
@@ -16939,6 +16947,17 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
     await w.getByRole('button', { name: 'Read it' }).click();
     await shot('13-step8-profile');
     await noMachineIds('the profile');
+
+    // The report at phone width. The walk's later 390px shots land on the map and the names, so the
+    // redesigned report — the longest surface in the feature — had no narrow-width check of its own.
+    await w.setViewportSize({ width: 390, height: 900 });
+    // The nav collapses to a drawer below 768px and animates; shooting mid-transition photographs the
+    // drawer sitting over the page rather than the page.
+    await expect(w.getByRole('heading', { name: 'The shape of it' })).toBeVisible();
+    await w.waitForTimeout(400);
+    await shot('18-390-report');
+    await expectNoInnerOverflow(w);
+    await w.setViewportSize({ width: 1280, height: 900 });
 
     // 74 §3.6.10 — the retake asks FIRST, before the steps: keep what is on record, or start from an empty
     // sheet. Owner-directed, because tapping Retake used to silently reload every previous answer.

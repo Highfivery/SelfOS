@@ -524,6 +524,35 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-18 — **Build (the report redesigned, and an AI read worth reading; mockup approved FIRST; SPEC 74
+  §3.3a; on `feat/report-redesign`).** The owner: _"improve the UI/UX GREATLY (which MEANS REDESIGN!!!)… Right
+  now its resulting in a very lonfg useless page"_, and separately _"the final report should also use AI to
+  analyze everything… why based on other data in the app"_. **What was actually wrong:** the report handed a
+  person who had just made hundreds of marks their own marks back — several hundred chips (loved, mild,
+  every hard no struck through) under two thin bars, with the prose as one undifferentiated Markdown block.
+  Built: a **hero** carrying a new `lede` at reading size — its own field, not the narrative's first
+  paragraph, because pulling the opener out of prose works until the model opens with a throat-clear and then
+  the loudest line on the page is filler (a pre-`lede` take falls back to it, so it still opens on a
+  sentence); **"Why this, probably"** — 2–4 keyed `readings` (pattern / gap / suggestion), each hedged, each
+  able to cite where ELSE in SelfOS the pattern shows, fed a bounded digest of the person's own-subject
+  insight facts; **a two-up grid** (strongest five dimensions, the rest folded, no-signal ones listed and
+  never charted; the hear/say gap promoted out of a chip list into the finding it is); **every list folds**
+  after twelve; **a hard no is one sentence** with a disclosure; and **"Where this gets used"**, because the
+  profile is not a document — it changes what the rest of the app says to them. **The load-bearing rule is in
+  code, not the prompt:** with nothing on file to cite, a `source` the model set anyway is **dropped** —
+  an invented citation about a person's own records is worse than none (guard verified to fail when
+  reverted). Gate green: typecheck (4 pkgs), lint, format, **2355 core + 13 relay + 1677 desktop** unit,
+  **4/4 spec-74 E2E**. **Two defects my own auditor caught, not my eye:** three `auto-fit minmax(300px, 1fr)`
+  grids **spilled past their cards at 390px** — a track minimum wider than the container never shrinks, so
+  `minmax(min(300px, 100%), 1fr)` is load-bearing, not decoration; and the walk's existing "390-profile" shot
+  was photographing the MAP, so the longest surface in the feature had no narrow-width check at all until I
+  added one. **Lessons: (1) a redesign whose point is "stop being long" has to fold the lists it did not
+  think of — the loved NAMES column was still a wall of 15+ chips after everything else folded, because I
+  designed it against a fixture with three. (2) A `<details>` keeps its contents in the DOM, so an RTL
+  assertion that a folded item is "not in the document" is testing the wrong thing — assert what a person can
+  SEE (`toBeVisible`). (3) When a screenshot is taken right after a viewport resize, the nav drawer animates
+  over the page and you photograph the drawer; wait for the content, not the resize.**
+
 - 2026-08-17 — **Fix (the TWO SCROLLBARS, found by measuring the document rather than counting elements;
   owner-reported three times; SPEC 74 §3.6.4; on `fix/adaptive-two-scrollbars`).** The cause was **21
   `position: absolute` visually-hidden `.srOnly` spans** — the text equivalent I added for the intensity meter —

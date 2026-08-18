@@ -192,6 +192,58 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
     expect(refused.value?.narrative).toBe('');
   });
 
+  it('carries the lede and the keyed readings, and filters a boundary out of both', async () => {
+    const { client, prompts } = fakeClient([
+      JSON.stringify({
+        narrative: 'You want to be claimed.',
+        lede: 'You want to be claimed, not pushed around.',
+        readings: [
+          {
+            kind: 'pattern',
+            text: 'The praise is about effort.',
+            source: 'Your onboarding answers.',
+          },
+          { kind: 'gap', text: 'You loved being called a whore.' },
+        ],
+        registers: {},
+        contexts: {},
+        themes: [],
+        wantsToSay: [],
+      }),
+    ]);
+    const out = await runSynthesis(deps(client), seeded(), 'turns…', [
+      'Confidence comes from effort.',
+    ]);
+    expect(out.value?.lede).toContain('not pushed around');
+    // The lede and the readings are printed at the top of their report, so a boundary quoted back there is
+    // the worst version of that failure — both go through the same filter as the prose.
+    expect(out.value?.readings).toHaveLength(1);
+    expect(out.value?.readings[0]?.kind).toBe('pattern');
+    expect(out.value?.readings[0]?.source).toBe('Your onboarding answers.');
+    // The signals reach the model, or a reading citing one would be a guess wearing a citation.
+    expect(prompts[0]?.system).toContain('Confidence comes from effort.');
+  });
+
+  it('drops a cited source when there was nothing on file to cite', async () => {
+    const { client, prompts } = fakeClient([
+      JSON.stringify({
+        narrative: 'You want to be claimed.',
+        lede: 'Claimed, not demeaned.',
+        readings: [{ kind: 'pattern', text: 'Praise lands.', source: 'Your onboarding answers.' }],
+        registers: {},
+        contexts: {},
+        themes: [],
+        wantsToSay: [],
+      }),
+    ]);
+    // No signals: the instruction says not to cite, and this is the enforcement. A source the model invented
+    // anyway is a claim about the person's own records that nothing backs.
+    const out = await runSynthesis(deps(client), seeded(), 'turns…');
+    expect(out.value?.readings[0]?.text).toBe('Praise lands.');
+    expect(out.value?.readings[0]?.source).toBeUndefined();
+    expect(prompts[0]?.system).toContain('nothing else on file');
+  });
+
   it('filters a boundary out of the synthesized themes too', async () => {
     const { client } = fakeClient([
       JSON.stringify({

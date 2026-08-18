@@ -1410,6 +1410,18 @@ export type AdaptiveLexiconEdit =
  * union (08 §4.3) so the `@selfos/answering` renderer round-trips test items unchanged (matrix →
  * `Record<string, number>`). The `TestDefinition` itself is curated code, never vaulted.
  */
+/**
+ * One keyed reading in the report's "why this, probably" (74 §3.3). `kind` is fixed so the report can lay
+ * them out; `source` is optional and, when present, names where in SelfOS the pattern also shows — an
+ * inference the person can check rather than one they have to take on faith.
+ */
+export const AdaptiveReadingSchema = z.object({
+  kind: z.enum(['pattern', 'gap', 'suggestion']),
+  text: z.string().min(1),
+  source: z.string().optional(),
+});
+export type AdaptiveReading = z.infer<typeof AdaptiveReadingSchema>;
+
 export const TestResultSchema = z.object({
   id: z.string().min(1),
   schemaVersion: z.number().int().positive(),
@@ -1445,6 +1457,18 @@ export const TestResultSchema = z.object({
   profile: AdaptiveProfileSchema.optional(),
   /** The prose report shown to the person. */
   narrative: z.string().optional(),
+  /**
+   * 74 §3.3 — the report's opening claim, in 2–3 sentences. Separate from `narrative` because the report
+   * LEADS with it at display size: pulling the first paragraph out of the prose would work until the model
+   * opened with a throat-clear, and then the loudest line on the page would be filler.
+   */
+  lede: z.string().optional(),
+  /**
+   * Keyed readings — "why this, probably". Each is an inference about the person, so each may name the
+   * SOURCE it echoes (an onboarding answer, a session), and the report prints that source verbatim rather
+   * than paraphrasing it. Absent `source` means it came from the marks alone, which is the honest default.
+   */
+  readings: z.array(AdaptiveReadingSchema).optional(),
   /** What this take actually cost. Admin-only at the seam (the 06 budgets.manage redaction). */
   costUsd: z.number().optional(),
 

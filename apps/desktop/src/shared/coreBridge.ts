@@ -464,6 +464,7 @@ import type {
   AdaptivePhaseView,
   AdaptiveProbeView,
   AdaptiveProfile,
+  AdaptiveReading,
   AdaptiveScenarioView,
   AdaptiveStateView,
   EroticLexicon,
@@ -475,7 +476,9 @@ import {
   deleteInsight,
   flagInsightFact,
   listAllInsights,
+  digestableInsights,
   listInsightsForPerson,
+  ownSubjectInsights,
   listMergeProposals,
   listRelatedShareableInsights,
   reapOrphanShares,
@@ -1771,6 +1774,13 @@ function lexiconReadyForGeneration(lexicon: EroticLexicon): { ready: boolean } {
   ).length;
   return generationReadiness(lexicon.entries.length, loved);
 }
+
+/**
+ * How many other-app facts reach the synthesis. Bounded because the prompt already carries the whole lexicon
+ * digest and the transcript: an unbounded profile would crowd out the marks the reading is supposed to be
+ * ABOUT, and the readings would start explaining the person's insights back to them instead.
+ */
+const MAX_SYNTHESIS_SIGNALS = 40;
 
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
   const activePersonId = async (): Promise<string | null> =>
@@ -4538,9 +4548,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const draft = await getAdaptiveResult(fs, key, gate.personId, parsed.resultId);
       const lexicon = await readLexicon(fs, key, gate.personId);
       const deps = await aiDeps('tests.own');
-      let synthesized: { profile?: AdaptiveProfile; narrative?: string; costUsd: number } = {
-        costUsd: 0,
-      };
+      let synthesized: {
+        profile?: AdaptiveProfile;
+        narrative?: string;
+        lede?: string;
+        readings?: AdaptiveReading[];
+        costUsd: number;
+      } = { costUsd: 0 };
       if (deps) {
         // §8.4's carve-out, enforced in code rather than asked of the model: a turn that reads as a
         // real-world disclosure never enters the erotic synthesis, so nothing derived from it can reach the
@@ -4549,11 +4563,24 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           .filter((turn) => !(typeof turn.answer === 'string' && readsAsDistress(turn.answer)))
           .map((turn) => `${turn.phase}: ${turn.item.text} → ${JSON.stringify(turn.answer)}`)
           .join('\n');
-        const out = await runSynthesis(deps, lexicon, transcript);
+        // What the rest of SelfOS already knows about them (74 §3.3). Own-subject only, and only the facts
+        // that already feed their own coaching — a reading is allowed to cite what they told the app, never
+        // what someone else said about them, and never a fact they flagged as wrong.
+        const signals = digestableInsights(
+          ownSubjectInsights(await listInsightsForPerson(fs, key, gate.personId)),
+        )
+          .flatMap((insight) => [
+            ...(insight.summary ? [insight.summary] : []),
+            ...insight.facts.filter((fact) => !fact.flaggedInaccurate).map((fact) => fact.text),
+          ])
+          .slice(0, MAX_SYNTHESIS_SIGNALS);
+        const out = await runSynthesis(deps, lexicon, transcript, signals);
         if (out.value) {
           synthesized = {
             profile: out.value.profile,
             narrative: out.value.narrative,
+            lede: out.value.lede,
+            readings: out.value.readings,
             costUsd: out.costUsd,
           };
         }
@@ -4568,6 +4595,8 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           resultId: parsed.resultId,
           ...(synthesized.profile ? { profile: synthesized.profile } : {}),
           ...(synthesized.narrative ? { narrative: synthesized.narrative } : {}),
+          ...(synthesized.lede ? { lede: synthesized.lede } : {}),
+          ...(synthesized.readings ? { readings: synthesized.readings } : {}),
           costUsd: synthesized.costUsd,
         },
         new Date(),

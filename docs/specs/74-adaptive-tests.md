@@ -246,6 +246,32 @@ read aloud or hand to a partner (§8.5), so it reads like prose with the structu
 Below it: the editable lexicon (§3.4), the spine bars (`SubscaleBar`, reusing the deterministic result screen),
 trends across retakes (`LineChart`, ≥2 results), history, and Delete.
 
+#### 3.3a The report, redesigned (2026-08-18, owner-requested, mockup approved first)
+
+As built, the report was the longest and least useful thing the test produced: a wall of several hundred
+chips — every loved line, every mild yes, every hard no struck through — under two thin bars, with the AI
+prose as an undifferentiated Markdown block on top. A person who has just made hundreds of marks does not
+want to read their marks back.
+
+It now **leads with what it means** and keeps every list behind a disclosure:
+
+- **A hero** carrying the synthesis's `lede` at reading size — one claim, in serif, the only line on the page
+  set that way. `lede` is its own field rather than the narrative's first paragraph, because pulling the
+  opener out of the prose works until the model opens with a throat-clear, and then the loudest line on the
+  page is filler. A take from before the field existed falls back to that first paragraph, so it still opens
+  on a sentence.
+- **"Why this, probably"** — 2–4 keyed `readings` (`pattern` / `gap` / `suggestion`), each hedged, each able
+  to name the **source** elsewhere in SelfOS it echoes. The synthesis is given a bounded digest of the
+  person's own-subject insight facts to read against; with no signals on file, a source is **dropped in code**
+  rather than trusted to the instruction — an invented citation is worse than none.
+- **A two-up grid**: the shape of it (strongest five, the rest folded, no-signal dimensions listed and never
+  charted) and the hear/say gap, which is the finding the test exists to produce and was previously a chip
+  list halfway down.
+- **Every long list folds** after twelve, and **a hard no is one sentence** ("N off the table") with a
+  disclosure — a boundary is a boundary, not a result to display at length.
+- **"Where this gets used"**, on the page, because the profile is not a document: it changes what the rest of
+  the app says to them, and a person who cannot see that reads the screen as a record of what they tapped.
+
 The report **may interpret** ("you respond to being claimed, not degraded") — clearly labelled as a reading of
 what they answered, never a verdict (§8.1). It is second-person, in their words, never clinical labels.
 

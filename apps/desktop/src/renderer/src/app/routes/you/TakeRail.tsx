@@ -184,9 +184,11 @@ export function Tally({
         ))}
       </div>
       {note ? (
-        <Text size="sm" tone="tertiary">
-          {note}
-        </Text>
+        <div className={adaptive.tallyNote}>
+          <Text size="sm" tone="tertiary">
+            {note}
+          </Text>
+        </div>
       ) : null}
     </Card>
   );

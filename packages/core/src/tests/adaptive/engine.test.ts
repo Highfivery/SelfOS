@@ -79,9 +79,10 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
   it('derives its ambiguities from the DATA, so the loop terminates on facts not on model confidence', () => {
     const ambiguities = openAmbiguities(seeded());
     const ids = ambiguities.map((a) => a.id);
-    // Loved `slut`, ruled out `whore`, same family → the "is it the word or the register?" question, which is
-    // the single most useful thing a probe can settle.
-    expect(ids).toContain('split:names-rough-heavy');
+    // The family split is drawn against the MIDDLE mark now, never a hard no (74 §3.6.15). Loved `slut` +
+    // ruled out `whore` no longer produces one: a hard no is settled, and a question that names it both asks
+    // them to justify a boundary and is then rejected for containing it.
+    expect(ids).not.toContain('split:names-rough-heavy');
     // Loves hearing "good girl", rated 0 to say → preference or goal?
     expect(ids).toContain('frozen');
     expect(ids).toContain('cringe');
@@ -399,5 +400,89 @@ describe('a heavy no-marker still gets lines (74 §8.4)', () => {
     expect(out.value).toContain('you look beautiful like that');
     // The boundary still holds where it means something: being CALLED love is off.
     expect(out.value).not.toContain('come here, love');
+  });
+});
+
+describe('the probe never asks about a hard no (74 §3.6.15)', () => {
+  it('draws its contrast against the middle mark, not a boundary', async () => {
+    const { DIRTY_TALK } = await import('./instruments/dirtyTalk');
+    const { applyBankMarks, emptyLexicon } = await import('./lexicon');
+    const { openAmbiguities } = await import('./engine');
+    const now = new Date('2026-08-18T00:00:00.000Z');
+    const names = DIRTY_TALK.bank.entries
+      .filter((e) => e.family.startsWith('names-warm'))
+      .slice(0, 6);
+    const marks = Object.fromEntries(
+      names.map((e, i) => [e.key, i === 0 ? 'love' : i === 1 ? 'okay' : 'never'] as const),
+    );
+    const lex = applyBankMarks(emptyLexicon('p1', now), DIRTY_TALK.bank, marks, 'take:1', now);
+
+    const banned = new Set(names.slice(2).map((e) => e.text));
+    for (const ambiguity of openAmbiguities(lex)) {
+      // It used to generate `They loved "X" but ruled out "Y"` — which asks them to justify a boundary (its
+      // own prompt forbids that) AND guarantees the question it produces is rejected for naming Y. The phase
+      // billed a call to produce nothing, every time, for anyone who had ruled anything out.
+      for (const term of banned) expect(ambiguity.question).not.toContain(term);
+      for (const term of ambiguity.terms) expect(banned.has(term)).toBe(false);
+    }
+  });
+
+  it('salvages a question whose inner quotes were never escaped', async () => {
+    const { client } = fakeClient([
+      // What roughly half of live replies look like for a one-string payload: valid-looking, not valid JSON.
+      '{"question": "When you hear "baby" land right — is it the word, or the register behind it?"}',
+    ]);
+    const out = await runProbePhase(deps(client), seeded(), {
+      id: 'x',
+      question: 'is it the word or the register?',
+      terms: ['baby'],
+    });
+    expect(out.ok).toBe(true);
+    expect(out.value).toContain('land right');
+  });
+});
+
+describe('the analysis survives one unlucky word (74 §3.6.15)', () => {
+  it('drops the offending PARAGRAPH, not the whole narrative', async () => {
+    const { client } = fakeClient([
+      JSON.stringify({
+        lede: 'You want to be claimed.',
+        narrative:
+          'A good paragraph about what lands.\n\nYou loved being called a whore.\n\nAnd a third.',
+        readings: [{ kind: 'pattern', text: 'Praise lands.' }],
+        registers: {},
+        contexts: {},
+        themes: [],
+        wantsToSay: [],
+      }),
+    ]);
+    const out = await runSynthesis(deps(client), seeded(), 'turns…');
+    // The boundary is still absolute — no sentence containing it is ever shown…
+    expect(out.value?.narrative).not.toContain('whore');
+    // …but the other 3,000 words survive. Rejecting the whole thing for one hit is what "the psychological
+    // analysis didn't come through" WAS: the model wrote it and we threw it away.
+    expect(out.value?.narrative).toContain('A good paragraph');
+    expect(out.value?.narrative).toContain('And a third');
+    expect(out.ok).toBe(true);
+  });
+
+  it('is a success when the lede and readings survive, even with no narrative', async () => {
+    const { client } = fakeClient([
+      JSON.stringify({
+        lede: 'You want to be claimed.',
+        narrative: 'You loved being called a whore.',
+        readings: [{ kind: 'pattern', text: 'Praise lands.' }],
+        registers: {},
+        contexts: {},
+        themes: [],
+        wantsToSay: [],
+      }),
+    ]);
+    const out = await runSynthesis(deps(client), seeded(), 'turns…');
+    // The report LEADS with these two. Gating `ok` on the narrative alone reported a total failure over a
+    // good lede and a reading — which is the state the owner kept hitting.
+    expect(out.ok).toBe(true);
+    expect(out.value?.lede).toContain('claimed');
+    expect(out.value?.readings).toHaveLength(1);
   });
 });

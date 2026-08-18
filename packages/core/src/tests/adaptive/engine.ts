@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   classifyParseOutcome,
   extractJsonArray,
+  salvageLooseStringField,
   extractJsonObject,
   tolerantArray,
 } from '../../ai/jsonSalvage';
@@ -104,6 +105,13 @@ export interface Ambiguity {
   id: string;
   /** The question the probe should actually resolve, in plain terms. */
   question: string;
+  /**
+   * The ONLY words the probe may quote back. Without this the prompt says "quote their own marked words" and
+   * the model picks from the whole lexicon — which, for someone with 246 hard nos, lands on a banned one
+   * about half the time, and the question is then discarded for containing it. Every phase billed a call to
+   * produce nothing, roughly every other attempt, and it read as the model being broken.
+   */
+  terms: string[];
 }
 
 /**
@@ -120,15 +128,29 @@ export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
     else byFamily.set(entry.family, [entry]);
   }
 
-  // 1) A family they both loved AND drew a line in — the "is it the register or that word?" question, which
-  //    is the single most useful thing a probe can settle (claiming vs contempt).
+  /*
+   * 1) A family where some landed and some plainly did not — the "is it the register or that word?" question,
+   *    which is the single most useful thing a probe can settle (claiming vs contempt).
+   *
+   *    The contrast is drawn against the MIDDLE mark, never a hard no. It used to name the ruled-out word:
+   *    `They loved "baby" but ruled out "sweet girl" — is it that word, or the register?` That is the app
+   *    fighting itself twice over. It asks them to justify a boundary, which the probe's own prompt forbids
+   *    ("never ask why something is a hard no"); and the question it generates necessarily contains the term
+   *    the boundary filter then rejects it for — so the phase billed a call and reported "nothing came back",
+   *    every time, for anyone who had ruled anything out. A hard no is settled. There is nothing to probe.
+   */
   for (const [family, entries] of byFamily) {
     const loved = entries.filter((e) => e.state === undefined && Math.max(e.hear, e.say) >= 3);
-    const refused = entries.filter((e) => e.state === 'never');
-    if (loved.length > 0 && refused.length > 0) {
+    const lukewarm = entries.filter(
+      (e) =>
+        e.state === 'okay' ||
+        (e.state === undefined && Math.max(e.hear, e.say) > 0 && Math.max(e.hear, e.say) < 3),
+    );
+    if (loved.length > 0 && lukewarm.length > 0) {
       out.push({
         id: `split:${family}`,
-        question: `They loved "${loved[0]!.text}" but ruled out "${refused[0]!.text}" — is it that word specifically, or the register behind it?`,
+        question: `They loved "${loved[0]!.text}" but were only lukewarm on "${lukewarm[0]!.text}" — is it that word specifically, or the register behind it?`,
+        terms: [loved[0]!.text, lukewarm[0]!.text],
       });
     }
   }
@@ -144,6 +166,7 @@ export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
     out.push({
       id: 'frozen',
       question: `They love hearing "${frozen[0]!.text}" but rated it 0 to say — is that "he can, I can't", or do they want to be able to and freeze?`,
+      terms: [frozen[0]!.text],
     });
   }
 
@@ -157,6 +180,7 @@ export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
     out.push({
       id: 'cringe',
       question: `They love hearing "${cringe[0]!.text}" but rate themselves near zero on saying it — what stops them?`,
+      terms: [cringe[0]!.text],
     });
   }
 
@@ -279,9 +303,17 @@ export async function runProbePhase(
     SAFETY,
     REGISTER,
     boundaryBlock(lexicon),
-    `Ask ONE short, warm, direct question that settles the ambiguity below. Quote their own marked words back \
-to them so it reads as someone paying attention, not a form. Never ask them to justify a boundary, and never \
-ask why something is a hard no. Return ONLY {"question": string}.`,
+    `Ask ONE short, warm, direct question that settles the ambiguity below.
+
+You may quote ONLY these words back to them, and no others: ${ambiguity.terms
+      .map((term) => `"${term}"`)
+      .join(
+        ', ',
+      )}. Quoting anything else is wrong — you cannot see which of their other words are off, and \
+naming one they have ruled out would be the worst version of this. Never ask them to justify a boundary, never \
+ask why something is a hard no, and never NAME one: a hard no is settled and is not a thing to ask about.
+
+Return ONLY {"question": string}.`,
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -302,7 +334,19 @@ ask why something is a hard no. Return ONLY {"question": string}.`,
       ...(out.message ? { message: out.message } : {}),
     };
   const parsed = z.object({ question: z.string().min(1) }).safeParse(extractJsonObject(out.text));
-  const raw = parsed.success ? parsed.data.question : '';
+  /*
+   * Salvage a bare question (37 §3.1). Asked for `{"question": …}`, the model sometimes just asks the
+   * question — which is the entire payload, in the right words, thrown away for missing its wrapper. Bounded
+   * so prose that isn't a question can't slip through: it has to be short and end in a question mark.
+   */
+  const bare = out.text.trim();
+  const salvaged =
+    // The whole reply is the question, unwrapped.
+    (bare.endsWith('?') && bare.length <= 400 && !bare.includes('{') ? bare : '') ||
+    // …or the wrapper is there but its inner quotes were never escaped, which is what half of the live
+    // replies look like for a one-string payload.
+    (salvageLooseStringField(out.text, 'question') ?? '');
+  const raw = parsed.success ? parsed.data.question : salvaged;
   // Every other phase filters what the model wrote; this one didn't, and it is the phase that puts free
   // prose in front of the person. A probe asking about a hard no is exactly what the prompt above forbids
   // ("never ask them to justify a boundary") — the instruction is belt, this is braces. Dropping it degrades
@@ -518,8 +562,17 @@ set a source on any reading.',
   const parsed = SynthesisSchema.safeParse(extractJsonObject(out.text) ?? {});
   if (!parsed.success) return { ok: false, degraded: true, costUsd: out.usage.costUsd };
   const data = parsed.data;
-  // A narrative that quotes a boundary back at them is worse than no narrative.
-  const narrative = violatesBoundary(lexicon, data.narrative) ? '' : data.narrative;
+  /*
+   * A narrative that quotes a boundary back at them is worse than no narrative — but this used to reject the
+   * WHOLE thing for a single hit, and the narrative is 6–8 paragraphs. One unlucky word in three thousand
+   * discarded the entire analysis, which is what "the psychological analysis didn't come through" was: the
+   * model wrote it, and we threw it away. Dropping the offending PARAGRAPH keeps the boundary absolute — no
+   * sentence containing it is ever shown — while keeping the rest of the work.
+   */
+  const narrative = data.narrative
+    .split(/\n{2,}/)
+    .filter((para) => para.trim() !== '' && !violatesBoundary(lexicon, para))
+    .join('\n\n');
   // The lede is the loudest line on the report and the readings sit right under it, so both go through the
   // same filter as the prose — a boundary quoted back at display size is the worst version of that failure.
   const lede = violatesBoundary(lexicon, data.lede) ? '' : data.lede;
@@ -531,8 +584,12 @@ set a source on any reading.',
     // With no signals there is nothing a source could honestly cite, so any the model set anyway is dropped
     // rather than shown — the instruction is not the enforcement.
     .map((r) => (signals.length === 0 ? { kind: r.kind, text: r.text } : r));
+  // The report LEADS with the lede and the readings; a take that produced those has an analysis, whatever
+  // happened to the long prose. Gating on the narrative alone reported a total failure over a good lede and
+  // three readings — which is the state the owner kept hitting.
+  const gotSomething = narrative !== '' || lede !== '' || readings.length > 0;
   return {
-    ok: narrative !== '',
+    ok: gotSomething,
     value: {
       narrative,
       lede,
@@ -549,7 +606,7 @@ set a source on any reading.',
           : {}),
       },
     },
-    degraded: narrative === '',
+    degraded: !gotSomething,
     costUsd: out.usage.costUsd,
   };
 }

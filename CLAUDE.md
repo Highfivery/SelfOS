@@ -524,6 +524,8 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+<<<<<<< Updated upstream
+
 - 2026-08-18 — **Fix (an emailed question got the same three buttons every time; owner-reported a SECOND
   time; SPEC 67 §3.3a; on `fix/suggestion-email-answerable`).** The screenshot: a reflective question — _"When
   did you first learn that holding it alone was the safer thing to do?"_ — under **I'm game · Maybe later ·
@@ -567,6 +569,36 @@ really']` stapled onto an arbitrary AI-written body. **Owner's rule:** _"it shou
   would otherwise have masked the gap. (4) An offline fake that returns the minimum valid shape
   (`{headline, body}` with no options) exercises the refusal path and never the delivered one — the fake has
   to produce what a real reply produces, or the richest path in the feature is untested.**
+  =======
+- 2026-08-18 — **Fix (four defects only the LIVE model could show; owner-reported a third time; SPEC 74
+  §3.6.15; on `fix/live-verified-phases`).** With the key, ran each phase against real Claude **at the owner's
+  numbers** (142 marks, ~246 hard nos) rather than the audit fixture's handful — and every remaining failure
+  reproduced immediately. **(1) The probe asked about a hard no.** `openAmbiguities` generated `They loved
+"baby" but ruled out "sweet girl" — is it that word, or the register?`: the probe's own prompt forbids asking
+  anyone to justify a boundary, and the question it generates then necessarily contains the term the boundary
+  filter rejects it for. Every attempt billed a call and reported "nothing came back" for anyone who had ruled
+  anything out. Contrast now drawn against the MIDDLE mark, and the prompt names the only words it may quote —
+  with 246 nos, "quote their own marked words" lands on a banned one about half the time. **(2) The analysis was
+  discarded whole for one word in three thousand** — `violatesBoundary` over the entire 6–8 paragraph narrative;
+  now per PARAGRAPH, and `ok` no longer hangs on the narrative alone since the report leads with the lede and
+  readings. **(3) Half of live one-string replies are invalid JSON** (`{"question": "When you hear "baby" …"}`,
+  inner quotes unescaped) — `salvageJsonObjectField` can't rescue it either, so `salvageLooseStringField` was
+  added. **(4) The name-family relaxation is opt-IN**: enumerating every everyday word is whack-a-mole across
+  342 names, and listing the CRUDE families fails open when one is added later. Also: **Retake went to the
+  intro** — an explanation of a test already taken, behind "Pick up where you left off", with the actual
+  question two taps on; it goes straight to the choice. And the auditor caught a live scenario option
+  overflowing its button (`Button` is nowrap at a fixed height — right for a label, wrong for a sentence).
+  Verified: 4/4 consecutive live probe runs green, 3/3 live lines + scenario + synthesis, and the full audit
+  walk green against the live model with 0 findings. Gate: typecheck (4 pkgs), lint, format, **2376 core + 13
+  relay + 1677 desktop** unit, 216 E2E. Every new guard verified to fail when reverted. **Lessons: (1) test at
+  the USER's data shape, not a convenient fixture — every one of these needed ~246 boundaries to appear, and the
+  audit fixture's handful hid all four. (2) A generator and a filter that disagree about the same rule is a
+  whole bug class: one part built a question ABOUT a hard no while another forbade naming it, so the feature
+  could only ever fail. Grep for the rule, not the symptom. (3) Offline fakes return clean short JSON forever —
+  they cannot show unescaped quotes, a refusal, or a sentence long enough to break a layout, which is three of
+  the four found here in one live run.**
+
+  > > > > > > > Stashed changes
 
 - 2026-08-18 — **LIVE-MODEL verification (the owner supplied a key; the model was never the problem — my TESTS
   were; SPEC 74 §3.6.14).** Ran the §3.6.9 audit walk against **real Claude** end to end. All three AI phases

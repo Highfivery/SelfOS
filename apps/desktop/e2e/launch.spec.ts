@@ -16988,7 +16988,9 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
       .getByRole('button', { name: /Retake|Take it again|Start/ })
       .first()
       .click();
-    await w.getByRole('button', { name: /Pick up where you left off|Begin/ }).click();
+    // STRAIGHT to the choice (74 §3.6.15). Retake used to land on the intro — an explanation of a test they
+    // have already taken, behind a button reading "Pick up where you left off" — with the actual question
+    // two taps further on.
     await expect(w.getByRole('heading', { name: /Taking it again/i })).toBeVisible();
     await expect(w.getByRole('list', { name: 'Every step' })).toHaveCount(0);
     await expect(w.getByText(/every hard no/i)).toBeVisible();
@@ -17009,7 +17011,6 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
       .getByRole('button', { name: /Retake|Start/ })
       .first()
       .click();
-    await w.getByRole('button', { name: /Pick up where you left off|Begin/ }).click();
     // Entering a retake asks again — the choice is per entry, not once ever.
     await w
       .getByRole('button', { name: /Keep and edit/i })

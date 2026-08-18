@@ -573,115 +573,35 @@ function contentStems(text: string): string[] {
 }
 
 /**
- * Pet names that are also **everyday words** (74 §8.4).
+ * The name families whose entries are **ordinary English** — words that mean something outside being a form
+ * of address, so ruling one out cannot mean "never use this word".
  *
- * Ruling one of these out means "don't call me that" — it cannot mean "never use this word", or ruling out
- * being called `love` suppresses every line containing the word love. Dozens of the name bank's entries are
- * ordinary English, so someone who rules out most of the bank was suppressing so much of the language that
- * the lines phase filtered out everything it generated and the synthesis discarded whole narratives — all of
- * which reached them as "nothing usable came back".
+ * Opt-IN by family, deliberately. Two earlier shapes were both wrong: enumerating every ordinary WORD is
+ * whack-a-mole (the bank has 342 single-word names, and the plain-meaning ones run from `love` and
+ * `beautiful` through `princess`, `kitten`, `doll`, `boss`, `captain`, `goose`, `trouble` and `sleepyhead` —
+ * miss one and a perfectly good sentence containing it is silently discarded, which is what dropped a
+ * generated probe question for someone with 246 hard nos and reported it to them as the model failing); and
+ * listing the CRUDE families instead fails OPEN, because a family added to the bank later, or a name written
+ * under a family id that isn't in the list, would quietly relax a hard no.
  *
- * The criterion is narrow on purpose: the word has a common non-address meaning in the kind of prose this
- * app writes. It is a RELAXATION, so anything not on it — `whore`, `slut`, `cumdump`, `sissy` — keeps the
- * plain substring match and is off wherever it appears. Multi-word names ("good girl") are never on it
- * either: they have no innocent use, so there is nothing to disambiguate.
+ * So: these families relax to address-only matching, and everything else — `rough-heavy`, `object`,
+ * `worthless`, `feminising`, `service`, `sharing`, `breeding`, and any family added tomorrow — keeps the plain
+ * substring match, so `whore` in "you filthy whore" is off wherever it sits. Multi-word names ("good girl")
+ * keep it too: no innocent use, nothing to disambiguate.
  */
-const EVERYDAY_WORDS: ReadonlySet<string> = new Set([
-  // verbs + adjectives, the class that breaks prose outright
-  'love',
-  'beautiful',
-  'gorgeous',
-  'lovely',
-  'precious',
-  'sweet',
-  'sweets',
-  'sweetest',
-  'dear',
-  'dearest',
-  'silly',
-  'useless',
-  'pathetic',
-  'worthless',
-  // everyday nouns of affection
-  'baby',
-  'babe',
-  'honey',
-  'sugar',
-  'angel',
-  'treasure',
-  'star',
-  'starlight',
-  'sunshine',
-  'flower',
-  'rose',
-  'peach',
-  'cookie',
-  'muffin',
-  'gem',
-  'jewel',
-  'doll',
-  'mine',
-  'trouble',
-  // people, roles + relations
-  'girl',
-  'boy',
-  'king',
-  'queen',
-  'boss',
-  'master',
-  'owner',
-  'hero',
-  'champion',
-  'champ',
-  'winner',
-  'doctor',
-  'nurse',
-  'teacher',
-  'professor',
-  'coach',
-  'officer',
-  'stranger',
-  'sister',
-  'brother',
-  'cousin',
-  'twin',
-  'uncle',
-  'auntie',
-  'wife',
-  'husband',
-  // animals
-  'cat',
-  'dog',
-  'mouse',
-  'bunny',
-  'rabbit',
-  'pup',
-  'puppy',
-  'kitten',
-  'cow',
-  'pony',
-  'tiger',
-  'wolf',
-  'bear',
-  'lion',
-  'goose',
-  'monkey',
-  'dove',
-  'lamb',
-  'pet',
-  'animal',
-  'beast',
-  'monster',
-  // the discard register, where the words are ordinary nouns
-  'trash',
-  'garbage',
-  'bug',
-  'worm',
-  'insect',
-  'failure',
-  'loser',
-  'reject',
-  'nobody',
+const EVERYDAY_NAME_FAMILIES: ReadonlySet<string> = new Set([
+  'names-warm',
+  'names-yours',
+  'names-praise',
+  'names-soft-power',
+  'names-hard-power',
+  'names-masculine',
+  'names-playful',
+  'names-aftercare',
+  'names-other-tongues',
+  'names-petplay',
+  'names-kinship',
+  'names-roleplay',
 ]);
 
 /**
@@ -709,11 +629,10 @@ export function violatesBoundary(
   // before this existed needs no migration to stop over-matching.
   const vocatives = new Set(
     lexicon.entries
-      .filter(
-        (entry) =>
-          entry.family.startsWith('names-') && EVERYDAY_WORDS.has(entry.text.trim().toLowerCase()),
-      )
-      .map((entry) => entry.text.trim().toLowerCase()),
+      .filter((entry) => EVERYDAY_NAME_FAMILIES.has(entry.family))
+      .map((entry) => entry.text.trim().toLowerCase())
+      // A multi-word name has no innocent use, so it keeps the plain match.
+      .filter((text) => !text.includes(' ')),
   );
   const literal = suppressedTexts(lexicon, direction).some((banned) => {
     const needle = banned.trim().toLowerCase();

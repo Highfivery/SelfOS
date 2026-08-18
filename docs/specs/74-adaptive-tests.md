@@ -963,6 +963,41 @@ full-width section, so most of the row was empty, and unreadable without matchin
 became one labelled row per dimension with its own sparkline and its change stated in words (which is also
 the §9 text equivalent, and the thing you actually want from a trend).
 
+#### 3.6.15 What the live model actually showed (2026-08-18, third pass)
+
+The owner supplied a key. Running the phases against **real Claude at his numbers** — 142 marks, ~246 hard
+nos — found four defects that no offline test could have, because the fake never refuses, never writes loose
+JSON, and never writes a sentence long enough to break a layout.
+
+- **The probe asked about a hard no.** `openAmbiguities` generated `They loved "baby" but ruled out "sweet
+girl" — is it that word, or the register?` That is the app fighting itself twice: the probe's own prompt
+  forbids asking anyone to justify a boundary, and the question it produces necessarily contains the term the
+  boundary filter then rejects it for. Every attempt billed a call and reported "nothing came back", for
+  anyone who had ruled anything out. The contrast is drawn against the **middle mark** now, and the prompt
+  names the only words the probe may quote — because with 246 nos, "quote their own marked words" lands on a
+  banned one about half the time.
+- **The analysis was thrown away whole for one word in three thousand.** `violatesBoundary` was applied to the
+  entire 6–8 paragraph narrative. It now filters **per paragraph**, so the boundary stays absolute — no
+  sentence containing it is ever shown — while the rest of the work survives. And `ok` no longer hangs on the
+  narrative alone: the report leads with the lede and the readings, so a take that produced those has an
+  analysis.
+- **Half of live one-string replies are invalid JSON.** The model writes
+  `{"question": "When you hear "baby" land right …"}` — inner quotes unescaped.
+  `salvageJsonObjectField` cannot rescue it either (it stops at the first unescaped quote), so
+  `salvageLooseStringField` was added: greedy to the last quote before the close.
+- **The name-family relaxation is opt-IN.** Enumerating every pet name that is also an everyday word is
+  whack-a-mole across 342 single-word names; listing the crude families instead fails OPEN when a family is
+  added later. So the everyday families are named explicitly and everything else keeps the plain substring
+  match.
+
+**And the retake flow.** Retake landed on the intro — an explanation of a test they had already taken, behind
+a button reading "Pick up where you left off" — with the question a retake actually poses (keep what you
+marked, or start fresh?) two taps further on. Retake now goes straight to that choice.
+
+A live scenario option also overflowed its button: an option is a whole spoken line, and `Button` is
+`white-space: nowrap` at a fixed height, which is right for a label and wrong for a sentence. The offline
+fake's short canned options could never have shown it.
+
 ## 6. IPC / API contracts
 
 All gated `tests.own` + active-person-scoped + 18+-withheld **in the bridge** (the trust boundary), with the

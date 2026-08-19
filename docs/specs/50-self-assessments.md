@@ -123,29 +123,60 @@ A new **Self-assessments** feature module registers a nav entry **"You"** (gated
 tree `/you`. Every screen is responsive (~360px→desktop) per [`01`](01-design-system.md). The crisis footer +
 not-medical line are present on every test/result surface (§8).
 
-### 3.1 The "You" hub (`/you`)
+### 3.1 The Tests hub (`/tests`) — REDESIGNED 2026-08-18
 
-The home of "the tests you took," **distinct from Memory** (Memory = the AI's inferred facts; the You hub = your
-deliberate self-assessments). A short header explains the difference and links Memory ("What SelfOS has _learned_
-about you lives in **Memory**"). Top to bottom:
+The home of "the tests you took," **distinct from Memory** (Memory = the AI's inferred facts; this hub = your
+deliberate self-assessments). Rebuilt from a two-section layout (Your profiles / Available tests, which moved an
+instrument between sections as you used it) into **one catalog grid where every instrument keeps its place and
+carries its own state**. Top to bottom:
 
-1. **Header** — "You — how you see yourself," a one-line not-medical framing ("These are reflections, not
-   verdicts"), and a link to Memory.
-2. **Your profiles** (only if any results exist) — one **profile card per instrument the person has taken**: the
-   instrument name, a compact **subscale summary** (the top 1–2 dimensions as labelled bars), `takenAt`/"taken N
-   times," and **Open** (→ §3.3) / **Retake** (→ §3.2). Sensitive instruments (kink/sexuality) show their card
-   only to the person themselves (own data) and carry a small **"private — only you"** marker.
-3. **Available tests** — a grouped catalog of the instruments (Personality · Relationships · Intimacy &
-   sexuality · Reflections & check-ins), each a card: name, what it measures, item count + estimated time, a
-   **non-diagnostic** one-liner, and **Take**. A test the person has **already taken drops out of this catalog**
-   (95) — it lives only under **Your profiles** above, where **Retake** (or **Check in again** for a wellbeing
-   reflection) is the re-run affordance — so a taken instrument never appears in two places at once; a group with
-   no remaining untaken tests, and the whole section once everything is taken, self-hides. The Intimacy &
-   sexuality group cards are **18+-gated** (§3.5).
+1. **Header** — `Tests` (matching the nav), the not-medical framing as a subtitle ("How you see yourself —
+   reflections, never verdicts"), a link to Memory, and a **stat strip**: `Taken` · `Not tried` · `Due`.
+   Three independent counts — **never a ratio, a percentage or a meter** (§8.1a).
+2. **The "next for you" slot** — offers exactly ONE thing, chosen by `nextForYou`: an overdue check-in first
+   (a two-minute re-check two weeks late outranks a fifteen-minute intimacy take), else the adaptive flagship
+   (74), else the **shortest** untried instrument. Hidden entirely when nothing is outstanding. Pre-ack the
+   adult instruments are absent from the catalog, so it falls through with no special-casing.
+3. **The catalog** — one `auto-fill` grid of every instrument, as a semantic list (`role="list"`, each card a
+   `listitem` named by its title). One filter control — status (All · Not tried · Under 5 min) and area
+   (the four groups) in a single "show me…" concept, each with a live count. It renders as chips **only at
+   ≥1280px**, where they are measured to fit on one row; **below that it becomes one full-width `Select`**,
+   because wrapping a control cluster is not a design (§12). The threshold is measured, not chosen: the
+   content column is the viewport minus a 240px sidebar and 40px of padding, and the seven chips wrap into
+   two rows at 1024px even with shortened labels (the filter uses short group labels — "Intimacy",
+   "Check-ins" — while each card's tag carries the full group name). The hub E2E asserts both halves: exactly
+   one chip row at 1440 and 1280, and the Select instead at 1024. The four group headings are gone: at sizes 1 / 1 / 3 / 5 they made two sections render a single
+   full-bleed card. Group is now a tag on each card.
+4. **The 18+ unlock** — one page-level row below the grid ("Three more, for adults", naming them), not a card
+   in the flow of a group. The instruments themselves stay withheld **in the bridge** (§3.5).
+5. **One reflection line**, then the crisis footer (§8).
 
-Empty state: a warm "Take a test to see how SelfOS understands you — and to make your coach, dreams, and
-questionnaires fit you better." (`tests.own` is on for Members, so the catalog is always reachable; the
-18+ group reveals after the ack.)
+**Card states** — the same component throughout; the difference is carried by form, never by size, so nothing
+reshapes as you work through the catalog:
+
+| State     | Body                                                           | Signals                            | Actions                                    |
+| --------- | -------------------------------------------------------------- | ---------------------------------- | ------------------------------------------ |
+| Not tried | blurb (2-line clamp)                                           | duration chip, group tag, 18+ pill | **Take** / **Check in** / **Start**        |
+| Taken     | top 1–2 subscale bars, or the GENTLE wellbeing sentence (§3.3) | green "Taken" pill                 | **Open** · **Retake** / **Check in again** |
+| Due       | as taken                                                       | amber stripe + "Due" pill          | **Check in** · **Open**                    |
+| Adaptive  | blurb + a static `N steps` marker                              | accent stripe, "Adapts as you go"  | **Start** / **Keep marking**               |
+
+The adaptive card shows the take's step count **only as an invitation** — never a position within it, because
+an adaptive take never finishes. It never renders `itemCount`, which is its 3,161-entry bank inventory, not a
+question count. The two privacy words stay distinct: `yours` for an adaptive intimacy profile (74 §8.4), the
+stronger `private — only you` for a spec-50 sensitive result.
+
+Empty state: no banner — the "next for you" slot IS the invitation. (`tests.own` is on for Members, so the
+catalog is always reachable; the 18+ instruments reveal after the ack.)
+
+### 3.1a The nav badge
+
+The Tests nav entry carries a count of what is **outstanding** — instruments never taken **plus** any whose
+gentle re-check window has passed — from `testsOutstandingCount`, the _same_ derivation the stat strip uses, so
+the nav and the page cannot disagree. Zero means **no badge at all** (the Inbox convention, never a "0" pill).
+The count is folded into the link's accessible name (`Tests, 9 to try`), so it is never number-or-colour alone
+(§9). `AppShell` loads the test catalog on a person change — it previously only reset it, so a badge would have
+read 0 until the person happened to open Home or the hub.
 
 ### 3.2 Taking / retaking a test
 
@@ -549,6 +580,22 @@ elsewhere — we **do not reproduce proprietary or copyrighted instrument text**
 bdsmtest, MBTI, proprietary Enneagram questionnaires); where only a published **structure** exists (Klein grid),
 the item phrasings are SelfOS-original. The not-medical line is visible on every test/result surface and in any
 narrative.
+
+### 8.1a Counts, never completion
+
+The hub counts what is outstanding and **never asserts a total to reach**: no ratio, no percentage, no bar
+filling toward full, no "done" state (CLAUDE.md §12, narrowed 2026-08-18). Three reasons, and each is
+independently sufficient:
+
+- **The catalog grows.** Instruments keep being added, so `10 of 10` would be false the next release. An added
+  instrument simply raises "Not tried".
+- **An adaptive take never finishes** (74) — you can always mark more, which is why its taken state reads
+  `Started` with **Keep marking**, and why its step marker appears only on the invitation.
+- **A re-checkable check-in is recurring, not completable** — the gentle window reopens it by design.
+
+The line is the **denominator**. `9 not tried` and a nav badge of `9` are honest; `9 / 10`, `90%`, or a filling
+meter make the banned claim. `testsHub.ts` returns no proportion anywhere, and both the page tests and the
+hub E2E assert the absence of a ratio, a `%` in the strip, and any `progressbar`.
 
 ### 8.2 Crisis routing
 

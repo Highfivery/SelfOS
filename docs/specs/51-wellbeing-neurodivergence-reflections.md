@@ -90,9 +90,9 @@ hard not-medical boundary:
 - **Proactive coaching** — wellbeing results are own-context `Insight`s, so the coach (Sessions, `05`) is gently
   more attuned ("you mentioned your mood's been low") and the §40 synthesis can connect a low-mood check-in to a
   session theme — **never** as a diagnosis, always as a reflection routed to professional help when it matters.
-- **Distinct hub group** — these live in the "You" hub under a clearly-labelled **"Reflections / check-ins"**
-  group, visually separated from spec-50's personality tests, so a person never confuses a non-diagnostic mood
-  check-in with a "test result."
+- **Distinctly marked in the hub** — carried by the card itself (group tag, a "Check in" call to action, the
+  reflective name leading, the gentle band sentence) rather than by a section heading (amended 2026-08-18, §3.1),
+  so a person never confuses a non-diagnostic mood check-in with a "test result."
 
 The check-in result is **structured signal** (a band + a normalized score), not a clinical conclusion — the same
 boundary every producer honours.
@@ -142,20 +142,29 @@ These instruments register **into the existing [`50`](50-self-assessments.md) "Y
 extra handling, and the mandatory crisis behaviour. Every check-in/result surface shows the always-present
 `CrisisFooter` + not-medical line (§8, inherited from spec 50).
 
-### 3.1 Entry — the "Reflections / check-ins" group in the You hub (`/you`)
+### 3.1 Entry — the "Reflections & check-ins" instruments in the Tests hub (`/tests`)
 
-The You hub (`50` §3.1) gains a **distinct group** under the personality/relationship/intimacy groups: a
-clearly-labelled **"Reflections & check-ins"** section with its own one-line framing — _"Gentle check-ins on how
-you've been feeling and how your mind works — reflections, not diagnoses."_ Each instrument is a card: the
-instrument's **reflective name** (e.g. **"Mood check-in"**, **"Anxiety check-in"**, **"Focus & attention
-reflection"**, **"Social & sensory reflection"** — never the clinical instrument name as the headline; the family
-tag e.g. "based on PHQ-9" is shown small for transparency), what it reflects on, item count + estimated time, the
-**non-diagnostic** one-liner, and **Take / Check in**. There is **no 18+ gate** on this group (these are
-wellbeing, not intimacy) — but they are **adult-framed** (§8.3 / §11 age-gating).
+**AMENDED 2026-08-18 (the `50` §3.1 redesign).** These no longer live under a group HEADING with its own framing
+line — the hub is now one catalog grid (four group headings at sizes 1 / 1 / 3 / 5 made two sections render a
+single full-bleed card). The distinctness the group heading carried is preserved, but carried by the card and the
+page instead, which is stronger because it travels with the instrument wherever it is shown:
 
-For **mood/anxiety** the person has taken before, the card shows a compact "last checked in N days ago" + a tiny
-trend sparkline (or just "Open" → the result with its trend). The group is reachable to any `tests.own` Member;
-crisis surfaces regardless of any setting (§8.2).
+- the card's **group tag** reads "Reflections & check-ins", and the filter can isolate exactly these;
+- its call to action is **"Check in"**, never "Take" (and **"Check in again"** once taken);
+- its **reflective name** leads (**"Mood check-in"**, **"Anxiety check-in"**, **"Focus & attention reflection"**,
+  **"Social & sensory reflection"**) — never the clinical instrument name as the headline; the family tag
+  ("based on PHQ-9") sits small beneath it for transparency;
+- a taken card shows the **GENTLE band sentence** (§3.3), never a score or the internal `clinicalKey`;
+- the **page-level line** states once that these are reflections, not verdicts or medical screening — replacing
+  ten near-identical per-card disclaimers, which only trained people to skip them. The per-instrument framing
+  stays on the intro and result screens, where §8.1 requires it.
+
+There is **no 18+ gate** on these (they are wellbeing, not intimacy) — but they are **adult-framed** (§8.3 / §11).
+
+For **mood/anxiety** the person has taken before, the gentle re-check window (§3.4) surfaces in three places from
+one derivation: the card gains an amber stripe and a **"Due"** pill, the hub's stat strip counts it under `Due`,
+and it is what the hub's rotating "next for you" slot offers FIRST — an overdue two-minute re-check outranks any
+longer instrument. It is reachable to any `tests.own` Member; crisis surfaces regardless of any setting (§8.2).
 
 ### 3.2 Opt-in & the check-in flow
 

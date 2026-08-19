@@ -30,6 +30,7 @@ import { useUsageStore } from '../stores/usageStore';
 import { unansweredCount, useInboxStore } from '../stores/inboxStore';
 import { questionnaireNavCount } from './routes/questionnaires/navCounts';
 import { memoryReviewCount } from './routes/memory/navCounts';
+import { testsOutstandingCount } from './routes/you/testsHub';
 import { useDreamStore } from '../stores/dreamStore';
 import { useInsightStore } from '../stores/insightStore';
 import { useGoalStore } from '../stores/goalStore';
@@ -96,6 +97,11 @@ export function AppShell(): JSX.Element {
   const questionnaireCount = questionnaireNavCount(sentOverview, inboxItems);
   const canOwnDreams = useSessionStore((s) => s.can('dreams.own'));
   const canTakeTests = useSessionStore((s) => s.can('tests.own'));
+  // The Tests nav badge (50 §3.1): instruments never taken + gentle re-checks now due — the SAME arithmetic
+  // the hub's stat strip shows, from one derivation, so the nav and the page can never disagree. A count,
+  // never a ratio: instruments keep being added, so a proportion would be a lie by the next release.
+  const testCatalog = useTestStore((s) => s.catalog);
+  const testResults = useTestStore((s) => s.resultsByTest);
   // Together (58 §3.1): the nav shows only with `together.own` AND a live partner edge; the badge counts
   // sessions waiting on you (invitations + your-turn), derived over your projection.
   const canTogether = useSessionStore((s) => s.can('together.own'));
@@ -127,6 +133,7 @@ export function AppShell(): JSX.Element {
   const activePersonId = useSessionStore((s) => s.activePerson?.id ?? null);
   const togetherWaiting = togetherWaitingCount(togetherSessions, activePersonId);
   const memoryCount = memoryReviewCount(memoryInsights, memoryProposals, activePersonId);
+  const testsCount = testsOutstandingCount(testCatalog, testResults, Date.now());
   const collapsed = useNavStore((s) => s.collapsed);
   const toggleSidebar = useNavStore((s) => s.toggle);
   const [switching, setSwitching] = useState(false);
@@ -202,7 +209,8 @@ export function AppShell(): JSX.Element {
     void useGoalStore.getState().load();
     void useChallengeStore.getState().load();
     if (canTogether) void useTogetherStore.getState().load(); // drives the nav visibility + badge (58 §3.1)
-  }, [activePersonId, canTogether]);
+    if (canTakeTests) void useTestStore.getState().load(); // drives the Tests nav badge (50 §3.1)
+  }, [activePersonId, canTogether, canTakeTests]);
 
   // Collapse any open drawer when the viewport grows back to desktop (where the sidebar is permanent).
   useEffect(() => {
@@ -438,12 +446,17 @@ export function AppShell(): JSX.Element {
               <NavLink
                 to="/tests"
                 className={navClass}
-                aria-label="Tests"
+                aria-label={testsCount > 0 ? `Tests, ${testsCount} to try` : 'Tests'}
                 title={tip('Tests')}
                 onClick={closeDrawer}
               >
                 <Compass size={18} aria-hidden="true" />
                 <span className={styles.label}>Tests</span>
+                {testsCount > 0 ? (
+                  <span className={styles.navBadge} aria-hidden="true">
+                    {testsCount}
+                  </span>
+                ) : null}
               </NavLink>
             ) : null}
             {canTogether && togetherHasPartner ? (

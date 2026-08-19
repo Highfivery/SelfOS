@@ -690,9 +690,14 @@ across the WHOLE take, names and deck words alike.
   `AdaptiveNameEntryView.settledHear` / `settledSay` with them.
 
 **What did NOT change.** A marked `never` still suppresses that text everywhere — unconditionally, on every path
-that writes prose a person reads (§5.8), including the unreviewed outbound ones. `deleteAllAdaptiveResults` still
-keeps `never` entries, so deleting your takes never makes the app start using a word you had ruled out. The report
-still offers the explicit lift, and still never asks why.
+that writes prose a person reads (§5.8), including the unreviewed outbound ones. The report still offers the
+explicit lift, and still never asks why.
+
+**Delete is delete (owner, 2026-08-19).** `deleteAllAdaptiveResults` used to KEEP `never` entries, which was right
+while a no was permanent and outlived the profile that recorded it. A preference that survives the delete button is
+just a preference the person cannot get rid of, so the carve-out is gone: deleting the test clears its entries and
+its probe-named boundaries, exactly as "start over" already did. Entry deletion stays scoped to what this
+instrument's takes wrote, because the lexicon is shared.
 
 ### 3.6.12 The register grid, redesigned — APPROVED + **BUILT** (2026-08-19, owner-requested, mockup approved)
 

@@ -530,6 +530,23 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-19 — **Owner decision + fix (delete is delete — a hard no no longer survives deleting the test; SPEC 74
+  §3.6.11; on `fix/delete-is-delete`).** Flagged after the redesign landed that `deleteAllAdaptiveResults`
+  deliberately KEPT `never` entries, and asked whether that should change now a no is a preference. Owner:
+  _"no, should not keep hard nos on delete, delet is delete"_. The carve-out was right while a no was permanent
+  and outlived the profile that recorded it (74 §8.5); a PREFERENCE that survives the delete button is one the
+  person cannot get rid of, which is the opposite of what the button says. Removed, plus `boundaries: []` so a
+  probe-named theme goes too — exactly what the sibling "start over" already did. Entry deletion stays scoped to
+  what THIS instrument's takes wrote, because the lexicon is shared across adaptive tests. The report's confirm
+  copy said the nos were kept, so it now says the opposite and names the consequence ("SelfOS stops steering
+  clear of those words too"). Gate: typecheck ×4, lint, format, **2401 core + 1734 desktop** unit, spec-74 E2E
+  4/4 with the UI audit at 0 findings; both new guards **verified to fail when reverted** (grep-confirmed).
+  **Lesson: `deleteAllAdaptiveResults` — a destructive op reachable from a confirm dialog — had NO test at all,
+  which is how the keep-hard-nos carve-out outlived the premise it was built on. The two tests added here are as
+  much the fix as the one-line behaviour change: one asserts nothing is still suppressed on behalf of a test that
+  no longer exists, the other pins the shared-lexicon scoping so a future "delete everything" cannot start eating
+  another instrument's rows.**
+
 - 2026-08-19 — **Build + owner decision (the pet-name bank is purged to what could be said in bed; a `never`
   becomes a PREFERENCE; the register grid redesigned; owner-reported bug fixed; SPEC 74 §3.6.11/§3.6.12; on
   `feat/pet-names-redesign`).** Three things, asked one at a time and mocked up before any code. **(1) The purge.**

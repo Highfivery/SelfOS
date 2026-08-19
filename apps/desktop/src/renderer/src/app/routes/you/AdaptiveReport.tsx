@@ -955,8 +955,8 @@ export function AdaptiveReport(): JSX.Element {
               {confirmingDelete ? (
                 <Text size="sm" tone="secondary">
                   This removes every take, the profile, and the words you rated — everywhere in
-                  SelfOS. Anything you marked <strong>not for you</strong> is kept, so nothing
-                  starts using a word you&rsquo;d ruled out.
+                  SelfOS, including the ones you marked <strong>not for you</strong>. Nothing is
+                  kept back, so SelfOS stops steering clear of those words too.
                 </Text>
               ) : null}
 

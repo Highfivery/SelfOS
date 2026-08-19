@@ -17181,6 +17181,22 @@ test('tests hub (50 §3.1): one grid with state on every card, a rotating next s
     await expect(strip.getByText('Taken')).toBeVisible();
     await expect(w.getByRole('link', { name: 'Tests, 9 to try' })).toBeVisible();
 
+    // A STARTED flagship keeps its panel — an adaptive take never finishes, which is exactly what its card
+    // says ("Started · Keep marking"). It used to drop out of the lead the moment it was opened once.
+    await w
+      .getByRole('listitem', { name: 'Dirty talk' })
+      .getByRole('button', { name: 'Start' })
+      .click();
+    await w
+      .getByRole('button', { name: /Begin|Start marking|Pick up/ })
+      .first()
+      .click();
+    await w.getByRole('link', { name: /^Tests/ }).click();
+    const flagshipPanel = w.getByRole('region', { name: /: Dirty talk$/ });
+    await expect(flagshipPanel).toHaveCount(1);
+    await expect(flagshipPanel.getByText('Keep going')).toBeVisible();
+    await expect(flagshipPanel.getByText(/never really finishes/)).toBeVisible();
+
     // The crisis footer is present on this page, always (51 §8).
     await expect(w.getByRole('button', { name: /Get help now/i })).toBeVisible();
 

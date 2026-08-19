@@ -387,8 +387,10 @@ describe('retake goes where a retake goes (74 §3.6.15)', () => {
         </Routes>
       </MemoryRouter>,
     );
-    // An adaptive take is never "finished", so its second action is "Keep marking", not "Retake".
-    await userEvent.click(await screen.findByRole('button', { name: 'Keep marking' }));
+    // An adaptive take is never "finished", so its second action is "Keep marking", not "Retake". Scoped to
+    // the CARD: the lead zone now offers the same started flagship, with the same words, by design.
+    const card = await screen.findByRole('listitem', { name: 'Dirty talk' });
+    await userEvent.click(within(card).getByRole('button', { name: 'Keep marking' }));
 
     // It used to land on the intro — an explanation of a test they have already taken, with a button reading
     // "Pick up where you left off", which then led to the actual question two taps later.

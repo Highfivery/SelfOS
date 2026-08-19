@@ -530,6 +530,26 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-19 — **Fix (a started adaptive take stopped being featured; owner-reported; SPEC 50 §3.1; on
+  `fix/flagship-stays-featured`).** _"im not seeing the Dirty Talk test getting featured"_. **Diagnosed on his
+  vault, not guessed:** four result files, the newest 576 bytes written at 06:59 in the same minute as
+  `lexicon.enc` — the adaptive result. So Dirty Talk counted as `taken`, and `nextUpFor` only offered the
+  flagship while `untaken`, so the lead fell through to the shortest untried. **That rule contradicted the
+  card it sits above:** the card says "Started · Keep marking" precisely because an adaptive take never
+  finishes, while the lead treated it as done — the deepest thing in the app dropping out of the lead the
+  moment it was opened once. **Owner picked the middle rule of three** (asked, not assumed): eligible once
+  started, priority unchanged — an overdue check-in still outranks it, since a mood check-in 35 days late
+  should. `NextUp` gained `started`, and the panel stops re-pitching a take already under way: kicker "Keep
+  going", CTA "Keep marking", entry carrying `retake` intent like the card's, and a line that says the honest
+  reason it is still on offer rather than selling it again. Gate: typecheck ×4, lint, format, **2396 core +
+  13 relay + 1723 desktop** unit, **218 E2E**. The new guard is **verified to fail when reverted**.
+  **Lessons: (1) a "never finishes" premise has to hold everywhere it is visible — stating it on the card and
+  contradicting it in the slot directly above is worse than not stating it. (2) I twice ran a revert-check
+  against a STALE bundle: once the `electron-vite build` timed out at the 2-minute limit and the run silently
+  used the previous build, and once a prettier reformat meant the revert never applied at all. Both times the
+  test "passed" and would have been recorded as proof. Rebuild in the background, then grep the file AND
+  confirm the build line before believing a revert-check either way.**
+
 - 2026-08-19 — **Fix + redesign (a skipped question was being stated as a definite finding; owner-reported as
   "the data isnt quite clear"; SPEC 50 §3.1/§8.1b; on `feat/tests-card-readings`).** Four follow-ups to the
   Tests redesign, three cosmetic and one that turned out to be a **correctness bug**. The owner's two sensitive

@@ -14,9 +14,15 @@ import type { BankAddress, BankBody, BankDirection, BankEntry } from './bank';
  * - **address** — who the line calls you. Anatomy cannot decide this; a trans woman may absolutely want
  *   "good girl". Asked directly, in two taps at the top of the take.
  *
- * **This is a display filter and nothing else.** It writes no mark, lifts no boundary, and suppresses nothing
- * downstream. Changing an answer re-shows everything and loses nothing — which is the whole difference between
- * this and a `never`, and why it can afford to fail open.
+ * **Resolving is pure display.** Nothing here writes a mark, lifts a boundary, or suppresses anything: the
+ * functions below only answer "which side of this line could this person be on", which is why they can afford
+ * to fail open.
+ *
+ * What the CALLER does with that answer is not display-only, and this used to say it was. Since 2026-08-19 a
+ * mark on a side a person is no longer asked about is REMOVED (`pruneUnshownMarks`, 74 §3.6.3): a `never`
+ * whose row is gone still suppresses that word app-wide through `suppressedTexts`, with no control left on
+ * screen to lift it, and that is the un-gettable-rid-of preference §3.2 was amended to abolish. So changing
+ * an answer re-shows everything on the side it re-opens, and does lose what it closes.
  *
  * PURE: no I/O, no AI, no crypto.
  */

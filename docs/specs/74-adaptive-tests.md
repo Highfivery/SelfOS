@@ -782,9 +782,52 @@ Measured on the real bank for the reported configuration: **557 pills removed, 0
 9. **`applyNameMarks` records the sides actually shown.** Hardcoding `['hear','say']` was true before names
    were oriented and became a lie the moment they were; a `0` on a side never offered reads as a refusal
    (§3.6.6).
-10. **Known and accepted** (owner-directed, raised and reaffirmed): the identity step still reads _"nothing is
-    ruled out, and no mark is lost"_ immediately above a control that now clears marks. No confirm was added
-    and the copy was left as-is.
+10. **The identity copy says what the control does** (owner-directed, 2026-08-19, on the audit). It read
+    _"nothing is ruled out, and no mark is lost"_ directly above a control that now clears marks — true while
+    orientation was a display filter, false from point 8 onward. It now says it clears any marks on a
+    direction it hides. No confirm was added: the sentence is the disclosure.
+
+### 3.6.24 Audit of §3.6.23 — APPROVED + **BUILT** (2026-08-19)
+
+A review of the above before it shipped. Four things it found, each fixed in the same change.
+
+1. **The prune runs on the identity tap, and on every state read** — not only on the two marking screens.
+   §3.6.23 point 8's own justification claimed `setAddress` pruned; it did not, and the renderer's follow-up
+   names re-read is not the trust boundary. `setAddress` now writes the new answers and re-derives orientation
+   **from the file** (never from the edit — the intake anatomy answer outranks identity, #62), and
+   `adaptiveState` prunes on the read every adaptive screen makes, so the REPORT heals as well as the take.
+   The residue is stated rather than implied: someone who edits their onboarding anatomy and never opens Tests
+   again keeps their own answer, honoured, until they next visit.
+2. **The report can lift a per-direction no.** Its hard-no list said _"change any of them whenever you like"_
+   over read-only chips, with the only control a row in the names phase — which is fine until the row is gone.
+   A name retired from the bank (266 in §3.6.11's purge, 37 more in point 4 below) kept suppressing app-wide
+   with nothing on any screen to lift it: the same un-gettable-rid-of preference, reached from the other side.
+   A new `clearNameSide` edit reuses `clearNameMarks` (deliberately not take-scoped) and lifts exactly one
+   direction, whether or not the name is still in the bank.
+3. **Twelve gendered role nouns were missed**, each in a family that already tagged its siblings — `ma'am` and
+   `my ma'am` beside `sir`/`madam`/`mistress`; `dominatrix` beside `master`/`mistress`; `temptress`,
+   `my temptress`, `seductress` beside `my little vixen`; `my waitress`, `my stewardess`, `my barmaid` beside
+   `my boss lady` and six `maid` entries; and `my schoolmaster`/`my schoolmistress`, adjacent lines, both
+   untagged between a tagged `my monk` and `my mother superior`. Being asked whether you want to be called
+   "ma'am" is the reported bug one word over. A test pins the rule so the class cannot drift back.
+4. **The animal-sex names are gone** (owner-directed). The bank tagged `stallion`, `bull`, `stag` and `vixen`
+   by animal sex and left `mare`, `filly`, `sow`, `ewe`, `doe`, `hen`, `cow`, `buck`, `ox`, `ram`, `colt`,
+   `rooster`, `boar` and the rest open — neither answer applied consistently. Offered the choice of tagging
+   them all or none, the owner removed the words instead: **37 entries** across `names-petplay`,
+   `names-masculine`, `names-sharing`, `names-breeding`, `names-agegap` and `names-rough-mild`. Cut by
+   `(family, text)`, never text alone (§3.6.11's rule), and nobody loses a mark — every consumer reads the
+   person's own lexicon, never the bank — which is exactly why point 2 had to land with it.
+
+**Measured, and accepted as correct:** for the reported man+woman configuration the prune withholds **0 of
+2,895** entries, so the §3.6.9 readiness gate cannot move. For a same-sex couple it withholds 15.7% (m+m) or
+10.0% (w+w), so a person sitting at exactly 15–17 marks can drop back under the gate — honest about the marks
+that are now gone, and re-markable immediately from the 1,600+ names still on offer.
+
+**Pinned, not endorsed:** `mergeLexicons` cannot express a deletion — it seeds from the older copy, so an entry
+the newer side pruned comes back. Nothing can reach it today (its one caller merges a lexicon against a copy of
+itself; conflicted vault copies are surfaced for a person to resolve, never auto-merged) and any resurrection
+would be re-pruned on the next adaptive read. A test records what a real two-copy merge would have to solve
+first — a tombstone — so a lifted `never` cannot quietly return from an older device.
 
 ## 4. Data model
 

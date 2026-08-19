@@ -530,6 +530,44 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-19 — **Audit (the gendered-names work, reviewed before it shipped; SPEC 74 §3.6.24; on
+  `feat/gendered-names`).** Four findings, each fixed in the same change, plus two measured and accepted.
+  **(1) The prune's coverage was narrower than its own justification claimed.** The comment on
+  `orientationForMarking` said the identity tap "prunes there"; the `setAddress` case said "Deliberately NOT
+  pruning here" — two comments, one file, contradicting each other, and the first is what the design rests on.
+  In practice the renderer re-reads names right after, but **the renderer is not the trust boundary**, and the
+  report — the one screen that can lift a hard no — never pruned at all. `setAddress` now writes the answers
+  and re-derives orientation **from the file** (never from the edit: the intake anatomy answer outranks
+  identity, #62), and `adaptiveState` prunes on the read every adaptive screen makes. **(2) The report promised
+  a control it did not have.** Its per-direction hard-no list said _"change any of them whenever you like"_
+  over read-only chips; the only control was a row in the names phase, and `setState` is whole-entry so it
+  could not touch a `hearState`. Fine until the row is gone — a name retired from the bank (266 in #534) kept
+  suppressing app-wide with nothing anywhere to lift it, the same un-gettable-rid-of preference #535 abolished,
+  reached from the other side. A `clearNameSide` edit reuses `clearNameMarks` (deliberately not take-scoped).
+  **(3) Twelve gendered role nouns were missed**, each in a family that already tagged its siblings: `ma'am`
+  beside `sir`/`madam`/`mistress`, `dominatrix` beside `master`, `temptress`/`seductress` beside a tagged
+  `my little vixen`, `my waitress`/`my stewardess`/`my barmaid` beside `my boss lady` and six `maid` entries,
+  and `my schoolmaster`/`my schoolmistress` — **adjacent lines**, both untagged, between a tagged `my monk` and
+  `my mother superior`. **(4) The animal-sex words are deleted** (owner's call when offered tag-all vs
+  tag-none): the bank tagged `stallion`/`bull`/`stag`/`vixen` by animal sex and left `mare`/`sow`/`buck`/`ox`
+  and ~30 more open, which is neither answer. **37 entries** removed, cut by `(family, text)` never text alone.
+  **Measured and accepted:** the prune withholds **0 of 2,895** entries for the reported man+woman config, so
+  the readiness gate cannot move there; 15.7% (m+m) / 10.0% (w+w) means only a person at exactly 15–17 marks
+  can fall back under it, honestly. **Verified clean, not assumed:** the 245-line CSS sweep — I re-checked all
+  14 files by resolving each module's own import identifier, and **0 removed classes are still referenced**
+  (my first pass "found" `.colMe` live and was wrong: the child selectors `.nameRow > .colMe` were dead, the
+  live `.nameRow .colMe` descendant rules survive, and the standalone `.colMe` they superseded was the thing
+  removed). Gate: typecheck ×4, lint, format, **2414 core + 13 relay + 1738 desktop** unit, spec-74 E2E 4/4
+  with the UI audit at 0 findings. Every new guard **verified to fail when reverted**, grep-confirmed each time.
+  **Lessons: (1) when two comments in one file disagree about whether something happens, at least one is
+  wrong and the load-bearing one is usually the confident one — the design rested on a guarantee the code did
+  not provide. (2) Deleting bank entries is safe for MARKS and unsafe for CONTROLS: every consumer reads the
+  person's own lexicon so nothing is lost, but the row that could edit the mark goes with the word — so a purge
+  needs a lift path that does not depend on the bank, which #534 shipped without and this change owed twice
+  over. (3) A revert-check no-opped again, on a two-occurrence string, exactly as warned — the `assert count==1`
+  is the only reason I did not record a vacuous proof, and it is worth writing even when the string looks
+  unique. (4) `grep -a` for `schemas.ts`: bitten again, 330KB reads as binary and prints nothing.**
+
 - 2026-08-19 — **Build (pet names and the deck's role lines are gender-aware; owner-reported; SPEC 74 §3.6.23,
   reversing §3.6.8 point 3; on `feat/gendered-names`).** _"a man being asked whether he calls his girlfriend 'my
   man'."_ **Reviewing it changed the shape of the fix.** A name has TWO answers and for a mixed-gender couple they

@@ -1464,6 +1464,12 @@ export interface AdaptiveSynthesisView {
 export type AdaptiveLexiconEdit =
   | { kind: 'rate'; key: string; hear?: number; say?: number }
   | { kind: 'setState'; key: string; state: 'never' | 'okay' | null }
+  /**
+   * Take back ONE direction of a pet-name mark. `setState` is whole-entry (what the deck writes); a name is
+   * answered per direction, so its `never` lives in `hearState`/`sayState` and needs its own op — which is
+   * what makes the report's hard-no list actionable even for a name no longer in the bank (74 §3.2/§3.6.8).
+   */
+  | { kind: 'clearNameSide'; key: string; side: 'hear' | 'say' }
   | {
       // 74 §3.6.4 — the two address taps. A DISPLAY filter: writes no mark, lifts no boundary.
       kind: 'setAddress';

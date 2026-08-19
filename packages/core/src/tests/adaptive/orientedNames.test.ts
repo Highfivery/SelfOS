@@ -236,3 +236,78 @@ describe('a name pass records what was actually offered', () => {
     expect(next.entries[0]?.sides).toEqual(['hear']);
   });
 });
+
+/**
+ * 74 §3.6.3 — the tagging rule is "who must the person being CALLED this be?", grammatical gender only.
+ *
+ * These are the entries where a family already answers that question for a sibling, so leaving one untagged
+ * is a drift rather than a judgment call — and each is the reported bug one word over ("do you want to be
+ * called ma'am?" put to a man). They were all found by sweeping the bank for gendered nouns whose family
+ * neighbours carry a tag, which is the check this pins.
+ */
+describe('a gendered role noun is tagged wherever its family already tags its siblings', () => {
+  const tag = (key: string): string | undefined => name(key).addresses;
+
+  it('tags an honorific the same way as its counterpart', () => {
+    // `sir` was tagged and `ma'am` — the female form of the same word — was not.
+    expect(tag('names-hard-power:sir')).toBe('man');
+    expect(tag('names-hard-power:ma-am')).toBe('girl');
+    expect(tag('names-hard-power:my-sir')).toBe('man');
+    expect(tag('names-hard-power:my-ma-am')).toBe('girl');
+    // The neutral form of the same role stays open — it is the tagging criterion, not the topic, that decides.
+    expect(tag('names-hard-power:my-dominant')).toBeUndefined();
+    expect(tag('names-hard-power:dominatrix')).toBe('girl');
+  });
+
+  it('tags an occupational -ess/-maid form, whose neutral sibling stays open', () => {
+    expect(tag('names-roleplay:my-waitress')).toBe('girl');
+    expect(tag('names-roleplay:my-stewardess')).toBe('girl');
+    expect(tag('names-roleplay:my-barmaid')).toBe('girl');
+    // Adjacent in the bank, the clearest pair in it, and both were missed.
+    expect(tag('names-roleplay:my-schoolmaster')).toBe('man');
+    expect(tag('names-roleplay:my-schoolmistress')).toBe('girl');
+    // Genuinely neutral job titles are NOT swept up by the rule.
+    for (const key of [
+      'names-roleplay:my-flight-attendant',
+      'names-roleplay:my-bartender',
+      'names-roleplay:my-tutor',
+    ]) {
+      expect(tag(key)).toBeUndefined();
+    }
+  });
+
+  it('leaves a word gendered only by convention open, however feminine it reads', () => {
+    // #62 again, and the owner's line: `queen` as an intensifier is not the honorific, `whore` and `slut`
+    // are conventions, and a gendered POSSESSOR does not constrain the person being called it.
+    for (const key of [
+      'names-rough-heavy:size-queen',
+      'names-rough-heavy:whore',
+      'names-rough-heavy:my-daddy-s-slut',
+      'names-rough-heavy:my-sir-s-slut',
+    ]) {
+      expect(tag(key)).toBeUndefined();
+    }
+  });
+});
+
+/**
+ * The `addresses`/`body` axes are checked against the person RECEIVING the line, and a self-label inverts
+ * that — "I'm your good girl" is said BY the girl. Tagging one would hide it from a straight man on the side
+ * where it fits him and keep it on the side where it doesn't. There is a comment saying so; this is the part
+ * that fails if someone "completes" the tagging anyway.
+ */
+describe('the self-label family stays un-oriented', () => {
+  it('carries no orientation on any entry', () => {
+    const selfLabels = DIRTY_TALK_BANK.entries.filter((e) => e.family === 'self-labelling');
+    expect(selfLabels.length).toBeGreaterThan(0);
+    for (const entry of selfLabels) {
+      expect(entry.addresses).toBeUndefined();
+      expect(entry.body).toBeUndefined();
+    }
+    // ...so it reaches everyone both ways, which is the point: for a straight man "I'm your good girl" is
+    // right to hear from her AND is the feminising register to say.
+    expect(
+      shownSides(entry(DIRTY_TALK_BANK, 'self-labelling:i-m-your-good-girl'), STRAIGHT_MAN),
+    ).toEqual(['hear', 'say']);
+  });
+});

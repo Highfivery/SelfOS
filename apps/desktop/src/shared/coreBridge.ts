@@ -875,6 +875,7 @@ import {
   addCustomEntry,
   applyBankMarks,
   applyDirections,
+  clearNameMarks,
   clearState,
   completeAdaptiveTake,
   deleteAllAdaptiveResults,
@@ -1241,6 +1242,22 @@ const AdaptiveLexiconEditSchema = z.discriminatedUnion('kind', [
     kind: z.literal('setState'),
     key: z.string().min(1),
     state: z.enum(['never', 'okay']).nullable(),
+  }),
+  z.object({
+    /*
+     * 74 §3.6.8/§3.2 — take back ONE direction of a pet-name mark, from the report.
+     *
+     * `setState` above is whole-entry, which is what the deck writes. A name is answered per direction, so a
+     * `never` from the names phase lives in `hearState`/`sayState` and that op cannot touch it — leaving the
+     * report's "change any of them whenever you like" as a sentence with no control behind it, and the only
+     * route back a row in the names phase. Which is fine until the row is gone: a name retired from the bank
+     * (266 in #534, 37 more when the animal-sex names went) still suppresses through `suppressedTexts` with
+     * nothing left on any screen to lift it. That is the un-gettable-rid-of preference §3.2 abolished,
+     * arrived at from the other direction.
+     */
+    kind: z.literal('clearNameSide'),
+    key: z.string().min(1),
+    side: z.enum(['hear', 'say']),
   }),
   z.object({
     // 74 §3.6.4 — the two address taps. A display filter: it writes no mark and lifts no boundary, so it is
@@ -2334,26 +2351,35 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
 
   /**
    * This person's orientation, having first REMOVED any mark on a side they are no longer asked about
-   * (74 §3.6.3, owner decision 2026-08-19).
-   *
-   * It runs on read because that is the only moment that covers everyone: changing the identity taps goes
-   * through `setAddress` and prunes there, but a lexicon marked before names were oriented has no such
-   * event to hang off. Idempotent, and it writes only when something actually changed, so the common case
-   * costs one comparison.
+   * (74 §3.6.3, owner decision 2026-08-19). Returns the pruned lexicon too, so a caller that needs both
+   * reads the file once rather than racing its own copy against this one.
    *
    * Why it must delete rather than merely hide: `suppressedTexts` reads the LIVE state, so a `never` on a
    * hidden side keeps suppressing that word everywhere with no control left on screen to lift it.
+   *
+   * **Where it runs, and why there.** A side becomes hidden when the identity taps change, when the intake
+   * anatomy answer changes, or — once — because this build oriented names that were marked before it. Only
+   * the first of those has an event to hang off, so this is called from three places rather than one:
+   *
+   * - `setAddress`, the identity change itself, so the stale mark never outlives the tap that stranded it;
+   * - `adaptiveState`, which every adaptive screen refresh returns, so the report heals as well as the take;
+   * - the two marking reads, which need the orientation anyway.
+   *
+   * Idempotent, and it writes only when something actually changed, so the common case costs one comparison.
+   * The residue is someone who edits their onboarding anatomy and never opens Tests again: their own answer
+   * still stands and is still honoured, it simply cannot be lifted until they next visit — which is the one
+   * screen that can lift it.
    */
   const orientationForMarking = async (gate: {
     ctx: { fs: FileSystem; key: Uint8Array };
     personId: string;
     def: AdaptiveTestDefinition;
-  }): Promise<Orientation> => {
+  }): Promise<{ who: Orientation; lexicon: EroticLexicon }> => {
     const who = await personOrientation(gate);
     const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
     const pruned = pruneUnshownMarks(lexicon, gate.def.bank, who, new Date());
     if (pruned.changed) await writeLexicon(gate.ctx.fs, gate.ctx.key, pruned.lexicon);
-    return who;
+    return { who, lexicon: pruned.lexicon };
   };
 
   /** The sides each marked key was offered on, for the record `applyBankMarks` writes (74 §3.6.6). */
@@ -2388,7 +2414,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     const history = await listAdaptiveResults(fs, key, gate.personId, gate.def.id);
     const draft = history.find((result) => result.status === 'draft') ?? null;
     const latest = history.find((result) => result.status !== 'draft') ?? null;
-    const lexicon = await readLexicon(fs, key, gate.personId);
+    // Pruned here, not merely read: this is the state EVERY adaptive screen refresh returns, so the report
+    // heals a mark stranded on a hidden side as well as the two marking screens do. Without it the only
+    // control that can lift a hard no is on a screen that never runs the prune.
+    const { lexicon } = await orientationForMarking(gate);
     const showCost = await activePersonCan(fs, key, 'budgets.manage');
     // The $ boundary is the BRIDGE, not the UI (the durable 06 rule). `TestResult` now carries `costUsd`, so
     // redacting only the view's own field would ship the figure inside `draft`/`latest`/`history`.
@@ -4312,7 +4341,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // `orientationForMarking`, not `personOrientation`: the deck has the same stuck-`never` as the names
       // did — mark a deck entry `never`, then change an identity tap so it is withheld, and it keeps
       // suppressing that word app-wide with no row left to lift it on.
-      const who = await orientationForMarking(gate);
+      const { who } = await orientationForMarking(gate);
       const shownByKey = new Map<string, readonly ('hear' | 'say')[]>();
       const withheldByFamily: Record<string, number> = {};
       // The pet names are marked in their own phase, both ways per name (74 §3.6.8) — they would otherwise
@@ -4386,9 +4415,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
        * calls her. So `shownSides` decides per pill, almost nothing leaves the register, and an entry is
        * dropped only when it fits neither of them.
        */
-      const who = await orientationForMarking(gate);
-      const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
-      const byKey = new Map((lexicon?.entries ?? []).map((entry) => [entry.key, entry]));
+      // One read for both: re-reading here would race the prune's own write and could seed the rows from
+      // the pre-prune copy, showing a mark on a pill that is no longer on screen.
+      const { who, lexicon } = await orientationForMarking(gate);
+      const byKey = new Map(lexicon.entries.map((entry) => [entry.key, entry]));
       const families = nameFamilies(gate.def.bank);
       // Resolved ONCE and read by both the rows and the register counts, so "0 of 43 marked" can never
       // count a name the register does not show.
@@ -4859,7 +4889,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
               ? clearState(lexicon, edit.key, now)
               : applyBankMarks(lexicon, DIRTY_TALK_BANK, { [edit.key]: edit.state }, 'edit', now);
           break;
-        case 'setAddress':
+        case 'setAddress': {
           lexicon = {
             ...lexicon,
             address: { self: edit.self, partner: edit.partner },
@@ -4867,11 +4897,29 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             // prior value when this edit doesn't carry one, so changing only the address never erases it.
             ...(edit.identity ? { identity: edit.identity } : {}),
           };
-          // Deliberately NOT pruning here. What the change withholds is removed by `orientationForMarking`
-          // on the next read of the names phase or the deck — which is the very next screen — and that path
-          // resolves the body axis through `personOrientation`, where the INTAKE anatomy answer outranks
-          // identity (#62). Rebuilding orientation from `edit` alone would ignore it and prune the wrong
-          // side for anyone whose onboarding answer and identity tap disagree.
+          /*
+           * Prune HERE, on the tap that stranded the mark — this is the only moment an identity change has.
+           *
+           * The renderer does follow this with a names re-read that prunes, but the renderer is not the
+           * trust boundary: a bridge caller, or a later screen that doesn't re-read, would leave a `never`
+           * on a now-hidden side suppressing that word app-wide with no control on screen to lift it. That
+           * is the un-gettable-rid-of preference §3.2 was amended to abolish.
+           *
+           * Written BEFORE re-deriving, and re-derived from the FILE rather than from `edit`: orientation's
+           * body axis lets the INTAKE anatomy answer outrank identity (#62), so rebuilding it from this
+           * edit alone would prune the wrong side for anyone whose onboarding answer and identity tap
+           * disagree. Reading it back costs one decrypt and cannot get that wrong.
+           */
+          await writeLexicon(ctx.fs, ctx.key, lexicon);
+          ({ lexicon } = await orientationForMarking(gate));
+          break;
+        }
+        case 'clearNameSide':
+          // `clearNameMarks` is deliberately NOT scoped to the take that wrote the mark — taking one back in
+          // a later sitting is the same ordinary act as changing it (74 §3.2, amended 2026-08-19) — so the
+          // report can reuse it as-is. It drops that direction's rating, its state, and its directional
+          // boundary, and leaves the other direction standing.
+          lexicon = clearNameMarks(lexicon, { [edit.key]: [edit.side] }, now);
           break;
         case 'addWord':
           lexicon = addCustomEntry(

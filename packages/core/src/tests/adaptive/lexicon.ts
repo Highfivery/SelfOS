@@ -514,9 +514,19 @@ function dedupeBoundaries(boundaries: readonly LexiconBoundary[]): LexiconBounda
 }
 
 /**
- * Merge two lexicons (pure) — the sync-conflict + retake path. Ratings AND states resolve last-write-wins
- * by `updatedAt`; **boundaries still UNION**, because a theme is named by an explicit act rather than a
- * mark that can be changed.
+ * Merge two lexicons (pure). Ratings AND states resolve last-write-wins by `updatedAt`; **boundaries still
+ * UNION**, because a theme is named by an explicit act rather than a mark that can be changed.
+ *
+ * **Its one production caller folds a synthesis back into a lexicon against a copy of ITSELF**
+ * (`completeAdaptiveResult`). There is no sync-conflict caller: a conflicted vault copy is surfaced to the
+ * person to resolve (`findConflicts` → the banner), never merged automatically.
+ *
+ * That matters because of what this function cannot express: **a deletion**. `byKey` is seeded from the older
+ * copy and the newer one only ever adds to it, so an entry the newer side dropped comes back. Today nothing
+ * can trip that — the only deletions are `pruneUnshownMarks`, both sides of the one live call are the same
+ * object, and any resurrection would be re-pruned on the next adaptive read. Wire a real two-copy merge and
+ * it becomes reachable, and a lifted `never` would come back with it: that needs a tombstone, not a tweak
+ * here. Pinned by a test so the limitation is a decision rather than a surprise.
  */
 export function mergeLexicons(a: EroticLexicon, b: EroticLexicon): EroticLexicon {
   const [older, newer] = a.updatedAt <= b.updatedAt ? [a, b] : [b, a];

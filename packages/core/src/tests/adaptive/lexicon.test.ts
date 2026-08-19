@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { DIRTY_TALK } from './instruments/dirtyTalk';
 
 import { memFileSystem } from '../../host/memFileSystem';
-import type { EroticLexicon } from '../../schemas';
+import type { EroticLexicon, LexiconEntry } from '../../schemas';
 import {
   addBoundary,
   addCustomEntry,
@@ -270,6 +270,47 @@ describe('74 §3.6.6 — a side that was never asked is not a refusal', () => {
     expect(marked.entries[0]?.sides).toEqual(['say']);
   });
 });
+/**
+ * The limitation, pinned rather than left to be discovered: `mergeLexicons` cannot express a DELETION.
+ *
+ * Its one production caller folds a synthesis into a lexicon against a copy of itself, so both sides always
+ * carry the same entries and nothing can trip this today; conflicted vault copies are surfaced for a person
+ * to resolve, never merged. But `pruneUnshownMarks` does delete (74 §3.6.3), and a lifted `never` is a
+ * deletion too — so if a real two-copy merge is ever wired, this is the test that says what it has to solve
+ * first (a tombstone), instead of a hard no quietly coming back from an older device.
+ */
+describe('mergeLexicons cannot express a deletion — pinned, not endorsed', () => {
+  const at = (updatedAt: string, entries: LexiconEntry[]): EroticLexicon => ({
+    personId: 'p1',
+    schemaVersion: 1,
+    entries,
+    registers: {},
+    contexts: {},
+    themes: [],
+    wantsToSay: [],
+    boundaries: [],
+    updatedAt,
+  });
+  const good: LexiconEntry = {
+    key: 'names-praise:good-girl',
+    text: 'good girl',
+    kind: 'word',
+    family: 'names-praise',
+    tier: 2,
+    hear: 0,
+    say: 0,
+    hearState: 'never',
+    source: 'test:t1',
+  };
+
+  it('brings back an entry the newer copy dropped', () => {
+    const older = at('2026-08-01T00:00:00.000Z', [good]);
+    const pruned = at('2026-08-19T00:00:00.000Z', []);
+    // Not what anyone wants — recorded so the next person to wire a merge sees it before their users do.
+    expect(mergeLexicons(older, pruned).entries.map((e) => e.key)).toEqual([good.key]);
+  });
+});
+
 describe('mergeLexicons keeps what was ASKED (74 §3.6.6)', () => {
   it('does not let an older device drop `sides` — that would recreate the fabricated goal', () => {
     // A device on a pre-orientation build writes entries with no `sides`. Spreading the newer entry alone

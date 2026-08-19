@@ -101,6 +101,9 @@ export type NextReason = 'due' | 'flagship' | 'quick';
 export interface NextUp {
   test: TestSummary;
   reason: NextReason;
+  /** A flagship already under way. It is still offered — an adaptive take never finishes — but the panel
+   *  invites picking it back up rather than starting it. */
+  started?: boolean;
   /** For a `due` pick: when it was last checked in on, so the copy can say how long it's been. */
   lastAt?: string;
 }
@@ -156,9 +159,17 @@ export function nextUpFor(
     });
   }
 
-  // 2. The adaptive flagship, while it has never been started.
-  const flagship = catalog.find((test) => test.kind === 'adaptive' && stateOf(test) === 'untaken');
-  if (flagship !== undefined) picks.push({ test: flagship, reason: 'flagship' });
+  /*
+   * 2. The adaptive flagship — offered whether or not it has been started, because it never finishes: there
+   * is always more to mark (74). Restricting this to `untaken` made the lead slot contradict the card, which
+   * says "Started · Keep marking" for exactly that reason, and meant the deepest thing in the app dropped
+   * out of the lead the moment it was opened once.
+   */
+  const flagship = catalog.find((test) => test.kind === 'adaptive');
+  if (flagship !== undefined) {
+    const started = stateOf(flagship) !== 'untaken';
+    picks.push({ test: flagship, reason: 'flagship', ...(started ? { started } : {}) });
+  }
 
   // 3. The shortest untried, then the next shortest. A stable sort, so equal lengths keep catalog order.
   const shortest = catalog

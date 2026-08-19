@@ -140,12 +140,21 @@ describe('nextForYou', () => {
     expect(next?.reason).toBe('flagship');
   });
 
-  it('falls to the shortest untried once the flagship is started', () => {
+  it('keeps offering the flagship once started — an adaptive take never finishes', () => {
+    // It used to drop out of the lead the moment it was opened once, which contradicted its own card
+    // ("Started · Keep marking") and buried the deepest thing in the app.
     const next = nextForYou(
       [bigFive, dirtyTalk, gad7],
       { 'dirty-talk': [result('dirty-talk', daysAgo(3))] },
       NOW,
     );
+    expect(next?.test.id).toBe('dirty-talk');
+    expect(next?.reason).toBe('flagship');
+    expect(next?.started).toBe(true);
+  });
+
+  it('falls to the shortest untried when there is no adaptive instrument at all', () => {
+    const next = nextForYou([bigFive, gad7], {}, NOW);
     expect(next?.test.id).toBe('gad7'); // 2 min beats Big Five's 20
     expect(next?.reason).toBe('quick');
   });
@@ -203,6 +212,17 @@ describe('nextUpFor — two featured', () => {
     );
     expect(picks.map((p) => p.test.id)).toEqual(['phq9', 'dirty-talk']);
     expect(picks.map((p) => p.reason)).toEqual(['due', 'flagship']);
+  });
+
+  it('still puts an overdue check-in ahead of the started flagship', () => {
+    const picks = nextUpFor(
+      [dirtyTalk, phq9],
+      { 'dirty-talk': [result('dirty-talk', daysAgo(2))], phq9: [result('phq9', daysAgo(30))] },
+      NOW,
+      2,
+    );
+    expect(picks.map((p) => p.test.id)).toEqual(['phq9', 'dirty-talk']);
+    expect(picks[1]?.started).toBe(true);
   });
 
   it('never repeats an instrument — the flagship is also in the untried list', () => {

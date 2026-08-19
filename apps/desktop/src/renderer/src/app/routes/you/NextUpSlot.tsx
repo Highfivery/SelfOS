@@ -42,14 +42,20 @@ export function NextUpSlot({ next, now }: { next: NextUp; now: number }): JSX.El
   const due = reason === 'due';
   const privacy = privacyWord(test);
   const cta = test.wellbeing ? 'Check in' : test.kind === 'adaptive' ? 'Start' : 'Take';
+  const kicker = due ? 'Next for you' : 'Start here';
 
   return (
-    <section className={`${styles.next} ${due ? styles.nextDue : ''}`} aria-label="Next for you">
+    // Named by its instrument: two panels sharing one region name is ambiguous to a screen reader, and to
+    // any test that has to tell them apart.
+    <section
+      className={`${styles.next} ${due ? styles.nextDue : ''}`}
+      aria-label={`${kicker}: ${test.title}`}
+    >
       <span className={styles.nextTile} aria-hidden="true">
         {due ? <Clock size={22} /> : <Compass size={22} />}
       </span>
       <div className={styles.nextText}>
-        <span className={styles.nextKicker}>{due ? 'Next for you' : 'Start here'}</span>
+        <span className={styles.nextKicker}>{kicker}</span>
         <span className={styles.nextTitleRow}>
           <Heading level={2} className={styles.nextTitle}>
             {test.title}

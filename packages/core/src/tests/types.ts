@@ -116,6 +116,13 @@ export interface SubscaleMeta {
   key: string;
   label: string;
   signed: boolean;
+  /**
+   * The subscale's descriptor bands in ascending order, labels only (§3.1). The hub's spectrum reading names
+   * the ends of its axis from these — a bipolar bar with unlabelled ends cannot be read at all — and taking
+   * them from the definition means the axis can never drift from the words the result screen uses. Absent
+   * where the subscale declares no bands.
+   */
+  bands?: string[];
 }
 
 /** Crypto-free display metadata for the catalog (what `tests:list` returns; the renderer never sees scoring). */
@@ -171,6 +178,9 @@ export function testSummary(def: TestDefinition): TestSummary {
       key: sub.key,
       label: sub.label,
       signed: (sub.normalize.out ?? (defaultSigned ? 'signed' : 'unit')) === 'signed',
+      ...(sub.bands && sub.bands.length > 0
+        ? { bands: [...sub.bands].sort((a, b) => a.upTo - b.upTo).map((b) => b.label) }
+        : {}),
     })),
     wellbeing: def.wellbeing ?? false,
     ...(def.attribution !== undefined ? { attribution: def.attribution } : {}),

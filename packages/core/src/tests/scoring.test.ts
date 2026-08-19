@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { matrixRowKey } from '../schemas';
-import { scoresToMetrics, scoreTest, type ScoreAnswers } from './scoring';
+import { NO_SIGNAL_BAND, matrixRowKey } from '../schemas';
+import {
+  hasSignal,
+  scoreTest,
+  scoresToMetrics,
+  withNoSignalBands,
+  type ScoreAnswers,
+} from './scoring';
 import { TEST_CATALOG, getTest } from './testCatalog';
 import type { TestDefinition } from './types';
 
@@ -226,5 +232,66 @@ describe('instruments — structural integrity + keying-independent sanity', () 
     // An unrated category floors to 0 (no items answered).
     const otherKey = scores.find((s) => s.key !== firstKey)!;
     expect(otherKey.normalized).toBe(0);
+  });
+});
+
+describe('unrated is not a no (§8.1a)', () => {
+  it('gives an unanswered subscale NO_SIGNAL_BAND, never a descriptor band', () => {
+    // Every item in both sensitive instruments is optional, so this is reachable by simply skipping.
+    const sexuality = getTest('kinsey-klein')!;
+    const scores = scoreTest(sexuality, {});
+    expect(scores.length).toBeGreaterThan(0);
+    for (const score of scores) {
+      expect(score.band).toBe(NO_SIGNAL_BAND);
+      expect(hasSignal(score)).toBe(false);
+    }
+    // The floor is still there for arithmetic — it is the BAND that must not assert anything.
+    expect(scores.every((s) => s.normalized === -1)).toBe(true);
+  });
+
+  it('never lets an unanswered kink category read as "little pull"', () => {
+    const kink = getTest('kink-interests')!;
+    const scores = scoreTest(kink, {});
+    expect(scores.some((s) => s.band === 'little pull')).toBe(false);
+    expect(scores.every((s) => s.band === NO_SIGNAL_BAND)).toBe(true);
+  });
+
+  it('still bands a subscale that WAS answered, including at the extreme', () => {
+    const sexuality = getTest('kinsey-klein')!;
+    // The Kinsey row alone, answered at the exclusively-other-sex end.
+    const scores = scoreTest(sexuality, { kinsey: { 'kinsey-overall': 1 } });
+    const overall = scores.find((s) => s.key === 'kinsey.orientation');
+    expect(overall?.normalized).toBe(-1);
+    expect(overall?.band).toBe('mostly other-sex'); // a real answer keeps its band…
+    expect(hasSignal(overall!)).toBe(true);
+    // …and the Klein variables nobody answered are distinguishable from it, which they were not before.
+    const attraction = scores.find((s) => s.key === 'klein.attraction');
+    expect(attraction?.normalized).toBe(-1);
+    expect(attraction?.band).toBe(NO_SIGNAL_BAND);
+  });
+});
+
+describe('withNoSignalBands — repairing results scored before the rule', () => {
+  const sexuality = getTest('kinsey-klein')!;
+  const answers: ScoreAnswers = { kinsey: { 'kinsey-overall': 1 } };
+
+  it('replaces the stale band on subscales the answers never touched', () => {
+    // Exactly what a pre-fix result holds: a confident band on everything.
+    const stale = scoreTest(sexuality, answers).map((s) => ({ ...s, band: 'mostly other-sex' }));
+    const repaired = withNoSignalBands(sexuality, stale, answers);
+    expect(repaired.find((s) => s.key === 'kinsey.orientation')?.band).toBe('mostly other-sex');
+    expect(repaired.find((s) => s.key === 'klein.attraction')?.band).toBe(NO_SIGNAL_BAND);
+  });
+
+  it('is idempotent and never invents or moves a score', () => {
+    const once = withNoSignalBands(sexuality, scoreTest(sexuality, answers), answers);
+    const twice = withNoSignalBands(sexuality, once, answers);
+    expect(twice).toEqual(once);
+    expect(twice.map((s) => s.normalized)).toEqual(once.map((s) => s.normalized));
+  });
+
+  it('leaves a score alone when its subscale is gone from the definition', () => {
+    const orphan = [{ key: 'klein.retired', raw: 1, normalized: -1, band: 'mostly other-sex' }];
+    expect(withNoSignalBands(sexuality, orphan, answers)).toEqual(orphan);
   });
 });

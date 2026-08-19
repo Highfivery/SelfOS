@@ -1,4 +1,4 @@
-import type { TestSubscaleScore } from '../schemas';
+import { NO_SIGNAL_BAND, type TestSubscaleScore } from '../schemas';
 import type { NormalizeOut, SubscaleSpec, TestDefinition } from './types';
 
 /**
@@ -94,7 +94,19 @@ function scoreSubscale(
 
   const unit = clamp((raw - min) / span, 0, 1);
   const normalized = outFor(sub, defaultOut) === 'signed' ? unit * 2 - 1 : unit;
-  const band = resolveBand(sub, round4(normalized));
+  /*
+   * Nothing answered ⇒ NO SIGNAL, never a descriptor band. Every item in the sexuality and kink
+   * instruments is optional, so skipping a Klein variable or declining a kink category floors the subscale
+   * to `normalize.min` — and a resolved band then states that floor as a finding: "mostly other-sex" for a
+   * question never answered, "little pull" for a category never opened. Worse on a signed scale, where the
+   * floor is −1: the MOST extreme value there is, so an unanswered variable outranked every answered one
+   * anywhere scores are ordered by distance from neutral.
+   *
+   * This is the rule the adaptive report already follows — unrated is not a no (74 §3.3) — reusing its
+   * constant so both kinds say the same thing. `normalized` keeps the floor for arithmetic; consumers read
+   * the band to know there is nothing to show.
+   */
+  const band = contributions.length === 0 ? NO_SIGNAL_BAND : resolveBand(sub, round4(normalized));
   return {
     key: sub.key,
     raw: round4(raw),
@@ -123,4 +135,38 @@ export function scoresToMetrics(scores: TestSubscaleScore[]): Record<string, num
   const metrics: Record<string, number> = {};
   for (const score of scores) metrics[score.key] = score.normalized;
   return metrics;
+}
+
+/**
+ * Re-derive the no-signal bands of an ALREADY-STORED result (§8.1a). A result scored before the rule above
+ * carries a confident band on subscales nobody answered, so the fix has to reach backwards — otherwise every
+ * existing result keeps stating skipped questions as findings until its owner retakes the whole instrument.
+ *
+ * Pure and total: it only ever REPLACES a band with `NO_SIGNAL_BAND`, never invents or moves a score, so
+ * re-running it is a no-op and a result that was already correct is returned unchanged.
+ */
+export function withNoSignalBands(
+  def: TestDefinition,
+  scores: TestSubscaleScore[],
+  answers: ScoreAnswers,
+): TestSubscaleScore[] {
+  const values = itemValues(def, answers);
+  const answeredCount = (sub: SubscaleSpec): number =>
+    sub.items.reduce(
+      (n, ref) => n + (values.has(ref.startsWith('-') ? ref.slice(1) : ref) ? 1 : 0),
+      0,
+    );
+  const bySubscale = new Map(def.scoring.subscales.map((sub) => [sub.key, sub]));
+  return scores.map((score) => {
+    const sub = bySubscale.get(score.key);
+    // A score whose subscale is gone from the definition is left exactly as found — guessing at it would be
+    // worse than showing what was recorded.
+    if (!sub || answeredCount(sub) > 0) return score;
+    return { ...score, band: NO_SIGNAL_BAND };
+  });
+}
+
+/** Whether a scored subscale has anything real to say — the one predicate every display should gate on. */
+export function hasSignal(score: TestSubscaleScore): boolean {
+  return score.band !== NO_SIGNAL_BAND;
 }

@@ -151,6 +151,20 @@ carries its own state**. Top to bottom:
    in the flow of a group. The instruments themselves stay withheld **in the bridge** (§3.5).
 5. **One reflection line**, then the crisis footer (§8).
 
+**What a taken card reads** is chosen by the instrument's SHAPE, not its id (`cardReading.ts`), because one
+generic "top 2 subscales as bars" summary is actively misleading on two of them:
+
+| Shape                  | Instruments                           | Reading                                                                                                                                                                                                                                         |
+| ---------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Every subscale signed  | Sexuality & orientation               | A **placement on a named spectrum** (poles taken from the subscale's own band labels, so the axis can never drift from the words the result screen uses), plus the one line Klein exists to produce — agreement, or the variable that diverges. |
+| ≥ 6 unipolar subscales | Kink & intimacy interests, Dirty talk | The **leading facets by name**, ranked, with a thin bar for relative strength and no percentage — plus the honest denominator, "of N areas you rated".                                                                                          |
+| Anything else          | Big Five, Attachment                  | The strongest 1–2 as compact labelled bars.                                                                                                                                                                                                     |
+
+Ranking a bipolar instrument by distance from neutral was the specific failure: near a pole most of the
+eight land on the same value, so the card printed the same sentence twice ("mostly other-sex −1.00", twice),
+and a bipolar bar with unlabelled ends cannot be read at all. All three readings show only subscales with
+signal (§8.1b).
+
 **Card states** — the same component throughout; the difference is carried by form, never by size, so nothing
 reshapes as you work through the catalog:
 
@@ -596,6 +610,33 @@ independently sufficient:
 The line is the **denominator**. `9 not tried` and a nav badge of `9` are honest; `9 / 10`, `90%`, or a filling
 meter make the banned claim. `testsHub.ts` returns no proportion anywhere, and both the page tests and the
 hub E2E assert the absence of a ratio, a `%` in the strip, and any `progressbar`.
+
+### 8.1b Unrated is not a no — BUG FIX 2026-08-19
+
+Every item in the sexuality and kink instruments is `required: false`, and `scoreSubscale` floors an
+all-unanswered subscale to `normalize.min`. It then **resolved a descriptor band on that floor**, so a
+skipped question and a definite answer at the far end were indistinguishable:
+
+|           | answered at the far end      | skipped entirely             |
+| --------- | ---------------------------- | ---------------------------- |
+| Sexuality | `−1.00` → "mostly other-sex" | `−1.00` → "mostly other-sex" |
+| Kink      | `0.00` → "little pull"       | `0.00` → "little pull"       |
+
+On a **signed** scale it was worse than a tie: `−1` is the most extreme value there is, so `topSubscales`
+— which ranks by distance from neutral — put **unanswered** variables ahead of every answered one, at the
+top of the hub card, stated as a finding.
+
+The fix reuses the adaptive report's own constant rather than inventing a flag: a subscale with **zero
+contributing items carries `NO_SIGNAL_BAND`**, never a descriptor (`hasSignal` is the predicate every
+display gates on). `normalized` keeps the floor for arithmetic. Three consequences:
+
+- the **hub card** reads only subscales with signal, and says "Nothing rated yet" when there are none;
+- the **result screen** charts only those, and lists the rest as _"Not rated: … Skipping something is not
+  the same as scoring zero on it"_ — and its **trends** contribute no point for a take where a subscale
+  went unrated, since plotting the floor would draw a dip that never happened;
+- results scored **before** the change are repaired on read: `withNoSignalBands` recomputes from the
+  answers the result already stores, so no retake is needed. It is pure and idempotent, and only ever
+  replaces a band.
 
 ### 8.2 Crisis routing
 

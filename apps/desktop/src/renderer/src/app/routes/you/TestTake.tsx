@@ -100,7 +100,7 @@ export function TestTake(): JSX.Element {
       <div className={styles.inner}>
         <Stack gap={4}>
           <button type="button" className={take.back} onClick={() => navigate('/tests')}>
-            ← You
+            ← Tests
           </button>
 
           {!started ? (

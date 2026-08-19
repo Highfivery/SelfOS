@@ -1,9 +1,7 @@
 /*
- * The shell's `.contentInner` is the app's ONE scroll container. This route used to add a second one —
- * `height: 100%; overflow-y: auto` inside a parent that already scrolls and carries 48px of padding, so the
- * page scrolled its own content AND pushed the parent past its height: two vertical scrollbars on every Tests
- * screen, worst on the deck where an area is 47 rows tall. No other route does this (the others use
- * `overflow-y` only on bounded inner lists), so this is the odd one out, not a new convention.
+ * The Tests hub (50 §3.1). The shell's `.contentInner` is the app's ONE scroll container — this route must
+ * never add a second (`height: 100%; overflow-y: auto` here once produced two vertical scrollbars on every
+ * Tests screen). No `max-width` on the page container either: the content area is the canvas (§12).
  */
 .page {
   min-width: 0;
@@ -11,12 +9,25 @@
 
 .inner {
   padding: var(--space-5);
-}
-
-.header {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-5);
+}
+
+/* ---------- header ---------- */
+.header {
+  display: flex;
+  gap: var(--space-5);
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.headerMain {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
 }
 
 .memoryLink {
@@ -30,69 +41,396 @@
 }
 
 .memoryLink:focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: var(--space-4);
-  margin-top: var(--space-3);
+/* The count, made visible on the page. Three independent numbers — deliberately NOT a ratio, a percentage
+   or a meter: instruments keep being added, so nothing here may imply a finish line. */
+.stats {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  flex: none;
 }
 
-.card {
+.stat {
   display: flex;
   flex-direction: column;
+  gap: 1px;
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  min-width: 78px;
 }
 
-.gatedCard {
-  margin-top: var(--space-3);
+.stat b {
+  font-size: var(--text-lg);
+  color: var(--color-text-heading);
+  font-weight: 700;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
 }
 
-.eyebrow {
+.stat span {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.statDue b {
+  color: var(--color-warning);
+}
+
+/* ---------- the rotating "next for you" slot ---------- */
+.next {
   display: flex;
+  gap: var(--space-4);
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--space-2);
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-tertiary);
-  margin-bottom: var(--space-1);
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-accent-subtle-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
-.privateTag {
-  display: inline-flex;
+.nextDue {
+  background: var(--color-warning-subtle-bg);
+}
+
+.nextTile {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  background: var(--color-accent-solid);
+  color: var(--color-accent-solid-text);
+}
+
+/* The paired warning tokens work in BOTH themes; a white-on-amber tile does not (dark's --color-warning is
+   a light amber, so white text on it is unreadable). */
+.nextDue .nextTile {
+  background: var(--color-warning-subtle-bg);
+  color: var(--color-warning-subtle-text);
+  box-shadow: inset 0 0 0 1px var(--color-warning);
+}
+
+.nextText {
+  flex: 1 1 300px;
+  min-width: 0;
+}
+
+.nextKicker {
+  display: block;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 700;
+  color: var(--color-accent-text);
+}
+
+.nextDue .nextKicker {
+  color: var(--color-warning-subtle-text);
+}
+
+.nextTitleRow {
+  display: flex;
   align-items: center;
-  gap: 3px;
-  text-transform: none;
-  letter-spacing: normal;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.nextTitle {
+  font-size: var(--text-md);
+  margin: 0;
+}
+
+.nextPrivacy {
+  font-size: var(--text-xs);
   color: var(--color-text-secondary);
 }
 
-.blurb {
+.nextLine {
+  margin: 2px 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.nextActions {
+  flex: none;
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* ---------- catalog ---------- */
+.gridHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+
+.gridTitle {
+  font-size: var(--text-base);
+  margin: 0;
+}
+
+.filters {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px var(--space-3);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  min-height: 32px;
+}
+
+.chipOn {
+  background: var(--color-accent-solid);
+  border-color: var(--color-accent-solid);
+  color: var(--color-accent-solid-text);
+  font-weight: 600;
+}
+
+.chipCount {
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.chipOn .chipCount {
+  color: var(--color-accent-solid-text);
+  opacity: 0.82;
+}
+
+/* MEASURED, not assumed: even with short labels the seven chips wrap into two rows at 1024px, because the
+   content column is the viewport minus a 240px sidebar and 40px of padding. They fit on one row at 1280px
+   and above and nowhere else, so that is exactly where they render. Below it the same filter becomes ONE
+   full-width Select — a space-filling control, the move the Sessions status filter already makes — because
+   wrapping a control cluster is not a design (§12). Both halves are asserted in the hub E2E. */
+.filterSelect {
+  display: none;
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 1279px) {
+  .filters {
+    display: none;
+  }
+
+  .filterSelect {
+    display: block;
+  }
+}
+
+/* `min(...)` so a track minimum can never exceed the container at 360px — a bare `minmax(268px, 1fr)`
+   overflows a narrow pane because the track floor doesn't shrink. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(268px, 100%), 1fr));
+  gap: var(--space-3);
+}
+
+/* ---------- a card ---------- */
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  padding-left: calc(var(--space-4) + 3px);
+  min-width: 0;
+}
+
+/* A stripe appears ONLY where it encodes state, never as decoration — so it reads as signal. */
+.card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  background: transparent;
+}
+
+.cardDue::before {
+  background: var(--color-warning);
+}
+
+.cardAdaptive::before {
+  background: var(--color-accent-solid);
+}
+
+.cardTop {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.tag {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-tertiary);
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.pillTaken {
+  color: var(--color-success);
+  font-weight: 650;
+}
+
+.pillDue {
+  color: var(--color-warning-subtle-text);
+  font-weight: 650;
+}
+
+.adultPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  padding: 0 7px;
+}
+
+.cardTitle {
+  font-size: var(--text-md);
+  margin: 0;
+  line-height: 1.25;
+}
+
+.cardMeta {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.cardBlurb {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-.framing {
-  font-style: italic;
+.cardGentle {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
 }
 
-.groupTitle {
-  margin-bottom: var(--space-1);
-}
-
-.groupFraming {
-  margin-bottom: var(--space-3);
+.cardBars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
 }
 
 .cardActions {
   display: flex;
   gap: var(--space-2);
   margin-top: auto;
+  padding-top: var(--space-1);
+  flex-wrap: wrap;
+}
+
+/* The SHAPE of an adaptive take, shown only on the invitation — never a position within it. */
+.pips {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+
+.pipRow {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.pipRow i {
+  display: block;
+  width: 14px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border-strong);
+}
+
+/* ---------- the 18+ gate ---------- */
+.gate {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  flex-wrap: wrap;
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+}
+
+.gateIcon {
+  flex: none;
+  color: var(--color-text-tertiary);
+}
+
+.gateText {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.gateText strong {
+  display: block;
+  color: var(--color-text-primary);
+  margin-bottom: 2px;
+}
+
+.reflectionLine {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-tertiary);
 }

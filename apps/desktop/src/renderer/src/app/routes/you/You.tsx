@@ -1,141 +1,50 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock } from 'lucide-react';
-import { TEST_GROUP_LABELS, type TestGroupId, type TestSummary } from '@selfos/core/tests';
-import type { TestResult } from '@shared/schemas';
-import {
-  Banner,
-  Button,
-  Card,
-  Heading,
-  Stack,
-  SubscaleBar,
-  Text,
-} from '../../../design-system/components';
+import type { TestGroupId, TestSummary } from '@selfos/core/tests';
+import { Button, Heading, Select, Text } from '../../../design-system/components';
 import { useTestStore } from '../../../stores/testStore';
 import { CrisisFooter } from '../sessions/CrisisFooter';
-import { RECHECK_AFTER_DAYS, RECHECKABLE_INSTRUMENTS, daysSince } from '../home/wellbeing';
-import { topSubscales, wellbeingDisplay } from './profile';
+import { NextUpSlot } from './NextUpSlot';
+import { TestCard } from './TestCard';
+import {
+  type HubFilter,
+  filterCount,
+  filterTests,
+  hubStats,
+  nextForYou,
+  takesOf,
+} from './testsHub';
 import styles from './You.module.css';
 
 const GROUP_ORDER: TestGroupId[] = ['personality', 'relationships', 'intimacy', 'wellbeing'];
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString();
-}
+/**
+ * Short labels for the FILTER only — the card's own tag carries the full group name. With the full names
+ * the seven chips need ~885px and wrap into 2–3 rows at every desktop width below 1280px, and a wrapped
+ * control cluster is not a design (§12). Measured, not assumed.
+ */
+const FILTER_GROUP_LABELS: Record<TestGroupId, string> = {
+  personality: 'Personality',
+  relationships: 'Relationships',
+  intimacy: 'Intimacy',
+  wellbeing: 'Check-ins',
+};
 
-/** A profile card for an instrument the person has taken: top dimensions + when, with Open / Retake. A
- *  wellbeing reflection (51) shows its GENTLE range sentence — never the clinical band or subscale bars — and,
- *  for mood/anxiety, a passive "check in again" prompt after a while (§3.1/§3.4). */
-function ProfileCard({ test, results }: { test: TestSummary; results: TestResult[] }): JSX.Element {
-  const navigate = useNavigate();
-  const latest = results[0];
-  const top = !test.wellbeing && latest ? topSubscales(test, latest.scores, 2) : [];
-  const wb = test.wellbeing && latest ? wellbeingDisplay(test, latest.scores) : undefined;
-  const dueForRecheck =
-    test.wellbeing &&
-    RECHECKABLE_INSTRUMENTS.has(test.id) &&
-    latest !== undefined &&
-    daysSince(latest.takenAt, Date.now()) >= RECHECK_AFTER_DAYS;
-  return (
-    <Card className={styles.card}>
-      <Stack gap={3}>
-        <div>
-          <span className={styles.eyebrow}>
-            {test.instrument}
-            {test.sensitive ? (
-              <span className={styles.privateTag}>
-                <Lock size={11} aria-hidden="true" />{' '}
-                {/* 74 §8.4 — an adaptive intimacy profile is NOT "only you": what you love travels
-                    silently into a partner's coach. The take's intro and the report both say so, so this
-                    badge must not contradict them one screen earlier. A spec-50 sensitive result really is
-                    own-context-only, so it keeps the stronger wording. */}
-                {test.kind === 'adaptive' ? 'yours' : 'private — only you'}
-              </span>
-            ) : null}
-          </span>
-          <Heading level={3}>{test.title}</Heading>
-        </div>
-        {wb ? (
-          <Text size="sm" tone="secondary" className={styles.blurb}>
-            {wb.display}
-          </Text>
-        ) : (
-          <Stack gap={2}>
-            {top.map((s) => (
-              <SubscaleBar
-                key={s.key}
-                label={s.label}
-                normalized={s.normalized}
-                band={s.band}
-                signed={s.signed}
-              />
-            ))}
-          </Stack>
-        )}
-        <Text size="sm" tone="secondary">
-          {test.wellbeing ? 'Last checked in ' : 'Taken '}
-          {results.length === 1 && !test.wellbeing ? 'once · last ' : ''}
-          {formatDate(latest?.takenAt ?? '')}
-        </Text>
-        {dueForRecheck ? (
-          <Text size="sm" tone="tertiary" className={styles.framing}>
-            It’s been a little while — want to check in again?
-          </Text>
-        ) : null}
-        <div className={styles.cardActions}>
-          <Button variant="secondary" onClick={() => navigate(`/tests/${test.id}`)}>
-            Open
-          </Button>
-          <Button
-            variant="ghost"
-            // Straight to "keep what you marked, or start fresh?" — the question a retake actually poses.
-            onClick={() => navigate(`/tests/${test.id}/take`, { state: { retake: true } })}
-          >
-            {test.wellbeing ? 'Check in again' : 'Retake'}
-          </Button>
-        </div>
-      </Stack>
-    </Card>
-  );
-}
-
-/** A catalog card for a test the person can take. */
-function CatalogCard({ test }: { test: TestSummary }): JSX.Element {
-  const navigate = useNavigate();
-  return (
-    <Card className={styles.card}>
-      <Stack gap={3}>
-        <div>
-          <span className={styles.eyebrow}>{test.instrument}</span>
-          <Heading level={3}>{test.title}</Heading>
-        </div>
-        <Text size="sm" tone="secondary" className={styles.blurb}>
-          {test.blurb}
-        </Text>
-        <Text size="sm" tone="secondary">
-          {test.kind === 'adaptive'
-            ? `About ${test.estimatedMinutes} min · adapts as you go`
-            : `${test.itemCount} questions · about ${test.estimatedMinutes} min`}
-        </Text>
-        <Text size="sm" tone="tertiary" className={styles.framing}>
-          {test.framing}
-        </Text>
-        <div className={styles.cardActions}>
-          <Button variant="primary" onClick={() => navigate(`/tests/${test.id}/take`)}>
-            {test.wellbeing ? 'Check in' : test.kind === 'adaptive' ? 'Start' : 'Take'}
-          </Button>
-        </div>
-      </Stack>
-    </Card>
-  );
-}
+/** The catalog filter. Status and area live in ONE control — a single "show me…" concept, not two rows. */
+const STATUS_FILTERS: { id: HubFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'untaken', label: 'Not tried' },
+  { id: 'quick', label: 'Under 5 min' },
+];
 
 /**
- * 50-self-assessments §3.1 — the "You" hub. The home of the tests you took (distinct from Memory, the AI's
- * inferred facts). Top: a non-diagnostic header + a link to Memory. Then "Your profiles" (per taken
- * instrument) and "Available tests" (a grouped catalog). The Intimacy & sexuality group is 18+-gated (§3.5).
+ * 50-self-assessments §3.1 — the Tests hub. A rotating "next for you" slot over ONE catalog grid where every
+ * instrument keeps its place and carries its own state, so taking something enriches a card rather than
+ * moving it to another section.
+ *
+ * The counts are counts, never a proportion: the catalog grows as instruments are added, so a ratio would be
+ * a lie by the next release, and an adaptive take (74) never finishes at all.
  */
 export function You(): JSX.Element {
   const navigate = useNavigate();
@@ -146,18 +55,27 @@ export function You(): JSX.Element {
   const load = useTestStore((s) => s.load);
   const acknowledgeAdult = useTestStore((s) => s.acknowledgeAdult);
   const [acking, setAcking] = useState(false);
+  const [filter, setFilter] = useState<HubFilter>('all');
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const isTaken = (t: TestSummary): boolean => (resultsByTest[t.id]?.length ?? 0) > 0;
-  const taken = catalog.filter(isTaken);
-  const anyResults = taken.length > 0;
-  // 95 — a taken test lives at the top under "Your profiles" (with a Retake / Check in again button), so
-  // it drops out of "Available tests" below rather than showing in both places.
-  const available = catalog.filter((t) => !isTaken(t));
-  const anyAvailable = available.length > 0;
+  // One clock reading per render, matching AppShell's badge exactly. A memoized `now` frozen on the last
+  // load would drift past a re-check boundary while the badge (computed fresh) moved — the two disagreeing
+  // is precisely what deriving both from this module is meant to prevent.
+  const now = Date.now();
+  const stats = hubStats(catalog, resultsByTest, now);
+  const next = nextForYou(catalog, resultsByTest, now);
+  const shown = filterTests(catalog, resultsByTest, now, filter);
+
+  const filters: { id: HubFilter; label: string; count: number }[] = [
+    ...STATUS_FILTERS,
+    ...GROUP_ORDER.filter((group) => catalog.some((t) => t.group === group)).map((group) => ({
+      id: group as HubFilter,
+      label: FILTER_GROUP_LABELS[group],
+    })),
+  ].map((f) => ({ ...f, count: filterCount(catalog, resultsByTest, now, f.id) }));
 
   const ack = async (): Promise<void> => {
     setAcking(true);
@@ -171,12 +89,12 @@ export function You(): JSX.Element {
   return (
     <div className={styles.page}>
       <div className={styles.inner}>
-        <Stack gap={5}>
-          <header className={styles.header}>
-            <Heading level={1}>You — how you see yourself</Heading>
-            <Text tone="secondary">
-              These are reflections, not verdicts. What SelfOS has <em>learned</em> about you lives
-              in{' '}
+        <header className={styles.header}>
+          <div className={styles.headerMain}>
+            <Heading level={1}>Tests</Heading>
+            <Text tone="secondary" size="sm">
+              How you see yourself — reflections, never verdicts. What SelfOS has <em>learned</em>{' '}
+              about you lives in{' '}
               <button
                 type="button"
                 className={styles.memoryLink}
@@ -186,80 +104,120 @@ export function You(): JSX.Element {
               </button>
               .
             </Text>
-          </header>
-
-          {loaded && !anyResults ? (
-            <Banner tone="info">
-              Take a test to see how SelfOS understands you — and to make your coach, dreams, and
-              questionnaires fit you better.
-            </Banner>
+          </div>
+          {loaded && catalog.length > 0 ? (
+            <div className={styles.stats} role="group" aria-label="Your tests at a glance">
+              {stats.taken > 0 ? (
+                <div className={styles.stat}>
+                  <b>{stats.taken}</b>
+                  <span>Taken</span>
+                </div>
+              ) : null}
+              {stats.notTried > 0 ? (
+                <div className={styles.stat}>
+                  <b>{stats.notTried}</b>
+                  <span>Not tried</span>
+                </div>
+              ) : null}
+              {stats.due > 0 ? (
+                <div className={`${styles.stat} ${styles.statDue}`}>
+                  <b>{stats.due}</b>
+                  <span>Due</span>
+                </div>
+              ) : null}
+            </div>
           ) : null}
+        </header>
 
-          {anyResults ? (
-            <section>
-              <Heading level={2}>Your profiles</Heading>
-              <div className={styles.grid}>
-                {taken.map((test) => (
-                  <ProfileCard key={test.id} test={test} results={resultsByTest[test.id] ?? []} />
+        {next ? <NextUpSlot next={next} now={now} /> : null}
+
+        {loaded && catalog.length > 0 ? (
+          <section aria-label="Everything you can take">
+            <div className={styles.gridHead}>
+              <Heading level={2} className={styles.gridTitle}>
+                Everything you can take
+              </Heading>
+              <Text size="sm" tone="tertiary">
+                {catalog.length} instruments
+              </Text>
+            </div>
+
+            {/* Desktop: chips with counts. Below --bp-md they can't fit, and wrapping a control cluster
+                isn't a design (§12), so the same filter becomes ONE full-width Select. */}
+            <div className={styles.filters} role="group" aria-label="Filter tests">
+              {filters.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  className={`${styles.chip} ${filter === f.id ? styles.chipOn : ''}`}
+                  aria-pressed={filter === f.id}
+                  onClick={() => setFilter(f.id)}
+                >
+                  {f.label}
+                  <span className={styles.chipCount}>{f.count}</span>
+                </button>
+              ))}
+            </div>
+            <div className={styles.filterSelect}>
+              <Select
+                aria-label="Show"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value as HubFilter)}
+              >
+                {filters.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {`Show: ${f.label} (${f.count})`}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            {shown.length > 0 ? (
+              <div className={styles.grid} role="list">
+                {shown.map((test: TestSummary) => (
+                  <TestCard
+                    key={test.id}
+                    test={test}
+                    results={takesOf(resultsByTest, test)}
+                    now={now}
+                  />
                 ))}
               </div>
-            </section>
-          ) : null}
+            ) : (
+              <Text size="sm" tone="secondary">
+                Nothing matches that filter.
+              </Text>
+            )}
+          </section>
+        ) : null}
 
-          {anyAvailable ? (
-            <section>
-              <Heading level={2}>Available tests</Heading>
-              <Stack gap={4}>
-                {GROUP_ORDER.map((group) => {
-                  const tests = available.filter((t) => t.group === group);
-                  const isIntimacyGated = group === 'intimacy' && !adultAcknowledged;
-                  if (tests.length === 0 && !isIntimacyGated) return null;
-                  return (
-                    <div key={group}>
-                      <Heading level={3} className={styles.groupTitle}>
-                        {TEST_GROUP_LABELS[group]}
-                      </Heading>
-                      {group === 'wellbeing' ? (
-                        <Text size="sm" tone="secondary" className={styles.groupFraming}>
-                          Gentle check-ins on how you’ve been feeling and how your mind works —
-                          reflections, not diagnoses.
-                        </Text>
-                      ) : null}
-                      {isIntimacyGated ? (
-                        <Card className={styles.gatedCard}>
-                          <Stack gap={3}>
-                            <Text>
-                              <Lock size={14} aria-hidden="true" /> These are 18+. Acknowledge to
-                              view the kink-interests inventory and the sexuality & orientation
-                              spectrum.
-                            </Text>
-                            <div className={styles.cardActions}>
-                              <Button
-                                variant="primary"
-                                onClick={() => void ack()}
-                                disabled={acking}
-                              >
-                                I’m 18 or older — show me
-                              </Button>
-                            </div>
-                          </Stack>
-                        </Card>
-                      ) : (
-                        <div className={styles.grid}>
-                          {tests.map((test) => (
-                            <CatalogCard key={test.id} test={test} />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </Stack>
-            </section>
-          ) : null}
+        {/* The 18+ gate is a property of the PAGE, not a card pretending to be an instrument. The gated
+            instruments are withheld in the bridge (§3.5), so nothing about them is reachable until this. */}
+        {loaded && !adultAcknowledged ? (
+          <section className={styles.gate} aria-label="Adult instruments">
+            <Lock size={20} aria-hidden="true" className={styles.gateIcon} />
+            <div className={styles.gateText}>
+              <strong>More, for adults</strong>
+              <Text size="sm" tone="secondary">
+                Sexuality &amp; orientation, kink &amp; intimacy interests, and dirty talk.
+              </Text>
+            </div>
+            <Button variant="primary" onClick={() => void ack()} disabled={acking}>
+              I’m 18 or older
+            </Button>
+          </section>
+        ) : null}
 
-          <CrisisFooter />
-        </Stack>
+        {/* Said once, properly. The per-instrument framing stays on the intro and result screens, where
+            51 §8.1 requires it — ten repeated disclaimers in a catalog only train people to skip them. */}
+        {loaded && catalog.length > 0 ? (
+          <p className={styles.reflectionLine}>
+            Every one of these is a reflection of how you answered on a given day — not a verdict, a
+            score, or a diagnosis. The check-ins are not medical screening.
+          </p>
+        ) : null}
+
+        <CrisisFooter />
       </div>
     </div>
   );

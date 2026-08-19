@@ -1635,7 +1635,7 @@ test('home (53 Slice B): self-assessment / wellbeing / intimacy recommendations 
 
     // The take-a-test primary action routes into the You hub.
     await w.getByRole('button', { name: /take a quick assessment/i }).click();
-    await expect(w.getByRole('heading', { name: /you — how you see yourself/i })).toBeVisible();
+    await expect(w.getByRole('heading', { name: /^Tests/ })).toBeVisible();
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });
@@ -11293,18 +11293,13 @@ test('self-assessments (50): take ECR-R → profile bars → retake adds a trend
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
-    await w.getByRole('link', { name: 'Tests', exact: true }).click();
-    await expect(w.getByRole('heading', { name: /how you see yourself/i })).toBeVisible();
+    await w.getByRole('link', { name: /^Tests/ }).click();
+    await expect(w.getByRole('heading', { name: /^Tests/ })).toBeVisible();
 
     // Take the Attachment (ECR-R) test through the rendered UI — its catalog card's "Take" button.
-    await w.getByRole('heading', { name: 'Attachment style' }).scrollIntoViewIfNeeded();
-    await w
-      .locator(
-        'xpath=//h3[normalize-space()="Attachment style"]/ancestor::*[contains(@class,"card")][1]',
-      )
-      .getByRole('button', { name: 'Take' })
-      .click();
+    const ecrCard = w.getByRole('listitem', { name: 'Attachment style' });
+    await ecrCard.scrollIntoViewIfNeeded();
+    await ecrCard.getByRole('button', { name: 'Take' }).click();
     await w.getByRole('button', { name: 'Begin' }).click();
     const groups1 = w.locator('[role="radiogroup"]');
     await expect(groups1).toHaveCount(36);
@@ -11333,19 +11328,16 @@ test('self-assessments (50): take ECR-R → profile bars → retake adds a trend
     await expect(w.getByText(/How this has shifted \(2 takes\)/)).toBeVisible();
     await expect(w.getByRole('heading', { name: 'History' })).toBeVisible();
 
-    // 95 — back on the hub, the taken test drops out of "Available tests": Attachment lives ONLY under
-    // "Your profiles" (with Retake), never a second time as a catalog "Take" card.
-    // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
-    await w.getByRole('link', { name: 'Tests', exact: true }).click();
-    await expect(w.getByRole('heading', { name: /how you see yourself/i })).toBeVisible();
-    const profiles = w.locator('section', {
-      has: w.getByRole('heading', { name: 'Your profiles' }),
-    });
-    await expect(profiles.getByRole('heading', { name: 'Attachment style' })).toBeVisible();
-    const available = w.locator('section', {
-      has: w.getByRole('heading', { name: 'Available tests' }),
-    });
-    await expect(available.getByRole('heading', { name: 'Attachment style' })).toHaveCount(0);
+    // 95 — back on the hub, the taken test keeps its place in the ONE grid and becomes a result card with
+    // Retake; it is never moved to a second section, and never duplicated as a "Take" card.
+    await w.getByRole('link', { name: /^Tests/ }).click();
+    await expect(w.getByRole('heading', { name: /^Tests/ })).toBeVisible();
+    // One catalog grid: a taken instrument keeps its place and becomes a RESULT card — it is never moved
+    // to a second section, and never duplicated as a "Take" card.
+    const attachmentCard = w.getByRole('listitem', { name: 'Attachment style' });
+    await expect(attachmentCard).toHaveCount(1);
+    await expect(attachmentCard.getByRole('button', { name: 'Retake' })).toBeVisible();
+    await expect(attachmentCard.getByRole('button', { name: 'Take', exact: true })).toHaveCount(0);
 
     // The derived Insight is on disk, approved, source 'test'.
     const fs = createNodeFileSystem(vault);
@@ -11384,20 +11376,17 @@ test('self-assessments (50): the kink test is 18+-gated; a result writes partner
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
-    await w.getByRole('link', { name: 'Tests', exact: true }).click();
+    await w.getByRole('link', { name: /^Tests/ }).click();
 
     // The Intimacy & sexuality group is 18+-gated — the cards are withheld until acknowledged.
-    await expect(w.getByText(/These are 18\+/)).toBeVisible();
+    await expect(w.getByText(/More, for adults/)).toBeVisible();
     await expect(w.getByRole('heading', { name: 'Kink & intimacy interests' })).toHaveCount(0);
     await w.getByRole('button', { name: /18 or older/i }).click();
     await expect(w.getByRole('heading', { name: 'Kink & intimacy interests' })).toBeVisible();
 
     // Take it: opt into a category (reveals its matrix), rate one item, score.
     await w
-      .locator(
-        'xpath=//h3[normalize-space()="Kink & intimacy interests"]/ancestor::*[contains(@class,"card")][1]',
-      )
+      .getByRole('listitem', { name: 'Kink & intimacy interests' })
       .getByRole('button', { name: 'Take' })
       .click();
     await w.getByRole('button', { name: 'Begin' }).click();
@@ -11458,19 +11447,15 @@ test('wellbeing (51): mood check-in → GENTLE range + help line; AI-off narrate
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
-    await w.getByRole('link', { name: 'Tests', exact: true }).click();
+    await w.getByRole('link', { name: /^Tests/ }).click();
 
     // The wellbeing group is distinct and NOT 18+-gated; it invites a "Check in", not "Take".
-    await expect(w.getByRole('heading', { name: 'Reflections & check-ins' })).toBeVisible();
-    await expect(w.getByText(/reflections, not diagnoses/i)).toBeVisible();
-    await w.getByRole('heading', { name: 'Mood check-in' }).scrollIntoViewIfNeeded();
-    await w
-      .locator(
-        'xpath=//h3[normalize-space()="Mood check-in"]/ancestor::*[contains(@class,"card")][1]',
-      )
-      .getByRole('button', { name: 'Check in' })
-      .click();
+    // A wellbeing reflection invites a "Check in", never a "Take", and the reflection framing is said once
+    // at page level rather than repeated on every card.
+    await expect(w.getByText(/not a verdict, a score, or a diagnosis/i)).toBeVisible();
+    const moodCard = w.getByRole('listitem', { name: 'Mood check-in' });
+    await moodCard.scrollIntoViewIfNeeded();
+    await moodCard.getByRole('button', { name: 'Check in' }).click();
 
     // The intro leads with the not-medical framing, then Begin.
     await expect(w.getByText(/not.*a.*diagnosis, a screening, or medical advice/i)).toBeVisible();
@@ -11572,15 +11557,10 @@ test('wellbeing (51): PHQ-9 item 9 surfaces crisis resources MID-check-in; the f
   const app = await launch(userData);
   try {
     const w = await app.firstWindow();
-    // `exact` because Playwright substring-matches accessible names, and the nav also has "Your Story".
-    await w.getByRole('link', { name: 'Tests', exact: true }).click();
-    await w.getByRole('heading', { name: 'Mood check-in' }).scrollIntoViewIfNeeded();
-    await w
-      .locator(
-        'xpath=//h3[normalize-space()="Mood check-in"]/ancestor::*[contains(@class,"card")][1]',
-      )
-      .getByRole('button', { name: 'Check in' })
-      .click();
+    await w.getByRole('link', { name: /^Tests/ }).click();
+    const moodAgain = w.getByRole('listitem', { name: 'Mood check-in' });
+    await moodAgain.scrollIntoViewIfNeeded();
+    await moodAgain.getByRole('button', { name: 'Check in' }).click();
     await w.getByRole('button', { name: 'Begin' }).click();
 
     // No crisis surface yet.
@@ -16237,7 +16217,10 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Tests' }).click();
     await w.getByRole('button', { name: /I.m 18 or older/i }).click();
-    await w.getByRole('button', { name: 'Start' }).click();
+    await w
+      .getByRole('listitem', { name: 'Dirty talk' })
+      .getByRole('button', { name: 'Start' })
+      .click();
     await w.getByRole('button', { name: 'Begin' }).click();
 
     // 74 §3.6.9 — the map: every step and its state, before any of them. Step 1 is who you both are.
@@ -16379,15 +16362,16 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
 
     // The hub is Tests now, and the 18+ group is gated until acknowledged (the bridge withholds it).
     await w.getByRole('link', { name: 'Tests' }).click();
-    await expect(w.getByRole('heading', { name: /you — how you see yourself/i })).toBeVisible();
-    await expect(w.getByRole('heading', { name: 'Dirty talk' })).toHaveCount(0);
+    await expect(w.getByRole('heading', { name: /^Tests/ })).toBeVisible();
+    await expect(w.getByRole('listitem', { name: 'Dirty talk' })).toHaveCount(0);
     await w.getByRole('button', { name: /I.m 18 or older/i }).click();
 
-    // An adaptive card says what it is, and never a question count it doesn't have.
-    const card = w.getByRole('heading', { name: 'Dirty talk' });
+    // An adaptive card says what it is, and never a question count it doesn't have. Scoped to the card
+    // because the rotating lead slot offers the same instrument by name until it has been started.
+    const card = w.getByRole('listitem', { name: 'Dirty talk' });
     await expect(card).toBeVisible();
-    await expect(w.getByText(/adapts as you go/i).first()).toBeVisible();
-    await w.getByRole('button', { name: 'Start' }).click();
+    await expect(card.getByText(/adapts as you go/i)).toBeVisible();
+    await card.getByRole('button', { name: 'Start' }).click();
 
     // The intro tells them the steer exists BEFORE they produce any material (74 §8.4).
     await expect(w.getByText(/shape what a partner’s coach suggests to them/i)).toBeVisible();
@@ -16721,7 +16705,7 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     await w.evaluate(() => {
       window.location.hash = '#/you';
     });
-    await expect(w.getByRole('heading', { name: /you — how you see yourself/i })).toBeVisible();
+    await expect(w.getByRole('heading', { name: /^Tests/ })).toBeVisible();
   } finally {
     await app.close();
   }
@@ -16744,7 +16728,10 @@ test('74 §3.6.9: every step is reachable both ways, and an AI step waits to be 
     const w = await app.firstWindow();
     await w.getByRole('link', { name: 'Tests' }).click();
     await w.getByRole('button', { name: /I.m 18 or older/i }).click();
-    await w.getByRole('button', { name: 'Start' }).click();
+    await w
+      .getByRole('listitem', { name: 'Dirty talk' })
+      .getByRole('button', { name: 'Start' })
+      .click();
     await w.getByRole('button', { name: 'Begin' }).click();
 
     // The map names all seven steps, says which spend, and marks the ones with nothing to work from.
@@ -16877,7 +16864,10 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
     await w.getByRole('link', { name: 'Tests' }).click();
     await w.getByRole('button', { name: /I.m 18 or older/i }).click();
     await shot('01-hub');
-    await w.getByRole('button', { name: 'Start' }).click();
+    await w
+      .getByRole('listitem', { name: 'Dirty talk' })
+      .getByRole('button', { name: 'Start' })
+      .click();
     await shot('02-intro');
     await noMachineIds('the intro');
 
@@ -17037,10 +17027,26 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
     // 74 §3.6.10 — the retake asks FIRST, before the steps: keep what is on record, or start from an empty
     // sheet. Owner-directed, because tapping Retake used to silently reload every previous answer.
     await w.getByRole('link', { name: 'Tests' }).click();
-    await w
-      .getByRole('button', { name: /Retake|Take it again|Start/ })
-      .first()
-      .click();
+    console.log(
+      'DIAG >>>',
+      JSON.stringify(
+        await w.evaluate(() => ({
+          buttons: [...document.querySelectorAll('button')]
+            .map((b) => b.textContent)
+            .filter((t) => /Start|Retake|Keep marking|Open|Take/.test(t ?? '')),
+          navLabel: [...document.querySelectorAll('a')]
+            .map((a) => a.getAttribute('aria-label'))
+            .find((l) => (l ?? '').startsWith('Tests')),
+        })),
+      ),
+    );
+    // An adaptive take is never "finished", so its taken card offers "Keep marking" rather than "Retake".
+    // WAIT for that label: the hub renders from cached results and refreshes on mount, so for a moment after
+    // arriving a just-completed take still reads as untried. Clicking then would start a fresh take instead
+    // of opening the keep-or-start-fresh choice — which is what this step exists to check.
+    const dirtyCard = w.getByRole('listitem', { name: 'Dirty talk' });
+    await expect(dirtyCard.getByRole('button', { name: 'Keep marking' })).toBeVisible();
+    await dirtyCard.getByRole('button', { name: 'Keep marking' }).click();
     // STRAIGHT to the choice (74 §3.6.15). Retake used to land on the intro — an explanation of a test they
     // have already taken, behind a button reading "Pick up where you left off" — with the actual question
     // two taps further on.
@@ -17060,10 +17066,11 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
 
     await w.setViewportSize({ width: 1280, height: 900 });
     await w.getByRole('link', { name: 'Tests' }).click();
-    await w
-      .getByRole('button', { name: /Retake|Start/ })
-      .first()
-      .click();
+    // Wait for the card to settle into its taken state before clicking — the hub refreshes its results on
+    // mount, so a just-completed take briefly still reads as untried.
+    const dirtyAgain = w.getByRole('listitem', { name: 'Dirty talk' });
+    await expect(dirtyAgain.getByRole('button', { name: 'Keep marking' })).toBeVisible();
+    await dirtyAgain.getByRole('button', { name: 'Keep marking' }).click();
     // Entering a retake asks again — the choice is per entry, not once ever.
     await w
       .getByRole('button', { name: /Keep and edit/i })
@@ -17096,5 +17103,114 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
     }
   } finally {
     await app.close();
+  }
+});
+
+test('tests hub (50 §3.1): one grid with state on every card, a rotating next slot, filters + a nav badge; 390px clean', async () => {
+  // Walks the whole hub: the pre-ack state, the ack, a full check-in, the filters, and four viewport widths.
+  test.setTimeout(90_000);
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.getByRole('link', { name: /^Tests/ }).click();
+    await expect(w.getByRole('heading', { name: 'Tests', exact: true })).toBeVisible();
+
+    // Pre-ack the three adult instruments are withheld IN THE BRIDGE, so 7 of the 10 are reachable — and
+    // the nav badge counts exactly what the page's strip counts (one derivation, so they cannot disagree).
+    await expect(w.getByRole('link', { name: 'Tests, 7 to try' })).toBeVisible();
+    const strip = w.getByRole('group', { name: 'Your tests at a glance' });
+    await expect(strip.getByText('Not tried')).toBeVisible();
+    await expect(strip.getByText('Taken')).toHaveCount(0);
+    // A count, never a completion claim: no ratio and no meter anywhere on the page.
+    await expect(strip.getByText('%')).toHaveCount(0);
+    await expect(w.getByRole('progressbar')).toHaveCount(0);
+
+    // The lead slot offers the shortest thing untried (the adult flagship is not in the catalog yet).
+    const lead = w.getByRole('region', { name: 'Next for you' });
+    await expect(lead.getByRole('heading', { name: 'Anxiety check-in' })).toBeVisible();
+
+    // Acknowledging 18+ reveals the three adult instruments and the badge follows.
+    await w.getByRole('button', { name: /18 or older/ }).click();
+    await expect(w.getByRole('link', { name: 'Tests, 10 to try' })).toBeVisible();
+    // The flagship now leads, and its card never renders its 3,161-entry bank as a question count.
+    await expect(lead.getByRole('heading', { name: 'Dirty talk' })).toBeVisible();
+    const dirty = w.getByRole('listitem', { name: 'Dirty talk' });
+    await expect(dirty.getByText(/Adapts as you go/)).toBeVisible();
+    await expect(w.getByText(/3161|3,161/)).toHaveCount(0);
+    // The two privacy words stay distinct — an adaptive profile is "yours", never "only you" (74 §8.4).
+    await expect(dirty.getByText(/yours/)).toBeVisible();
+    await expect(dirty.getByText(/private — only you/)).toHaveCount(0);
+    await expect(
+      w
+        .getByRole('listitem', { name: 'Kink & intimacy interests' })
+        .getByText(/private — only you/),
+    ).toBeVisible();
+
+    // Filters narrow the ONE grid from a single control. Chips render at >=1280px only (below that they
+    // cannot fit on one row, so the Select takes over) — the default window is narrower, so widen first.
+    await w.setViewportSize({ width: 1440, height: 900 });
+    const filters = w.getByRole('group', { name: 'Filter tests' });
+    await filters.getByRole('button', { name: /Under 5 min/ }).click();
+    await expect(w.getByRole('listitem', { name: 'Anxiety check-in' })).toBeVisible();
+    await expect(w.getByRole('listitem', { name: 'Big Five personality' })).toHaveCount(0);
+    await filters.getByRole('button', { name: /^All/ }).click();
+    await expect(w.getByRole('listitem', { name: 'Big Five personality' })).toBeVisible();
+
+    // Take the shortest one: its card is ENRICHED in place — it never moves to another section, and the
+    // strip + badge both follow from the same derivation.
+    await w
+      .getByRole('listitem', { name: 'Anxiety check-in' })
+      .getByRole('button', { name: 'Check in' })
+      .click();
+    await w.getByRole('button', { name: 'Begin' }).click();
+    await answerEveryRow(w, 'Not at all');
+    await w.getByRole('button', { name: 'See my check-in' }).scrollIntoViewIfNeeded();
+    await w.getByRole('button', { name: 'See my check-in' }).click();
+    await expect(w.getByRole('heading', { name: 'Your check-in' })).toBeVisible();
+
+    await w.getByRole('link', { name: /^Tests/ }).click();
+    const anxiety = w.getByRole('listitem', { name: 'Anxiety check-in' });
+    await expect(anxiety).toHaveCount(1);
+    // A wellbeing result shows the GENTLE sentence and offers "Check in again", never "Take".
+    await expect(anxiety.getByRole('button', { name: 'Check in again' })).toBeVisible();
+    await expect(anxiety.getByRole('button', { name: 'Take' })).toHaveCount(0);
+    await expect(strip.getByText('Taken')).toBeVisible();
+    await expect(w.getByRole('link', { name: 'Tests, 9 to try' })).toBeVisible();
+
+    // The crisis footer is present on this page, always (51 §8).
+    await expect(w.getByRole('button', { name: /Get help now/i })).toBeVisible();
+
+    // The chip row must occupy exactly ONE row wherever chips render — a wrapped control cluster is not a
+    // design (§12), and with the full group names it wrapped into 2–3 rows at every desktop width below
+    // 1280px. Measured here rather than assumed, at the narrowest width chips are allowed.
+    for (const width of [1440, 1280]) {
+      await w.setViewportSize({ width, height: 900 });
+      await expect(filters).toBeVisible();
+      const rows = await filters.evaluate(
+        (el) =>
+          new Set([...el.children].map((c) => Math.round(c.getBoundingClientRect().top))).size,
+      );
+      expect(rows, `filter chips wrapped into ${rows} rows at ${width}px`).toBe(1);
+    }
+    // Below 1280 they cannot fit on one row, so the chips give way to the Select rather than wrapping.
+    await w.setViewportSize({ width: 1024, height: 900 });
+    await expect(filters).toBeHidden();
+    await expect(w.getByLabel('Show')).toBeVisible();
+    await w.setViewportSize({ width: 1280, height: 900 });
+
+    // 390px: single column, and the filter chips give way to one full-width Select rather than
+    // wrapping into a pile (§12). No page overflow and no inner scroller anywhere.
+    await w.setViewportSize({ width: 390, height: 844 });
+    await expect(w.getByLabel('Show')).toBeVisible();
+    await expect(filters).toBeHidden();
+    await expectNoInnerOverflow(w);
+    await expect
+      .poll(async () => w.evaluate(() => document.querySelector('main')?.scrollWidth ?? 0))
+      .toBeLessThanOrEqual(390);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
   }
 });

@@ -449,13 +449,19 @@ placing anything. Specifically:
   against a near-empty seed and immediately obvious in a real vault. Seed fixtures with what real data looks
   like — content, history, and each state — and assert GEOMETRY (insets, row height, computed hover styles),
   because those are the defects screenshots-in-CI cannot catch and users see first.
-- **NEVER show a topic, category, or area as COMPLETE — there is always another question (durable owner rule,
-  2026-08-13).** No percentage, no meter filling toward a full width, no "done" state on anything the AI
-  explores. A bar toward 100% claims progress toward finished, and nothing in SelfOS's coverage model ever
-  finishes — the emergent topic map exists precisely because new ground keeps appearing. Show what HAPPENED
-  (activity over time, how many questions, when last asked) rather than what is "left". The honest never-"done"
-  scale (New → Getting to know you → Knows you well) is also gone from the Explored panel for the same reason:
-  paired with a meter it made the same claim in words.
+- **NEVER show anything as COMPLETE — no percentage, no ratio, no meter filling toward a full width, no "done"
+  state (durable owner rule, 2026-08-13; NARROWED 2026-08-18).** A bar toward 100% claims progress toward
+  finished, and nothing here finishes: the emergent topic map exists because new ground keeps appearing, an
+  adaptive take can always be added to, and **the instrument catalog itself grows as tests are added — so
+  "10 of 10" would be a lie the next release.** Show what HAPPENED (activity over time, how many questions,
+  when last asked) rather than what is "left". The honest never-"done" scale (New → Getting to know you →
+  Knows you well) is also gone from the Explored panel for the same reason: paired with a meter it made the
+  same claim in words.
+  **A COUNT is not a completion claim, and IS allowed** (owner, 2026-08-18: _"tests will be added as time goes
+  on so completion isnt good, but count is"_). "9 not tried", a nav badge of 9 — fine, because the number says
+  how much is outstanding without asserting a total to reach. The line is the DENOMINATOR: the moment a
+  surface pairs the count with a total (`9 / 10`, 90%, a filling bar) it makes the banned claim. Counts up,
+  never fractions of a whole.
 - **A control's label must say what it DOES, not how it feels.** Three passes on one button got this wrong —
   "Explore again" read as _finished, revisit sometime_; "Leave alone" named a mood; "Ask about this next"
   implied the topic would not be asked otherwise, which was false. And when ONE control does two different
@@ -523,6 +529,45 @@ placing anything. Specifically:
   so the fix was to derive it, not drop it.**
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
+
+- 2026-08-18 — **Redesign (the Tests landing page: one grid with state on every card, a rotating "next", and a
+  nav count; owner-requested, mockup approved FIRST; SPEC 50 §3.1/§3.1a/§8.1a + 51 §3.1 amended; on
+  `feat/tests-landing-redesign`).** The owner asked for a COMPLETE redesign — _"sleek, modern, easy to navigate…
+  not a tidy-up"_ — plus _"easy for the user to tell what tests they've taken, which they havent"_ and a nav
+  count to encourage taking them, _"espeically the dirty talk one"_. **Reviewed by LOOKING, not just reading:**
+  captured the live page from real Electron at 1440px, which showed a defect the code read alone had not — the
+  grid was `auto-fit minmax(260px, 1fr)`, so a group holding ONE test stretched that card to the full 1050px
+  while Intimacy and Reflections rendered 3-up at ~330px. **The same component appeared at three widths on one
+  screen**, and the narrow ones silently truncated their blurbs mid-word. Groups sized **1 / 1 / 3 / 5** were the
+  cause, so the four headings went and group became a tag on each card. **Asked five questions one at a time and
+  built only after the mockup was approved:** next-action lead + catalog below (results shown too) · one grid +
+  filters · a rotating "next" slot rather than a permanent flagship hero · results ON the card · the badge counts
+  never-taken **plus** due. **Built:** a pure `testsHub.ts` every surface derives from — the stat strip, the lead
+  slot, the cards and the nav badge all read ONE function, so they cannot drift the way the Home card and the
+  Questionnaires badge once did; `nextForYou` (overdue check-in → adaptive flagship → shortest untried → hide);
+  one `TestCard` whose state is carried by FORM not size (an amber stripe + "Due" pill, an accent stripe + a
+  static step marker for the adaptive one, result bars or the gentle wellbeing sentence once taken); a single
+  filter that is chips **only at ≥1280px, where they are MEASURED to fit on one row**, and one full-width
+  `Select` below that, never a wrapped pile (§12);
+  the 18+ unlock as a page-level row instead of a card impersonating an instrument; and the ten repeated italic
+  disclaimers replaced by ONE page line (the per-instrument framing stays on the intro + result screens where 51
+  §8.1 needs it). **The owner asked to remove the never-show-COMPLETE rule and gave a better reason than mine:**
+  _"tests will be added as time goes on so completion isnt good, but count is"_ — so it was NARROWED, not
+  deleted: the denominator is the line, counts up are fine, `9 / 10` and `%` and meters are not. **Four defects
+  found by verifying rather than assuming:** the `#fff` literals in the mockup were unreadable on dark's light
+  amber (`--color-warning`), so amber now means _attention_ and accent alone means _action_; `AppShell` RESET the
+  test store but never LOADED it, so the badge would have read 0 until the person opened Home or the hub; the
+  badge changes the nav link's accessible name, which silently broke all ten `{ name: 'Tests', exact: true }`
+  E2E locators; and "Retake" **contains** "Take", so my own `toHaveCount(0)` assertion passed against the wrong
+  element until `exact: true`. Gate green: typecheck (4 pkgs), lint, format, **2390 core + 1697 desktop** unit
+  (+15 `testsHub`, +13 rewritten page tests), **217 E2E**. Visual QA at 1440px and 390px from real Electron.
+  **Lessons: (1) an `auto-fit minmax(N, 1fr)` grid is only a grid when the section has enough items — with one
+  it is a full-bleed banner, so check every section's REAL cardinality before choosing the track. (2) A count
+  and a completion claim are separated by exactly one thing, the denominator; that distinction is what let a
+  requested nav badge coexist with a durable no-completion rule. (3) Adding a badge changes an accessible NAME,
+  so every `exact: true` locator for that control breaks — grep for them in the same change. (4) Playwright and
+  RTL substring-match accessible names, so "Take" matches "Retake": an absence assertion without `exact` is
+  worse than no assertion, because it passes.**
 
 - 2026-08-18 — **Fix (the moments had no way out, the questions were paragraphs, and five defects nobody had
   reported; owner-reported twice; SPEC 74 §3.6.17–§3.6.22; on `fix/dirty-talk-moments-and-questions`).** _"In

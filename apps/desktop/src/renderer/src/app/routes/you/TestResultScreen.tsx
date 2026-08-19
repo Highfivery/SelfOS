@@ -16,6 +16,7 @@ import {
 import { useTestStore } from '../../../stores/testStore';
 import { CrisisFooter } from '../sessions/CrisisFooter';
 import { subscaleViews, wellbeingDisplay } from './profile';
+import { NO_SIGNAL_BAND } from '@shared/schemas';
 import styles from './You.module.css';
 import result from './TestResult.module.css';
 
@@ -63,7 +64,10 @@ export function TestResultScreen(): JSX.Element {
       points: ordered
         .map((r) => {
           const score = r.scores.find((s) => s.key === meta.key);
-          return score ? { date: r.takenAt, value: score.normalized } : null;
+          // A take where this subscale went unrated contributes NO point — plotting its floor would draw a
+          // dip that never happened.
+          if (!score || score.band === NO_SIGNAL_BAND) return null;
+          return { date: r.takenAt, value: score.normalized };
         })
         .filter((p): p is { date: string; value: number } => p !== null),
     }));
@@ -82,7 +86,7 @@ export function TestResultScreen(): JSX.Element {
         <div className={styles.inner}>
           <Stack gap={4}>
             <button type="button" className={result.back} onClick={() => navigate('/tests')}>
-              ← You
+              ← Tests
             </button>
             <Heading level={1}>{test.title}</Heading>
             <Banner tone="info">You haven’t taken this yet.</Banner>
@@ -112,13 +116,21 @@ export function TestResultScreen(): JSX.Element {
   // Non-wellbeing only — a wellbeing result's subscale `band` is the internal clinicalKey, which must never be
   // rendered (§8.1); the wellbeing branch uses `wb.display` instead. Computed only when it's actually shown.
   const views = test.wellbeing ? [] : subscaleViews(test, selected.scores);
+  /*
+   * 50 §8.1a — unrated is not a no. A subscale nobody answered floors to its minimum, so charting it states
+   * a skipped question as a finding: "little pull" for a kink category never opened, "mostly other-sex" for
+   * a Klein variable never answered. Those are LISTED as not rated instead — the rule the adaptive report
+   * already follows.
+   */
+  const charted = views.filter((v) => v.band !== NO_SIGNAL_BAND);
+  const notRated = views.filter((v) => v.band === NO_SIGNAL_BAND);
 
   return (
     <div className={styles.page}>
       <div className={styles.inner}>
         <Stack gap={5}>
           <button type="button" className={result.back} onClick={() => navigate('/tests')}>
-            ← You
+            ← Tests
           </button>
 
           <header>
@@ -172,7 +184,7 @@ export function TestResultScreen(): JSX.Element {
             <section>
               <Heading level={2}>Your results</Heading>
               <Stack gap={3}>
-                {views.map((v) => (
+                {charted.map((v) => (
                   <SubscaleBar
                     key={v.key}
                     label={v.label}
@@ -181,6 +193,17 @@ export function TestResultScreen(): JSX.Element {
                     signed={v.signed}
                   />
                 ))}
+                {charted.length === 0 ? (
+                  <Text size="sm" tone="secondary">
+                    Nothing here was rated yet — retake it whenever you like and it will fill in.
+                  </Text>
+                ) : null}
+                {notRated.length > 0 ? (
+                  <Text size="sm" tone="tertiary">
+                    Not rated: {notRated.map((v) => v.label).join(' · ')}. Skipping something is not
+                    the same as scoring zero on it, so these are left blank rather than charted.
+                  </Text>
+                ) : null}
               </Stack>
             </section>
           )}

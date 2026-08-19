@@ -17126,15 +17126,18 @@ test('tests hub (50 §3.1): one grid with state on every card, a rotating next s
     await expect(strip.getByText('%')).toHaveCount(0);
     await expect(w.getByRole('progressbar')).toHaveCount(0);
 
-    // The lead slot offers the shortest thing untried (the adult flagship is not in the catalog yet).
-    const lead = w.getByRole('region', { name: 'Next for you' });
-    await expect(lead.getByRole('heading', { name: 'Anxiety check-in' })).toBeVisible();
+    // The lead offers the shortest thing untried (the adult flagship is not in the catalog yet). Each panel
+    // is named by its instrument — there can be two, so a shared name would be ambiguous.
+    const leads = w.getByRole('region', { name: /^(Next for you|Start here): / });
+    await expect(leads.first().getByRole('heading', { name: 'Anxiety check-in' })).toBeVisible();
 
     // Acknowledging 18+ reveals the three adult instruments and the badge follows.
     await w.getByRole('button', { name: /18 or older/ }).click();
     await expect(w.getByRole('link', { name: 'Tests, 10 to try' })).toBeVisible();
     // The flagship now leads, and its card never renders its 3,161-entry bank as a question count.
-    await expect(lead.getByRole('heading', { name: 'Dirty talk' })).toBeVisible();
+    await expect(leads.first().getByRole('heading', { name: 'Dirty talk' })).toBeVisible();
+    // Two are featured, not one — the second panel is a different instrument.
+    await expect(leads).toHaveCount(2);
     const dirty = w.getByRole('listitem', { name: 'Dirty talk' });
     await expect(dirty.getByText(/Adapts as you go/)).toBeVisible();
     await expect(w.getByText(/3161|3,161/)).toHaveCount(0);
@@ -17208,6 +17211,76 @@ test('tests hub (50 §3.1): one grid with state on every card, a rotating next s
     await expect
       .poll(async () => w.evaluate(() => document.querySelector('main')?.scrollWidth ?? 0))
       .toBeLessThanOrEqual(390);
+  } finally {
+    await app.close();
+    await rm(userData, { recursive: true, force: true });
+    await rm(vault, { recursive: true, force: true });
+  }
+});
+
+test('self-assessments (50 §8.1a): a skipped question is never stated as a finding, on the card or the result', async () => {
+  test.setTimeout(90_000);
+  const { userData, vault } = await seedReadyVault();
+  const app = await launch(userData);
+  try {
+    const w = await app.firstWindow();
+    await w.setViewportSize({ width: 1440, height: 900 });
+    await w.getByRole('link', { name: /^Tests/ }).click();
+    await w.getByRole('button', { name: /18 or older/ }).click();
+
+    // Every item in this instrument is optional. Answer the Kinsey row and two Klein variables, SKIP the
+    // rest — the realistic case, and the one that used to floor five subscales to −1.00 and then state that
+    // floor as "mostly other-sex", a definite finding on questions never answered.
+    await w
+      .getByRole('listitem', { name: 'Sexuality & orientation' })
+      .getByRole('button', { name: 'Take' })
+      .click();
+    await w.getByRole('button', { name: 'Begin' }).click();
+    const rows = w.locator('[role="radiogroup"]');
+    await rows.nth(0).getByRole('radio').first().click(); // Kinsey: one end
+    await rows.nth(1).getByRole('radio').first().click(); // a Klein variable, same end
+    await rows.nth(2).getByRole('radio').last().click(); // another, the OTHER end → a real divergence
+    await w.getByRole('button', { name: 'See my result' }).scrollIntoViewIfNeeded();
+    await w.getByRole('button', { name: 'See my result' }).click();
+    await expect(w.getByRole('heading', { name: 'Your results' })).toBeVisible();
+
+    // The result charts ONLY what was answered, and names the rest as not rated rather than plotting a floor.
+    await expect(w.getByText(/Not rated:/)).toBeVisible();
+    await expect(w.getByText(/Skipping something is not the same as scoring zero/)).toBeVisible();
+    const charted = await w.getByText('mostly other-sex', { exact: true }).count();
+    expect(charted, 'a skipped variable was charted as a finding').toBe(2); // the two answered at that end
+
+    // Back on the hub the card is a placement on a NAMED spectrum plus the divergence — not the same
+    // sentence printed twice, which is what ranking by distance from neutral produced.
+    await w.getByRole('link', { name: /^Tests/ }).click();
+    const card = w.getByRole('listitem', { name: 'Sexuality & orientation' });
+    await expect(card.getByText('Where you sit')).toBeVisible();
+    await expect(card.getByText('Mostly other-sex', { exact: true })).toBeVisible();
+    await expect(card.getByText(/Except “Who you.ve actually had sex with”/)).toBeVisible();
+    // The poles are labelled, or the bar cannot be read at all.
+    await expect(card.getByText('mostly same-sex', { exact: true })).toBeVisible();
+
+    // The kink test: opt into one category, rate a few rows — the other thirteen are never listed, and the
+    // denominator is what was actually rated.
+    await w
+      .getByRole('listitem', { name: 'Kink & intimacy interests' })
+      .getByRole('button', { name: 'Take' })
+      .click();
+    await w.getByRole('button', { name: 'Begin' }).click();
+    await w.getByText('Sensual & sensory', { exact: true }).click();
+    const kinkRows = w.locator('[role="radiogroup"]');
+    const n = Math.min(4, await kinkRows.count());
+    for (let i = 0; i < n; i += 1) await kinkRows.nth(i).getByRole('radio').last().click();
+    await w.getByRole('button', { name: 'See my result' }).scrollIntoViewIfNeeded();
+    await w.getByRole('button', { name: 'See my result' }).click();
+    await expect(w.getByRole('heading', { name: 'Your results' })).toBeVisible();
+
+    await w.getByRole('link', { name: /^Tests/ }).click();
+    const kinkCard = w.getByRole('listitem', { name: 'Kink & intimacy interests' });
+    await expect(kinkCard.getByText(/of 1 area you rated/)).toBeVisible();
+    await expect(kinkCard.getByText('Sensual & sensory')).toBeVisible();
+    // A category never opened floors to 0 → "little pull". It must appear nowhere.
+    await expect(w.getByText('little pull')).toHaveCount(0);
   } finally {
     await app.close();
     await rm(userData, { recursive: true, force: true });

@@ -12,6 +12,20 @@ import adaptive from './Adaptive.module.css';
  * been reached, with no route back to the words or the names. This is the screen that fixes both: every step,
  * what it asks, whether it spends, what you have already done in it, and a tap into any of them.
  */
+/**
+ * What a finished step says after its label. Three steps — who you two are, the split, and the profile —
+ * have nothing countable: their "done" is HAVING ANSWERED, so `count` is 0 and the row read "done · 0",
+ * a number of nothing.
+ *
+ * And where there IS a count it needs its unit, which is what `StepStatus.unit` was added for: 132 marks
+ * beside 6 answered questions beside 8 moment picks is three different things wearing one bare number. The
+ * rail already does this; the map never did.
+ */
+function doneLabel(status: StepStatus): string {
+  if (status.count <= 0) return 'done';
+  return status.unit ? `done · ${status.count} ${status.unit}` : `done · ${status.count}`;
+}
+
 export function TakeMap({
   statuses,
   resuming,
@@ -86,7 +100,7 @@ export function TakeMap({
                     ) : null}
                     <span className={adaptive.mapState}>
                       {state === 'done' && status.fresh === undefined
-                        ? `done · ${status.count}`
+                        ? doneLabel(status)
                         : state === 'skipped'
                           ? 'skipped'
                           : state === 'blocked'

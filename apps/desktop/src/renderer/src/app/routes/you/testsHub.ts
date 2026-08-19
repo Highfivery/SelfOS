@@ -13,6 +13,19 @@ import { RECHECK_AFTER_DAYS, RECHECKABLE_INSTRUMENTS, daysSince } from '../home/
  * this module returns a proportion for that reason.
  */
 
+/**
+ * Short group labels, used by BOTH the filter and each card's tag. The full names ("Intimacy & sexuality",
+ * "Reflections & check-ins") are too wide for a control row and too wide for a card's top line beside the
+ * 18+ and duration pills — which is what wrapped the 18+ cards onto two lines. One source, so the filter
+ * and the cards can never disagree about what a group is called.
+ */
+export const FILTER_GROUP_LABELS: Record<TestGroupId, string> = {
+  personality: 'Personality',
+  relationships: 'Relationships',
+  intimacy: 'Intimacy',
+  wellbeing: 'Check-ins',
+};
+
 /** Below this, an instrument is "quick" — drives the "Under 5 min" filter and the lead slot's fallback. */
 export const QUICK_MINUTES = 5;
 
@@ -107,29 +120,60 @@ export function nextForYou(
   resultsByTest: Record<string, TestResult[]>,
   now: number,
 ): NextUp | undefined {
+  return nextUpFor(catalog, resultsByTest, now, 1)[0];
+}
+
+/**
+ * The lead zone's picks, best first, at most `limit` and never the same instrument twice. Same priority as
+ * a single pick — overdue check-ins (longest-waiting first), then the adaptive flagship, then the shortest
+ * untried — so a second panel simply takes the next thing down rather than a different rule.
+ *
+ * Fewer than `limit` when there is less outstanding, and empty when everything is taken and nothing is due:
+ * the zone hides rather than inventing something to push.
+ */
+export function nextUpFor(
+  catalog: TestSummary[],
+  resultsByTest: Record<string, TestResult[]>,
+  now: number,
+  limit = 2,
+): NextUp[] {
   const stateOf = (test: TestSummary): TestCardState =>
     cardStateOf(test, takesOf(resultsByTest, test), now);
 
-  // 1. Due — the one left longest, so a backlog is worked oldest-first.
+  const picks: NextUp[] = [];
+
+  // 1. Due — longest-waiting first, so a backlog is worked oldest-first.
   const due = catalog
     .filter((test) => stateOf(test) === 'due')
     .map((test) => ({ test, at: takesOf(resultsByTest, test)[0]?.takenAt ?? '' }))
     // Parse rather than compare strings: a lexicographic sort is only correct while every stamp is `…Z`.
     .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
-  const oldest = due[0];
-  if (oldest !== undefined) {
-    return { test: oldest.test, reason: 'due', ...(oldest.at !== '' ? { lastAt: oldest.at } : {}) };
+  for (const entry of due) {
+    picks.push({
+      test: entry.test,
+      reason: 'due',
+      ...(entry.at !== '' ? { lastAt: entry.at } : {}),
+    });
   }
 
   // 2. The adaptive flagship, while it has never been started.
   const flagship = catalog.find((test) => test.kind === 'adaptive' && stateOf(test) === 'untaken');
-  if (flagship !== undefined) return { test: flagship, reason: 'flagship' };
+  if (flagship !== undefined) picks.push({ test: flagship, reason: 'flagship' });
 
-  // 3. The shortest untried. A stable sort, so equal lengths keep catalog order.
+  // 3. The shortest untried, then the next shortest. A stable sort, so equal lengths keep catalog order.
   const shortest = catalog
     .filter((test) => stateOf(test) === 'untaken')
-    .sort((a, b) => a.estimatedMinutes - b.estimatedMinutes)[0];
-  return shortest !== undefined ? { test: shortest, reason: 'quick' } : undefined;
+    .sort((a, b) => a.estimatedMinutes - b.estimatedMinutes);
+  for (const test of shortest) picks.push({ test, reason: 'quick' });
+
+  // The flagship also appears in the untried list, so de-dupe by instrument — a panel must never repeat.
+  const seen = new Set<string>();
+  const unique = picks.filter((pick) => {
+    if (seen.has(pick.test.id)) return false;
+    seen.add(pick.test.id);
+    return true;
+  });
+  return unique.slice(0, Math.max(0, limit));
 }
 
 /** The catalog filter. Status filters and area filters share one control — one "show me…" concept. */

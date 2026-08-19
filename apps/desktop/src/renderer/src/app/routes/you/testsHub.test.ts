@@ -7,6 +7,7 @@ import {
   filterTests,
   hubStats,
   nextForYou,
+  nextUpFor,
   testsOutstandingCount,
 } from './testsHub';
 
@@ -189,5 +190,50 @@ describe('filters', () => {
     expect(filterCount(catalog, results, NOW, 'all')).toBe(4);
     expect(filterCount(catalog, results, NOW, 'untaken')).toBe(3);
     expect(filterCount(catalog, results, NOW, 'wellbeing')).toBe(2);
+  });
+});
+
+describe('nextUpFor — two featured', () => {
+  it('fills the second panel rather than letting an overdue check-in hide the flagship', () => {
+    const picks = nextUpFor(
+      [bigFive, dirtyTalk, phq9],
+      { phq9: [result('phq9', daysAgo(18))] },
+      NOW,
+      2,
+    );
+    expect(picks.map((p) => p.test.id)).toEqual(['phq9', 'dirty-talk']);
+    expect(picks.map((p) => p.reason)).toEqual(['due', 'flagship']);
+  });
+
+  it('never repeats an instrument — the flagship is also in the untried list', () => {
+    const picks = nextUpFor([dirtyTalk, gad7, bigFive], {}, NOW, 3);
+    expect(new Set(picks.map((p) => p.test.id)).size).toBe(picks.length);
+    expect(picks[0]?.test.id).toBe('dirty-talk');
+  });
+
+  it('works oldest-first through a backlog of due check-ins', () => {
+    const picks = nextUpFor(
+      [phq9, gad7],
+      { phq9: [result('phq9', daysAgo(20))], gad7: [result('gad7', daysAgo(60))] },
+      NOW,
+      2,
+    );
+    expect(picks.map((p) => p.test.id)).toEqual(['gad7', 'phq9']);
+  });
+
+  it('returns fewer than asked when less is outstanding, and none when nothing is', () => {
+    expect(nextUpFor([bigFive], {}, NOW, 2)).toHaveLength(1);
+    expect(
+      nextUpFor(
+        [bigFive],
+        { 'bigfive-ipip-120': [result('bigfive-ipip-120', daysAgo(9))] },
+        NOW,
+        2,
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('still backs the single-pick helper', () => {
+    expect(nextForYou([bigFive, dirtyTalk], {}, NOW)?.test.id).toBe('dirty-talk');
   });
 });

@@ -861,6 +861,7 @@ import {
   normalizeTestSummary,
   takeTest,
   testForm,
+  withNoSignalBands,
   type ScoreAnswers,
   type TestForm,
   type TestNarrateResponse,
@@ -4173,7 +4174,29 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       ) {
         return [];
       }
-      const results = await listResults(ctx.fs, ctx.key, personId, testId);
+      const stored = await listResults(ctx.fs, ctx.key, personId, testId);
+      /*
+       * 50 §8.1a — repair the bands of results scored before "unrated is not a no". Their subscales carry a
+       * confident descriptor on questions nobody answered ("mostly other-sex" for a skipped Klein variable,
+       * "little pull" for a kink category never opened), so without this every existing result keeps stating
+       * skips as findings until its owner retakes the whole instrument. Deterministic and idempotent — it
+       * only ever replaces a band with the no-signal one, from the answers the result already stores.
+       * Adaptive results are scored by the spine, which has always emitted NO_SIGNAL_BAND itself.
+       */
+      const deterministic = getTest(testId);
+      const results =
+        deterministic === undefined
+          ? stored
+          : stored.map((result) => ({
+              ...result,
+              scores: withNoSignalBands(
+                deterministic,
+                result.scores,
+                Object.fromEntries(
+                  result.answers.map((a) => [a.questionId, a.value]),
+                ) as ScoreAnswers,
+              ),
+            }));
       if (await activePersonCan(ctx.fs, ctx.key, 'budgets.manage')) return results;
       return results.map((result) => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars

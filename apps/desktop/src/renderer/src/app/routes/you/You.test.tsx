@@ -133,7 +133,9 @@ const renderYou = (): void => {
 
 /** The catalog grid, so a query never collides with the identically-labelled lead-slot action. */
 const grid = (): HTMLElement => screen.getByRole('region', { name: 'Everything you can take' });
-const leadSlot = (): HTMLElement => screen.getByRole('region', { name: 'Next for you' });
+/** The lead panels, each named by its instrument — there can be two, so a bare name would be ambiguous. */
+const leadSlots = (): HTMLElement[] =>
+  screen.queryAllByRole('region', { name: /^(Next for you|Start here): / });
 
 describe('Tests hub', () => {
   it('keeps every instrument in ONE grid, enriching a card rather than moving it', async () => {
@@ -186,9 +188,13 @@ describe('Tests hub', () => {
     });
     renderYou();
 
-    await waitFor(() => expect(leadSlot()).toBeInTheDocument());
-    expect(within(leadSlot()).getByRole('heading', { name: 'Mood check-in' })).toBeInTheDocument();
-    expect(within(leadSlot()).getByText(/18 days since your last one/)).toBeInTheDocument();
+    await waitFor(() => expect(leadSlots().length).toBeGreaterThan(0));
+    // The overdue check-in leads, ahead of the flagship — which now takes the second panel rather than
+    // being hidden by it.
+    const panels = leadSlots();
+    expect(within(panels[0]!).getByRole('heading', { name: 'Mood check-in' })).toBeInTheDocument();
+    expect(within(panels[0]!).getByText(/18 days since your last one/)).toBeInTheDocument();
+    expect(within(panels[1]!).getByRole('heading', { name: 'Dirty talk' })).toBeInTheDocument();
     // The due card is findable in the grid too, not only in the lead slot.
     expect(within(grid()).getByText('Due')).toBeInTheDocument();
   });
@@ -203,8 +209,10 @@ describe('Tests hub', () => {
         <You />
       </MemoryRouter>,
     );
-    await waitFor(() => expect(leadSlot()).toBeInTheDocument());
-    expect(within(leadSlot()).getByRole('heading', { name: 'Dirty talk' })).toBeInTheDocument();
+    await waitFor(() => expect(leadSlots().length).toBeGreaterThan(0));
+    expect(
+      within(leadSlots()[0]!).getByRole('heading', { name: 'Dirty talk' }),
+    ).toBeInTheDocument();
     unmount();
     clearMockBridge();
     useTestStore.getState().reset();
@@ -215,7 +223,7 @@ describe('Tests hub', () => {
     });
     renderYou();
     await waitFor(() => expect(screen.getByText('Everything you can take')).toBeInTheDocument());
-    expect(screen.queryByRole('region', { name: 'Next for you' })).not.toBeInTheDocument();
+    expect(leadSlots()).toHaveLength(0);
   });
 
   it('filters the grid from one control, with a count on every option', async () => {

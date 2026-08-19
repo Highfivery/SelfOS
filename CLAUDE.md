@@ -530,6 +530,42 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-19 — **Fix + redesign (a skipped question was being stated as a definite finding; owner-reported as
+  "the data isnt quite clear"; SPEC 50 §3.1/§8.1b; on `feat/tests-card-readings`).** Four follow-ups to the
+  Tests redesign, three cosmetic and one that turned out to be a **correctness bug**. The owner's two sensitive
+  cards each printed the same sentence twice — "mostly other-sex −1.00" on both rows — and asked me to review
+  how those instruments work before proposing anything. **Reading them is what found it:** every item in the
+  sexuality and kink instruments is `required: false`, and `scoreSubscale` floors an all-unanswered subscale to
+  `normalize.min` **and then resolved a descriptor band on that floor**. So a skipped question and a definite
+  answer at the far end were indistinguishable — `−1.00` → "mostly other-sex" either way, `0.00` → "little
+  pull" either way. On a SIGNED scale it was worse than a tie: `−1` is the most extreme value there is, so
+  `topSubscales`, which ranks by distance from neutral, put **unanswered** variables ahead of every answered
+  one, at the top of the card, as a finding. **The fix reuses the adaptive report's own constant rather than
+  inventing a flag** — `NO_SIGNAL_BAND`, whose comment already says "unrated is not a no" — so no schema change
+  and both test kinds say the same thing; and `withNoSignalBands` repairs results scored BEFORE the change from
+  the answers they already store, so nobody has to retake anything. The result screen got it too: it charts
+  only what was answered, names the rest ("Not rated: … Skipping something is not the same as scoring zero on
+  it"), and its trends contribute **no point** for a take where a subscale went unrated, since plotting the
+  floor draws a dip that never happened. **Then the display, chosen by instrument SHAPE rather than id:** an
+  all-signed instrument is a **placement on a named spectrum** — the old bar filled from the centre with no
+  labelled ends, so it could not be read at all — plus the one line Klein exists to produce (agreement, or the
+  variable that diverges); an instrument with ≥6 unipolar facets shows its **leading facets by name** with the
+  honest denominator "of N areas you rated" (not 14 — you opened six). Also: the card tag took the SHORT group
+  name and `.cardTop` lost `flex-wrap`, because "INTIMACY & SEXUALITY" beside the 18+ and duration pills
+  overflowed and dropped the duration to a second line — only on the 18+ cards, which is why they sat a line
+  taller; the take map's **"done · 0"** is gone (three steps have nothing countable, and `StepStatus.unit`
+  existed precisely so the rail never shows a bare number — the rail honoured it, the map never did); and the
+  lead zone features **two** panels, so an overdue check-in no longer hides the flagship. Gate: typecheck ×4,
+  lint, format, **2396 core + 13 relay + 1721 desktop** unit, full E2E. Both new guards **verified to fail when
+  reverted**. **Lessons: (1) when a display looks empty, suspect the DATA before the layout — "the same
+  sentence twice" was the visible end of a scoring rule that turned every skip into a verdict. (2) A floor
+  value plus a resolved band is a lie generator wherever items are optional; the tell is that the floor and a
+  real extreme answer render identically, which also means no screenshot can distinguish them. (3) Reverting
+  the fix to prove a guard bites is worthless if the revert silently does not apply — my first attempt
+  patched a string prettier had since reformatted, the E2E passed, and I nearly recorded a vacuous guard as
+  proven; grep the file after reverting, not just before. (4) Two independent fixes for one bug (score-time
+  and read-time repair) mean reverting either alone still passes — revert BOTH to prove the guard.**
+
 - 2026-08-18 — **Redesign (the Tests landing page: one grid with state on every card, a rotating "next", and a
   nav count; owner-requested, mockup approved FIRST; SPEC 50 §3.1/§3.1a/§8.1a + 51 §3.1 amended; on
   `feat/tests-landing-redesign`).** The owner asked for a COMPLETE redesign — _"sleek, modern, easy to navigate…

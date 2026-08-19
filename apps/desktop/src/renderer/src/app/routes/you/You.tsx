@@ -8,28 +8,17 @@ import { CrisisFooter } from '../sessions/CrisisFooter';
 import { NextUpSlot } from './NextUpSlot';
 import { TestCard } from './TestCard';
 import {
+  FILTER_GROUP_LABELS,
   type HubFilter,
   filterCount,
   filterTests,
   hubStats,
-  nextForYou,
+  nextUpFor,
   takesOf,
 } from './testsHub';
 import styles from './You.module.css';
 
 const GROUP_ORDER: TestGroupId[] = ['personality', 'relationships', 'intimacy', 'wellbeing'];
-
-/**
- * Short labels for the FILTER only — the card's own tag carries the full group name. With the full names
- * the seven chips need ~885px and wrap into 2–3 rows at every desktop width below 1280px, and a wrapped
- * control cluster is not a design (§12). Measured, not assumed.
- */
-const FILTER_GROUP_LABELS: Record<TestGroupId, string> = {
-  personality: 'Personality',
-  relationships: 'Relationships',
-  intimacy: 'Intimacy',
-  wellbeing: 'Check-ins',
-};
 
 /** The catalog filter. Status and area live in ONE control — a single "show me…" concept, not two rows. */
 const STATUS_FILTERS: { id: HubFilter; label: string }[] = [
@@ -66,7 +55,7 @@ export function You(): JSX.Element {
   // is precisely what deriving both from this module is meant to prevent.
   const now = Date.now();
   const stats = hubStats(catalog, resultsByTest, now);
-  const next = nextForYou(catalog, resultsByTest, now);
+  const next = nextUpFor(catalog, resultsByTest, now, 2);
   const shown = filterTests(catalog, resultsByTest, now, filter);
 
   const filters: { id: HubFilter; label: string; count: number }[] = [
@@ -129,7 +118,13 @@ export function You(): JSX.Element {
           ) : null}
         </header>
 
-        {next ? <NextUpSlot next={next} now={now} /> : null}
+        {next.length > 0 ? (
+          <div className={styles.leadGrid}>
+            {next.map((pick) => (
+              <NextUpSlot key={pick.test.id} next={pick} now={now} />
+            ))}
+          </div>
+        ) : null}
 
         {loaded && catalog.length > 0 ? (
           <section aria-label="Everything you can take">

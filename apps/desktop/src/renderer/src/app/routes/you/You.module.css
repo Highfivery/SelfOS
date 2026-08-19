@@ -85,7 +85,15 @@
   color: var(--color-warning);
 }
 
-/* ---------- the rotating "next for you" slot ---------- */
+/* ---------- the rotating "next for you" slots ---------- */
+/* Up to two, side by side. `min(...)` on the track floor so a panel can never exceed a narrow container,
+   and they stack below ~900px so the higher-priority one still comes first on a phone. */
+.leadGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: var(--space-3);
+}
+
 .next {
   display: flex;
   gap: var(--space-4);
@@ -166,6 +174,21 @@
   flex: none;
   display: flex;
   gap: var(--space-2);
+}
+
+/* Side by side there isn't room for text and a button on one line, so the action takes its own full-width
+   row — which also makes the two panels the same height whatever their copy runs to. */
+.leadGrid .next {
+  align-items: flex-start;
+}
+
+.leadGrid .nextActions {
+  width: 100%;
+}
+
+.leadGrid .nextActions button {
+  width: 100%;
+  justify-content: center;
 }
 
 /* ---------- catalog ---------- */
@@ -285,7 +308,10 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  flex-wrap: wrap;
+  /* Deliberately NOT wrapping. "INTIMACY & SEXUALITY" beside the 18+ and duration pills overflowed the
+     card, dropping the duration to a second line — so the 18+ cards sat a line taller than every other
+     card in the grid. The tag ellipsizes instead, which no future long group name can undo. */
+  flex-wrap: nowrap;
   min-width: 0;
 }
 
@@ -433,4 +459,122 @@
   margin: 0;
   font-size: var(--text-sm);
   color: var(--color-text-tertiary);
+}
+
+/* ---------- a taken card's reading ---------- */
+.readKicker {
+  display: block;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-tertiary);
+  font-weight: 600;
+}
+
+.readFinding {
+  font-size: var(--text-md);
+  color: var(--color-text-heading);
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+/* A bipolar placement. The old bar filled from the centre with NO labelled ends, so a half-filled track
+   could not be read at all — a marker between two named poles can. */
+.spectrum {
+  margin-top: var(--space-2);
+}
+
+.spectrumTrack {
+  position: relative;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    90deg,
+    var(--color-accent-subtle-bg),
+    var(--color-surface-alt),
+    var(--color-accent-subtle-bg)
+  );
+  border: 1px solid var(--color-border);
+}
+
+.spectrumTick {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: 50%;
+  width: 1px;
+  background: var(--color-border-strong);
+}
+
+.spectrumDot {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-solid);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 2px var(--color-surface);
+}
+
+.spectrumEnds {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: 5px;
+  font-size: var(--text-xs);
+  color: var(--color-text-tertiary);
+}
+
+.divergence {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+/* The leading facets by NAME — what a list of fourteen has to compress to. The bar carries relative
+   strength without a percentage: that one draw leads another is the information, not that it scored 91. */
+.draws {
+  list-style: none;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.draw {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.drawName {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawBar {
+  position: relative;
+  flex: none;
+  width: 62px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.drawBar i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  background: var(--color-accent-solid);
 }

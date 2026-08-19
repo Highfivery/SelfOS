@@ -250,6 +250,43 @@ describe('AdaptiveReport (74 §3.3)', () => {
     expect(screen.getByText('line 100')).not.toBeVisible();
   });
 
+  it('puts the fold’s arrow on the heading’s own line, not above it (74 §3.6.20)', async () => {
+    /*
+     * The native `<details>` marker is a list-item bullet at the START of the summary box, so a summary whose
+     * children are BLOCKS — a heading and a line under it — drops it onto its own line above them. The owner
+     * spotted it in a screenshot; nothing was pointed at it because every other fold in this report is a
+     * single line of text, where the default marker sits correctly.
+     *
+     * jsdom does not apply CSS modules, so a computed-style assertion here would pass on nothing (this
+     * repo's own lesson). The real, checkable fix is STRUCTURAL: the arrow is an element inside the summary
+     * row rather than the browser's marker, so it lays out beside the heading.
+     */
+    installMockBridge({
+      testsAdaptiveState: async () =>
+        state({
+          latest: {
+            ...result('r1', '2026-08-01', 0.9),
+            turns: [
+              {
+                phase: 'probe',
+                item: { id: 'a#q', pack: 'probe', text: 'Order or request?', options: [] },
+                answer: 'An order.',
+                at: '2026-08-01',
+              },
+            ],
+          },
+        }),
+    });
+    renderReport();
+
+    const summary = (await screen.findByText('What you told it')).closest('summary');
+    expect(summary).not.toBeNull();
+    // The heading lives INSIDE the summary — the row is the summary, not a block stacked under a marker.
+    expect(summary!.querySelector('h2')?.textContent).toBe('What you told it');
+    // …and the arrow is our own element in that row, which is what puts it on the heading's line.
+    expect(summary!.querySelector('svg')).not.toBeNull();
+  });
+
   it('says where the profile is used, because it is not a page you visit', async () => {
     installMockBridge({
       testsAdaptiveState: async () => state({ latest: result('r1', '2026-08-01', 0.9) }),

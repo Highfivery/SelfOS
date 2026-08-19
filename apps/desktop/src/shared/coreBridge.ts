@@ -467,6 +467,7 @@ import type {
   AdaptiveReading,
   AdaptiveScenarioView,
   AdaptiveStateView,
+  AdaptiveSynthesisView,
   EroticLexicon,
 } from '@selfos/core/schemas';
 // A value, not a type — the readiness numbers are shared with the renderer so the two cannot drift.
@@ -884,7 +885,10 @@ import {
   recordBankPass,
   recordSplitPass,
   runLinesPhase,
+  answersDigest,
+  openEndedAmbiguity,
   runProbePhase,
+  ambiguityOfProbeTurn,
   runScenarioPhase,
   runSynthesis,
   accruePhaseCost,
@@ -1206,10 +1210,23 @@ const AdaptiveSplitSchema = AdaptiveRefSchema.extend({
 const AdaptiveScenarioInputSchema = AdaptiveRefSchema.extend({
   context: z.enum(ADAPTIVE_CONTEXTS),
 });
+const AdaptiveSynthesizeInputSchema = AdaptiveRefSchema.extend({
+  /** Finish the take on the deterministic profile alone, after being told the written analysis failed. */
+  acceptDegraded: z.boolean().optional(),
+});
 const AdaptiveTurnInputSchema = AdaptiveRefSchema.extend({
   phase: z.string().min(1),
   itemId: z.string().min(1),
   text: z.string(),
+  /**
+   * 74 §3.6.17 — the choices the item offered, PERSISTED.
+   *
+   * This was hardcoded `[]` when stamping, so every generated moment's options were thrown away the instant
+   * one was picked. The scene survived and the choices did not, which meant an answered moment could never be
+   * re-opened or re-picked: the grid showed it "done", and the only thing tapping it could do was spend again
+   * and write five different moments. `AdaptiveItem.options` has existed for exactly this the whole time.
+   */
+  options: z.array(z.string()).optional(),
   answer: z.union([z.string(), z.number(), z.array(z.string()), z.record(z.string(), z.number())]),
 });
 const AdaptiveLexiconEditSchema = z.discriminatedUnion('kind', [
@@ -1782,8 +1799,26 @@ function lexiconReadyForGeneration(lexicon: EroticLexicon): { ready: boolean } {
  */
 const MAX_SYNTHESIS_SIGNALS = 40;
 
+/**
+ * Everything they have ANSWERED in this take, for the next phase to build on (74 §3.6.16).
+ *
+ * Each phase used to see the lexicon and nothing else, so a probe answer three screens back informed nothing
+ * that came after it. Every generating phase now takes this, so the take compounds rather than restarting.
+ */
+async function takeAnswers(
+  fs: FileSystem,
+  key: Uint8Array,
+  personId: string,
+  resultId: string,
+): Promise<string> {
+  const result = await getAdaptiveResult(fs, key, personId, resultId);
+  return answersDigest(result?.turns ?? []);
+}
+
 /** Why an adaptive AI phase produced nothing, in the person's words. Shared so the phases can't disagree. */
 const AI_UNAVAILABLE_FOR_PHASE = 'AI isn’t available right now — check Settings, then try again.';
+/** The take itself is out of reach — signed out, switched person, or the 18+ acknowledgement is gone. */
+const ADAPTIVE_UNAVAILABLE = 'This test isn’t available right now.';
 const NOT_ENOUGH_MARKED = 'There isn’t enough marked yet for this to be worth running.';
 
 export function createCoreBridge(host: BridgeHost): SelfosBridge {
@@ -4467,7 +4502,16 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const deps = await aiDeps('tests.own');
       if (!deps)
         return { ok: false, degraded: true, message: 'Turn on AI in Settings to use this.' };
-      const out = await runLinesPhase(deps, lexicon, parsed.round);
+      const priorTurns =
+        (await getAdaptiveResult(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId))
+          ?.turns ?? [];
+      const out = await runLinesPhase(
+        deps,
+        lexicon,
+        parsed.round,
+        await takeAnswers(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId),
+        priorTurns.filter((t) => t.phase === 'lines').map((t) => t.item.text),
+      );
       // Every phase's spend accrues onto the draft, or the take's own cost figure is only its last call.
       await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
       return {
@@ -4483,13 +4527,19 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const gate = await adaptiveGate(parsed.testId);
       if (!gate) return { ok: false, done: true, degraded: true };
       const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
+      /*
+       * Which AMBIGUITIES have been put to them. A probe turn is now keyed per QUESTION (74 §3.6.17 — a pass
+       * asks up to six, and stamping them all under the bare ambiguity id meant each answer overwrote the
+       * last), so the ambiguity is read back off the id rather than being the whole of it. Both halves live
+       * in `engine.ts` beside each other so this and the stamping cannot drift apart.
+       */
       const asked = new Set(
         (
           (await getAdaptiveResult(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId))
             ?.turns ?? []
         )
           .filter((turn) => turn.phase === 'probe')
-          .map((turn) => turn.item.id),
+          .map((turn) => ambiguityOfProbeTurn(turn.item.id)),
       );
       // The confidence rule: probe while the DATA leaves something unresolved, and stop when it doesn't.
       // `asked` is keyed on the AMBIGUITY id (returned below and stamped by the renderer) rather than on the
@@ -4497,18 +4547,39 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const next = openAmbiguities(lexicon).find((ambiguity) => !asked.has(ambiguity.id));
       // A ceiling as well as the rule: a data-driven loop should converge, and if it ever doesn't, a person
       // must not be billed a call per tap to find out (74 §5.3 — a backstop, not a depth cap).
-      if (!next || asked.size >= MAX_ADAPTIVE_PROBES) {
+      /*
+       * Out of structured ambiguities is not out of questions. The derived list is finite — three for a
+       * typical take — and exhausting it used to end the step for good. There is always more worth asking,
+       * so it falls back to an open-ended pass grounded in what they marked, and only reports `done` when
+       * there is genuinely nothing to work from or the per-take cap is reached.
+       */
+      const target = next ?? openEndedAmbiguity(lexicon);
+      if (!target || asked.size >= MAX_ADAPTIVE_PROBES) {
         return { ok: true, done: true, degraded: false };
       }
       const deps = await aiDeps('tests.own');
       if (!deps)
         return { ok: false, done: false, degraded: true, message: AI_UNAVAILABLE_FOR_PHASE };
-      const out = await runProbePhase(deps, lexicon, next);
+      // What has already been PUT TO THEM, so a second pass asks something new rather than rewording the
+      // first. `asked` above tracks ambiguity ids; the question texts are what the model needs to avoid.
+      const askedQuestions = (
+        (await getAdaptiveResult(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId))
+          ?.turns ?? []
+      )
+        .filter((turn) => turn.phase === 'probe')
+        .map((turn) => turn.item.text);
+      const out = await runProbePhase(
+        deps,
+        lexicon,
+        target,
+        askedQuestions,
+        await takeAnswers(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId),
+      );
       await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
       return {
         ok: out.ok,
-        ...(out.value ? { question: out.value } : {}),
-        ambiguityId: next.id,
+        ...(out.value?.[0] ? { question: out.value[0].question, questions: out.value } : {}),
+        ambiguityId: target.id,
         done: false,
         degraded: out.degraded,
         // The phase's OWN account of what went wrong. Without it the renderer had only `degraded`, which it
@@ -4534,12 +4605,30 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           degraded: true,
           message: AI_UNAVAILABLE_FOR_PHASE,
         };
-      const out = await runScenarioPhase(deps, lexicon, parsed.context);
+      const priorScenes = (
+        (await getAdaptiveResult(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId))
+          ?.turns ?? []
+      )
+        .filter((t) => t.phase === 'scenario')
+        .map((t) => t.item.text);
+      const out = await runScenarioPhase(
+        deps,
+        lexicon,
+        parsed.context,
+        await takeAnswers(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId),
+        priorScenes,
+      );
       await accruePhaseCost(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, out.costUsd);
       return {
         ok: out.ok,
         context: parsed.context,
-        ...(out.value ? { scene: out.value.scene, options: out.value.options } : {}),
+        ...(out.value?.[0]
+          ? {
+              scene: out.value[0].scene,
+              options: out.value[0].options,
+              scenes: out.value.map((s) => ({ scene: s.scene, options: s.options })),
+            }
+          : {}),
         degraded: out.degraded,
         ...(out.message ? { message: out.message } : {}),
       };
@@ -4550,15 +4639,20 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       if (!gate) return;
       await stampTurn(gate.ctx.fs, gate.ctx.key, gate.personId, parsed.resultId, {
         phase: parsed.phase,
-        item: { id: parsed.itemId, pack: parsed.phase, text: parsed.text, options: [] },
+        item: {
+          id: parsed.itemId,
+          pack: parsed.phase,
+          text: parsed.text,
+          options: parsed.options ?? [],
+        },
         answer: parsed.answer,
         at: new Date().toISOString(),
       });
     },
-    testsAdaptiveSynthesize: async (input): Promise<AdaptiveStateView | null> => {
-      const parsed = AdaptiveRefSchema.parse(input);
+    testsAdaptiveSynthesize: async (input): Promise<AdaptiveSynthesisView> => {
+      const parsed = AdaptiveSynthesizeInputSchema.parse(input);
       const gate = await adaptiveGate(parsed.testId);
-      if (!gate) return null;
+      if (!gate) return { ok: false, state: null, message: ADAPTIVE_UNAVAILABLE };
       const { fs, key } = gate.ctx;
       const draft = await getAdaptiveResult(fs, key, gate.personId, parsed.resultId);
       const lexicon = await readLexicon(fs, key, gate.personId);
@@ -4570,6 +4664,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         readings?: AdaptiveReading[];
         costUsd: number;
       } = { costUsd: 0 };
+      /*
+       * 74 §3.6.18 — WHY it couldn't, carried to the person instead of dropped on the floor here.
+       *
+       * `runSynthesis` classifies its own failures and this handler discarded every one of them, checking only
+       * `if (out.value)`. AI being unavailable at all was the same silence.
+       */
+      let failure: string | null = deps ? null : AI_UNAVAILABLE_FOR_PHASE;
       if (deps) {
         // §8.4's carve-out, enforced in code rather than asked of the model: a turn that reads as a
         // real-world disclosure never enters the erotic synthesis, so nothing derived from it can reach the
@@ -4590,7 +4691,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           ])
           .slice(0, MAX_SYNTHESIS_SIGNALS);
         const out = await runSynthesis(deps, lexicon, transcript, signals);
-        if (out.value) {
+        if (out.ok && out.value) {
           synthesized = {
             profile: out.value.profile,
             narrative: out.value.narrative,
@@ -4598,9 +4699,30 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             readings: out.value.readings,
             costUsd: out.costUsd,
           };
+        } else {
+          failure = out.message ?? 'The analysis didn’t come through — try again.';
+          // The call was still billed even though nothing usable came back, so the spend is recorded on the
+          // draft rather than lost with the failure.
+          await accruePhaseCost(fs, key, gate.personId, parsed.resultId, out.costUsd);
         }
       }
-      // A degraded synthesis still COMPLETES the take — the deterministic profile is honest on its own.
+      /*
+       * A FAILED analysis no longer completes the take (owner decision, 2026-08-18).
+       *
+       * It used to complete regardless, which took the one step that hadn't run and marked the whole thing
+       * finished, then redirected to a report with no profile in it. Staying open means the retry is where
+       * they already are, and the step is still honestly unfinished. Every mark was saved long before this,
+       * so nothing is at risk in waiting.
+       *
+       * `acceptDegraded` is the deliberate way out, and it exists because "never complete on a failure" alone
+       * is a TRAP: someone over budget, or hitting a model that keeps refusing, could never finish the take at
+       * all. The rest of the profile — the spine scores, the words, the names, the trends — is computed from
+       * the lexicon with no model involved and is honest on its own, so finishing without the written analysis
+       * is a real outcome. It is never the default: they are told what failed first, and choose it.
+       */
+      if (failure && !parsed.acceptDegraded) {
+        return { ok: false, state: await adaptiveState(gate), message: failure };
+      }
       await completeAdaptiveTake(
         fs,
         key,
@@ -4616,7 +4738,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         },
         new Date(),
       );
-      return adaptiveState(gate);
+      return { ok: true, state: await adaptiveState(gate) };
     },
     testsAdaptiveDeleteAll: async (input): Promise<AdaptiveStateView | null> => {
       const { testId } = TestIdSchema.parse(input);

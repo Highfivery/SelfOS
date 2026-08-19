@@ -122,13 +122,29 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
     expect(prompts).toHaveLength(0);
   });
 
-  it('asks ONE question per probe, and never asks them to justify a boundary', async () => {
+  it('asks as many as the ambiguity needs, and never asks them to justify a boundary', async () => {
     const { client, prompts } = fakeClient([
-      '{"question": "Is it the word, or being talked down to?"}',
+      // As many as it needs (74 §3.6.16), each standing alone with its own example — a single question that
+      // assumes they remember what they tapped is unanswerable a week later.
+      JSON.stringify({
+        questions: ['Is it the word, or being talked down to?', 'Does it change mid-scene?'],
+      }),
     ]);
     const ambiguity = openAmbiguities(seeded())[0]!;
     const out = await runProbePhase(deps(client), seeded(), ambiguity);
-    expect(out.value).toBe('Is it the word, or being talked down to?');
+    expect(out.value?.map((q) => q.question)).toEqual([
+      'Is it the word, or being talked down to?',
+      'Does it change mid-scene?',
+    ]);
+    // 74 §3.6.17 — SHORT and tappable, which is the opposite of what the prompt used to demand. It required
+    // every question to restate the marks and carry a worked example before asking, so paragraphs were the
+    // spec rather than a drift; the concrete OPTIONS carry that weight now.
+    expect(prompts[0]?.system).toContain('Hard limit: 20 words');
+    expect(prompts[0]?.system).toContain('ANSWERABLE BY TAPPING');
+    expect(prompts[0]?.system).not.toContain('CONCRETE EXAMPLE');
+    // …and it stays on the words. "What this says about them" is a reading, and it belongs in the profile
+    // where it is labelled as one — not as a question they answer about themselves mid-test.
+    expect(prompts[0]?.system).toContain('About LANGUAGE');
     expect(prompts[0]?.system).toContain('never ask why something is a hard no');
     expect(prompts[0]?.user).toContain(ambiguity.question);
   });
@@ -137,7 +153,9 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
     // Every sibling phase filters what the model wrote; this one shipped its prose straight to the screen,
     // and it is the phase that asks open questions. "Never ask them to justify a boundary" has to be
     // enforced, not requested.
-    const { client } = fakeClient(['{"question": "What is it about being called a whore?"}']);
+    const { client } = fakeClient([
+      JSON.stringify({ questions: ['What is it about being called a whore?'] }),
+    ]);
     const ambiguity = openAmbiguities(seeded())[0]!;
     const out = await runProbePhase(deps(client), seeded(), ambiguity);
     expect(out.value).toBeUndefined();
@@ -146,20 +164,31 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
 
   it('drops a scenario whose SCENE names a hard no, not just its options', async () => {
     const { client } = fakeClient([
-      '{"scene": "He calls you a whore across the room.", "options": ["tease", "escalate"]}',
+      JSON.stringify({
+        scenes: [
+          { scene: 'He calls you a whore across the room.', options: ['tease', 'escalate'] },
+        ],
+      }),
     ]);
     const out = await runScenarioPhase(deps(client), seeded(), 'sexting');
     expect(out.value).toBeUndefined();
     expect(out.degraded).toBe(true);
   });
 
-  it('scores a scenario per CONTEXT, because filth mid-act is wrong at 2pm', async () => {
+  it('writes a SET of moments per context, because filth mid-act is wrong at 2pm', async () => {
     const { client, prompts } = fakeClient([
-      '{"scene": "He texts you at 2pm.", "options": ["escalate", "tease", "not at work"]}',
+      JSON.stringify({
+        scenes: [
+          { scene: 'He texts you at 2pm.', options: ['escalate', 'tease', 'not at work'] },
+          { scene: 'He calls on the way home.', options: ['tell him', 'make him wait'] },
+        ],
+      }),
     ]);
     const out = await runScenarioPhase(deps(client), seeded(), 'sexting');
-    expect(out.value?.context).toBe('sexting');
-    expect(out.value?.options).toHaveLength(3);
+    // More than one moment per pass (74 §3.6.16) — one at a time meant a call per scene and no sense of a set.
+    expect(out.value).toHaveLength(2);
+    expect(out.value?.[0]?.context).toBe('sexting');
+    expect(out.value?.[0]?.options).toHaveLength(3);
     expect(prompts[0]?.system).toContain('"sexting"');
   });
 
@@ -438,7 +467,56 @@ describe('the probe never asks about a hard no (74 §3.6.15)', () => {
       terms: ['baby'],
     });
     expect(out.ok).toBe(true);
-    expect(out.value).toContain('land right');
+    expect(out.value?.[0]?.question).toContain('land right');
+  });
+
+  /*
+   * 74 §3.6.17 — the length is ENFORCED, not merely requested.
+   *
+   * A live run produced a 27-word question in a set of six. The prompt asks for under 20 and mostly gets it,
+   * but "too long" is the exact complaint this rewrite answers, and every other generated thing here is
+   * checked in code as well as asked for.
+   */
+  it('drops a rambling question rather than showing it', async () => {
+    const long = `Thinking back to what you marked earlier about the words you like to hear in the moment, \
+would you say that it is the specific phrasing that lands for you or something else entirely about it?`;
+    const { client } = fakeClient([
+      JSON.stringify({
+        questions: [
+          { question: 'Which lands harder?', options: ['a', 'b'] },
+          { question: 'Order or request?', options: ['a', 'b'] },
+          { question: 'What kills it?', options: ['a', 'b'] },
+          { question: long, options: ['a', 'b'] },
+        ],
+      }),
+    ]);
+    const out = await runProbePhase(deps(client), seeded(), openAmbiguities(seeded())[0]!);
+    expect(out.value?.map((q) => q.question)).toEqual([
+      'Which lands harder?',
+      'Order or request?',
+      'What kills it?',
+    ]);
+  });
+
+  it('gives way rather than leaving them a thin pass when EVERY question is long', async () => {
+    // The cap must not be able to empty the step. A whole verbose pass still ships — shortest first — since
+    // an honest set of slightly-long questions beats a paid call that produced nothing.
+    const long = (n: number): string => `${'word '.repeat(n)}land?`;
+    const { client } = fakeClient([
+      JSON.stringify({
+        questions: [
+          { question: long(40), options: ['a', 'b'] },
+          { question: long(25), options: ['a', 'b'] },
+        ],
+      }),
+    ]);
+    const out = await runProbePhase(deps(client), seeded(), openAmbiguities(seeded())[0]!);
+    expect(out.ok).toBe(true);
+    expect(out.value).toHaveLength(2);
+    // Shortest first, so the best of a bad set leads.
+    expect(out.value?.[0]?.question.split(/\s+/).length).toBeLessThan(
+      out.value![1]!.question.split(/\s+/).length,
+    );
   });
 });
 
@@ -484,5 +562,59 @@ describe('the analysis survives one unlucky word (74 §3.6.15)', () => {
     expect(out.ok).toBe(true);
     expect(out.value?.lede).toContain('claimed');
     expect(out.value?.readings).toHaveLength(1);
+  });
+});
+
+describe('a name loved one way and ruled out the other (74 §3.6.16)', () => {
+  // The normal shape of the names pass: every loved name is marked in ONE direction, which makes it a hard no
+  // in the other (§3.6.8 — "never call me slut" must not stop him calling her slut). `violatesBoundary` with
+  // no direction then refuses it, so the engine picked a term BECAUSE they loved it and forbade itself from
+  // naming it. Verified against the owner's own vault: every one of his four loved terms is this shape, so
+  // the probe failed 100% of the time.
+  it('lets the probe quote a word it was handed, while still filtering everything else', async () => {
+    const { applyBankMarks, applyNameMarks, emptyLexicon, suppressedTexts } =
+      await import('./lexicon');
+    const { DIRTY_TALK } = await import('./instruments/dirtyTalk');
+    const now = new Date('2026-08-18T00:00:00.000Z');
+    const naughtyGirl = DIRTY_TALK.bank.entries.find((e) => e.text === 'naughty girl')!;
+    const whore = DIRTY_TALK.bank.entries.find((e) => e.text === 'whore')!;
+
+    let lex = applyNameMarks(
+      emptyLexicon('p1', now),
+      DIRTY_TALK.bank,
+      {
+        [naughtyGirl.key]: { hear: 'never', say: 'love' },
+        [whore.key]: { hear: 'never', say: 'never' },
+      },
+      'take:1',
+      now,
+    );
+    lex = applyBankMarks(lex, DIRTY_TALK.bank, {}, 'take:1', now);
+    // Undirected, it reads as ruled out — which is right for a line and wrong for a question about it.
+    expect(suppressedTexts(lex)).toContain('naughty girl');
+
+    const ok = fakeClient([
+      JSON.stringify({
+        question: 'When you hear "naughty girl" — is it the word or the register?',
+      }),
+    ]);
+    const kept = await runProbePhase(deps(ok.client), lex, {
+      id: 'x',
+      question: 'word or register?',
+      terms: ['naughty girl'],
+    });
+    expect(kept.ok).toBe(true);
+    expect(kept.value?.[0]?.question).toContain('naughty girl');
+
+    // …and a question that reaches for a DIFFERENT ruled-out word is still dropped.
+    const bad = fakeClient([
+      JSON.stringify({ questions: ['Is "naughty girl" different from being called a whore?'] }),
+    ]);
+    const dropped = await runProbePhase(deps(bad.client), lex, {
+      id: 'x',
+      question: 'word or register?',
+      terms: ['naughty girl'],
+    });
+    expect(dropped.ok).toBe(false);
   });
 });

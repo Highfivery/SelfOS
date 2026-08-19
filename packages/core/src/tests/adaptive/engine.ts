@@ -73,6 +73,31 @@ function boundaryBlock(lexicon: EroticLexicon): string {
   )}.`;
 }
 
+/**
+ * What they have ANSWERED so far in this take — every reaction, probe answer and scenario pick.
+ *
+ * The marks say what they like; these say what they told us when asked. Until now each phase saw only the
+ * lexicon, so a probe answer three screens back informed nothing: the lines phase couldn't build on what they
+ * had just explained, and the scenario couldn't use a preference they had spelled out in their own words.
+ * Every generating phase takes this, so the take compounds instead of restarting.
+ */
+export function answersDigest(
+  turns: readonly { phase: string; item: { text: string }; answer: unknown }[],
+): string {
+  const lines = turns
+    .filter((turn) => turn.answer !== undefined && turn.answer !== null && turn.answer !== '')
+    .slice(-ANSWER_CONTEXT_CAP)
+    .map((turn) => {
+      const answer = typeof turn.answer === 'string' ? turn.answer : JSON.stringify(turn.answer);
+      return `- (${turn.phase}) ${turn.item.text} → ${answer}`;
+    });
+  if (lines.length === 0) return '';
+  return `What they have told us already in this take — build on it, never re-ask it:\n${lines.join('\n')}`;
+}
+
+/** How many prior answers reach a prompt. Newest-last, so the freshest context is what survives the cap. */
+const ANSWER_CONTEXT_CAP = 24;
+
 /** A compact picture of what the bank already established, so a phase never re-asks what it knows. */
 export function lexiconDigest(lexicon: EroticLexicon): string {
   const line = (label: string, entries: LexiconEntry[]): string =>
@@ -211,6 +236,28 @@ function nothingUsable(
   };
 }
 
+/**
+ * When the structured list is exhausted, the take can still ask — grounded in what they marked rather than in
+ * a specific unresolved contradiction.
+ *
+ * The derived ambiguities are finite (three, for a typical take), and running out reported "nothing left it
+ * can't work out" for good. But there is always more worth asking: how a register lands in a different
+ * moment, what they would want to say rather than hear, what kills it. "As many as it needs based on the
+ * data" (owner, 2026-08-18) means the step keeps its depth from the DATA, not from a fixed list.
+ */
+export function openEndedAmbiguity(lexicon: EroticLexicon): Ambiguity | null {
+  const loved = lexicon.entries
+    .filter((e) => e.state === undefined && Math.max(e.hear, e.say) >= 3)
+    .slice(0, 4)
+    .map((e) => e.text);
+  if (loved.length === 0) return null;
+  return {
+    id: `open:${loved.length}`,
+    question: `They marked ${loved.map((t) => `"${t}"`).join(', ')} as landing. Go deeper on what that is actually made of — the moment, the register, the direction, what would break it.`,
+    terms: loved,
+  };
+}
+
 // ── Phase: line reactions ──────────────────────────────────────────────────────────────────────────
 
 const LinesSchema = z.object({
@@ -243,6 +290,10 @@ export async function runLinesPhase(
   deps: AiDeps,
   lexicon: EroticLexicon,
   round: number,
+  /** Everything they have answered in this take (`answersDigest`). */
+  answers = '',
+  /** Lines already written in this take — a round that repeats one wastes the slot. */
+  writtenBefore: readonly string[] = [],
 ): Promise<PhaseResult<string[]>> {
   const system = [
     PERSONA,
@@ -253,7 +304,14 @@ export async function runLinesPhase(
 questions, the words themselves. Vary the register deliberately across praise, claiming, command, narration, \
 degradation, begging and filth, so their reactions tell us which register lands rather than which topic. Draw \
 on what already landed for them, and push slightly past it — this round should TEST something, not repeat what \
-we know. Return ONLY {"lines": string[]}.`,
+we know.${
+      writtenBefore.length > 0
+        ? `\n\nAlready written for them — do not repeat any of these, or a near-variant:\n${writtenBefore
+            .slice(-24)
+            .map((line) => `- ${line}`)
+            .join('\n')}`
+        : ''
+    } Return ONLY {"lines": string[]}.`,
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -261,7 +319,7 @@ we know. Return ONLY {"lines": string[]}.`,
   const out = await runClaude(
     deps,
     system,
-    `${lexiconDigest(lexicon)}\n\nThis is round ${round}.`,
+    [lexiconDigest(lexicon), answers, `This is round ${round}.`].filter(Boolean).join('\n\n'),
     'test.adaptive.lines',
     1200,
   );
@@ -275,9 +333,12 @@ we know. Return ONLY {"lines": string[]}.`,
     };
   const parsed = LinesSchema.safeParse(extractJsonObject(out.text));
   const written = parsed.success ? parsed.data.lines : [];
+  const seen = new Set(writtenBefore.map((line) => line.trim().toLowerCase()));
   const lines = written
     // Belt and braces: the prompt forbids their hard nos, and anything that slips through is dropped here.
     .filter((line) => !violatesBoundary(lexicon, line))
+    // …and a line already put to them is a wasted slot, so the ask is enforced rather than requested.
+    .filter((line) => !seen.has(line.trim().toLowerCase()))
     .slice(0, LINES_PER_ROUND);
   if (lines.length === 0) {
     return {
@@ -290,20 +351,104 @@ we know. Return ONLY {"lines": string[]}.`,
   return { ok: true, value: lines, degraded: false, costUsd: out.usage.costUsd };
 }
 
+/**
+ * How many questions one pass asks. Not "one per ambiguity": an ambiguity is where to START, and asking the
+ * same narrow thing repeatedly produced two near-identical questions in a row. A pass spans angles — a scene
+ * to react to, phrases to choose between, what they'd say, what kills it, what does the most work — so the
+ * set is worth the call.
+ */
+const MAX_PROBE_QUESTIONS = 6;
+
+/**
+ * The hard ceiling on a probe question, in words.
+ *
+ * The prompt asks for under 20 and the model mostly obliges — but a live run produced a 27-word one in a set
+ * of six, and "too long" is the exact complaint this rewrite exists to answer. Every other generated thing in
+ * this engine is checked in code as well as asked for in the prompt (`violatesBoundary` is the same pattern):
+ * an instruction is belt, this is braces.
+ *
+ * Set above the asked-for 20 so an occasional 21-word question is not thrown away for one word — this drops
+ * the ramblers, not the near-misses.
+ */
+const MAX_PROBE_WORDS = 22;
+
+/** Enough of a set to be worth showing. Below this the cap gives way rather than leaving them a thin pass. */
+const MIN_PROBE_QUESTIONS = 3;
+
+const wordCount = (text: string): number => text.trim().split(/\s+/).length;
+
 // ── Phase: probe ───────────────────────────────────────────────────────────────────────────────────
 
-/** Ask ONE question that resolves ONE ambiguity. Returns the question text to put in front of them. */
+/** One probe question and the answers written for it. */
+export interface ProbeQuestion {
+  question: string;
+  /** 74 §3.6.17 — tappable answers written for THIS question. Empty ⇒ free text only. */
+  options: string[];
+}
+
+/*
+ * `probeTurnId` / `ambiguityOfProbeTurn` / `PROBE_SKIPPED` live in the crypto-free `schemas.ts` and are
+ * re-exported here beside the phase that uses them. The renderer stamps the turn and the bridge reads the
+ * ambiguity back off it, so the two halves must be one definition — and the renderer cannot import this
+ * module, whose barrel pulls in crypto (the `generationReadiness` precedent).
+ */
+export { probeTurnId, ambiguityOfProbeTurn, PROBE_SKIPPED } from '../../schemas';
+
+/**
+ * Ask the questions that resolve ONE ambiguity — as many as it genuinely needs, not always exactly one.
+ *
+ * The count is the model's call within a cap, because how much there is to pin down depends on the marks:
+ * a family they split cleanly needs one question, a hear/say gap can need two. Each must stand alone and
+ * carry a concrete example, since a question that assumes they remember what they tapped is unanswerable a
+ * week later — which is what "makes no sense and doesn't provide enough context or an example" was.
+ */
 export async function runProbePhase(
   deps: AiDeps,
   lexicon: EroticLexicon,
   ambiguity: Ambiguity,
-): Promise<PhaseResult<string>> {
+  /** Questions already put to them in this take — so a second pass asks something NEW. */
+  askedBefore: readonly string[] = [],
+  /** Everything they have answered in this take (`answersDigest`). */
+  answers = '',
+): Promise<PhaseResult<ProbeQuestion[]>> {
   const system = [
     PERSONA,
     SAFETY,
     REGISTER,
     boundaryBlock(lexicon),
-    `Ask ONE short, warm, direct question that settles the ambiguity below.
+    /*
+     * 74 §3.6.17 — SHORT, and answerable by tapping. Owner-directed, twice: "the questions are too long, they
+     * should be quick to read, short, easy to answer, and specifically about dirty talk."
+     *
+     * The previous version required the opposite by construction — every question had to restate the marks in
+     * plain words and carry a worked example before it asked anything — so paragraphs were the spec, not a
+     * drift. That requirement existed to fix "makes no sense and doesn't provide enough context": a bare
+     * question about a mark you made twenty minutes ago is unanswerable. The ANSWERS carry that weight now.
+     * Concrete options are the context, and reading five of them is faster than reading one paragraph.
+     */
+    `Write ${MAX_PROBE_QUESTIONS} short questions about the WORDS — what they want said to them, what they \
+want to be able to say, and how it should be worded. The ambiguity below is where to start, not the subject.
+
+Every question must be:
+- SHORT. Hard limit: 20 words. One line. No preamble, no restating what they marked, no explaining why you \
+ask, no setting a scene before the question. A question they have to read twice has already failed, and \
+anything over the limit is dropped before they see it.
+- About LANGUAGE. Which wording lands, which of two lines is closer, what they'd want to say, what phrasing \
+kills it, which word is doing the work. NOT what it says about them as a person — that reading belongs in \
+their profile, not in a question they have to answer about themselves mid-test.
+- ANSWERABLE BY TAPPING. Give 3–5 answers written for THAT question: real, specific, in their register, and \
+meaningfully different from each other — not degrees of the same answer. One may be "depends", "neither", or \
+"I'd rather say nothing" where that is genuinely an answer. Options are what carry the concreteness, so put \
+the actual words in them: "'good girl'" and "'that's my girl'" are answers; "the first one" is not.
+
+Two questions circling the same point are one question padded out — spread them across different angles.${
+      askedBefore.length > 0
+        ? `\n\nAlready asked — ask about something else:\n${askedBefore
+            .slice(-12)
+            .map((q) => `- ${q}`)
+            .join('\n')}`
+        : ''
+    }
 
 You may quote ONLY these words back to them, and no others: ${ambiguity.terms
       .map((term) => `"${term}"`)
@@ -313,7 +458,7 @@ You may quote ONLY these words back to them, and no others: ${ambiguity.terms
 naming one they have ruled out would be the worst version of this. Never ask them to justify a boundary, never \
 ask why something is a hard no, and never NAME one: a hard no is settled and is not a thing to ask about.
 
-Return ONLY {"question": string}.`,
+Return ONLY {"questions": [{"question": string, "options": string[]}]}.`,
   ]
     .filter(Boolean)
     .join('\n\n');
@@ -321,9 +466,13 @@ Return ONLY {"question": string}.`,
   const out = await runClaude(
     deps,
     system,
-    `${lexiconDigest(lexicon)}\n\nThe ambiguity: ${ambiguity.question}`,
+    [lexiconDigest(lexicon), answers, `The ambiguity: ${ambiguity.question}`]
+      .filter(Boolean)
+      .join('\n\n'),
     'test.adaptive.probe',
-    400,
+    // Six SHORT questions with a handful of short options each. The paragraph version needed 3500 and was
+    // still cut off at 2000; this shape is a fraction of that, with room for the JSON wrapper.
+    2000,
   );
   if (!out.ok)
     return {
@@ -333,7 +482,24 @@ Return ONLY {"question": string}.`,
       ...(out.reason ? { reason: out.reason } : {}),
       ...(out.message ? { message: out.message } : {}),
     };
-  const parsed = z.object({ question: z.string().min(1) }).safeParse(extractJsonObject(out.text));
+  // The model writes `["…","…"]` or `[{"question":"…"}, …]` depending on the day. Both are the same payload,
+  // and rejecting one of them threw away six good questions for the shape of their wrapper. A question that
+  // arrives without options is kept and answered as free text — one missing field is not worth a lost
+  // question, and the renderer already has a box for exactly this.
+  const questionish = z.union([
+    z.string().min(1),
+    z.object({
+      question: z.string().min(1),
+      options: z.array(z.string()).catch([]).default([]),
+    }),
+  ]);
+  const parsed = z
+    .object({ questions: tolerantArray(questionish, '', (v) => v !== '') })
+    .safeParse(extractJsonObject(out.text));
+  const asQuestion = (q: z.infer<typeof questionish>): ProbeQuestion =>
+    typeof q === 'string'
+      ? { question: q, options: [] }
+      : { question: q.question, options: q.options };
   /*
    * Salvage a bare question (37 §3.1). Asked for `{"question": …}`, the model sometimes just asks the
    * question — which is the entire payload, in the right words, thrown away for missing its wrapper. Bounded
@@ -342,25 +508,73 @@ Return ONLY {"question": string}.`,
   const bare = out.text.trim();
   const salvaged =
     // The whole reply is the question, unwrapped.
-    (bare.endsWith('?') && bare.length <= 400 && !bare.includes('{') ? bare : '') ||
+    (bare.endsWith('?') && bare.length <= 600 && !bare.includes('{') ? bare : '') ||
     // …or the wrapper is there but its inner quotes were never escaped, which is what half of the live
     // replies look like for a one-string payload.
     (salvageLooseStringField(out.text, 'question') ?? '');
-  const raw = parsed.success ? parsed.data.question : salvaged;
+  const written: ProbeQuestion[] =
+    parsed.success && parsed.data.questions.length > 0
+      ? parsed.data.questions.map(asQuestion)
+      : salvaged
+        ? [{ question: salvaged, options: [] }]
+        : [];
   // Every other phase filters what the model wrote; this one didn't, and it is the phase that puts free
   // prose in front of the person. A probe asking about a hard no is exactly what the prompt above forbids
   // ("never ask them to justify a boundary") — the instruction is belt, this is braces. Dropping it degrades
   // the phase, which the caller already handles, rather than showing them the question.
-  const question = violatesBoundary(lexicon, raw) ? '' : raw;
-  if (question === '') {
+  /*
+   * Check the question against everything they have ruled out EXCEPT the words we handed it.
+   *
+   * A name can be loved one way and ruled out the other (§3.6.8 — "never call me slut" must not stop him
+   * calling her slut), and `violatesBoundary` with no direction refuses anything ruled out either way, which
+   * is correct for a LINE: we don't know who would be saying it. A probe question is not a line. It DISCUSSES
+   * a word the app itself chose precisely because they marked it loved, so refusing to print it means the
+   * engine picks a term and then forbids itself from naming it.
+   *
+   * For someone who marked every one of their loved names in one direction only — the normal shape of the
+   * names pass — that was every question, every time, and the phase could never produce anything.
+   *
+   * Masking the allowed terms keeps the check on everything else: a question that reaches for some OTHER
+   * ruled-out word is still dropped.
+   */
+  const mask = (text: string): string =>
+    ambiguity.terms.reduce((t, term) => (term.trim() === '' ? t : t.split(term).join('…')), text);
+  const questions = written
+    .filter((q) => !violatesBoundary(lexicon, mask(q.question)))
+    .map((q) => ({
+      question: q.question,
+      /*
+       * The OPTIONS are prose put in front of them too — the same gap the scenario phase had, where a scene
+       * passed through unchecked while its options were filtered. Masked on the same grounds as the question:
+       * these answers are ABOUT the words the engine itself chose because they were marked loved, so the
+       * check runs on everything except those.
+       *
+       * A question whose options are all filtered still stands and falls back to free text — losing the way
+       * to answer quickly is much better than losing the question.
+       */
+      options: q.options.filter((o) => o.trim() !== '' && !violatesBoundary(lexicon, mask(o))),
+    }))
+    .slice(0, MAX_PROBE_QUESTIONS);
+  /*
+   * Enforce the length. Shortest-first so that if the cap has to give way — a whole pass of verbose
+   * questions — they still get the tightest ones rather than an empty step or a wall of prose.
+   */
+  const short = questions.filter((q) => wordCount(q.question) <= MAX_PROBE_WORDS);
+  const shipped =
+    short.length >= Math.min(MIN_PROBE_QUESTIONS, questions.length)
+      ? short
+      : [...questions]
+          .sort((a, b) => wordCount(a.question) - wordCount(b.question))
+          .slice(0, MAX_PROBE_QUESTIONS);
+  if (shipped.length === 0) {
     return {
       ok: false,
       degraded: true,
       costUsd: out.usage.costUsd,
-      ...nothingUsable(out.text, 'question', raw !== ''),
+      ...nothingUsable(out.text, 'question', written.length > 0),
     };
   }
-  return { ok: true, value: question, degraded: false, costUsd: out.usage.costUsd };
+  return { ok: true, value: shipped, degraded: false, costUsd: out.usage.costUsd };
 }
 
 // ── Phase: scenario ────────────────────────────────────────────────────────────────────────────────
@@ -382,30 +596,58 @@ export interface ScenarioItem {
   options: string[];
 }
 
-const ScenarioSchema = z.object({
+const SceneSchema = z.object({
   scene: z.string().min(1),
   options: tolerantArray(z.string().min(1), '', (v) => v.trim() !== ''),
 });
+const SENTINEL_SCENE = { scene: '', options: [] as string[] };
+const ScenarioSchema = z.object({
+  scenes: tolerantArray(SceneSchema, SENTINEL_SCENE, (v) => v.scene.trim() !== ''),
+});
+
+/** How many moments one pass writes. One at a time meant a call per scene and no sense of a set. */
+const MAX_SCENES = 5;
 
 export async function runScenarioPhase(
   deps: AiDeps,
   lexicon: EroticLexicon,
   context: AdaptiveContext,
-): Promise<PhaseResult<ScenarioItem>> {
+  /** Everything they have answered in this take (`answersDigest`). */
+  answers = '',
+  /** Moments already written for this take — "write more" must mean MORE, not the same five again. */
+  writtenBefore: readonly string[] = [],
+): Promise<PhaseResult<ScenarioItem[]>> {
   const system = [
     PERSONA,
     SAFETY,
     REGISTER,
     boundaryBlock(lexicon),
-    `Write one short, concrete, explicit moment in the "${context}" context, then 3–4 things that could be \
-SAID in that moment — real lines, meaningfully different from each other in register, one of which may be \
-"nothing, no words". The point is to learn what register fits THIS moment, since what lands mid-act is wrong \
-at 2pm. Return ONLY {"scene": string, "options": string[]}.`,
+    `Write ${MAX_SCENES} different short, concrete, explicit moments in the "${context}" context — genuinely \
+different situations, not one situation reworded — and for each, 3–4 things that could be SAID in it: real \
+lines, meaningfully different from each other in register, one of which may be "nothing, no words". The point \
+is to learn what register fits THIS moment, since what lands mid-act is wrong at 2pm.
+
+${
+  writtenBefore.length > 0
+    ? `\nMoments already written for them — write DIFFERENT ones, not variants of these:\n${writtenBefore
+        .slice(-15)
+        .map((scene) => `- ${scene}`)
+        .join('\n')}\n`
+    : ''
+}
+Return ONLY {"scenes": [{"scene": string, "options": string[]}]}.`,
   ]
     .filter(Boolean)
     .join('\n\n');
 
-  const out = await runClaude(deps, system, lexiconDigest(lexicon), 'test.adaptive.scenario', 700);
+  const out = await runClaude(
+    deps,
+    system,
+    [lexiconDigest(lexicon), answers].filter(Boolean).join('\n\n'),
+    'test.adaptive.scenario',
+    // Five scenes, each with 3–4 lines. At 700 the set was cut off after the first.
+    3000,
+  );
   if (!out.ok)
     return {
       ok: false,
@@ -415,28 +657,28 @@ at 2pm. Return ONLY {"scene": string, "options": string[]}.`,
       ...(out.message ? { message: out.message } : {}),
     };
   const parsed = ScenarioSchema.safeParse(extractJsonObject(out.text));
-  if (!parsed.success || parsed.data.options.length === 0) {
-    return { ok: false, degraded: true, costUsd: out.usage.costUsd };
-  }
-  const options = parsed.data.options.filter((o) => !violatesBoundary(lexicon, o));
-  // The SCENE is prose shown to them too, and it was passing through unchecked while its options were
-  // filtered — a scene that sets up a boundary is the same failure as an option that names one.
-  const clean = options.length > 0 && !violatesBoundary(lexicon, parsed.data.scene);
-  if (!clean) {
+  const written = parsed.success ? parsed.data.scenes : [];
+  // The SCENE is prose shown to them too, and it used to pass through unchecked while its options were
+  // filtered — a scene that sets up a boundary is the same failure as an option that names one. A scene whose
+  // options are all filtered is dropped; the others in the set still stand.
+  const scenes = written
+    .map((s) => ({
+      context,
+      scene: s.scene,
+      options: s.options.filter((o) => !violatesBoundary(lexicon, o)),
+    }))
+    .filter((s) => s.options.length > 0 && !violatesBoundary(lexicon, s.scene))
+    .filter((s) => !writtenBefore.some((prior) => prior.trim() === s.scene.trim()))
+    .slice(0, MAX_SCENES);
+  if (scenes.length === 0) {
     return {
       ok: false,
       degraded: true,
       costUsd: out.usage.costUsd,
-      // It parsed, so this is OUR filter, not the model — say which.
-      ...nothingUsable(out.text, 'scene', true),
+      ...nothingUsable(out.text, 'scene', written.length > 0),
     };
   }
-  return {
-    ok: true,
-    value: { context, scene: parsed.data.scene, options },
-    degraded: false,
-    costUsd: out.usage.costUsd,
-  };
+  return { ok: true, value: scenes, degraded: false, costUsd: out.usage.costUsd };
 }
 
 // ── Phase: synthesis ───────────────────────────────────────────────────────────────────────────────
@@ -560,7 +802,22 @@ set a source on any reading.',
       ...(out.message ? { message: out.message } : {}),
     };
   const parsed = SynthesisSchema.safeParse(extractJsonObject(out.text) ?? {});
-  if (!parsed.success) return { ok: false, degraded: true, costUsd: out.usage.costUsd };
+  /*
+   * 74 §3.6.18 — say WHICH failure this was.
+   *
+   * Every sibling phase was given this and the synthesis was missed — and the synthesis is the one the owner
+   * reported three times. It returned a bare `degraded` with no reason and no message, so the report printed
+   * the same generic sentence whether the model refused, the reply was cut off, or the JSON never parsed.
+   * Each repeat report carried no more information than the last, because there was nothing behind it.
+   */
+  if (!parsed.success) {
+    return {
+      ok: false,
+      degraded: true,
+      costUsd: out.usage.costUsd,
+      ...classifyParseOutcome(out.text, 'analysis'),
+    };
+  }
   const data = parsed.data;
   /*
    * A narrative that quotes a boundary back at them is worse than no narrative — but this used to reject the
@@ -588,8 +845,16 @@ set a source on any reading.',
   // happened to the long prose. Gating on the narrative alone reported a total failure over a good lede and
   // three readings — which is the state the owner kept hitting.
   const gotSomething = narrative !== '' || lede !== '' || readings.length > 0;
+  // It WROTE the analysis and our own boundary filter took all of it — which is a completely different thing
+  // to tell someone than "the model didn't answer", and the one they can actually act on. `nothingUsable`
+  // draws exactly this distinction for the other phases; the synthesis parsed, so this is always our side.
+  const filteredOut = !gotSomething
+    ? nothingUsable(out.text, 'analysis', true)
+    : { reason: undefined, message: undefined };
   return {
     ok: gotSomething,
+    ...(filteredOut.reason ? { reason: filteredOut.reason } : {}),
+    ...(filteredOut.message ? { message: filteredOut.message } : {}),
     value: {
       narrative,
       lede,

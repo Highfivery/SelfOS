@@ -1168,6 +1168,52 @@ inner scroller — the deck is a single column at every width, so nothing collap
 
 ## 12. Changelog
 
+- 2026-08-18 — **AMENDED (§3.6.17–§3.6.22): the moments get navigation, the questions get short and tappable,
+  and five silent defects go with them.** Owner-reported: _"In the moment has no navigation… no way back to the
+  category grid, and no way to review or edit answers given for other categories"_ and _"the questions are too
+  long — they should be quick to read, short, easy to answer, and specifically about dirty talk."_
+
+  **§3.6.17 — the probe.** A pass asks up to six questions and every one of them was stamped under the bare
+  AMBIGUITY id; `stampTurn` replaces on `(phase, item.id)`, so answering Q2 destroyed Q1's answer. Six answers
+  typed, one on disk — which is also why the review screen showed a single card, and why the synthesis, whose
+  richest input is this free text, was fed a sixth of it. `probeTurnId`/`ambiguityOfProbeTurn` split the two
+  (crypto-free in `schemas.ts`, so the renderer stamps and the bridge reads back one definition). The questions
+  are now one line under 20 words — **enforced in code, not just asked for** — with 3–5 tappable answers
+  written for that exact question and a folded "say more"; the prompt's interpretive angle is gone, because a
+  reading about the person belongs in their profile where it is labelled as one. A skip records a distinct
+  marker instead of `''`, which every consumer had been counting as an answer.
+
+  **§3.6.19 — the moments.** The generated scenes were never persisted (`options: []` hardcoded at the stamp),
+  so an answered moment could never be re-opened or re-picked, and re-entering a category could only mean
+  spending again on five different ones. Options now travel with the turn, the six categories are a strip that
+  never leaves the screen, and switching is navigation rather than a purchase. Three of the six —
+  `edge`, `sexting`, `phone` — had been written by the engine and reachable from nowhere.
+
+  **§3.6.18 — a failed analysis.** The one AI phase that never carried its own reason, and the one reported
+  three times because of it: `runSynthesis` returned a bare `degraded` on a parse failure and the bridge
+  discarded `ok`/`reason`/`message` regardless, then completed the take and redirected to a report with no
+  profile in it. It now names which failure it was, leaves the take open, and offers both a retry and an
+  explicit `acceptDegraded` finish — the latter because "never complete on a failure" alone is a trap for
+  anyone over budget.
+
+  **§3.6.21/§3.6.22.** The take's running spend in the rail (admin-only by construction — the bridge redacts
+  `costUsd`), comparable rail units, and an area jump for the 36-area words step.
+
+  **Verified LIVE** against the owner's own vault through `createCoreBridge` — the real handlers, not the
+  engine functions — at 132 marks / 245 boundaries: questions 8–13 words (was ~54), 6/6 tappable, **6 of 6
+  answers on disk**, an answered moment keeps its 4 options, `sexting` writes moments, analysis 2,450 chars.
+  Gate: typecheck ×3, lint, format, **2390 core + 1684 desktop** unit, **216 E2E**. The answer-loss guard is
+  verified to FAIL when reverted ("expected 3 but got 1").
+
+  **Lessons: (1) a shared id across N generated items is invisible until something replaces-by-id — the
+  de-duplication fix that made answers editable is what turned a harmless append into silent destruction, so
+  when you add replace-by-key, enumerate everything that writes that key. (2) Paid output that is never
+  persisted (a scene's options) reads as a UI dead end, and the fix is storage, not navigation. (3) A prompt
+  that asks for brevity gets it most of the time; one 27-word question in six is enough to reopen the
+  complaint, so the cap belongs in code — the instruction is belt, the filter is braces. (4) A destructive
+  action called as "cleanup" without reading it cost the owner his whole lexicon: `abandonAdaptiveTake` is the
+  disclosed, confirm-gated "start fresh", not a scratch-draft tidy-up.**
+
 - 2026-08-17 — **AMENDED (§3.6.2): word-level marking stays; REGISTER becomes the axis that carries the rest,
   and a rejected line can become a boundary.** The owner asked whether the bank should be quote-based instead
   of word-based, from a case word-level can't answer on its own: _"they could like I want to fuck your pussy

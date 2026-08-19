@@ -1370,7 +1370,15 @@ export interface AdaptivePhaseView {
 
 export interface AdaptiveProbeView {
   ok: boolean;
+  /** The FIRST question, kept so an older renderer still works. */
   question?: string;
+  /**
+   * Every question this ambiguity asks, with the answers written for each (74 §3.6.16/§3.6.17).
+   *
+   * The answers are the point: the questions are one line now, and what makes a one-line question answerable
+   * is a set of concrete options rather than the paragraph of context that used to precede it.
+   */
+  questions?: { question: string; options: string[] }[];
   /** The AMBIGUITY this question is resolving. The renderer stamps it as the turn's item id, which is what
    *  lets the next call know it has been asked — without it the same ambiguity is returned forever and the
    *  take can never reach synthesis (while billing a call per tap). */
@@ -1385,10 +1393,68 @@ export interface AdaptiveProbeView {
 export interface AdaptiveScenarioView {
   ok: boolean;
   context: string;
+  /** The first moment, kept so an older renderer still works. */
   scene?: string;
   options?: string[];
+  /** Every moment this pass wrote (74 §3.6.16) — answered in any order, and re-answerable. */
+  scenes?: { scene: string; options: string[] }[];
   degraded: boolean;
   /** Why no scene came back. Without it a failed tap is indistinguishable from a button that does nothing. */
+  message?: string;
+}
+
+/**
+ * The turn id for ONE probe question.
+ *
+ * A pass asks up to six questions, and every one of them used to be stamped under the bare ambiguity id.
+ * `stampTurn` replaces a turn keyed on `(phase, item.id)` — deliberately, so a changed answer updates rather
+ * than duplicating (74 §3.6.16) — so the second answer of a pass OVERWROTE the first. Six answers typed, one
+ * on disk: the review screen showed a single card because that was all there was, and the synthesis, whose
+ * richest input is this free text, was fed a sixth of it.
+ *
+ * The ambiguity stays the PREFIX because the bridge picks the next ambiguity by asking what has already been
+ * asked. `ambiguityOfProbeTurn` is the other half of that pair, and both live here — crypto-free — because
+ * the renderer stamps the turn and the bridge reads it back, so one definition has to serve both.
+ */
+export function probeTurnId(ambiguityId: string, question: string): string {
+  return `${ambiguityId}#${question.trim().slice(0, 60)}`;
+}
+
+/** The ambiguity a probe turn belongs to. A pre-fix turn has no `#`, and its whole id IS the ambiguity. */
+export function ambiguityOfProbeTurn(turnId: string): string {
+  const at = turnId.indexOf('#');
+  return at < 0 ? turnId : turnId.slice(0, at);
+}
+
+/**
+ * What a SKIPPED probe question records (74 §3.6.17).
+ *
+ * Skipping has to record the question as asked, or "skip this" hands back the same one forever. It used to
+ * record `''` — which is a string, so every consumer that tested `typeof answer === 'string'` counted a skip
+ * as an answer: the review list showed skipped questions under an "Answered" label with an empty box. A
+ * distinct marker keeps them visible, honestly labelled, and still answerable.
+ */
+export const PROBE_SKIPPED = ' skipped';
+
+/** Whether a turn's answer is a real answer rather than a recorded skip. */
+export function isAnsweredTurn(answer: unknown): answer is string {
+  return typeof answer === 'string' && answer.trim() !== '' && answer !== PROBE_SKIPPED;
+}
+
+/**
+ * The result of asking for the profile (74 §3.6.18).
+ *
+ * The synthesis used to return the state alone, so a failure was indistinguishable from a success at the
+ * seam: the bridge discarded the phase's `ok`, `reason` and `message`, marked the take COMPLETE anyway, and
+ * the renderer sent them to a report that printed one generic sentence whatever had gone wrong. The three
+ * other AI phases each carry their own account of a failure; this is the fourth, and it is the one that got
+ * reported over and over precisely because there was nothing behind the sentence to diagnose from.
+ */
+export interface AdaptiveSynthesisView {
+  /** Whether a profile was actually written. False leaves the take OPEN — nothing is completed on a failure. */
+  ok: boolean;
+  state: AdaptiveStateView | null;
+  /** Why it couldn't, in their words. */
   message?: string;
 }
 

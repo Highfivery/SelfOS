@@ -116,8 +116,18 @@ export type StepState =
 export interface StepStatus {
   step: TakeStep;
   state: StepState;
-  /** Marks made in this step — the SAME unit for every step, so the rail's numbers are comparable. */
+  /** How much has been done in this step. */
   count: number;
+  /**
+   * What `count` COUNTS, so the rail can say it.
+   *
+   * The doc here used to claim one unit for every step "so the rail's numbers are comparable", and they never
+   * were: 132 marks sat next to 6 answered questions next to 8 moment picks, three different things wearing
+   * one bare number. Naming the unit is what makes them readable side by side.
+   */
+  unit?: string;
+  /** The denominator where the step has one — moments are 2 of 6, not 2. */
+  outOf?: number;
   /**
    * How many of those were made in THIS sitting. Marks live in one lexicon across takes, so a retake opens with
    * last time's already on record; where the two differ, both are shown rather than one standing for the other.
@@ -144,6 +154,8 @@ export interface StepInput {
   scenariosAnswered: number;
   /** What was already on record when this sitting opened, for the two marking steps. */
   seeded: { names: number; bank: number };
+  /** How many moment CATEGORIES have at least one answer, and how many there are (74 §3.6.19). */
+  momentCategories: number;
   /** Whether the two identity taps have been answered — that step's "done", since it stamps no turn. */
   identityAnswered: boolean;
   /** Marks that were a yes — a lexicon of nothing but hard nos gives a generator nothing to write from. */
@@ -186,13 +198,34 @@ export function stepStatuses(input: StepInput): StepStatus[] {
     }
   };
 
+  /** What this step's number means, in the person's words. */
+  const unitOf = (id: StepId): { unit?: string; outOf?: number } => {
+    switch (id) {
+      case 'names':
+        return { unit: 'names' };
+      case 'bank':
+        return { unit: 'words' };
+      case 'lines':
+        return { unit: 'lines' };
+      case 'probe':
+        return { unit: 'asked' };
+      case 'scenario':
+        // 74 §3.6.19 — a moment count on its own is meaningless (8 of what?). The denominator is the six
+        // categories, which is the thing a person is actually working through.
+        return { unit: 'moments', outOf: input.momentCategories };
+      default:
+        return {};
+    }
+  };
+
   const freshOf = (id: StepId): number | undefined => {
     if (id === 'names') return Math.max(0, input.nameMarks - input.seeded.names);
     if (id === 'bank') return Math.max(0, input.bankMarks - input.seeded.bank);
     return undefined;
   };
 
-  return TAKE_STEPS.map((step) => {
+  // Annotated, or the trailing `.map` below strips the contextual typing and every `state` widens to string.
+  return TAKE_STEPS.map((step): StepStatus => {
     const count = countOf(step.id);
     const freshCount = freshOf(step.id);
     // Only worth saying when it differs — on a first take every mark IS this sitting's.
@@ -224,7 +257,7 @@ export function stepStatuses(input: StepInput): StepStatus[] {
     }
     if (
       input.phase === phaseForStep(step.id) ||
-      (step.id === 'profile' && input.phase === 'done')
+      (step.id === 'profile' && (input.phase === 'done' || input.phase === 'profile'))
     ) {
       return { step, state: 'now', count, ...fresh };
     }
@@ -235,7 +268,7 @@ export function stepStatuses(input: StepInput): StepStatus[] {
     if (input.skipped.includes(step.id)) return { step, state: 'skipped', count, ...fresh };
     if (input.closed.has(step.id)) return { step, state: 'done', count, ...fresh };
     return { step, state: 'open', count, ...fresh };
-  });
+  }).map((status): StepStatus => ({ ...status, ...unitOf(status.step.id) }));
 }
 
 /** The next step after this one that is worth offering — skipping over anything blocked. */

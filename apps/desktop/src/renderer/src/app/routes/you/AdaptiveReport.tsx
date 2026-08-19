@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Lock } from 'lucide-react';
 import { NO_SIGNAL_BAND, type AdaptiveReading, type LexiconEntry } from '@shared/schemas';
+import { isAnsweredTurn } from '@selfos/core/schemas';
 
 import {
   AdminOnlyBadge,
@@ -295,6 +296,24 @@ export function AdaptiveReport(): JSX.Element {
    * that take's report still opens on a sentence instead of a heading.
    */
   const paragraphs = (latest?.narrative ?? '').split(/\n{2,}/).filter((p) => p.trim() !== '');
+
+  /**
+   * 74 §3.6.20 — the answers, grouped by which step asked for them. Read from the take's own turns, so a
+   * question answered in an earlier sitting reads back the same as one answered a minute ago.
+   */
+  const told = (
+    [
+      { label: 'The questions it asked', phase: 'probe' },
+      { label: 'In the moment', phase: 'scenario' },
+    ] as const
+  )
+    .map((group) => ({
+      label: group.label,
+      items: (latest?.turns ?? [])
+        .filter((turn) => turn.phase === group.phase && isAnsweredTurn(turn.answer))
+        .map((turn) => ({ id: turn.item.id, asked: turn.item.text, said: String(turn.answer) })),
+    }))
+    .filter((group) => group.items.length > 0);
   const lede = latest?.lede ?? paragraphs[0] ?? '';
   const rest = (latest?.lede ? paragraphs : paragraphs.slice(1)).join('\n\n');
   const readings = latest?.readings ?? [];
@@ -655,6 +674,61 @@ export function AdaptiveReport(): JSX.Element {
                       </div>
                     ))}
                   </div>
+                </Card>
+              ) : null}
+
+              {/*
+               * 74 §3.6.20 — what you TOLD it, given back to you.
+               *
+               * The report showed readings, prose, names, words, scores and trends — and nothing you had
+               * actually said. The probe answers and moment picks fed the synthesis as transcript and were
+               * then invisible: reachable only by navigating back into the take's own steps. That is the
+               * same write-only pattern the middle mark had, where hundreds of taps bought nothing the
+               * person could see.
+               *
+               * Folded, because the report was rightly called a long useless page once already. It costs
+               * one row until it is opened.
+               */}
+              {told.length > 0 ? (
+                <Card>
+                  <details className={adaptive.fold}>
+                    <summary>
+                      <Heading level={2}>What you told it</Heading>
+                      <Text size="sm" tone="tertiary">
+                        {told.length} answered — the questions it asked and the moments you picked
+                      </Text>
+                    </summary>
+                    <Stack gap={4}>
+                      {told.map((group) => (
+                        <div key={group.label}>
+                          <Text size="sm" tone="tertiary">
+                            {group.label}
+                          </Text>
+                          <Stack gap={2}>
+                            {group.items.map((item) => (
+                              <div key={item.id} className={adaptive.toldRow}>
+                                <Text size="sm" tone="secondary">
+                                  {item.asked}
+                                </Text>
+                                <Text>
+                                  <b>{item.said}</b>
+                                </Text>
+                              </div>
+                            ))}
+                          </Stack>
+                        </div>
+                      ))}
+                    </Stack>
+                    <button
+                      type="button"
+                      className={adaptive.textLink}
+                      onClick={() =>
+                        navigate(`/tests/${testId}/take`, { state: { step: 'probe' } })
+                      }
+                    >
+                      Change any of these
+                    </button>
+                  </details>
                 </Card>
               ) : null}
 

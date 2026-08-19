@@ -951,6 +951,245 @@ describe('a failed AI phase says so — it never wears a success (74 §3.6.12)',
     // Tapping a moment used to clear the thinking state and set no scene — the same grid, no scene, no
     // error. It read as a button that does nothing.
     await userEvent.click(await screen.findByRole('button', { name: /Build-up/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /Write build-up moments/i }));
     expect(await screen.findByText(/Nothing usable came back/i)).toBeInTheDocument();
+  });
+
+  it('picking a category costs nothing — only asking for moments spends (74 §3.6.19)', async () => {
+    // The strip is navigation, not a purchase. It used to be a grid where a tap WAS the spend, so there was
+    // no way to look at a category — or come back to one you had answered — without paying for five more.
+    const scenario = vi.fn(() => Promise.resolve({ ok: true, context: 'edge', degraded: false }));
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveScenario: scenario as never,
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'scenario', marks: ENOUGH_MARKS });
+
+    // All six are reachable — `edge`, `sexting` and `phone` were written by the engine and offered nowhere.
+    for (const name of ['Build-up', 'During', 'Edge', 'After', 'Sexting', 'Phone']) {
+      await userEvent.click(await screen.findByRole('button', { name: new RegExp(`^${name}`) }));
+    }
+    expect(scenario).not.toHaveBeenCalled();
+  });
+});
+
+describe('typing in an answered question does not take the app down (74 §3.6.16)', () => {
+  beforeEach(() => useAdaptiveTestStore.getState().reset());
+  it('survives a backspace — the value is read before the state updater runs', async () => {
+    // A blank white window: reading `e.currentTarget.value` INSIDE a functional setState throws, because the
+    // updater runs after the event has been handled and React has nulled `currentTarget` by then. One
+    // keystroke in the edit box killed the whole renderer. (`e.target` is NOT nulled, which is why the other
+    // updaters in the app that read `target.value` are fine.)
+    const draft = {
+      id: 'd1',
+      schemaVersion: 1,
+      testId: 'dirty-talk',
+      testVersion: 1,
+      kind: 'adaptive',
+      status: 'draft',
+      subjectPersonId: 'p1',
+      answers: [],
+      scores: [],
+      turns: [
+        {
+          phase: 'probe',
+          item: { id: 'a1', pack: 'probe', text: 'What lands for you?', options: [] },
+          answer: 'ab',
+          at: 'x',
+        },
+      ],
+      takenAt: 'x',
+      createdAt: 'x',
+      updatedAt: 'x',
+    };
+    installMockBridge({
+      testsBank: () => Promise.resolve({ families: [], entries: [] }) as never,
+      testsAdaptiveState: () =>
+        Promise.resolve({
+          testId: 'dirty-talk',
+          title: 'T',
+          blurb: 'b',
+          framing: 'f',
+          estimatedMinutes: 15,
+          draft,
+          latest: null,
+          history: [],
+          lexicon: {
+            schemaVersion: 1,
+            personId: 'p1',
+            entries: [],
+            registers: {},
+            contexts: {},
+            themes: [],
+            wantsToSay: [],
+            boundaries: [],
+            updatedAt: 'x',
+          },
+          ambiguitiesLeft: 1,
+          staleForRetake: false,
+        }) as never,
+    });
+    render(
+      <MemoryRouter initialEntries={['/tests/dirty-talk/take']}>
+        <AdaptiveTake />
+      </MemoryRouter>,
+    );
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    const marks = Object.fromEntries(
+      Array.from({ length: 16 }, (_, i) => [`seed:${i}`, i < 5 ? 'love' : 'okay'] as const),
+    );
+    useAdaptiveTestStore.setState({ phase: 'probe', marks: marks as never });
+    const box = await screen.findByLabelText(/Your answer to: What lands/i);
+    await userEvent.click(box);
+    await userEvent.keyboard('{Backspace}{Backspace}{Backspace}');
+    expect(box).toBeInTheDocument();
+  });
+});
+
+describe('every new control on the AI steps actually works (74 §3.6.16)', () => {
+  const draftWith = (turns: unknown[]) => ({
+    ...DRAFT,
+    turns,
+  });
+  const marks = Object.fromEntries(
+    Array.from({ length: 16 }, (_, i) => [`seed:${i}`, i < 5 ? 'love' : 'okay'] as const),
+  );
+
+  it('shows every answered question, and saving an edit writes it', async () => {
+    const turn = vi.fn(() => Promise.resolve(undefined));
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () =>
+        Promise.resolve(
+          state({
+            draft: draftWith([
+              {
+                phase: 'probe',
+                item: { id: 'a1', pack: 'probe', text: 'First question?', options: [] },
+                answer: 'my answer',
+                at: 'x',
+              },
+            ]) as never,
+          }),
+        ),
+      testsAdaptiveTurn: turn as never,
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'probe', marks: marks as never });
+
+    // The whole set is on screen, not one question with no way back to the last.
+    const box = await screen.findByLabelText(/Your answer to: First question/i);
+    expect(box).toHaveValue('my answer');
+    await userEvent.type(box, ' — changed');
+    await userEvent.click(screen.getByRole('button', { name: /Save this answer/i }));
+    expect(turn).toHaveBeenCalledWith(
+      expect.objectContaining({ phase: 'probe', itemId: 'a1', answer: 'my answer — changed' }),
+    );
+  });
+
+  it('lists every moment, marks the one you picked, and lets you change it', async () => {
+    const turn = vi.fn(() => Promise.resolve(undefined));
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveTurn: turn as never,
+      testsAdaptiveScenario: () =>
+        Promise.resolve({
+          ok: true,
+          context: 'buildUp',
+          degraded: false,
+          scene: 'A moment.',
+          options: ['say this', 'or this'],
+          scenes: [
+            { scene: 'A moment.', options: ['say this', 'or this'] },
+            { scene: 'Another moment.', options: ['third', 'fourth'] },
+          ],
+        }),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'scenario', marks: marks as never });
+    await userEvent.click(await screen.findByRole('button', { name: /^Build-up/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /Write build-up moments/i }));
+
+    // More than one moment per pass — one at a time meant a call per scene and no sense of a set.
+    expect(await screen.findByText('A moment.')).toBeInTheDocument();
+    expect(screen.getByText('Another moment.')).toBeInTheDocument();
+    // …and there is a way to get more, rather than one pass and done.
+    expect(
+      screen.getByRole('button', { name: /Write more build-up moments/i }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'or this' }));
+    // The OPTIONS travel with the turn (74 §3.6.19). They were hardcoded `[]`, so the scene survived and the
+    // choices did not — which is what made an answered moment impossible to re-open or re-pick.
+    expect(turn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phase: 'scenario',
+        answer: 'or this',
+        options: ['say this', 'or this'],
+      }),
+    );
+  });
+
+  it('shows the take’s running spend to an admin, and jumps straight to an area (74 §3.6.21/§3.6.22)', async () => {
+    // The take is the most expensive thing in the app and every step priced itself as "a little of your AI
+    // allowance" — an adjective, seven times, while the real total sat unread on the draft. `costUsd` is
+    // redacted at the bridge for anyone without `budgets.manage`, so its presence IS the admin gate.
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () =>
+        Promise.resolve(state({ draft: { ...DRAFT, costUsd: 0.3142 } as never })),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'bank', marks: marks as never });
+
+    expect(await screen.findByText('$0.31')).toBeInTheDocument();
+    expect(screen.getAllByText(/Admin only/i).length).toBeGreaterThan(0);
+
+    // …and 36 areas with only prev/next meant twenty taps to revisit one. A Select, not a chip row (§12).
+    const jump = await screen.findByLabelText('Go to an area');
+    expect(jump).toBeInTheDocument();
+  });
+
+  it('hides the spend entirely when the bridge redacted it (74 §3.6.21)', async () => {
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'bank', marks: marks as never });
+
+    await screen.findByLabelText('Go to an area');
+    expect(screen.queryByText(/Spent so far/i)).not.toBeInTheDocument();
+  });
+
+  it('the profile step waits to be asked instead of spending on arrival', async () => {
+    const synth = vi.fn(() => Promise.resolve(state()));
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveSynthesize: synth as never,
+    });
+    renderTake();
+    await useAdaptiveTestStore.getState().load('dirty-talk');
+    useAdaptiveTestStore.setState({ phase: 'map', marks: marks as never });
+
+    await userEvent.click(
+      within(await screen.findByRole('list', { name: 'Every step' })).getByRole('button', {
+        name: /Your profile/i,
+      }),
+    );
+    // Navigating to the most expensive step used to RUN it — the one step you could not look at without
+    // paying for it — and, once `done`, it had no view of its own and rendered a blank page.
+    expect(synth).not.toHaveBeenCalled();
+    expect(await screen.findByRole('button', { name: /Write my profile/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Write my profile/i }));
+    expect(synth).toHaveBeenCalled();
   });
 });

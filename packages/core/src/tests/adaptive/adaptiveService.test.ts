@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { memFileSystem } from '../../host/memFileSystem';
+import { probeTurnId, ambiguityOfProbeTurn } from '../../schemas';
 import { readLedger } from '../../questionnaires/askLedger';
 import { listAllInsights, summarizeForContext } from '../../insights/insightStore';
 import { readLexicon, writeLexicon } from './lexicon';
@@ -16,6 +17,7 @@ import {
   recordBankPass,
   recordNamePass,
   recordSplitPass,
+  stampTurn,
   startAdaptiveTake,
 } from './adaptiveService';
 
@@ -477,5 +479,101 @@ describe('74 §3.6.8 — recording the pet-name phase', () => {
     const lex = await readLexicon(fs, key, 'p1');
     expect(lex?.entries.find((e) => e.key === KEY)?.hearState).toBe('never');
     expect(lex?.boundaries).toHaveLength(1);
+  });
+});
+
+describe('a retake keeps what you told it (74 §3.6.16)', () => {
+  it("carries the prior take's answers into the new draft, and an edit replaces rather than duplicates", async () => {
+    const fs = memFileSystem();
+    const key = new Uint8Array(32).fill(9);
+    const now = new Date('2026-08-18T00:00:00.000Z');
+
+    const first = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', now);
+    await stampTurn(fs, key, 'p1', first.id, {
+      phase: 'probe',
+      item: { id: 'a1', pack: 'probe', text: 'What lands?', options: [] },
+      answer: 'the first answer',
+      at: now.toISOString(),
+    });
+    // Editing an answer REPLACES it. Appending made a changed answer a duplicate — both reached the
+    // synthesis, and the ask ledger counted the item twice.
+    await stampTurn(fs, key, 'p1', first.id, {
+      phase: 'probe',
+      item: { id: 'a1', pack: 'probe', text: 'What lands?', options: [] },
+      answer: 'the edited answer',
+      at: now.toISOString(),
+    });
+    const edited = await getAdaptiveResult(fs, key, 'p1', first.id);
+    expect(edited?.turns).toHaveLength(1);
+    expect(edited?.turns?.[0]?.answer).toBe('the edited answer');
+
+    await completeAdaptiveTake(fs, key, DIRTY_TALK, { personId: 'p1', resultId: first.id }, now);
+    const retake = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', now);
+
+    // A retake used to start with `turns: []`, so every line reaction, question answer and moment pick from
+    // last time vanished — while the MARKS survived, because those live in the lexicon. "Keep what you
+    // marked" means keep what they told us too; there was also nothing left to review or edit.
+    expect(retake.id).not.toBe(first.id);
+    expect(retake.turns).toHaveLength(1);
+    expect(retake.turns?.[0]?.answer).toBe('the edited answer');
+  });
+
+  /*
+   * The one that mattered most, and the one nothing was watching.
+   *
+   * `stampTurn` replaces on `(phase, item.id)` — correct, and what makes an answer editable. The probe then
+   * stamped every question of a pass under the bare AMBIGUITY id, so answering the second question silently
+   * destroyed the answer to the first. Six answers typed, one on disk; the review screen showed a single card
+   * because that was all there was, and the synthesis was fed a sixth of the richest input in the take.
+   *
+   * No fixture ever ran a multi-question pass, so a green suite said nothing about it.
+   */
+  it('keeps every answer in one probe pass — a turn per QUESTION, not per ambiguity (74 §3.6.17)', async () => {
+    const fs = memFileSystem();
+    const key = new Uint8Array(32).fill(4);
+    const now = new Date('2026-08-18T00:00:00.000Z');
+    const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', now);
+
+    const ambiguity = 'split:praise';
+    const pass = [
+      'Does "my good girl" hit different from "good girl"?',
+      'Being told what to do — an order, or a request?',
+      'What kills it fastest mid-way through?',
+    ];
+    for (const [i, question] of pass.entries()) {
+      await stampTurn(fs, key, 'p1', draft.id, {
+        phase: 'probe',
+        item: {
+          id: probeTurnId(ambiguity, question),
+          pack: 'probe',
+          text: question,
+          options: ['a', 'b'],
+        },
+        answer: `answer ${i}`,
+        at: now.toISOString(),
+      });
+    }
+
+    const after = await getAdaptiveResult(fs, key, 'p1', draft.id);
+    expect(after?.turns).toHaveLength(3);
+    expect(after?.turns?.map((t) => t.answer)).toEqual(['answer 0', 'answer 1', 'answer 2']);
+    // The options travel with the turn, so an answered question can be re-opened and re-picked.
+    expect(after?.turns?.[0]?.item.options).toEqual(['a', 'b']);
+    // …and every one of them still resolves to the ambiguity the bridge asks about, or the same ambiguity
+    // would be served forever and the step could never finish.
+    expect(new Set(after?.turns?.map((t) => ambiguityOfProbeTurn(t.item.id)))).toEqual(
+      new Set([ambiguity]),
+    );
+
+    // Re-answering ONE of them still replaces in place rather than appending a duplicate.
+    await stampTurn(fs, key, 'p1', draft.id, {
+      phase: 'probe',
+      item: { id: probeTurnId(ambiguity, pass[1]!), pack: 'probe', text: pass[1]!, options: [] },
+      answer: 'changed my mind',
+      at: now.toISOString(),
+    });
+    const revised = await getAdaptiveResult(fs, key, 'p1', draft.id);
+    expect(revised?.turns).toHaveLength(3);
+    expect(revised?.turns?.find((t) => t.item.text === pass[1])?.answer).toBe('changed my mind');
   });
 });

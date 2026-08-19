@@ -249,6 +249,7 @@ import type {
   AdaptiveProbeView,
   AdaptiveScenarioView,
   AdaptiveStateView,
+  AdaptiveSynthesisView,
   EroticLexicon,
 } from '@selfos/core/schemas';
 import type {
@@ -2457,13 +2458,28 @@ export interface SelfosBridge {
     phase: string;
     itemId: string;
     text: string;
+    /**
+     * The choices the item offered (74 §3.6.17). Persisted with the turn, so an answered moment or question
+     * can be re-opened and re-picked; without it the scene survived and its options did not.
+     */
+    options?: string[];
     answer: string | number | string[] | Record<string, number>;
   }): Promise<void>;
-  /** Synthesize + complete the take. Metered `test.adaptive.synthesize`; completes even if it degrades. */
+  /**
+   * Synthesize + complete the take. Metered `test.adaptive.synthesize`.
+   *
+   * A FAILURE leaves the take open and says why (74 §3.6.18): it used to complete regardless and bounce the
+   * person to a report with no profile in it and no account of what happened.
+   */
   testsAdaptiveSynthesize(input: {
     testId: string;
     resultId: string;
-  }): Promise<AdaptiveStateView | null>;
+    /**
+     * Complete the take without the written analysis, after being shown why it failed. The deterministic
+     * half of the profile needs no model, so this is a real outcome — never the default, and never silent.
+     */
+    acceptDegraded?: boolean;
+  }): Promise<AdaptiveSynthesisView>;
   /** Discard an in-flight draft. Nothing is scored, no profile exists. */
   testsAdaptiveAbandon(input: { testId: string; resultId: string }): Promise<void>;
   /** The person's own lexicon — always fully visible to them (74 §8.4). */

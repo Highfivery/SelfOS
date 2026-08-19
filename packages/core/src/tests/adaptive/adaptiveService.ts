@@ -177,7 +177,18 @@ export async function startAdaptiveTake(
     testVersion: def.version,
     subjectPersonId: personId,
     answers: [],
-    turns: [],
+    /*
+     * Carry the prior take's answers forward.
+     *
+     * A retake used to start with `turns: []`, so every line reaction, question answer and moment pick from
+     * last time vanished the moment they tapped Retake — while the MARKS survived (those live in the
+     * lexicon). "Keep what you marked" plainly means keep what they told us too; losing it also meant the
+     * next pass could not build on any of it, and there was nothing to review or edit.
+     *
+     * `stampTurn` replaces by item id, so re-answering one of these updates it rather than duplicating.
+     * "Start fresh" goes through `abandonAdaptiveTake`, which wipes everything — that path is unchanged.
+     */
+    turns: prior?.turns ?? [],
     scores: [],
     ...(prior ? { reTakeOf: prior.id } : {}),
     ...(prior?.insightId ? { insightId: prior.insightId } : {}),
@@ -361,11 +372,13 @@ export async function stampTurn(
 ): Promise<void> {
   const draft = await getAdaptiveResult(fs, key, personId, resultId);
   if (!draft || draft.status !== 'draft') return;
-  await saveResult(fs, key, {
-    ...draft,
-    turns: [...(draft.turns ?? []), turn],
-    updatedAt: turn.at,
-  });
+  // REPLACE a turn for the same item rather than appending a second one. Answers are editable (74 §3.6.16 —
+  // "a way to see what has been answered, edit those answers"), and appending made a changed answer a
+  // duplicate: both reached the synthesis, and the ask ledger counted the item twice.
+  const rest = (draft.turns ?? []).filter(
+    (t) => !(t.phase === turn.phase && t.item.id === turn.item.id),
+  );
+  await saveResult(fs, key, { ...draft, turns: [...rest, turn], updatedAt: turn.at });
 }
 
 /**

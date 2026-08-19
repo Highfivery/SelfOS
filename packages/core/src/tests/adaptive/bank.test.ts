@@ -180,15 +180,40 @@ describe('74 §3.6.8 — the pet-name bank', () => {
     expect(missing).toEqual([]);
   });
 
-  it('keys every name uniquely, including the ones that appear in two registers', () => {
+  it('keys every name uniquely, and says the same thing only once', () => {
     const keys = nameEntries.map((e) => e.key);
     expect(new Set(keys).size).toBe(keys.length);
-    // "papi" is masculine AND other-tongues; each copy is its own row with its own line. The key is
-    // scoped by FAMILY, which is what lets the same word mean different things in two registers --
-    // and is why the 2026-08-19 purge had to cut by (family, text): "my gifted girl" is achievement
-    // praise in names-praise and a girl who was GIVEN AWAY in names-sharing, so a text-keyed cut
-    // would have taken the on-register one with it.
-    expect(keys.filter((k) => k.endsWith(':papi')).length).toBeGreaterThan(1);
+    /*
+     * The key is scoped by FAMILY, which is what lets the same word mean different things in two
+     * registers -- and is why a cut must be by (family, text): "my gifted girl" is achievement praise
+     * in names-praise and a girl who was GIVEN AWAY in names-sharing, so a text-keyed cut would have
+     * taken the on-register one with it.
+     *
+     * That scoping is a licence for a genuine second MEANING, never for the same name twice. `papi`
+     * was in masculine and other-tongues meaning exactly the same thing, so it was marked twice, and
+     * one copy could hold a love while the other held a no -- the same defect the deck/names overlap
+     * had (#534). Both halves are pinned: keys stay unique, and no text repeats.
+     */
+    const texts = nameEntries.map((e) => e.text.trim().toLowerCase());
+    expect(new Set(texts).size).toBe(texts.length);
+  });
+
+  it('never carries a name and its bare form as two rows', () => {
+    // "my love" beside "love" is one name asked twice: the possessive changes nothing about what is
+    // being decided, so it doubled the taps for nothing (owner, 2026-08-19). 184 pairs were cut.
+    const byFamily = new Map<string, Set<string>>();
+    for (const entry of nameEntries) {
+      const set = byFamily.get(entry.family) ?? new Set<string>();
+      set.add(entry.text.trim());
+      byFamily.set(entry.family, set);
+    }
+    const pairs: string[] = [];
+    for (const [family, texts] of byFamily) {
+      for (const text of texts) {
+        if (text.startsWith('my ') && texts.has(text.slice(3))) pairs.push(`${family}: ${text}`);
+      }
+    }
+    expect(pairs).toEqual([]);
   });
 
   it('asks every name BOTH ways — the whole point of the phase', () => {

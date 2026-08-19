@@ -51,6 +51,28 @@ export interface BankFamily {
   phase?: 'names';
 }
 
+/**
+ * 74 §3.6.25 — where a retired name's marks go.
+ *
+ * Cutting a name from the bank does not cut it from anyone's lexicon: every consumer reads the person's
+ * own store, so the mark survives the word (#534). That is right for the answer and wrong for the CONTROL —
+ * the row that could change it goes with the entry, while `suppressedTexts` keeps reading the mark, so a
+ * `never` on a retired name keeps that word out of every generated line with nothing left to lift it on.
+ *
+ * Two kinds of cut, two answers:
+ *
+ * - **retired into another entry** — "my love" was cut because "love" says the same thing, so the mark
+ *   MOVES rather than dying. The survivor's own answer always wins; this only fills a side they left blank.
+ * - **retired outright** — "my paperweight" names nothing anyone is called, so there is nowhere to move it
+ *   and the mark goes with the word.
+ *
+ * Only the first needs recording. The second is derived: an entry whose FAMILY belongs to this bank but
+ * whose KEY no longer does was cut from this bank, whenever that happened and whether or not anyone wrote
+ * it down. Scoping by family is what keeps another adaptive instrument's entries — which share the one
+ * lexicon — out of it entirely.
+ */
+export type BankRetirements = Readonly<Record<string, string>>;
+
 export interface BankEntry {
   key: string;
   text: string;
@@ -132,6 +154,8 @@ export function bankFamily(
 export interface Bank {
   families: readonly BankFamily[];
   entries: readonly BankEntry[];
+  /** Marks on a name this bank retired INTO another one (see {@link BankRetirements}). */
+  retiredInto?: BankRetirements;
 }
 
 export function buildBank(blocks: readonly { family: BankFamily; entries: BankEntry[] }[]): Bank {

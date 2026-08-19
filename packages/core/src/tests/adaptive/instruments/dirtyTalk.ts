@@ -2,6 +2,7 @@ import { DIRTY_TALK_SPINE } from '../spine';
 import type { AdaptiveTestDefinition } from '../types';
 import { DIRTY_TALK_BANK } from './dirtyTalkBank';
 import { DIRTY_TALK_NAMES } from './dirtyTalkNames';
+import { DIRTY_TALK_NAME_RETIREMENTS } from './dirtyTalkRetirements';
 
 /**
  * 74-adaptive-tests — **Dirty Talk**, the first adaptive instrument: a map of the sexual language a person
@@ -32,6 +33,9 @@ export const DIRTY_TALK: AdaptiveTestDefinition = {
   bank: {
     families: [...DIRTY_TALK_NAMES.families, ...DIRTY_TALK_BANK.families],
     entries: [...DIRTY_TALK_NAMES.entries, ...DIRTY_TALK_BANK.entries],
+    // 74 §3.6.25 — where a retired name's marks go. Only the ones with somewhere to GO are listed; a name
+    // cut with no survivor is derived from the family, so the list cannot go stale.
+    retiredInto: DIRTY_TALK_NAME_RETIREMENTS,
   },
   spine: DIRTY_TALK_SPINE,
   // Pass 1 marks what lands across the whole bank; pass 2 splits only what was marked into hear/say; the AI

@@ -7884,46 +7884,56 @@ describe('update awareness (36)', () => {
       });
 
       /**
-       * 74 §3.2 — a `never` a person can no longer reach is the preference the spec was amended to abolish.
+       * 74 §3.2/§3.6.25 — a `never` a person can no longer reach is the preference the spec was amended
+       * to abolish, and a purge is one of two ways to strand one.
        *
-       * A pet-name no lives per DIRECTION, so the report's whole-entry "changed my mind" could not touch it
-       * and the only control was a row in the names phase. Retire the name from the bank — 266 went in #534
-       * and 37 animal-sex names went with this change — and there is no row, while `suppressedTexts` keeps
-       * that word out of every generated line app-wide.
+       * Cutting a name does not cut it from anyone's lexicon (#534), so the mark outlives the row that
+       * could change it while `suppressedTexts` keeps reading it. Measured on the owner's own vault before
+       * this shipped: 173 of 1,110 entries were names the bank had retired, 169 of them still suppressing.
+       * They are now cleared on the next adaptive read, without the person having to find anything.
        */
-      it('lets the report lift a per-direction no on a name the bank no longer carries', async () => {
+      it('clears a mark on a name the bank has retired, on the next read', async () => {
         const { host, bridge, ownerId } = await freshOwner();
         await bridge.testsAcknowledgeAdult();
         const started = await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
         const { fs, key } = (await host.host.vaultAndKey())!;
 
-        // Mark a real name, then make it a retired one: the mark stays, its bank row does not.
         await bridge.testsAdaptiveNames({
           testId: 'dirty-talk',
           resultId: started!.draft!.id,
           marks: { 'names-praise:good-girl': { hear: 'never' } },
           autosave: true,
         });
+        // Retire it the way a purge does: the mark stays on disk, its bank row does not.
         const marked = await readLexicon(fs, key, ownerId);
         await writeLexicon(fs, key, {
           ...marked,
           entries: marked.entries.map((e) =>
-            e.key === 'names-praise:good-girl' ? { ...e, key: 'names-praise:retired-name' } : e,
+            e.key === 'names-praise:good-girl' ? { ...e, key: 'names-praise:a-retired-name' } : e,
           ),
         });
         expect(suppressedTexts(await readLexicon(fs, key, ownerId))).toContain('good girl');
-        // The prune leaves it alone, correctly — it cannot resolve sides for a key the bank never had, and
-        // guessing would delete a custom word the person typed themselves.
-        await bridge.testsAdaptiveState({ testId: 'dirty-talk' });
-        expect(suppressedTexts(await readLexicon(fs, key, ownerId))).toContain('good girl');
 
-        // So the report has to be able to lift it, and now can.
+        await bridge.testsAdaptiveState({ testId: 'dirty-talk' });
+        const after = await readLexicon(fs, key, ownerId);
+        expect(suppressedTexts(after)).not.toContain('good girl');
+        expect(after.entries.some((e) => e.key === 'names-praise:a-retired-name')).toBe(false);
+      });
+
+      it('leaves a custom write-in alone — it was never the bank’s to retire', async () => {
+        const { host, bridge, ownerId } = await freshOwner();
+        await bridge.testsAcknowledgeAdult();
+        await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
         await bridge.testsLexiconEdit({
-          kind: 'clearNameSide',
-          key: 'names-praise:retired-name',
-          side: 'hear',
+          kind: 'addWord',
+          text: 'wreck me',
+          family: 'names-warm',
+          wordKind: 'phrase',
         });
-        expect(suppressedTexts(await readLexicon(fs, key, ownerId))).not.toContain('good girl');
+        await bridge.testsAdaptiveState({ testId: 'dirty-talk' });
+        const { fs, key } = (await host.host.vaultAndKey())!;
+        const after = await readLexicon(fs, key, ownerId);
+        expect(after.entries.some((e) => e.text === 'wreck me')).toBe(true);
       });
 
       it('lifts only the direction asked for, never the other one', async () => {

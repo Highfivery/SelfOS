@@ -829,6 +829,52 @@ itself; conflicted vault copies are surfaced for a person to resolve, never auto
 would be re-pruned on the next adaptive read. A test records what a real two-copy merge would have to solve
 first — a tombstone — so a lifted `never` cannot quietly return from an older device.
 
+### 3.6.25 The second purge, and what happens to marks on a name that goes — APPROVED + **BUILT** (2026-08-19)
+
+The owner, on the register grid: _"several in the object category are not sexual at all"_, then _"purge repetitive
+ones that are duplicative like 'my twin', 'twin' — we don't need the 'my'"_. Two cuts, and a data question the
+first purge (§3.6.11) never answered.
+
+1. **Off-register names — 108 cut.** `names-object` had 50 of 103 that were household inventory rather than
+   objectification: `my paperweight`, `my bookend`, `my doorstop`, `my cog`, `my widget`. It was not only that
+   register — `names-worship` carried a religious-object thesaurus (`my scripture`, `my creed`, `my penance`),
+   `names-playful` was affectionate exasperation rather than a bedroom register (`my scallywag`, `my miscreant`),
+   and `names-masculine` had size-synonym padding. The line is §3.6.11's, applied more strictly: **a thing nobody
+   would ever address a person as.** Reviewing the first draft cut it back from 155 to 108 — furniture play,
+   ashtray play and the watersports vocabulary are real practices with real terms, and `my footstool` is not
+   `my doorstop`.
+2. **A name and its own possessive — 184 cut.** `love` / `my love`, `sir` / `my sir`, `kitten` / `my kitten`:
+   the same name asked twice, because the "my" decides nothing. 189 pairs existed; 184 went (the rest had
+   already gone with the off-register cut). Plus `papi`, the one name in two registers meaning the same thing
+   in both — so it was marked twice and could hold a love in one and a hard no in the other.
+
+**1,912 → 1,619**, every text and key distinct, no register left empty.
+
+**The data question.** A cut name does not leave anyone's lexicon — every consumer reads the person's own store,
+so nobody loses an answer to a purge (§3.6.11). That is right for the ANSWER and wrong for the CONTROL: the row
+that could change it goes with the entry, while `suppressedTexts` keeps reading the mark. A `never` on a retired
+name therefore kept that word out of every generated line with nothing left on any screen to lift it — the
+un-gettable-rid-of preference §3.2 abolished, reached through the bank instead of through orientation.
+**Measured on the owner's own vault: 173 of one account's 1,110 entries were retired names, 169 of them still
+suppressing; the other account had none.**
+
+So `pruneUnshownMarks` gained a retirement pass, which runs wherever it already runs:
+
+- **Retired INTO another name** (`Bank.retiredInto`, frozen in `dirtyTalkRetirements.ts`) — the 184 possessives
+  and `papi`. The survivor says what the retired one said, so the mark **moves**. The survivor's own answer
+  always wins; a migration only fills a side they left genuinely blank, so it can never overwrite something
+  they actually said.
+- **Retired outright** — no survivor, so the mark goes with the word. **Derived, not listed:** an entry whose
+  FAMILY belongs to this bank but whose KEY no longer does was cut from this bank, whenever that happened. That
+  covers §3.6.11's 266 and §3.6.24's 37 without a list that can go stale.
+
+Scoping by family is what makes the derived half safe: the lexicon is ONE store shared by every adaptive intimacy
+instrument, so another instrument's entries carry families this bank has never heard of and are untouched — as is
+a custom write-in, which is the person's own word and was never the bank's to retire.
+
+Verified against the real decrypted vault, not a fixture: **1,110 → 937 entries, 169 words released, and zero
+survivors whose own answer changed.**
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

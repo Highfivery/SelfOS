@@ -339,9 +339,10 @@ export function pruneUnshownMarks(
   who: Orientation,
   now: Date,
 ): { lexicon: EroticLexicon; changed: boolean } {
-  let changed = false;
+  const retired = retireCutMarks(lexicon.entries, bank);
+  let changed = retired.changed;
   const entries: LexiconEntry[] = [];
-  for (const entry of lexicon.entries) {
+  for (const entry of retired.entries) {
     const spec = bankEntry(bank, entry.key);
     if (!spec) {
       entries.push(entry);
@@ -376,6 +377,66 @@ export function pruneUnshownMarks(
   }
   if (!changed) return { lexicon, changed: false };
   return { lexicon: { ...lexicon, entries, updatedAt: now.toISOString() }, changed: true };
+}
+
+/**
+ * 74 §3.6.25 — marks on a name this bank has RETIRED. A separate pass, run before orientation.
+ *
+ * Cutting a name from the bank does not cut it from anyone's lexicon: every consumer reads the person's own
+ * store, so nobody loses an answer to a purge (#534). That is right for the ANSWER and wrong for the
+ * CONTROL — the row that could change it goes with the entry, while `suppressedTexts` keeps reading the
+ * mark. A `never` on a retired name therefore keeps that word out of every generated line with nothing left
+ * on any screen to lift it: the un-gettable-rid-of preference §3.2 abolished, reached through the bank
+ * instead of through orientation.
+ *
+ * Two kinds of cut, two answers:
+ *
+ * - **Retired INTO another name** (`bank.retiredInto`) — "my love" went because "love" says the same thing,
+ *   so the mark MOVES. The survivor's own answer always wins; this only fills a side they left blank, so a
+ *   migration can never overwrite something they actually said.
+ * - **Retired outright** — "my paperweight" names nothing anyone is called, so there is nowhere to move it
+ *   and the mark goes with the word. Derived rather than listed: an entry whose FAMILY belongs to this bank
+ *   but whose KEY no longer does was cut from it, whenever that happened.
+ *
+ * Scoping by family is what makes the derived half safe. The lexicon is ONE store shared by every adaptive
+ * intimacy instrument, so another instrument's entries carry families this bank has never heard of and are
+ * left alone — as is a custom write-in, which is the person's own word and was never the bank's to retire.
+ */
+function retireCutMarks(
+  all: readonly LexiconEntry[],
+  bank: Bank,
+): { entries: LexiconEntry[]; changed: boolean } {
+  const ourFamily = new Set(bank.families.map((family) => family.id));
+  const isRetired = (entry: LexiconEntry): boolean =>
+    !entry.custom && ourFamily.has(entry.family) && bankEntry(bank, entry.key) === undefined;
+  if (!all.some(isRetired)) return { entries: [...all], changed: false };
+
+  const kept = new Map(all.filter((entry) => !isRetired(entry)).map((entry) => [entry.key, entry]));
+  for (const entry of all) {
+    if (!isRetired(entry)) continue;
+    const into = bank.retiredInto?.[entry.key];
+    const spec = into === undefined ? undefined : bankEntry(bank, into);
+    if (into === undefined || spec === undefined) continue; // retired outright — the mark goes with it
+    const survivor = kept.get(into);
+    if (!survivor) {
+      // Nothing marked on the survivor, so the answer moves across whole — under the survivor's own key
+      // and text, or the report would show them a name the bank no longer has.
+      kept.set(into, { ...entry, key: into, text: spec.text, family: spec.family });
+      continue;
+    }
+    kept.set(into, {
+      ...survivor,
+      ...(survivor.state === undefined && entry.state ? { state: entry.state } : {}),
+      ...(survivor.hearState === undefined && entry.hearState
+        ? { hearState: entry.hearState }
+        : {}),
+      ...(survivor.sayState === undefined && entry.sayState ? { sayState: entry.sayState } : {}),
+      // A rating only fills a side the survivor left genuinely unanswered.
+      hear: survivor.hearState === undefined && survivor.hear === 0 ? entry.hear : survivor.hear,
+      say: survivor.sayState === undefined && survivor.say === 0 ? entry.say : survivor.say,
+    });
+  }
+  return { entries: [...kept.values()], changed: true };
 }
 
 /** Pass 2 — the hear/say split, applied only to entries pass 1 marked. */

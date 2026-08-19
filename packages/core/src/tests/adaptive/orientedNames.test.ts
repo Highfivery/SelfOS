@@ -4,7 +4,8 @@ import { DIRTY_TALK_BANK } from './instruments/dirtyTalkBank';
 import { bankEntry, type Bank, type BankEntry } from './bank';
 import { OPEN_ORIENTATION, shownSides, type Orientation } from './orientation';
 import { applyNameMarks, pruneUnshownMarks, suppressedTexts } from './lexicon';
-import type { EroticLexicon } from '../../schemas';
+import { DIRTY_TALK } from './instruments/dirtyTalk';
+import type { EroticLexicon, LexiconEntry } from '../../schemas';
 
 /**
  * 74 §3.6.3 — pet names are oriented (owner-directed, 2026-08-19), reversing §3.6.8's carve-out.
@@ -49,7 +50,7 @@ describe('names are oriented per direction', () => {
       'names-rough-heavy:slut',
       'names-warm:angel',
       'names-warm:baby',
-      'names-soft-power:my-kitten',
+      'names-soft-power:kitten',
     ]) {
       expect(shownSides(name(key), STRAIGHT_MAN)).toEqual(['hear', 'say']);
     }
@@ -249,11 +250,10 @@ describe('a gendered role noun is tagged wherever its family already tags its si
   const tag = (key: string): string | undefined => name(key).addresses;
 
   it('tags an honorific the same way as its counterpart', () => {
-    // `sir` was tagged and `ma'am` — the female form of the same word — was not.
+    // `sir` was tagged and `ma'am` — the female form of the same word — was not. (`my sir` / `my ma'am`
+    // carried the same tags and were cut with the 184 other bare/"my" pairs.)
     expect(tag('names-hard-power:sir')).toBe('man');
     expect(tag('names-hard-power:ma-am')).toBe('girl');
-    expect(tag('names-hard-power:my-sir')).toBe('man');
-    expect(tag('names-hard-power:my-ma-am')).toBe('girl');
     // The neutral form of the same role stays open — it is the tagging criterion, not the topic, that decides.
     expect(tag('names-hard-power:my-dominant')).toBeUndefined();
     expect(tag('names-hard-power:dominatrix')).toBe('girl');
@@ -309,5 +309,92 @@ describe('the self-label family stays un-oriented', () => {
     expect(
       shownSides(entry(DIRTY_TALK_BANK, 'self-labelling:i-m-your-good-girl'), STRAIGHT_MAN),
     ).toEqual(['hear', 'say']);
+  });
+});
+
+/**
+ * 74 §3.6.25 — a mark on a name the bank has RETIRED.
+ *
+ * Cutting a name does not cut it from anyone's lexicon: every consumer reads the person's own store, so
+ * nobody loses an answer to a purge (#534). Right for the answer, wrong for the CONTROL — the row that
+ * could change it goes with the entry while `suppressedTexts` keeps reading the mark, so a `never` on a
+ * retired name kept that word out of every generated line with nothing left on any screen to lift it.
+ *
+ * Measured on the real vault before this shipped: 173 of one person's 1,110 entries were retired names,
+ * 169 of them still suppressing. The other account had none.
+ */
+describe('a mark on a name the bank retired', () => {
+  const lex = (entries: LexiconEntry[]): EroticLexicon => ({
+    personId: 'p1',
+    schemaVersion: 1,
+    entries,
+    registers: {},
+    contexts: {},
+    themes: [],
+    wantsToSay: [],
+    boundaries: [],
+    updatedAt: '2026-08-19T00:00:00.000Z',
+  });
+  const mark = (key: string, family: string, over: Partial<LexiconEntry> = {}): LexiconEntry => ({
+    key,
+    text: key.split(':')[1] ?? key,
+    kind: 'word',
+    family,
+    tier: 3,
+    hear: 0,
+    say: 0,
+    ...over,
+  });
+
+  it('stops suppressing a word whose name was cut with nowhere to go', () => {
+    const before = lex([
+      mark('names-object:my-paperweight', 'names-object', { hearState: 'never' }),
+    ]);
+    expect(suppressedTexts(before)).toContain('my-paperweight');
+    const after = pruneUnshownMarks(before, DIRTY_TALK.bank, OPEN_ORIENTATION, new Date());
+    expect(after.changed).toBe(true);
+    expect(after.lexicon.entries).toEqual([]);
+  });
+
+  it('MOVES the mark when the name was retired into another that says the same thing', () => {
+    // "my love" went because "love" says it; the answer is the same answer, so it survives the word.
+    const after = pruneUnshownMarks(
+      lex([mark('names-warm:my-love', 'names-warm', { hearState: 'love', hear: 3 })]),
+      DIRTY_TALK.bank,
+      OPEN_ORIENTATION,
+      new Date(),
+    );
+    const moved = after.lexicon.entries.find((e) => e.key === 'names-warm:love');
+    expect(moved?.hearState).toBe('love');
+    // Under the SURVIVOR's own text, or the report shows them a name the bank no longer has.
+    expect(moved?.text).toBe('love');
+    expect(after.lexicon.entries.some((e) => e.key === 'names-warm:my-love')).toBe(false);
+  });
+
+  it('never overwrites what they said about the survivor', () => {
+    // The whole risk of a migration. Their answer on the surviving name wins; the retired one only fills
+    // a side they left genuinely blank.
+    const after = pruneUnshownMarks(
+      lex([
+        mark('names-warm:love', 'names-warm', { hearState: 'never' }),
+        mark('names-warm:my-love', 'names-warm', { hearState: 'love', sayState: 'love', say: 3 }),
+      ]),
+      DIRTY_TALK.bank,
+      OPEN_ORIENTATION,
+      new Date(),
+    );
+    const kept = after.lexicon.entries.find((e) => e.key === 'names-warm:love');
+    expect(kept?.hearState).toBe('never'); // theirs, untouched
+    expect(kept?.sayState).toBe('love'); // the side they had left blank
+  });
+
+  it('never touches a custom write-in or another instrument’s entry', () => {
+    const before = lex([
+      mark('custom:names-warm:my-own-word', 'names-warm', { custom: true, hearState: 'never' }),
+      mark('fantasy-scenes:some-scene', 'fantasy-scenes', { hearState: 'never' }),
+    ]);
+    const after = pruneUnshownMarks(before, DIRTY_TALK.bank, OPEN_ORIENTATION, new Date());
+    expect(after.changed).toBe(false);
+    expect(after.lexicon.entries).toHaveLength(2);
   });
 });

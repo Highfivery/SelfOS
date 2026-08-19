@@ -16638,6 +16638,24 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     // leave, so finishing now lands straight on the report.
     await expect(w.getByRole('button', { name: 'Read it' })).toHaveCount(0);
 
+    /*
+     * 74 §3.6.18 — the profile step WAITS to be asked (the most expensive step was the only one you could
+     * not look at without paying for it), and a failure STAYS HERE and says which failure it was.
+     *
+     * AI is off in this vault, so this is the failure path: it names the reason instead of completing the
+     * take and dropping them on a report with no profile in it and one generic sentence about it.
+     */
+    await w.getByRole('button', { name: /Write my profile/i }).click();
+    // Assert the BEHAVIOUR, not one particular reason: which failure this is depends on the vault (no key,
+    // over budget, a reply that won't parse), and the point of §3.6.18 is that it names whichever it was and
+    // stays put. Pinning one message makes the test a statement about the fake rather than about the app.
+    await expect(w.getByText(/Nothing was lost/i)).toBeVisible();
+    await expect(w.getByRole('button', { name: /Try the analysis again/i })).toBeVisible();
+    await w.screenshot({ path: 'e2e-artifacts/74-analysis-failed.png' });
+    // …and the deliberate way out, so a take whose analysis cannot run is never unfinishable. The rest of
+    // the profile is computed from the lexicon with no model involved.
+    await w.getByRole('button', { name: /Finish without the written analysis/i }).click();
+
     // The report renders from the deterministic scores, honestly labelled as the short version.
     await expect(w.getByText(/didn.t come through this time/i)).toBeVisible();
     await expect(w.getByText('Being claimed')).toBeVisible();
@@ -16943,6 +16961,16 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
       if (await moment.isVisible().catch(() => false)) {
         await moment.click();
         await settle();
+        /*
+         * 74 §3.6.19 — picking a category is NAVIGATION, not a purchase, so it no longer writes anything on
+         * its own. Asking for the moments is the second, deliberate tap — without it this walk stops
+         * exercising the scenario phase at all, which is exactly how that phase shipped untested before.
+         */
+        const write = w.getByRole('button', { name: /Write build-up moments/i }).first();
+        if (await write.isVisible().catch(() => false)) {
+          await write.click();
+          await settle();
+        }
         await shot(`${file}-asked`);
       }
     }
@@ -16952,6 +16980,31 @@ test('74 §3.6.9 AUDIT: every step of the take, at desktop and at 390px', async 
       .getByRole('button', { name: /Finish — show me my profile|Next: your profile/i })
       .first()
       .click();
+    // `settle` is scoped to the per-step loop above; this is outside it.
+    await w.waitForTimeout(600);
+    /*
+     * The profile step WAITS to be asked (74 §3.6.9) — "Next: your profile" navigates to it and spends
+     * nothing, which is the whole point of that change. Without this the walk sat on the step until its
+     * budget ran out, waiting for a report nothing had asked for.
+     */
+    const write = w.getByRole('button', { name: /Write my profile/i }).first();
+    if (await write.isVisible().catch(() => false)) await write.click();
+    /*
+     * 74 §3.6.18 — a failed analysis STAYS on the step and names the failure, rather than completing the take
+     * and dropping them on a report with nothing in it. AI is off in this vault, so that is this walk's path:
+     * take the disclosed way out, which finishes on the deterministic profile.
+     */
+    const degraded = w
+      .getByRole('button', { name: /Finish without the written analysis/i })
+      .first();
+    // WAIT for it rather than probing once: the synthesis is a real call, so an immediate `isVisible` is
+    // false while it is still running, the walk skips the escape, and then sits out its whole 180s budget
+    // waiting for a report that was never going to arrive.
+    await degraded.waitFor({ state: 'visible', timeout: 20_000 }).catch(() => undefined);
+    if (await degraded.isVisible().catch(() => false)) {
+      await shot('13-step8-analysis-failed');
+      await degraded.click();
+    }
     // `done` is not a screen (74 §3.6.13): it used to render a banner and a button whose only job was to
     // leave, so finishing now lands straight on the report.
     await expect(w.getByRole('button', { name: 'Read it' })).toHaveCount(0);

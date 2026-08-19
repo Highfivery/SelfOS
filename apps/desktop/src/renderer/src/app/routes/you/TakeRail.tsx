@@ -1,5 +1,5 @@
 import { Check, Lock, Minus, Sparkles } from 'lucide-react';
-import { Button, Card, Text } from '../../../design-system/components';
+import { AdminOnlyBadge, Button, Card, Text } from '../../../design-system/components';
 import type { StepId, StepStatus } from './takeSteps';
 import adaptive from './Adaptive.module.css';
 
@@ -32,7 +32,11 @@ function trailing(status: StepStatus): string | null {
   if (status.outstanding) return `${status.outstanding} new to do`;
   // A retake opens with last time's marks already on record, so one number would be standing for the other.
   if (status.fresh) return `${status.count} · ${status.fresh} today`;
-  if (status.count > 0) return String(status.count);
+  // A denominator where there is one — "2 of 6" moments, not a bare "2" that names nothing.
+  if (status.outOf) return `${status.count} of ${status.outOf}`;
+  // …otherwise the unit, because 132 next to 6 next to 8 is three different things wearing one number.
+  if (status.count > 0)
+    return status.unit ? `${status.count} ${status.unit}` : String(status.count);
   return null;
 }
 
@@ -42,6 +46,7 @@ export function TakeRail({
   actions,
   saveState,
   extra,
+  spendUsd,
 }: {
   statuses: readonly StepStatus[];
   onGo: (id: StepId) => void;
@@ -50,6 +55,17 @@ export function TakeRail({
   saveState?: JSX.Element | null;
   /** The step's own running state (a marks tally), above the steps it belongs to. */
   extra?: JSX.Element | null;
+  /**
+   * 74 §3.6.21 — what this take has cost so far.
+   *
+   * ADMIN-ONLY BY CONSTRUCTION: `costUsd` is redacted at the bridge for anyone without `budgets.manage`
+   * (the durable 06 rule — the $ boundary is the bridge, not the UI), so the field being present IS the
+   * gate. Undefined renders nothing.
+   *
+   * The take is the most expensive thing in SelfOS and every step described its price as "a little of your
+   * AI allowance" — an adjective, seven times over, while the real running total sat on the draft unread.
+   */
+  spendUsd?: number | undefined;
 }): JSX.Element {
   return (
     <aside className={adaptive.rail} aria-label="The steps, and where to go next">
@@ -63,6 +79,18 @@ export function TakeRail({
         <div className={adaptive.railActions}>{actions}</div>
         {saveState ? <div className={adaptive.railSaved}>{saveState}</div> : null}
       </Card>
+      {spendUsd !== undefined ? (
+        <Card className={adaptive.railCard}>
+          <div className={adaptive.railHead}>This take</div>
+          <div className={adaptive.spendRow}>
+            <Text as="span" size="sm" tone="secondary">
+              Spent so far
+            </Text>
+            <b>${spendUsd.toFixed(2)}</b>
+          </div>
+          <AdminOnlyBadge />
+        </Card>
+      ) : null}
       {extra ?? null}
       <Card className={`${adaptive.railCard} ${adaptive.railSteps}`}>
         <div className={adaptive.railHead}>The steps</div>

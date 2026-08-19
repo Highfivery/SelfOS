@@ -1921,7 +1921,9 @@
 /* The three moments, as cards that say what they are. */
 .momentGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  /* `min()` on the track minimum, or a 200px floor never shrinks and the strip spills past its own card at
+     phone width (the §12 auto-fit trap this codebase has already been bitten by). */
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
   gap: var(--space-3);
 }
 .moment {
@@ -1943,6 +1945,15 @@
 }
 .momentDone {
   border-color: var(--color-accent-solid);
+}
+/* The category currently being shown. Distinct from `momentDone` — one is "you have answered some of this",
+   the other is "this is what you are looking at", and a strip that never leaves the screen needs both. */
+.momentOpen {
+  border-color: var(--color-accent-solid);
+  background: var(--color-accent-subtle-bg);
+}
+.momentOpen .momentBlurb {
+  color: var(--color-accent-text);
 }
 .momentTop {
   display: flex;
@@ -2283,4 +2294,40 @@
   padding-block: var(--space-2);
   text-align: left;
   justify-content: flex-start;
+}
+
+/* 74 §3.6.20 — one answered question (or moment) in "What you told it": what was asked, quiet and small,
+   over what they said. The answer is the thing being read back, so it leads on weight. */
+.toldRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.toldRow:last-child {
+  border-bottom: none;
+}
+
+/* 74 §3.6.21 — the take's running spend in the rail. Admin-only; the bridge redacts the figure itself. */
+.spendRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.spendRow > b {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 74 §3.6.22 — jump straight to an area. Bounded so it doesn't dominate the header row, and full-width on a
+   phone where the head stacks (36 options need a Select, never a chip row — §12). */
+.areaJump {
+  max-width: 260px;
+}
+@media (max-width: 620px) {
+  .areaJump {
+    max-width: none;
+    width: 100%;
+  }
 }

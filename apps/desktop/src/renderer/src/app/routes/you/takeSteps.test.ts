@@ -18,6 +18,7 @@ const BASE: StepInput = {
   lineReactions: 0,
   probesAnswered: 0,
   scenariosAnswered: 0,
+  momentCategories: 6,
   loved: 0,
   seeded: { names: 0, bank: 0 },
   identityAnswered: false,

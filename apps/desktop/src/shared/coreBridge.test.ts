@@ -7672,13 +7672,29 @@ describe('update awareness (36)', () => {
           splits: { 'names-praise:good-girl': { hear: 4, say: 0 } },
         });
 
-        // Synthesize + complete. AI is off in this host, so it degrades — and STILL completes.
-        const done = await bridge.testsAdaptiveSynthesize({
+        /*
+         * Synthesize. AI is off in this host, so the written analysis cannot run — and a failure no longer
+         * completes the take silently (74 §3.6.18). It says why, and leaves the draft open.
+         */
+        const blocked = await bridge.testsAdaptiveSynthesize({
           testId: 'dirty-talk',
           resultId: resultId!,
         });
-        expect(done?.latest?.status).toBe('complete');
-        expect(done?.draft).toBeNull();
+        expect(blocked.ok).toBe(false);
+        expect(blocked.message).toBeTruthy();
+        expect(blocked.state?.draft).not.toBeNull();
+        expect(blocked.state?.latest?.status).not.toBe('complete');
+
+        // …and the deliberate way out, so a person whose analysis keeps failing is never stuck with an
+        // unfinishable take: the deterministic profile is computed from the lexicon and stands on its own.
+        const done = await bridge.testsAdaptiveSynthesize({
+          testId: 'dirty-talk',
+          resultId: resultId!,
+          acceptDegraded: true,
+        });
+        expect(done.ok).toBe(true);
+        expect(done.state?.latest?.status).toBe('complete');
+        expect(done.state?.draft).toBeNull();
 
         // The lexicon is encrypted on disk, and the derived Insight feeds the taker's OWN intimacy context.
         const { fs, key } = (await host.host.vaultAndKey())!;

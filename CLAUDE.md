@@ -524,6 +524,47 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-18 — **Fix (the moments had no way out, the questions were paragraphs, and five defects nobody had
+  reported; owner-reported twice; SPEC 74 §3.6.17–§3.6.22; on `fix/dirty-talk-moments-and-questions`).** _"In
+  the moment has no navigation… no way to review or edit answers given for other categories"_ and _"the
+  questions are too long — short, easy to answer, and specifically about dirty talk"_. **Read the code before
+  proposing anything, and found worse than was reported.** (1) **A pass's six probe answers collapsed into
+  one.** Every question of a pass was stamped under the bare AMBIGUITY id, and the previous session's own fix —
+  making `stampTurn` replace by item so an answer could be edited — turned that from a harmless append into
+  silent destruction: answering Q2 overwrote Q1. Six answers typed, one on disk; the review screen showed a
+  single card because that was all there was, and the synthesis was fed a sixth of its richest input. (2) **A
+  moment's options were never saved** (`options: []` hardcoded at the stamp), so an answered moment could never
+  be re-opened or re-picked, and the only thing a "done" category could do was spend again on five different
+  moments — which is what read as a dead end. (3) **Three of six categories were unreachable** (`edge`,
+  `sexting`, `phone` — written by the engine, offered nowhere). (4) **A skip recorded `''`**, a string, so every
+  consumer counted it as an answer. (5) **The analysis failure was completely silent** — `runSynthesis`
+  returned no reason on a parse failure and the bridge discarded `ok`/`reason`/`message` anyway, then completed
+  the take and redirected to a report with no profile in it. Three of four phases got the reason-threading fix;
+  the fourth is the one the owner reported three times. **Built:** per-question turn ids (`probeTurnId` /
+  `ambiguityOfProbeTurn`, crypto-free so the renderer stamps and the bridge reads back ONE definition); short
+  questions **enforced in code** with 3–5 tappable answers + a folded "say more", the interpretive angle
+  dropped (a reading about a person belongs in their profile, labelled as one); a six-category strip that never
+  leaves the screen where switching is navigation, not a purchase; a failed analysis that names itself, stays
+  put, and offers a retry AND an explicit `acceptDegraded` finish (never completing on a failure alone is a
+  trap for anyone over budget); the folded "What you told it" in the report; the take's running spend in the
+  rail; comparable rail units; an area jump for the 36-area words step. **Verified LIVE against the owner's own
+  vault through `createCoreBridge` — the real handlers, not the engine functions — at 132 marks / 245
+  boundaries:** questions 8–13 words (was ~54), 6/6 tappable, **6 of 6 answers on disk**, an answered moment
+  keeps its options, `sexting` writes moments, analysis 2,450 chars. Gate: typecheck ×3, lint, format, **2390
+  core + 1684 desktop** unit, **216 E2E** (the lone failure is the documented accumulated-load flake — 3/3 in
+  isolation on a clean tree). The answer-loss guard is **verified to FAIL when reverted** ("expected 3 but got
+  1"). **Lessons: (1) when you make a write replace-by-key, enumerate every caller that writes that key — the
+  de-dup fix that made answers editable is exactly what made a shared id destructive, and no fixture ran a
+  multi-question pass so a green suite said nothing. (2) Paid output that is never persisted reads as a UI dead
+  end; the fix is storage, not navigation. (3) A prompt that asks for brevity gets it most of the time — one
+  27-word question in six reopens the complaint, so the cap belongs in code (the instruction is belt, the
+  filter is braces), and only the LIVE run showed it. (4) NEVER call a destructive op as "cleanup" without
+  reading it: I ended the harness with `testsAdaptiveAbandon` on the strength of a changelog line and wiped the
+  owner's 132 marks and 245 boundaries — it is the disclosed, confirm-gated "start fresh", not a scratch-draft
+  tidy-up. (5) A harness that fakes a host type must use the APP's field names: mine used the SDK's raw usage
+  fields, so cost computed to NaN, JSON wrote it as `null`, and the poisoned event made every budget check for
+  that person throw — taking AI down app-wide until the shard was repaired.**
+
 <<<<<<< Updated upstream
 
 - 2026-08-18 — **Fix (an emailed question got the same three buttons every time; owner-reported a SECOND

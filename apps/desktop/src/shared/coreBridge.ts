@@ -902,7 +902,6 @@ import {
   shownSides,
   deckFamilies,
   nameFamilies,
-  openDraft,
   recordNamePass,
   type AdaptiveTestDefinition,
   type Orientation,
@@ -4351,7 +4350,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // governs the DECK, where a line naming a body either fits or doesn't.
       const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
       const byKey = new Map((lexicon?.entries ?? []).map((entry) => [entry.key, entry]));
-      const draftId = (await openDraft(gate.ctx.fs, gate.ctx.key, gate.personId, testId))?.id;
       const families = nameFamilies(gate.def.bank);
       const entriesFor = (familyId: string) =>
         gate.def.bank.entries.filter((entry) => entry.family === familyId);
@@ -4387,19 +4385,17 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             minTier: Math.min(...tiers, 5),
             maxTier: Math.max(...tiers, 1),
             samples: own.slice(0, 3).map((entry) => entry.text),
-            marked: own.filter((entry) => {
-              const mark = byKey.get(entry.key);
-              return mark?.hearState !== undefined || mark?.sayState !== undefined;
-            }).length,
+            // No `marked` count here on purpose. It was fetched once at mount and never recomputed, so a
+            // register marked in THIS sitting kept reading "Not opened" (owner-reported 2026-08-19). Every
+            // fact it carried is already in `entries`, so the renderer derives all of it from the marks it
+            // holds live — one source of truth, and instant.
           };
         }),
         entries: families.flatMap((family) =>
           entriesFor(family.id).map((entry) => {
             const mark = byKey.get(entry.key);
-            // Settled = ruled out in an EARLIER take. One made in this sitting stays editable, exactly as the
-            // deck treats a boundary made a minute ago (74 §3.4).
-            const settled = (side: 'hearState' | 'sayState'): boolean =>
-              mark?.[side] === 'never' && mark.source !== `test:${draftId ?? ''}`;
+            // Nothing is "settled" any more: a `never` is a preference, changeable in any sitting
+            // (74 §3.2, amended 2026-08-19).
             return {
               key: entry.key,
               text: entry.text,
@@ -4408,8 +4404,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
               example: entry.example ?? entry.text,
               ...(mark?.hearState ? { hearState: mark.hearState } : {}),
               ...(mark?.sayState ? { sayState: mark.sayState } : {}),
-              ...(settled('hearState') ? { settledHear: true } : {}),
-              ...(settled('sayState') ? { settledSay: true } : {}),
             };
           }),
         ),

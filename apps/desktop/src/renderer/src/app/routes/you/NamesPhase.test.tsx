@@ -21,7 +21,6 @@ const NAMES: AdaptiveNamesView = {
       minTier: 2,
       maxTier: 2,
       samples: ['good girl', 'good boy'],
-      marked: 0,
     },
     {
       id: 'names-rough-heavy',
@@ -30,7 +29,6 @@ const NAMES: AdaptiveNamesView = {
       minTier: 4,
       maxTier: 5,
       samples: ['slut'],
-      marked: 3,
     },
   ],
   entries: [
@@ -54,8 +52,8 @@ const NAMES: AdaptiveNamesView = {
       family: 'names-rough-heavy',
       tier: 4,
       example: 'that’s my slut',
-      // Ruled out to hear in an EARLIER take — settled, and not re-offered.
-      settledHear: true,
+      // Ruled out to hear in an EARLIER take. Still re-markable: a no is a preference now (74 §3.2).
+      hearState: 'never',
     },
   ],
 };
@@ -76,15 +74,69 @@ describe('NamesPhase (74 §3.6.8)', () => {
     await useAdaptiveTestStore.getState().loadNames('dirty-talk');
   }
 
-  it('opens on the registers, not on 2,000 rows — with the count and real names on each card', async () => {
+  it('opens on the registers, not on 2,000 rows — real names, the range in words, and progress', async () => {
     await load();
     renderPhase();
     const card = screen.getByRole('button', { name: /praise/i });
-    expect(card).toHaveTextContent('2');
     // Never choosing blind: real names from inside it.
     expect(card).toHaveTextContent('good girl');
-    // A started register reads as started — that is the unit of progress, not a row.
-    expect(screen.getByRole('button', { name: /rough, heavy/i })).toHaveTextContent('3 marked');
+    // How far it goes, said in words — the five-pip meter it replaced encoded a RANGE and read as an AMOUNT.
+    expect(card).toHaveTextContent(/gentle/i);
+    expect(card).toHaveTextContent('2 names, none marked yet');
+    // A register whose names carry a mark from an earlier sitting reads as started, from the SEEDED marks.
+    const rough = screen.getByRole('button', { name: /rough, heavy/i });
+    expect(rough).toHaveTextContent('100%');
+    expect(rough).toHaveTextContent('1 of 1 names marked');
+    expect(rough).toHaveTextContent(/all marked/i);
+    expect(rough).toHaveTextContent(/strong to intense/i);
+  });
+
+  it('THE BUG: a register marked in THIS sitting stops reading "none marked yet" immediately', async () => {
+    // It used to keep the mount-time server count forever, so a register you had just worked through still
+    // read "Not opened" until the take was reloaded (owner-reported 2026-08-19).
+    await load();
+    renderPhase();
+    expect(screen.getByRole('button', { name: /praise/i })).toHaveTextContent(
+      '2 names, none marked yet',
+    );
+    await userEvent.click(screen.getByRole('button', { name: /praise/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'good girl — Angel → Ben — love it' }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: /Done with this one/i }));
+    const card = screen.getByRole('button', { name: /praise/i });
+    expect(card).toHaveTextContent('1 of 2 names marked');
+    expect(card).toHaveTextContent('50%');
+    expect(card).not.toHaveTextContent('none marked yet');
+  });
+
+  it('counts love / okay / never as names, and they reconcile with the marked total', async () => {
+    await load();
+    renderPhase();
+    await userEvent.click(screen.getByRole('button', { name: /praise/i }));
+    await userEvent.click(
+      screen.getByRole('button', { name: 'good girl — Angel → Ben — love it' }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'good boy — Angel → Ben — never' }));
+    await userEvent.click(screen.getByRole('button', { name: /Done with this one/i }));
+    const card = screen.getByRole('button', { name: /praise/i });
+    expect(card).toHaveTextContent('2 of 2 names marked');
+    // One loved, one ruled out — mutually exclusive, so they sum to the marked total.
+    expect(card).toHaveTextContent(/you love/i);
+    expect(card).toHaveTextContent(/not for you/i);
+  });
+
+  it('sorts in progress first by default, and re-sorts on demand', async () => {
+    await load();
+    renderPhase();
+    const names = (): string[] =>
+      screen
+        .getAllByRole('button', { name: /praise|rough, heavy/i })
+        .map((el) => el.textContent ?? '');
+    // rough-heavy is fully marked, so it sinks below the untouched one.
+    expect(names()[0]).toMatch(/praise/i);
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /sort/i }), 'hot');
+    expect(names()[0]).toMatch(/rough, heavy/i);
   });
 
   it('asks each name TWICE, in columns carrying both real names', async () => {
@@ -144,19 +196,21 @@ describe('NamesPhase (74 §3.6.8)', () => {
     );
   });
 
-  it('leaves an EARLIER take’s hard no settled on its own side only', async () => {
+  it('lets an EARLIER take’s no be changed — nothing is off the table for good (74 §3.2)', async () => {
     await load();
     renderPhase();
     await userEvent.click(screen.getByRole('button', { name: /rough, heavy/i }));
-    // "slut" appears as the name AND inside its own example, so scope to the name element itself.
-    expect(screen.getByText(/off the table/i)).toBeInTheDocument();
-    // …and the other direction is still live, because a boundary is per-direction now.
-    expect(
-      screen.getByRole('button', { name: 'slut — Ben → Angel — love it' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: 'slut — Angel → Ben — love it' }),
-    ).not.toBeInTheDocument();
+    // The row is no longer locked out, on either side.
+    expect(screen.queryByText(/off the table/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'slut — Angel → Ben — never' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    // …and tapping a different mark actually changes it.
+    await userEvent.click(screen.getByRole('button', { name: 'slut — Angel → Ben — love it' }));
+    expect(useAdaptiveTestStore.getState().nameMarks['names-rough-heavy:slut']).toMatchObject({
+      hear: 'love',
+    });
   });
 
   it('shows the shared step rail on BOTH screens, and only the register has its own primary', async () => {

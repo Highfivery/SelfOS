@@ -530,6 +530,45 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-19 — **Build + owner decision (the pet-name bank is purged to what could be said in bed; a `never`
+  becomes a PREFERENCE; the register grid redesigned; owner-reported bug fixed; SPEC 74 §3.6.11/§3.6.12; on
+  `feat/pet-names-redesign`).** Three things, asked one at a time and mocked up before any code. **(1) The purge.**
+  _"many that are not sexual at all"_ — right: 2,215 names carried pumpkin, muffin, my sprout, goober, doofus, my
+  MVP, my teammate, sleepyhead. Owner picked the line: **could it plausibly be said in bed?** 266 cut → **1,949**,
+  all inside seven registers; the other seventeen were already on-register. **Cut by (family, text), never text
+  alone** — three names live in two registers with different meanings, and `my gifted girl` is achievement praise
+  in `names-praise` and a girl who was GIVEN AWAY in `names-sharing`, so a text-keyed cut would have destroyed the
+  on-register copy (verified at lines 296/1985, not assumed). Two rules settled the edges: a foreign endearment is
+  judged by how it FUNCTIONS in its language, not its literal gloss (so `mi cielo`, `mon petit chou` stay, exactly
+  as `baby` stays — this REVERSED three drops in my own draft), and `names-yours` keeps names that claim the
+  person and drops names that describe what they are to you. Reviewing the SURVIVORS caught two more
+  inconsistencies of mine (`silly girl` kept while `silly` was dropped; `my heart`/`my life` kept while `my whole
+life` was dropped). **Nobody loses a mark**: every consumer reads the person's own lexicon, never the bank.
+  **(2) `never` → a preference.** Owner: _"the never should be a preference, NOT a boundary across the entire
+  app."_ I asked what that meant operationally, since it has two readings, and flagged that suppression also
+  governs UNREVIEWED outbound content (a generated questionnaire, an intimacy email) — he chose **changeable, but
+  still respected**, across the whole take. Suppression is now DERIVED from the live mark: no re-mark block, no
+  `kind:'word'` record, `suppressedTexts` ignores a legacy record that matches an entry (so **no migration**), and
+  clearing is no longer take-scoped. `mergeLexicons` drops never-wins, which would have undone a lift on the next
+  sync. **The draft guard survives** — a stale `resultId` still cannot reach a take that is not open. **(3) The
+  grid + THE BUG.** `register.marked` was computed server-side and fetched ONCE at mount, so a register marked in
+  this sitting still read "Not opened" while one marked earlier showed a count. Removed the field entirely and
+  derive everything from `store.nameMarks` (seeded on load AND live) — one source of truth, and it is what supplies
+  the love/okay/never counts, which never existed in the view type. Progress bar + %, either-direction-counts,
+  one grid + sort, counts as NAMES so they reconcile. Gate: typecheck ×4, lint, format, **2399 core + 1734
+  desktop** unit, spec-74 E2E 4/4 with the UI audit at **0 findings**. The bug guard is **verified to fail when
+  reverted** (grep-confirmed the revert applied).
+  **Lessons: (1) VISUAL QA IS MEASUREMENT, NOT LOOKING — I twice "fixed" a progress bar I could not see, and both
+  fixes were wrong. The DOM said `width: 0`: the card is a `<button>`, whose flex box does not stretch its items
+  like a `<div>`, so a track whose only child is an empty fill span collapsed to zero and NO screenshot assertion
+  could ever have caught it. Measure the element (`getBoundingClientRect`) before theorising about colour. (2) A
+  redesign changes ACCESSIBLE NAMES: adding an eyebrow above the title made the card's name start with "gentle to
+  strong", silently breaking every `^register` locator in 4 E2E walks. Give a composite card ONE explicit
+  `aria-label` led by its own name. (3) `minmax(272px, 1fr)` never shrinks below 272px — at 390px every card spilled
+  past the grid. `minmax(min(272px, 100%), 1fr)` is load-bearing, and the E2E audit caught it where I had not.
+  (4) The mockup could not know the rail already carried a love/okay/never tally, so my stat strip duplicated it and
+  cost five rows at phone width — the real app is the only place that shows you that.**
+
 - 2026-08-19 — **Fix (a started adaptive take stopped being featured; owner-reported; SPEC 50 §3.1; on
   `fix/flagship-stays-featured`).** _"im not seeing the Dirty Talk test getting featured"_. **Diagnosed on his
   vault, not guessed:** four result files, the newest 576 bytes written at 06:59 in the same minute as

@@ -1289,8 +1289,6 @@ export interface AdaptiveNameRegisterView {
   maxTier: number;
   /** Three real names from inside it. */
   samples: string[];
-  /** How many of its names this person has already answered either way. */
-  marked: number;
 }
 
 export interface AdaptiveNameEntryView {
@@ -1303,9 +1301,6 @@ export interface AdaptiveNameEntryView {
   /** What they have already said, per direction. */
   hearState?: 'love' | 'okay' | 'never';
   sayState?: 'love' | 'okay' | 'never';
-  /** A boundary from an EARLIER take, per direction — settled, and not re-offered. */
-  settledHear?: boolean;
-  settledSay?: boolean;
 }
 
 export interface AdaptiveNamesView {

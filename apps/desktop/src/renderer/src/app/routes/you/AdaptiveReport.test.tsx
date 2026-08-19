@@ -245,8 +245,9 @@ describe('AdaptiveReport (74 §3.3)', () => {
     expect(screen.getByText('See the other 3')).toBeVisible();
     expect(screen.getByText('line 14')).not.toBeVisible();
 
-    // The hard nos are a sentence, not a field of struck-through chips.
-    expect(screen.getByText(/3 off the table/)).toBeVisible();
+    // The nos are a sentence, not a field of struck-through chips — and the copy no longer claims
+    // permanence, because a no is a preference you can change (74 §3.6.11).
+    expect(screen.getByText(/3 not for you/)).toBeVisible();
     expect(screen.getByText('line 100')).not.toBeVisible();
   });
 

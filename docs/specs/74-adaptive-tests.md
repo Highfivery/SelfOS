@@ -666,6 +666,68 @@ only route to a clean run was a destructive button at the bottom of a screen nob
 The destructive option is never the default and never one tap: it names what it clears, then confirms. The choice
 is per ENTRY, not once ever — leaving the take and coming back asks again, because the answer can change.
 
+### 3.6.11 A `never` is a preference, not a permanent boundary — APPROVED + **BUILT** (2026-08-19, owner-directed)
+
+The owner: _"the never should be a preference, NOT a boundary across the entire app."_ Asked what that meant
+operationally, since it has two very different readings, and the answer was **changeable, but still respected** —
+across the WHOLE take, names and deck words alike.
+
+**What it means in code.** Suppression is now DERIVED from the live mark rather than duplicated into a record:
+
+- `applyBankMarks` / `applyNameMarks` no longer refuse to re-mark a `never`, and no longer write a
+  `kind:'word'` boundary record. A second copy of the same fact is precisely what made it unliftable — the entry
+  could change and the record could not.
+- `suppressedTexts` reads a bank entry's suppression from its **state**, and ignores a `kind:'word'` record that
+  matches an entry. Nothing on disk has to be migrated: lexicons written before today still carry those records,
+  and they are simply no longer the source of truth. A `theme` named in a probe is untouched — that is what
+  `boundaries` is for now.
+- `clearMarks` / `clearNameMarks` are no longer scoped to the take that wrote the mark. Taking one back in a
+  later sitting is the same ordinary act as changing it. **The draft guard in `adaptiveService` still holds**: a
+  stale `resultId` cannot reach into a take that is not open, which was always a separate protection.
+- `mergeLexicons` resolves state last-write-wins. `never`-wins was right while it was permanent and is wrong for
+  a preference: lifting one here would be undone by an older copy on the next sync.
+- Nothing renders as settled. The deck's locked row and the pet-name "off the table" state are gone, and
+  `AdaptiveNameEntryView.settledHear` / `settledSay` with them.
+
+**What did NOT change.** A marked `never` still suppresses that text everywhere — unconditionally, on every path
+that writes prose a person reads (§5.8), including the unreviewed outbound ones. `deleteAllAdaptiveResults` still
+keeps `never` entries, so deleting your takes never makes the app start using a word you had ruled out. The report
+still offers the explicit lift, and still never asks why.
+
+### 3.6.12 The register grid, redesigned — APPROVED + **BUILT** (2026-08-19, owner-requested, mockup approved)
+
+A complete redesign of the pet-name register grid, plus the bug that made it necessary.
+
+**The bug.** Each register's `marked` count was computed server-side in `testsNames` and fetched **once** at
+mount; `flush()` never re-fetched. So a register marked in THIS sitting kept reading "Not opened", while one
+marked in an earlier sitting showed a count — because that one was already baked into the fetch. Two sources of
+truth for one fact, and the stale one was on screen.
+
+**The fix is the redesign's foundation.** `AdaptiveNameRegisterView.marked` is **removed**: every fact it carried
+is already in `entries`, and `store.nameMarks` is seeded from the view on load AND updated on every tap, so it is
+complete. A pure `registerStats(entries, nameMarks)` derives all of it in the renderer — exact, instant, and with
+nothing left to drift. It is also what supplies the love / okay / never counts, which never existed in the view
+type at all.
+
+**Owner decisions, asked one at a time.**
+
+1. **A progress bar and a percentage** — the never-show-complete rule was narrowed on 2026-08-18 because a
+   moving total makes a denominator a lie; a register's total is fixed, and the screen already showed
+   "N of M marked" inside an open register. Worded as progress through the LIST, never about the person.
+2. **Either direction counts as answered.** A name marked one way is answered. The alternatives make 100%
+   unreachable for someone who only cares about being called things, which is its own dishonesty.
+3. **One grid with a sort control**, never grouped sections — a group holding one register would stretch that
+   card to the full row in an `auto-fill` grid (the defect #530 hit). Default: in progress → untouched →
+   all-marked, curated warm→furthest order as the tiebreak.
+4. **All three counts**, as counts of NAMES so they reconcile with the marked total above them. A mixed name
+   lands in one bucket, precedence `never > love > okay`.
+
+**The range is words, not a meter.** The five-pip meter lit the tiers a register SPANS (4–5 lit positions 4 and
+5), which reads as an AMOUNT ("2 out of 5") — two encodings of overlapping facts with nothing saying how they
+related. Reported twice as unclear. It is now an eyebrow above the title reading `gentle`, `gentle to strong`,
+`warm to intense`, `intense`. §12 decides the placement: a tag never shares a line with a title, or both it and
+the sample names lose width.
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.
@@ -1040,7 +1102,9 @@ every surface. The report interprets but never diagnoses.
 
 ### 8.2 Boundaries and shame
 
-- A `never` is permanent, suppressed everywhere, never re-offered, and **never requires a reason**.
+- A `never` is **a preference, not a permanent boundary** (owner decision, 2026-08-19 — see §3.6.11). It is
+  suppressed everywhere for exactly as long as it is set, is changeable in any sitting, and **never requires
+  a reason**.
 - The AI **never escalates**. It offers a spread; the person picks. If a probe would push toward material they
   haven't shown interest in, it doesn't run. The app never pushes sex at anyone.
 - Names and roles are identity-loaded (_daddy_ for someone with a father wound, _slut_ for someone with a

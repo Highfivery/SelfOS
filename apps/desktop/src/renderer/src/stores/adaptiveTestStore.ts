@@ -535,13 +535,6 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
 
     mark: (key, mark) => {
       set((prev) => {
-        // A hard no from an EARLIER take is not re-markable here — it lifts only through the report's explicit
-        // "changed my mind" (74 §3.2). One made in this sitting stays editable, or autosave would set it in
-        // stone the instant it was tapped.
-        const locked =
-          !prev.touched.includes(key) &&
-          prev.state?.lexicon.entries.some((entry) => entry.key === key && entry.state === 'never');
-        if (locked) return prev;
         const marks = { ...prev.marks };
         if (mark === null) {
           delete marks[key];
@@ -592,9 +585,8 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
 
     markName: (key, side, mark) => {
       set((prev) => {
-        const entry = prev.names?.entries.find((item) => item.key === key);
-        // A hard no from an EARLIER take is settled, per direction — same rule as the deck's rows.
-        if (side === 'hear' ? entry?.settledHear : entry?.settledSay) return prev;
+        // A no is a preference (74 §3.2, amended 2026-08-19): re-markable in any sitting, in either
+        // direction, exactly like every other mark.
         const current = prev.nameMarks[key] ?? {};
         const next = { ...current };
         const cleared = current[side] === mark;

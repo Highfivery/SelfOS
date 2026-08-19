@@ -156,15 +156,10 @@ export function applyBankMarks(
     const spec = bankEntry(bank, key);
     const existing = byKey.get(key);
     if (!spec && !existing) continue;
-    // A boundary is unliftable by ANY mark — not just by `love`. Downgrading it to `notYet` used to leave the
-    // word in `derivedWantsToSay`, which puts it in their own coach prompt as a GOAL two lines under "never
-    // use this", and in a partner-shared Insight fact. A `never` lifts only through `clearState`.
-    //
-    // LOAD-BEARING BEYOND THIS FUNCTION: because this `continue` runs BEFORE the write below, a boundary
-    // entry can never be re-stamped with a newer take's `source` — which is the only reason `clearMarks`'s
-    // source scoping cannot be walked around by re-marking a hard no and then clearing it. Deleting this
-    // line silently unlocks un-marking someone else's settled boundary too.
-    if (existing?.state === 'never') continue;
+    // 74 §3.2 (amended 2026-08-19): a `never` is a PREFERENCE, not a permanent boundary. It is respected
+    // for exactly as long as it is set, and the person may change it in any sitting — so nothing blocks a
+    // re-mark here. Suppression is derived from the live state by `suppressedTexts`, which is what makes
+    // lifting it instant: change the mark and the word stops being suppressed on the next read.
     const shownSides = sidesByKey[key];
     // Record what was ASKED, so a `0` on a side that was never offered is distinguishable from a refusal.
     const withSides = shownSides ? { sides: [...shownSides] } : {};
@@ -189,12 +184,10 @@ export function applyBankMarks(
         source,
       });
     } else {
+      // No boundary RECORD is written for a bank entry any more. A second copy of the same fact is what
+      // made a `never` unliftable: the entry could change and the record could not. `boundaries` now holds
+      // only what is not a bank entry — a theme a probe named ("anything about being used").
       byKey.set(key, { ...base, hear: 0, say: 0, state: mark, source });
-      if (mark === 'never') {
-        // A bank boundary is a LITERAL text to suppress, whether it is one word or a whole phrase; `theme`
-        // is reserved for a described boundary a probe named ("anything about being used").
-        boundaries.push({ text: base.text, kind: 'word', at: now.toISOString() });
-      }
     }
   }
   return {
@@ -247,18 +240,14 @@ export function applyNameMarks(
     const spec = bankEntry(bank, key);
     const existing = byKey.get(key);
     if (!spec && !existing) continue;
-    // The same unliftable-boundary rule as the deck (see `applyBankMarks`), per direction.
-    const settled = (side: 'hear' | 'say'): boolean =>
-      existing?.state === 'never' ||
-      (existing?.[side === 'hear' ? 'hearState' : 'sayState'] === 'never' &&
-        existing.source !== source);
+    // A name's `never` is a preference too, per direction, and is re-markable in any sitting.
     const base = existing ?? toLexiconEntry(spec as BankEntry, source);
-    const hearState = settled('hear') ? existing?.hearState : (mark.hear ?? base.hearState);
-    const sayState = settled('say') ? existing?.sayState : (mark.say ?? base.sayState);
+    const hearState = mark.hear ?? base.hearState;
+    const sayState = mark.say ?? base.sayState;
     byKey.set(key, {
       ...base,
-      hear: settled('hear') ? base.hear : ratingFor(mark.hear, base.hear),
-      say: settled('say') ? base.say : ratingFor(mark.say, base.say),
+      hear: ratingFor(mark.hear, base.hear),
+      say: ratingFor(mark.say, base.say),
       ...(hearState ? { hearState } : {}),
       ...(sayState ? { sayState } : {}),
       // Both sides are always put to them in this phase — that is what makes it two marks, not one.
@@ -266,16 +255,6 @@ export function applyNameMarks(
       state: undefined,
       source,
     });
-    for (const side of ['hear', 'say'] as const) {
-      if (mark[side] === 'never' && !settled(side)) {
-        boundaries.push({
-          text: base.text,
-          kind: 'word',
-          at: now.toISOString(),
-          direction: side,
-        });
-      }
-    }
   }
   return {
     ...lexicon,
@@ -290,13 +269,12 @@ export function clearNameMarks(
   lexicon: EroticLexicon,
   cleared: Readonly<Record<string, readonly ('hear' | 'say')[]>>,
   now: Date,
-  source: string,
 ): EroticLexicon {
   const entries = lexicon.entries.map((entry) => {
     const sides = cleared[entry.key];
-    // Scoped to THIS take, exactly like `clearMarks`: an earlier take's settled answer is not un-markable
-    // by a later one.
-    if (!sides || entry.source !== source) return entry;
+    // Not scoped to the take that wrote it: a mark is a preference, so taking it back in a later sitting is
+    // the same ordinary act as changing it.
+    if (!sides) return entry;
     const next = { ...entry };
     for (const side of sides) {
       if (side === 'hear') {
@@ -312,7 +290,7 @@ export function clearNameMarks(
   const clearedTexts = new Map<string, Set<'hear' | 'say'>>();
   for (const [key, sides] of Object.entries(cleared)) {
     const entry = lexicon.entries.find((e) => e.key === key);
-    if (!entry || entry.source !== source) continue;
+    if (!entry) continue;
     clearedTexts.set(entry.text, new Set(sides));
   }
   const boundaries = lexicon.boundaries.filter((boundary) => {
@@ -410,12 +388,11 @@ export function clearMarks(
   lexicon: EroticLexicon,
   keys: readonly string[],
   now: Date,
-  source: string,
 ): EroticLexicon {
   if (keys.length === 0) return lexicon;
   const wanted = new Set(keys);
-  const clearable = (entry: LexiconEntry): boolean =>
-    wanted.has(entry.key) && entry.source === source;
+  // Not scoped to the take that wrote it — see `clearNameMarks`.
+  const clearable = (entry: LexiconEntry): boolean => wanted.has(entry.key);
   const dropped = lexicon.entries.filter((entry) => clearable(entry) && entry.state === 'never');
   if (!lexicon.entries.some(clearable)) return lexicon;
   return {
@@ -461,17 +438,19 @@ function dedupeBoundaries(boundaries: readonly LexiconBoundary[]): LexiconBounda
 }
 
 /**
- * Merge two lexicons (pure) — the sync-conflict + retake path. Ratings resolve last-write-wins by
- * `updatedAt`, but **a `never` on EITHER side wins** and **boundaries UNION**, so no merge can lose a hard no.
+ * Merge two lexicons (pure) — the sync-conflict + retake path. Ratings AND states resolve last-write-wins
+ * by `updatedAt`; **boundaries still UNION**, because a theme is named by an explicit act rather than a
+ * mark that can be changed.
  */
 export function mergeLexicons(a: EroticLexicon, b: EroticLexicon): EroticLexicon {
   const [older, newer] = a.updatedAt <= b.updatedAt ? [a, b] : [b, a];
   const byKey = new Map(older.entries.map((entry) => [entry.key, entry]));
   for (const entry of newer.entries) {
     const prior = byKey.get(entry.key);
-    // A hard no from either side survives the merge, whichever side is newer.
-    const state: LexiconState | undefined =
-      prior?.state === 'never' || entry.state === 'never' ? 'never' : entry.state;
+    // Last-write-wins, including for `never`. It used to survive from EITHER side so a sync conflict could
+    // not lose a hard no -- correct while it was permanent, wrong now that it is a preference: lifting one
+    // on this device would be undone by an older copy that still had it.
+    const state: LexiconState | undefined = entry.state;
     byKey.set(entry.key, {
       ...entry,
       ...(state ? { state } : {}),
@@ -511,8 +490,17 @@ export function suppressedTexts(lexicon: EroticLexicon, direction?: 'hear' | 'sa
       return entry.hearState === 'never' || entry.sayState === 'never';
     })
     .map((entry) => entry.text);
+  // A bank entry's suppression comes from its live state ABOVE, never from a record. Lexicons written
+  // before 2026-08-19 still carry a `kind:'word'` record per hard no; honouring those would make a lifted
+  // preference keep suppressing forever, so an entry-backed word record is ignored here. Nothing has to be
+  // migrated: the record is simply no longer the source of truth. A `theme` (named in a probe, not a bank
+  // entry) is unaffected, and so is a word boundary with no entry behind it.
+  const entryTexts = new Set(lexicon.entries.map((entry) => entry.text.trim().toLowerCase()));
   const fromBoundaries = lexicon.boundaries
     .filter((boundary) => !direction || !boundary.direction || boundary.direction === direction)
+    .filter(
+      (boundary) => boundary.kind !== 'word' || !entryTexts.has(boundary.text.trim().toLowerCase()),
+    )
     .map((boundary) => boundary.text);
   return [...new Set([...fromEntries, ...fromBoundaries])];
 }

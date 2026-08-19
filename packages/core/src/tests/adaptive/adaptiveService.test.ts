@@ -4,7 +4,7 @@ import { memFileSystem } from '../../host/memFileSystem';
 import { probeTurnId, ambiguityOfProbeTurn } from '../../schemas';
 import { readLedger } from '../../questionnaires/askLedger';
 import { listAllInsights, summarizeForContext } from '../../insights/insightStore';
-import { readLexicon, writeLexicon } from './lexicon';
+import { readLexicon, writeLexicon, suppressedTexts, violatesBoundary } from './lexicon';
 import { DIRTY_TALK } from './instruments/dirtyTalk';
 import {
   abandonAdaptiveTake,
@@ -130,8 +130,8 @@ describe('the adaptive take (74 §5)', () => {
     const insight = (await listAllInsights(fs, KEY))[0]!;
     const text = JSON.stringify(insight);
     expect(text).not.toContain('whore');
-    // …but the lexicon still carries it, which is what every consumer suppresses on.
-    expect((await readLexicon(fs, KEY, P, NOW)).boundaries.map((b) => b.text)).toEqual(['whore']);
+    // …but the lexicon still suppresses it, which is what every consumer reads.
+    expect(suppressedTexts(await readLexicon(fs, KEY, P, NOW))).toEqual(['whore']);
   });
 
   it('carries the hear/say GAP into the Insight as a goal the practice session can run on', async () => {
@@ -165,10 +165,9 @@ describe('the adaptive take (74 §5)', () => {
     expect((await latestCompleteResult(fs, KEY, P, DIRTY_TALK.id))?.id).toBe(second.id);
   });
 
-  it('a retake NEVER re-offers a hard no', async () => {
+  it('a retake CAN change a no — it is a preference, and the suppression follows it', async () => {
     const { fs } = await fullTake();
     const second = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, LATER);
-    // Even if the UI somehow marked it loved on the retake, the boundary holds.
     const lexicon = await recordBankPass(
       fs,
       KEY,
@@ -176,7 +175,8 @@ describe('the adaptive take (74 §5)', () => {
       { personId: P, resultId: second.id, marks: { [WHORE]: 'love' } },
       LATER,
     );
-    expect(lexicon.entries.find((e) => e.key === WHORE)?.state).toBe('never');
+    expect(lexicon.entries.find((e) => e.key === WHORE)?.state).toBeUndefined();
+    expect(suppressedTexts(lexicon)).not.toContain('whore');
   });
 
   // --- 74 §3.4 — autosaving the passes ---
@@ -216,7 +216,7 @@ describe('the adaptive take (74 §5)', () => {
       { personId: P, resultId: draft.id, marks: { [CUNT]: 'never' }, autosave: true },
       NOW,
     );
-    expect(marked.boundaries.some((b) => b.text.includes('cunt'))).toBe(true);
+    expect(suppressedTexts(marked).some((t) => t.includes('cunt'))).toBe(true);
 
     const undone = await recordBankPass(
       fs,
@@ -225,23 +225,24 @@ describe('the adaptive take (74 §5)', () => {
       { personId: P, resultId: draft.id, marks: {}, cleared: [CUNT], autosave: true },
       NOW,
     );
-    expect(undone.boundaries.some((b) => b.text.includes('cunt'))).toBe(false);
+    expect(suppressedTexts(undone).some((t) => t.includes('cunt'))).toBe(false);
     expect(undone.entries.find((e) => e.key === CUNT)?.state).toBeUndefined();
   });
 
-  it('CANNOT clear a boundary from an EARLIER take, however the un-mark is crafted (74 §3.2)', async () => {
-    // The renderer is not the trust boundary: a `cleared` key it should never send must still bounce.
-    const { fs } = await fullTake(); // sets `whore` → never, in take #1
-    const second = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, LATER);
-    const lexicon = await recordBankPass(
-      fs,
-      KEY,
-      DIRTY_TALK,
-      { personId: P, resultId: second.id, marks: {}, cleared: [WHORE], autosave: true },
-      LATER,
-    );
-    expect(lexicon.entries.find((e) => e.key === WHORE)?.state).toBe('never');
-    expect(lexicon.boundaries.map((b) => b.text)).toContain('whore');
+  it('takes back an EARLIER take’s mark from the open one — changing your mind is not take-scoped', () => {
+    return (async () => {
+      const { fs } = await fullTake(); // sets `whore` → never, in take #1
+      const second = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, LATER);
+      const lexicon = await recordBankPass(
+        fs,
+        KEY,
+        DIRTY_TALK,
+        { personId: P, resultId: second.id, marks: {}, cleared: [WHORE], autosave: true },
+        LATER,
+      );
+      expect(lexicon.entries.find((e) => e.key === WHORE)?.state).toBeUndefined();
+      expect(suppressedTexts(lexicon)).not.toContain('whore');
+    })();
   });
 
   it('refuses an un-mark aimed at a COMPLETED take, even with a matching source', async () => {
@@ -256,7 +257,7 @@ describe('the adaptive take (74 §5)', () => {
       LATER,
     );
     expect(lexicon.entries.find((e) => e.key === WHORE)?.state).toBe('never');
-    expect(lexicon.boundaries.map((b) => b.text)).toContain('whore');
+    expect(suppressedTexts(lexicon)).toContain('whore');
   });
 
   it('closing the bank pass does NOT reset a split rating back to the love seed', async () => {
@@ -364,7 +365,7 @@ describe('74 §3.6.8 — start over from the top', () => {
     );
     const before = await readLexicon(fs, key, 'p1');
     expect(before?.entries.length).toBeGreaterThan(0);
-    expect(before?.boundaries.map((b) => b.text)).toContain('whore');
+    expect(suppressedTexts(before)).toContain('whore');
 
     await abandonAdaptiveTake(fs, 'p1', draft.id, key);
 
@@ -432,10 +433,9 @@ describe('74 §3.6.8 — recording the pet-name phase', () => {
       hearState: 'never',
       sayState: 'love',
     });
-    // The boundary it wrote is one-way, so his own coach can still put it in his mouth.
-    expect(lex?.boundaries).toEqual([
-      expect.objectContaining({ text: 'good girl', direction: 'hear' }),
-    ]);
+    // The suppression is one-way, so his own coach can still put it in his mouth.
+    expect(violatesBoundary(lex, 'that\u2019s my good girl', 'hear')).toBe(true);
+    expect(violatesBoundary(lex, 'that\u2019s my good girl', 'say')).toBe(false);
     // An autosave leaves no turn — 2,000 names would otherwise write 2,000 of them.
     const afterAutosave = await getAdaptiveResult(fs, key, 'p1', draft.id);
     expect(afterAutosave?.turns ?? []).toHaveLength(0);
@@ -450,7 +450,7 @@ describe('74 §3.6.8 — recording the pet-name phase', () => {
     const cleared = await readLexicon(fs, key, 'p1');
     expect(cleared?.entries.find((e) => e.key === KEY)?.hearState).toBeUndefined();
     expect(cleared?.entries.find((e) => e.key === KEY)?.sayState).toBe('love');
-    expect(cleared?.boundaries).toEqual([]);
+    expect(violatesBoundary(cleared, 'that\u2019s my good girl', 'hear')).toBe(false);
     // …and closing the pass stamps exactly one turn.
     const closed = await getAdaptiveResult(fs, key, 'p1', draft.id);
     expect(closed?.turns).toHaveLength(1);
@@ -478,7 +478,9 @@ describe('74 §3.6.8 — recording the pet-name phase', () => {
     );
     const lex = await readLexicon(fs, key, 'p1');
     expect(lex?.entries.find((e) => e.key === KEY)?.hearState).toBe('never');
-    expect(lex?.boundaries).toHaveLength(1);
+    // The draft guard is what bounced it: `resultId` was not the open take. Changing your mind is free,
+    // but only through the take you actually have open.
+    expect(violatesBoundary(lex, 'take it, whore', 'hear')).toBe(true);
   });
 });
 

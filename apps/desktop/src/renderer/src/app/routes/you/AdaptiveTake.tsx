@@ -1022,7 +1022,9 @@ export function AdaptiveTake(): JSX.Element {
                       counts={nameTally}
                       label="Names marked"
                       testIdPrefix="name-tally"
-                      note={`${Object.keys(store.nameMarks).length} names · both directions counted`}
+                      note={`${Object.keys(store.nameMarks).length} ${
+                        Object.keys(store.nameMarks).length === 1 ? 'name' : 'names'
+                      } · both directions counted`}
                     />
                   }
                   actions={
@@ -1202,26 +1204,15 @@ export function AdaptiveTake(): JSX.Element {
                     </Text>
                   ) : (
                     areaEntries.map((entry) => {
-                      // Settled = a boundary from an EARLIER take. One made in THIS take stays editable,
-                      // whether it was tapped a minute ago (`touched`) or in a previous sitting of the
-                      // same take — a stricter UI would strand a mis-tap noticed tomorrow.
+                      // Nothing is settled: a no is a preference, changeable in any sitting
+                      // (74 §3.2, amended 2026-08-19). A row used to freeze once the take that set it
+                      // closed, which stranded a mis-tap noticed the next day.
                       const mark = store.marks[entry.key];
-                      const mineThisTake =
-                        store.touched.includes(entry.key) ||
-                        store.state?.lexicon.entries.some(
-                          (e) =>
-                            e.key === entry.key && e.source === `test:${store.state?.draft?.id}`,
-                        );
-                      const locked =
-                        !mineThisTake &&
-                        store.state?.lexicon.entries.some(
-                          (e) => e.key === entry.key && e.state === 'never',
-                        );
                       return (
                         <div
                           key={entry.key}
                           className={`${adaptive.row} ${mark && mark !== 'never' ? adaptive.rowOn : ''} ${
-                            mark === 'never' || locked ? adaptive.rowNo : ''
+                            mark === 'never' ? adaptive.rowNo : ''
                           }`}
                         >
                           <div className={adaptive.line}>
@@ -1296,48 +1287,42 @@ export function AdaptiveTake(): JSX.Element {
                               )}
                             </div>
                           </div>
-                          {locked ? (
-                            <span className={adaptive.lockedMark}>
-                              <Ban size={13} aria-hidden="true" /> off the table
-                            </span>
-                          ) : (
-                            <span className={adaptive.marks}>
-                              {(['love', 'okay'] as BankMark[]).map((option) => {
-                                const { label, Icon } = MARK_META[option];
-                                return (
-                                  <button
-                                    key={option}
-                                    type="button"
-                                    className={`${adaptive.mark} ${adaptive[option]} ${
-                                      mark === option ? adaptive.markOn : ''
-                                    }`}
-                                    aria-pressed={mark === option}
-                                    aria-label={`${entry.text} — ${sideLabel(entry.sides)} — ${label}`}
-                                    onClick={() =>
-                                      store.mark(entry.key, mark === option ? null : option)
-                                    }
-                                  >
-                                    <Icon size={18} aria-hidden="true" />
-                                  </button>
-                                );
-                              })}
-                              {/* A hard no is set apart, so it can never be a mis-tap neighbour. */}
-                              <span className={adaptive.markGap} aria-hidden="true" />
-                              <button
-                                type="button"
-                                className={`${adaptive.mark} ${adaptive.never} ${
-                                  mark === 'never' ? adaptive.markOn : ''
-                                }`}
-                                aria-pressed={mark === 'never'}
-                                aria-label={`${entry.text} — ${sideLabel(entry.sides)} — ${MARK_META.never.label}`}
-                                onClick={() =>
-                                  store.mark(entry.key, mark === 'never' ? null : 'never')
-                                }
-                              >
-                                <Ban size={18} aria-hidden="true" />
-                              </button>
-                            </span>
-                          )}
+                          <span className={adaptive.marks}>
+                            {(['love', 'okay'] as BankMark[]).map((option) => {
+                              const { label, Icon } = MARK_META[option];
+                              return (
+                                <button
+                                  key={option}
+                                  type="button"
+                                  className={`${adaptive.mark} ${adaptive[option]} ${
+                                    mark === option ? adaptive.markOn : ''
+                                  }`}
+                                  aria-pressed={mark === option}
+                                  aria-label={`${entry.text} — ${sideLabel(entry.sides)} — ${label}`}
+                                  onClick={() =>
+                                    store.mark(entry.key, mark === option ? null : option)
+                                  }
+                                >
+                                  <Icon size={18} aria-hidden="true" />
+                                </button>
+                              );
+                            })}
+                            {/* A hard no is set apart, so it can never be a mis-tap neighbour. */}
+                            <span className={adaptive.markGap} aria-hidden="true" />
+                            <button
+                              type="button"
+                              className={`${adaptive.mark} ${adaptive.never} ${
+                                mark === 'never' ? adaptive.markOn : ''
+                              }`}
+                              aria-pressed={mark === 'never'}
+                              aria-label={`${entry.text} — ${sideLabel(entry.sides)} — ${MARK_META.never.label}`}
+                              onClick={() =>
+                                store.mark(entry.key, mark === 'never' ? null : 'never')
+                              }
+                            >
+                              <Ban size={18} aria-hidden="true" />
+                            </button>
+                          </span>
                           {/*
                            * 74 §3.6.13 — the hear/say question, asked HERE rather than as a step of its own.
                            *
@@ -1347,7 +1332,7 @@ export function AdaptiveTake(): JSX.Element {
                            * where it actually applies: an entry offered only one way already knows its
                            * direction, and an entry they ruled out is not rated at all.
                            */}
-                          {!locked && mark === 'love' && entry.sides.length >= 2 ? (
+                          {mark === 'love' && entry.sides.length >= 2 ? (
                             <div className={adaptive.rowSplit}>
                               <span className={adaptive.rowSplitLead}>How much…</span>
                               {(['hear', 'say'] as const).map((direction) => (

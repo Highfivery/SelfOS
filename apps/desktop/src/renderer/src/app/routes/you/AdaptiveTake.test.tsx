@@ -347,7 +347,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     expect(screen.getByTestId('tally-never')).toHaveTextContent('0');
   });
 
-  it('a boundary from an EARLIER take is still settled, not re-offered', async () => {
+  it('an EARLIER take’s no is re-offered and re-markable — nothing is settled (74 §3.6.11)', async () => {
     const withBoundary = state({
       draft: DRAFT,
       lexicon: {
@@ -374,13 +374,13 @@ describe('AdaptiveTake (74 §3.2)', () => {
     });
     renderTake();
     await beginTake(/Pick up where you left off/i);
-    // No practice sheet here: a boundary from an earlier take IS a mark, so this person has practised.
-    // The boundary lives in the taboo family — the deck shows one area at a time (74 §3.6.4).
+    // No practice sheet here: a no from an earlier take IS a mark, so this person has practised.
+    // It lives in the taboo family — the deck shows one area at a time (74 §3.6.4).
     await userEvent.click(await screen.findByRole('button', { name: /Next area/ }));
-    expect(await screen.findByText(/off the table/i)).toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', { name: 'run (primal) — hear & say — never' }),
-    ).not.toBeInTheDocument();
+    // The row is live rather than frozen, and shows the answer they gave.
+    expect(screen.queryByText(/off the table/i)).not.toBeInTheDocument();
+    const no = await screen.findByRole('button', { name: 'run (primal) — hear & say — never' });
+    expect(no).toHaveAttribute('aria-pressed', 'true');
   });
 
   // --- 74 §3.6.3/§3.6.4/§3.6.5 — orientation ---

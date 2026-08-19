@@ -16427,21 +16427,39 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     await expect(w.getByTestId('name-tally-never')).toContainText('1');
     await w.screenshot({ path: 'e2e-artifacts/74-names-marking.png' });
 
-    // Autosave, then the vault: one entry, two directions, and a ONE-WAY boundary.
+    // Autosave, then the vault: one entry, two directions, and NO boundary record. A no is a preference,
+    // suppressed from its live state (74 §3.6.11) — a second copy of the fact is what made it unliftable.
     await expect
       .poll(async () => {
         const lex = (await readEncryptedJson(fs, LEXICON, key).catch(() => null)) as {
           entries: { key: string; hearState?: string; sayState?: string }[];
-          boundaries: { text: string; direction?: string }[];
+          boundaries: { text: string }[];
         } | null;
         const entry = (lex?.entries ?? []).find((e) => e.key === 'names-praise:good-girl');
-        return `${entry?.hearState ?? '-'}/${entry?.sayState ?? '-'}/${
-          (lex?.boundaries ?? []).find((b) => b.text === 'good girl')?.direction ?? '-'
-        }`;
+        return `${entry?.hearState ?? '-'}/${entry?.sayState ?? '-'}/${(lex?.boundaries ?? []).length}`;
       })
-      .toBe('never/love/hear');
+      .toBe('never/love/0');
 
     await w.getByRole('button', { name: /Done with this one/i }).click();
+
+    // 74 §3.6.12 — the redesigned grid. The card updates from the marks this screen already holds: it used
+    // to keep the count fetched once at mount, so a register worked through in THIS sitting still read
+    // "Not opened" (owner-reported 2026-08-19).
+    const praiseCard = w.getByRole('button', { name: /^praise/i });
+    // The track must actually DRAW. The card is a <button>, whose flex box does not stretch its items, so
+    // the bar measured 0px wide and no progress ever showed -- invisible to every screenshot assertion.
+    expect(
+      await w.evaluate(() => {
+        const card = document.querySelector('button[aria-label^="praise"]');
+        const bar = card?.querySelector('[class*="regBar"]');
+        return bar ? Math.round(bar.getBoundingClientRect().width) : 0;
+      }),
+    ).toBeGreaterThan(100);
+    await expect(praiseCard).toContainText('1 of');
+    await expect(praiseCard).not.toContainText('none marked yet');
+    // The range is words, not a five-pip meter that encoded a RANGE and read as an AMOUNT.
+    await expect(praiseCard).toContainText(/gentle|warm|strong|intense/i);
+    await w.screenshot({ path: 'e2e-artifacts/74-names-grid-marked.png' });
     await w.getByRole('button', { name: /Done with names/i }).click();
     // The words open on their owed two-tap practice.
     await w.screenshot({ path: 'e2e-artifacts/74-practice.png' });
@@ -16528,7 +16546,8 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
       })
       .toBeGreaterThanOrEqual(2);
 
-    // A mis-tap is not a life sentence: un-marking takes the boundary back out of the store.
+    // A mis-tap is not a life sentence: un-marking takes the suppression back out of the store. It is the
+    // entry's own state that suppresses now (74 §3.6.11), so lifting the mark lifts the suppression.
     await w
       .getByRole('button', { name: 'beg like the slut you are — hear & say — never', exact: true })
       .first()
@@ -16537,11 +16556,12 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     await expect
       .poll(async () => {
         const lex = (await readEncryptedJson(fs, LEXICON, key)) as {
-          boundaries: { text: string }[];
+          entries: { key: string; state?: string }[];
         };
-        return lex.boundaries.some((b) => b.text === 'beg like the slut you are');
+        return (lex.entries ?? []).find((e) => e.key === 'degradation:beg-like-the-slut-you-are')
+          ?.state;
       })
-      .toBe(false);
+      .toBeUndefined();
     await w
       .getByRole('button', { name: 'beg like the slut you are — hear & say — never', exact: true })
       .first()
@@ -16643,10 +16663,10 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     // The report renders from the deterministic scores, honestly labelled as the short version.
     await expect(w.getByText(/didn.t come through this time/i)).toBeVisible();
     await expect(w.getByText('Being claimed')).toBeVisible();
-    // A hard no is ONE line with a disclosure now, not a field of struck-through chips (74 §3.3). Two of
-    // them can be on screen — the names card and the words section each state their own — so this counts
-    // rather than assuming one.
-    await expect(w.getByText(/off the table\./i).first()).toBeVisible();
+    // A no is ONE line with a disclosure now, not a field of struck-through chips (74 §3.3). Two of them
+    // can be on screen — the names card and the words section each state their own — so this counts rather
+    // than assuming one. The copy no longer claims permanence: a no is a preference (74 §3.6.11).
+    await expect(w.getByText(/not for you\./i).first()).toBeVisible();
     // Their own answers, all of them: a mild yes is shown, plainly second-tier, never as a favourite.
     await expect(w.getByText(/Fine either way/i).first()).toBeVisible();
     // The redesign's own shape: the profile says where it is USED, because it is not a page you visit.
@@ -16666,12 +16686,19 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     expect(Buffer.from(lexRaw!).toString('utf8')).not.toContain('beg like the slut you are'); // encrypted
     const lexicon = (await readEncryptedJson(fs, 'people/owner-1/tests/lexicon.enc', key)) as {
       boundaries: { text: string }[];
-      entries: { key: string; state?: string }[];
+      entries: { key: string; state?: string; hearState?: string; sayState?: string }[];
     };
-    expect(lexicon.boundaries.map((b) => b.text).sort()).toEqual([
-      'beg like the slut you are',
-      'good girl',
-    ]);
+    // No boundary RECORDS: a bank entry's suppression is its live state, so there is one source of truth
+    // and lifting a no is instant (74 §3.6.11). `boundaries` now holds only a themed no a probe named.
+    expect(lexicon.boundaries).toEqual([]);
+    // A deck entry carries one `state`; a NAME carries one per direction, because "never call me that" must
+    // not stop him calling HER that. The old boundary record flattened the two into one list.
+    expect(
+      lexicon.entries
+        .filter((e) => e.state === 'never' || e.hearState === 'never' || e.sayState === 'never')
+        .map((e) => e.key)
+        .sort(),
+    ).toEqual(['degradation:beg-like-the-slut-you-are', 'names-praise:good-girl']);
     // The practice's two taps persisted alongside "all mine" — three middle marks, none of them invented.
     expect(lexicon.entries.filter((e) => e.state === 'okay')).toHaveLength(3);
     expect(

@@ -178,24 +178,7 @@
   border: 1px solid var(--color-border-strong);
   color: var(--color-text-secondary);
   font-size: var(--text-xs);
-}
-
-.muted {
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-}
-
-.linkButton {
-  border: none;
-  background: transparent;
-  padding: 0;
-  color: var(--color-accent-text);
-  font: inherit;
-  cursor: pointer;
-  text-decoration: underline;
-}
-
-/* Structured-exercise stepper, shown beside the thread. */
+} /* Structured-exercise stepper, shown beside the thread. */
 .stepper {
   display: flex;
   flex-wrap: wrap;

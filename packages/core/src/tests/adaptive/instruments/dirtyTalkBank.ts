@@ -511,7 +511,7 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
         { text: 'one more', ex: 'one more — you can give me one more' },
         'ask permission',
         'you can come now',
-        'good girl, come',
+        { text: 'good girl, come', addresses: 'girl' },
         'come on my cock',
         'hold it for me',
         "you're not done",
@@ -775,8 +775,8 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
         'please give it to me',
       ],
       4: [
-        'please sir',
-        'please daddy',
+        { text: 'please sir', addresses: 'man' },
+        { text: 'please daddy', addresses: 'man' },
         'please let me come',
         "I'll be good",
         "I'll do anything",
@@ -1110,7 +1110,7 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
         'squeeze',
         'harder than that',
         'again',
-        'spank me daddy',
+        { text: 'spank me daddy', addresses: 'man' },
       ],
       4: [
         'choke me',
@@ -1419,28 +1419,48 @@ export const DIRTY_TALK_BANK: Bank = buildBank([
       'The name inside a whole sentence, which is what people actually say.',
     ),
     {
-      2: ['yes sir', "yes ma'am"],
+      2: [
+        { text: 'yes sir', addresses: 'man' },
+        { text: "yes ma'am", addresses: 'girl' },
+      ],
       3: [
-        'oh daddy',
-        'yes daddy',
-        'please daddy',
-        'thank you daddy',
-        'yes mistress',
-        'please sir',
-        'thank you sir',
+        { text: 'oh daddy', addresses: 'man' },
+        { text: 'yes daddy', addresses: 'man' },
+        { text: 'please daddy', addresses: 'man' },
+        { text: 'thank you daddy', addresses: 'man' },
+        { text: 'yes mistress', addresses: 'girl' },
+        { text: 'please sir', addresses: 'man' },
+        { text: 'thank you sir', addresses: 'man' },
       ],
       4: [
-        'spank me daddy',
-        'fuck me daddy',
-        'harder daddy',
-        'deeper daddy',
-        "I'm your good girl daddy",
-        'cum in me daddy',
-        "yes daddy, I'm yours",
+        { text: 'spank me daddy', addresses: 'man' },
+        { text: 'fuck me daddy', addresses: 'man' },
+        { text: 'harder daddy', addresses: 'man' },
+        { text: 'deeper daddy', addresses: 'man' },
+        { text: "I'm your good girl daddy", addresses: 'man' },
+        { text: 'cum in me daddy', addresses: 'man' },
+        { text: "yes daddy, I'm yours", addresses: 'man' },
       ],
-      5: ['use me daddy', "I'll be good for you daddy"],
+      5: [
+        { text: 'use me daddy', addresses: 'man' },
+        { text: "I'll be good for you daddy", addresses: 'man' },
+      ],
     },
   ),
+  /*
+   * 74 §3.6.3 — this family is DELIBERATELY left un-oriented, and the reason is worth stating so nobody
+   * "completes" the tagging by adding it.
+   *
+   * `addresses` means "who the line is aimed AT", and `shownSides` checks it against the person on the
+   * receiving end: me on `hear`, them on `say`. A self-label inverts that. "I'm your good girl" is said
+   * BY the girl, so hearing it needs HER to be one and saying it needs ME to be one — exactly backwards
+   * from every other entry. Tagging these `addresses: 'girl'` would hide the line from a straight man on
+   * the side where it fits him perfectly and keep it on the side where it doesn't.
+   *
+   * It is two entries ("I'm your good girl", "I'm your dirty girl"), so they stay open rather than earn a
+   * second axis. ("I'm your good girl daddy" in `role-lines` carries both constraints, but its `addresses:
+   * 'man'` happens to resolve correctly on both sides, so it needs nothing special.)
+   */
   bankFamily(
     phrase(
       'self-labelling',

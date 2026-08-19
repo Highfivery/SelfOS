@@ -61,13 +61,7 @@
   gap: var(--space-3);
   margin-left: auto;
   min-width: 0;
-}
-
-.syncSlot {
-  display: inline-flex;
-}
-
-/* Below --bp-sm the sync chip yields first (the in-content Banner still surfaces conflicts), so the
+} /* Below --bp-sm the sync chip yields first (the in-content Banner still surfaces conflicts), so the
    essential controls + the macOS traffic-light inset stay within the narrow titlebar. */
 @media (max-width: 479px) {
   .syncSlot {

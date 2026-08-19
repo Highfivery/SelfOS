@@ -783,14 +783,7 @@
 .confirmActions {
   display: flex;
   gap: var(--space-2);
-}
-
-.resendNudge {
-  color: var(--color-success);
-  font-weight: 500;
-}
-
-/* Received card CTA (Answer / Continue / View) — sits at the card bottom because the whole cluster is pinned by
+} /* Received card CTA (Answer / Continue / View) — sits at the card bottom because the whole cluster is pinned by
  * `.cardFoot`'s `margin-top: auto`; the CTA just follows the status/meta (a second auto margin here would split
  * the free space and float the footer to the card middle). */
 .rcta {
@@ -1005,32 +998,7 @@
 .aiHeader:focus-visible {
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 2px;
-}
-
-.aiToggles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3) var(--space-4);
-}
-
-.aiToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  cursor: pointer;
-}
-
-.linkButton {
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--color-accent-text);
-  font: inherit;
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-/* AI-drafted marker + per-question reword assists. */
+} /* AI-drafted marker + per-question reword assists. */
 .aiBadge {
   display: inline-flex;
   align-items: center;
@@ -1182,13 +1150,6 @@
   flex-shrink: 0;
   padding-bottom: var(--space-2);
 }
-
-.compatRow {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
 .options {
   display: flex;
   flex-direction: column;

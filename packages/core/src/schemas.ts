@@ -1301,6 +1301,13 @@ export interface AdaptiveNameEntryView {
   /** What they have already said, per direction. */
   hearState?: 'love' | 'okay' | 'never';
   sayState?: 'love' | 'okay' | 'never';
+  /**
+   * 74 §3.6.3 — the directions this person is actually asked about this name. A name whose register names a
+   * gender neither of them is is offered one way only ("my man" is something he can be called, never
+   * something he calls her), and a name that fits neither of them is not returned at all. Resolved here
+   * rather than in the renderer so the rows and the register counts cannot disagree.
+   */
+  sides: ('hear' | 'say')[];
 }
 
 export interface AdaptiveNamesView {

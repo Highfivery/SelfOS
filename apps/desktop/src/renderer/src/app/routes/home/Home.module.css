@@ -33,17 +33,7 @@
   font-weight: 600;
   line-height: 1.2;
   color: var(--color-text-primary);
-}
-
-/* Reflowing card grid — one column on phones, fills the row on wider screens. */
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: var(--space-4);
-  align-items: start;
-}
-
-/* A card that should always span the full row regardless of grid width. */
+} /* A card that should always span the full row regardless of grid width. */
 .wide {
   grid-column: 1 / -1;
 }
@@ -345,31 +335,7 @@
   font-size: var(--text-md);
   font-weight: 500;
   color: var(--color-text-primary);
-}
-
-/* Profile-freshness suggestions (§15) */
-.freshnessItem {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.freshnessItem:last-child {
-  padding-bottom: 0;
-  border-bottom: none;
-}
-
-.freshnessActions {
-  display: flex;
-  gap: var(--space-2);
-  flex: none;
-}
-
-/* =========================================================================
+} /* =========================================================================
    60-home-dashboard-redesign — the Hybrid layout + new elements
    ========================================================================= */
 

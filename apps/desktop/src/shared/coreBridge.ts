@@ -899,6 +899,7 @@ import {
   addressFromAnswer,
   bodyFromAnatomyAnswer,
   orientArea,
+  pruneUnshownMarks,
   shownSides,
   deckFamilies,
   nameFamilies,
@@ -2329,6 +2330,30 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             ? 'either'
             : bodyFromAnatomyAnswer(undefined, lexicon.identity?.partner),
     };
+  };
+
+  /**
+   * This person's orientation, having first REMOVED any mark on a side they are no longer asked about
+   * (74 §3.6.3, owner decision 2026-08-19).
+   *
+   * It runs on read because that is the only moment that covers everyone: changing the identity taps goes
+   * through `setAddress` and prunes there, but a lexicon marked before names were oriented has no such
+   * event to hang off. Idempotent, and it writes only when something actually changed, so the common case
+   * costs one comparison.
+   *
+   * Why it must delete rather than merely hide: `suppressedTexts` reads the LIVE state, so a `never` on a
+   * hidden side keeps suppressing that word everywhere with no control left on screen to lift it.
+   */
+  const orientationForMarking = async (gate: {
+    ctx: { fs: FileSystem; key: Uint8Array };
+    personId: string;
+    def: AdaptiveTestDefinition;
+  }): Promise<Orientation> => {
+    const who = await personOrientation(gate);
+    const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
+    const pruned = pruneUnshownMarks(lexicon, gate.def.bank, who, new Date());
+    if (pruned.changed) await writeLexicon(gate.ctx.fs, gate.ctx.key, pruned.lexicon);
+    return who;
   };
 
   /** The sides each marked key was offered on, for the record `applyBankMarks` writes (74 §3.6.6). */
@@ -4284,7 +4309,10 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // 74 §3.6.3 — orient HOST-SIDE. The renderer receives only what could actually be said to or by this
       // person, plus a per-family withheld count it states out loud (§3.6.5). Both axes fail open, so an
       // unanswered question widens what is shown and never quietly narrows it.
-      const who = await personOrientation(gate);
+      // `orientationForMarking`, not `personOrientation`: the deck has the same stuck-`never` as the names
+      // did — mark a deck entry `never`, then change an identity tap so it is withheld, and it keeps
+      // suppressing that word app-wide with no row left to lift it on.
+      const who = await orientationForMarking(gate);
       const shownByKey = new Map<string, readonly ('hear' | 'say')[]>();
       const withheldByFamily: Record<string, number> = {};
       // The pet names are marked in their own phase, both ways per name (74 §3.6.8) — they would otherwise
@@ -4345,14 +4373,30 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const { testId } = TestIdSchema.parse(input);
       const gate = await adaptiveGate(testId);
       if (!gate) return null;
-      // No orientation filter here, deliberately (74 §3.6.8): whether a name is "for a girl" is a convention,
-      // and the whole point of the phase is that the person decides rather than the app. The body axis still
-      // governs the DECK, where a line naming a body either fits or doesn't.
+      /*
+       * 74 §3.6.3 — names ARE oriented (owner-directed, 2026-08-19), reversing §3.6.8's carve-out.
+       *
+       * That carve-out reasoned that "for a girl" is a convention and the person should decide. True of the
+       * convention-coded words — `slut`, `angel`, `kitten`, `doll` — and those are still asked of everyone.
+       * It is not true of a noun that literally names a gender: a straight man being asked whether he calls
+       * his girlfriend "my man" is not being offered a choice, it is being asked a question with no answer.
+       *
+       * The unit is the DIRECTION, not the name. A name has two answers and for a mixed-gender couple they
+       * have opposite fits: "good girl" is wrong as something he is called and exactly right as something he
+       * calls her. So `shownSides` decides per pill, almost nothing leaves the register, and an entry is
+       * dropped only when it fits neither of them.
+       */
+      const who = await orientationForMarking(gate);
       const lexicon = await readLexicon(gate.ctx.fs, gate.ctx.key, gate.personId);
       const byKey = new Map((lexicon?.entries ?? []).map((entry) => [entry.key, entry]));
       const families = nameFamilies(gate.def.bank);
+      // Resolved ONCE and read by both the rows and the register counts, so "0 of 43 marked" can never
+      // count a name the register does not show.
       const entriesFor = (familyId: string) =>
-        gate.def.bank.entries.filter((entry) => entry.family === familyId);
+        gate.def.bank.entries
+          .filter((entry) => entry.family === familyId)
+          .map((entry) => ({ entry, sides: shownSides(entry, who) }))
+          .filter((row) => row.sides.length > 0);
       const people = await listPeople(gate.ctx.fs, gate.ctx.key);
       const self = people.find((person) => person.id === gate.personId);
       // The column headers read better with real names ("Angel → you"), so find a live partner edge; the
@@ -4376,7 +4420,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         testId,
         registers: families.map((family) => {
           const own = entriesFor(family.id);
-          const tiers = own.map((entry) => entry.tier);
+          const tiers = own.map((row) => row.entry.tier);
           return {
             id: family.id,
             label: family.label,
@@ -4384,7 +4428,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             count: own.length,
             minTier: Math.min(...tiers, 5),
             maxTier: Math.max(...tiers, 1),
-            samples: own.slice(0, 3).map((entry) => entry.text),
+            samples: own.slice(0, 3).map((row) => row.entry.text),
             // No `marked` count here on purpose. It was fetched once at mount and never recomputed, so a
             // register marked in THIS sitting kept reading "Not opened" (owner-reported 2026-08-19). Every
             // fact it carried is already in `entries`, so the renderer derives all of it from the marks it
@@ -4392,7 +4436,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           };
         }),
         entries: families.flatMap((family) =>
-          entriesFor(family.id).map((entry) => {
+          entriesFor(family.id).map(({ entry, sides }) => {
             const mark = byKey.get(entry.key);
             // Nothing is "settled" any more: a `never` is a preference, changeable in any sitting
             // (74 §3.2, amended 2026-08-19).
@@ -4402,6 +4446,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
               family: entry.family,
               tier: entry.tier,
               example: entry.example ?? entry.text,
+              sides,
               ...(mark?.hearState ? { hearState: mark.hearState } : {}),
               ...(mark?.sayState ? { sayState: mark.sayState } : {}),
             };
@@ -4420,6 +4465,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
         gate.ctx.key,
         gate.def,
         {
+          sides: await markedSides(gate, Object.keys(parsed.marks)),
           personId: gate.personId,
           resultId: parsed.resultId,
           // `exactOptionalPropertyTypes`: an explicitly-undefined side is a different type from an absent
@@ -4821,6 +4867,11 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
             // prior value when this edit doesn't carry one, so changing only the address never erases it.
             ...(edit.identity ? { identity: edit.identity } : {}),
           };
+          // Deliberately NOT pruning here. What the change withholds is removed by `orientationForMarking`
+          // on the next read of the names phase or the deck — which is the very next screen — and that path
+          // resolves the body axis through `personOrientation`, where the INTAKE anatomy answer outranks
+          // identity (#62). Rebuilding orientation from `edit` alone would ignore it and prune the wrong
+          // side for anyone whose onboarding answer and identity tap disagree.
           break;
         case 'addWord':
           lexicon = addCustomEntry(

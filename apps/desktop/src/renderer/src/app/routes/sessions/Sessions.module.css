@@ -145,17 +145,6 @@
 .wrapCardSlot {
   margin-top: var(--space-4);
 }
-
-.connectLink {
-  border: none;
-  background: transparent;
-  padding: 0;
-  color: var(--color-accent-text);
-  font: inherit;
-  cursor: pointer;
-  text-decoration: underline;
-}
-
 .empty {
   display: flex;
   align-items: center;
@@ -193,14 +182,6 @@
   color: var(--color-text-secondary);
   font-style: italic;
 }
-
-.costRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-
 .composerWrap {
   position: relative;
   display: flex;

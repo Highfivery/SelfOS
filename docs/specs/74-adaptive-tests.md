@@ -569,7 +569,9 @@ most directly usable output the test could produce — were the least used thing
    Inside, the whole register is on the page — the tier lines are signposts, not doors.
 2. **Two marks per name**, `call me` and `call them`, in columns tinted with the same two colours the §3.6.3
    direction band already teaches, carrying both people's actual names. Never one mark plus an inferred side.
-3. **The address axis stops applying to names** and survives only for the ~144 body/praise/claiming entries, where
+3. **The address axis stops applying to names** — **SUPERSEDED 2026-08-19, see §3.6.23**: it applies again,
+   per DIRECTION rather than per name, because a noun that literally names a gender is not a convention. The
+   rest of this point stands, and survives only for the ~144 body/praise/claiming entries, where
    marking cannot help: a line naming a body either fits yours or it doesn't. The identity question shrinks to
    that job and loses every pet-name example.
 4. **Boundaries become directional.** "Never call me slut" must not stop him calling her slut, so
@@ -732,6 +734,57 @@ type at all.
 related. Reported twice as unclear. It is now an eyebrow above the title reading `gentle`, `gentle to strong`,
 `warm to intense`, `intense`. §12 decides the placement: a tag never shares a line with a title, or both it and
 the sample names lose width.
+
+### 3.6.23 Pet names are oriented — APPROVED + **BUILT** (2026-08-19, owner-directed)
+
+The owner: _"Currently the Dirty Talk take offers names and words that don't fit the person's or their partner's
+gender — e.g. a man being asked whether he calls his girlfriend 'my man'."_ This **reverses §3.6.8 point 3**,
+which stopped the address axis applying to names. That carve-out reasoned that "for a girl" is a convention and
+the person should decide — true of the convention-coded words, and they are still asked of everyone. It is not
+true of a noun that literally names a gender: a straight man asked whether he calls his girlfriend "my man" is
+not being offered a choice, he is being asked a question with no answer.
+
+**The finding that set the shape.** A name has TWO answers, and for a mixed-gender couple they have OPPOSITE
+fits: "good girl" is wrong as something he is called and exactly right as something he calls her; "good boy" is
+the reverse. So the unit is the **direction**, not the name — almost nothing leaves the register, and an entry
+is dropped only when it fits neither of them. It reuses `shownSides()` unchanged; only names had opted out.
+Measured on the real bank for the reported configuration: **557 pills removed, 0 entries withheld.**
+
+1. **The mismatched pill is removed, with no placeholder** (owner-directed). Both pills are `flex: 1 1 auto`,
+   so the survivor fills the row — a reserved gap would be the placeholder in negative space.
+2. **Silent.** No count, no footer, no per-register explanation. Unlike the deck's §3.6.5 withheld note, nothing
+   is actually lost: every name still appears, still markable in the direction that fits.
+3. **Both sides key off the identity taps** already collected (§3.6.3). `either` — "neither · both · it
+   depends", or unanswered — shows everything, so the resolver still fails OPEN and nobody gets a thinner test
+   for declining.
+4. **Tagged by "who must the person being CALLED this be?"**, grammatical gender only. `slut`, `whore`, `angel`,
+   `kitten`, `doll`, `baby`, `pet` are deliberately NOT tagged (#62: never infer a preference from gender), and
+   neither is `queen` in the intensifier sense — `size queen`, `cum queen` — which men use constantly. 475 names
+   carry `addresses`; 82 carry `body`.
+5. **`names-feminising` ships untagged, and is not an exemption.** Its premise is a gendered name aimed at
+   anyone, so `either` IS the correct answer to the tagging question. It needed a carve-out only under
+   row-hiding, which is not what was built.
+6. **`body` reaches the names too** (94 tags, previously zero). `my cock` / `my pussy` / `my cunt` are not
+   conventionally-odd but anatomically impossible for the wrong person. It applies only where the anatomy is
+   the **head** of the name: "my little cunt" names her body, "cock sleeve" and "dick sucker" name a use for
+   someone else's, and tagging those would demand the wrong person's anatomy. `tits`, `nipples`, `ass`,
+   `thighs`, `hole` stay open — not exclusive to one body.
+7. **The deck's gendered vocatives are tagged too** — 22 entries, of which `role-lines` was **18 of 18**
+   (`yes sir`, `oh daddy`, `yes ma'am`). `self-labelling` is deliberately left alone: `addresses` is checked
+   against the person RECEIVING the line, but "I'm your good girl" describes the person SAYING it, so the axis
+   is inverted there and tagging it would hide the line from him on the side where it fits.
+8. **A mark on a side nobody is asked about is REMOVED** (owner-directed), not merely ignored. `suppressedTexts`
+   derives suppression from the live state, so a `never` on a hidden side kept that word out of every generated
+   line app-wide with no control left to lift it — the un-gettable-rid-of preference §3.6.11 abolished. This
+   also fixes the same **pre-existing bug in the deck**. It runs on read (`pruneUnshownMarks`), because that is
+   the only moment covering a lexicon marked before names were oriented; it is idempotent and writes only when
+   something changed. A key the bank does not know — a custom write-in — is never touched.
+9. **`applyNameMarks` records the sides actually shown.** Hardcoding `['hear','say']` was true before names
+   were oriented and became a lie the moment they were; a `0` on a side never offered reads as a refusal
+   (§3.6.6).
+10. **Known and accepted** (owner-directed, raised and reaffirmed): the identity step still reads _"nothing is
+    ruled out, and no mark is lost"_ immediately above a control that now clears marks. No confirm was added
+    and the copy was left as-is.
 
 ## 4. Data model
 

@@ -3,22 +3,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-}
-
-.adminBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-subtle-bg);
-  color: var(--color-accent-text);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-/* Extends the shared TitlebarControl: cap the width so a long name ellipsizes instead of pushing the
+} /* Extends the shared TitlebarControl: cap the width so a long name ellipsizes instead of pushing the
    other controls. */
 .trigger {
   max-width: 200px;

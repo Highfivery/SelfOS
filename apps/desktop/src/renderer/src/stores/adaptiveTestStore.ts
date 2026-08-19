@@ -658,6 +658,10 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       // Step 1 → step 2. These two taps are the take's FIRST step now (74 §3.6.9), so answering them moves to
       // the pet names rather than jumping into the deck they happen to orient.
       set({ bank: bank ?? get().bank, busy: false, phase: 'names' });
+      // ...and so are the NAMES, since 2026-08-19 (§3.6.3). Without this re-read the very next screen renders
+      // the pills resolved from the PREVIOUS answers — which on a first take is no answers, so every name
+      // shows both ways and the step these two taps exist to orient is the one they don't reach.
+      await get().loadNames(testId);
     },
 
     banLine: async (line) => {

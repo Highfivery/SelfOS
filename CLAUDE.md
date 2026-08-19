@@ -530,6 +530,44 @@ placing anything. Specifically:
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
 
+- 2026-08-19 — **Build (pet names and the deck's role lines are gender-aware; owner-reported; SPEC 74 §3.6.23,
+  reversing §3.6.8 point 3; on `feat/gendered-names`).** _"a man being asked whether he calls his girlfriend 'my
+  man'."_ **Reviewing it changed the shape of the fix.** A name has TWO answers and for a mixed-gender couple they
+  have OPPOSITE fits — "good girl" is wrong as something he is called and exactly right as something he calls her —
+  so the unit is the **direction, not the name**, and it reuses `shownSides()` unchanged; only names had opted out.
+  **Measured on the real bank: 557 pills removed for the reported configuration and ZERO entries withheld**, so
+  nothing left the register; `either`/unanswered removes nothing at all, and the resolver still fails open.
+  Owner decisions, asked one at a time: remove the pill with **no placeholder** (both are `flex: 1 1 auto`, so the
+  survivor fills the row — a reserved gap IS the placeholder, in negative space); **silent** (no count, no footer);
+  **both sides key off the identity taps**; a mark on a now-hidden side is **deleted**. Tagged by _"who must the
+  person being CALLED this be?"_ — grammatical gender only, so `slut`/`angel`/`kitten`/`doll`/`baby` and `queen`
+  in the intensifier sense (`size queen`) stay open to everyone (#62: never infer a preference from gender), and
+  **`names-feminising` ships untagged as the CORRECT answer rather than an exemption** — it needed a carve-out only
+  under row-hiding, which is not what was built. **Three things the review found that were not in the brief:**
+  (1) **94 pet names name anatomy and `body` was untagged on all 1,949** — a straight man was asked whether he
+  wanted to be called "my pussy"; tagged only where the anatomy is the **head** of the name, since `cock sleeve`
+  and `dick sucker` name a use for someone ELSE's; (2) the deck's `role-lines` was **18 of 18** untagged (`yes sir`,
+  `oh daddy`, `yes ma'am`); (3) **the deck already had the stuck-`never` bug** — `suppressedTexts` reads the LIVE
+  state, so a `never` on a side an identity change had hidden kept suppressing that word app-wide with no control
+  left to lift it, which is exactly the un-gettable-rid-of preference #535 abolished. `pruneUnshownMarks` fixes
+  both. Also: `applyNameMarks` recorded `sides: ['hear','say']` unconditionally, true before names were oriented
+  and a lie after. **Dead CSS swept as asked:** 245 lines from `Adaptive.module.css` — 20 unreferenced classes plus
+  the superseded `.nameRow` grid and its 760px media block, **both structurally dead** (their `.nameRow > .colMe`
+  selectors never matched, because `.colMe` is a grandchild) — and **64 more rules across 13 other files**, every
+  file first checked for `styles[variable]` indexing so Button/Banner/Toast/typography were correctly left alone.
+  Gate: typecheck ×4, lint, format, **2414 core + 13 relay + 1734 desktop** unit, spec-74 E2E 4/4 with the UI audit
+  at 0 findings. Every guard **verified to fail when reverted**, grep-confirmed each time.
+  **Lessons: (1) the fix I would have built without measuring was the wrong one — row-level hiding removes "good
+  girl", the name he would most use. Two answers per row means the unit of a filter is the CELL, and that only
+  showed up by asking what each direction means. (2) A revert-check is worthless unless the revert is asserted:
+  mine no-opped on a string with two occurrences, the E2E passed, and I would have recorded a vacuous proof — the
+  `assert count==1` is what caught it. (3) `setAddress` re-read the bank "because it is oriented HOST-SIDE" and not
+  the names, which became oriented host-side too — when a comment explains WHY something is re-read, grep for
+  everything else that reason now covers. Only the E2E caught it; every unit test passed. (4) Two files in this
+  repo are large enough that `grep` treats them as binary and silently prints nothing — `schemas.ts` at 330KB is
+  one. Use `grep -a`, and treat a bare empty result on a file you know contains the string as a tooling answer,
+  not a finding.**
+
 - 2026-08-19 — **Owner decision + fix (delete is delete — a hard no no longer survives deleting the test; SPEC 74
   §3.6.11; on `fix/delete-is-delete`).** Flagged after the redesign landed that `deleteAllAdaptiveResults`
   deliberately KEPT `never` entries, and asked whether that should change now a no is a preference. Owner:

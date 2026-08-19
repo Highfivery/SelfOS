@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Lock } from 'lucide-react';
+import { ChevronRight, Lock } from 'lucide-react';
 import { NO_SIGNAL_BAND, type AdaptiveReading, type LexiconEntry } from '@shared/schemas';
 import { isAnsweredTurn } from '@selfos/core/schemas';
 
@@ -692,11 +692,21 @@ export function AdaptiveReport(): JSX.Element {
               {told.length > 0 ? (
                 <Card>
                   <details className={adaptive.fold}>
-                    <summary>
-                      <Heading level={2}>What you told it</Heading>
-                      <Text size="sm" tone="tertiary">
-                        {told.length} answered — the questions it asked and the moments you picked
-                      </Text>
+                    {/*
+                     * The native `<details>` marker is a list-item bullet at the START of the summary box,
+                     * so a summary whose children are BLOCKS (a heading and a line under it) pushes it onto
+                     * its own line above them — which is the misalignment. Every other fold in this report
+                     * has a one-line text summary, so this is the only one that needed a row of its own.
+                     * Lucide, not a glyph (§12).
+                     */}
+                    <summary className={adaptive.foldHead}>
+                      <ChevronRight size={16} className={adaptive.foldChevron} aria-hidden="true" />
+                      <span>
+                        <Heading level={2}>What you told it</Heading>
+                        <Text size="sm" tone="tertiary">
+                          {told.length} answered — the questions it asked and the moments you picked
+                        </Text>
+                      </span>
                     </summary>
                     <Stack gap={4}>
                       {told.map((group) => (

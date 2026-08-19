@@ -2331,3 +2331,33 @@
     width: 100%;
   }
 }
+
+/*
+ * A fold whose summary is a HEADING plus a line under it. The native marker is a list-item bullet at the
+ * start of the summary box, so with block children it lands on its own line above them rather than beside
+ * the heading — the misalignment the owner spotted. One row, chevron aligned to the heading's own line.
+ */
+.foldHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  list-style: none;
+}
+.foldHead::-webkit-details-marker {
+  display: none;
+}
+.foldChevron {
+  flex: none;
+  /* Nudge onto the heading's cap-height rather than the top of its line box. */
+  margin-top: 2px;
+  color: var(--color-text-tertiary);
+  transition: transform var(--motion-fast) var(--ease-standard);
+}
+details[open] > .foldHead .foldChevron {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .foldChevron {
+    transition: none;
+  }
+}

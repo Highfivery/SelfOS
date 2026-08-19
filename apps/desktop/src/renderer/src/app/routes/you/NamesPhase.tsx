@@ -18,7 +18,7 @@ import adaptive from './Adaptive.module.css';
 /**
  * 74 §3.6.8 — the pet-name phase, which runs before the vocabulary.
  *
- * Two things about it are decisions, not conveniences:
+ * Three things about it are decisions, not conveniences:
  *
  * 1. **Register-first.** ~2,000 names is ~4,000 marks; nobody walks that, so the phase opens on the registers
  *    as cards carrying how far they go, what is inside them, and how far through them you are — and the
@@ -26,8 +26,12 @@ import adaptive from './Adaptive.module.css';
  *    choosing scope rather than the app pre-deciding. Inside a register the WHOLE register is on the page:
  *    the tier lines are signposts, not doors (they already chose to be here).
  * 2. **Two marks per name**, in columns that never look alike — permanent tint, own edge, headers carrying
- *    both people's real names, in the same two colours the §3.6.3 direction band already teaches. Whether a
- *    name is "for a girl" is a convention, so nothing is filtered by orientation here.
+ *    both people's real names, in the same two colours the §3.6.3 direction band already teaches.
+ * 3. **Each name is asked in the direction it can land** (§3.6.3, owner-directed 2026-08-19). A convention —
+ *    `slut`, `angel`, `kitten` — is still put to everyone, because who those are "for" is exactly what the
+ *    phase exists to let the person decide. A noun that literally names a gender is not a convention: "my
+ *    man" is something he can be called and never something he calls her, so it is offered one way. The
+ *    filtering is SILENT and the row is unchanged — only the pill that had no answer is gone.
  */
 
 const MARKS: { value: BankMark; label: string; Icon: typeof Flame }[] = [
@@ -233,8 +237,17 @@ export function NamesPhase({
     <div className={adaptive.deck}>
       <div className={`${adaptive.band} ${adaptive.bandNames}`}>
         <span className={adaptive.bandText}>
-          <b>Both ways, every name.</b> Whether a name is &ldquo;for a girl&rdquo; is a convention —
-          you decide, not us.
+          {/* This used to open "Both ways, every name" — and my first correction, "Two answers per name",
+              was no better: neither is true once names are oriented (§3.6.3), because a straight man is
+              asked about "good girl" once, not twice. Both claims are dropped rather than replaced with an
+              explanation, since the filtering is silent by decision.
+
+              What remains is exact. A CONVENTION — `slut`, `angel`, `kitten`, `doll`, `baby` — is still put
+              to everyone in both directions, and that is precisely what is not filtered: only a noun that
+              literally names a gender is, and those are not conventions. So the sentence says something the
+              screen still honours, rather than something it used to. */}
+          Whether a name is &ldquo;for a girl&rdquo; is a convention &mdash;{' '}
+          <b>you decide, not us.</b>
         </span>
       </div>
       <div className={adaptive.deckHead}>
@@ -354,9 +367,11 @@ function NameRow({
             <Phrase quote={entry.example} term={entry.text} />
           </div>
         </div>
+        {/* Only the directions this person is actually asked about. Both pills are `flex: 1 1 auto`, so a
+            lone survivor stretches across the row on its own — no gap, and nothing to explain. */}
         <div className={adaptive.nameMarksRow}>
-          {column('hear')}
-          {column('say')}
+          {entry.sides.includes('hear') ? column('hear') : null}
+          {entry.sides.includes('say') ? column('say') : null}
         </div>
       </div>
     </>

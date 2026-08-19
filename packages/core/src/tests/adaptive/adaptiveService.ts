@@ -310,13 +310,15 @@ export async function recordNamePass(
     marks: NameMarks;
     /** Directions taken back, per key (74 §3.4). */
     cleared?: Readonly<Record<string, readonly ('hear' | 'say')[]>>;
+    /** Which sides each key was SHOWN on (74 §3.6.3). Absent for a key ⇒ both. */
+    sides?: Readonly<Record<string, readonly ('hear' | 'say')[]>>;
     autosave?: boolean;
   },
   now: Date,
 ): Promise<EroticLexicon> {
   const lexicon = await readLexicon(fs, key, input.personId, now);
   const source = `test:${input.resultId}`;
-  const marked = applyNameMarks(lexicon, def.bank, input.marks, source, now);
+  const marked = applyNameMarks(lexicon, def.bank, input.marks, source, now, input.sides ?? {});
   const draft = await openDraft(fs, key, input.personId, def.id);
   const clearable = draft?.id === input.resultId ? (input.cleared ?? {}) : {};
   const next = clearNameMarks(marked, clearable, now);

@@ -16241,13 +16241,49 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
     await w.screenshot({ path: 'e2e-artifacts/74-identity.png', fullPage: true });
     // Step 1 → step 2: answering who you both are lands on the pet names.
     await w.getByRole('button', { name: /Next: what you call each other/i }).click();
-    // 74 §3.6.8 — the pet names are NOT oriented: "good girl" is offered to this
-    // straight man in BOTH directions, because whether a name is "for a girl" is a convention and the point
-    // of the phase is that he decides. (The deck stays oriented — that is what the rest of this walk checks.)
+    /*
+     * 74 §3.6.3 — the pet names ARE oriented now (owner-directed, 2026-08-19), reversing §3.6.8's carve-out.
+     * The reported bug was a man being asked whether he calls his girlfriend "my man".
+     *
+     * The unit is the DIRECTION, not the name: "good girl" keeps the pill where it lands (he calls her it)
+     * and loses the one where it cannot (he is called it). Getting this backwards would be the worse bug —
+     * hiding the row entirely takes away the name he would most use.
+     */
     await expect(w.getByRole('heading', { name: /what do you call each other/i })).toBeVisible();
     await w.getByRole('button', { name: /^praise/i }).click();
-    await expect(w.getByRole('button', { name: /^good girl — .*→ Tester/i }).first()).toBeVisible();
     await expect(w.getByRole('button', { name: /^good girl — Tester →/i }).first()).toBeVisible();
+    await expect(w.getByRole('button', { name: /^good girl — .*→ Tester/i })).toHaveCount(0);
+    // ...and its mirror, so the filter is per-person rather than a blanket "hide anything feminine".
+    await expect(w.getByRole('button', { name: /^good boy — .*→ Tester/i }).first()).toBeVisible();
+    await expect(w.getByRole('button', { name: /^good boy — Tester →/i })).toHaveCount(0);
+    /*
+     * MEASURED, not eyeballed (the 2026-08-19 lesson: a progress bar was "fixed" twice on visual hunches
+     * while the DOM said `width: 0`). The whole reason no placeholder is needed is that both pills are
+     * `flex: 1 1 auto`, so a lone survivor fills the row — leaving a hole instead would be the placeholder
+     * the owner explicitly did not want.
+     */
+    const stretch = await w.evaluate(() => {
+      const label = Array.from(document.querySelectorAll('*')).find(
+        (el) => el.children.length === 0 && el.textContent?.trim() === 'I call them this',
+      );
+      const pill = label?.closest('span')?.parentElement;
+      const row = pill?.parentElement;
+      if (!pill || !row) return null;
+      return {
+        pills: row.children.length,
+        ratio: pill.getBoundingClientRect().width / row.getBoundingClientRect().width,
+      };
+    });
+    expect(stretch?.pills).toBe(1);
+    expect(stretch?.ratio ?? 0).toBeGreaterThan(0.95);
+
+    // A CONVENTION-coded word is still asked both ways — #62 forbids inferring a preference from gender,
+    // and deciding for himself is the entire point of the phase.
+    await w.getByRole('button', { name: /Done with this one/i }).click();
+    await w.getByRole('button', { name: /^warm & sweet/i }).click();
+    await expect(w.getByRole('button', { name: /^angel — .*→ Tester/i }).first()).toBeVisible();
+    await expect(w.getByRole('button', { name: /^angel — Tester →/i }).first()).toBeVisible();
+    await w.getByRole('button', { name: /Done with this one/i }).click();
     await w.getByRole('button', { name: /Done with names/i }).click();
     // The words are next, and they open on their owed two-tap practice.
     await clearPractice(w);

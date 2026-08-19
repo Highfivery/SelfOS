@@ -8,6 +8,7 @@ const entry = (key: string, family: string, tier = 2): AdaptiveNameEntryView => 
   family,
   tier,
   example: `come here, ${key}`,
+  sides: ['hear', 'say'],
 });
 
 const ENTRIES = [

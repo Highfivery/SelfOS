@@ -38,6 +38,7 @@ const NAMES: AdaptiveNamesView = {
       family: 'names-praise',
       tier: 2,
       example: 'that’s it — such a good girl for me',
+      sides: ['hear', 'say'],
     },
     {
       key: 'names-praise:good-boy',
@@ -45,6 +46,7 @@ const NAMES: AdaptiveNamesView = {
       family: 'names-praise',
       tier: 2,
       example: 'that’s my good boy',
+      sides: ['hear', 'say'],
     },
     {
       key: 'names-rough-heavy:slut',
@@ -52,6 +54,7 @@ const NAMES: AdaptiveNamesView = {
       family: 'names-rough-heavy',
       tier: 4,
       example: 'that’s my slut',
+      sides: ['hear', 'say'],
       // Ruled out to hear in an EARLIER take. Still re-markable: a no is a preference now (74 §3.2).
       hearState: 'never',
     },

@@ -9,6 +9,7 @@ import {
 } from '../../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../../vault';
 import { bankEntry, toLexiconEntry, type Bank, type BankEntry } from './bank';
+import { shownSides, type Orientation } from './orientation';
 
 /**
  * 74-adaptive-tests §4.4 — the shared **erotic lexicon**: ONE per person, written by every adaptive intimacy
@@ -233,6 +234,12 @@ export function applyNameMarks(
   marks: NameMarks,
   source: string,
   now: Date,
+  /**
+   * Which sides each key was SHOWN on (74 §3.6.3). Absent for a key ⇒ both, the pre-orientation behaviour.
+   * A name whose register names a gender neither of you is only offers one direction now, so recording both
+   * would put a fact in the file that the screen never asked.
+   */
+  sidesByKey: Readonly<Record<string, readonly ('hear' | 'say')[]>> = {},
 ): EroticLexicon {
   const byKey = new Map(lexicon.entries.map((entry) => [entry.key, entry]));
   const boundaries = [...lexicon.boundaries];
@@ -250,8 +257,11 @@ export function applyNameMarks(
       say: ratingFor(mark.say, base.say),
       ...(hearState ? { hearState } : {}),
       ...(sayState ? { sayState } : {}),
-      // Both sides are always put to them in this phase — that is what makes it two marks, not one.
-      sides: ['hear', 'say'],
+      // What was actually put to them. This phase asks BOTH directions per name — that is what makes it two
+      // marks rather than one — EXCEPT where orientation withheld a side, so the shown sides are recorded
+      // rather than assumed. Hardcoding both used to be true and became a lie the moment names were
+      // oriented; a `0` on a side that was never offered reads as a refusal (§3.6.6).
+      sides: [...(sidesByKey[key] ?? (['hear', 'say'] as const))],
       state: undefined,
       source,
     });
@@ -300,6 +310,72 @@ export function clearNameMarks(
     return !(boundary.direction && sides.has(boundary.direction));
   });
   return { ...lexicon, entries, boundaries, updatedAt: now.toISOString() };
+}
+
+/**
+ * 74 §3.6.3 — drop what this person is no longer asked (owner decision, 2026-08-19).
+ *
+ * Orientation used to be a pure display filter, and for the deck alone that was survivable. Once it reaches
+ * the pet names it stops being survivable, because a mark on a side nobody can see any more still WORKS:
+ * `suppressedTexts` derives suppression from the live `state`/`hearState`/`sayState`, so a `never` on a
+ * hidden side keeps that word out of every generated line app-wide with no control left on screen to lift
+ * it. That is precisely the un-gettable-rid-of preference §3.2 was amended to abolish.
+ *
+ * So a mark on an unshown side is REMOVED, not merely ignored:
+ *
+ * - one side hidden → that side's rating and per-direction state go; the other side is untouched
+ * - both hidden → the entry goes entirely, `state` and all, which is what actually releases a deck `never`
+ * - a key the bank does not know (a custom write-in, a retired entry) is never touched — we cannot resolve
+ *   which sides it would be shown on, and guessing would delete something the person typed themselves
+ *
+ * Boundaries are left alone: a themed boundary a probe named ("anything about being used") is not a bank
+ * entry and has no side to be hidden on.
+ *
+ * Returns `changed` so a caller can skip the write when there is nothing to do — this runs on read.
+ */
+export function pruneUnshownMarks(
+  lexicon: EroticLexicon,
+  bank: Bank,
+  who: Orientation,
+  now: Date,
+): { lexicon: EroticLexicon; changed: boolean } {
+  let changed = false;
+  const entries: LexiconEntry[] = [];
+  for (const entry of lexicon.entries) {
+    const spec = bankEntry(bank, entry.key);
+    if (!spec) {
+      entries.push(entry);
+      continue;
+    }
+    const shown = shownSides(spec, who);
+    if (shown.length === 0) {
+      changed = true;
+      continue;
+    }
+    let next = entry;
+    if (!shown.includes('hear') && (entry.hear !== 0 || entry.hearState !== undefined)) {
+      next = { ...next, hear: 0 };
+      delete next.hearState;
+      changed = true;
+    }
+    if (!shown.includes('say') && (entry.say !== 0 || entry.sayState !== undefined)) {
+      next = { ...next, say: 0 };
+      delete next.sayState;
+      changed = true;
+    }
+    // Record what is actually on offer now, so a 0 on an unshown side is never read as a refusal (§3.6.6).
+    if (
+      next.sides === undefined ||
+      next.sides.length !== shown.length ||
+      !shown.every((side) => next.sides?.includes(side))
+    ) {
+      next = { ...next, sides: [...shown] };
+      changed = true;
+    }
+    entries.push(next);
+  }
+  if (!changed) return { lexicon, changed: false };
+  return { lexicon: { ...lexicon, entries, updatedAt: now.toISOString() }, changed: true };
 }
 
 /** Pass 2 — the hear/say split, applied only to entries pass 1 marked. */
@@ -438,9 +514,19 @@ function dedupeBoundaries(boundaries: readonly LexiconBoundary[]): LexiconBounda
 }
 
 /**
- * Merge two lexicons (pure) — the sync-conflict + retake path. Ratings AND states resolve last-write-wins
- * by `updatedAt`; **boundaries still UNION**, because a theme is named by an explicit act rather than a
- * mark that can be changed.
+ * Merge two lexicons (pure). Ratings AND states resolve last-write-wins by `updatedAt`; **boundaries still
+ * UNION**, because a theme is named by an explicit act rather than a mark that can be changed.
+ *
+ * **Its one production caller folds a synthesis back into a lexicon against a copy of ITSELF**
+ * (`completeAdaptiveResult`). There is no sync-conflict caller: a conflicted vault copy is surfaced to the
+ * person to resolve (`findConflicts` → the banner), never merged automatically.
+ *
+ * That matters because of what this function cannot express: **a deletion**. `byKey` is seeded from the older
+ * copy and the newer one only ever adds to it, so an entry the newer side dropped comes back. Today nothing
+ * can trip that — the only deletions are `pruneUnshownMarks`, both sides of the one live call are the same
+ * object, and any resurrection would be re-pruned on the next adaptive read. Wire a real two-copy merge and
+ * it becomes reachable, and a lifted `never` would come back with it: that needs a tombstone, not a tweak
+ * here. Pinned by a test so the limitation is a decision rather than a surprise.
  */
 export function mergeLexicons(a: EroticLexicon, b: EroticLexicon): EroticLexicon {
   const [older, newer] = a.updatedAt <= b.updatedAt ? [a, b] : [b, a];

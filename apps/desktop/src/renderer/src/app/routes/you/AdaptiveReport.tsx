@@ -234,6 +234,10 @@ export function AdaptiveReport(): JSX.Element {
   const nameEntries = lexicon.entries.filter((e) => e.family.startsWith('names-'));
   const pickNames = (side: 'hearState' | 'sayState', mark: 'love' | 'okay' | 'never'): string[] =>
     nameEntries.filter((e) => e[side] === mark).map((e) => e.text);
+  // The hard-no lists carry the KEY as well, because unlike the other two they need to be actionable: this
+  // is the only control anywhere that can lift a per-direction `never` (74 §3.2).
+  const pickNos = (side: 'hearState' | 'sayState'): { key: string; text: string }[] =>
+    nameEntries.filter((e) => e[side] === 'never').map((e) => ({ key: e.key, text: e.text }));
   const names = {
     callMe: pickNames('hearState', 'love'),
     okayCalled: pickNames('hearState', 'okay'),
@@ -598,13 +602,15 @@ export function AdaptiveReport(): JSX.Element {
                           head: 'Call me',
                           love: names.callMe,
                           okay: names.okayCalled,
-                          no: names.neverCalled,
+                          no: pickNos('hearState'),
+                          side: 'hear',
                         },
                         {
                           head: 'What you call them',
                           love: names.iCall,
                           okay: names.okaySaying,
-                          no: names.neverSaying,
+                          no: pickNos('sayState'),
+                          side: 'say',
                         },
                       ] as const
                     ).map((col) => (
@@ -658,17 +664,42 @@ export function AdaptiveReport(): JSX.Element {
                             in SelfOS while they&rsquo;re marked &mdash; change any of them whenever
                             you like.
                             <details className={adaptive.fold}>
-                              <summary>See them</summary>
+                              <summary>See them, and change your mind</summary>
                               <div className={adaptive.chipRow}>
-                                {col.no.map((text) => (
+                                {col.no.map(({ key, text }) => (
                                   <span
-                                    key={text}
+                                    key={key}
                                     className={`${adaptive.nameChip} ${adaptive.chipNo}`}
                                   >
                                     {text}
                                   </span>
                                 ))}
                               </div>
+                              {/*
+                               * The sentence above used to be the whole affordance: "change any of them
+                               * whenever you like", over read-only chips, with the actual control a row in
+                               * the names phase. That held right up until the row was gone — a name retired
+                               * from the bank keeps suppressing with nothing left to lift it on. So the
+                               * control lives HERE, where the claim is made, and works whether or not the
+                               * name is still in the bank.
+                               */}
+                              <Stack gap={2}>
+                                {col.no.map(({ key, text }) => (
+                                  <Button
+                                    key={key}
+                                    variant="ghost"
+                                    onClick={() =>
+                                      void editLexicon({
+                                        kind: 'clearNameSide',
+                                        key,
+                                        side: col.side,
+                                      })
+                                    }
+                                  >
+                                    Changed my mind about &ldquo;{text}&rdquo;
+                                  </Button>
+                                ))}
+                              </Stack>
                             </details>
                           </div>
                         ) : null}

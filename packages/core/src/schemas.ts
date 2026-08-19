@@ -1301,6 +1301,13 @@ export interface AdaptiveNameEntryView {
   /** What they have already said, per direction. */
   hearState?: 'love' | 'okay' | 'never';
   sayState?: 'love' | 'okay' | 'never';
+  /**
+   * 74 §3.6.3 — the directions this person is actually asked about this name. A name whose register names a
+   * gender neither of them is is offered one way only ("my man" is something he can be called, never
+   * something he calls her), and a name that fits neither of them is not returned at all. Resolved here
+   * rather than in the renderer so the rows and the register counts cannot disagree.
+   */
+  sides: ('hear' | 'say')[];
 }
 
 export interface AdaptiveNamesView {
@@ -1457,6 +1464,12 @@ export interface AdaptiveSynthesisView {
 export type AdaptiveLexiconEdit =
   | { kind: 'rate'; key: string; hear?: number; say?: number }
   | { kind: 'setState'; key: string; state: 'never' | 'okay' | null }
+  /**
+   * Take back ONE direction of a pet-name mark. `setState` is whole-entry (what the deck writes); a name is
+   * answered per direction, so its `never` lives in `hearState`/`sayState` and needs its own op — which is
+   * what makes the report's hard-no list actionable even for a name no longer in the bank (74 §3.2/§3.6.8).
+   */
+  | { kind: 'clearNameSide'; key: string; side: 'hear' | 'say' }
   | {
       // 74 §3.6.4 — the two address taps. A DISPLAY filter: writes no mark, lifts no boundary.
       kind: 'setAddress';

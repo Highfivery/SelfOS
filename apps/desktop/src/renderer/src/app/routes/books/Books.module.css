@@ -1123,27 +1123,7 @@
 .grow {
   flex: 1;
   min-width: 0;
-}
-
-.chapterRow:first-child {
-  border-top: none;
-  padding-top: 0;
-}
-
-.overviewRow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-1) 0;
-  border-top: 1px solid var(--color-border);
-}
-
-.overviewRow:first-of-type {
-  border-top: none;
-}
-
-/* A written-chapter row is a full-width button that reads like the overview rows but is clickable. */
+} /* A written-chapter row is a full-width button that reads like the overview rows but is clickable. */
 .chapterLink {
   display: flex;
   align-items: baseline;
@@ -1189,22 +1169,7 @@
   flex: 1 1 16rem;
   min-width: 0;
   font-style: italic;
-}
-
-/* Consent center rows (§17.5) — name · consent state · pseudonym, wrapping on a narrow pane. */
-.consentRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) 0;
-  border-top: 1px solid var(--color-border);
-}
-.consentName {
-  flex: 1 1 10rem;
-  min-width: 0;
-}
-/* Continuity review rows (§17.3) — the finding fills the row; Mark fixed / Dismiss sit at the end. */
+} /* Continuity review rows (§17.3) — the finding fills the row; Mark fixed / Dismiss sit at the end. */
 .continuityRow {
   display: flex;
   flex-wrap: wrap;
@@ -1709,70 +1674,11 @@
   background: var(--color-accent);
   transition: width 0.3s ease;
 }
-
-/* The reader view (§3.6) — typography-first, a comfortable measure (the owner-approved §12 reader exception). */
-.readerView {
-  max-width: 70%;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  line-height: 1.7;
-}
-
 @media (max-width: 768px) {
   .readerView {
     max-width: 100%;
   }
-}
-
-.coverPage {
-  text-align: center;
-  padding: var(--space-6) 0;
-  border-bottom: 1px solid var(--color-border);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.dedication {
-  text-align: center;
-  color: var(--color-text-secondary);
-}
-
-.epigraph {
-  margin: 0;
-  padding-left: var(--space-4);
-  border-left: 3px solid var(--color-border);
-  color: var(--color-text-secondary);
-  font-style: italic;
-}
-
-.toc {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
-
-.readerChapter {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  margin-bottom: var(--space-5);
-}
-
-.backMatter {
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-/* Chapters as a grid of portrait, cover-backed cards (§3.1 redesign) — the book's cover (or a chapter's own
+} /* Chapters as a grid of portrait, cover-backed cards (§3.1 redesign) — the book's cover (or a chapter's own
    illustration where it has one) fills each card; a dark scrim keeps the title readable. Grouped by part. */
 .partSection {
   display: flex;

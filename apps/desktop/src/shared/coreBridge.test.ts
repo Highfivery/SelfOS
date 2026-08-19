@@ -47,7 +47,7 @@ import {
   readProfile,
   writeProfile,
 } from '@selfos/core/questionnaires';
-import { getTest } from '@selfos/core/tests';
+import { getTest, readLexicon, suppressedTexts, writeLexicon } from '@selfos/core/tests';
 import { matrixRowKey } from '@selfos/core/schemas';
 import { saveGoal } from '@selfos/core/goals';
 import { listChallenges, recordCheckIn } from '@selfos/core/challenges';
@@ -7743,6 +7743,154 @@ describe('update awareness (36)', () => {
           wordKind: 'phrase',
         });
         expect(added?.entries.some((e) => e.text === 'wreck me')).toBe(true);
+      });
+
+      /**
+       * 74 §3.6.3 — a mark on a side the person is no longer asked about is REMOVED, and the moment that has
+       * to happen is the identity tap that stranded it.
+       *
+       * `suppressedTexts` reads the LIVE state, so a `never` left on a hidden side keeps that word out of
+       * every generated line app-wide with no pill left on screen to lift it — the un-gettable-rid-of
+       * preference §3.2 was amended to abolish. The renderer does re-read names right after this call, but
+       * the renderer is not the trust boundary.
+       */
+      it('stops suppressing a word the moment the identity tap hides the pill for it', async () => {
+        const { host, bridge, ownerId } = await freshOwner();
+        await bridge.testsAcknowledgeAdult();
+        const started = await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
+        // Answer as a couple who are shown everything, so both directions are genuinely on offer.
+        await bridge.testsLexiconEdit({
+          kind: 'setAddress',
+          self: 'either',
+          partner: 'either',
+          identity: { self: 'either', partner: 'either' },
+        });
+        // "good girl" is `addresses: 'girl'`. Rule it out as something to be CALLED.
+        await bridge.testsAdaptiveNames({
+          testId: 'dirty-talk',
+          resultId: started!.draft!.id,
+          marks: { 'names-praise:good-girl': { hear: 'never' } },
+          autosave: true,
+        });
+        const { fs, key } = (await host.host.vaultAndKey())!;
+        expect(suppressedTexts(await readLexicon(fs, key, ownerId))).toContain('good girl');
+
+        // Now say he is a man. The hear side of "good girl" is no longer asked, so the pill that could lift
+        // that no is gone — and this ONE call must therefore take the no with it.
+        await bridge.testsLexiconEdit({
+          kind: 'setAddress',
+          self: 'man',
+          partner: 'girl',
+          identity: { self: 'man', partner: 'woman' },
+        });
+        const after = await readLexicon(fs, key, ownerId);
+        expect(suppressedTexts(after)).not.toContain('good girl');
+        // ...and the side he IS asked about survives untouched, which is the whole reason the unit is the
+        // direction and not the name: "good girl" is exactly what he would call her.
+        const entry = after.entries.find((e) => e.key === 'names-praise:good-girl');
+        expect(entry?.hearState).toBeUndefined();
+        expect(entry?.sides).toEqual(['say']);
+      });
+
+      /**
+       * The same heal has to reach the REPORT, because the report is where a hard no is listed and lifted.
+       * Reading state is what every adaptive screen does on arrival, so pruning there covers a lexicon marked
+       * before this build as well as one stranded by a tap.
+       */
+      it('heals a stranded mark on a plain state read, not only on the marking screens', async () => {
+        const { host, bridge, ownerId } = await freshOwner();
+        await bridge.testsAcknowledgeAdult();
+        const started = await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
+        await bridge.testsAdaptiveNames({
+          testId: 'dirty-talk',
+          resultId: started!.draft!.id,
+          marks: { 'names-praise:good-girl': { hear: 'never' } },
+          autosave: true,
+        });
+        const { fs, key } = (await host.host.vaultAndKey())!;
+        // Strand it the way a pre-orientation lexicon is stranded: the mark is on disk, the orientation that
+        // hides it arrives from somewhere this write never saw.
+        const stranded = await readLexicon(fs, key, ownerId);
+        await writeLexicon(fs, key, {
+          ...stranded,
+          address: { self: 'man', partner: 'girl' },
+          identity: { self: 'man', partner: 'woman' },
+        });
+        expect(suppressedTexts(await readLexicon(fs, key, ownerId))).toContain('good girl');
+
+        // A bare state read — no marking, no identity change.
+        await bridge.testsAdaptiveState({ testId: 'dirty-talk' });
+        expect(suppressedTexts(await readLexicon(fs, key, ownerId))).not.toContain('good girl');
+      });
+
+      /**
+       * 74 §3.2 — a `never` a person can no longer reach is the preference the spec was amended to abolish.
+       *
+       * A pet-name no lives per DIRECTION, so the report's whole-entry "changed my mind" could not touch it
+       * and the only control was a row in the names phase. Retire the name from the bank — 266 went in #534
+       * and 37 animal-sex names went with this change — and there is no row, while `suppressedTexts` keeps
+       * that word out of every generated line app-wide.
+       */
+      it('lets the report lift a per-direction no on a name the bank no longer carries', async () => {
+        const { host, bridge, ownerId } = await freshOwner();
+        await bridge.testsAcknowledgeAdult();
+        const started = await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
+        const { fs, key } = (await host.host.vaultAndKey())!;
+
+        // Mark a real name, then make it a retired one: the mark stays, its bank row does not.
+        await bridge.testsAdaptiveNames({
+          testId: 'dirty-talk',
+          resultId: started!.draft!.id,
+          marks: { 'names-praise:good-girl': { hear: 'never' } },
+          autosave: true,
+        });
+        const marked = await readLexicon(fs, key, ownerId);
+        await writeLexicon(fs, key, {
+          ...marked,
+          entries: marked.entries.map((e) =>
+            e.key === 'names-praise:good-girl' ? { ...e, key: 'names-praise:retired-name' } : e,
+          ),
+        });
+        expect(suppressedTexts(await readLexicon(fs, key, ownerId))).toContain('good girl');
+        // The prune leaves it alone, correctly — it cannot resolve sides for a key the bank never had, and
+        // guessing would delete a custom word the person typed themselves.
+        await bridge.testsAdaptiveState({ testId: 'dirty-talk' });
+        expect(suppressedTexts(await readLexicon(fs, key, ownerId))).toContain('good girl');
+
+        // So the report has to be able to lift it, and now can.
+        await bridge.testsLexiconEdit({
+          kind: 'clearNameSide',
+          key: 'names-praise:retired-name',
+          side: 'hear',
+        });
+        expect(suppressedTexts(await readLexicon(fs, key, ownerId))).not.toContain('good girl');
+      });
+
+      it('lifts only the direction asked for, never the other one', async () => {
+        const { host, bridge, ownerId } = await freshOwner();
+        await bridge.testsAcknowledgeAdult();
+        const started = await bridge.testsAdaptiveStart({ testId: 'dirty-talk' });
+        // `slut` is convention-coded, so both directions are asked of everyone — the case where a one-sided
+        // lift has something to get wrong.
+        await bridge.testsAdaptiveNames({
+          testId: 'dirty-talk',
+          resultId: started!.draft!.id,
+          marks: { 'names-rough-heavy:slut': { hear: 'never', say: 'never' } },
+          autosave: true,
+        });
+        await bridge.testsLexiconEdit({
+          kind: 'clearNameSide',
+          key: 'names-rough-heavy:slut',
+          side: 'hear',
+        });
+        const { fs, key } = (await host.host.vaultAndKey())!;
+        const after = await readLexicon(fs, key, ownerId);
+        const entry = after.entries.find((e) => e.key === 'names-rough-heavy:slut');
+        expect(entry?.hearState).toBeUndefined();
+        expect(entry?.sayState).toBe('never');
+        // Still suppressed overall — he took back being called it, not calling her it.
+        expect(suppressedTexts(after)).toContain('slut');
+        expect(suppressedTexts(after, 'hear')).not.toContain('slut');
       });
 
       it('denies the adaptive surface to a person without tests.own (Guest)', async () => {

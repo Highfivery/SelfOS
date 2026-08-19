@@ -228,7 +228,6 @@
 /* Inline badges (sensitive / flagged / withdrawn) — small, subtle, flowing right after the fact text
    (44 audit). `inline-flex` + `vertical-align: middle` keeps them on the text's last line, never floating. */
 .inlineTag,
-.flaggedTag,
 .sensitiveTag {
   display: inline-flex;
   align-items: center;
@@ -258,12 +257,6 @@
   font-size: var(--text-xs);
   color: var(--color-text-secondary);
 }
-
-.provenance {
-  margin-left: auto;
-  min-width: 0;
-}
-
 .provLink {
   display: inline-flex;
   align-items: center;
@@ -747,11 +740,6 @@
   min-width: 0;
   margin-top: 1px;
 }
-.metaDot {
-  flex: none;
-  color: var(--color-text-tertiary);
-  opacity: 0.55;
-}
 .provStatic {
   min-width: 0;
 }
@@ -762,14 +750,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* Inline single-fact edit */
-.factEditActions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-1);
 }
 .actionsSpacer {
   flex: 1;

@@ -963,14 +963,18 @@ export function AdaptiveTake(): JSX.Element {
                       </div>
                     ))}
                     <Text size="sm" tone="tertiary">
-                      Change this any time. It only decides what you&rsquo;re shown — nothing is
-                      ruled out, and no mark is lost.
+                      {/* This said "nothing is ruled out, and no mark is lost" — true while orientation
+                          was only a display filter, and false since it started pruning (§3.6.3): a mark on
+                          a direction this hides is cleared on the tap itself. Saying so costs one line and
+                          is cheaper than the surprise. */}
+                      Change this any time. It decides what you&rsquo;re shown — and clears any
+                      marks on a direction it hides.
                     </Text>
                   </div>
                 ) : (
                   <Text size="sm" tone="tertiary">
-                    Change this any time. It only decides what you&rsquo;re shown — nothing is ruled
-                    out, and no mark is lost.
+                    Change this any time. It decides what you&rsquo;re shown — and clears any marks
+                    on a direction it hides.
                   </Text>
                 )}
               </div>

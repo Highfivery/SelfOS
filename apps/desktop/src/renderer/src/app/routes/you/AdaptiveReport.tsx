@@ -378,7 +378,7 @@ export function AdaptiveReport(): JSX.Element {
                 <Text tone="secondary">
                   Nothing here yet. Once you&rsquo;ve taken it, this page holds your words — what
                   you love to hear, what you can say out loud, what you&rsquo;re working up to, and
-                  what is off the table for good.
+                  what you&rsquo;d rather it never used.
                 </Text>
                 <div className={adaptive.introActions}>
                   <Button variant="primary" onClick={() => navigate(`/tests/${testId}/take`)}>
@@ -654,8 +654,9 @@ export function AdaptiveReport(): JSX.Element {
                         ) : null}
                         {col.no.length > 0 ? (
                           <div className={adaptive.noBox}>
-                            <strong>{col.no.length} off the table.</strong> Never suggested anywhere
-                            in SelfOS.
+                            <strong>{col.no.length} not for you.</strong> Never suggested anywhere
+                            in SelfOS while they&rsquo;re marked &mdash; change any of them whenever
+                            you like.
                             <details className={adaptive.fold}>
                               <summary>See them</summary>
                               <div className={adaptive.chipRow}>
@@ -767,8 +768,9 @@ export function AdaptiveReport(): JSX.Element {
                   <FoldedChips entries={okay} label="Fine either way — usable, not favourites" />
                   {never.length > 0 ? (
                     <div className={adaptive.noBox}>
-                      <strong>{never.length} off the table.</strong> Nothing in SelfOS will suggest
-                      these — and lifting one is yours alone to do.
+                      <strong>{never.length} not for you.</strong> Nothing in SelfOS will suggest
+                      these for as long as they&rsquo;re marked &mdash; and changing your mind about
+                      one is yours alone to do, any time.
                       <details className={adaptive.fold}>
                         <summary>See them, and change your mind</summary>
                         <Chips entries={never} never />
@@ -953,7 +955,8 @@ export function AdaptiveReport(): JSX.Element {
               {confirmingDelete ? (
                 <Text size="sm" tone="secondary">
                   This removes every take, the profile, and the words you rated — everywhere in
-                  SelfOS. Anything you marked <strong>off the table</strong> stays off the table.
+                  SelfOS. Anything you marked <strong>not for you</strong> is kept, so nothing
+                  starts using a word you&rsquo;d ruled out.
                 </Text>
               ) : null}
 

@@ -7646,7 +7646,12 @@ describe('update awareness (36)', () => {
             'names-rough-heavy:whore': 'never',
           },
         });
-        expect(marked?.lexicon.boundaries.map((b) => b.text)).toEqual(['whore']);
+        // Suppression rides the entry's live state — no second record, which is what used to make a no
+        // unliftable (74 §3.6.11).
+        expect(
+          marked?.lexicon.entries.find((e) => e.key === 'names-rough-heavy:whore')?.state,
+        ).toBe('never');
+        expect(marked?.lexicon.boundaries).toEqual([]);
 
         // 74 §3.6.9 — three marks is not material. A generating step refuses BEFORE any model call, so a
         // crafted request cannot spend on a lexicon the person has barely started; the renderer greys the same
@@ -7717,14 +7722,19 @@ describe('update awareness (36)', () => {
           marks: { 'names-rough-heavy:whore': 'never' },
         });
 
-        expect((await bridge.testsLexicon())?.boundaries).toHaveLength(1);
-        // Only an explicit act by the person lifts a boundary (74 §3.2).
+        const noState = async (): Promise<string | undefined> =>
+          (await bridge.testsLexicon())?.entries.find((e) => e.key === 'names-rough-heavy:whore')
+            ?.state;
+        expect(await noState()).toBe('never');
+        // The report's explicit "changed my mind" still lifts it — now one of several ways, not the only one.
         const cleared = await bridge.testsLexiconEdit({
           kind: 'setState',
           key: 'names-rough-heavy:whore',
           state: null,
         });
-        expect(cleared?.boundaries).toHaveLength(0);
+        expect(
+          cleared?.entries.find((e) => e.key === 'names-rough-heavy:whore')?.state,
+        ).toBeUndefined();
         // Their own word, in their own words.
         const added = await bridge.testsLexiconEdit({
           kind: 'addWord',

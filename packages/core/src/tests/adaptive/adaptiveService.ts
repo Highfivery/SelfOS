@@ -277,7 +277,7 @@ export async function recordBankPass(
   // renderer in `adaptiveState().history`, so that is a reachable string, not a hypothetical one (74 §3.2).
   const draft = await openDraft(fs, key, input.personId, def.id);
   const clearable = draft?.id === input.resultId ? (input.cleared ?? []) : [];
-  const next = clearMarks(marked, clearable, now, source);
+  const next = clearMarks(marked, clearable, now);
   await writeLexicon(fs, key, next);
   if (input.autosave) return next;
   await stampTurn(fs, key, input.personId, input.resultId, {
@@ -319,7 +319,7 @@ export async function recordNamePass(
   const marked = applyNameMarks(lexicon, def.bank, input.marks, source, now);
   const draft = await openDraft(fs, key, input.personId, def.id);
   const clearable = draft?.id === input.resultId ? (input.cleared ?? {}) : {};
-  const next = clearNameMarks(marked, clearable, now, source);
+  const next = clearNameMarks(marked, clearable, now);
   await writeLexicon(fs, key, next);
   if (input.autosave) return next;
   await stampTurn(fs, key, input.personId, input.resultId, {

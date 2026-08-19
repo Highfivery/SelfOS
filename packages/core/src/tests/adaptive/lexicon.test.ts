@@ -41,15 +41,16 @@ function seeded(): EroticLexicon {
 }
 
 describe('the erotic lexicon (74 §4.4)', () => {
-  it('applies pass-1 marks: love seeds both directions, a no zeroes and records a boundary', () => {
+  it('applies pass-1 marks: love seeds both directions, a no zeroes and suppresses', () => {
     const lex = seeded();
     const byKey = new Map(lex.entries.map((entry) => [entry.key, entry]));
     expect(byKey.get(GOOD_GIRL)).toMatchObject({ hear: 3, say: 3, state: undefined });
     expect(byKey.get(WHORE)).toMatchObject({ hear: 0, say: 0, state: 'never' });
     expect(byKey.get(CUNT)).toMatchObject({ hear: 0, say: 0, state: 'okay' });
-    // A `never` becomes a GLOBAL boundary, which is what every consumer suppresses on.
-    expect(lex.boundaries.map((b) => b.text)).toEqual(['whore']);
-    // `notYet` is NOT a boundary — it is coachable material, not a hard no.
+    // A `never` suppresses the word everywhere, derived from the LIVE state — no second record is written,
+    // which is what used to make it unliftable (74 §3.2, amended 2026-08-19).
+    expect(lex.boundaries).toEqual([]);
+    // `notYet`/`okay` are NOT suppressed — they are coachable material, not a refusal.
     expect(suppressedTexts(lex)).toEqual(['whore']);
   });
 
@@ -59,14 +60,18 @@ describe('the erotic lexicon (74 §4.4)', () => {
     expect(lex.entries).toHaveLength(3);
   });
 
-  it('never lets a mark or a split lift a hard no', () => {
+  it('lets a later mark lift a no — it is a preference, respected only while it is set', () => {
     const lex = seeded();
+    expect(suppressedTexts(lex)).toContain('whore');
     const reMarked = applyBankMarks(lex, DIRTY_TALK.bank, { [WHORE]: 'love' }, 'take:2', LATER);
-    expect(reMarked.entries.find((e) => e.key === WHORE)).toMatchObject({
-      state: 'never',
-      hear: 0,
-    });
-    const split = applyDirections(reMarked, { [WHORE]: { hear: 4, say: 4 } }, LATER);
+    expect(reMarked.entries.find((e) => e.key === WHORE)?.state).toBeUndefined();
+    // The whole point: the suppression goes WITH the mark, on the very next read.
+    expect(suppressedTexts(reMarked)).not.toContain('whore');
+    expect(violatesBoundary(reMarked, 'come here, whore')).toBe(false);
+  });
+
+  it('still refuses to re-rate a no through the SPLIT pass — that pass rates what was loved', () => {
+    const split = applyDirections(seeded(), { [WHORE]: { hear: 4, say: 4 } }, LATER);
     expect(split.entries.find((e) => e.key === WHORE)).toMatchObject({
       state: 'never',
       hear: 0,
@@ -85,7 +90,7 @@ describe('the erotic lexicon (74 §4.4)', () => {
     expect(lex.entries.find((e) => e.key === GOOD_GIRL)).toMatchObject({ hear: 4, say: 4 });
   });
 
-  it('merges last-write-wins on ratings, but a `never` from EITHER side survives and boundaries union', () => {
+  it('merges last-write-wins on ratings AND states, and unions the themes', () => {
     const mine = seeded();
     const theirs = addBoundary(
       applyBankMarks(
@@ -99,12 +104,20 @@ describe('the erotic lexicon (74 §4.4)', () => {
       LATER,
     );
     const merged = mergeLexicons(mine, theirs);
-    // The newer side never marked `whore` at all — the hard no still survives the merge.
+    // The newer side never touched `whore`, so the older side's answer stands.
     expect(merged.entries.find((e) => e.key === WHORE)?.state).toBe('never');
-    expect(new Set(merged.boundaries.map((b) => b.text))).toEqual(
-      new Set(['whore', 'anything about being used']),
-    );
+    // Only the theme is a record now; a bank entry's suppression rides its state.
+    expect(merged.boundaries.map((b) => b.text)).toEqual(['anything about being used']);
     expect(merged.entries.find((e) => e.key === 'anatomy-her:tits')).toBeDefined();
+  });
+
+  it('lets the NEWER side lift a no — never-wins would undo it on the next sync', () => {
+    // The exact case: ruled out on an old copy, lifted here. Before `never` became a preference this
+    // merged back to `never`, silently undoing the change on whichever device synced second.
+    const lifted = applyBankMarks(seeded(), DIRTY_TALK.bank, { [WHORE]: 'love' }, 'take:2', LATER);
+    const merged = mergeLexicons(seeded(), lifted);
+    expect(merged.entries.find((e) => e.key === WHORE)?.state).toBeUndefined();
+    expect(suppressedTexts(merged)).not.toContain('whore');
   });
 
   it('suppresses a candidate line that touches any boundary', () => {
@@ -152,7 +165,7 @@ describe('the erotic lexicon (74 §4.4)', () => {
     await writeLexicon(fs, KEY, seeded());
     const read = await readLexicon(fs, KEY, 'p1', NOW);
     expect(read.entries).toHaveLength(3);
-    expect(read.boundaries.map((b) => b.text)).toEqual(['whore']);
+    expect(suppressedTexts(read)).toEqual(['whore']);
     // A corrupt doc must never throw out of the surface that depends on it.
     await fs.writeAtomic('people/p1/tests/lexicon.enc', new TextEncoder().encode('not json'));
     expect((await readLexicon(fs, KEY, 'p1', NOW)).entries).toEqual([]);
@@ -180,14 +193,20 @@ describe('boundary matching (74 §5.7)', () => {
   });
 });
 
-describe('a hard no is unliftable (74 §3.2 — the invariant the feature rests on)', () => {
-  it('cannot be downgraded by ANY mark, not just by love', () => {
+describe('a hard no is respected while set, and changeable (74 §3.2, amended 2026-08-19)', () => {
+  it('is lifted by ANY later mark, and the suppression goes with it', () => {
     const lex = seeded();
     for (const mark of ['love', 'okay'] as const) {
       const after = applyBankMarks(lex, DIRTY_TALK.bank, { [WHORE]: mark }, 'take:2', LATER);
-      expect(after.entries.find((e) => e.key === WHORE)?.state).toBe('never');
-      expect(suppressedTexts(after)).toContain('whore');
+      expect(after.entries.find((e) => e.key === WHORE)?.state).not.toBe('never');
+      expect(suppressedTexts(after)).not.toContain('whore');
     }
+  });
+
+  it('suppresses for exactly as long as it is set — the half that must not regress', () => {
+    const lex = seeded();
+    expect(violatesBoundary(lex, 'you filthy whore')).toBe(true);
+    expect(suppressedTexts(lex)).toContain('whore');
   });
 
   it('never appears in the goal list, however it was marked', () => {
@@ -406,7 +425,7 @@ describe('74 §3.6.8 — the pet-name pass', () => {
     expect(entry?.sides).toEqual(['hear', 'say']);
   });
 
-  it('writes a DIRECTIONAL boundary, so the other direction is untouched', () => {
+  it('suppresses one DIRECTION only, so the other is untouched', () => {
     const lex = applyNameMarks(
       start(),
       DIRTY_TALK.bank,
@@ -414,12 +433,12 @@ describe('74 §3.6.8 — the pet-name pass', () => {
       'take:1',
       now,
     );
-    expect(lex.boundaries).toEqual([expect.objectContaining({ text: 'slut', direction: 'hear' })]);
+    expect(lex.boundaries).toEqual([]);
     expect(violatesBoundary(lex, 'take it, slut', 'hear')).toBe(true);
     expect(violatesBoundary(lex, 'take it, slut', 'say')).toBe(false);
   });
 
-  it('leaves an EARLIER take’s boundary settled — marking over it does not lift it', () => {
+  it('lets a LATER take mark over a no, per direction — nothing is settled for good', () => {
     const first = applyNameMarks(
       start(),
       DIRTY_TALK.bank,
@@ -434,8 +453,8 @@ describe('74 §3.6.8 — the pet-name pass', () => {
       'take:2',
       now,
     );
-    expect(second.entries.find((e) => e.key === KEY)?.hearState).toBe('never');
-    expect(violatesBoundary(second, 'take it, slut', 'hear')).toBe(true);
+    expect(second.entries.find((e) => e.key === KEY)?.hearState).toBe('love');
+    expect(violatesBoundary(second, 'take it, slut', 'hear')).toBe(false);
   });
 
   it('takes back ONE direction, leaving the other standing', () => {
@@ -446,14 +465,16 @@ describe('74 §3.6.8 — the pet-name pass', () => {
       'take:1',
       now,
     );
-    const cleared = clearNameMarks(lex, { [KEY]: ['hear'] }, now, 'take:1');
+    const cleared = clearNameMarks(lex, { [KEY]: ['hear'] }, now);
     const entry = cleared.entries.find((e) => e.key === KEY);
     expect(entry?.hearState).toBeUndefined();
     expect(entry?.sayState).toBe('never');
-    expect(cleared.boundaries.map((b) => b.direction)).toEqual(['say']);
+    // The direction they took back stops suppressing; the one they left standing does not.
+    expect(violatesBoundary(cleared, 'take it, slut', 'hear')).toBe(false);
+    expect(violatesBoundary(cleared, 'take it, slut', 'say')).toBe(true);
   });
 
-  it('never lets a later take un-mark an earlier one', () => {
+  it('lets a LATER sitting take back an earlier mark — a preference is not take-scoped', () => {
     const first = applyNameMarks(
       start(),
       DIRTY_TALK.bank,
@@ -461,9 +482,9 @@ describe('74 §3.6.8 — the pet-name pass', () => {
       'take:1',
       now,
     );
-    const attempt = clearNameMarks(first, { [KEY]: ['say'] }, now, 'take:2');
-    expect(attempt.entries.find((e) => e.key === KEY)?.sayState).toBe('never');
-    expect(attempt.boundaries).toHaveLength(1);
+    const taken = clearNameMarks(first, { [KEY]: ['say'] }, now);
+    expect(taken.entries.find((e) => e.key === KEY)?.sayState).toBeUndefined();
+    expect(violatesBoundary(taken, 'take it, slut', 'say')).toBe(false);
   });
 });
 

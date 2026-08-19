@@ -183,8 +183,12 @@ describe('74 §3.6.8 — the pet-name bank', () => {
   it('keys every name uniquely, including the ones that appear in two registers', () => {
     const keys = nameEntries.map((e) => e.key);
     expect(new Set(keys).size).toBe(keys.length);
-    // "my everything" is warm AND worship; each copy is its own row with its own line.
-    expect(keys.filter((k) => k.endsWith(':my-everything')).length).toBeGreaterThan(1);
+    // "papi" is masculine AND other-tongues; each copy is its own row with its own line. The key is
+    // scoped by FAMILY, which is what lets the same word mean different things in two registers --
+    // and is why the 2026-08-19 purge had to cut by (family, text): "my gifted girl" is achievement
+    // praise in names-praise and a girl who was GIVEN AWAY in names-sharing, so a text-keyed cut
+    // would have taken the on-register one with it.
+    expect(keys.filter((k) => k.endsWith(':papi')).length).toBeGreaterThan(1);
   });
 
   it('asks every name BOTH ways — the whole point of the phase', () => {

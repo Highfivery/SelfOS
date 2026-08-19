@@ -9,6 +9,7 @@ import { DIRTY_TALK } from './instruments/dirtyTalk';
 import {
   abandonAdaptiveTake,
   completeAdaptiveTake,
+  deleteAllAdaptiveResults,
   deleteAdaptiveResult,
   latestCompleteResult,
   listAdaptiveResults,
@@ -348,6 +349,69 @@ describe('the adaptive take (74 §5)', () => {
 });
 
 describe('74 §3.6.8 — start over from the top', () => {
+  it('DELETE IS DELETE — removing every take takes the hard nos with it (74 §3.6.11)', async () => {
+    // It used to keep `never` entries, which was right while a no was permanent. A preference that survives
+    // the delete button is one the person cannot get rid of, so the carve-out is gone.
+    const fs = memFileSystem();
+    const key = new Uint8Array(32).fill(5);
+    const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', NOW);
+    await recordBankPass(
+      fs,
+      key,
+      DIRTY_TALK,
+      {
+        personId: 'p1',
+        resultId: draft.id,
+        marks: { 'names-praise:good-girl': 'love', 'names-rough-heavy:whore': 'never' },
+      },
+      NOW,
+    );
+    await completeAdaptiveTake(fs, key, DIRTY_TALK, { personId: 'p1', resultId: draft.id }, LATER);
+    const before = await readLexicon(fs, key, 'p1', LATER);
+    expect(suppressedTexts(before)).toContain('whore');
+
+    await deleteAllAdaptiveResults(fs, key, DIRTY_TALK, 'p1', LATER);
+
+    const after = await readLexicon(fs, key, 'p1', LATER);
+    expect(after.entries).toEqual([]);
+    expect(after.boundaries).toEqual([]);
+    // The whole point: nothing is still being suppressed on behalf of a test that no longer exists.
+    expect(suppressedTexts(after)).toEqual([]);
+    expect(await listAdaptiveResults(fs, key, 'p1', DIRTY_TALK.id)).toEqual([]);
+  });
+
+  it('leaves ANOTHER instrument’s entries alone — the lexicon is shared', async () => {
+    const fs = memFileSystem();
+    const key = new Uint8Array(32).fill(5);
+    const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', NOW);
+    await recordBankPass(
+      fs,
+      key,
+      DIRTY_TALK,
+      { personId: 'p1', resultId: draft.id, marks: { 'names-rough-heavy:whore': 'never' } },
+      NOW,
+    );
+    // A row some other adaptive instrument wrote: same lexicon, a source this delete does not own.
+    const mine = await readLexicon(fs, key, 'p1', NOW);
+    await writeLexicon(fs, key, {
+      ...mine,
+      entries: [
+        ...mine.entries,
+        {
+          ...mine.entries[0]!,
+          key: 'other:thing',
+          text: 'from another test',
+          source: 'test:other',
+        },
+      ],
+    });
+
+    await deleteAllAdaptiveResults(fs, key, DIRTY_TALK, 'p1', LATER);
+
+    const after = await readLexicon(fs, key, 'p1', LATER);
+    expect(after.entries.map((e) => e.key)).toEqual(['other:thing']);
+  });
+
   it('clears EVERYTHING for that person, hard nos included', async () => {
     const fs = memFileSystem();
     const key = new Uint8Array(32).fill(7);

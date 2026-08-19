@@ -587,11 +587,18 @@ export async function deleteAllAdaptiveResults(
   const lexicon = await readLexicon(fs, key, personId, now);
   await writeLexicon(fs, key, {
     ...lexicon,
-    // Only what THIS instrument's takes wrote. A shared lexicon means another test's entries are not ours to
-    // delete — and a boundary is nobody's to delete but theirs.
-    entries: lexicon.entries.filter(
-      (entry) => entry.state === 'never' || !(entry.source && takeIds.has(entry.source)),
-    ),
+    /*
+     * Delete is delete (owner, 2026-08-19). A hard no used to be kept here, back when it was permanent and
+     * outlived the profile that recorded it. It is a PREFERENCE now (74 §3.6.11), so keeping one through a
+     * delete would leave the person suppressing words they had asked the app to forget — the opposite of
+     * what the button says.
+     *
+     * Still scoped to what THIS instrument's takes wrote: the lexicon is shared, so another test's entries
+     * are not ours to delete. Boundaries carry no source to scope by, and they are written by this take's
+     * probe phase, so they go with it — the same thing "start over" already does.
+     */
+    entries: lexicon.entries.filter((entry) => !(entry.source && takeIds.has(entry.source))),
+    boundaries: [],
     registers: {},
     contexts: {},
     themes: [],

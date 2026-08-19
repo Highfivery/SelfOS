@@ -1088,24 +1088,11 @@ export const AdaptiveTurnSchema = z.object({
 export type AdaptiveTurn = z.infer<typeof AdaptiveTurnSchema>;
 
 /**
- * How one entry landed (74 §3.6.2). `never` is a permanent boundary — suppressed everywhere, never
- * re-offered, never requiring a reason. `okay` is a MILD YES: fine, works, not a favourite. Absent ⇒ simply
- * unrated, which is NEVER read as a no (74 §7).
+ * 74 §3.6.8/§3.6.26 — one direction's answer: the three marks BOTH marking phases use.
  *
- * `notYet` ("makes me cringe") is the superseded middle state and is accepted only so an existing vault still
- * parses; it is coerced to `okay` on read and never written again. The coercion is real — the two meanings
- * differ — and its blast radius is bounded because a COMPLETED take persists its derived goals onto the
- * lexicon, so only an unfinished draft loses a goal contribution (74 §3.6.2).
- */
-export const LexiconStateSchema = z
-  .enum(['never', 'okay', 'notYet'])
-  .transform((state) => (state === 'notYet' ? ('okay' as const) : state));
-export type LexiconState = z.infer<typeof LexiconStateSchema>;
-
-/**
- * 74 §3.6.8 — one direction's answer for a name: the three marks the deck already uses. Distinct from
- * `LexiconState`, which has no `love` because love is carried by the ratings; a per-direction mark needs all
- * three in one value, since there is no second number to put it in.
+ * This is the only mark there is. The deck used to carry a whole-entry `state` plus a separate 0–4 split to
+ * pull the two directions apart; that pair is gone, and with it the shape where an entry had one answer
+ * standing in for two.
  */
 export const LexiconDirectionMarkSchema = z.enum(['love', 'okay', 'never']);
 export type LexiconDirectionMark = z.infer<typeof LexiconDirectionMarkSchema>;
@@ -1123,15 +1110,14 @@ export const LexiconEntrySchema = z.object({
   tier: z.number().int().min(1).max(5),
   hear: LexiconRatingSchema.catch(0).default(0),
   say: LexiconRatingSchema.catch(0).default(0),
-  state: LexiconStateSchema.optional(),
   /**
-   * 74 §3.6.8 — the per-DIRECTION marks, written by the pet-name phase, where a name is answered twice: once
-   * for being called it and once for calling them it. The two genuinely diverge — wanting to call her
-   * "good girl" says nothing about wanting to be called it — so one `state` cannot hold the answer.
+   * 74 §3.6.8/§3.6.26 — the per-DIRECTION marks, written by BOTH marking phases: every term is answered
+   * twice, once for hearing it and once for saying it. The two genuinely diverge — wanting to call her
+   * "good girl" says nothing about wanting to be called it.
    *
-   * `hear`/`say` are still derived from these (love → 4, okay → 2, never → 0), so the spine, the steer, the
-   * report and every existing consumer keep reading the same two numbers they always did. Absent on a phrase
-   * entry, which is marked once and split afterwards.
+   * `hear`/`say` are derived from these (love → 4, okay → 2, never → 0), so the spine, the steer, the report
+   * and every existing consumer keep reading the same two numbers they always did. A side is absent when it
+   * was not answered — which is not the same as a zero, and `directionAnswered` is what tells them apart.
    */
   hearState: LexiconDirectionMarkSchema.optional(),
   sayState: LexiconDirectionMarkSchema.optional(),
@@ -1462,14 +1448,13 @@ export interface AdaptiveSynthesisView {
 
 /** The edits a person may make to their own lexicon (74 §3.4). */
 export type AdaptiveLexiconEdit =
-  | { kind: 'rate'; key: string; hear?: number; say?: number }
-  | { kind: 'setState'; key: string; state: 'never' | 'okay' | null }
   /**
-   * Take back ONE direction of a pet-name mark. `setState` is whole-entry (what the deck writes); a name is
-   * answered per direction, so its `never` lives in `hearState`/`sayState` and needs its own op — which is
-   * what makes the report's hard-no list actionable even for a name no longer in the bank (74 §3.2/§3.6.8).
+   * Take back ONE direction of a mark — the names AND, since §3.6.26, the words, which are answered the same
+   * way. It is what makes the report's per-direction hard-no lists actionable even for a term no longer in
+   * the bank, which is the only thing standing between a retired row and a preference nobody can lift
+   * (74 §3.2/§3.6.8/§3.6.26). The whole-entry `rate`/`setState` ops it replaces went with the 0–4 split.
    */
-  | { kind: 'clearNameSide'; key: string; side: 'hear' | 'say' }
+  | { kind: 'clearSide'; key: string; side: 'hear' | 'say' }
   | {
       // 74 §3.6.4 — the two address taps. A DISPLAY filter: writes no mark, lifts no boundary.
       kind: 'setAddress';

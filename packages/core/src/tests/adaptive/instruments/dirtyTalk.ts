@@ -38,10 +38,10 @@ export const DIRTY_TALK: AdaptiveTestDefinition = {
     retiredInto: DIRTY_TALK_NAME_RETIREMENTS,
   },
   spine: DIRTY_TALK_SPINE,
-  // Pass 1 marks what lands across the whole bank; pass 2 splits only what was marked into hear/say; the AI
+  // The names and the deck are both marked per direction (74 §3.6.26); the AI
   // phases then chase what the bank left ambiguous (74 §3.2).
   // Names first: they are the most usable thing the test produces, and the shortest way in (74 §3.6.8).
-  phases: ['names', 'bank', 'split', 'lines', 'probe', 'scenario', 'synthesis'],
+  phases: ['names', 'bank', 'lines', 'probe', 'scenario', 'synthesis'],
   saturates: ['Intimacy:dirty-talk'],
   saturationGist:
     'mapped their dirty-talk vocabulary, registers and boundaries in the Dirty Talk test',

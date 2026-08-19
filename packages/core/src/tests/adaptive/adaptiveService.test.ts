@@ -15,9 +15,7 @@ import {
   listAdaptiveResults,
   getAdaptiveResult,
   openDraft,
-  recordBankPass,
-  recordNamePass,
-  recordSplitPass,
+  recordMarkingPass,
   stampTurn,
   startAdaptiveTake,
 } from './adaptiveService';
@@ -34,24 +32,21 @@ const CUNT = 'anatomy-her:cunt';
 
 async function fullTake(fs = memFileSystem(), now = NOW) {
   const draft = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, now);
-  await recordBankPass(
+  await recordMarkingPass(
     fs,
     KEY,
     DIRTY_TALK,
     {
+      phase: 'bank',
       personId: P,
       resultId: draft.id,
-      marks: { [GOOD_GIRL]: 'love', [MINE]: 'love', [WHORE]: 'never', [CUNT]: 'okay' },
-    },
-    now,
-  );
-  await recordSplitPass(
-    fs,
-    KEY,
-    {
-      personId: P,
-      resultId: draft.id,
-      splits: { [GOOD_GIRL]: { hear: 4, say: 0 }, [MINE]: { hear: 4, say: 3 } },
+      marks: {
+        // `good girl` is the hear/say GAP case: loved to hear, only okay to say (74 §3.6.26).
+        [GOOD_GIRL]: { hear: 'love', say: 'okay' },
+        [MINE]: { hear: 'love', say: 'okay' },
+        [WHORE]: { hear: 'never', say: 'never' },
+        [CUNT]: { hear: 'okay', say: 'okay' },
+      },
     },
     now,
   );
@@ -78,7 +73,7 @@ async function fullTake(fs = memFileSystem(), now = NOW) {
 }
 
 describe('the adaptive take (74 §5)', () => {
-  it('runs the whole deterministic path with no AI: bank → split → a scored, complete result', async () => {
+  it('runs the whole deterministic path with no AI: marks → a scored, complete result', async () => {
     const { result } = await fullTake();
     expect(result?.status).toBe('complete');
     expect(result?.kind).toBe('adaptive');
@@ -86,13 +81,21 @@ describe('the adaptive take (74 §5)', () => {
     const byKey = new Map((result?.scores ?? []).map((s) => [s.key, s.normalized]));
     expect(byKey.get('dirtytalk.claiming')).toBeGreaterThan(0.7);
     expect(byKey.get('dirtytalk.degradation')).toBe(0);
-    // Loves hearing it, can't say it → the say-confidence gap is real and low.
-    expect(byKey.get('dirtytalk.say-confidence')).toBeLessThan(0.5);
+    /*
+     * Loves hearing it, only okay saying it → the gap shows, at exactly the half-way mark.
+     *
+     * It used to assert `< 0.5`, which the 0–4 split could reach (a say of 1 scored 0.25). Three marks
+     * (74 §3.6.26) score a non-boundary say as 1.0 or 0.5, so 0.5 IS the floor for something they have not
+     * ruled out — anything lower is a `never`, which suppresses the word rather than scoring it low. Pinned
+     * at the real number so the narrowing is a recorded decision rather than a surprise.
+     */
+    expect(byKey.get('dirtytalk.say-confidence')).toBe(0.5);
   });
 
   it('persists what was ASKED, not just what came back', async () => {
     const { result } = await fullTake();
-    expect(result?.turns?.map((turn) => turn.phase)).toEqual(['bank', 'split']);
+    // One marking turn, not two: the deck's separate split pass is gone (74 §3.6.26).
+    expect(result?.turns?.map((turn) => turn.phase)).toEqual(['bank']);
     expect(result?.turns?.[0]?.item.text).toMatch(/entries across \d+ families/);
   });
 
@@ -139,7 +142,7 @@ describe('the adaptive take (74 §5)', () => {
     const { fs } = await fullTake();
     const insight = (await listAllInsights(fs, KEY))[0]!;
     const goal = insight.facts.find((fact) => fact.id.endsWith(':wants-to-say'));
-    expect(goal?.text).toContain('good girl'); // loves hearing it, rated 0 to say
+    expect(goal?.text).toContain('good girl'); // loves hearing it, only okay to say
     // The middle mark is a mild yes now, not a goal (74 §3.6.2) — the gap is the whole signal.
     expect(goal?.text).not.toContain('cunt');
   });
@@ -169,14 +172,19 @@ describe('the adaptive take (74 §5)', () => {
   it('a retake CAN change a no — it is a preference, and the suppression follows it', async () => {
     const { fs } = await fullTake();
     const second = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, LATER);
-    const lexicon = await recordBankPass(
+    const lexicon = await recordMarkingPass(
       fs,
       KEY,
       DIRTY_TALK,
-      { personId: P, resultId: second.id, marks: { [WHORE]: 'love' } },
+      {
+        phase: 'bank',
+        personId: P,
+        resultId: second.id,
+        marks: { [WHORE]: { hear: 'love', say: 'love' } },
+      },
       LATER,
     );
-    expect(lexicon.entries.find((e) => e.key === WHORE)?.state).toBeUndefined();
+    expect(lexicon.entries.find((e) => e.key === WHORE)?.hearState).toBe('love');
     expect(suppressedTexts(lexicon)).not.toContain('whore');
   });
 
@@ -185,11 +193,17 @@ describe('the adaptive take (74 §5)', () => {
   it('an AUTOSAVE persists the marks but does not stamp a turn (or a pass costs ~1,100 of them)', async () => {
     const fs = memFileSystem();
     const draft = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, NOW);
-    const lexicon = await recordBankPass(
+    const lexicon = await recordMarkingPass(
       fs,
       KEY,
       DIRTY_TALK,
-      { personId: P, resultId: draft.id, marks: { [GOOD_GIRL]: 'love' }, autosave: true },
+      {
+        phase: 'bank',
+        personId: P,
+        resultId: draft.id,
+        marks: { [GOOD_GIRL]: { hear: 'love', say: 'love' } },
+        autosave: true,
+      },
       NOW,
     );
     // Written — that is the whole point: closing the app here loses nothing.
@@ -197,11 +211,16 @@ describe('the adaptive take (74 §5)', () => {
     expect((await openDraft(fs, KEY, P, DIRTY_TALK.id))?.turns ?? []).toHaveLength(0);
 
     // Closing the pass is what records that it happened.
-    await recordBankPass(
+    await recordMarkingPass(
       fs,
       KEY,
       DIRTY_TALK,
-      { personId: P, resultId: draft.id, marks: { [GOOD_GIRL]: 'love' } },
+      {
+        phase: 'bank',
+        personId: P,
+        resultId: draft.id,
+        marks: { [GOOD_GIRL]: { hear: 'love', say: 'love' } },
+      },
       NOW,
     );
     expect((await openDraft(fs, KEY, P, DIRTY_TALK.id))?.turns ?? []).toHaveLength(1);
@@ -210,38 +229,58 @@ describe('the adaptive take (74 §5)', () => {
   it('un-marking a mis-tapped ✗ takes the boundary back — autosave must not make it permanent', async () => {
     const fs = memFileSystem();
     const draft = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, NOW);
-    const marked = await recordBankPass(
+    const marked = await recordMarkingPass(
       fs,
       KEY,
       DIRTY_TALK,
-      { personId: P, resultId: draft.id, marks: { [CUNT]: 'never' }, autosave: true },
+      {
+        phase: 'bank',
+        personId: P,
+        resultId: draft.id,
+        marks: { [CUNT]: { hear: 'never', say: 'never' } },
+        autosave: true,
+      },
       NOW,
     );
     expect(suppressedTexts(marked).some((t) => t.includes('cunt'))).toBe(true);
 
-    const undone = await recordBankPass(
+    const undone = await recordMarkingPass(
       fs,
       KEY,
       DIRTY_TALK,
-      { personId: P, resultId: draft.id, marks: {}, cleared: [CUNT], autosave: true },
+      {
+        phase: 'bank',
+        personId: P,
+        resultId: draft.id,
+        marks: {},
+        cleared: { [CUNT]: ['hear', 'say'] },
+        autosave: true,
+      },
       NOW,
     );
     expect(suppressedTexts(undone).some((t) => t.includes('cunt'))).toBe(false);
-    expect(undone.entries.find((e) => e.key === CUNT)?.state).toBeUndefined();
+    expect(undone.entries.find((e) => e.key === CUNT)?.hearState).toBeUndefined();
   });
 
   it('takes back an EARLIER take’s mark from the open one — changing your mind is not take-scoped', () => {
     return (async () => {
       const { fs } = await fullTake(); // sets `whore` → never, in take #1
       const second = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, LATER);
-      const lexicon = await recordBankPass(
+      const lexicon = await recordMarkingPass(
         fs,
         KEY,
         DIRTY_TALK,
-        { personId: P, resultId: second.id, marks: {}, cleared: [WHORE], autosave: true },
+        {
+          phase: 'bank',
+          personId: P,
+          resultId: second.id,
+          marks: {},
+          cleared: { [WHORE]: ['hear', 'say'] },
+          autosave: true,
+        },
         LATER,
       );
-      expect(lexicon.entries.find((e) => e.key === WHORE)?.state).toBeUndefined();
+      expect(lexicon.entries.find((e) => e.key === WHORE)?.hearState).toBeUndefined();
       expect(suppressedTexts(lexicon)).not.toContain('whore');
     })();
   });
@@ -250,62 +289,52 @@ describe('the adaptive take (74 §5)', () => {
     // Result ids reach the renderer in `adaptiveState().history`, so "pass the old id" is a reachable string.
     const { fs, result } = await fullTake();
     await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, LATER);
-    const lexicon = await recordBankPass(
+    const lexicon = await recordMarkingPass(
       fs,
       KEY,
       DIRTY_TALK,
-      { personId: P, resultId: result!.id, marks: {}, cleared: [WHORE], autosave: true },
+      {
+        phase: 'bank',
+        personId: P,
+        resultId: result!.id,
+        marks: {},
+        cleared: { [WHORE]: ['hear', 'say'] },
+        autosave: true,
+      },
       LATER,
     );
-    expect(lexicon.entries.find((e) => e.key === WHORE)?.state).toBe('never');
+    expect(lexicon.entries.find((e) => e.key === WHORE)?.hearState).toBe('never');
     expect(suppressedTexts(lexicon)).toContain('whore');
-  });
-
-  it('closing the bank pass does NOT reset a split rating back to the love seed', async () => {
-    // Re-sending the whole pass is what closing does; quitting between the two passes is now encouraged, so
-    // a clobber here would silently flatten a real hear/say gap.
-    const fs = memFileSystem();
-    const draft = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, NOW);
-    await recordBankPass(
-      fs,
-      KEY,
-      DIRTY_TALK,
-      { personId: P, resultId: draft.id, marks: { [GOOD_GIRL]: 'love' }, autosave: true },
-      NOW,
-    );
-    await recordSplitPass(
-      fs,
-      KEY,
-      { personId: P, resultId: draft.id, splits: { [GOOD_GIRL]: { hear: 4, say: 1 } } },
-      NOW,
-    );
-    const closed = await recordBankPass(
-      fs,
-      KEY,
-      DIRTY_TALK,
-      { personId: P, resultId: draft.id, marks: { [GOOD_GIRL]: 'love' } },
-      NOW,
-    );
-    const entry = closed.entries.find((e) => e.key === GOOD_GIRL);
-    expect(entry?.hear).toBe(4);
-    expect(entry?.say).toBe(1);
   });
 
   it('un-marking a 🔥 clears the ratings it seeded, not just the state', async () => {
     const fs = memFileSystem();
     const draft = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, NOW);
-    await recordBankPass(
+    await recordMarkingPass(
       fs,
       KEY,
       DIRTY_TALK,
-      { personId: P, resultId: draft.id, marks: { [MINE]: 'love' }, autosave: true },
+      {
+        phase: 'bank',
+        personId: P,
+        resultId: draft.id,
+        marks: { [MINE]: { hear: 'love', say: 'love' } },
+        autosave: true,
+      },
       NOW,
     );
-    const undone = await recordBankPass(
+    const undone = await recordMarkingPass(
       fs,
       KEY,
       DIRTY_TALK,
-      { personId: P, resultId: draft.id, marks: {}, cleared: [MINE], autosave: true },
+      {
+        phase: 'bank',
+        personId: P,
+        resultId: draft.id,
+        marks: {},
+        cleared: { [MINE]: ['hear', 'say'] },
+        autosave: true,
+      },
       NOW,
     );
     const entry = undone.entries.find((e) => e.key === MINE);
@@ -327,11 +356,16 @@ describe('the adaptive take (74 §5)', () => {
   it('completes honestly with NO AI phases at all — a thinner profile, not a failed take', async () => {
     const fs = memFileSystem();
     const draft = await startAdaptiveTake(fs, KEY, DIRTY_TALK, P, NOW);
-    await recordBankPass(
+    await recordMarkingPass(
       fs,
       KEY,
       DIRTY_TALK,
-      { personId: P, resultId: draft.id, marks: { [MINE]: 'love' } },
+      {
+        phase: 'bank',
+        personId: P,
+        resultId: draft.id,
+        marks: { [MINE]: { hear: 'love', say: 'love' } },
+      },
       NOW,
     );
     const result = await completeAdaptiveTake(
@@ -355,14 +389,18 @@ describe('74 §3.6.8 — start over from the top', () => {
     const fs = memFileSystem();
     const key = new Uint8Array(32).fill(5);
     const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', NOW);
-    await recordBankPass(
+    await recordMarkingPass(
       fs,
       key,
       DIRTY_TALK,
       {
+        phase: 'bank',
         personId: 'p1',
         resultId: draft.id,
-        marks: { 'names-praise:good-girl': 'love', 'names-rough-heavy:whore': 'never' },
+        marks: {
+          'names-praise:good-girl': { hear: 'love', say: 'love' },
+          'names-rough-heavy:whore': { hear: 'never', say: 'never' },
+        },
       },
       NOW,
     );
@@ -384,11 +422,16 @@ describe('74 §3.6.8 — start over from the top', () => {
     const fs = memFileSystem();
     const key = new Uint8Array(32).fill(5);
     const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', NOW);
-    await recordBankPass(
+    await recordMarkingPass(
       fs,
       key,
       DIRTY_TALK,
-      { personId: 'p1', resultId: draft.id, marks: { 'names-rough-heavy:whore': 'never' } },
+      {
+        phase: 'bank',
+        personId: 'p1',
+        resultId: draft.id,
+        marks: { 'names-rough-heavy:whore': { hear: 'never', say: 'never' } },
+      },
       NOW,
     );
     // A row some other adaptive instrument wrote: same lexicon, a source this delete does not own.
@@ -416,14 +459,18 @@ describe('74 §3.6.8 — start over from the top', () => {
     const fs = memFileSystem();
     const key = new Uint8Array(32).fill(7);
     const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', new Date());
-    await recordBankPass(
+    await recordMarkingPass(
       fs,
       key,
       DIRTY_TALK,
       {
+        phase: 'bank',
         personId: 'p1',
         resultId: draft.id,
-        marks: { 'names-praise:good-girl': 'love', 'names-rough-heavy:whore': 'never' },
+        marks: {
+          'names-praise:good-girl': { hear: 'love', say: 'love' },
+          'names-rough-heavy:whore': { hear: 'never', say: 'never' },
+        },
       },
       NOW,
     );
@@ -447,14 +494,15 @@ describe('74 §3.6.8 — start over from the top', () => {
     const fs = memFileSystem();
     const key = new Uint8Array(32).fill(7);
     const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', new Date());
-    await recordBankPass(
+    await recordMarkingPass(
       fs,
       key,
       DIRTY_TALK,
       {
+        phase: 'bank',
         personId: 'p1',
         resultId: draft.id,
-        marks: { 'names-praise:good-girl': 'love' },
+        marks: { 'names-praise:good-girl': { hear: 'love', say: 'love' } },
       },
       NOW,
     );
@@ -480,11 +528,12 @@ describe('74 §3.6.8 — recording the pet-name phase', () => {
     const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', NOW);
     const KEY = 'names-praise:good-girl';
 
-    await recordNamePass(
+    await recordMarkingPass(
       fs,
       key,
       DIRTY_TALK,
       {
+        phase: 'names',
         personId: 'p1',
         resultId: draft.id,
         marks: { [KEY]: { hear: 'never', say: 'love' } },
@@ -504,11 +553,17 @@ describe('74 §3.6.8 — recording the pet-name phase', () => {
     const afterAutosave = await getAdaptiveResult(fs, key, 'p1', draft.id);
     expect(afterAutosave?.turns ?? []).toHaveLength(0);
 
-    await recordNamePass(
+    await recordMarkingPass(
       fs,
       key,
       DIRTY_TALK,
-      { personId: 'p1', resultId: draft.id, marks: {}, cleared: { [KEY]: ['hear'] } },
+      {
+        phase: 'names',
+        personId: 'p1',
+        resultId: draft.id,
+        marks: {},
+        cleared: { [KEY]: ['hear'] },
+      },
       NOW,
     );
     const cleared = await readLexicon(fs, key, 'p1');
@@ -525,19 +580,31 @@ describe('74 §3.6.8 — recording the pet-name phase', () => {
     const key = new Uint8Array(32).fill(9);
     const draft = await startAdaptiveTake(fs, key, DIRTY_TALK, 'p1', NOW);
     const KEY = 'names-rough-heavy:whore';
-    await recordNamePass(
+    await recordMarkingPass(
       fs,
       key,
       DIRTY_TALK,
-      { personId: 'p1', resultId: draft.id, marks: { [KEY]: { hear: 'never' } }, autosave: true },
+      {
+        phase: 'names',
+        personId: 'p1',
+        resultId: draft.id,
+        marks: { [KEY]: { hear: 'never' } },
+        autosave: true,
+      },
       NOW,
     );
     // A result id the renderer legitimately holds, for a take that is not the open draft.
-    await recordNamePass(
+    await recordMarkingPass(
       fs,
       key,
       DIRTY_TALK,
-      { personId: 'p1', resultId: 'some-other-take', marks: {}, cleared: { [KEY]: ['hear'] } },
+      {
+        phase: 'names',
+        personId: 'p1',
+        resultId: 'some-other-take',
+        marks: {},
+        cleared: { [KEY]: ['hear'] },
+      },
       NOW,
     );
     const lex = await readLexicon(fs, key, 'p1');

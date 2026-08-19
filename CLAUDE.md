@@ -560,6 +560,50 @@ A running log of durable decisions and feedback captured into the project config
   see if both live) settled it. This was the SECOND non-bug I proposed a fix for in one session — the other was a
   `customTypes` "leak" that turned out to be a household-wide file — so the rule is: reproduce the mechanism, or
   do not ship the fix.**
+- 2026-08-19 — **Build (the words step gets two columns, like the pet names; owner-chosen from a mockup; SPEC 74
+  §3.6.26; on `chore/pet-name-purge-two`).** _"theres no way to mark i like to hear vs. i like to say."_ The
+  §3.6.13 fold had left the split reachable only in theory: the band still promised _"you split the two apart in
+  the next step"_ of a step that no longer existed, the control rendered ONLY after a `love` and only on a
+  both-sided row, nothing read as selected over a value already set (a love writes 3/3 immediately, but `mark()`
+  never seeded `store.splits`), and when it did appear it was `How much…` over two rows of `0 1 2 3 4` — a
+  second, unrelated rating. **Measuring the real vault before building changed the fix twice.** The handoff's
+  premise was backwards: `derivedWantsToSay` fired for **7 entries, every one from the DECK and none from the
+  names**, because the names have been three-mark all along and three marks cannot express the old gap — so the
+  deck's 0–4 scale was the only thing feeding the goal list. And the owner's 132 deck entries carry **no
+  love/okay/never at all** (pure ratings, **119 with `hear ≠ say`**, all five say values used), so the written-up
+  migration — seed the new columns from `state` — would have blanked **119 real marks**. Asked with those numbers
+  in hand; owner chose three marks as mocked, and **remove** the deck's old answers rather than guess at them (a
+  `0` on an offered side is ambiguous between "dialled down" and "never touched", and reading it as a hard no
+  invents ~20 app-wide suppressions nobody declared). **Built:** one writer (`applyDirectionalMarks` +
+  `recordMarkingPass` + one `AdaptiveMarkPass` payload) with `applyBankMarks`/`applyDirections`/the `split`
+  phase/`clearState`/the `rate`+`setState` edits deleted; the names' own row reused, so a one-sided entry's
+  survivor stretches across it; and the reset run **inside `readLexicon`** — the one read every consumer goes
+  through — so there is exactly ONE shape in the app and no branch anywhere for the old one (the owner was
+  emphatic about this mid-build: _"DO NOT SUPPORT LEGACY THINGS"_ — so the whole-entry `state` came out of the
+  SCHEMA too, and every `state === 'never'` / `state === undefined` read with it). **Three things measuring
+  caught that reasoning would not:** (1) `derivedWantsToSay` would have gone **structurally dead** — `say <= 1`
+  can only mean a `never` under three marks, which `violatesBoundary` then strips, so the goal list, the practice
+  sheet and the coach's "wants to say" material would have emptied silently; the gap is now the one asymmetry
+  three marks CAN express (loved to hear, only okay to say), hoisted into one exported `hasSayGap` because
+  `engine.ts` carried **three more copies** of the same dead numeric test. (2) "I love hearing it, I could never
+  say it" is a **boundary, not a goal** — it suppresses, and §3.6.15 forbids the probe from asking anyone to
+  justify one. (3) `say-confidence` floors at 0.5 where the 0–4 scale reached 0.25 — pinned at the real number.
+  **Two pre-existing defects fixed rather than extended:** the spine's `meanOf` **filtered a hard no out** before
+  `value()` could score it 0 (its own comment says a boundary contributes 0, "a no, not a missing answer") — the
+  existing test caught it on revert; and the report's words section listed pet names too, so 18 rows appeared
+  under both "Love to hear" and "Call me". The spine also gained the MIRROR of §3.6.6's asked-side guard on the
+  hear direction, and **checking rather than asserting is what made that honest**: I had written it up as live
+  for the owner's 59 say-only entries, then found **no hear-directional dimension exists** — it fixes nothing
+  today and exists so the next one cannot reintroduce the bug. Pinned by a test against a one-off dimension. **Lessons: (1) the handoff's central claim was checkable in one
+  decrypt and was false — "the deck can never produce the gap" was exactly inverted, and building on it would
+  have deleted the only working source of the signal the change existed to restore. Measure the premise, not
+  just the design. (2) Collapsing a 5-point scale to 3 marks silently kills every predicate written as a numeric
+  threshold; grep for the CONCEPT (`say <= 1`) rather than the function, or three copies of it die quietly in
+  another file. (3) "Don't support legacy" is a design instruction, not a cleanup one — moving the migration
+  into `readLexicon` meant no consumer needed a branch, which is what let the retired field leave the schema
+  entirely instead of lingering as a defensive read forever. (4) A test fixture cast `as never` defeats every
+  compiler check the refactor relies on: three inline copies of the old mark shape typechecked clean and failed
+  at runtime as a blocked AI step.**
 
 - 2026-08-19 — **Audit (the gendered-names work, reviewed before it shipped; SPEC 74 §3.6.24; on
   `feat/gendered-names`).** Four findings, each fixed in the same change, plus two measured and accepted.

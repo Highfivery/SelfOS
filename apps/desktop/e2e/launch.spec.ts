@@ -16487,10 +16487,10 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
     await goTo('Anatomy — his body');
     // A line about his own body is his to HEAR.
     await expect(
-      w.getByRole('button', { name: 'your hard cock — you hear — love it', exact: true }),
+      w.getByRole('button', { name: 'your hard cock — Them → You — love it', exact: true }),
     ).toBeVisible();
     await w
-      .getByRole('button', { name: 'your hard cock — you hear — love it', exact: true })
+      .getByRole('button', { name: 'your hard cock — Them → You — love it', exact: true })
       .click();
 
     // 74 §3.6.6 — the sides are RECORDED, so a side that was never offered is not a refusal: without it, a
@@ -16531,7 +16531,7 @@ test('74 §3.6: the deck is ORIENTED — a straight man is never asked to be cal
   }
 });
 
-test('74: the Dirty Talk take — mark, split, complete, and the boundary holds everywhere', async () => {
+test('74: the Dirty Talk take — mark both ways, complete, and the boundary holds everywhere', async () => {
   // The bank renders ~1,100 entries (3 buttons each) and the §12 guard walks every element on the page, so
   // this walk is legitimately slower than a typical one.
   test.setTimeout(180_000);
@@ -16674,19 +16674,28 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     // The deck only moves FORWARD, so mark in the bank's own family order: claiming before degradation. The
     // un-mark round trip below happens while the ruled-out row is still on screen. ("mine", "my girl", "all
     // mine" and "dirty little slut" moved to the pet-name phase — nothing is asked twice, §3.6.9.)
-    await markInDeck("you're mine — hear & say — love it");
-    // 74 §3.6.13 — the hear/say question is asked ON the row now, the moment a both-sided entry is marked,
-    // rather than as a second pass over a screen that was empty for anyone marking mostly names.
-    await w.getByRole('button', { name: "you're mine — hear 4 of 4", exact: true }).first().click();
-    await w.getByRole('button', { name: "you're mine — say 0 of 4", exact: true }).first().click();
-    await markInDeck('you belong to me — hear & say — love it');
+    /*
+     * 74 §3.6.26 — TWO marks per row, one per direction, BOTH always on screen.
+     *
+     * This used to be one mark for the whole term plus a 0–4 pair that appeared only after a `love` — the
+     * pass that, measured on the real vault, nobody reached. The two columns are the feature: mark the same
+     * term differently each way and the vault must carry the difference.
+     */
+    await markInDeck("you're mine — Them → You — love it");
+    // BOTH columns are on the row, always — neither hidden behind marking the other, which is what made the
+    // old inline split unreachable. (Asserted after the first mark: `markInDeck` is what opens the area.)
+    await expect(
+      w.getByRole('button', { name: "you're mine — You → Them — love it", exact: true }).first(),
+    ).toBeVisible();
+    await markInDeck("you're mine — You → Them — it's okay");
+    await markInDeck('you belong to me — Them → You — love it');
     await expect(w.getByTestId('tally-love')).toContainText('2');
     // The middle mark. It used to be recorded and then invisible everywhere — asserted on the report below.
-    await markInDeck("nobody else gets this — hear & say — it's okay");
-    // 3, not 1: the two practice taps were real marks. That count IS the assertion that the practice is not
-    // a demo — a sheet that threw its taps away would read '1' here.
-    await expect(w.getByTestId('tally-okay')).toContainText('3');
-    await markInDeck('beg like the slut you are — hear & say — never');
+    await markInDeck("nobody else gets this — Them → You — it's okay");
+    // 4, not 2: the two practice taps were real marks, and so was the say side above. That count IS the
+    // assertion that the practice is not a demo — a sheet that threw its taps away would read '2' here.
+    await expect(w.getByTestId('tally-okay')).toContainText('4');
+    await markInDeck('beg like the slut you are — Them → You — never');
     await expect(w.getByTestId('tally-never')).toContainText('1');
 
     // 74 §3.4 — every tap saves itself. Nothing below clicks Next, so the only thing that can have written
@@ -16699,6 +16708,42 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
       }
     });
     await w.screenshot({ path: 'e2e-artifacts/74-autosave.png' });
+    // ── The two clusters FIT, measured rather than looked at (CLAUDE.md §12) ───────────────────────
+    // The row gained a SECOND cluster of three 44px targets. §3.6.8 is the precedent and the warning: two
+    // clusters on one row came out `105px 148px 148px` at a 1100px window, and the second cluster's buttons
+    // intercepted clicks meant for the first — a bug that looks like a typography problem in a screenshot.
+    // The names' row solved it by stacking and letting each cluster flex; this asserts the deck's reuse of
+    // that actually holds, at desktop AND at phone width.
+    for (const width of [1280, 390]) {
+      await w.setViewportSize({ width, height: 900 });
+      const fit = await w.evaluate(() => {
+        const btns = Array.from(document.querySelectorAll('button[aria-label]'));
+        const at = (needle: string): HTMLElement | undefined =>
+          btns.find((b) => (b.getAttribute('aria-label') ?? '').includes(needle)) as
+            | HTMLElement
+            | undefined;
+        const hear = at('Them → You — love it');
+        const say = at('You → Them — love it');
+        if (!hear || !say) return null;
+        const h = hear.getBoundingClientRect();
+        const s = say.getBoundingClientRect();
+        return {
+          // Boxes that intersect are boxes that steal each other's taps.
+          overlap: h.right > s.left && h.left < s.right && h.top < s.bottom && h.bottom > s.top,
+          hearWidth: Math.round(h.width),
+          sayWidth: Math.round(s.width),
+          offScreen: h.left < 0 || s.right > window.innerWidth + 1,
+        };
+      });
+      expect(fit, `no two-column deck row found at ${width}px`).not.toBeNull();
+      expect(fit!.overlap, `the two direction clusters overlap at ${width}px`).toBe(false);
+      expect(fit!.offScreen, `a direction cluster is off-screen at ${width}px`).toBe(false);
+      // A tap target squeezed to nothing is the §3.6.8 failure in its other form.
+      expect(fit!.hearWidth, `hear target collapsed at ${width}px`).toBeGreaterThanOrEqual(28);
+      expect(fit!.sayWidth, `say target collapsed at ${width}px`).toBeGreaterThanOrEqual(28);
+    }
+    await w.setViewportSize({ width: 1280, height: 900 });
+
     // ── ONE scrollbar, ever ────────────────────────────────────────────────────────────────────────
     // Two guards, because the first one alone was VACUOUS: it counted elements whose computed `overflow-y`
     // is auto/scroll, which (a) can never see the DOCUMENT — `html` computes to `visible` yet still paints
@@ -16723,30 +16768,52 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     await expect
       .poll(async () => {
         const lex = (await readEncryptedJson(fs, LEXICON, key).catch(() => null)) as {
-          entries: { key: string; state?: string; hear: number }[];
+          entries: { key: string; hearState?: string; sayState?: string }[];
         } | null;
-        return (lex?.entries ?? []).filter((e) => e.hear > 0 || e.state).length;
+        return (lex?.entries ?? []).filter((e) => e.hearState ?? e.sayState).length;
       })
       .toBeGreaterThanOrEqual(2);
+
+    /*
+     * The point of the whole change, asserted on the decrypted vault: ONE deck term, answered DIFFERENTLY
+     * each way. Before §3.6.26 the deck wrote a single mark for the entry, so `hear` and `say` came out equal
+     * for every word — which is why the hear/say gap the goal list, the practice sheet and the coach's
+     * "wants to say" material are built on could only ever fill from the pet names.
+     */
+    await expect
+      .poll(async () => {
+        const lex = (await readEncryptedJson(fs, LEXICON, key).catch(() => null)) as {
+          entries: {
+            key: string;
+            hear: number;
+            say: number;
+            hearState?: string;
+            sayState?: string;
+          }[];
+        } | null;
+        const mine = (lex?.entries ?? []).find((e) => e.key === 'claiming:you-re-mine');
+        return mine ? `${mine.hearState}/${mine.sayState}:${mine.hear}/${mine.say}` : null;
+      })
+      .toBe('love/okay:4/2');
 
     // A mis-tap is not a life sentence: un-marking takes the suppression back out of the store. It is the
     // entry's own state that suppresses now (74 §3.6.11), so lifting the mark lifts the suppression.
     await w
-      .getByRole('button', { name: 'beg like the slut you are — hear & say — never', exact: true })
+      .getByRole('button', { name: 'beg like the slut you are — Them → You — never', exact: true })
       .first()
       .click();
     await expect(w.getByTestId('tally-never')).toContainText('0');
     await expect
       .poll(async () => {
         const lex = (await readEncryptedJson(fs, LEXICON, key)) as {
-          entries: { key: string; state?: string }[];
+          entries: { key: string; hearState?: string }[];
         };
         return (lex.entries ?? []).find((e) => e.key === 'degradation:beg-like-the-slut-you-are')
-          ?.state;
+          ?.hearState;
       })
       .toBeUndefined();
     await w
-      .getByRole('button', { name: 'beg like the slut you are — hear & say — never', exact: true })
+      .getByRole('button', { name: 'beg like the slut you are — Them → You — never', exact: true })
       .first()
       .click();
     await expect(w.getByTestId('tally-never')).toContainText('1');
@@ -16869,23 +16936,26 @@ test('74: the Dirty Talk take — mark, split, complete, and the boundary holds 
     expect(Buffer.from(lexRaw!).toString('utf8')).not.toContain('beg like the slut you are'); // encrypted
     const lexicon = (await readEncryptedJson(fs, 'people/owner-1/tests/lexicon.enc', key)) as {
       boundaries: { text: string }[];
-      entries: { key: string; state?: string; hearState?: string; sayState?: string }[];
+      entries: { key: string; hearState?: string; sayState?: string }[];
     };
-    // No boundary RECORDS: a bank entry's suppression is its live state, so there is one source of truth
-    // and lifting a no is instant (74 §3.6.11). `boundaries` now holds only a themed no a probe named.
+    // No boundary RECORDS: a term's suppression is its live mark, so there is one source of truth and
+    // lifting a no is instant (74 §3.6.11). `boundaries` now holds only a themed no a probe named.
     expect(lexicon.boundaries).toEqual([]);
-    // A deck entry carries one `state`; a NAME carries one per direction, because "never call me that" must
-    // not stop him calling HER that. The old boundary record flattened the two into one list.
+    // EVERY term carries a mark per direction since §3.6.26 — the deck as well as the names — because
+    // "never call me that" must not stop him calling HER that.
     expect(
       lexicon.entries
-        .filter((e) => e.state === 'never' || e.hearState === 'never' || e.sayState === 'never')
+        .filter((e) => e.hearState === 'never' || e.sayState === 'never')
         .map((e) => e.key)
         .sort(),
     ).toEqual(['degradation:beg-like-the-slut-you-are', 'names-praise:good-girl']);
-    // The practice's two taps persisted alongside "all mine" — three middle marks, none of them invented.
-    expect(lexicon.entries.filter((e) => e.state === 'okay')).toHaveLength(3);
+    // The practice's two taps persisted alongside "all mine" and the say side of "you're mine" — four middle
+    // marks, none of them invented.
     expect(
-      lexicon.entries.find((e) => e.key === 'degradation:beg-like-the-slut-you-are')?.state,
+      lexicon.entries.filter((e) => e.hearState === 'okay' || e.sayState === 'okay'),
+    ).toHaveLength(4);
+    expect(
+      lexicon.entries.find((e) => e.key === 'degradation:beg-like-the-slut-you-are')?.hearState,
     ).toBe('never');
 
     // The Insight feeds the coach — and carries no boundary (suppression is structural, 74 §5.5).

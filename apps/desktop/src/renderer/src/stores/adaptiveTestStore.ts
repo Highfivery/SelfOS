@@ -36,7 +36,6 @@ export type TakePhase =
   /** 74 §3.6.8 — the pet-name phase, which runs FIRST: what the two of you call each other. */
   | 'names'
   | 'bank'
-  | 'split'
   | 'lines'
   | 'probe'
   | 'scenario'
@@ -58,12 +57,17 @@ const AUTOSAVE_DELAY_MS = 700;
  * Keeping it out of zustand means a tap re-renders the one row it changed, not the whole ~1,100-entry grid.
  */
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
-let dirtyMarks = new Set<string>();
-let dirtyCleared = new Set<string>();
-let dirtySplits = new Set<string>();
-/** 74 §3.6.8 — pending pet-name work: which sides of which names changed, and which were taken back. */
-let dirtyNames = new Map<string, Set<'hear' | 'say'>>();
-let dirtyNameCleared = new Map<string, Set<'hear' | 'say'>>();
+/**
+ * Pending work, per phase: which SIDES of which keys changed, and which were taken back.
+ *
+ * One shape for both since §3.6.26 — the deck answers per direction exactly as the pet names always have, so
+ * the deck's old `Set<string>` of whole-entry marks plus a third set for the 0–4 split are gone.
+ */
+type DirtySides = Map<string, Set<'hear' | 'say'>>;
+let dirtyMarks: DirtySides = new Map();
+let dirtyCleared: DirtySides = new Map();
+let dirtyNames: DirtySides = new Map();
+let dirtyNameCleared: DirtySides = new Map();
 
 /** Serializes the writes — see `flush`. */
 let inFlight: Promise<void> = Promise.resolve();
@@ -74,7 +78,7 @@ let inFlight: Promise<void> = Promise.resolve();
  */
 let generation = 0;
 /** Un-marks made anywhere in this take, so the closing call can carry them (an absent key undoes nothing). */
-let clearedThisTake = new Set<string>();
+let clearedThisTake: DirtySides = new Map();
 
 function resetPending(): void {
   if (saveTimer) clearTimeout(saveTimer);
@@ -83,12 +87,96 @@ function resetPending(): void {
   // Start a fresh chain. The old one may still be waiting on a call that never settles (a wedged IPC), and
   // every later save queues behind it — so a single hung write would silently stop autosaving for good.
   inFlight = Promise.resolve();
-  dirtyMarks = new Set();
-  dirtyCleared = new Set();
-  dirtySplits = new Set();
+  dirtyMarks = new Map();
+  dirtyCleared = new Map();
   dirtyNames = new Map();
   dirtyNameCleared = new Map();
-  clearedThisTake = new Set();
+  clearedThisTake = new Map();
+}
+
+/** A mark map keyed by entry, each side answered independently. Both phases use it. */
+type DirectionalMarks = Record<string, { hear?: BankMark; say?: BankMark }>;
+
+/** Record a side as pending (or as taken back), keeping the two maps mutually exclusive per side. */
+function markPending(
+  dirty: DirtySides,
+  cleared: DirtySides,
+  key: string,
+  side: 'hear' | 'say',
+): void {
+  const sides = dirty.get(key) ?? new Set<'hear' | 'say'>();
+  const clearedSides = cleared.get(key) ?? new Set<'hear' | 'say'>();
+  sides.add(side);
+  clearedSides.delete(side);
+  dirty.set(key, sides);
+  if (clearedSides.size > 0) cleared.set(key, clearedSides);
+  else cleared.delete(key);
+}
+
+function clearPending(
+  dirty: DirtySides,
+  cleared: DirtySides,
+  key: string,
+  side: 'hear' | 'say',
+): void {
+  const sides = dirty.get(key) ?? new Set<'hear' | 'say'>();
+  const clearedSides = cleared.get(key) ?? new Set<'hear' | 'say'>();
+  sides.delete(side);
+  clearedSides.add(side);
+  cleared.set(key, clearedSides);
+  if (sides.size > 0) dirty.set(key, sides);
+  else dirty.delete(key);
+}
+
+/**
+ * Toggle one direction of one entry. Tapping the mark that is already set takes it back.
+ *
+ * Shared by the deck and the pet names: since §3.6.26 they do the same thing to different slices of state,
+ * and keeping two copies is how one of them grows a fix the other never gets.
+ */
+function toggleMark(
+  prev: DirectionalMarks,
+  key: string,
+  side: 'hear' | 'say',
+  mark: BankMark,
+  dirty: DirtySides,
+  cleared: DirtySides,
+): DirectionalMarks {
+  // A no is a preference (74 §3.2, amended 2026-08-19): re-markable in any sitting, in either direction,
+  // exactly like every other mark.
+  const current = prev[key] ?? {};
+  const next = { ...current };
+  const takenBack = current[side] === mark;
+  if (takenBack) delete next[side];
+  else next[side] = mark;
+  const marks = { ...prev };
+  if (Object.keys(next).length === 0) delete marks[key];
+  else marks[key] = next;
+  if (takenBack) clearPending(dirty, cleared, key, side);
+  else markPending(dirty, cleared, key, side);
+  return marks;
+}
+
+/** The pending delta for one phase: only the sides that actually changed, and only where a mark survives. */
+function deltaFor(dirty: DirtySides, marks: DirectionalMarks): DirectionalMarks {
+  const out: DirectionalMarks = {};
+  for (const [key, sides] of dirty) {
+    const current = marks[key];
+    const mark: { hear?: BankMark; say?: BankMark } = {};
+    for (const side of sides) {
+      const value = current?.[side];
+      if (value) mark[side] = value;
+    }
+    if (Object.keys(mark).length > 0) out[key] = mark;
+  }
+  return out;
+}
+
+/** `Map<key, Set<side>>` → the wire shape the bridge takes. */
+function clearedFor(cleared: DirtySides): Record<string, ('hear' | 'say')[]> {
+  const out: Record<string, ('hear' | 'say')[]> = {};
+  for (const [key, sides] of cleared) out[key] = [...sides];
+  return out;
 }
 
 type Get = () => AdaptiveTestState;
@@ -105,35 +193,15 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = null;
   const mine = generation;
-  const { state, marks, splits, nameMarks } = get();
+  const { state, marks, nameMarks } = get();
   const resultId = state?.draft?.id;
-  const marksDelta: Record<string, BankMark> = {};
-  for (const key of dirtyMarks) {
-    const mark = marks[key];
-    if (mark) marksDelta[key] = mark;
-  }
-  const cleared = [...dirtyCleared];
-  const splitsDelta: Record<string, { hear?: number; say?: number }> = {};
-  for (const key of dirtySplits) {
-    const value = splits[key];
-    if (value) splitsDelta[key] = value;
-  }
-  const namesDelta: Record<string, { hear?: BankMark; say?: BankMark }> = {};
-  for (const [key, sides] of dirtyNames) {
-    const current = nameMarks[key];
-    const mark: { hear?: BankMark; say?: BankMark } = {};
-    for (const side of sides) {
-      const value = current?.[side];
-      if (value) mark[side] = value;
-    }
-    if (Object.keys(mark).length > 0) namesDelta[key] = mark;
-  }
-  const nameCleared: Record<string, ('hear' | 'say')[]> = {};
-  for (const [key, sides] of dirtyNameCleared) nameCleared[key] = [...sides];
+  const marksDelta = deltaFor(dirtyMarks, marks);
+  const cleared = clearedFor(dirtyCleared);
+  const namesDelta = deltaFor(dirtyNames, nameMarks);
+  const nameCleared = clearedFor(dirtyNameCleared);
   const nothing =
     Object.keys(marksDelta).length === 0 &&
-    cleared.length === 0 &&
-    Object.keys(splitsDelta).length === 0 &&
+    Object.keys(cleared).length === 0 &&
     Object.keys(namesDelta).length === 0 &&
     Object.keys(nameCleared).length === 0;
   if (nothing) {
@@ -146,14 +214,13 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
     return;
   }
   // Drained BEFORE the await: a tap during the write belongs to the next flush, not this one.
-  dirtyMarks = new Set();
-  dirtyCleared = new Set();
-  dirtySplits = new Set();
+  dirtyMarks = new Map();
+  dirtyCleared = new Map();
   dirtyNames = new Map();
   dirtyNameCleared = new Map();
   let ok = true;
   try {
-    if (Object.keys(marksDelta).length > 0 || cleared.length > 0) {
+    if (Object.keys(marksDelta).length > 0 || Object.keys(cleared).length > 0) {
       const res = await window.selfos?.testsAdaptiveBank({
         testId,
         resultId,
@@ -173,15 +240,6 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
       });
       ok = res !== null && res !== undefined;
     }
-    if (ok && Object.keys(splitsDelta).length > 0) {
-      const res = await window.selfos?.testsAdaptiveSplit({
-        testId,
-        resultId,
-        splits: splitsDelta,
-        autosave: true,
-      });
-      ok = res !== null && res !== undefined;
-    }
   } catch {
     ok = false;
   }
@@ -192,17 +250,23 @@ async function runFlush(testId: string, get: Get, set: Set_): Promise<void> {
     set({ saveState: 'saved' });
     return;
   }
-  for (const key of Object.keys(marksDelta)) dirtyMarks.add(key);
-  for (const key of cleared) dirtyCleared.add(key);
-  for (const key of Object.keys(splitsDelta)) dirtySplits.add(key);
-  for (const [key, mark] of Object.entries(namesDelta)) {
-    const sides = dirtyNames.get(key) ?? new Set<'hear' | 'say'>();
-    for (const side of ['hear', 'say'] as const) if (mark[side]) sides.add(side);
-    dirtyNames.set(key, sides);
-  }
-  for (const [key, sides] of Object.entries(nameCleared)) {
-    dirtyNameCleared.set(key, new Set(sides));
-  }
+  const requeue = (
+    delta: DirectionalMarks,
+    clearedDelta: Record<string, ('hear' | 'say')[]>,
+    dirty: DirtySides,
+    dirtyClearedSet: DirtySides,
+  ): void => {
+    for (const [key, mark] of Object.entries(delta)) {
+      const sides = dirty.get(key) ?? new Set<'hear' | 'say'>();
+      for (const side of ['hear', 'say'] as const) if (mark[side]) sides.add(side);
+      dirty.set(key, sides);
+    }
+    for (const [key, sides] of Object.entries(clearedDelta)) {
+      dirtyClearedSet.set(key, new Set(sides));
+    }
+  };
+  requeue(marksDelta, cleared, dirtyMarks, dirtyCleared);
+  requeue(namesDelta, nameCleared, dirtyNames, dirtyNameCleared);
   set({ saveState: 'unsaved', error: "Couldn't save that just now — it'll retry." });
 }
 
@@ -229,11 +293,11 @@ interface AdaptiveTestState {
    * boundary display is for marks from EARLIER takes). These stay editable until the take ends.
    */
   touched: string[];
-  marks: Record<string, BankMark>;
-  splits: Record<string, { hear?: number; say?: number }>;
+  /** 74 §3.6.26 — the deck, answered per direction. Same shape as `nameMarks`; same writer behind both. */
+  marks: DirectionalMarks;
   /** 74 §3.6.8 — the pet-name phase: its registers + names, and two marks per name. */
   names: AdaptiveNamesView | null;
-  nameMarks: Record<string, { hear?: BankMark; say?: BankMark }>;
+  nameMarks: DirectionalMarks;
   /** Which register is open. `null` ⇒ the grid, which is where the phase starts. */
   openRegister: string | null;
   lines: string[];
@@ -290,7 +354,7 @@ interface AdaptiveTestState {
 
   load(testId: string): Promise<void>;
   start(testId: string): Promise<void>;
-  mark(key: string, mark: BankMark | null): void;
+  mark(key: string, side: 'hear' | 'say', mark: BankMark): void;
   /** Load the pet-name phase (free — no AI). */
   loadNames(testId: string): Promise<void>;
   /** Mark one direction of one name. Passing the same mark again takes it back (74 §3.4). */
@@ -317,8 +381,6 @@ interface AdaptiveTestState {
   /** Remember the deck position so resuming lands where they stopped (74 §3.6.4). */
   rememberArea(area: number): Promise<void>;
   submitBank(testId: string): Promise<void>;
-  setSplit(key: string, direction: 'hear' | 'say', value: number): void;
-  submitSplit(testId: string): Promise<void>;
   loadLines(testId: string, round: number): Promise<void>;
   reactToLine(testId: string, line: string, reaction: 'love' | 'meh' | 'no'): Promise<void>;
   nextProbe(testId: string): Promise<void>;
@@ -373,7 +435,6 @@ const EMPTY = {
   saveState: 'idle' as 'idle' | 'saving' | 'saved' | 'unsaved',
   touched: [] as string[],
   marks: {},
-  splits: {},
   names: null,
   nameMarks: {},
   openRegister: null,
@@ -502,14 +563,17 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
           priorReactions[turn.item.text] = turn.answer as 'love' | 'meh' | 'no';
         }
       }
-      const marks: Record<string, BankMark> = {};
-      const splits: Record<string, { hear?: number; say?: number }> = {};
+      // Seed from the per-direction marks, exactly as the names phase does (74 §3.6.26). Pre-Option-B deck
+      // answers were 0–4 ratings with no mark behind them; those are cleared on read by
+      // `resetPreDirectionalDeckMarks` rather than guessed at here, so an unmarked row means unmarked.
+      const marks: DirectionalMarks = {};
       for (const entry of state?.lexicon.entries ?? []) {
-        if (entry.state === 'never') marks[entry.key] = 'never';
-        else if (entry.state === 'okay') marks[entry.key] = 'okay';
-        else if (entry.hear > 0 || entry.say > 0) marks[entry.key] = 'love';
-        if (entry.hear > 0 || entry.say > 0)
-          splits[entry.key] = { hear: entry.hear, say: entry.say };
+        if (entry.hearState || entry.sayState) {
+          marks[entry.key] = {
+            ...(entry.hearState ? { hear: entry.hearState } : {}),
+            ...(entry.sayState ? { say: entry.sayState } : {}),
+          };
+        }
       }
       set((prev) => ({
         bank,
@@ -517,7 +581,6 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         loaded: true,
         lineReactions: { ...priorReactions },
         marks,
-        splits,
         seeded: { ...prev.seeded, bank: Object.keys(marks).length },
       }));
     },
@@ -533,20 +596,17 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       await get().loadNames(testId);
     },
 
-    mark: (key, mark) => {
+    mark: (key, side, mark) => {
       set((prev) => {
-        const marks = { ...prev.marks };
-        if (mark === null) {
-          delete marks[key];
-          dirtyMarks.delete(key);
-          dirtyCleared.add(key);
-          clearedThisTake.add(key);
-        } else {
-          marks[key] = mark;
-          dirtyCleared.delete(key);
-          clearedThisTake.delete(key);
-          dirtyMarks.add(key);
-        }
+        const marks = toggleMark(prev.marks, key, side, mark, dirtyMarks, dirtyCleared);
+        // Mirrored into the take-wide record so the CLOSING call can carry the un-mark: it sends the whole
+        // pass, and an un-marked side is simply absent from `marks` — absence undoes nothing, so without this
+        // a failed autosave would leave the stale mark on record for good.
+        if (marks[key]?.[side] === undefined) {
+          const sides = clearedThisTake.get(key) ?? new Set<'hear' | 'say'>();
+          sides.add(side);
+          clearedThisTake.set(key, sides);
+        } else clearedThisTake.get(key)?.delete(side);
         return {
           marks,
           saveState: 'saving',
@@ -567,7 +627,7 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       }
       // Seed from what they have already said, exactly as the deck seeds from the lexicon — a retake must not
       // present every answered name blank, and "pick up where you left off" must look like it did.
-      const nameMarks: Record<string, { hear?: BankMark; say?: BankMark }> = {};
+      const nameMarks: DirectionalMarks = {};
       for (const entry of names.entries) {
         if (entry.hearState || entry.sayState) {
           nameMarks[entry.key] = {
@@ -584,33 +644,10 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
     },
 
     markName: (key, side, mark) => {
-      set((prev) => {
-        // A no is a preference (74 §3.2, amended 2026-08-19): re-markable in any sitting, in either
-        // direction, exactly like every other mark.
-        const current = prev.nameMarks[key] ?? {};
-        const next = { ...current };
-        const cleared = current[side] === mark;
-        if (cleared) delete next[side];
-        else next[side] = mark;
-        const nameMarks = { ...prev.nameMarks };
-        if (Object.keys(next).length === 0) delete nameMarks[key];
-        else nameMarks[key] = next;
-
-        const sides = dirtyNames.get(key) ?? new Set<'hear' | 'say'>();
-        const clearedSides = dirtyNameCleared.get(key) ?? new Set<'hear' | 'say'>();
-        if (cleared) {
-          sides.delete(side);
-          clearedSides.add(side);
-        } else {
-          clearedSides.delete(side);
-          sides.add(side);
-        }
-        if (sides.size > 0) dirtyNames.set(key, sides);
-        else dirtyNames.delete(key);
-        if (clearedSides.size > 0) dirtyNameCleared.set(key, clearedSides);
-        else dirtyNameCleared.delete(key);
-        return { nameMarks, saveState: 'saving' };
-      });
+      set((prev) => ({
+        nameMarks: toggleMark(prev.nameMarks, key, side, mark, dirtyNames, dirtyNameCleared),
+        saveState: 'saving',
+      }));
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(() => void get().flush(get().activeTestId), AUTOSAVE_DELAY_MS);
     },
@@ -639,7 +676,7 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
     flush: async (testId) => {
       // Chain, never overlap. The debounce guarantees one TIMER, not one flush: on a round trip slower than the
       // delay (iCloud, a big lexicon), flush B would read the lexicon before flush A's write landed and silently
-      // drop A's delta — `recordBankPass` is read-modify-write over one file and IPC handlers are not serialized.
+      // drop A's delta — `recordMarkingPass` is read-modify-write over one file and IPC handlers are not serialized.
       // A lost mark is precisely the promise this feature makes, so the writes queue.
       inFlight = inFlight.then(() => runFlush(testId, get, set)).catch(() => undefined);
       await inFlight;
@@ -693,44 +730,14 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
         testId,
         resultId,
         marks,
-        cleared: [...clearedThisTake],
-      }) ?? Promise.resolve(null));
-      // 74 §3.6.13 — the split is folded into the words: the hear/say question is asked ON the row, so closing
-      // the deck also closes that pass. It only ever asked about DECK marks, and the pet-name phase already
-      // asks both directions per row, so for anyone marking mostly names it was a step that never had
-      // anything in it — a screen you landed on and could do nothing with.
-      const withSplit = await (window.selfos?.testsAdaptiveSplit({
-        testId,
-        resultId,
-        splits: get().splits,
+        cleared: clearedFor(clearedThisTake),
       }) ?? Promise.resolve(null));
       set({
-        state: withSplit ?? next ?? state,
+        state: next ?? state,
         busy: false,
         phase: 'lines',
         saveState: 'saved',
       });
-    },
-
-    setSplit: (key, direction, value) => {
-      set((prev) => ({
-        splits: { ...prev.splits, [key]: { ...prev.splits[key], [direction]: value } },
-        saveState: 'saving',
-      }));
-      dirtySplits.add(key);
-      if (saveTimer) clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => void get().flush(get().activeTestId), AUTOSAVE_DELAY_MS);
-    },
-
-    submitSplit: async (testId) => {
-      const { state, splits } = get();
-      const resultId = state?.draft?.id;
-      if (!resultId) return;
-      set({ busy: true });
-      await get().flush(testId);
-      const next = await (window.selfos?.testsAdaptiveSplit({ testId, resultId, splits }) ??
-        Promise.resolve(null));
-      set({ state: next ?? state, busy: false, phase: 'lines', saveState: 'saved' });
     },
 
     loadLines: async (testId, round) => {

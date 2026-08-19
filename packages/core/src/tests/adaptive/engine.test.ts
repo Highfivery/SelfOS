@@ -6,7 +6,13 @@ import { DIRTY_TALK } from './instruments/dirtyTalk';
 import type { ClaudeClient } from '../../host';
 import { memFileSystem } from '../../host/memFileSystem';
 import type { AiDeps } from '../../questionnaires/aiCall';
-import { applyBankMarks, applyDirections, emptyLexicon, addBoundary } from './lexicon';
+import {
+  applyDirectionalMarks,
+  emptyLexicon,
+  addBoundary,
+  type BankMark,
+  type DirectionalMark,
+} from './lexicon';
 import {
   lexiconDigest,
   openAmbiguities,
@@ -58,21 +64,23 @@ function deps(client: ClaudeClient): AiDeps {
   };
 }
 
+/** The same mark both ways — what a whole-entry mark used to mean before §3.6.26. */
+const both = (mark: BankMark): DirectionalMark => ({ hear: mark, say: mark });
+
 function seeded() {
-  let lex = applyBankMarks(
+  return applyDirectionalMarks(
     emptyLexicon('angel', NOW),
     DIRTY_TALK.bank,
     {
-      'names-praise:good-girl': 'love',
-      'names-rough-heavy:whore': 'never',
-      'names-rough-heavy:slut': 'love',
-      'anatomy-her:cunt': 'okay',
+      // Loves hearing it, saying it is merely okay — the hear/say gap (§3.6.26).
+      'names-praise:good-girl': { hear: 'love', say: 'okay' },
+      'names-rough-heavy:whore': both('never'),
+      'names-rough-heavy:slut': both('love'),
+      'anatomy-her:cunt': both('okay'),
     },
     'take:1',
     NOW,
   );
-  lex = applyDirections(lex, { 'names-praise:good-girl': { hear: 4, say: 0 } }, NOW);
-  return lex;
 }
 
 describe('the adaptive engine (74 §5.1/§5.3)', () => {
@@ -296,7 +304,13 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
 
   it('surfaces the hear/say GAP as context — the signal that replaced the old cringe list (§3.6.2)', () => {
     // Loves hearing it, rated 0 to say, and BOTH sides were asked: that is the coachable material now.
-    const lex = applyDirections(seeded(), { 'names-praise:good-girl': { hear: 4, say: 0 } }, NOW);
+    const lex = applyDirectionalMarks(
+      seeded(),
+      DIRTY_TALK.bank,
+      { 'names-praise:good-girl': { hear: 'love', say: 'okay' } },
+      'take:1',
+      NOW,
+    );
     expect(lexiconDigest(lex)).toContain('low on saying');
   });
 
@@ -340,8 +354,11 @@ describe('74 §3.6.6 — an unasked side is never read as a refusal', () => {
           kind: 'word' as const,
           family: 'names-power',
           tier: 2,
-          hear: 3,
-          say: 0,
+          // Answered both ways, and the two answers differ — the gap (74 §3.6.26).
+          hear: 4,
+          say: 2,
+          hearState: 'love' as const,
+          sayState: 'okay' as const,
           sides: ['hear' as const, 'say' as const],
         },
       ],
@@ -388,9 +405,15 @@ describe('§3.6.11 — an unanswered side is not a rated zero', () => {
   });
 
   it('still finds the gap when they DID answer both ways', () => {
-    // A real "I love hearing it and I can't say it" — answered on both sides, and the most coachable signal
-    // in the take. The fix must not silence it.
-    const answered = name({ sayState: 'never', say: 0 });
+    // A real gap — answered on both sides, and the most coachable signal in the take. The fix must not
+    // silence it.
+    //
+    // 74 §3.6.26: the gap is love-to-hear against OKAY-to-say. It used to be `sayState: 'never'`, which
+    // three marks make a contradiction: a `never` is a boundary — `suppressedTexts` strips that word from
+    // everything generated, and §3.6.15 forbids the probe from asking anyone to justify one. Probing it
+    // would put the single thing they ruled out in front of them as homework, which is the leak §3.2's goal
+    // guard exists to stop. So "I could never say it" is respected, and "saying it is only okay" is coached.
+    const answered = name({ sayState: 'okay', say: 2 });
     const open = openAmbiguities(lexicon([answered]));
     expect(open.map((a) => a.id)).toContain('frozen');
     expect(lexiconDigest(lexicon([answered]))).toMatch(/low on saying/i);
@@ -400,7 +423,7 @@ describe('§3.6.11 — an unanswered side is not a rated zero', () => {
 describe('a heavy no-marker still gets lines (74 §8.4)', () => {
   it('does not filter out everything the model writes', async () => {
     const { DIRTY_TALK } = await import('./instruments/dirtyTalk');
-    const { applyBankMarks, emptyLexicon } = await import('./lexicon');
+    const { applyDirectionalMarks, emptyLexicon } = await import('./lexicon');
     const now = new Date('2026-08-18T00:00:00.000Z');
 
     // The reported state: went through the pet-name pass and ruled out most of it. Dozens of those names are
@@ -410,8 +433,14 @@ describe('a heavy no-marker still gets lines (74 §8.4)', () => {
     const names = DIRTY_TALK.bank.entries
       .filter((e) => e.family.startsWith('names-'))
       .slice(0, 130);
-    const marks = Object.fromEntries(names.map((e) => [e.key, 'never' as const]));
-    const lexicon = applyBankMarks(emptyLexicon('p1', now), DIRTY_TALK.bank, marks, 'take:1', now);
+    const marks = Object.fromEntries(names.map((e) => [e.key, both('never')]));
+    const lexicon = applyDirectionalMarks(
+      emptyLexicon('p1', now),
+      DIRTY_TALK.bank,
+      marks,
+      'take:1',
+      now,
+    );
 
     const written = [
       'I love the sound you make',
@@ -435,16 +464,22 @@ describe('a heavy no-marker still gets lines (74 §8.4)', () => {
 describe('the probe never asks about a hard no (74 §3.6.15)', () => {
   it('draws its contrast against the middle mark, not a boundary', async () => {
     const { DIRTY_TALK } = await import('./instruments/dirtyTalk');
-    const { applyBankMarks, emptyLexicon } = await import('./lexicon');
+    const { applyDirectionalMarks, emptyLexicon } = await import('./lexicon');
     const { openAmbiguities } = await import('./engine');
     const now = new Date('2026-08-18T00:00:00.000Z');
     const names = DIRTY_TALK.bank.entries
       .filter((e) => e.family.startsWith('names-warm'))
       .slice(0, 6);
     const marks = Object.fromEntries(
-      names.map((e, i) => [e.key, i === 0 ? 'love' : i === 1 ? 'okay' : 'never'] as const),
+      names.map((e, i) => [e.key, both(i === 0 ? 'love' : i === 1 ? 'okay' : 'never')] as const),
     );
-    const lex = applyBankMarks(emptyLexicon('p1', now), DIRTY_TALK.bank, marks, 'take:1', now);
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', now),
+      DIRTY_TALK.bank,
+      marks,
+      'take:1',
+      now,
+    );
 
     const banned = new Set(names.slice(2).map((e) => e.text));
     for (const ambiguity of openAmbiguities(lex)) {
@@ -572,14 +607,13 @@ describe('a name loved one way and ruled out the other (74 §3.6.16)', () => {
   // naming it. Verified against the owner's own vault: every one of his four loved terms is this shape, so
   // the probe failed 100% of the time.
   it('lets the probe quote a word it was handed, while still filtering everything else', async () => {
-    const { applyBankMarks, applyNameMarks, emptyLexicon, suppressedTexts } =
-      await import('./lexicon');
+    const { applyDirectionalMarks, emptyLexicon, suppressedTexts } = await import('./lexicon');
     const { DIRTY_TALK } = await import('./instruments/dirtyTalk');
     const now = new Date('2026-08-18T00:00:00.000Z');
     const naughtyGirl = DIRTY_TALK.bank.entries.find((e) => e.text === 'naughty girl')!;
     const whore = DIRTY_TALK.bank.entries.find((e) => e.text === 'whore')!;
 
-    let lex = applyNameMarks(
+    let lex = applyDirectionalMarks(
       emptyLexicon('p1', now),
       DIRTY_TALK.bank,
       {
@@ -589,7 +623,7 @@ describe('a name loved one way and ruled out the other (74 §3.6.16)', () => {
       'take:1',
       now,
     );
-    lex = applyBankMarks(lex, DIRTY_TALK.bank, {}, 'take:1', now);
+    lex = applyDirectionalMarks(lex, DIRTY_TALK.bank, {}, 'take:1', now);
     // Undirected, it reads as ruled out — which is right for a line and wrong for a question about it.
     expect(suppressedTexts(lex)).toContain('naughty girl');
 

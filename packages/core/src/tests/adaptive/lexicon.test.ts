@@ -7,9 +7,8 @@ import type { EroticLexicon, LexiconEntry } from '../../schemas';
 import {
   addBoundary,
   addCustomEntry,
-  applyBankMarks,
-  applyDirections,
-  clearState,
+  applyDirectionalMarks,
+  resetPreDirectionalDeckMarks,
   derivedWantsToSay,
   emptyLexicon,
   lovedEntries,
@@ -18,8 +17,7 @@ import {
   suppressedTexts,
   violatesBoundary,
   writeLexicon,
-  applyNameMarks,
-  clearNameMarks,
+  clearDirectionalMarks,
 } from './lexicon';
 
 const NOW = new Date('2026-08-16T12:00:00.000Z');
@@ -31,22 +29,37 @@ const WHORE = 'names-rough-heavy:whore';
 const CUNT = 'anatomy-her:cunt';
 
 function seeded(): EroticLexicon {
-  return applyBankMarks(
+  return applyDirectionalMarks(
     emptyLexicon('p1', NOW),
     DIRTY_TALK.bank,
-    { [GOOD_GIRL]: 'love', [WHORE]: 'never', [CUNT]: 'okay' },
+    {
+      [GOOD_GIRL]: { hear: 'love', say: 'love' },
+      [WHORE]: { hear: 'never', say: 'never' },
+      [CUNT]: { hear: 'okay', say: 'okay' },
+    },
     'take:1',
     NOW,
   );
 }
 
 describe('the erotic lexicon (74 §4.4)', () => {
-  it('applies pass-1 marks: love seeds both directions, a no zeroes and suppresses', () => {
+  it('derives a rating per direction from the mark, and a no zeroes and suppresses', () => {
     const lex = seeded();
     const byKey = new Map(lex.entries.map((entry) => [entry.key, entry]));
-    expect(byKey.get(GOOD_GIRL)).toMatchObject({ hear: 3, say: 3, state: undefined });
-    expect(byKey.get(WHORE)).toMatchObject({ hear: 0, say: 0, state: 'never' });
-    expect(byKey.get(CUNT)).toMatchObject({ hear: 0, say: 0, state: 'okay' });
+    // love → 4, okay → 2, never → 0, per side, with the mark itself kept alongside (74 §3.6.26).
+    expect(byKey.get(GOOD_GIRL)).toMatchObject({
+      hear: 4,
+      say: 4,
+      hearState: 'love',
+      sayState: 'love',
+    });
+    expect(byKey.get(WHORE)).toMatchObject({
+      hear: 0,
+      say: 0,
+      hearState: 'never',
+      sayState: 'never',
+    });
+    expect(byKey.get(CUNT)).toMatchObject({ hear: 2, say: 2, hearState: 'okay', sayState: 'okay' });
     // A `never` suppresses the word everywhere, derived from the LIVE state — no second record is written,
     // which is what used to make it unliftable (74 §3.2, amended 2026-08-19).
     expect(lex.boundaries).toEqual([]);
@@ -63,40 +76,58 @@ describe('the erotic lexicon (74 §4.4)', () => {
   it('lets a later mark lift a no — it is a preference, respected only while it is set', () => {
     const lex = seeded();
     expect(suppressedTexts(lex)).toContain('whore');
-    const reMarked = applyBankMarks(lex, DIRTY_TALK.bank, { [WHORE]: 'love' }, 'take:2', LATER);
-    expect(reMarked.entries.find((e) => e.key === WHORE)?.state).toBeUndefined();
+    const reMarked = applyDirectionalMarks(
+      lex,
+      DIRTY_TALK.bank,
+      { [WHORE]: { hear: 'love', say: 'love' } },
+      'take:2',
+      LATER,
+    );
+    expect(reMarked.entries.find((e) => e.key === WHORE)?.hearState).toBe('love');
     // The whole point: the suppression goes WITH the mark, on the very next read.
     expect(suppressedTexts(reMarked)).not.toContain('whore');
     expect(violatesBoundary(reMarked, 'come here, whore')).toBe(false);
   });
 
-  it('still refuses to re-rate a no through the SPLIT pass — that pass rates what was loved', () => {
-    const split = applyDirections(seeded(), { [WHORE]: { hear: 4, say: 4 } }, LATER);
-    expect(split.entries.find((e) => e.key === WHORE)).toMatchObject({
-      state: 'never',
-      hear: 0,
-      say: 0,
-    });
-  });
-
-  it('lifts a boundary ONLY through an explicit clear, which drops the suppression with it', () => {
-    const cleared = clearState(seeded(), WHORE, LATER);
-    expect(cleared.entries.find((e) => e.key === WHORE)?.state).toBeUndefined();
+  it('lifts a no by taking the mark back, which drops the suppression with it', () => {
+    const cleared = clearDirectionalMarks(seeded(), { [WHORE]: ['hear', 'say'] }, LATER);
+    const entry = cleared.entries.find((e) => e.key === WHORE);
+    expect(entry?.hearState).toBeUndefined();
+    expect(entry?.sayState).toBeUndefined();
     expect(suppressedTexts(cleared)).toEqual([]);
   });
 
-  it('applies the pass-2 hear/say split, clamped', () => {
-    const lex = applyDirections(seeded(), { [GOOD_GIRL]: { hear: 4, say: 9 } }, LATER);
-    expect(lex.entries.find((e) => e.key === GOOD_GIRL)).toMatchObject({ hear: 4, say: 4 });
+  it('answers the two directions independently — the whole point of §3.6.26', () => {
+    // A word can be loved to hear and ruled out to say. The old deck writer took ONE mark for the entry and
+    // a second 0–4 pass to pull them apart, which is the pass nobody reached.
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      { [CUNT]: { hear: 'love', say: 'never' } },
+      'take:1',
+      NOW,
+    );
+    expect(lex.entries.find((e) => e.key === CUNT)).toMatchObject({
+      hear: 4,
+      say: 0,
+      hearState: 'love',
+      sayState: 'never',
+    });
+    // ...and only the SAY direction is suppressed: ruling out saying a word never bans hearing it.
+    expect(suppressedTexts(lex, 'say')).toContain('cunt');
+    expect(suppressedTexts(lex, 'hear')).not.toContain('cunt');
   });
 
   it('merges last-write-wins on ratings AND states, and unions the themes', () => {
     const mine = seeded();
     const theirs = addBoundary(
-      applyBankMarks(
+      applyDirectionalMarks(
         emptyLexicon('p1', LATER),
         DIRTY_TALK.bank,
-        { [GOOD_GIRL]: 'love', 'anatomy-her:tits': 'love' },
+        {
+          [GOOD_GIRL]: { hear: 'love', say: 'love' },
+          'anatomy-her:tits': { hear: 'love', say: 'love' },
+        },
         'take:2',
         LATER,
       ),
@@ -105,7 +136,7 @@ describe('the erotic lexicon (74 §4.4)', () => {
     );
     const merged = mergeLexicons(mine, theirs);
     // The newer side never touched `whore`, so the older side's answer stands.
-    expect(merged.entries.find((e) => e.key === WHORE)?.state).toBe('never');
+    expect(merged.entries.find((e) => e.key === WHORE)?.hearState).toBe('never');
     // Only the theme is a record now; a bank entry's suppression rides its state.
     expect(merged.boundaries.map((b) => b.text)).toEqual(['anything about being used']);
     expect(merged.entries.find((e) => e.key === 'anatomy-her:tits')).toBeDefined();
@@ -114,9 +145,15 @@ describe('the erotic lexicon (74 §4.4)', () => {
   it('lets the NEWER side lift a no — never-wins would undo it on the next sync', () => {
     // The exact case: ruled out on an old copy, lifted here. Before `never` became a preference this
     // merged back to `never`, silently undoing the change on whichever device synced second.
-    const lifted = applyBankMarks(seeded(), DIRTY_TALK.bank, { [WHORE]: 'love' }, 'take:2', LATER);
+    const lifted = applyDirectionalMarks(
+      seeded(),
+      DIRTY_TALK.bank,
+      { [WHORE]: { hear: 'love', say: 'love' } },
+      'take:2',
+      LATER,
+    );
     const merged = mergeLexicons(seeded(), lifted);
-    expect(merged.entries.find((e) => e.key === WHORE)?.state).toBeUndefined();
+    expect(merged.entries.find((e) => e.key === WHORE)?.hearState).toBe('love');
     expect(suppressedTexts(merged)).not.toContain('whore');
   });
 
@@ -128,16 +165,29 @@ describe('the erotic lexicon (74 §4.4)', () => {
   });
 
   it('derives the wants-to-say goal list from the hear/say GAP alone (74 §3.6.2)', () => {
-    const lex = applyDirections(seeded(), { [GOOD_GIRL]: { hear: 4, say: 0 } }, LATER);
+    const lex = applyDirectionalMarks(
+      seeded(),
+      DIRTY_TALK.bank,
+      { [GOOD_GIRL]: { hear: 'love', say: 'okay' } },
+      'take:2',
+      LATER,
+    );
     const goals = derivedWantsToSay(lex);
-    expect(goals).toContain('good girl'); // loves hearing it, can't say it — the whole signal
+    // Loves hearing it; saying it is only okay — the one gap three marks can express (74 §3.6.26).
+    expect(goals).toContain('good girl');
     // The middle mark is a MILD YES now, not "I'd feel like an idiot", so it is not a goal.
     expect(goals).not.toContain('cunt');
     expect(goals).not.toContain('whore'); // a hard no is never a goal
   });
 
   it('ranks loved entries and never surfaces a boundary among them', () => {
-    const lex = applyDirections(seeded(), { [GOOD_GIRL]: { hear: 4, say: 1 } }, LATER);
+    const lex = applyDirectionalMarks(
+      seeded(),
+      DIRTY_TALK.bank,
+      { [GOOD_GIRL]: { hear: 'love', say: 'okay' } },
+      'take:2',
+      LATER,
+    );
     expect(lovedEntries(lex, 'hear').map((e) => e.text)).toEqual(['good girl']);
     expect(lovedEntries(lex, 'say')).toEqual([]);
   });
@@ -193,12 +243,154 @@ describe('boundary matching (74 §5.7)', () => {
   });
 });
 
+describe('74 §3.6.26 — the deck answers per direction, and its old answers are cleared', () => {
+  it('carries a DECK term into the goal list — the signal the change exists to restore', () => {
+    // Measured on the real vault before the change: every entry `derivedWantsToSay` fired for came from the
+    // deck's 0–4 split, none from the names. Option B removes that scale, so unless the deck can express the
+    // gap in MARKS the goal list, the practice sheet and the coach's "wants to say" material go empty.
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      { [CUNT]: { hear: 'love', say: 'okay' } },
+      'take:1',
+      NOW,
+    );
+    expect(CUNT.startsWith('names-')).toBe(false); // a deck term, not a pet name
+    expect(derivedWantsToSay(lex)).toContain('cunt');
+  });
+
+  it('clears a pre-Option-B deck answer, and the boundary record behind it', () => {
+    // The shape every real vault holds: ratings, no per-direction mark, plus the legacy `kind:'word'` record
+    // a hard no used to write beside the entry.
+    const legacy: EroticLexicon = {
+      ...emptyLexicon('p1', NOW),
+      entries: [
+        {
+          key: CUNT,
+          text: 'cunt',
+          kind: 'word',
+          family: 'anatomy-her',
+          tier: 4,
+          // A rating with no mark behind it: the only shape the deck could write before §3.6.26.
+          hear: 4,
+          say: 1,
+        },
+      ],
+      boundaries: [{ text: 'cunt', kind: 'word', at: NOW.toISOString() }],
+    };
+    // Not suppressed today: `suppressedTexts` ignores a word record while an entry with that text exists.
+    // Remove the entry and leave the record and it starts suppressing — a word they never ruled out, banned
+    // app-wide, with no row anywhere to lift it. Exactly the un-gettable-rid-of preference §3.2 abolished,
+    // reached by cleaning up.
+    expect(suppressedTexts(legacy)).not.toContain('cunt');
+    expect(suppressedTexts({ ...legacy, entries: [] })).toContain('cunt');
+
+    const { lexicon, changed } = resetPreDirectionalDeckMarks(legacy, LATER);
+    expect(changed).toBe(true);
+    expect(lexicon.entries).toEqual([]);
+    expect(lexicon.boundaries).toEqual([]);
+    expect(suppressedTexts(lexicon)).toEqual([]);
+  });
+
+  it('clears an entry whose answer lived in the RETIRED whole-entry state, and its record', () => {
+    // What an `okay`/`never` looks like once `state` leaves the schema: 0/0 with no mark, indistinguishable
+    // from an unrated row. Measured on the real vault — one member had 12 of these — so a rule keyed on
+    // "has a rating" would have left them behind as meaningless rows, with their word records dormant only
+    // for as long as the empty rows happened to survive.
+    const stripped: EroticLexicon = {
+      ...emptyLexicon('p1', NOW),
+      entries: [
+        {
+          key: CUNT,
+          text: 'cunt',
+          kind: 'word',
+          family: 'anatomy-her',
+          tier: 4,
+          hear: 0,
+          say: 0,
+        },
+      ],
+      boundaries: [{ text: 'cunt', kind: 'word', at: NOW.toISOString() }],
+    };
+    const { lexicon, changed } = resetPreDirectionalDeckMarks(stripped, LATER);
+    expect(changed).toBe(true);
+    expect(lexicon.entries).toEqual([]);
+    expect(lexicon.boundaries).toEqual([]);
+    expect(suppressedTexts(lexicon)).toEqual([]);
+  });
+
+  it('leaves the pet names alone — they were already answered this way', () => {
+    const names = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      { [GOOD_GIRL]: { hear: 'love', say: 'never' } },
+      'take:1',
+      NOW,
+    );
+    const { lexicon, changed } = resetPreDirectionalDeckMarks(names, LATER);
+    expect(changed).toBe(false);
+    expect(lexicon.entries.find((e) => e.key === GOOD_GIRL)).toMatchObject({
+      hearState: 'love',
+      sayState: 'never',
+    });
+  });
+
+  it('keeps a word they typed themselves, and only clears its rating', () => {
+    // A custom write-in is 0/0 with no state the moment it is added — the exact shape being purged — so
+    // without the carve-out the migration would eat the word on the next read.
+    const custom = addCustomEntry(
+      emptyLexicon('p1', NOW),
+      { text: 'my own line', family: 'sensation', kind: 'phrase' },
+      'take:1',
+      NOW,
+    );
+    const fresh = resetPreDirectionalDeckMarks(custom, LATER);
+    expect(fresh.changed).toBe(false);
+    expect(fresh.lexicon.entries).toHaveLength(1);
+
+    const rated = {
+      ...custom,
+      entries: custom.entries.map((e) => ({ ...e, hear: 3, say: 3 })),
+    };
+    const { lexicon, changed } = resetPreDirectionalDeckMarks(rated, LATER);
+    expect(changed).toBe(true);
+    expect(lexicon.entries).toHaveLength(1);
+    expect(lexicon.entries[0]).toMatchObject({ text: 'my own line', hear: 0, say: 0 });
+  });
+
+  it('is idempotent — it runs on every read, so a second pass must not write', () => {
+    const legacy: EroticLexicon = {
+      ...emptyLexicon('p1', NOW),
+      entries: [
+        {
+          key: CUNT,
+          text: 'cunt',
+          kind: 'word',
+          family: 'anatomy-her',
+          tier: 4,
+          hear: 4,
+          say: 1,
+        },
+      ],
+    };
+    const once = resetPreDirectionalDeckMarks(legacy, LATER);
+    expect(once.changed).toBe(true);
+    expect(resetPreDirectionalDeckMarks(once.lexicon, LATER).changed).toBe(false);
+  });
+});
+
 describe('a hard no is respected while set, and changeable (74 §3.2, amended 2026-08-19)', () => {
   it('is lifted by ANY later mark, and the suppression goes with it', () => {
     const lex = seeded();
     for (const mark of ['love', 'okay'] as const) {
-      const after = applyBankMarks(lex, DIRTY_TALK.bank, { [WHORE]: mark }, 'take:2', LATER);
-      expect(after.entries.find((e) => e.key === WHORE)?.state).not.toBe('never');
+      const after = applyDirectionalMarks(
+        lex,
+        DIRTY_TALK.bank,
+        { [WHORE]: { hear: mark, say: mark } },
+        'take:2',
+        LATER,
+      );
+      expect(after.entries.find((e) => e.key === WHORE)?.hearState).not.toBe('never');
       expect(suppressedTexts(after)).not.toContain('whore');
     }
   });
@@ -212,7 +404,13 @@ describe('a hard no is respected while set, and changeable (74 §3.2, amended 20
   it('never appears in the goal list, however it was marked', () => {
     // The path that used to leak: never → notYet put the word in `wantsToSay`, which reaches their own coach
     // prompt as something to PRACTISE, two lines under "never use this".
-    const downgraded = applyBankMarks(seeded(), DIRTY_TALK.bank, { [WHORE]: 'okay' }, 'e', LATER);
+    const downgraded = applyDirectionalMarks(
+      seeded(),
+      DIRTY_TALK.bank,
+      { [WHORE]: { hear: 'okay', say: 'okay' } },
+      'e',
+      LATER,
+    );
     expect(derivedWantsToSay(downgraded)).not.toContain('whore');
   });
 
@@ -225,6 +423,8 @@ describe('a hard no is respected while set, and changeable (74 §3.2, amended 20
 });
 
 describe('74 §3.6.6 — a side that was never asked is not a refusal', () => {
+  // Loved to hear, only okay to say — the gap (74 §3.6.26). `sides` still records what was OFFERED, which is
+  // a different question from what was ANSWERED and is what this section is about.
   const base = {
     key: 'names-praise:good-girl',
     text: 'good girl',
@@ -232,16 +432,18 @@ describe('74 §3.6.6 — a side that was never asked is not a refusal', () => {
     family: 'names-power',
     tier: 2,
     hear: 4,
-    say: 0,
+    say: 2,
+    hearState: 'love' as const,
+    sayState: 'okay' as const,
   };
 
   it('does NOT turn a loved HEAR-ONLY entry into a goal the person never declined', () => {
     // The failure this guards: goals reach their own coach prompt AND a partner-shared Insight fact, so a
     // fabricated one is not a cosmetic bug — it invents a want and then shares it.
-    const lexicon = {
-      ...emptyLexicon('p1', NOW),
-      entries: [{ ...base, sides: ['hear' as const] }],
-    };
+    // Hear-only means the say side carries no MARK — there is nothing to be a gap against.
+    const hearOnly = { ...base, say: 0, sides: ['hear' as const] };
+    delete (hearOnly as { sayState?: unknown }).sayState;
+    const lexicon = { ...emptyLexicon('p1', NOW), entries: [hearOnly] };
     expect(derivedWantsToSay(lexicon)).toEqual([]);
   });
 
@@ -253,16 +455,19 @@ describe('74 §3.6.6 — a side that was never asked is not a refusal', () => {
     expect(derivedWantsToSay(lexicon)).toEqual(['good girl']);
   });
 
-  it('treats a pre-orientation entry (no `sides`) as both-asked, which is what it was', () => {
+  it('reads answeredness from the MARKS, not from `sides`', () => {
+    // The two say different things: `sides` is what the deck OFFERED, a mark is what they ANSWERED. Only the
+    // mark can decide whether a direction has a real answer behind it, so an entry carrying both marks is
+    // answered both ways whatever `sides` happens to say.
     const lexicon = { ...emptyLexicon('p1', NOW), entries: [base] };
     expect(derivedWantsToSay(lexicon)).toEqual(['good girl']);
   });
 
   it('records the sides it showed, so the take is the record of what was asked', () => {
-    const marked = applyBankMarks(
+    const marked = applyDirectionalMarks(
       emptyLexicon('p1', NOW),
       DIRTY_TALK.bank,
-      { 'names-praise:good-girl': 'love' },
+      { 'names-praise:good-girl': { say: 'love' } },
       'test:r1',
       NOW,
       { 'names-praise:good-girl': ['say'] },
@@ -422,7 +627,8 @@ describe('74 §3.6.8 — a name can be ruled out one way and loved the other', (
           tier: 4,
           hear: 0,
           say: 0,
-          state: 'never' as const,
+          hearState: 'never' as const,
+          sayState: 'never' as const,
           source: 'test:r0',
         },
       ],
@@ -452,7 +658,7 @@ describe('74 §3.6.8 — the pet-name pass', () => {
   const KEY = 'names-rough-heavy:slut';
 
   it('writes each direction separately, and derives the ratings the rest of the app reads', () => {
-    const lex = applyNameMarks(
+    const lex = applyDirectionalMarks(
       start(),
       DIRTY_TALK.bank,
       { [KEY]: { hear: 'never', say: 'love' } },
@@ -467,7 +673,7 @@ describe('74 §3.6.8 — the pet-name pass', () => {
   });
 
   it('suppresses one DIRECTION only, so the other is untouched', () => {
-    const lex = applyNameMarks(
+    const lex = applyDirectionalMarks(
       start(),
       DIRTY_TALK.bank,
       { [KEY]: { hear: 'never', say: 'love' } },
@@ -480,14 +686,14 @@ describe('74 §3.6.8 — the pet-name pass', () => {
   });
 
   it('lets a LATER take mark over a no, per direction — nothing is settled for good', () => {
-    const first = applyNameMarks(
+    const first = applyDirectionalMarks(
       start(),
       DIRTY_TALK.bank,
       { [KEY]: { hear: 'never' } },
       'take:1',
       now,
     );
-    const second = applyNameMarks(
+    const second = applyDirectionalMarks(
       first,
       DIRTY_TALK.bank,
       { [KEY]: { hear: 'love' } },
@@ -499,14 +705,14 @@ describe('74 §3.6.8 — the pet-name pass', () => {
   });
 
   it('takes back ONE direction, leaving the other standing', () => {
-    const lex = applyNameMarks(
+    const lex = applyDirectionalMarks(
       start(),
       DIRTY_TALK.bank,
       { [KEY]: { hear: 'never', say: 'never' } },
       'take:1',
       now,
     );
-    const cleared = clearNameMarks(lex, { [KEY]: ['hear'] }, now);
+    const cleared = clearDirectionalMarks(lex, { [KEY]: ['hear'] }, now);
     const entry = cleared.entries.find((e) => e.key === KEY);
     expect(entry?.hearState).toBeUndefined();
     expect(entry?.sayState).toBe('never');
@@ -516,14 +722,14 @@ describe('74 §3.6.8 — the pet-name pass', () => {
   });
 
   it('lets a LATER sitting take back an earlier mark — a preference is not take-scoped', () => {
-    const first = applyNameMarks(
+    const first = applyDirectionalMarks(
       start(),
       DIRTY_TALK.bank,
       { [KEY]: { say: 'never' } },
       'take:1',
       now,
     );
-    const taken = clearNameMarks(first, { [KEY]: ['say'] }, now);
+    const taken = clearDirectionalMarks(first, { [KEY]: ['say'] }, now);
     expect(taken.entries.find((e) => e.key === KEY)?.sayState).toBeUndefined();
     expect(violatesBoundary(taken, 'take it, slut', 'say')).toBe(false);
   });
@@ -545,7 +751,8 @@ describe('a pet name is a boundary when it ADDRESSES them, not whenever the word
       tier: 1,
       hear: 0,
       say: 0,
-      state: 'never' as const,
+      hearState: 'never' as const,
+      sayState: 'never' as const,
     })),
     registers: {},
     contexts: {},
@@ -593,7 +800,8 @@ describe('a pet name is a boundary when it ADDRESSES them, not whenever the word
           tier: 4,
           hear: 0,
           say: 0,
-          state: 'never',
+          hearState: 'never',
+          sayState: 'never',
         },
       ],
     };
@@ -612,7 +820,8 @@ describe('a pet name is a boundary when it ADDRESSES them, not whenever the word
           tier: 5,
           hear: 0,
           say: 0,
-          state: 'never',
+          hearState: 'never',
+          sayState: 'never',
         },
       ],
     };
@@ -633,7 +842,8 @@ describe('a pet name is a boundary when it ADDRESSES them, not whenever the word
           tier: 4,
           hear: 0,
           say: 0,
-          state: 'never',
+          hearState: 'never',
+          sayState: 'never',
         },
       ],
     };

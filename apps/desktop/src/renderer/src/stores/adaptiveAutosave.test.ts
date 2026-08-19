@@ -63,7 +63,7 @@ describe('the adaptive autosave', () => {
     installMockBridge({ testsAdaptiveBank: bank as never });
     seed();
 
-    useAdaptiveTestStore.getState().mark('names-power:good-girl', 'love');
+    useAdaptiveTestStore.getState().mark('names-power:good-girl', 'hear', 'love');
     // Switching person is an in-app modal — the take stays mounted — and AppShell resets every per-person
     // store. The debounced write must die with it, or it lands in the NEXT person's lexicon.
     useAdaptiveTestStore.getState().reset();
@@ -77,7 +77,7 @@ describe('the adaptive autosave', () => {
     installMockBridge({ testsAdaptiveBank: (() => Promise.resolve(null)) as never });
     seed();
 
-    useAdaptiveTestStore.getState().mark('names-power:good-girl', 'love');
+    useAdaptiveTestStore.getState().mark('names-power:good-girl', 'hear', 'love');
     await useAdaptiveTestStore.getState().flush('dirty-talk');
 
     expect(useAdaptiveTestStore.getState().saveState).toBe('unsaved');
@@ -94,13 +94,13 @@ describe('the adaptive autosave', () => {
     });
     seed();
 
-    useAdaptiveTestStore.getState().mark('names-power:good-girl', 'love');
+    useAdaptiveTestStore.getState().mark('names-power:good-girl', 'hear', 'love');
     await useAdaptiveTestStore.getState().flush('dirty-talk');
     fail = false;
     await useAdaptiveTestStore.getState().flush('dirty-talk');
 
     expect(calls).toHaveLength(2);
-    expect(calls[1]).toMatchObject({ marks: { 'names-power:good-girl': 'love' } });
+    expect(calls[1]).toMatchObject({ marks: { 'names-power:good-girl': { hear: 'love' } } });
     expect(useAdaptiveTestStore.getState().saveState).toBe('saved');
   });
 
@@ -130,9 +130,9 @@ describe('the adaptive autosave', () => {
     });
     seed();
 
-    useAdaptiveTestStore.getState().mark('a:one', 'love');
+    useAdaptiveTestStore.getState().mark('a:one', 'hear', 'love');
     const first = useAdaptiveTestStore.getState().flush('dirty-talk');
-    useAdaptiveTestStore.getState().mark('b:two', 'never');
+    useAdaptiveTestStore.getState().mark('b:two', 'hear', 'never');
     const second = useAdaptiveTestStore.getState().flush('dirty-talk');
     await Promise.resolve();
     await Promise.resolve();
@@ -148,8 +148,8 @@ describe('the adaptive autosave', () => {
       string,
       string
     >;
-    expect(sent['a:one']).toBe('love');
-    expect(sent['b:two']).toBe('never');
+    expect(sent['a:one']).toEqual({ hear: 'love' });
+    expect(sent['b:two']).toEqual({ hear: 'never' });
   });
 
   it('carries the take’s un-marks on the closing call, not just the marks', async () => {
@@ -157,14 +157,16 @@ describe('the adaptive autosave', () => {
     installMockBridge({ testsAdaptiveBank: bank as never });
     seed();
 
-    useAdaptiveTestStore.getState().mark('a:one', 'never');
-    useAdaptiveTestStore.getState().mark('a:one', null); // took it back
+    useAdaptiveTestStore.getState().mark('a:one', 'hear', 'never');
+    // Tapping the same mark again takes it back — the toggle both phases share since §3.6.26.
+    useAdaptiveTestStore.getState().mark('a:one', 'hear', 'never');
     await useAdaptiveTestStore.getState().submitBank('dirty-talk');
 
-    // An un-marked key is ABSENT from `marks`, and absence undoes nothing — the closing call must say so.
+    // An un-marked side is ABSENT from `marks`, and absence undoes nothing — the closing call must say which
+    // DIRECTION was taken back (74 §3.6.26), or a failed autosave leaves the stale mark on record for good.
     const closing = (bank.mock.calls.at(-1) as unknown[] | undefined)?.[0] as
-      | { cleared?: string[] }
+      | { cleared?: Record<string, ('hear' | 'say')[]> }
       | undefined;
-    expect(closing?.cleared).toContain('a:one');
+    expect(closing?.cleared?.['a:one']).toEqual(['hear']);
   });
 });

@@ -345,7 +345,6 @@ export function registerIpcHandlers(): void {
   handle(IpcChannels.testsAdaptiveState, bridge.testsAdaptiveState);
   handle(IpcChannels.testsAdaptiveStart, bridge.testsAdaptiveStart);
   handle(IpcChannels.testsAdaptiveBank, bridge.testsAdaptiveBank);
-  handle(IpcChannels.testsAdaptiveSplit, bridge.testsAdaptiveSplit);
   handle(IpcChannels.testsAdaptiveSetArea, bridge.testsAdaptiveSetArea);
   handle(IpcChannels.testsAdaptiveLines, bridge.testsAdaptiveLines);
   handle(IpcChannels.testsAdaptiveProbe, bridge.testsAdaptiveProbe);

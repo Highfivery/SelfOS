@@ -1008,7 +1008,7 @@ describe('74 §8.4 — a hard no suppresses in EVERY session, not just an intima
 describe('the challenge coach speaks in their words too (74 §5.8)', () => {
   it('gives a challenge session the own-lexicon steer it was speaking explicitly without', async () => {
     const { upsertPerson } = await import('../people/peopleService');
-    const { applyBankMarks, applyDirections, emptyLexicon, writeLexicon } =
+    const { applyDirectionalMarks, emptyLexicon, writeLexicon } =
       await import('../tests/adaptive/lexicon');
     const { DIRTY_TALK } = await import('../tests/adaptive/instruments/dirtyTalk');
     const { acknowledgeAdult } = await import('./guidanceService');
@@ -1019,14 +1019,16 @@ describe('the challenge coach speaks in their words too (74 §5.8)', () => {
     const person = (await upsertPerson(fs, key, { displayName: 'Ben', isSubject: true, tags: [] }))
       .id;
     await acknowledgeAdult(fs, key, person);
-    let lex = applyBankMarks(
+    const lex = applyDirectionalMarks(
       emptyLexicon(person, now),
       DIRTY_TALK.bank,
-      { 'names-praise:good-girl': 'love', 'names-rough-heavy:whore': 'never' },
+      {
+        'names-praise:good-girl': { hear: 'love', say: 'love' },
+        'names-rough-heavy:whore': { hear: 'never', say: 'never' },
+      },
       'take:1',
       now,
     );
-    lex = applyDirections(lex, { 'names-praise:good-girl': { hear: 4, say: 4 } }, now);
     await writeLexicon(fs, key, lex);
 
     let system = '';

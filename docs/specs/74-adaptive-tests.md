@@ -875,6 +875,83 @@ a custom write-in, which is the person's own word and was never the bank's to re
 Verified against the real decrypted vault, not a fixture: **1,110 → 937 entries, 169 words released, and zero
 survivors whose own answer changed.**
 
+### 3.6.26 The words get two columns, like the names — APPROVED + **BUILT** (2026-08-19, owner-directed)
+
+The owner: _"theres no way to mark i like to hear vs. i like to say."_ Option B of a three-way mockup, chosen
+with the tap cost stated and accepted (~2 taps per word, ~1,700 for the deck).
+
+**What was actually wrong.** §3.6.13 folded the hear/say split out of its own step and into the deck row, and
+four things then made it effectively unreachable: the direction band still promised _"you split the two apart in
+the next step"_ of a step that no longer existed; the control rendered only after a `love` and only on a
+both-sided entry, so an unmarked screen gave no sign it was there; nothing read as selected over a value that
+was already set (a `love` writes 3/3 immediately, but `mark()` never seeded `store.splits`); and when it did
+appear it was `How much…` over two rows of `0 1 2 3 4` under three icon buttons — a second, unrelated rating.
+
+**What the vault said, which changed the shape of the fix.** Measured before building, on the real accounts:
+
+- The owner's 132 deck entries carry **no `love`/`okay`/`never` at all** — they are pure ratings, **119 of them
+  with `hear ≠ say`**, using **all five** values on the say side. He had reached the split; it was
+  undiscoverable, not absent.
+- `derivedWantsToSay` fired for **7 entries, every one from the deck, none from the pet names** — the reverse of
+  the assumption the work was scoped on. The names have been three-mark all along, and three marks cannot
+  express the old gap, so the deck's 0–4 scale was the ONLY thing feeding the goal list.
+- Seeding the new columns from the whole-entry `state` (the obvious migration) would have shown **119 real marks
+  as blank**.
+
+**Owner decisions, asked with those numbers in hand.** Three marks per direction, as mocked — the 1-vs-2 and
+3-vs-4 nuance goes. And the deck's existing answers are **removed**, not guessed at: a `0` on a side they were
+offered is genuinely ambiguous between "I dialled it down" and "I never touched it", and reading it as a hard no
+would have invented ~20 app-wide suppressions nobody declared.
+
+**What was built.**
+
+1. **One writer.** `applyBankMarks` (whole-entry) and `applyDirections` (the 0–4 split) are deleted;
+   `applyNameMarks`/`clearNameMarks` are renamed `applyDirectionalMarks`/`clearDirectionalMarks` and serve both
+   phases, as do one `recordMarkingPass` and one `AdaptiveMarkPass` payload. `hear`/`say` stay derived
+   (love → 4, okay → 2, never → 0), so the spine, the steer, the report and every other consumer read the two
+   numbers they always read.
+2. **The row is the names' row.** Both columns always visible, neither behind the other, reusing `colMe`/
+   `colThem` so the direction colours teach the same thing they do on the names; a one-sided entry's survivor
+   stretches across the row (`flex: 1 1 auto`), so there is no gap and nothing to explain.
+3. **The old data goes, and the boundary record with it.** `resetPreDirectionalDeckMarks` runs inside
+   `readLexicon` — the one read every consumer goes through — so there is exactly one shape in the app and
+   nothing downstream needs a branch for the old one. It needs no bank: a rating with no mark behind it can only
+   be pre-§3.6.26 deck data. A custom write-in keeps its word and loses only its rating. **And a `kind:'word'`
+   boundary record left behind is removed with the entry**, because `suppressedTexts` ignores such a record only
+   while an entry with that text exists — dropping the entry and keeping the record would START suppressing a
+   word they never ruled out, app-wide, with no row anywhere to lift it. Measured: 0 such records for the owner,
+   4 for the other member. Because it runs on a READ it does not itself write: every consumer sees the cleaned
+   lexicon immediately, and the file is rewritten by the next thing that saves — which, on the deck, is the next
+   tap. Verified on the real vault: **1,110 → 978 for the owner (all 132 deck entries, all 978 pet names kept),
+   16 → 0 for the other member, whose lexicon was deck-only.**
+4. **The whole-entry `state` is gone from the schema**, along with `LexiconState`, the `rate`/`setState` lexicon
+   edits (neither had a caller), the `split` phase, and `clearState`. `clearNameSide` becomes `clearSide` and
+   now lifts a per-direction `never` on a WORD as well as a name — the only route back once a term leaves the
+   bank.
+
+**Three consequences of the narrowing, found by measuring rather than by reasoning about it.**
+
+- **`derivedWantsToSay` would have been structurally dead.** `say <= 1` can only mean a `never` under three
+  marks, and `violatesBoundary` then strips it — so nothing could ever qualify, and the goal list, the practice
+  sheet and the coach's "wants to say" material would have gone permanently empty. The gap is now the one
+  asymmetry three marks CAN express — loved to hear, only okay to say — hoisted into a single exported
+  `hasSayGap` that the engine reads too, because `engine.ts` carried three more copies of the dead numeric test.
+- **"I love hearing it, I could never say it" is a boundary, not a goal.** It suppresses, and §3.6.15 forbids
+  the probe from asking anyone to justify one; treating it as the most coachable signal would put the single
+  thing they ruled out in front of them as homework.
+- **`say-confidence` floors at 0.5** for anything not ruled out, where the 0–4 scale could reach 0.25. Pinned at
+  the real number rather than left to be discovered.
+
+**Two defects fixed on the way**, both pre-existing and both extended by this change if left alone. The spine's
+`meanOf` **filtered a hard no out** before `value()` could score it 0 — its own comment says "a boundary
+contributes 0, it is a no, not a missing answer", and the filter was dropping those entries before the scorer
+saw them; already true of the names, and this change would have extended it to the deck. And the report's words
+section listed pet names too: a name loved-to-hear carries `hear: 4`, so 18 rows appeared under both "Love to
+hear" and "Call me". The spine also gained the **mirror** of §3.6.6's was-this-side-asked guard on the hear
+direction — checked rather than assumed: **no dimension on the spine is hear-directional today**, so it fixes
+nothing live and exists so the next one that is cannot reintroduce the bug by being written the obvious way.
+Pinned by a test against a one-off dimension.
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

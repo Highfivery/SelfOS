@@ -145,7 +145,6 @@ const bridge: SelfosBridge = {
   testsAdaptiveState: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveState, input),
   testsAdaptiveStart: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveStart, input),
   testsAdaptiveBank: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveBank, input),
-  testsAdaptiveSplit: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveSplit, input),
   testsAdaptiveSetArea: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveSetArea, input),
   testsAdaptiveLines: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveLines, input),
   testsAdaptiveProbe: (input) => ipcRenderer.invoke(IpcChannels.testsAdaptiveProbe, input),

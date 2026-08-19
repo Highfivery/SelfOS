@@ -133,8 +133,6 @@ export interface StepStatus {
    * last time's already on record; where the two differ, both are shown rather than one standing for the other.
    */
   fresh?: number;
-  /** Work that appeared after they left the step (marks added later still need splitting). */
-  outstanding?: number;
   /** Why it is blocked, in their terms. */
   reason?: string;
 }
@@ -146,9 +144,6 @@ export interface StepInput {
   skipped: readonly StepId[];
   nameMarks: number;
   bankMarks: number;
-  /** Entries still owed the hear/say question, and how many of those have an answer. */
-  splitNeeded: number;
-  splitAnswered: number;
   lineReactions: number;
   probesAnswered: number;
   scenariosAnswered: number;
@@ -189,11 +184,8 @@ export function stepStatuses(input: StepInput): StepStatus[] {
         return input.probesAnswered;
       case 'scenario':
         return input.scenariosAnswered;
-      // `split` is folded into the words (74 §3.6.13) — still a phase in the union, no longer a step of
-      // its own — so it counts nothing here, same as the two steps that have nothing to tally.
       case 'identity':
       case 'profile':
-      case 'split':
         return 0;
     }
   };
@@ -233,7 +225,7 @@ export function stepStatuses(input: StepInput): StepStatus[] {
     // Blocked beats everything except being the step you are actually on: a rail that lets you jump anywhere
     // must not offer a tap whose only outcome is an empty screen (or, for an AI step, a paid call that can only
     // come back empty — `testsAdaptiveLines`/`Scenario` reach the model with no marks-guard of their own).
-    // The split needs marks; the three generating steps need enough of them. The profile is deliberately NOT
+    // The three generating steps need enough marks. The profile is deliberately NOT
     // gated on the threshold — being unable to finish is worse than a thin profile, and the report already says
     // when it is working from little (it just needs SOMETHING).
     const gate =

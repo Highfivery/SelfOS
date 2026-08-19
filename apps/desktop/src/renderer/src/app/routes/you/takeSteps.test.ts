@@ -13,8 +13,6 @@ const BASE: StepInput = {
   skipped: [],
   nameMarks: 0,
   bankMarks: 0,
-  splitNeeded: 0,
-  splitAnswered: 0,
   lineReactions: 0,
   probesAnswered: 0,
   scenariosAnswered: 0,

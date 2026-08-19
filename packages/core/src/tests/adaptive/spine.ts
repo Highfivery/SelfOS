@@ -4,10 +4,11 @@ import {
   type LexiconEntry,
   type TestSubscaleScore,
 } from '../../schemas';
-import { saySideAnswered } from './lexicon';
+import { hasAnswer, hearSideAnswered, saySideAnswered } from './lexicon';
 // Re-exported so the renderer's report reads the SAME predicate through the lean `adaptive-spine` subpath. It
 // had its own inlined copy — a third one — and therefore the same bug.
-export { bothSidesAnswered } from './lexicon';
+// Re-exported for the renderer: `spine` is the crypto-free subpath the report imports from.
+export { bothSidesAnswered, hasSayGap } from './lexicon';
 
 /**
  * 74-adaptive-tests §4.2 — the **spine**: the FIXED set of scored dimensions an adaptive instrument maps onto.
@@ -163,7 +164,7 @@ function round4(n: number): number {
 
 /** A rating 0..4 → 0..1. A boundary contributes 0 (it is a no, not a missing answer). */
 function value(entry: LexiconEntry, direction: SpineDimension['direction']): number {
-  if (entry.state === 'never') return 0;
+  // A `never` already scores 0 through its rating — the mark IS the number (74 §3.6.26).
   const raw =
     direction === 'hear'
       ? entry.hear
@@ -183,11 +184,22 @@ function meanOf(
   direction: SpineDimension['direction'],
 ): { value: number; signal: boolean } {
   const marked = entries
-    .filter((entry) => entry.state !== undefined || entry.hear > 0 || entry.say > 0)
-    // A say-direction dimension must not count an entry whose SAY side was never put to them: `say: 0` reads
-    // as "cannot say it", so a hear-only mark would drag the dimension to the floor and the report would say
-    // "not their thing, 0%" about something they were never asked (74 §3.6.6).
-    .filter((entry) => direction !== 'say' || saySideAnswered(entry));
+    .filter(hasAnswer)
+    // A directional dimension must not count an entry whose side was never put to them: a `0` there reads as
+    // "cannot say it" / "doesn't want to hear it", so a one-sided mark would drag the dimension to the floor
+    // and the report would say "not their thing, 0%" about something they were never asked (74 §3.6.6).
+    //
+    // The say guard shipped with §3.6.6. The hear one is its mirror, added for symmetry: no dimension on the
+    // spine is hear-directional TODAY, so it fixes nothing live — it means the next one that is cannot
+    // reintroduce the §3.6.6 bug by being written the obvious way. Pinned by a test against a one-off
+    // dimension, so it is not untested code.
+    .filter((entry) =>
+      direction === 'say'
+        ? saySideAnswered(entry)
+        : direction === 'hear'
+          ? hearSideAnswered(entry)
+          : true,
+    );
   if (marked.length === 0) return { value: 0, signal: false };
   const total = marked.reduce((sum, entry) => sum + value(entry, direction), 0);
   return { value: total / marked.length, signal: true };
@@ -195,9 +207,7 @@ function meanOf(
 
 /** How far up the tiers their appetite actually reaches — the mean tier of what they LOVED, on 1..5. */
 function explicitness(lexicon: EroticLexicon): number {
-  const loved = lexicon.entries.filter(
-    (entry) => entry.state === undefined && Math.max(entry.hear, entry.say) >= 3,
-  );
+  const loved = lexicon.entries.filter((entry) => Math.max(entry.hear, entry.say) >= 3);
   if (loved.length === 0) return 0;
   const mean = loved.reduce((sum, entry) => sum + entry.tier, 0) / loved.length;
   return (mean - 1) / 4;
@@ -211,9 +221,7 @@ function explicitness(lexicon: EroticLexicon): number {
 function sayConfidence(lexicon: EroticLexicon): number {
   // Only entries whose SAY side was actually asked — otherwise every hear-only entry contributes a 0 and the
   // dimension floors for everyone the moment orientation ships (74 §3.6.6).
-  const wanted = lexicon.entries.filter(
-    (entry) => entry.state !== 'never' && entry.hear >= 3 && saySideAnswered(entry),
-  );
+  const wanted = lexicon.entries.filter((entry) => entry.hear >= 3 && saySideAnswered(entry));
   if (wanted.length === 0) return 0;
   const total = wanted.reduce((sum, entry) => sum + entry.say / 4, 0);
   return total / wanted.length;
@@ -236,9 +244,7 @@ export function scoreSpine(
   }
   // Whether the take produced ANY signal at all — the two derived dimensions (explicitness, say-confidence)
   // read the whole lexicon rather than one family, so they share the take's own emptiness.
-  const anyMarked = lexicon.entries.some(
-    (entry) => entry.state !== undefined || entry.hear > 0 || entry.say > 0,
-  );
+  const anyMarked = lexicon.entries.some(hasAnswer);
   return spine.map((dimension) => {
     let normalized: number;
     let signal: boolean;
@@ -248,9 +254,7 @@ export function scoreSpine(
     } else if (dimension.key === 'dirtytalk.say-confidence') {
       normalized = sayConfidence(lexicon);
       // No signal ⇒ NO_SIGNAL_BAND ("nothing yet"), never a 0% that reads as a verdict.
-      signal = lexicon.entries.some(
-        (entry) => entry.state !== 'never' && entry.hear >= 3 && saySideAnswered(entry),
-      );
+      signal = lexicon.entries.some((entry) => entry.hear >= 3 && saySideAnswered(entry));
     } else {
       const entries = dimension.families.flatMap((family) => byFamily.get(family) ?? []);
       const mean = meanOf(entries, dimension.direction);

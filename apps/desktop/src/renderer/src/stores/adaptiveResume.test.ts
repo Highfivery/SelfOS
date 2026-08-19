@@ -19,8 +19,11 @@ describe('resumePhase', () => {
   });
 
   it('moves PAST a closed pass — a stamped turn means that phase finished', () => {
-    // The split is folded into the words (74 §3.6.13), so a closed deck goes straight to the lines.
+    // The deck goes straight to the lines: its separate split pass is gone (74 §3.6.26).
     expect(resumePhase([{ phase: 'bank' }])).toBe('lines');
+    // A draft written BEFORE that still has a `split` turn on disk. It resumes the same way rather than
+    // falling through to the start — `resumePhase` takes a bare string precisely so a retired phase can't
+    // strand someone mid-take.
     expect(resumePhase([{ phase: 'bank' }, { phase: 'split' }])).toBe('lines');
   });
 

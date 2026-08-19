@@ -105,13 +105,11 @@ export function TakeMap({
                           ? 'skipped'
                           : state === 'blocked'
                             ? (status.reason ?? 'not yet')
-                            : status.outstanding
-                              ? `${status.outstanding} new to do`
-                              : status.fresh
-                                ? `${status.count} on record · ${status.fresh} today`
-                                : status.count > 0
-                                  ? `${status.count} so far`
-                                  : 'not started'}
+                            : status.fresh
+                              ? `${status.count} on record · ${status.fresh} today`
+                              : status.count > 0
+                                ? `${status.count} so far`
+                                : 'not started'}
                     </span>
                   </span>
                   <span className={adaptive.mapBlurb}>{step.blurb}</span>

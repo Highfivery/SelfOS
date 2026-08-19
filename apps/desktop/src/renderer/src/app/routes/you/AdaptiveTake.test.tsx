@@ -112,8 +112,19 @@ async function beginTake(label: RegExp = /^Begin$/): Promise<void> {
  * Enough marked material for a generating step to be worth running (74 §3.6.9). Below this the AI steps are
  * deliberately blocked — running one on two or three marks gives the model nothing of the person's to draw on.
  */
-const ENOUGH_MARKS: Record<string, 'love' | 'okay' | 'never'> = Object.fromEntries(
-  Array.from({ length: 16 }, (_, i) => [`seed:${i}`, i < 5 ? 'love' : 'okay'] as const),
+/**
+ * Enough to clear the §3.6.9 readiness gate: 15 marks, at least 3 of them a yes.
+ *
+ * Counted per DIRECTION since §3.6.26, so each entry carries two — which is also what the gate now sees.
+ */
+const ENOUGH_MARKS: Record<
+  string,
+  { hear?: 'love' | 'okay' | 'never'; say?: 'love' | 'okay' | 'never' }
+> = Object.fromEntries(
+  Array.from({ length: 16 }, (_, i) => {
+    const mark = i < 5 ? ('love' as const) : ('okay' as const);
+    return [`seed:${i}`, { hear: mark, say: mark }] as const;
+  }),
 );
 
 function renderTake(): void {
@@ -165,13 +176,13 @@ describe('AdaptiveTake (74 §3.2)', () => {
     // The marking rules live behind one link now, instead of four paragraphs on every one of 36 areas.
     await userEvent.click(await screen.findByRole('button', { name: /How marking works/i }));
     expect(screen.getByText(/nothing in SelfOS will suggest it again/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'good girl — hear & say — love it' }));
+    await userEvent.click(screen.getByRole('button', { name: 'good girl — Them → You — love it' }));
 
     await userEvent.click(screen.getByRole('button', { name: /Next area/ }));
     // The taboo family carries its roleplay framing wherever it appears (74 §8.1).
     expect(screen.getByText(/PRE-AGREED, SAFEWORDED ROLEPLAY/)).toBeInTheDocument();
     await userEvent.click(
-      screen.getByRole('button', { name: 'run (primal) — hear & say — never' }),
+      screen.getByRole('button', { name: 'run (primal) — Them → You — never' }),
     );
     // The rail tallies per mark now, rather than one "N marked so far" line.
     // The rail tallies per mark now, rather than one "N marked so far" line.
@@ -182,7 +193,12 @@ describe('AdaptiveTake (74 §3.2)', () => {
     await waitFor(() =>
       expect(bankPass).toHaveBeenCalledWith(
         expect.objectContaining({
-          marks: { 'names-power:good-girl': 'love', 'taboo:run-primal': 'never' },
+          // Nested `objectContaining`: the practice sheet's own tap is a real mark on a real entry, so the
+          // payload legitimately carries a side this test never touched.
+          marks: expect.objectContaining({
+            'names-power:good-girl': expect.objectContaining({ hear: 'love' }),
+            'taboo:run-primal': expect.objectContaining({ hear: 'never' }),
+          }),
         }),
       ),
     );
@@ -243,7 +259,14 @@ describe('AdaptiveTake (74 §3.2)', () => {
     // The practice tap is a REAL mark — it is autosaved like any other, not a throwaway demo.
     await waitFor(() =>
       expect(bankPass).toHaveBeenCalledWith(
-        expect.objectContaining({ marks: { 'names-power:good-girl': 'okay' }, autosave: true }),
+        expect.objectContaining({
+          // The SAY side: `pickBeats` demonstrates that direction first, and since §3.6.26 the practice tap
+          // lands on the direction its own beat showed rather than marking the whole entry.
+          marks: expect.objectContaining({
+            'names-power:good-girl': expect.objectContaining({ say: 'okay' }),
+          }),
+          autosave: true,
+        }),
       ),
     );
 
@@ -270,7 +293,10 @@ describe('AdaptiveTake (74 §3.2)', () => {
             tier: 2,
             hear: 4,
             say: 4,
-            // A loved entry carries no `state` — the ratings ARE the love (only never/okay are stamped).
+            // Loved BOTH ways. Since §3.6.26 the mark is what carries that; the ratings are derived from it,
+            // and an entry with ratings and no mark is pre-Option-B data that `readLexicon` clears.
+            hearState: 'love' as const,
+            sayState: 'love' as const,
             source: 'test:r1',
           },
         ],
@@ -302,12 +328,14 @@ describe('AdaptiveTake (74 §3.2)', () => {
     await pastPractice();
     expect(screen.getByText(/Every tap saves itself/i)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'good girl — hear & say — love it' }));
+    await userEvent.click(screen.getByRole('button', { name: 'good girl — Them → You — love it' }));
     // No Next click anywhere in this test — the write happens on its own.
     await waitFor(() =>
       expect(bankPass).toHaveBeenCalledWith(
         expect.objectContaining({
-          marks: { 'names-power:good-girl': 'love' },
+          marks: expect.objectContaining({
+            'names-power:good-girl': expect.objectContaining({ hear: 'love' }),
+          }),
           autosave: true,
         }),
       ),
@@ -328,20 +356,23 @@ describe('AdaptiveTake (74 §3.2)', () => {
     await pastPractice();
 
     await userEvent.click(screen.getByRole('button', { name: /Next area/ }));
-    const never = screen.getByRole('button', { name: 'run (primal) — hear & say — never' });
+    const never = screen.getByRole('button', { name: 'run (primal) — Them → You — never' });
     await userEvent.click(never);
     await waitFor(() => expect(bankPass).toHaveBeenCalled());
     // Still a live control, not the settled "off the table" row a PRIOR take's boundary renders as.
     expect(
-      screen.getByRole('button', { name: 'run (primal) — hear & say — never' }),
+      screen.getByRole('button', { name: 'run (primal) — Them → You — never' }),
     ).toBeInTheDocument();
 
     await userEvent.click(
-      screen.getByRole('button', { name: 'run (primal) — hear & say — never' }),
+      screen.getByRole('button', { name: 'run (primal) — Them → You — never' }),
     );
     await waitFor(() =>
       expect(bankPass).toHaveBeenLastCalledWith(
-        expect.objectContaining({ cleared: ['taboo:run-primal'], autosave: true }),
+        expect.objectContaining({
+          cleared: expect.objectContaining({ 'taboo:run-primal': ['hear'] }),
+          autosave: true,
+        }),
       ),
     );
     expect(screen.getByTestId('tally-never')).toHaveTextContent('0');
@@ -361,7 +392,8 @@ describe('AdaptiveTake (74 §3.2)', () => {
             tier: 5,
             hear: 0,
             say: 0,
-            state: 'never' as const,
+            hearState: 'never' as const,
+            sayState: 'never' as const,
             source: 'test:r0',
           },
         ],
@@ -379,7 +411,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Next area/ }));
     // The row is live rather than frozen, and shows the answer they gave.
     expect(screen.queryByText(/off the table/i)).not.toBeInTheDocument();
-    const no = await screen.findByRole('button', { name: 'run (primal) — hear & say — never' });
+    const no = await screen.findByRole('button', { name: 'run (primal) — Them → You — never' });
     expect(no).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -633,7 +665,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
     });
     renderTake();
     await useAdaptiveTestStore.getState().load('dirty-talk');
-    for (const phase of ['probe', 'scenario', 'done', 'split', 'lines'] as const) {
+    for (const phase of ['probe', 'scenario', 'done', 'lines'] as const) {
       useAdaptiveTestStore.setState({ phase });
       expect(
         await screen.findByRole('button', { name: /get help now/i }),
@@ -1038,10 +1070,7 @@ describe('typing in an answered question does not take the app down (74 §3.6.16
       </MemoryRouter>,
     );
     await useAdaptiveTestStore.getState().load('dirty-talk');
-    const marks = Object.fromEntries(
-      Array.from({ length: 16 }, (_, i) => [`seed:${i}`, i < 5 ? 'love' : 'okay'] as const),
-    );
-    useAdaptiveTestStore.setState({ phase: 'probe', marks: marks as never });
+    useAdaptiveTestStore.setState({ phase: 'probe', marks: ENOUGH_MARKS });
     const box = await screen.findByLabelText(/Your answer to: What lands/i);
     await userEvent.click(box);
     await userEvent.keyboard('{Backspace}{Backspace}{Backspace}');
@@ -1054,9 +1083,6 @@ describe('every new control on the AI steps actually works (74 §3.6.16)', () =>
     ...DRAFT,
     turns,
   });
-  const marks = Object.fromEntries(
-    Array.from({ length: 16 }, (_, i) => [`seed:${i}`, i < 5 ? 'love' : 'okay'] as const),
-  );
 
   it('shows every answered question, and saving an edit writes it', async () => {
     const turn = vi.fn(() => Promise.resolve(undefined));
@@ -1079,7 +1105,7 @@ describe('every new control on the AI steps actually works (74 §3.6.16)', () =>
     });
     renderTake();
     await useAdaptiveTestStore.getState().load('dirty-talk');
-    useAdaptiveTestStore.setState({ phase: 'probe', marks: marks as never });
+    useAdaptiveTestStore.setState({ phase: 'probe', marks: ENOUGH_MARKS });
 
     // The whole set is on screen, not one question with no way back to the last.
     const box = await screen.findByLabelText(/Your answer to: First question/i);
@@ -1112,7 +1138,7 @@ describe('every new control on the AI steps actually works (74 §3.6.16)', () =>
     });
     renderTake();
     await useAdaptiveTestStore.getState().load('dirty-talk');
-    useAdaptiveTestStore.setState({ phase: 'scenario', marks: marks as never });
+    useAdaptiveTestStore.setState({ phase: 'scenario', marks: ENOUGH_MARKS });
     await userEvent.click(await screen.findByRole('button', { name: /^Build-up/ }));
     await userEvent.click(await screen.findByRole('button', { name: /Write build-up moments/i }));
 
@@ -1146,7 +1172,7 @@ describe('every new control on the AI steps actually works (74 §3.6.16)', () =>
     });
     renderTake();
     await useAdaptiveTestStore.getState().load('dirty-talk');
-    useAdaptiveTestStore.setState({ phase: 'bank', marks: marks as never });
+    useAdaptiveTestStore.setState({ phase: 'bank', marks: ENOUGH_MARKS });
 
     expect(await screen.findByText('$0.31')).toBeInTheDocument();
     expect(screen.getAllByText(/Admin only/i).length).toBeGreaterThan(0);
@@ -1163,7 +1189,7 @@ describe('every new control on the AI steps actually works (74 §3.6.16)', () =>
     });
     renderTake();
     await useAdaptiveTestStore.getState().load('dirty-talk');
-    useAdaptiveTestStore.setState({ phase: 'bank', marks: marks as never });
+    useAdaptiveTestStore.setState({ phase: 'bank', marks: ENOUGH_MARKS });
 
     await screen.findByLabelText('Go to an area');
     expect(screen.queryByText(/Spent so far/i)).not.toBeInTheDocument();
@@ -1178,7 +1204,7 @@ describe('every new control on the AI steps actually works (74 §3.6.16)', () =>
     });
     renderTake();
     await useAdaptiveTestStore.getState().load('dirty-talk');
-    useAdaptiveTestStore.setState({ phase: 'map', marks: marks as never });
+    useAdaptiveTestStore.setState({ phase: 'map', marks: ENOUGH_MARKS });
 
     await userEvent.click(
       within(await screen.findByRole('list', { name: 'Every step' })).getByRole('button', {

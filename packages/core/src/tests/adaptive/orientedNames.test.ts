@@ -3,7 +3,7 @@ import { DIRTY_TALK_NAMES } from './instruments/dirtyTalkNames';
 import { DIRTY_TALK_BANK } from './instruments/dirtyTalkBank';
 import { bankEntry, type Bank, type BankEntry } from './bank';
 import { OPEN_ORIENTATION, shownSides, type Orientation } from './orientation';
-import { applyNameMarks, pruneUnshownMarks, suppressedTexts } from './lexicon';
+import { applyDirectionalMarks, pruneUnshownMarks, suppressedTexts } from './lexicon';
 import { DIRTY_TALK } from './instruments/dirtyTalk';
 import type { EroticLexicon, LexiconEntry } from '../../schemas';
 
@@ -226,7 +226,7 @@ describe('a name pass records what was actually offered', () => {
       wantsToSay: [],
       updatedAt: '2026-08-19T00:00:00.000Z',
     };
-    const next = applyNameMarks(
+    const next = applyDirectionalMarks(
       base,
       DIRTY_TALK_NAMES,
       { 'names-yours:my-man': { hear: 'love' } },

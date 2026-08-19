@@ -82,7 +82,7 @@ export function PracticeSheet({
 }: {
   entries: readonly AdaptiveBankEntryView[];
   /** Records a GENUINE mark — the practice taps are real answers, not a demo. */
-  onMark: (key: string, mark: 'love' | 'okay' | 'never') => void;
+  onMark: (key: string, side: 'hear' | 'say', mark: 'love' | 'okay' | 'never') => void;
   onDone: () => void;
   /**
    * 74 §3.6.9 — the way out that isn't doing it. The sheet is required to reach the DECK, but once any step is a
@@ -104,7 +104,10 @@ export function PracticeSheet({
   const hear = beat.side === 'hear';
 
   const tap = (mark: 'love' | 'okay' | 'never'): void => {
-    onMark(beat.entry.key, mark);
+    // The beat already knows which direction it is demonstrating, so the practice tap lands on THAT side
+    // (74 §3.6.26). It used to write a whole-entry mark, which recorded an answer for a direction the beat
+    // had not shown — and the sheet's whole point is that direction varies per line.
+    onMark(beat.entry.key, beat.side, mark);
     setTapped(mark);
     // A moment to see the mark land, then the band flips — that flip IS the direction lesson.
     if (!last) {

@@ -104,12 +104,6 @@ function pairShorthand(
   return `You & ${them}`;
 }
 
-/** What a row is rating, in the person's terms. Both sides shown ⇒ nothing to disambiguate. */
-function sideLabel(sides: readonly ('hear' | 'say')[]): string {
-  if (sides.length >= 2) return 'hear & say';
-  return sides[0] === 'say' ? 'you say' : 'you hear';
-}
-
 /**
  * The direction, as a sentence, for a whole area.
  *
@@ -125,18 +119,22 @@ function directionSentence(sides: readonly ('hear' | 'say')[] | null): string {
     return 'This area mixes the two — each line says which way it goes.';
   }
   if (sides.length >= 2) {
-    return 'Rate these BOTH ways at once — hearing it from them and saying it to them. You split the two apart in the next step.';
+    // It used to say "rate these BOTH ways at once … you split the two apart in the next step" — of a step
+    // that had been folded away, so the promise pointed at nothing and the one mark it asked for stood in
+    // for two different answers (74 §3.6.26).
+    return 'Two answers per line — one for hearing it from them, one for saying it to them.';
   }
   return sides[0] === 'say'
     ? 'Things YOU SAY TO THEM — rate how much you want to say it.'
     : 'Things THEY SAY TO YOU — rate how much you want to hear it.';
 }
 
-const MARK_META: Record<BankMark, { label: string; Icon: typeof Flame }> = {
-  love: { label: 'love it', Icon: Flame },
-  okay: { label: "it's okay", Icon: Contrast },
-  never: { label: 'never', Icon: Ban },
-};
+/** The three marks in tap order, per direction — the same set, and the same order, as the pet names. */
+const DECK_MARKS: { value: BankMark; label: string; Icon: typeof Flame }[] = [
+  { value: 'love', label: 'love it', Icon: Flame },
+  { value: 'okay', label: "it's okay", Icon: Contrast },
+  { value: 'never', label: 'never', Icon: Ban },
+];
 import {
   Banner,
   Button,
@@ -499,20 +497,6 @@ export function AdaptiveTake(): JSX.Element {
     return areaEntries[0]?.sides ?? null;
   }, [areaEntries]);
   /**
-   * 74 §3.6.4 — what still needs the hear/say question after the collapse: only entries this person was
-   * offered on BOTH sides. Everything oriented to one side already knows its direction.
-   */
-  const splitNeeded = useMemo(
-    () =>
-      Object.keys(store.marks).filter((key) => {
-        if (store.marks[key] === 'never') return false;
-        const entry = bank?.entries.find((e) => e.key === key);
-        return (entry?.sides.length ?? 0) >= 2;
-      }),
-    [store.marks, bank],
-  );
-
-  /**
    * 74 §3.6.9 — the step model, and the one place the rail, the map and every frame read their state from.
    *
    * The AI phases used to fire themselves on arrival (`started.current[phase]` → `loadLines`/`nextProbe`). With a
@@ -583,11 +567,6 @@ export function AdaptiveTake(): JSX.Element {
         skipped: store.skipped as StepId[],
         nameMarks: Object.keys(store.nameMarks).length,
         bankMarks: marked.length,
-        splitNeeded: splitNeeded.length,
-        splitAnswered: splitNeeded.filter((key) => {
-          const split = store.splits[key];
-          return split?.hear !== undefined || split?.say !== undefined;
-        }).length,
         lineReactions: Object.keys(store.lineReactions).length,
         probesAnswered: (store.state?.draft?.turns ?? []).filter((turn) => turn.phase === 'probe')
           .length,
@@ -597,11 +576,11 @@ export function AdaptiveTake(): JSX.Element {
         momentCategories: CONTEXTS.length,
         seeded: store.seeded,
         identityAnswered: store.bank?.address !== undefined,
-        loved:
-          Object.values(store.marks).filter((mark) => mark === 'love').length +
-          Object.values(store.nameMarks).filter(
-            (mark) => mark.hear === 'love' || mark.say === 'love',
-          ).length,
+        // Per direction on both steps now — a term loved to hear but ruled out to say is one loved answer,
+        // and before §3.6.26 the deck could only ever contribute a whole-entry one.
+        loved: [...Object.values(store.marks), ...Object.values(store.nameMarks)].filter(
+          (mark) => mark.hear === 'love' || mark.say === 'love',
+        ).length,
       }),
     [
       store.phase,
@@ -609,8 +588,7 @@ export function AdaptiveTake(): JSX.Element {
       store.skipped,
       store.nameMarks,
       marked.length,
-      splitNeeded,
-      store.splits,
+      store.marks,
       store.lineReactions,
       store.state,
       store.seeded,
@@ -620,7 +598,12 @@ export function AdaptiveTake(): JSX.Element {
   /** The two marking steps' tallies, so both render the same card from one place. */
   const bankTally = useMemo(() => {
     const out = { love: 0, okay: 0, never: 0 };
-    for (const mark of Object.values(store.marks)) out[mark] += 1;
+    // Counted per DIRECTION since §3.6.26, exactly like the names — a term can be loved one way and ruled
+    // out the other, and a single number for the row could only ever tell half of that.
+    for (const mark of Object.values(store.marks)) {
+      if (mark.hear) out[mark.hear] += 1;
+      if (mark.say) out[mark.say] += 1;
+    }
     return out;
   }, [store.marks]);
   const nameTally = useMemo(() => {
@@ -1062,7 +1045,7 @@ export function AdaptiveTake(): JSX.Element {
           {phase === 'bank' && area && practice === 'needed' ? (
             <PracticeSheet
               entries={bank.entries}
-              onMark={(key, mark) => store.mark(key, mark)}
+              onMark={(key, side, mark) => store.mark(key, side, mark)}
               onDone={() => setPractice('done')}
               onLeave={() => store.setPhase('map')}
             />
@@ -1211,13 +1194,20 @@ export function AdaptiveTake(): JSX.Element {
                       // Nothing is settled: a no is a preference, changeable in any sitting
                       // (74 §3.2, amended 2026-08-19). A row used to freeze once the take that set it
                       // closed, which stranded a mis-tap noticed the next day.
-                      const mark = store.marks[entry.key];
+                      const mark = store.marks[entry.key] ?? {};
+                      const answered = mark.hear !== undefined || mark.say !== undefined;
+                      // Both directions ruled out is the only whole-row "no" left — one side being a no while
+                      // the other is loved is an ordinary answer, not a struck-through row.
+                      const allNo =
+                        answered &&
+                        (mark.hear ?? 'never') === 'never' &&
+                        (mark.say ?? 'never') === 'never';
                       return (
                         <div
                           key={entry.key}
-                          className={`${adaptive.row} ${mark && mark !== 'never' ? adaptive.rowOn : ''} ${
-                            mark === 'never' ? adaptive.rowNo : ''
-                          }`}
+                          className={`${adaptive.row} ${adaptive.nameRow} ${
+                            answered && !allNo ? adaptive.rowOn : ''
+                          } ${allNo ? adaptive.rowNo : ''}`}
                         >
                           <div className={adaptive.line}>
                             {/*
@@ -1254,12 +1244,6 @@ export function AdaptiveTake(): JSX.Element {
                                     {entry.tier >= 4 ? 'more intense' : 'gentler'}
                                   </span>
                                 </span>
-                                {/* Only when the area MIXES the two — the band carries it otherwise. */}
-                                {areaSides === null ? (
-                                  <span className={adaptive.sideChip}>
-                                    {sideLabel(entry.sides)}
-                                  </span>
-                                ) : null}
                               </span>
                             </div>
                             {/* The line you react to is the hero of the row — with the word you're actually
@@ -1291,75 +1275,64 @@ export function AdaptiveTake(): JSX.Element {
                               )}
                             </div>
                           </div>
-                          <span className={adaptive.marks}>
-                            {(['love', 'okay'] as BankMark[]).map((option) => {
-                              const { label, Icon } = MARK_META[option];
-                              return (
-                                <button
-                                  key={option}
-                                  type="button"
-                                  className={`${adaptive.mark} ${adaptive[option]} ${
-                                    mark === option ? adaptive.markOn : ''
-                                  }`}
-                                  aria-pressed={mark === option}
-                                  aria-label={`${entry.text} — ${sideLabel(entry.sides)} — ${label}`}
-                                  onClick={() =>
-                                    store.mark(entry.key, mark === option ? null : option)
-                                  }
-                                >
-                                  <Icon size={18} aria-hidden="true" />
-                                </button>
-                              );
-                            })}
-                            {/* A hard no is set apart, so it can never be a mis-tap neighbour. */}
-                            <span className={adaptive.markGap} aria-hidden="true" />
-                            <button
-                              type="button"
-                              className={`${adaptive.mark} ${adaptive.never} ${
-                                mark === 'never' ? adaptive.markOn : ''
-                              }`}
-                              aria-pressed={mark === 'never'}
-                              aria-label={`${entry.text} — ${sideLabel(entry.sides)} — ${MARK_META.never.label}`}
-                              onClick={() =>
-                                store.mark(entry.key, mark === 'never' ? null : 'never')
-                              }
-                            >
-                              <Ban size={18} aria-hidden="true" />
-                            </button>
-                          </span>
                           {/*
-                           * 74 §3.6.13 — the hear/say question, asked HERE rather than as a step of its own.
+                           * 74 §3.6.26 — TWO marks, one per direction, both on the row.
                            *
-                           * It was a separate pass over everything already marked, and for anyone who marked
-                           * mostly pet names — which are asked both ways on their own rows — it was a screen
-                           * you landed on with nothing on it. Asked inline it costs one extra tap on the rows
-                           * where it actually applies: an entry offered only one way already knows its
-                           * direction, and an entry they ruled out is not rated at all.
+                           * The deck used to take one mark for the whole term and then ask the hear/say
+                           * question separately: first as its own step, then (§3.6.13) folded into the row as
+                           * a 0–4 pair that appeared only AFTER a `love`, showed nothing selected over a
+                           * value that was already set, and sat under a band still promising "the next step".
+                           * So the two directions came out equal for most terms, and the gap between them —
+                           * the goal list, the practice sheet, the "wants to say but freezes" material —
+                           * could only fill from the pet names, which had asked both ways all along.
+                           *
+                           * This is the names' own layout, reused: both pills are `flex: 1 1 auto`, so where
+                           * orientation offers only one direction the survivor stretches across the row on
+                           * its own — no gap, and nothing to explain.
                            */}
-                          {mark === 'love' && entry.sides.length >= 2 ? (
-                            <div className={adaptive.rowSplit}>
-                              <span className={adaptive.rowSplitLead}>How much…</span>
-                              {(['hear', 'say'] as const).map((direction) => (
-                                <span key={direction} className={adaptive.marks}>
-                                  <span className={adaptive.dirLabel}>
-                                    {direction === 'hear' ? 'to hear' : 'to say'}
+                          <div className={adaptive.nameMarksRow}>
+                            {(['hear', 'say'] as const)
+                              .filter((side) => entry.sides.includes(side))
+                              .map((side) => {
+                                const current = mark[side];
+                                const who = side === 'hear' ? 'Them → You' : 'You → Them';
+                                return (
+                                  <span
+                                    key={side}
+                                    className={side === 'hear' ? adaptive.colMe : adaptive.colThem}
+                                  >
+                                    <span className={adaptive.colWho}>
+                                      {who}
+                                      <small>
+                                        {side === 'hear' ? 'I like hearing it' : 'I like saying it'}
+                                      </small>
+                                    </span>
+                                    <span className={adaptive.marks}>
+                                      {DECK_MARKS.map(({ value, label, Icon }, i) => (
+                                        <span key={value} className={adaptive.markSlot}>
+                                          {/* The no is set apart, so it is never a mis-tap neighbour — a
+                                              preference you can change any time, not a door that locks. */}
+                                          {i === 2 ? (
+                                            <span className={adaptive.markGap} aria-hidden="true" />
+                                          ) : null}
+                                          <button
+                                            type="button"
+                                            className={`${adaptive.mark} ${adaptive[value]} ${
+                                              current === value ? adaptive.markOn : ''
+                                            }`}
+                                            aria-pressed={current === value}
+                                            aria-label={`${entry.text} — ${who} — ${label}`}
+                                            onClick={() => store.mark(entry.key, side, value)}
+                                          >
+                                            <Icon size={17} aria-hidden="true" />
+                                          </button>
+                                        </span>
+                                      ))}
+                                    </span>
                                   </span>
-                                  {[0, 1, 2, 3, 4].map((value) => (
-                                    <button
-                                      key={value}
-                                      type="button"
-                                      className={adaptive.markButton}
-                                      aria-pressed={store.splits[entry.key]?.[direction] === value}
-                                      aria-label={`${entry.text} — ${direction} ${value} of 4`}
-                                      onClick={() => store.setSplit(entry.key, direction, value)}
-                                    >
-                                      {value}
-                                    </button>
-                                  ))}
-                                </span>
-                              ))}
-                            </div>
-                          ) : null}
+                                );
+                              })}
+                          </div>
                         </div>
                       );
                     })

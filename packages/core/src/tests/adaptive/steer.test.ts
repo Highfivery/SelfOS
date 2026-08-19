@@ -8,13 +8,7 @@ import { memFileSystem } from '../../host/memFileSystem';
 import type { FileSystem } from '../../host';
 import { upsertPerson } from '../../people/peopleService';
 import { upsertRelationship } from '../../people/relationshipService';
-import {
-  applyBankMarks,
-  applyDirections,
-  emptyLexicon,
-  writeLexicon,
-  applyNameMarks,
-} from './lexicon';
+import { applyDirectionalMarks, emptyLexicon, writeLexicon } from './lexicon';
 import {
   buildOwnLexiconBlock,
   buildOwnSuppressionBlock,
@@ -40,18 +34,19 @@ async function seedPair(): Promise<{ fs: FileSystem; ben: string; angel: string;
     type: 'partner',
   });
   // Angel's lexicon: loves being claimed, one hard no, one theme.
-  let lex = applyBankMarks(
+  let lex = applyDirectionalMarks(
     emptyLexicon(angel, NOW),
     DIRTY_TALK.bank,
     {
-      'names-praise:good-girl': 'love',
-      'claiming:you-re-mine': 'love',
-      'names-rough-heavy:whore': 'never',
+      // Loves hearing it, saying it is merely okay — the hear/say gap, in the vocabulary a marked entry
+      // has to express it in now (§3.6.26: a `say` of 0 can only be a `never`, which is a hard no).
+      'names-praise:good-girl': { hear: 'love', say: 'okay' },
+      'claiming:you-re-mine': { hear: 'love', say: 'love' },
+      'names-rough-heavy:whore': { hear: 'never', say: 'never' },
     },
     'take:1',
     NOW,
   );
-  lex = applyDirections(lex, { 'names-praise:good-girl': { hear: 4, say: 0 } }, NOW);
   lex = { ...lex, themes: ['being claimed, not degraded'], voice: 'low, close, certain.' };
   await writeLexicon(fs, KEY, lex);
   return { fs, ben, angel, relId: rel.id };
@@ -146,7 +141,8 @@ describe('the middle mark is not write-only (74 §3.6.2)', () => {
           tier: 3 as const,
           hear: 0,
           say: 0,
-          state: 'okay' as const,
+          hearState: 'okay' as const,
+          sayState: 'okay' as const,
         },
       ],
     });
@@ -172,7 +168,8 @@ describe('the middle mark is not write-only (74 §3.6.2)', () => {
           tier: 3 as const,
           hear: 0,
           say: 0,
-          state: 'okay' as const,
+          hearState: 'okay' as const,
+          sayState: 'okay' as const,
         },
       ],
     };
@@ -196,7 +193,8 @@ describe('the middle mark is not write-only (74 §3.6.2)', () => {
           tier: 3 as const,
           hear: 0,
           say: 0,
-          state: 'okay' as const,
+          hearState: 'okay' as const,
+          sayState: 'okay' as const,
         },
       ],
     });
@@ -262,7 +260,7 @@ describe('§3.6.2 — REGISTER steers generation, which the word list cannot', (
 describe('74 §3.6.8 — names reach both prompts as vocatives', () => {
   const now = new Date('2026-08-17T10:00:00.000Z');
   const marked = (): EroticLexicon =>
-    applyNameMarks(
+    applyDirectionalMarks(
       emptyLexicon('p1', now),
       DIRTY_TALK.bank,
       {

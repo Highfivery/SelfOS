@@ -29,7 +29,6 @@ const PIP: Record<StepStatus['state'], JSX.Element | number | null> = {
 function trailing(status: StepStatus): string | null {
   if (status.state === 'skipped') return 'skipped';
   if (status.state === 'blocked') return null;
-  if (status.outstanding) return `${status.outstanding} new to do`;
   // A retake opens with last time's marks already on record, so one number would be standing for the other.
   if (status.fresh) return `${status.count} · ${status.fresh} today`;
   // A denominator where there is one — "2 of 6" moments, not a bare "2" that names nothing.

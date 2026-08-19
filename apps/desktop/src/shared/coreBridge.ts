@@ -874,14 +874,10 @@ import {
   // 74 — the adaptive engine.
   ADAPTIVE_CONTEXTS,
   DIRTY_TALK,
-  DIRTY_TALK_BANK,
   abandonAdaptiveTake,
   addBoundary,
   addCustomEntry,
-  applyBankMarks,
-  applyDirections,
-  clearNameMarks,
-  clearState,
+  clearDirectionalMarks,
   completeAdaptiveTake,
   deleteAllAdaptiveResults,
   getAdaptiveResult,
@@ -889,8 +885,7 @@ import {
   openAmbiguities,
   readsAsDistress,
   readLexicon,
-  recordBankPass,
-  recordSplitPass,
+  recordMarkingPass,
   runLinesPhase,
   answersDigest,
   openEndedAmbiguity,
@@ -909,7 +904,6 @@ import {
   shownSides,
   deckFamilies,
   nameFamilies,
-  recordNamePass,
   type AdaptiveTestDefinition,
   type Orientation,
 } from '@selfos/core/tests';
@@ -1170,7 +1164,10 @@ const TestTakeSchema = z.object({
   answers: z.record(z.string(), z.unknown()),
 });
 // 74 — the adaptive-test inputs. Validated HERE, at the trust boundary; the renderer is never it.
-const AdaptiveNamesInputSchema = z.object({
+// 74 §3.6.26 — ONE shape for both marking phases. The deck used to send a single mark per entry plus a
+// separate 0–4 "split" call; it now answers per direction exactly as the names always have, so the two
+// handlers validate the same thing and differ only in the turn they stamp.
+const AdaptiveMarkPassSchema = z.object({
   testId: z.string().min(1),
   resultId: z.string().min(1),
   marks: z
@@ -1197,23 +1194,6 @@ const AdaptiveAreaSchema = z.object({
   testId: z.string().min(1),
   area: z.number().int().min(0).max(500),
 });
-const AdaptiveBankPassSchema = AdaptiveRefSchema.extend({
-  marks: z.record(z.string(), z.enum(['love', 'never', 'okay'])),
-  // Bounded: an autosave sends a small delta, and the closing call sends the whole pass. Neither is unbounded,
-  // and a renderer that sends a million keys is a bug, not a use case.
-  cleared: z.array(z.string().min(1)).max(2000).optional(),
-  autosave: z.boolean().optional(),
-});
-const AdaptiveSplitSchema = AdaptiveRefSchema.extend({
-  splits: z.record(
-    z.string(),
-    z.object({
-      hear: z.number().min(0).max(4).optional(),
-      say: z.number().min(0).max(4).optional(),
-    }),
-  ),
-  autosave: z.boolean().optional(),
-});
 const AdaptiveScenarioInputSchema = AdaptiveRefSchema.extend({
   context: z.enum(ADAPTIVE_CONTEXTS),
 });
@@ -1238,29 +1218,20 @@ const AdaptiveTurnInputSchema = AdaptiveRefSchema.extend({
 });
 const AdaptiveLexiconEditSchema = z.discriminatedUnion('kind', [
   z.object({
-    kind: z.literal('rate'),
-    key: z.string().min(1),
-    hear: z.number().min(0).max(4).optional(),
-    say: z.number().min(0).max(4).optional(),
-  }),
-  z.object({
-    kind: z.literal('setState'),
-    key: z.string().min(1),
-    state: z.enum(['never', 'okay']).nullable(),
-  }),
-  z.object({
     /*
-     * 74 §3.6.8/§3.2 — take back ONE direction of a pet-name mark, from the report.
+     * 74 §3.6.8/§3.2/§3.6.26 — take back ONE direction of a mark, from the report.
      *
-     * `setState` above is whole-entry, which is what the deck writes. A name is answered per direction, so a
-     * `never` from the names phase lives in `hearState`/`sayState` and that op cannot touch it — leaving the
-     * report's "change any of them whenever you like" as a sentence with no control behind it, and the only
-     * route back a row in the names phase. Which is fine until the row is gone: a name retired from the bank
-     * (266 in #534, 37 more when the animal-sex names went) still suppresses through `suppressedTexts` with
-     * nothing left on any screen to lift it. That is the un-gettable-rid-of preference §3.2 abolished,
-     * arrived at from the other direction.
+     * The report's per-direction hard-no lists are the only control anywhere that can lift one, and since
+     * §3.6.26 that covers the DECK as well as the names: both answer per direction, so both need a way back
+     * that does not depend on the row still existing. Which matters because rows do go — a term retired from
+     * the bank (266 in #534, 37 more when the animal-sex names went) still suppresses through
+     * `suppressedTexts` with nothing left on any screen to lift it. That is the un-gettable-rid-of preference
+     * §3.2 abolished, arrived at from the other direction.
+     *
+     * The whole-entry `setState`/`rate` ops this used to sit beside are gone with the 0–4 split (§3.6.26):
+     * nothing called either, and neither has a writer any more.
      */
-    kind: z.literal('clearNameSide'),
+    kind: z.literal('clearSide'),
     key: z.string().min(1),
     side: z.enum(['hear', 'say']),
   }),
@@ -1809,9 +1780,8 @@ async function loadDeployableRelayBundle(relay: BridgeHost['relay']): Promise<Re
  * of nothing but hard nos gives a step whose job is "write something they would want" no material at all.
  */
 function lexiconReadyForGeneration(lexicon: EroticLexicon): { ready: boolean } {
-  const loved = lexicon.entries.filter(
-    (entry) => entry.state !== 'never' && Math.max(entry.hear, entry.say) >= 3,
-  ).length;
+  // A `never` already scores 0 on both sides, so the rating alone is the whole test (74 §3.6.26).
+  const loved = lexicon.entries.filter((entry) => Math.max(entry.hear, entry.say) >= 3).length;
   return generationReadiness(lexicon.entries.length, loved);
 }
 
@@ -2387,7 +2357,7 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     return { who, lexicon: pruned.lexicon };
   };
 
-  /** The sides each marked key was offered on, for the record `applyBankMarks` writes (74 §3.6.6). */
+  /** The sides each marked key was offered on, for the record the writer keeps (74 §3.6.6). */
   const markedSides = async (
     gate: {
       ctx: { fs: FileSystem; key: Uint8Array };
@@ -4492,14 +4462,15 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       };
     },
     testsAdaptiveNames: async (input): Promise<AdaptiveStateView | null> => {
-      const parsed = AdaptiveNamesInputSchema.parse(input);
+      const parsed = AdaptiveMarkPassSchema.parse(input);
       const gate = await adaptiveGate(parsed.testId);
       if (!gate) return null;
-      await recordNamePass(
+      await recordMarkingPass(
         gate.ctx.fs,
         gate.ctx.key,
         gate.def,
         {
+          phase: 'names',
           sides: await markedSides(gate, Object.keys(parsed.marks)),
           personId: gate.personId,
           resultId: parsed.resultId,
@@ -4538,47 +4509,32 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
     // a cheaper ack would make "refused" and "saved" indistinguishable, and the renderer would show
     // "Saved" over a write that never happened.
     testsAdaptiveBank: async (input): Promise<AdaptiveStateView | null> => {
-      const parsed = AdaptiveBankPassSchema.parse(input);
+      const parsed = AdaptiveMarkPassSchema.parse(input);
       const gate = await adaptiveGate(parsed.testId);
       if (!gate) return null;
-      await recordBankPass(
+      await recordMarkingPass(
         gate.ctx.fs,
         gate.ctx.key,
         gate.def,
         {
+          phase: 'bank',
           personId: gate.personId,
           resultId: parsed.resultId,
-          marks: parsed.marks,
+          // `exactOptionalPropertyTypes`: an explicitly-undefined side is a different type from an absent
+          // one, and "absent" is what "they didn't answer this way" means.
+          marks: Object.fromEntries(
+            Object.entries(parsed.marks).map(([key, mark]) => [
+              key,
+              {
+                ...(mark.hear ? { hear: mark.hear } : {}),
+                ...(mark.say ? { say: mark.say } : {}),
+              },
+            ]),
+          ),
           // 74 §3.6.6 — resolve the sides HERE, from the same orientation the deck was built with, so the
           // record of what was asked can't drift from what was shown.
           sides: await markedSides(gate, Object.keys(parsed.marks)),
           ...(parsed.cleared ? { cleared: parsed.cleared } : {}),
-          ...(parsed.autosave ? { autosave: true } : {}),
-        },
-        new Date(),
-      );
-      return adaptiveState(gate);
-    },
-    testsAdaptiveSplit: async (input): Promise<AdaptiveStateView | null> => {
-      const parsed = AdaptiveSplitSchema.parse(input);
-      const gate = await adaptiveGate(parsed.testId);
-      if (!gate) return null;
-      // `exactOptionalPropertyTypes`: Zod's `.optional()` yields `| undefined`, which is not the same type as
-      // an absent key — rebuild the map with only the keys that were actually sent.
-      const splits: Record<string, { hear?: number; say?: number }> = {};
-      for (const [key, value] of Object.entries(parsed.splits)) {
-        splits[key] = {
-          ...(value.hear !== undefined ? { hear: value.hear } : {}),
-          ...(value.say !== undefined ? { say: value.say } : {}),
-        };
-      }
-      await recordSplitPass(
-        gate.ctx.fs,
-        gate.ctx.key,
-        {
-          personId: gate.personId,
-          resultId: parsed.resultId,
-          splits,
           ...(parsed.autosave ? { autosave: true } : {}),
         },
         new Date(),
@@ -4876,24 +4832,6 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       const now = new Date();
       let lexicon = await readLexicon(ctx.fs, ctx.key, personId, now);
       switch (edit.kind) {
-        case 'rate':
-          lexicon = applyDirections(
-            lexicon,
-            {
-              [edit.key]: {
-                ...(edit.hear !== undefined ? { hear: edit.hear } : {}),
-                ...(edit.say !== undefined ? { say: edit.say } : {}),
-              },
-            },
-            now,
-          );
-          break;
-        case 'setState':
-          lexicon =
-            edit.state === null
-              ? clearState(lexicon, edit.key, now)
-              : applyBankMarks(lexicon, DIRTY_TALK_BANK, { [edit.key]: edit.state }, 'edit', now);
-          break;
         case 'setAddress': {
           lexicon = {
             ...lexicon,
@@ -4919,12 +4857,12 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
           ({ lexicon } = await orientationForMarking(gate));
           break;
         }
-        case 'clearNameSide':
-          // `clearNameMarks` is deliberately NOT scoped to the take that wrote the mark — taking one back in
-          // a later sitting is the same ordinary act as changing it (74 §3.2, amended 2026-08-19) — so the
-          // report can reuse it as-is. It drops that direction's rating, its state, and its directional
-          // boundary, and leaves the other direction standing.
-          lexicon = clearNameMarks(lexicon, { [edit.key]: [edit.side] }, now);
+        case 'clearSide':
+          // `clearDirectionalMarks` is deliberately NOT scoped to the take that wrote the mark — taking one
+          // back in a later sitting is the same ordinary act as changing it (74 §3.2, amended 2026-08-19) —
+          // so the report can reuse it as-is. It drops that direction's rating, its state, and its
+          // directional boundary, and leaves the other direction standing.
+          lexicon = clearDirectionalMarks(lexicon, { [edit.key]: [edit.side] }, now);
           break;
         case 'addWord':
           lexicon = addCustomEntry(

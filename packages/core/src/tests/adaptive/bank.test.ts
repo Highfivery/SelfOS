@@ -98,7 +98,8 @@ describe('the dirty-talk bank (74 §13)', () => {
       say: 0,
       source: 'test:1',
     });
-    expect(entry.state).toBeUndefined();
+    expect(entry.hearState).toBeUndefined();
+    expect(entry.sayState).toBeUndefined();
   });
 });
 

@@ -11,18 +11,14 @@ import {
 } from '../../schemas';
 import { readEncryptedJson, writeEncryptedJson } from '../../vault';
 import {
-  applyBankMarks,
-  applyDirections,
-  applyNameMarks,
-  clearNameMarks,
-  type NameMarks,
-  clearMarks,
+  applyDirectionalMarks,
+  clearDirectionalMarks,
+  type DirectionalMarks,
   derivedWantsToSay,
   lovedEntries,
   mergeLexicons,
   readLexicon,
   writeLexicon,
-  type BankMarks,
 } from './lexicon';
 import { takeCarriesDistress } from './distress';
 import { recordTakeSaturation } from './saturation';
@@ -240,19 +236,29 @@ export async function abandonAdaptiveTake(
 }
 
 /**
- * Record pass 1 of the bank — the marks. Writes straight through to the person's lexicon (the living store),
- * and stamps a turn on the draft so the take carries a record of what it asked, not just what came back.
+ * Record a marking pass — the deck ("The words") or the pet names (74 §3.6.8/§3.6.26).
+ *
+ * ONE function, because since Option B the two phases do the same thing: an entry is answered per direction,
+ * `love | okay | never` on each side it is offered. They differed only in the turn they stamp, so that is all
+ * this takes a parameter for. The deck used to have its own whole-entry writer plus a second 0–4 "split" pass
+ * — that pair is gone (§3.6.26), and with it the class of bug where one phase's writer grew a fix the other
+ * never got.
+ *
+ * Writes straight through to the person's lexicon (the living store), and stamps a turn on the draft so the
+ * take carries a record of what it asked, not just what came back.
  */
-export async function recordBankPass(
+export async function recordMarkingPass(
   fs: FileSystem,
   key: Uint8Array,
   def: AdaptiveTestDefinition,
   input: {
     personId: string;
     resultId: string;
-    marks: BankMarks;
-    /** Marks the person took back — un-marked in the same sitting (74 §3.4). */
-    cleared?: readonly string[];
+    /** Which phase is stamping — the turn record, and nothing else. */
+    phase: 'bank' | 'names';
+    marks: DirectionalMarks;
+    /** Directions the person took back, per key (74 §3.4). An absent key undoes nothing. */
+    cleared?: Readonly<Record<string, readonly ('hear' | 'say')[]>>;
     /**
      * Which sides each key was SHOWN on for this person (74 §3.6.6). Resolved by the caller, which knows the
      * orientation. Recorded on the entry so a side that was never offered is never read as a refusal —
@@ -261,7 +267,7 @@ export async function recordBankPass(
     sides?: Readonly<Record<string, readonly ('hear' | 'say')[]>>;
     /**
      * An AUTOSAVE, not the end of the pass. The lexicon is written either way — that is the point, so nothing
-     * is lost — but only completing the pass stamps a turn. A turn per tap would put ~1,100 of them in the
+     * is lost — but only completing the pass stamps a turn. A turn per tap would put thousands of them in the
      * result and make `turns` useless as a record of what was actually asked.
      */
     autosave?: boolean;
@@ -270,95 +276,41 @@ export async function recordBankPass(
 ): Promise<EroticLexicon> {
   const lexicon = await readLexicon(fs, key, input.personId, now);
   const source = `test:${input.resultId}`;
-  const marked = applyBankMarks(lexicon, def.bank, input.marks, source, now, input.sides ?? {});
-  // Un-marking is scoped to THIS take's own marks, and only while the take is still OPEN. Without the draft
-  // check, `source` scoping is only as strong as a renderer-supplied string: passing a COMPLETED take's id
-  // makes `source` match its entries and lifts a boundary that take settled. Result ids are handed to the
-  // renderer in `adaptiveState().history`, so that is a reachable string, not a hypothetical one (74 §3.2).
-  const draft = await openDraft(fs, key, input.personId, def.id);
-  const clearable = draft?.id === input.resultId ? (input.cleared ?? []) : [];
-  const next = clearMarks(marked, clearable, now);
-  await writeLexicon(fs, key, next);
-  if (input.autosave) return next;
-  await stampTurn(fs, key, input.personId, input.resultId, {
-    phase: 'bank',
-    item: {
-      id: 'bank',
-      pack: 'bank',
-      text: `${def.bank.entries.length} entries across ${def.bank.families.length} families`,
-      options: [],
-    },
-    answer: Object.keys(input.marks).length,
-    at: now.toISOString(),
-  });
-  return next;
-}
-
-/**
- * Record the PET-NAME phase (74 §3.6.8) — two marks per name, autosaved a tap at a time like the deck.
- *
- * Same shape as `recordBankPass` on purpose: the un-mark is scoped to this take's own marks AND to the take
- * still being open, because `source` on its own is only as strong as a renderer-supplied string.
- */
-export async function recordNamePass(
-  fs: FileSystem,
-  key: Uint8Array,
-  def: AdaptiveTestDefinition,
-  input: {
-    personId: string;
-    resultId: string;
-    marks: NameMarks;
-    /** Directions taken back, per key (74 §3.4). */
-    cleared?: Readonly<Record<string, readonly ('hear' | 'say')[]>>;
-    /** Which sides each key was SHOWN on (74 §3.6.3). Absent for a key ⇒ both. */
-    sides?: Readonly<Record<string, readonly ('hear' | 'say')[]>>;
-    autosave?: boolean;
-  },
-  now: Date,
-): Promise<EroticLexicon> {
-  const lexicon = await readLexicon(fs, key, input.personId, now);
-  const source = `test:${input.resultId}`;
-  const marked = applyNameMarks(lexicon, def.bank, input.marks, source, now, input.sides ?? {});
+  const marked = applyDirectionalMarks(
+    lexicon,
+    def.bank,
+    input.marks,
+    source,
+    now,
+    input.sides ?? {},
+  );
+  // Un-marking is scoped to the take still being OPEN. Without the draft check, `source` scoping is only as
+  // strong as a renderer-supplied string: passing a COMPLETED take's id makes `source` match its entries.
+  // Result ids are handed to the renderer in `adaptiveState().history`, so that is a reachable string, not a
+  // hypothetical one (74 §3.2).
   const draft = await openDraft(fs, key, input.personId, def.id);
   const clearable = draft?.id === input.resultId ? (input.cleared ?? {}) : {};
-  const next = clearNameMarks(marked, clearable, now);
+  const next = clearDirectionalMarks(marked, clearable, now);
   await writeLexicon(fs, key, next);
   if (input.autosave) return next;
+  const item =
+    input.phase === 'names'
+      ? {
+          id: 'names',
+          pack: 'names',
+          text: `${nameFamilies(def.bank).length} registers of names, marked both ways`,
+          options: [],
+        }
+      : {
+          id: 'bank',
+          pack: 'bank',
+          text: `${def.bank.entries.length} entries across ${def.bank.families.length} families`,
+          options: [],
+        };
   await stampTurn(fs, key, input.personId, input.resultId, {
-    phase: 'names',
-    item: {
-      id: 'names',
-      pack: 'names',
-      text: `${nameFamilies(def.bank).length} registers of names, marked both ways`,
-      options: [],
-    },
+    phase: input.phase,
+    item,
     answer: Object.keys(input.marks).length,
-    at: now.toISOString(),
-  });
-  return next;
-}
-
-/** Record pass 2 — the hear/say split on what pass 1 marked. */
-export async function recordSplitPass(
-  fs: FileSystem,
-  key: Uint8Array,
-  input: {
-    personId: string;
-    resultId: string;
-    splits: Record<string, { hear?: number; say?: number }>;
-    /** As above — an autosave persists the ratings but does not close the pass. */
-    autosave?: boolean;
-  },
-  now: Date,
-): Promise<EroticLexicon> {
-  const lexicon = await readLexicon(fs, key, input.personId, now);
-  const next = applyDirections(lexicon, input.splits, now);
-  await writeLexicon(fs, key, next);
-  if (input.autosave) return next;
-  await stampTurn(fs, key, input.personId, input.resultId, {
-    phase: 'split',
-    item: { id: 'split', pack: 'bank', text: 'hear / say split', options: [] },
-    answer: Object.keys(input.splits).length,
     at: now.toISOString(),
   });
   return next;

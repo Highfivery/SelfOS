@@ -16,7 +16,7 @@ import type {
   LexiconEntry,
 } from '../../schemas';
 import { runClaude, type AiDeps } from '../../questionnaires/aiCall';
-import { bothSidesAnswered, suppressedTexts, violatesBoundary } from './lexicon';
+import { hasSayGap, suppressedTexts, violatesBoundary } from './lexicon';
 
 /**
  * 74-adaptive-tests §5.1/§5.3 — the **adaptive half**: the phases that chase what the bank left ambiguous,
@@ -107,14 +107,10 @@ export function lexiconDigest(lexicon: EroticLexicon): string {
           .slice(0, CONTEXT_CAP)
           .map((e) => e.text)
           .join(' · ')}`;
-  const loved = lexicon.entries.filter(
-    (e) => e.state === undefined && Math.max(e.hear, e.say) >= 3,
-  );
+  const loved = lexicon.entries.filter((e) => Math.max(e.hear, e.say) >= 3);
   // Re-sourced from the GAP, not the middle mark: `okay` is a mild yes now, so the old `notYet` filter would
   // be permanently empty and this context line would silently stop existing (74 §3.6.2).
-  const stuck = lexicon.entries.filter(
-    (e) => e.state === undefined && bothSidesAnswered(e) && e.hear >= 3 && e.say <= 1,
-  );
+  const stuck = lexicon.entries.filter(hasSayGap);
   return [
     line('They marked these as landing', loved),
     line('They love hearing these but rate themselves low on saying them', stuck),
@@ -165,12 +161,8 @@ export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
    *    every time, for anyone who had ruled anything out. A hard no is settled. There is nothing to probe.
    */
   for (const [family, entries] of byFamily) {
-    const loved = entries.filter((e) => e.state === undefined && Math.max(e.hear, e.say) >= 3);
-    const lukewarm = entries.filter(
-      (e) =>
-        e.state === 'okay' ||
-        (e.state === undefined && Math.max(e.hear, e.say) > 0 && Math.max(e.hear, e.say) < 3),
-    );
+    const loved = entries.filter((e) => Math.max(e.hear, e.say) >= 3);
+    const lukewarm = entries.filter((e) => e.hearState === 'okay' || e.sayState === 'okay');
     if (loved.length > 0 && lukewarm.length > 0) {
       out.push({
         id: `split:${family}`,
@@ -184,13 +176,14 @@ export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
   // BOTH sides must have been asked (74 §3.6.6). Without the guard this reads a side the deck never offered
   // as a refusal — and once seeding stopped filling the unshown side, it fired for essentially every oriented
   // person, putting a FALSE statement in front of them ("rated it 0 to say") whose answer then feeds synthesis.
-  const frozen = lexicon.entries.filter(
-    (e) => e.state !== 'never' && bothSidesAnswered(e) && e.hear >= 3 && e.say === 0,
-  );
+  const frozen = lexicon.entries.filter(hasSayGap);
   if (frozen.length > 0) {
     out.push({
       id: 'frozen',
-      question: `They love hearing "${frozen[0]!.text}" but rated it 0 to say — is that "he can, I can't", or do they want to be able to and freeze?`,
+      // No longer "rated it 0 to say": there is no 0–4 scale to quote (74 §3.6.26), and a term they ruled
+      // out saying is a boundary the probe must never ask them to justify (§3.6.15) — so this fires on the
+      // softer gap, and says what they actually marked.
+      question: `They love hearing "${frozen[0]!.text}" but only marked saying it "okay" — is that "he can, I can't", or do they want to be able to and freeze?`,
       terms: [frozen[0]!.text],
     });
   }
@@ -198,9 +191,7 @@ export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
   // 3) Loves to hear it, can't say it — the most coachable signal in the take. Sourced from the gap since
   // the middle mark stopped meaning "cringe" (74 §3.6.2); an empty probe pack is invisible, so a filter that
   // can never match again would have removed this silently.
-  const cringe = lexicon.entries.filter(
-    (e) => e.state === undefined && bothSidesAnswered(e) && e.hear >= 3 && e.say <= 1,
-  );
+  const cringe = lexicon.entries.filter(hasSayGap);
   if (cringe.length > 0) {
     out.push({
       id: 'cringe',
@@ -247,7 +238,7 @@ function nothingUsable(
  */
 export function openEndedAmbiguity(lexicon: EroticLexicon): Ambiguity | null {
   const loved = lexicon.entries
-    .filter((e) => e.state === undefined && Math.max(e.hear, e.say) >= 3)
+    .filter((e) => Math.max(e.hear, e.say) >= 3)
     .slice(0, 4)
     .map((e) => e.text);
   if (loved.length === 0) return null;

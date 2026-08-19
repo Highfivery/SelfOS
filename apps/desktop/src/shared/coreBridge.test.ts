@@ -7696,20 +7696,21 @@ describe('update awareness (36)', () => {
         const resultId = started?.draft?.id;
         expect(resultId).toBeTruthy();
 
-        // Pass 1 — mark what lands. Free: no AI, no budget.
+        // The words, marked per direction (74 §3.6.26). Free: no AI, no budget.
         const marked = await bridge.testsAdaptiveBank({
           testId: 'dirty-talk',
           resultId: resultId!,
           marks: {
-            'names-praise:good-girl': 'love',
-            'claiming:you-re-mine': 'love',
-            'names-rough-heavy:whore': 'never',
+            // Loved to hear, only okay to say — the gap the profile is built on.
+            'names-praise:good-girl': { hear: 'love', say: 'okay' },
+            'claiming:you-re-mine': { hear: 'love', say: 'love' },
+            'names-rough-heavy:whore': { hear: 'never', say: 'never' },
           },
         });
-        // Suppression rides the entry's live state — no second record, which is what used to make a no
+        // Suppression rides the entry's live marks — no second record, which is what used to make a no
         // unliftable (74 §3.6.11).
         expect(
-          marked?.lexicon.entries.find((e) => e.key === 'names-rough-heavy:whore')?.state,
+          marked?.lexicon.entries.find((e) => e.key === 'names-rough-heavy:whore')?.hearState,
         ).toBe('never');
         expect(marked?.lexicon.boundaries).toEqual([]);
 
@@ -7729,13 +7730,6 @@ describe('update awareness (36)', () => {
           context: 'during',
         });
         expect(thinScene).toMatchObject({ ok: false, degraded: true });
-
-        // Pass 2 — the hear/say split.
-        await bridge.testsAdaptiveSplit({
-          testId: 'dirty-talk',
-          resultId: resultId!,
-          splits: { 'names-praise:good-girl': { hear: 4, say: 0 } },
-        });
 
         /*
          * Synthesize. AI is off in this host, so the written analysis cannot run — and a failure no longer
@@ -7779,21 +7773,22 @@ describe('update awareness (36)', () => {
         await bridge.testsAdaptiveBank({
           testId: 'dirty-talk',
           resultId: started!.draft!.id,
-          marks: { 'names-rough-heavy:whore': 'never' },
+          marks: { 'names-rough-heavy:whore': { hear: 'never', say: 'never' } },
         });
 
         const noState = async (): Promise<string | undefined> =>
           (await bridge.testsLexicon())?.entries.find((e) => e.key === 'names-rough-heavy:whore')
-            ?.state;
+            ?.hearState;
         expect(await noState()).toBe('never');
-        // The report's explicit "changed my mind" still lifts it — now one of several ways, not the only one.
+        // The report's explicit "changed my mind" still lifts it, per direction (74 §3.6.26) — and it works
+        // for a WORD as well as a name now, which is the only route back once a term leaves the bank.
         const cleared = await bridge.testsLexiconEdit({
-          kind: 'setState',
+          kind: 'clearSide',
           key: 'names-rough-heavy:whore',
-          state: null,
+          side: 'hear',
         });
         expect(
-          cleared?.entries.find((e) => e.key === 'names-rough-heavy:whore')?.state,
+          cleared?.entries.find((e) => e.key === 'names-rough-heavy:whore')?.hearState,
         ).toBeUndefined();
         // Their own word, in their own words.
         const added = await bridge.testsLexiconEdit({
@@ -7845,11 +7840,11 @@ describe('update awareness (36)', () => {
         });
         const after = await readLexicon(fs, key, ownerId);
         expect(suppressedTexts(after)).not.toContain('good girl');
-        // ...and the side he IS asked about survives untouched, which is the whole reason the unit is the
-        // direction and not the name: "good girl" is exactly what he would call her.
-        const entry = after.entries.find((e) => e.key === 'names-praise:good-girl');
-        expect(entry?.hearState).toBeUndefined();
-        expect(entry?.sides).toEqual(['say']);
+        // The mark goes with the side it belonged to — and this entry had no OTHER answer, so the entry
+        // goes too: since §3.6.26 a lexicon entry carries answers, and one with none carries nothing. The
+        // row itself comes back from the bank on the side he IS asked about, unmarked, which is the whole
+        // reason the unit is the direction and not the name: "good girl" is exactly what he would call her.
+        expect(after.entries.find((e) => e.key === 'names-praise:good-girl')).toBeUndefined();
       });
 
       /**
@@ -7949,7 +7944,7 @@ describe('update awareness (36)', () => {
           autosave: true,
         });
         await bridge.testsLexiconEdit({
-          kind: 'clearNameSide',
+          kind: 'clearSide',
           key: 'names-rough-heavy:slut',
           side: 'hear',
         });

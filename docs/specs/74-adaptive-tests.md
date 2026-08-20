@@ -1170,6 +1170,46 @@ repeated in six more places, each one suppression made CONDITIONAL on something 
   imported BY `generationService`, which `guidanceService` imports — reading the prefs in the helper would close
   a cycle.
 
+### 3.6.31 The live-model pass — and the paragraph the filter was eating — APPROVED + **BUILT** (2026-08-19, owner-directed)
+
+Every AI phase run against **real Claude**, at the owner's real shape (758 entries, 34 loved-to-hear, 708
+suppressed), on an in-memory COPY of his lexicon — the §3.6.18 lesson, which cost him 132 marks when a harness
+ended with a destructive op against the live vault.
+
+**The model was never the problem.** All four phases returned `stop_reason: end_turn` with valid JSON: 11
+explicit lines carrying BOTH voices (the §3.6.29 doer's-voice addition visibly landing), five distinct
+scenario moments each with a non-verbal option, and a synthesis whose readings were specific rather than
+generic — it noticed that his cock vocabulary _escalates_ (hard → thick → fat → heavy → massive) and read it
+as a crescendo to be paced, then proposed fragments ("There." "More.") as the way into his say-gap.
+
+**What the run did find was on our side.** The synthesis model wrote **2,978 characters across 7 paragraphs
+and the boundary filter kept 2.** `runSynthesis` filters per paragraph — correct since §3.6.29 — but with 708
+suppressed terms the paragraph that gets eaten is the most useful one in the report: the hear/say-gap
+paragraph necessarily QUOTES the line the gap is about (`finger my ass`), and the bare name `my ass` was
+ruled out, which a multi-word term matches as a plain substring.
+
+Two fixes, both owner-chosen:
+
+1. **An explicit love outranks a substring no.** An occurrence of a banned term sitting INSIDE a phrase the
+   person has explicitly loved does not count. The term still binds on its own and in any line they have not
+   said yes to, so nothing they ruled out is loosened — verified: `my ass` alone is still refused, and so is
+   `I want to slap my ass hard`, while `fuck my ass` is allowed to HEAR and refused to SAY, exactly matching
+   his marks. `lovedEntries` is the definition used, because a second one (reading `hearState` rather than the
+   numeric rating) silently disagreed with the rest of the app and left genuinely loved lines suppressed.
+2. **The vocative rule only fires where the word ENDS the phrase.** `([^a-z0-9]|$)` accepted a following
+   space, so `my beautiful cock` read as being CALLED beautiful. Requiring terminal punctuation or end-of-line
+   keeps `my beautiful`, `come here, beautiful` and `you're my baby`, drops the adjective case, and leaves
+   §3.6.13's relaxation (`you look beautiful today`) untouched. `oh baby yes` is given up deliberately — the
+   comma form is the common one and still binds.
+
+**A correction, recorded because the method matters more than the number.** My first measurement reported
+"36% of the lines he loves are blocked by his own hard-no list" and "37% of the bank". Both were artifacts of
+my own harness calling `violatesBoundary` with **no direction**, which by documented design refuses anything
+ruled out either way. Measured per direction the real figure is **0 of 34 loved-to-hear and 0 of 8
+loved-to-say** — suppression was correct wherever the caller knows the direction. The defect was real but far
+narrower than I first reported: it is specific to the DIRECTIONLESS callers, of which the synthesis narrative
+is the one that matters. The fix is proven by reverting it and watching the hear/say-gap paragraph drop.
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

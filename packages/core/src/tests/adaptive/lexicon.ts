@@ -751,7 +751,7 @@ export function violatesBoundary(
   /** Which way this line runs, when the caller knows. Omitted ⇒ refuse anything ruled out either way. */
   direction?: 'hear' | 'say',
 ): boolean {
-  const text = candidate.toLowerCase();
+  const whole = candidate.toLowerCase();
   const stems = new Set(contentStems(candidate));
   // Which banned terms are pet names that are ALSO everyday words. Derived from the bank at match time
   // rather than stored on the boundary, so it applies to every record already written — a name ruled out
@@ -763,10 +763,41 @@ export function violatesBoundary(
       // A multi-word name has no innocent use, so it keeps the plain match.
       .filter((text) => !text.includes(' ')),
   );
+  /*
+   * 74 §3.6.31 — the person's own explicit YES outranks a substring NO.
+   *
+   * Measured on the owner's real lexicon: ruling out the NAME `my ass` suppressed `fuck my ass`,
+   * `finger my ass`, `pound my ass` and `cum in my ass` — every one of which he had marked LOVED — because a
+   * multi-word name keeps a plain substring match. 36% of the lines he loved and 37% of the whole bank were
+   * rejected by his own list, which is what cut a 7-paragraph analysis down to two.
+   *
+   * So an occurrence of a banned term that sits INSIDE a phrase this person has explicitly loved does not
+   * count. The term still binds everywhere else — on its own, and in any line they have not said yes to — so
+   * nothing they actually ruled out is loosened. A text both loved AND ruled out keeps the NO: that is a
+   * contradiction, and suppression is the half that can only ever prevent.
+   */
+  // `lovedEntries` IS the app's definition of loved — the same one the steer, the spine and the report read.
+  // Using a second one here (the `hearState` field) silently disagreed with it: the numeric rating is what
+  // survives a merge from an older device, so a genuinely loved line read as unloved and stayed suppressed.
+  const lovedPhrases = lovedEntries(lexicon, direction ?? 'either')
+    .map((entry) => entry.text.trim().toLowerCase())
+    .filter((phrase) => phrase !== '');
+  /** The candidate with every loved phrase CONTAINING `needle` blanked out, so it cannot match from there. */
+  const maskLoved = (hay: string, needle: string): string => {
+    let out = hay;
+    for (const phrase of lovedPhrases) {
+      if (phrase === needle || !phrase.includes(needle)) continue;
+      // A control char cannot appear in a candidate and matches no word-boundary pattern.
+      out = out.split(phrase).join('\u0001'.repeat(phrase.length));
+    }
+    return out;
+  };
+
   const literal = suppressedTexts(lexicon, direction).some((banned) => {
     const needle = banned.trim().toLowerCase();
     if (needle === '') return false;
     const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const text = maskLoved(whole, needle);
     /*
      * A single-word PET NAME is only a boundary when it is used to ADDRESS them.
      *
@@ -791,8 +822,16 @@ export function violatesBoundary(
       // Carries a vocative comma: "that's it baby, just like that". A full stop is NOT enough — "you look
       // beautiful." is a compliment, not a name, and that is exactly the false positive being removed.
       new RegExp(`(^|[^a-z0-9])${escaped}\\s*,`, 'i'),
-      // Named as theirs, or as what they are: "my love" · "you're my baby" · "such a doll".
-      new RegExp(`\\b(my|oh|hey|you're|youre|such an?|a|an)\\s+${escaped}([^a-z0-9]|$)`, 'i'),
+      /*
+       * Named as theirs, or as what they are: "my love" · "you're my baby" · "such a doll".
+       *
+       * 74 §3.6.31 — only where the word ENDS the phrase. `([^a-z0-9]|$)` accepted a following space, so
+       * "my beautiful cock" read as being CALLED beautiful and was suppressed for someone who had ruled that
+       * name out — while plainly being an adjective in front of a noun. Requiring terminal punctuation or the
+       * end of the line keeps "my love", "my love, come here" and "you're my baby", and drops the adjective
+       * case. "oh baby yes" is given up deliberately; the comma form above is the common one and still binds.
+       */
+      new RegExp(`\\b(my|oh|hey|you're|youre|such an?|a|an)\\s+${escaped}\\s*([.,!?;:]|$)`, 'i'),
     ].some((re) => re.test(text));
   });
   if (literal) return true;

@@ -560,6 +560,32 @@ A running log of durable decisions and feedback captured into the project config
   see if both live) settled it. This was the SECOND non-bug I proposed a fix for in one session — the other was a
   `customTypes` "leak" that turned out to be a household-wide file — so the rule is: reproduce the mechanism, or
   do not ship the fix.**
+- 2026-08-19 — **Live-model pass on Dirty Talk (the model was fine; our own filter was eating the analysis);
+  SPEC 74 §3.6.31; on `chore/pet-name-purge-two`).** Ran every AI phase against **real Claude** at the owner's
+  real shape (758 entries, 708 suppressed), on an in-memory COPY of his lexicon — never the live vault, which a
+  harness wiped once (§3.6.18). All four phases returned `end_turn` with valid JSON, and the output was good:
+  lines carrying BOTH voices, five distinct scenario moments, and a synthesis that noticed his cock vocabulary
+  ESCALATES and read it as a crescendo to pace. **The defect was ours:** the synthesis wrote **7 paragraphs and
+  the filter kept 2** — the hear/say-gap paragraph, the actionable one, necessarily QUOTES the line the gap is
+  about (`finger my ass`), and the bare name `my ass` was ruled out, which a multi-word term matches as a plain
+  substring. Fixed two ways, both owner-chosen: an **explicit love outranks a substring no** (the term still
+  binds alone and in any unloved line — verified `my ass` and `I want to slap my ass hard` are still refused
+  while `fuck my ass` is allowed to HEAR and refused to SAY, exactly his marks), and the **vocative rule now
+  only fires where the word ENDS the phrase** (`my beautiful cock` is an adjective, not an address). Gate:
+  typecheck ×4, lint, format, full suite. Both guards **verified to fail when reverted**.
+  **Lessons: (1) I reported "36% of the lines he loves are blocked by his own list" and it was FALSE — an
+  artifact of my own harness calling `violatesBoundary` with no direction, which by documented design refuses
+  anything ruled out either way. Per direction the figure is 0 of 34 and 0 of 8. A measurement is only a
+  finding once you have checked that the way you measured matches the way the app calls it; I nearly shipped a
+  loosening of the app's hard guarantee on the strength of my own harness's default argument. (2) The real
+  defect was narrower and still worth fixing: it lives only in the DIRECTIONLESS callers, and the synthesis
+  narrative is the one that matters — prose ABOUT a hear/say gap cannot avoid quoting the term the gap is
+  about. (3) `anthropicClient` throws "you're running in a browser-like environment" under `apps/desktop`'s
+  jsdom vitest env; a live harness there needs `// @vitest-environment node` or every phase returns a bare
+  ERROR in 29ms and reads exactly like a model failure. (4) Two definitions of "loved" (the numeric rating vs
+  the `hearState` field) silently disagree — use `lovedEntries`, which is the one the steer, spine and report
+  already read.**
+
 - 2026-08-19 — **Release pass on Dirty Talk (a stricter line on the names, one landing rule, one rail, and
   suppression swept across six more surfaces; owner-directed from measured lists; SPEC 74 §3.6.30; on
   `chore/pet-name-purge-two`).** _"all pet names should be specific to dirty talk and sexual"_ — a NEW,

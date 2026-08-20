@@ -948,6 +948,103 @@ describe('a pet name is a boundary when it ADDRESSES them, not whenever the word
   });
 });
 
+describe('74 §3.6.31 — an explicit love outranks a substring no', () => {
+  /**
+   * Measured live on the owner's vault: the synthesis wrote seven paragraphs and the boundary filter kept
+   * two. The one it lost that mattered most was the hear/say-gap paragraph — the actionable one — because it
+   * quoted `finger my ass`, a line he LOVES to hear, and he had ruled out the bare name `my ass`, which a
+   * multi-word term matches as a plain substring.
+   */
+  const lex = (): EroticLexicon => {
+    const base = emptyLexicon('p1', new Date('2026-08-19T00:00:00.000Z'));
+    return {
+      ...base,
+      entries: [
+        // Ruled out as a NAME, both ways.
+        {
+          key: 'names-body:my-ass',
+          text: 'my ass',
+          kind: 'word',
+          family: 'names-body',
+          tier: 3,
+          hear: 0,
+          say: 0,
+          hearState: 'never',
+          sayState: 'never',
+          source: 'take:1',
+        },
+        // …and LOVED as a line that contains it.
+        {
+          key: 'anal:finger-my-ass',
+          text: 'finger my ass',
+          kind: 'phrase',
+          family: 'anal',
+          tier: 3,
+          hear: 3,
+          say: 0,
+          hearState: 'love',
+          sayState: 'never',
+          source: 'take:1',
+        },
+      ],
+    };
+  };
+
+  it('keeps prose that quotes a line they love, even though a ruled-out term sits inside it', () => {
+    const para =
+      "The hear/say gap is sharp: 'finger my ass' sits in your high-love column and your low-comfort-saying one.";
+    expect(violatesBoundary(lex(), para, 'hear')).toBe(false);
+  });
+
+  it('still refuses the ruled-out term itself, and any line they have NOT said yes to', () => {
+    // The whole guarantee: nothing they actually ruled out is loosened.
+    expect(violatesBoundary(lex(), 'my ass')).toBe(true);
+    expect(violatesBoundary(lex(), 'I want to slap my ass hard')).toBe(true);
+  });
+
+  it('respects direction — loved to hear, ruled out to say', () => {
+    expect(violatesBoundary(lex(), 'finger my ass', 'hear')).toBe(false);
+    expect(violatesBoundary(lex(), 'finger my ass', 'say')).toBe(true);
+  });
+});
+
+describe('74 §3.6.31 — the vocative rule only fires where the word ENDS the phrase', () => {
+  const lex = (): EroticLexicon => {
+    const base = emptyLexicon('p1', new Date('2026-08-19T00:00:00.000Z'));
+    return {
+      ...base,
+      entries: [
+        {
+          key: 'names-warm:beautiful',
+          text: 'beautiful',
+          kind: 'word',
+          family: 'names-warm',
+          tier: 1,
+          hear: 0,
+          say: 0,
+          hearState: 'never',
+          sayState: 'never',
+          source: 'take:1',
+        },
+      ],
+    };
+  };
+
+  it('allows an adjective in front of a noun', () => {
+    // `([^a-z0-9]|$)` accepted the following space, so this read as being CALLED beautiful.
+    expect(violatesBoundary(lex(), 'my beautiful cock')).toBe(false);
+  });
+
+  it('still catches being addressed by it', () => {
+    expect(violatesBoundary(lex(), 'my beautiful')).toBe(true);
+    expect(violatesBoundary(lex(), 'come here, beautiful')).toBe(true);
+  });
+
+  it('still allows the ordinary sense — the §3.6.13 relaxation is untouched', () => {
+    expect(violatesBoundary(lex(), 'you look beautiful today')).toBe(false);
+  });
+});
+
 describe('74 §3.6.29 — the legacy word-boundary records are gone', () => {
   /*
    * The defect this closes, measured on the real vault: 999 `kind:'word'` records, 382 of them ORPHANED by

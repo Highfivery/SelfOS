@@ -17,6 +17,7 @@ import {
 import {
   lexiconDigest,
   openAmbiguities,
+  openEndedAmbiguity,
   runLinesPhase,
   runProbePhase,
   runScenarioPhase,
@@ -134,6 +135,105 @@ describe('the adaptive engine (74 §5.1/§5.3)', () => {
     // One marked row, one open question about it — not three.
     expect(ambiguities).toHaveLength(1);
     expect(ambiguities[0]?.id).toBe('frozen');
+  });
+
+  /**
+   * 74 §3.6.36 — OWNER-REPORTED: `"my big cock" hit, "my beautiful pussy" only half-did. What's the split?`
+   *
+   * The model was faithful; the premise it was handed was nonsense. Both of the split's lists were
+   * direction-blind, so the contrast paired a mark made about being CALLED something with a mark made about
+   * SAYING something else — not two points on one scale. For a mixed-anatomy couple it is not even about the
+   * same person's body: orientation shows a penis name only on the side its owner can hear and a vulva name
+   * only on the side he can say (§3.6.23), which is exactly the pair he was asked about.
+   */
+  it('never contrasts what they like being CALLED with what they like SAYING', () => {
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      {
+        // His body, so he only ever sees it as something he is called.
+        'names-body:my-big-cock': { hear: 'love' },
+        // Hers, so he only ever sees it as something he says.
+        'names-body:my-beautiful-pussy': { say: 'okay' },
+      },
+      'take:1',
+      NOW,
+    );
+    // Asserted, not assumed: both marks really did land, or this passes on an empty lexicon.
+    expect(lex.entries.find((e) => e.text === 'my big cock')?.hearState).toBe('love');
+    expect(lex.entries.find((e) => e.text === 'my beautiful pussy')?.sayState).toBe('okay');
+
+    for (const ambiguity of openAmbiguities(lex)) {
+      expect(ambiguity.question).not.toContain('my beautiful pussy');
+    }
+  });
+
+  it('still asks the split when both marks are the SAME direction, and says which', () => {
+    // The other half of the fix: comparing within one direction must not disable the ambiguity that makes
+    // this phase worth running. Two penis names, both marks about being CALLED — a real register question.
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      {
+        'names-body:my-big-cock': { hear: 'love' },
+        'names-body:my-good-cock': { hear: 'okay' },
+      },
+      'take:1',
+      NOW,
+    );
+    const split = openAmbiguities(lex).find((a) => a.id.startsWith('split:'));
+    expect(split, 'the split ambiguity must survive the direction fix').toBeDefined();
+    expect(split!.id).toBe('split:names-body:hear');
+    // The DIRECTION is in the sentence the model is asked to resolve, so a question that omits it cannot be
+    // written from a premise that states it.
+    expect(split!.question).toContain('being called');
+    expect(split!.question).not.toContain('saying');
+    // …and each quoted word carries how it was marked, so the two cannot be flattened back together.
+    expect(split!.termNote?.['my big cock']).toBe('they love being called this');
+    expect(split!.termNote?.['my good cock']).toBe('only lukewarm about being called this');
+  });
+
+  it('says which way each word landed in the open-ended fallback', () => {
+    // The same conflation in the pass that runs once the derived ambiguities are used up — which is most of
+    // them. It said "they marked these as landing" and then asked the model to go deeper on "the direction".
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      {
+        'names-body:my-big-cock': { hear: 'love' },
+        'names-body:my-beautiful-pussy': { say: 'love' },
+      },
+      'take:1',
+      NOW,
+    );
+    const open = openEndedAmbiguity(lex);
+    expect(open?.question).toContain('"my big cock" as landing to be called');
+    expect(open?.question).toContain('"my beautiful pussy" as landing to say');
+    expect(open?.termNote?.['my beautiful pussy']).toBe('landed to say');
+  });
+
+  it('puts each quoted word in the prompt WITH how it was marked', async () => {
+    const { client, prompts } = fakeClient([
+      '{"questions": [{"question": "Which?", "options": ["a"]}]}',
+    ]);
+    const lex = applyDirectionalMarks(
+      emptyLexicon('p1', NOW),
+      DIRTY_TALK.bank,
+      {
+        'names-body:my-big-cock': { hear: 'love' },
+        'names-body:my-good-cock': { hear: 'okay' },
+      },
+      'take:1',
+      NOW,
+    );
+    const split = openAmbiguities(lex).find((a) => a.id.startsWith('split:'))!;
+    await runProbePhase(deps(client), lex, split);
+    // The bare list gave the model two words and no idea which was which — the direction lived only in the
+    // user message while the rule about what may be quoted lived here.
+    expect(prompts[0]?.system).toContain('- "my big cock" — they love being called this');
+    expect(prompts[0]?.system).toContain(
+      '- "my good cock" — only lukewarm about being called this',
+    );
   });
 
   it('puts the hard nos in the prompt as a negative constraint', async () => {

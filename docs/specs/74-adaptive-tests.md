@@ -1753,6 +1753,59 @@ the shape of the whole bug — look for the other two before fixing the reported
 branch for a phase does not merely under-test it; it makes every screenshot of that phase a picture of a
 failure, which is how three screens reached a redesign having never been looked at.
 
+### 3.6.36 The probe's premise — a question about one direction — APPROVED + **BUILT** (2026-08-20, owner-reported)
+
+Owner, on a question the take produced: _`"my big cock" hit, "my beautiful pussy" only half-did. What's the
+split?`_ — with the hypothesis that it was _"not taking into account who says what to who"_. He was right, and
+**the model was faithful.** Reproduced before anything was changed: `openAmbiguities` handed it
+
+> They loved "my big cock" but were only lukewarm on "my beautiful pussy" — is it that word specifically, or
+> the register behind it?
+
+and the model simply shortened it. **The premise was the defect.** The `split` ambiguity drew both of its lists
+direction-blind — `Math.max(hear, say) >= 3` for the loved side against `hearState === 'okay' || sayState ===
+'okay'` for the contrast — so it could pair a mark made about being **CALLED** something with a mark made about
+**SAYING** something else. Those are answers to two different questions, and no split exists between them.
+
+For a mixed-anatomy couple it is worse than incoherent, and that is exactly the reported pair: `names-body`
+holds `body: 'penis'` and `body: 'vulva'` entries in one family, and orientation (§3.6.23) shows a penis name
+only on the side its owner can hear and a vulva name only on the side he can say. So the question contrasted
+**two different people's bodies** and asked which word he preferred.
+
+**Comparing within one direction fixes both at once**, because orientation has already separated the bodies
+onto opposite sides — no body lookup is needed, and none is available: the persisted `LexiconEntry` carries
+`family` and the marks, never `body`. A direction the person was never shown is still not an answer (§3.6.6).
+
+**The same conflation was in `openEndedAmbiguity`**, which is the fallback that runs for most later passes once
+the derived ambiguities are used up: it flattened both directions into one list, told the model "they marked
+these as landing", and then asked it to go deeper on _"the direction"_ — the one fact the list had just thrown
+away. Each term now says which way it landed.
+
+**And the context the model was given was thinner than it looked.** The quote list — the only words the probe
+may name — was bare text in the SYSTEM prompt while the direction lived in the user message, so the two could
+be flattened back together at the point they matter most. Each term now carries how it was marked
+(`termNote`). The split also asked about _"the register behind it"_ without ever naming the register; the
+bank's own family label is passed in (optional, keyed by family id, so the function stays pure over the
+lexicon — its whole point is that the loop terminates on data rather than on a model's opinion).
+
+The premise the same marks now produce:
+
+> They love being called "my big cock" but were only lukewarm about being called "my good cock" — is it that
+> word specifically, or the register behind it (the body itself)?
+
+**Guarded, each verified to fail when reverted:** the reported pair produces no cross-direction contrast; a
+**same**-direction pair still produces one (the anti-vacuity check — comparing within a direction must not
+quietly disable the ambiguity that makes this phase worth running); the open-ended fallback names each
+direction; and the prompt renders each term with its mark.
+
+**Lessons.** (1) When a model writes a bad question, read the premise it was handed before touching the prompt
+— here the wording was the model's and the nonsense was entirely ours. (2) A comparison is only meaningful
+between things measured the same way: `Math.max(hear, say)` is the same "one number standing for two answers"
+the deck was rebuilt to remove in §3.6.26, surviving in the one place that then asks the person to explain the
+difference. (3) Orientation already encodes which body a term belongs to, in `sides` — a rule expressed in
+terms of direction inherits that for free, where a rule reaching for `body` would need a bank the lexicon
+does not have.
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

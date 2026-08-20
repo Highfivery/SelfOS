@@ -4636,7 +4636,13 @@ export function createCoreBridge(host: BridgeHost): SelfosBridge {
       // The confidence rule: probe while the DATA leaves something unresolved, and stop when it doesn't.
       // `asked` is keyed on the AMBIGUITY id (returned below and stamped by the renderer) rather than on the
       // model's prose, or the same ambiguity comes back forever and the take never finishes.
-      const next = openAmbiguities(lexicon).find((ambiguity) => !asked.has(ambiguity.id));
+      // 74 §3.6.36 — the bank's own labels, so the split can name the register it is asking about.
+      const familyLabels = Object.fromEntries(
+        gate.def.bank.families.map((family) => [family.id, family.label]),
+      );
+      const next = openAmbiguities(lexicon, familyLabels).find(
+        (ambiguity) => !asked.has(ambiguity.id),
+      );
       // A ceiling as well as the rule: a data-driven loop should converge, and if it ever doesn't, a person
       // must not be billed a call per tap to find out (74 §5.3 — a backstop, not a depth cap).
       /*

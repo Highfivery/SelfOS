@@ -195,6 +195,15 @@ export interface Ambiguity {
    * produce nothing, roughly every other attempt, and it read as the model being broken.
    */
   terms: string[];
+  /**
+   * 74 §3.6.36 — how each of those words was actually marked, keyed by the word.
+   *
+   * The quote list was bare text, so the model was handed two terms with no idea which was loved and which
+   * was lukewarm, or — the part that produced a nonsense question — which DIRECTION either was marked in.
+   * "my big cock" (loved to be CALLED) beside "my beautiful pussy" (lukewarm about SAYING) are not two
+   * points on one scale; for a mixed-anatomy couple they are not even about the same person's body.
+   */
+  termNote?: Record<string, string>;
 }
 
 /**
@@ -202,7 +211,18 @@ export interface Ambiguity {
  * ambiguities remain, it probes; when they are gone, it stops. Derived from the DATA, never from the model, so
  * the loop terminates on facts rather than on a model's opinion of its own certainty.
  */
-export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
+export function openAmbiguities(
+  lexicon: EroticLexicon,
+  /**
+   * 74 §3.6.36 — what each family is CALLED, so the split can name the register it is asking about.
+   *
+   * The question is literally "is it that word specifically, or the register behind it?" and it never said
+   * what the register was — the model had two words and had to infer the category they came from. Optional
+   * and keyed by family id: the lexicon carries the id, the bank carries the label, and this function stays
+   * pure over the lexicon (its whole point is that the loop terminates on data, not on a model's opinion).
+   */
+  familyLabels: Readonly<Record<string, string>> = {},
+): Ambiguity[] {
   const out: Ambiguity[] = [];
   const byFamily = new Map<string, LexiconEntry[]>();
   for (const entry of lexicon.entries) {
@@ -223,29 +243,49 @@ export function openAmbiguities(lexicon: EroticLexicon): Ambiguity[] {
    *    every time, for anyone who had ruled anything out. A hard no is settled. There is nothing to probe.
    */
   for (const [family, entries] of byFamily) {
-    const loved = entries.filter((e) => Math.max(e.hear, e.say) >= 3);
     /*
-     * 74 §3.6.34 — the contrast needs TWO DIFFERENT words, which is the whole question.
+     * 74 §3.6.36 — a register split is a question about ONE DIRECTION, so it is drawn within one.
      *
-     * Both lists are direction-blind over the same rows, so a single row marked love-to-hear + okay-to-say
-     * — the commonest gap there is — landed in BOTH: `Math.max(hear, say) >= 3` from the love, `sayState
-     * === 'okay'` from the okay. When it was the first such row in its family the question came out
-     * `They loved "good girl" but were only lukewarm on "good girl"`, with that word listed twice in
-     * `terms`, and the probe is told it may quote only the terms it is given — so a billed pass was spent
-     * on a premise that contradicts itself and gives the model nothing to work with.
+     * OWNER-REPORTED: `"my big cock" hit, "my beautiful pussy" only half-did. What's the split?` — which is
+     * the model faithfully shortening the premise it was handed. Both lists here were direction-blind
+     * (`Math.max(hear, say) >= 3` against `hearState === 'okay' || sayState === 'okay'`), so the contrast
+     * could pair a mark made about being CALLED something with a mark made about SAYING something else.
+     * That is not a register split; it is two different answers to two different questions.
      *
-     * A per-DIRECTION difference on ONE row is not a split in the register; it is the say-gap, which the
-     * `frozen` ambiguity below already asks about properly.
+     * For a mixed-anatomy couple it is worse than incoherent, and that is the reported case: orientation
+     * shows a penis name only on the side its owner can HEAR and a vulva name only on the side he can SAY
+     * (§3.6.23), so the pair is about two different people's bodies. Comparing within one direction fixes
+     * both at once, because orientation has already separated the bodies onto opposite sides.
+     *
+     * A direction the person was never SHOWN is not an answer (§3.6.6) — `directionAnswered` is what
+     * distinguishes "they said okay" from "we never asked", and reading a blank side as a mark is the
+     * conflation §3.6.11 exists to prevent.
      */
-    const pick = loved[0];
-    const contrast = pick
-      ? entries.find((e) => e.key !== pick.key && (e.hearState === 'okay' || e.sayState === 'okay'))
-      : undefined;
-    if (pick && contrast) {
+    for (const side of ['hear', 'say'] as const) {
+      const stateOf = (entry: LexiconEntry): 'love' | 'okay' | 'never' | undefined =>
+        side === 'hear' ? entry.hearState : entry.sayState;
+      const pick = entries.find((entry) => stateOf(entry) === 'love');
+      const contrast = pick
+        ? entries.find((entry) => entry.key !== pick.key && stateOf(entry) === 'okay')
+        : undefined;
+      if (!pick || !contrast) continue;
+      // Said in the person's own terms, and the direction is IN the sentence — the model reads this as the
+      // thing to resolve, so a premise that does not name the direction cannot produce a question that does.
+      const loves = side === 'hear' ? 'being called' : 'saying';
+      // Named where the bank told us what it is called; without it the sentence asks about "the register"
+      // and leaves the model to guess which one from two words.
+      const register = familyLabels[family];
+      const behind = register
+        ? `the register behind it (${register.replace(/^Names — /, '')})`
+        : 'the register behind it';
       out.push({
-        id: `split:${family}`,
-        question: `They loved "${pick.text}" but were only lukewarm on "${contrast.text}" — is it that word specifically, or the register behind it?`,
+        id: `split:${family}:${side}`,
+        question: `They love ${loves} "${pick.text}" but were only lukewarm about ${loves} "${contrast.text}" — is it that word specifically, or ${behind}?`,
         terms: [pick.text, contrast.text],
+        termNote: {
+          [pick.text]: `they love ${loves} this`,
+          [contrast.text]: `only lukewarm about ${loves} this`,
+        },
       });
     }
   }
@@ -319,15 +359,34 @@ function nothingUsable(
  * data" (owner, 2026-08-18) means the step keeps its depth from the DATA, not from a fixed list.
  */
 export function openEndedAmbiguity(lexicon: EroticLexicon): Ambiguity | null {
+  /*
+   * 74 §3.6.36 — WHICH WAY each of these landed. Same defect as the split above, in the fallback that runs
+   * for most later passes: `Math.max(hear, say) >= 3` flattens the two directions into one list, so the
+   * model was told "they marked these as landing" and then asked to go deeper on "the direction" — the one
+   * fact the list had just thrown away.
+   */
   const loved = lexicon.entries
-    .filter((e) => Math.max(e.hear, e.say) >= 3)
+    .filter((entry) => entry.hearState === 'love' || entry.sayState === 'love')
     .slice(0, 4)
-    .map((e) => e.text);
+    .map((entry) => ({
+      text: entry.text,
+      way:
+        entry.hearState === 'love' && entry.sayState === 'love'
+          ? 'both ways'
+          : entry.hearState === 'love'
+            ? 'to be called'
+            : 'to say',
+    }));
   if (loved.length === 0) return null;
   return {
     id: `open:${loved.length}`,
-    question: `They marked ${loved.map((t) => `"${t}"`).join(', ')} as landing. Go deeper on what that is actually made of — the moment, the register, the direction, what would break it.`,
-    terms: loved,
+    question: `They marked ${loved
+      .map((l) => `"${l.text}" as landing ${l.way}`)
+      .join(
+        ', ',
+      )}. Go deeper on what that is actually made of — the moment, the register, what would break it.`,
+    terms: loved.map((l) => l.text),
+    termNote: Object.fromEntries(loved.map((l) => [l.text, `landed ${l.way}`])),
   };
 }
 
@@ -531,11 +590,15 @@ Two questions circling the same point are one question padded out — spread the
         : ''
     }
 
-You may quote ONLY these words back to them, and no others: ${ambiguity.terms
-      .map((term) => `"${term}"`)
-      .join(
-        ', ',
-      )}. Quoting anything else is wrong — you cannot see which of their other words are off, and \
+You may quote ONLY these words back to them, and no others, and each is listed with how they actually \
+marked it — a word they love being CALLED and a word they love SAYING are answers to two different \
+questions, and a question that treats them as one scale makes no sense to them:
+${ambiguity.terms
+  .map((term) =>
+    ambiguity.termNote?.[term] ? `- "${term}" — ${ambiguity.termNote[term]}` : `- "${term}"`,
+  )
+  .join('\n')}
+Quoting anything else is wrong — you cannot see which of their other words are off, and \
 naming one they have ruled out would be the worst version of this. Never ask them to justify a boundary, never \
 ask why something is a hard no, and never NAME one: a hard no is settled and is not a thing to ask about.
 

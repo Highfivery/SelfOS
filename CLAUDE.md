@@ -133,6 +133,21 @@ origin/main`) so history stays linear and the release manifest never carries a s
    branch + what to restart. **`pnpm dev` needs a FULL restart for anything in `packages/core`** (it is
    bundled into the main process; a hot reload leaves main serving the old code). Twice the owner tested
    stale code and reported an already-fixed bug.
+   **NEVER run the Playwright-Electron E2E suite while `pnpm dev` is running.** The failure mode is the
+   nastiest kind: **every** test dies as a silent 30-second timeout with no assertion and no error — including
+   tests you never touched, and including a pristine `origin/main` checkout — so it reads exactly like you broke
+   something, and you will go hunting through your own diff for a bug that isn't there. Close the dev app, then
+   re-run. (Diagnostic tell: run one trivial test, e.g. `-g "boots straight to the shell"`. If _that_ fails, it
+   is the environment, not your change.)
+
+   **It is resource contention, NOT the single-instance lock — do not "fix" `index.ts` for it.** That was
+   measured, not assumed: two app instances launched with distinct `--user-data-dir` values run happily side by
+   side, so `--user-data-dir` isolates the lock correctly and the `app.setName()`-before-`requestSingleInstanceLock()`
+   ordering in `main/index.ts` is harmless. The E2E harness already passes `--user-data-dir`; it is simply
+   competing with the dev server + dev Electron for the machine, and `firstWindow()` blows its 30s budget. (The
+   giveaway that the machine is still saturated: a boot test that normally takes ~4s took **17.1s** immediately
+   after the dev app was closed.)
+
 8. **Offer to release** (the **`release`** skill): once the slice is on `main`, ask the user
    _"Tag & publish vX.Y.Z now, or batch with the next change?"_ Releasing = **merging the open
    release-please PR** (which auto-bumps the version, writes `CHANGELOG.md`, tags `vX.Y.Z`, and builds +
@@ -529,6 +544,22 @@ placing anything. Specifically:
   so the fix was to derive it, not drop it.**
 
 A running log of durable decisions and feedback captured into the project config. Newest first.
+
+- 2026-08-20 — **Feedback (never run E2E with `pnpm dev` up — and it is NOT the single-instance lock; CLAUDE.md
+  §6 step 7).** An hour was lost to this: with the owner's dev app running, **every** Playwright-Electron test
+  failed as a bare 30s timeout — no assertion, no error — including tests untouched by the change and including a
+  pristine `origin/main` checkout, which reads exactly like self-inflicted breakage. Closing the dev app fixed it
+  instantly. **I then proposed a code fix for the wrong cause and was wrong**: I attributed it to
+  `app.setName()` running before `requestSingleInstanceLock()` in `main/index.ts` defeating the harness's
+  `--user-data-dir` isolation. Measured instead of assumed — **two instances with distinct `--user-data-dir` run
+  simultaneously**, so the lock is correctly isolated and `index.ts` needs no change. It is plain resource
+  contention (a boot test that normally runs in ~4s took **17.1s** right after the dev app closed). **Lessons:
+  (1) when a whole suite fails at once, run ONE trivial test before reading your own diff — if that fails too it
+  is the environment, and pristine `main` is the decisive control. (2) A plausible mechanism is not a diagnosis:
+  the lock story explained every symptom and was still false, and a two-minute experiment (launch two instances,
+  see if both live) settled it. This was the SECOND non-bug I proposed a fix for in one session — the other was a
+  `customTypes` "leak" that turned out to be a household-wide file — so the rule is: reproduce the mechanism, or
+  do not ship the fix.**
 
 - 2026-08-19 — **Audit (the gendered-names work, reviewed before it shipped; SPEC 74 §3.6.24; on
   `feat/gendered-names`).** Four findings, each fixed in the same change, plus two measured and accepted.

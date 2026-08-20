@@ -772,7 +772,7 @@ export const ANTHROPIC_API_KEY_ID = 'anthropic.apiKey';
 export const OPENAI_API_KEY_ID = 'openai.apiKey';
 /** The secret id for the device-local Resend API key (67-email-engagement §4.1; the `openai.apiKey` posture). */
 export const RESEND_API_KEY_ID = 'resend.apiKey';
-export type { DeviceView } from '@selfos/core/schemas';
+export type { DeviceView, SkipSummary } from '@selfos/core/schemas';
 export type {
   QuestionnaireCoverageView,
   CoverageAreaView,

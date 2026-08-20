@@ -28,6 +28,7 @@ import {
   type RelayEnv,
 } from '@selfos/core/relay';
 import {
+  UNCLEAR_SKIP_REASON,
   createAssignment,
   getAssignmentSnapshot,
   getQuestionnaire,
@@ -6301,6 +6302,65 @@ describe('createCoreBridge', () => {
     await bridge.accessSetAccount({ personId: guest.id, roleId: 'guest', pin: null });
     await bridge.sessionSetActive({ personId: guest.id });
     expect(await bridge.questionnairesSentOverview()).toEqual({});
+  });
+
+  it('a fully-skipped response stops offering Analyze and reports counts only (08 §34)', async () => {
+    const { bridge, ownerId } = await freshOwner();
+    const q = await bridge.questionnairesSave({
+      title: 'What we haven’t said out loud',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: ownerId },
+      questions: [
+        { id: 'q1', type: 'shortText', prompt: 'What held you back?', required: false },
+        { id: 'q2', type: 'shortText', prompt: 'And since then?', required: false },
+      ],
+    });
+    const { assignment } = await bridge.assignmentsCreate({ questionnaireId: q.id });
+    // Every question comes back declined — one flagged unclear, one with the person's own words.
+    await bridge.assignmentsSubmit({
+      assignmentId: assignment.id,
+      answers: [
+        { questionId: 'q1', value: { declined: true, reason: UNCLEAR_SKIP_REASON } },
+        { questionId: 'q2', value: { declined: true, reason: 'I had a miscarriage in March' } },
+      ],
+    });
+
+    const overview = (await bridge.questionnairesSentOverview())[q.id];
+    // The bug: this used to stay set forever, re-offering an Analyze that bails EMPTY before the model.
+    expect(overview?.analyzableAssignmentId).toBeUndefined();
+    expect(overview?.analyzed).toBe(false);
+    expect(overview?.skipped).toEqual({
+      total: 2,
+      visible: 2,
+      byKind: { unclear: 1, 'prefer-not-to-say': 0, 'not-applicable': 0, other: 1 },
+    });
+    // Counts only: the recipient's written reason never crosses the bridge on this path, so the same shape
+    // is safe whether the send was Standard or Private.
+    expect(JSON.stringify(overview)).not.toContain('miscarriage');
+
+    // And a send with a REAL answer alongside a skip is still analysable — only "nothing at all" is terminal.
+    const q2 = await bridge.questionnairesSave({
+      title: 'Partly answered',
+      type: 'general',
+      sensitivity: 'standard',
+      recipient: { kind: 'person', personId: ownerId },
+      questions: [
+        { id: 'q1', type: 'shortText', prompt: 'One', required: false },
+        { id: 'q2', type: 'shortText', prompt: 'Two', required: false },
+      ],
+    });
+    const second = await bridge.assignmentsCreate({ questionnaireId: q2.id });
+    await bridge.assignmentsSubmit({
+      assignmentId: second.assignment.id,
+      answers: [
+        { questionId: 'q1', value: 'Something real' },
+        { questionId: 'q2', value: { declined: true } },
+      ],
+    });
+    const partial = (await bridge.questionnairesSentOverview())[q2.id];
+    expect(partial?.analyzableAssignmentId).toBe(second.assignment.id);
+    expect(partial?.skipped).toBeUndefined();
   });
 
   it('card privacy badges (§3.1): sentOverview derives private/mixed; a compatibility Inbox item carries its visibility', async () => {

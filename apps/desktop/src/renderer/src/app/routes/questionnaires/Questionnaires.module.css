@@ -2046,3 +2046,37 @@
   color: var(--color-text-secondary);
   background: var(--color-surface-alt);
 }
+
+/* A send that came back with nothing answered (08 §34). Amber, not red: a skip is information, not an
+   error — and not the accent either, which on this card means "there is something to do". */
+.pillSkipped {
+  background: var(--color-warning-subtle-bg);
+  color: var(--color-warning-subtle-text);
+}
+
+.skipPrompt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+}
+
+.skipCounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* The small uppercase label above a card's explanatory block. */
+.zoneLabel {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
+}

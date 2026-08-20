@@ -13,6 +13,12 @@ import {
   unansweredRequired,
   visibleAnswers,
   visibleQuestions,
+  skipKindOf,
+  summarizeSkips,
+  isFullySkipped,
+  UNCLEAR_SKIP_REASON,
+  PREFER_NOT_TO_SAY_SKIP_REASON,
+  NOT_APPLICABLE_SKIP_REASON,
 } from './answering';
 
 function q(over: Partial<Question> & Pick<Question, 'id' | 'type'>): Question {
@@ -391,5 +397,63 @@ describe('answering — per-question decline (§25)', () => {
     });
     // A real answer carries no decline flag.
     expect(rows[1]?.declined).toBeUndefined();
+  });
+});
+
+describe('skip summary (08 §34)', () => {
+  const q = (id: string, required = false): Question => ({
+    id,
+    type: 'shortText',
+    prompt: `Prompt ${id}`,
+    required,
+  });
+
+  it('classifies each preset reason, and anything else as `other`', () => {
+    expect(skipKindOf(UNCLEAR_SKIP_REASON)).toBe('unclear');
+    expect(skipKindOf(PREFER_NOT_TO_SAY_SKIP_REASON)).toBe('prefer-not-to-say');
+    expect(skipKindOf(NOT_APPLICABLE_SKIP_REASON)).toBe('not-applicable');
+    expect(skipKindOf('she died in March and I can’t')).toBe('other');
+    expect(skipKindOf(undefined)).toBe('other');
+  });
+
+  it('counts a question the recipient never touched as skipped, not as absent', () => {
+    // A blank is the same negative signal as an explicit skip for the sender's "why didn't this land?"
+    const summary = summarizeSkips([q('a'), q('b')], {
+      a: { declined: true, reason: UNCLEAR_SKIP_REASON },
+    });
+    expect(summary).toEqual({
+      total: 2,
+      visible: 2,
+      byKind: { unclear: 1, 'prefer-not-to-say': 0, 'not-applicable': 0, other: 1 },
+    });
+  });
+
+  it('carries NO reason text — the count shape is what a Private send may show its sender', () => {
+    const summary = summarizeSkips([q('a')], {
+      a: { declined: true, reason: 'I had a miscarriage in March' },
+    });
+    expect(JSON.stringify(summary)).not.toContain('miscarriage');
+    expect(summary.byKind.other).toBe(1);
+  });
+
+  it('ignores questions a branch has hidden', () => {
+    const gated: Question = {
+      id: 'b',
+      type: 'shortText',
+      prompt: 'Follow-up',
+      required: false,
+      branch: { whenQuestionId: 'a', equals: 'yes', action: 'show' },
+    };
+    const summary = summarizeSkips([q('a'), gated], { a: 'no' });
+    expect(summary.visible).toBe(1);
+    expect(summary.total).toBe(0);
+  });
+
+  it('isFullySkipped only when every visible question came back empty', () => {
+    expect(isFullySkipped([q('a'), q('b')], { a: { declined: true }, b: { declined: true } })).toBe(
+      true,
+    );
+    expect(isFullySkipped([q('a'), q('b')], { a: 'answered', b: { declined: true } })).toBe(false);
+    expect(isFullySkipped([], {})).toBe(false);
   });
 });

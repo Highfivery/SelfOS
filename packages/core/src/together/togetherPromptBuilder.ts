@@ -3,7 +3,7 @@ import type { ContextTopic, TogetherSession } from '../schemas';
 import { buildContext, getPerson } from '../people';
 import { FORMATTING, PERSONA, SAFETY } from '../conversations/promptBuilder';
 import { buildPartnerWishGuidance } from '../questionnaires/partnerWishes';
-import { buildCouplesLexiconBlock } from '../tests/adaptive/steer';
+import { buildCouplesLexiconBlock, buildCouplesSuppressionBlock } from '../tests/adaptive/steer';
 import { buildGroundingPack } from './groundingPack';
 import { listStates } from './togetherService';
 import { getTogetherGuide, togetherGuideLifeAreas } from './togetherCatalog';
@@ -262,9 +262,21 @@ export async function buildTogetherSystemPrompt(
   // conversation, so a per-partner block with a name in front of it is one person's file read aloud (their
   // goal list included, which is the shame material). The block carries the UNION of both hard-no lists, so a
   // limit either of them has drawn is never suggested to either.
-  if (options.allAdultAcked) {
-    const couples = await buildCouplesLexiconBlock(fs, key, session.participantIds);
-    if (couples) parts.push(couples);
+  const couples = options.allAdultAcked
+    ? await buildCouplesLexiconBlock(fs, key, session.participantIds)
+    : '';
+  if (couples) parts.push(couples);
+  /*
+   * 74 §5.8a — and the hard-no list UNCONDITIONALLY, which the block above used to carry inside the ack.
+   *
+   * A pair where either partner had not acked 18+ — or had revoked it — generated prose both of them read
+   * with no idea what either had ruled out. The positive half stays gated (the explicit register is what
+   * makes that vocabulary appropriate); suppression can only ever PREVENT, so it is never right to withhold.
+   * Emitted only when the merged block is absent, or an acked pair would carry the same list twice.
+   */
+  if (!couples) {
+    const banned = await buildCouplesSuppressionBlock(fs, key, session.participantIds);
+    if (banned) parts.push(banned);
   }
 
   // The explicit register (Phase F) — appended ONLY when BOTH partners have acknowledged adult content

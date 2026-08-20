@@ -218,4 +218,20 @@ export const DIRTY_TALK_RETIRED_FAMILIES: readonly string[] = [
   // 74 §3.6.29 — down to two entries after the four purges. Its survivors moved into `names-rough-mild`
   // (see the mapping above), so a mark on either one migrates rather than being retired outright.
   'names-playful',
+  /*
+   * 74 §3.6.30 — retired whole, at the owner's direction, under the tightened criterion.
+   *
+   * The register was ADDED to fill a measured "the bank has essentially none of this" gap and was then
+   * filled with ADMIRATION — handsome, hero, knight, warrior, soldier, my pilot, my trucker — which is
+   * exactly the class the owner named: sayable in bed, but about character or occupation rather than sex.
+   *
+   * Retired rather than pruned to its 12 rough survivors (stud, beast, brute, caveman…), which was his call
+   * made with the measurement in hand: those 12 exist in no other family, so this DOES remove that
+   * vocabulary from the app. Nobody holds a mark in the register, so no answer is lost — only the words.
+   *
+   * The ~20 `names-masculine:my-X → names-masculine:X` rows above are now inert and stay, per the frozen
+   * rule: `retireCutMarks` resolves a migration target that is no longer a live entry to `undefined` and
+   * retires the mark outright, which is the right answer once the whole register has gone.
+   */
+  'names-masculine',
 ];

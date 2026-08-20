@@ -12,7 +12,7 @@ import {
 import { getBookType } from './bookTypes';
 import { resolvePersonOptionNames } from './castRegister';
 import { enforceProtected } from './storyMarkup';
-import { subjectLexiconBlock } from './storyGenerationService';
+import { subjectLexiconBlocks } from './storyGenerationService';
 import { buildBiographerSystem } from './storyPromptBuilder';
 import { chapterParagraphs } from './storyText';
 import {
@@ -95,7 +95,7 @@ export async function checkContinuity(
     await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
     // Both passes here REWRITE chapter prose, so they can introduce a term the drafting pass — which does
     // carry the block — was careful to avoid.
-    await subjectLexiconBlock(deps.fs, deps.key, bookType, deps.personId),
+    await subjectLexiconBlocks(deps.fs, deps.key, bookType, deps.personId),
   );
   const chaptersBlock = written
     .map((c) => `### ${c.title}\n\n${c.markdown.trim()}`)
@@ -212,7 +212,7 @@ export async function lineEditChapter(
     await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
     // Both passes here REWRITE chapter prose, so they can introduce a term the drafting pass — which does
     // carry the block — was careful to avoid.
-    await subjectLexiconBlock(deps.fs, deps.key, bookType, deps.personId),
+    await subjectLexiconBlocks(deps.fs, deps.key, bookType, deps.personId),
   );
   const user = [
     `Line-edit this ONE chapter of ${book.title}. Polish only: tighten grammar, smooth the flow, fix awkward`,

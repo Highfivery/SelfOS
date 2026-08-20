@@ -560,6 +560,49 @@ A running log of durable decisions and feedback captured into the project config
   see if both live) settled it. This was the SECOND non-bug I proposed a fix for in one session — the other was a
   `customTypes` "leak" that turned out to be a household-wide file — so the rule is: reproduce the mechanism, or
   do not ship the fix.**
+- 2026-08-19 — **Release pass on Dirty Talk (a stricter line on the names, one landing rule, one rail, and
+  suppression swept across six more surfaces; owner-directed from measured lists; SPEC 74 §3.6.30; on
+  `chore/pet-name-purge-two`).** _"all pet names should be specific to dirty talk and sexual"_ — a NEW,
+  stricter criterion than the four previous purges' "could it plausibly be said in bed?", put to the owner as
+  such rather than presented as a missed application of the old one. **18 reviewers proposed, 17 skeptics tried
+  to save: 478 candidates, 267 saved** — more than half, which is the number that says the first pass alone
+  would have over-cut. **The two warm registers turned out to be ONE decision:** `names-warm` (54) and
+  `names-other-tongues` (113) track each other exactly (`amor`=`love`, `bella`=`beautiful`, `muñeca`=`doll`),
+  and the reviewers' own split was incoherent — `babe` cut while `baby` was kept, `beautiful` cut while
+  `beautiful thing` was kept — so it was REJECTED rather than applied and re-derived on a line that states in
+  one clause: **appearance and sexual claim stay, sentiment goes** (115 cut, 52 kept, `baby`/`babe` now agree).
+  `names-masculine` retired whole (52) — its own note recorded that it was ADDED to fill a measured gap and then
+  filled with admiration, which is exactly the class reported. **203 cut, 2,429 → 2,226, every text still
+  appearing exactly once.** The DECK needed almost nothing (5 of 929) — the act families are sex acts by
+  construction. Plus 24 orientation edits, nearly all the bank contradicting ITSELF (`leaking` tagged `penis`
+  while its own example sits untagged one family over; eight `anatomy-her` "hole" entries tagged `vulva` when
+  `names-object` has agreed all along that an ass is a hole), and the one missing flip in the bank —
+  `so hard it hurts` was body-tagged with no `bodyOf`, so it was inverted on both sides for exactly the
+  mixed-anatomy couple it matters for. **"Keep marking" → the intro, root-caused end to end:** the owner's only
+  result is `status:'draft'` and `coreBridge` defines `latest` as the first NON-draft result, so `latest` was
+  null, the resume effect returned early, and the phase sat on its `intro` initial value — **the card and the
+  take screen disagreed about what "started" means**. Now anything with prior work opens on the map. **The rail
+  rebuilt from an approved mockup** (one card instead of four; "All steps" back to the map from every screen,
+  keeping its place at phone width). **Suppression swept:** a map of all 34 lexicon consumers found the
+  §3.6.29 `chatService` defect repeated in SIX more places — `emailSuggestionService` (lexicon read only for
+  the intimacy family, which disabled the prompt constraint AND both output guards on the one surface nobody
+  reviews before it sends), `togetherPromptBuilder`, `challengeSuggestService`, `testNarrative`,
+  `storyPromptBuilder`, and the mirror fault in `goalSuggestService` (explicit vocabulary with no 18+
+  re-check). Gate: typecheck ×4, lint, format. Every new guard **verified to fail when reverted**.
+  **Lessons: (1) the never-state-an-unverified-fact rule applies to a DECISION OPTION, not just a report. I
+  wrote that the 12 masculine survivors "mostly duplicate names-rough-mild" without checking; all 12 are
+  unique, and the owner chose on that basis. Checking before acting caught it, but an option description IS a
+  finding, and a wrong one launders a guess into someone else's decision. (2) Never hand-patch a structured
+  literal with a regex. Appending `body:` to a BARE-STRING bank entry produced `'take my load', body: 'penis' }`
+  — valid-looking garbage — and the repair regex then matched `ex:` VALUES and corrupted 71 more. Reconstruct
+  the entry from parsed fields (the `entry_src` pattern), and when a repair over-matches, restore from git and
+  re-apply deterministically rather than patching the patch. (3) A test failing after a §5.8a fix is not
+  automatically a fixture to update: `storyPrompt.lexicon.test`'s "never reaches a non-adult book" was guarding
+  a REAL leak, and my first fix would have shipped one — carry the steer/suppression split in the TYPE so
+  neither layer has to guess which half it holds. (4) Making something run on ARRIVAL makes previously
+  unreachable failure paths reachable: `start()` assigned a possibly-null state straight through, which had
+  been harmless while it only ran behind a tap and blanks the screen the moment it runs on mount.**
+
 - 2026-08-19 — **Production audit of Dirty Talk (the bank deduped, oriented and grown; a hard no stops being
   permanent; the spine stops throwing away 42% of the deck; owner-directed from measured lists; SPEC 74 §3.6.29;
   on `chore/pet-name-purge-two`).** A full pass before release, measured against the shipped bank and the

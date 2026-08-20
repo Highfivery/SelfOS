@@ -599,6 +599,88 @@
 .railCard {
   padding: var(--space-4);
 }
+
+/*
+ * 74 §3.6.30 — the rail is ONE card of sections, not four stacked cards.
+ *
+ * Four cards meant four borders, four paddings and four uppercase headings stacked above the step list, and
+ * the list is the thing the rail exists for. Sections divided by a hairline say the same thing with one
+ * border and no repeated chrome, and lift the steps ~120px up the column.
+ */
+.railUnified {
+  padding: 0;
+  overflow: hidden;
+}
+
+.railSection {
+  padding: var(--space-3) var(--space-4);
+}
+
+.railSection + .railSection {
+  border-top: 1px solid var(--color-border);
+}
+
+/* Back to the map, from every screen. Leads the card because it is the one control that never changes. */
+.railMap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-alt);
+  color: var(--color-accent-text);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+
+.railMap:hover {
+  background: var(--color-accent-subtle-bg);
+}
+
+.railMapIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
+  background: var(--color-accent-subtle-bg);
+}
+
+.railMapLabel {
+  flex: 1;
+  min-width: 0;
+}
+
+.railMapAt {
+  flex: none;
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The spend line, as a footer rather than a card of its own. */
+.railFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-alt);
+  font-size: 0.75rem;
+}
+
+.railFoot > b {
+  margin-left: auto;
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
 /* The one card allowed to give. `min-height: 0` is what lets a flex child shrink below its content. */
 .railSteps {
   min-height: 0;
@@ -620,22 +702,33 @@
 
 .tally {
   display: flex;
-  flex-direction: column;
   gap: var(--space-2);
 }
 
+/* Each count is its own tile: the number leads, its label sits under it. Three rows of "dot · label · number"
+   was a third of the rail's height for three small numbers that read fine side by side. */
 .tallyRow {
+  flex: 1;
+  min-width: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-2);
-  font-size: 0.875rem;
-  color: var(--color-text-secondary);
+  gap: 2px;
+  padding: var(--space-2) var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-alt);
 }
 
 .tallyRow > b {
-  margin-left: auto;
   color: var(--color-text-heading);
+  font-size: 0.95rem;
   font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.tallyRow > .tallyLabel {
+  font-size: 0.6875rem;
+  color: var(--color-text-tertiary);
 }
 
 .dot {
@@ -721,6 +814,46 @@
     border: 0;
     background: none;
     box-shadow: none;
+  }
+
+  /*
+   * 74 §3.6.30 — the one card DISSOLVES here. The bar is a single flex row, and a card is a block, so its
+   * sections would stack inside it and the bar would grow to three lines. `display: contents` removes the
+   * card from the box tree and promotes the sections to flex children of the bar, which is the shape the
+   * bar was designed for.
+   */
+  .rail .railUnified {
+    display: contents;
+  }
+
+  .rail .railSection {
+    padding: 0;
+    border: 0;
+  }
+
+  /* The map keeps its place at phone width — it is a verb, and the way back must not be the thing that goes.
+     Its label and position marker do go: the icon carries it, and the bar has one line to spend. */
+  .rail .railMap {
+    width: auto;
+    flex: none;
+    padding: var(--space-1);
+    border: 0;
+    background: none;
+  }
+
+  .rail .railMapLabel,
+  .rail .railMapAt {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* Admin-only chrome, and the least useful thing in a one-line bar. It is on the desktop rail and the map. */
+  .rail .railFoot {
+    display: none;
   }
 
   /* The bar is ONE line of tally + actions — what it was designed for, and what keeps the deck's primary

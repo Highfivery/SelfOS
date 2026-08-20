@@ -90,7 +90,7 @@ describe('names are oriented per direction', () => {
     // deciding for himself is the entire point of the phase.
     for (const key of [
       'names-rough-heavy:slut',
-      'names-warm:angel',
+      'names-warm:beautiful',
       'names-warm:baby',
       'names-soft-power:kitten',
     ]) {
@@ -408,18 +408,19 @@ describe('a mark on a name the bank retired', () => {
   });
 
   it('MOVES the mark when the name was retired into another that says the same thing', () => {
-    // "my love" went because "love" says it; the answer is the same answer, so it survives the word.
+    // "my daddy" went because "daddy" says it; the answer is the same answer, so it survives the word.
+    // (Was the warm my-love/love pair until §3.6.30 cut `love` — a migration test needs a LIVE target.)
     const after = pruneUnshownMarks(
-      lex([mark('names-warm:my-love', 'names-warm', { hearState: 'love', hear: 3 })]),
+      lex([mark('names-hard-power:my-daddy', 'names-hard-power', { hearState: 'love', hear: 3 })]),
       DIRTY_TALK.bank,
       OPEN_ORIENTATION,
       new Date(),
     );
-    const moved = after.lexicon.entries.find((e) => e.key === 'names-warm:love');
+    const moved = after.lexicon.entries.find((e) => e.key === 'names-hard-power:daddy');
     expect(moved?.hearState).toBe('love');
     // Under the SURVIVOR's own text, or the report shows them a name the bank no longer has.
-    expect(moved?.text).toBe('love');
-    expect(after.lexicon.entries.some((e) => e.key === 'names-warm:my-love')).toBe(false);
+    expect(moved?.text).toBe('daddy');
+    expect(after.lexicon.entries.some((e) => e.key === 'names-hard-power:my-daddy')).toBe(false);
   });
 
   it('never overwrites what they said about the survivor', () => {
@@ -427,14 +428,18 @@ describe('a mark on a name the bank retired', () => {
     // a side they left genuinely blank.
     const after = pruneUnshownMarks(
       lex([
-        mark('names-warm:love', 'names-warm', { hearState: 'never' }),
-        mark('names-warm:my-love', 'names-warm', { hearState: 'love', sayState: 'love', say: 3 }),
+        mark('names-hard-power:daddy', 'names-hard-power', { hearState: 'never' }),
+        mark('names-hard-power:my-daddy', 'names-hard-power', {
+          hearState: 'love',
+          sayState: 'love',
+          say: 3,
+        }),
       ]),
       DIRTY_TALK.bank,
       OPEN_ORIENTATION,
       new Date(),
     );
-    const kept = after.lexicon.entries.find((e) => e.key === 'names-warm:love');
+    const kept = after.lexicon.entries.find((e) => e.key === 'names-hard-power:daddy');
     expect(kept?.hearState).toBe('never'); // theirs, untouched
     expect(kept?.sayState).toBe('love'); // the side they had left blank
   });

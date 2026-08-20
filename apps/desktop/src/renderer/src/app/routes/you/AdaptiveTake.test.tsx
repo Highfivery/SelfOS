@@ -104,7 +104,16 @@ async function pastPractice(): Promise<void> {
  * name registers, so the names step bounces straight through to the words (free — `loadNames` makes no AI call).
  */
 async function beginTake(label: RegExp = /^Begin$/): Promise<void> {
-  await userEvent.click(await screen.findByRole('button', { name: label }));
+  // 74 §3.6.30 — a take with prior work opens straight on the MAP, so the intro exists only for a genuinely
+  // untouched one. Wait for whichever entry point this fixture produces rather than assuming the intro.
+  await waitFor(() => {
+    expect(
+      screen.queryByRole('button', { name: label }) ??
+        screen.queryByRole('button', { name: /^(Start|Pick up):/ }),
+    ).not.toBeNull();
+  });
+  const intro = screen.queryByRole('button', { name: label });
+  if (intro) await userEvent.click(intro);
   await userEvent.click(await screen.findByRole('button', { name: /^(Start|Pick up):/ }));
 }
 
@@ -684,6 +693,64 @@ describe('AdaptiveTake (74 §3.2)', () => {
     expect(await screen.findByText(/Area 2 of 2/)).toBeInTheDocument();
   });
 
+  it('offers a way back to the map from every step, in the rail (74 §3.6.30)', async () => {
+    /*
+     * Reported alongside the intro bug: the map was reachable on the way IN and on the way back OUT, and
+     * nowhere in between — so someone part-way through had the seven steps listed beside them and no route
+     * to the screen that explains what they are.
+     */
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveBank: (() => Promise.resolve(state({ draft: DRAFT }))) as never,
+    });
+    renderTake();
+    await beginTake();
+    await pastPractice();
+    // On a marking step, with the rail beside it.
+    expect(await screen.findByRole('list', { name: 'Steps' })).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Every step' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /All steps/i }));
+    expect(await screen.findByRole('list', { name: 'Every step' })).toBeInTheDocument();
+  });
+
+  it('opens a DRAFT-only take on the map, not the intro (74 §3.6.30)', async () => {
+    /*
+     * The reported bug, in the state it was reported from: one result, `status: 'draft'`, no profile.
+     *
+     * The card calls that "Keep marking" — `cardStateOf` is satisfied by ANY result and `listAdaptiveResults`
+     * includes the draft. The take screen used to ask a stricter question: its resume path required
+     * `state.latest`, which the bridge defines as the first result whose status is NOT draft. So `latest` was
+     * null, the effect returned early, `start()` never ran, and the phase sat on its `intro` initial value.
+     * A `latest`-only fixture would pass against the old code too — the draft-only shape is the whole point.
+     */
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state({ draft: DRAFT })),
+      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    expect(await screen.findByRole('list', { name: 'Every step' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Begin$/ })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Pick up where you left off/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('still shows the intro for a take nobody has touched', async () => {
+    // The other half of the rule — the intro is not gone, it is now reserved for a genuinely first take.
+    installMockBridge({
+      testsBank: () => Promise.resolve(BANK),
+      testsAdaptiveState: () => Promise.resolve(state()),
+      testsAdaptiveStart: () => Promise.resolve(state({ draft: DRAFT })),
+    });
+    renderTake();
+    expect(await screen.findByRole('button', { name: /^Begin$/ })).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Every step' })).not.toBeInTheDocument();
+  });
+
   it('keeps the crisis footer on EVERY phase, including the ones you type into', async () => {
     // It used to be rendered inside the intro/address/bank branches only, so it vanished on probe and
     // scenario — the free-text phases the distress detector actually reads — and on `done`, where someone
@@ -724,9 +791,8 @@ describe('AdaptiveTake (74 §3.2)', () => {
     renderTake();
     // It wipes every mark and every hard no for this person, so it does not sit shoulder to shoulder with
     // "pick up where you left off" — it is at the bottom of the map, with what it clears spelled out.
-    await userEvent.click(
-      await screen.findByRole('button', { name: /Pick up where you left off/i }),
-    );
+    // 74 §3.6.30 — a take with prior work opens ON the map, so the step list is what greets them.
+    expect(await screen.findByRole('list', { name: 'Every step' })).toBeInTheDocument();
     expect(await screen.findByText(/every hard no for this test/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Start over from the top/i }));
     // Honest about what it does and does not touch: the marks are their answers, not this take's state.
@@ -923,9 +989,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
       testsAdaptiveAbandon: abandon as never,
     });
     renderTake();
-    await userEvent.click(
-      await screen.findByRole('button', { name: /Pick up where you left off/i }),
-    );
+    // 74 §3.6.30 — opens on the map, which puts the retake choice up first rather than behind an intro.
 
     // Before anything else — not the step list, and not a destructive button at the bottom of a screen
     // nobody scrolls to.
@@ -949,9 +1013,7 @@ describe('AdaptiveTake (74 §3.2)', () => {
       testsAdaptiveAbandon: abandon as never,
     });
     renderTake();
-    await userEvent.click(
-      await screen.findByRole('button', { name: /Pick up where you left off/i }),
-    );
+    // 74 §3.6.30 — opens on the map, which puts the retake choice up first rather than behind an intro.
     await userEvent.click(await screen.findByRole('button', { name: /Keep and edit/i }));
 
     // Straight to the map, with nothing cleared.

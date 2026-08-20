@@ -72,6 +72,37 @@ const deps = (client: ClaudeClient, over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+describe('74 §5.8a — the hard-no list is unconditional', () => {
+  it('carries it even when adult content is NOT allowed', async () => {
+    /*
+     * `suppressed` was computed and handed in unconditionally and then interpolated ONLY into the
+     * `adultAllowed` branch, so for anyone who had not acked 18+ the list was decrypted, built and silently
+     * dropped. The non-adult branch says "Do NOT suggest any sexual or intimate challenge" — which is a
+     * different rule and does not cover, say, a word ruled out that a perfectly non-sexual challenge could
+     * still reach.
+     */
+    const { applyDirectionalMarks } = await import('../tests/adaptive/lexicon');
+    const { emptyLexicon, writeLexicon } = await import('../tests/adaptive/lexicon');
+    const { DIRTY_TALK } = await import('../tests/adaptive/instruments/dirtyTalk');
+    await writeLexicon(
+      fs,
+      key,
+      applyDirectionalMarks(
+        emptyLexicon('p1', now),
+        DIRTY_TALK.bank,
+        { 'names-rough-heavy:whore': { hear: 'never', say: 'never' } },
+        'take:1',
+        now,
+      ),
+    );
+    await saveInsight(fs, key, insight('i1'));
+    const { client, system } = jsonClient();
+    await suggestChallenge(deps(client, { adultAllowed: false }));
+    expect(system()).toContain('whore');
+    expect(system()).toMatch(/NEVER use any of these/i);
+  });
+});
+
 describe('suggestChallenge', () => {
   it('builds a transcript-free digest, meters challenge.suggest BEFORE returning, and caches the candidate', async () => {
     await saveInsight(fs, key, insight('i1'));

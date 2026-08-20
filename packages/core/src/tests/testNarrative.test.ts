@@ -130,6 +130,47 @@ describe('narrateResult — the only metered call', () => {
     expect(captured.system).toContain('consensual adults');
   });
 
+  it('carries the hard-no list on a NON-sensitive instrument too (74 §5.8a)', async () => {
+    // It used to ride inside the `sensitive` branch, so every other instrument's narrative — Big Five,
+    // ECR-R, PHQ-9, GAD-7, ASRS, AQ-10/RAADS-R — wrote warm prose back with no idea what was ruled out.
+    // The ADULT_BOUNDARY is what makes an explicit register appropriate and stays gated; suppression only
+    // ever PREVENTS, so it is never right to withhold.
+    const fs = memFileSystem();
+    const { applyDirectionalMarks, emptyLexicon, writeLexicon } =
+      await import('./adaptive/lexicon');
+    const { DIRTY_TALK } = await import('./adaptive/instruments/dirtyTalk');
+    await writeLexicon(
+      fs,
+      key,
+      applyDirectionalMarks(
+        emptyLexicon('p1', now),
+        DIRTY_TALK.bank,
+        { 'names-rough-heavy:whore': { hear: 'never', say: 'never' } },
+        'take:1',
+        now,
+      ),
+    );
+    const def = getTest('phq9')!;
+    const result = await seedResult(fs, 'phq9');
+    const captured: { system?: string } = {};
+    await narrateResult({
+      fs,
+      key,
+      client: fakeClient(captured),
+      apiKey: 'k',
+      aiEnabled: true,
+      model: 'm',
+      def,
+      result,
+      personId: 'p1',
+      now,
+      overBudget: false,
+    });
+    expect(captured.system).toContain('whore');
+    // …and no adult boundary, which is the half that IS gated.
+    expect(captured.system).not.toContain('consensual adults');
+  });
+
   it('a wellbeing instrument bounds the prompt + NEVER sends the internal clinical key (51 §8.1)', async () => {
     const fs = memFileSystem();
     const def = getTest('phq9')!;

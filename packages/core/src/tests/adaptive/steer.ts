@@ -203,6 +203,28 @@ export function buildOwnLexiconBlock(lexicon: EroticLexicon): string {
  * shame material. This emits the shared vocabulary with no owner attached, the union of both hard-no lists,
  * and the same never-attribute clause the solo steer carries.
  */
+/**
+ * 74 §5.8a — the couples hard-no list ALONE, for a session where the explicit register does not apply.
+ *
+ * The sibling of {@link buildOwnSuppressionBlock}, and it exists for the same reason: the couples steer and
+ * the couples suppression used to travel together inside {@link buildCouplesLexiconBlock}, so a pair where
+ * either partner had not acked 18+ — or had revoked it — carried NO hard-no list into a prompt both of them
+ * read. Suppression can only ever PREVENT, so no state makes withholding it correct.
+ */
+export async function buildCouplesSuppressionBlock(
+  fs: FileSystem,
+  key: Uint8Array,
+  personIds: readonly string[],
+): Promise<string> {
+  const lexicons = await Promise.all(personIds.map((id) => readLexicon(fs, key, id)));
+  const banned = [...new Set(lexicons.flatMap((lex) => suppressedTexts(lex)))];
+  if (banned.length === 0) return '';
+  return (
+    'NEVER use any of these, for either of them, in any form — and never say that you are avoiding' +
+    ` anything: ${banned.join(' · ')}.`
+  );
+}
+
 export async function buildCouplesLexiconBlock(
   fs: FileSystem,
   key: Uint8Array,

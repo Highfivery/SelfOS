@@ -448,7 +448,7 @@ describe('a heavy no-marker still gets lines (74 §8.4)', () => {
       'stay just like that',
       'I have wanted this all day',
       'you take it so well',
-      'come here, love', // a real vocative — this one SHOULD be dropped
+      'come here, baby', // a real vocative — this one SHOULD be dropped
     ];
     const { client } = fakeClient([JSON.stringify({ lines: written })]);
     const out = await runLinesPhase(deps(client), lexicon, 1);
@@ -456,8 +456,8 @@ describe('a heavy no-marker still gets lines (74 §8.4)', () => {
     expect(out.ok).toBe(true);
     expect(out.value).toContain('I love the sound you make');
     expect(out.value).toContain('you look beautiful like that');
-    // The boundary still holds where it means something: being CALLED love is off.
-    expect(out.value).not.toContain('come here, love');
+    // The boundary still holds where it means something: being CALLED baby is off.
+    expect(out.value).not.toContain('come here, baby');
   });
 });
 
@@ -668,7 +668,7 @@ describe('74 §3.6.29 — the digest keeps the two directions apart', () => {
         // Loved to be CALLED it, never to say it.
         'names-praise:good-girl': { hear: 'love', say: 'never' },
         // The mirror: loved to SAY, never to hear.
-        'names-masculine:big-boy': { hear: 'never', say: 'love' },
+        'names-praise:good-boy': { hear: 'never', say: 'love' },
         // The middle mark, which reached the synthesis nowhere at all.
         'anatomy-her:cunt': { hear: 'okay', say: 'okay' },
       },
@@ -679,8 +679,8 @@ describe('74 §3.6.29 — the digest keeps the two directions apart', () => {
     const hearLine = digest.split('\n').find((l) => l.startsWith('They want to HEAR')) ?? '';
     const sayLine = digest.split('\n').find((l) => l.startsWith('They want to SAY')) ?? '';
     expect(hearLine).toContain('good girl');
-    expect(hearLine).not.toContain('big boy');
-    expect(sayLine).toContain('big boy');
+    expect(hearLine).not.toContain('good boy');
+    expect(sayLine).toContain('good boy');
     expect(sayLine).not.toContain('good girl');
     expect(digest).toMatch(/Fine with, not favourites.*cunt/);
   });

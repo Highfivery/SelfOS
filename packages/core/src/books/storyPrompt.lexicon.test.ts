@@ -44,6 +44,42 @@ describe('the book prompt takes their own vocabulary (74 §5.8)', () => {
     expect(system).not.toContain('good girl');
   });
 
+  it('carries the hard-no list into a book that is NOT adult-gated (74 §5.8a)', () => {
+    /*
+     * The two halves have different rules, and this layer used to re-test `gates.adult` over the MERGED
+     * value — so a biography, which `subjectLexiconBlocks` deliberately hands suppression alone, had that
+     * thrown away one layer down and went near a marriage with no idea what its subject had ruled out.
+     */
+    const system = buildBiographerSystem(
+      BIOGRAPHY_BOOK_TYPE,
+      CONFIG,
+      'Angel',
+      undefined,
+      {},
+      {
+        suppression: 'NEVER use: whore.',
+      },
+    );
+    expect(system).toContain('NEVER use: whore.');
+    // …and still no positive steer on a non-adult book: the halves are separate, not merged.
+    expect(system).not.toContain('THEIR OWN VOCABULARY');
+  });
+
+  it('does not repeat the hard nos on an adult book, whose steer already ends with them', () => {
+    const system = buildBiographerSystem(
+      EROTICA_BOOK_TYPE,
+      CONFIG,
+      'Angel',
+      undefined,
+      {},
+      {
+        steer: LEXICON,
+      },
+    );
+    expect(system).toContain('THEIR OWN VOCABULARY');
+    expect(system.split('NEVER use: whore.').length - 1).toBe(1);
+  });
+
   it('leaves the prompt byte-unchanged when there is no lexicon', () => {
     const withOut = buildBiographerSystem(EROTICA_BOOK_TYPE, CONFIG, 'Angel', undefined, {});
     const withEmpty = buildBiographerSystem(EROTICA_BOOK_TYPE, CONFIG, 'Angel', undefined, {}, '');

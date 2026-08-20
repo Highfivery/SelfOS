@@ -385,24 +385,30 @@ export function AdaptiveTake(): JSX.Element {
       .then(() => useAdaptiveTestStore.getState().goToStep(routeStep));
   }, [routeStep, store.state, testId]);
 
-  /*
-   * Retake goes STRAIGHT to the retake choice.
+  /**
+   * 74 §3.6.30 — the intro is for a take nobody has touched. Anything with prior work opens on the MAP.
    *
-   * It used to land on the intro — a screen explaining a test they have already taken, with a button reading
-   * "Pick up where you left off", which then led to "Taking it again". Three screens and two of them wrong:
-   * they did not ask to pick anything up, they asked to take it again, and the question that actually needs
-   * answering (keep what you marked, or start fresh?) was two taps behind an explanation they had read
-   * before.
+   * Reported as "Keep marking goes to the intro", and the cause was that the card and this screen disagreed
+   * about what "started" means. `cardStateOf` calls a test taken as soon as ANY result exists, and
+   * `listAdaptiveResults` includes the draft — so a take opened once and left mid-way reads as "Keep
+   * marking" on the card. This screen asked a stricter question: the old effect required `store.state.latest`,
+   * which `coreBridge` defines as the first result whose status is NOT draft. A draft-only take therefore had
+   * `latest === null`, the effect returned early, `start()` was never called, and the phase stayed on its
+   * `intro` initial value — an explanation of a test they were already part-way through.
+   *
+   * Keying on prior work rather than on the retake FLAG is what removes the disagreement instead of patching
+   * one route into it: a deep link, a resumed session and the card all land in the same place, and only a
+   * genuinely untouched take still gets the intro.
+   *
+   * The step deep-link owns its own `start()`, so this stands aside for it rather than racing a second one.
    */
-  const tookRetake = useRef(false);
+  const hasPriorWork = Boolean(store.state?.draft ?? store.state?.latest);
+  const tookResume = useRef(false);
   useEffect(() => {
-    if (tookRetake.current || !routeState?.retake || !store.state?.latest) return;
-    tookRetake.current = true;
-    void useAdaptiveTestStore
-      .getState()
-      .start(testId)
-      .then(() => useAdaptiveTestStore.getState().setPhase('map'));
-  }, [routeState, store.state, testId]);
+    if (tookResume.current || routeStep !== undefined || !store.state || !hasPriorWork) return;
+    tookResume.current = true;
+    void useAdaptiveTestStore.getState().start(testId);
+  }, [routeStep, store.state, hasPriorWork, testId]);
 
   // Quitting or backgrounding the app inside the 700ms debounce would otherwise drop the last taps. The
   // unmount cleanup does not fire on a window close, so this is the only thing covering that path.
@@ -658,6 +664,19 @@ export function AdaptiveTake(): JSX.Element {
       return undefined;
     });
   };
+  /**
+   * 74 §3.6.30 — back to the map from any step.
+   *
+   * Flushes first for the same reason `goTo` does: the marking steps autosave on a 700ms debounce, and
+   * leaving the step inside that window would drop the last few taps — the moment a person is most likely
+   * to be navigating away.
+   */
+  const goToMap = (): void => {
+    void store.flush(testId).then(() => {
+      store.setPhase('map');
+      return undefined;
+    });
+  };
   const skipCurrent = (): void => {
     if (!current) return;
     // Skipping the last step before the profile lands on the MAP, never on a synthesis: a skip is passing
@@ -729,7 +748,17 @@ export function AdaptiveTake(): JSX.Element {
    * all (no branch handles `done`) and the redirect was suppressed. A blank page with a back link.
    * Deriving it means the very first render is already the map.
    */
-  const phase = store.phase === 'done' && routeState?.retake ? 'map' : store.phase;
+  const phase =
+    store.phase === 'done' && routeState?.retake
+      ? 'map'
+      : // …and the same for the way IN: `start()` above is two awaits deep, so without deriving it the intro
+        // renders for the whole round trip — the very screen the report was about. Deliberately NOT applied to
+        // `done`, which is handled above and only under retake intent: `hasPriorWork` is true for the whole of
+        // every take, so mapping `done` on it would land someone on the map at the end of the take they just
+        // finished instead of on the profile they finished it for.
+        store.phase === 'intro' && hasPriorWork
+        ? 'map'
+        : store.phase;
 
   /**
    * Every line already reacted to in this take, so returning to the step shows the set rather than an empty
@@ -964,6 +993,7 @@ export function AdaptiveTake(): JSX.Element {
               <TakeRail
                 statuses={statuses}
                 onGo={goTo}
+                onMap={goToMap}
                 spendUsd={takeSpend}
                 actions={
                   <>
@@ -1002,6 +1032,7 @@ export function AdaptiveTake(): JSX.Element {
                 <TakeRail
                   statuses={statuses}
                   onGo={goTo}
+                  onMap={goToMap}
                   spendUsd={takeSpend}
                   saveState={<SaveState state={store.saveState} />}
                   extra={
@@ -1371,6 +1402,7 @@ export function AdaptiveTake(): JSX.Element {
                 <TakeRail
                   statuses={statuses}
                   onGo={goTo}
+                  onMap={goToMap}
                   spendUsd={takeSpend}
                   saveState={<SaveState state={store.saveState} />}
                   extra={
@@ -1557,6 +1589,7 @@ export function AdaptiveTake(): JSX.Element {
               <TakeRail
                 statuses={statuses}
                 onGo={goTo}
+                onMap={goToMap}
                 actions={stepActions()}
                 spendUsd={takeSpend}
               />
@@ -1775,6 +1808,7 @@ export function AdaptiveTake(): JSX.Element {
               <TakeRail
                 statuses={statuses}
                 onGo={goTo}
+                onMap={goToMap}
                 actions={stepActions()}
                 spendUsd={takeSpend}
               />
@@ -1902,6 +1936,7 @@ export function AdaptiveTake(): JSX.Element {
               <TakeRail
                 statuses={statuses}
                 onGo={goTo}
+                onMap={goToMap}
                 actions={stepActions()}
                 spendUsd={takeSpend}
               />
@@ -2004,6 +2039,7 @@ export function AdaptiveTake(): JSX.Element {
               <TakeRail
                 statuses={statuses}
                 onGo={goTo}
+                onMap={goToMap}
                 actions={stepActions()}
                 spendUsd={takeSpend}
               />

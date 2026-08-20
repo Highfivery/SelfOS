@@ -591,7 +591,12 @@ export const useAdaptiveTestStore = create<AdaptiveTestState>((set, get) => {
       // 74 §3.6.9 — the map, not a phase. Both a first take and a resumed one land here: the whole reason it
       // exists is that "pick up where you left off" used to drop into whichever AI phase had been reached, with
       // no route back to the person's own words.
-      set({ state, busy: false, phase: 'map' });
+      // Never blank a state we already have. A refused or failed `testsAdaptiveStart` resolves to `null`
+      // (that is how every gated handler reports a closed gate — it does not throw), and assigning it
+      // straight through replaced the state `load` had already fetched, leaving the screen on "Loading…"
+      // with no error and no route out. Latent until §3.6.30 made this run on arrival rather than only
+      // behind a tap.
+      set((prev) => ({ state: state ?? prev.state, busy: false, phase: 'map' }));
       // Free (no AI), so the map can show the names step's real count without asking for anything.
       await get().loadNames(testId);
     },

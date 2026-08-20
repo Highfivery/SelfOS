@@ -35,6 +35,7 @@ import {
   buildRevisionUserMessage,
   renderTaggedCorpus,
   tagCorpusItems,
+  type LexiconBlocks,
 } from './storyPromptBuilder';
 import { chapterParagraphs, countWords, stripSourceMarkers } from './storyText';
 import { generatedEventId } from './storyTimeline';
@@ -138,21 +139,24 @@ export type FoundationsResult =
  * or empty lexicon returns nothing so the prompt is byte-unchanged. A pair-owned book (`ownerRef` is a
  * pairKey, not a person) simply has no lexicon to read, which is the correct answer rather than a special case.
  */
-export async function subjectLexiconBlock(
+export async function subjectLexiconBlocks(
   fs: FileSystem,
   key: Uint8Array,
   bookType: BookType,
   personId: string,
-): Promise<string | undefined> {
+): Promise<LexiconBlocks> {
   // The two halves have different rules. The positive steer — their explicit vocabulary — is for an
   // adult-gated book only. SUPPRESSION is for every book: a biography chapter about a marriage can reach the
   // same ground, and a hard no can only ever PREVENT a line. Gating both together meant that the moment a
   // non-adult book went near intimacy it had no idea what was off.
-  const block =
-    bookType.gates?.adult === true
-      ? buildOwnLexiconBlock(await readLexicon(fs, key, personId))
-      : await buildOwnSuppressionBlock(fs, key, personId);
-  return block === '' ? undefined : block;
+  // An adult book's steer already ENDS with the hard-no list, so it is not repeated as `suppression` —
+  // otherwise an erotica prompt would carry the same list twice.
+  if (bookType.gates?.adult === true) {
+    const steer = buildOwnLexiconBlock(await readLexicon(fs, key, personId));
+    return steer === '' ? {} : { steer };
+  }
+  const suppression = await buildOwnSuppressionBlock(fs, key, personId);
+  return suppression === '' ? {} : { suppression };
 }
 
 export async function generateFoundations(
@@ -170,7 +174,7 @@ export async function generateFoundations(
     await resolvePersonOptionNames(deps.fs, deps.key, opts.bookType, opts.config.typeOptions),
     // The chapters written FROM this outline already carried the block; the outline itself did not, so the
     // book was planned without it and then written with it.
-    await subjectLexiconBlock(deps.fs, deps.key, opts.bookType, deps.personId),
+    await subjectLexiconBlocks(deps.fs, deps.key, opts.bookType, deps.personId),
   );
   const user = buildFoundationsUserMessage(corpus, opts.bookType, opts.config);
 
@@ -357,7 +361,7 @@ export async function generateChapter(
     renderTaggedCorpus(slice, tagged),
     await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
     // 74 §5.8 — their own vocabulary, for an adult-gated book. Additive: absent ⇒ the prompt is unchanged.
-    await subjectLexiconBlock(deps.fs, deps.key, bookType, deps.personId),
+    await subjectLexiconBlocks(deps.fs, deps.key, bookType, deps.personId),
   );
 
   // Pass 1 of the craft loop (72 §5.3) — decide what this chapter IS before writing a word. Optional by
@@ -680,7 +684,7 @@ export async function applyMarkup(
     corpus.personName,
     undefined,
     await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
-    await subjectLexiconBlock(deps.fs, deps.key, bookType, deps.personId),
+    await subjectLexiconBlocks(deps.fs, deps.key, bookType, deps.personId),
   );
   const user = buildRevisionUserMessage(source, tagged, {
     chapter: existing,
@@ -823,7 +827,7 @@ export async function answerAuthorQuestion(
     corpus.personName,
     undefined,
     await resolvePersonOptionNames(deps.fs, deps.key, bookType, book.config.typeOptions),
-    await subjectLexiconBlock(deps.fs, deps.key, bookType, deps.personId),
+    await subjectLexiconBlocks(deps.fs, deps.key, bookType, deps.personId),
   );
   const user = buildAnswerAuthorMessage({
     personName: corpus.personName,

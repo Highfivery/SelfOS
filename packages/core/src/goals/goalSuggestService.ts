@@ -8,6 +8,7 @@ import { SAFETY } from '../conversations/promptBuilder';
 import { runClaude, type AiDeps } from '../questionnaires/aiCall';
 import { buildOwnSuppressionBlock, buildPracticeGroundBlock } from '../tests/adaptive/steer';
 import { profileReadBlock } from '../tests/adaptive/adaptiveService';
+import { getGuidancePrefs } from '../conversations/guidanceService';
 import { gatherGenerationContext, isThinContext } from '../questionnaires/contextProviders';
 import {
   GoalSuggestionSchema,
@@ -81,9 +82,22 @@ export async function suggestGoals(deps: AiDeps): Promise<GoalSuggestResult> {
   // the bank is marked. Goals was proposing commitments from their profile and insights while the app held
   // an explicit, self-authored list of things they had said they wanted to work up to, and never looked.
   // Suppression rides along unconditionally, because a suggested goal is prose they read.
+  /*
+   * 74 §5.8a — suppression unconditional, the POSITIVE steer gated on the 18+ ack.
+   *
+   * `profileReadBlock` self-gates (its docstring explains why the gate lives in the helper). The practice
+   * ground could not follow it there: `steer.ts` is imported BY `generationService`, which `guidanceService`
+   * imports, so reading the prefs inside the helper would close a cycle. It has exactly one caller — this
+   * one — so the gate sits here instead, and this comment is why it is not where its sibling's is.
+   *
+   * It matters because the block quotes their own explicit vocabulary verbatim; revoking the ack has to take
+   * that away on the next call, the same as it takes away the profile read.
+   */
+  const adultAcked =
+    (await getGuidancePrefs(deps.fs, deps.key, deps.personId)).adultAcknowledged === true;
   const [suppression, practice, read] = await Promise.all([
     buildOwnSuppressionBlock(deps.fs, deps.key, deps.personId),
-    buildPracticeGroundBlock(deps.fs, deps.key, deps.personId),
+    adultAcked ? buildPracticeGroundBlock(deps.fs, deps.key, deps.personId) : '',
     profileReadBlock(deps.fs, deps.key, deps.personId),
   ]);
   const call = await runClaude(

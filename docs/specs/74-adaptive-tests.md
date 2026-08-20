@@ -1087,6 +1087,89 @@ no denominators, and one line saying there is no finishing it.
 1,140 → 709 (all live and liftable), and **zero leftovers** — no entry in a retired family, no key missing from
 the bank, no word record.
 
+### 3.6.30 The release pass — a stricter line on the names, one landing rule, one rail — APPROVED + **BUILT** (2026-08-19, owner-directed)
+
+**The criterion tightened.** _"Im still seeing pet names that are getting asked that arent sexual at all like
+handsome, handsome boy, big guy, bear, hero, big boy, tiger, wolf, warrior, soldier, boss man, lion, knight, my
+strong man, giant, rogue, etc. THERE'S A TON THAT SHOULD BE REMOVED. Please keep in mind all pet names should be
+specific to dirty talk and sexual."_
+
+This is a NEW line, not a missed application of the old one, and it was put to the owner as such. The four
+previous purges (§3.6.11, §3.6.24, §3.6.25, §3.6.27) all asked _could it plausibly be said in bed?_ — which keeps
+`handsome` and `bear`. The line now is **sexual and explicit, specific to dirty talk**, and it cuts deeper.
+
+**Method: 18 reviewers proposed, 17 skeptics tried to save.** 478 candidates, **267 saved** by the adversarial
+pass — more than half, which is the number that says the first pass alone would have over-cut. Every list was
+shown to the owner before anything was removed.
+
+**The two warm registers were ONE decision.** `names-warm` (54) and `names-other-tongues` (113) track each other
+exactly — `amor`=`love`, `bella`=`beautiful`, `chérie`=`darling`, `muñeca`=`doll` — because §3.6.11's rule judges
+a foreign endearment by how it FUNCTIONS in its own language. The reviewers' own split was incoherent (`babe`
+cut while `baby` was kept, `beautiful` cut while `beautiful thing` was kept) and was rejected rather than
+applied. The owner took a re-derived line that can be stated in one clause: **appearance and sexual claim stay,
+sentiment goes.** 115 cut, 52 kept, and `baby`/`babe` now share an answer.
+
+**`names-masculine` retired whole (52).** Its own note recorded why it read so badly: it was ADDED to fill a
+measured "the bank has essentially none of this" gap and was then filled with admiration — heroic, occupational,
+animal-strength — which is precisely the class the owner named. Retired rather than pruned to its 12 rough
+survivors, **with the measurement in hand**: all 12 (`stud`, `beast`, `brute`, `caveman`…) exist in no other
+family, so this does remove that vocabulary. Nobody holds a mark in the register, so no answer is lost.
+_An earlier version of this decision was taken on my claim that the survivors "mostly duplicate names-rough-mild"
+— which was unverified and false. It was corrected and re-put before anything was cut._
+
+**The deck was already on-criterion**: 5 lines of 929 (`I miss you`, `can't wait to see you`, `I love this`,
+`I love you`, `your arms`). The act families are sex acts by construction; the words step needed no purge.
+
+**203 cut in total, 2,429 → 2,226**, every text still appearing exactly once.
+
+**Orientation, third pass.** 24 deck edits, almost all the bank contradicting ITSELF: `leaking` tagged
+`penis` while its own example string exists untagged one family over; eight `anatomy-her` "hole" entries tagged
+`vulva` when `names-object` has agreed all along that an ass is a hole; `I'm gonna cum in your pussy` untagged on
+the line above its tagged twin. Plus the one missing flip in the bank — `so hard it hurts` was `body: 'penis'`
+with no `bodyOf`, so it was inverted on both sides for exactly the mixed-anatomy couple it matters for. Four
+examples fixed that contradicted their own tag (`my dream boy`, addressed `that's my girl`).
+
+**"Keep marking" went to the intro (§3.6.9).** Measured end to end rather than guessed: the owner's only
+`dirty-talk` result is `status: 'draft'`, and `coreBridge` defines `latest` as the first result whose status is
+NOT draft — so `latest` was null, the resume effect returned early, `start()` never ran, and the phase sat on its
+`intro` initial value. **The card and the take screen disagreed about what "started" means**: `cardStateOf` is
+satisfied by any result and `listAdaptiveResults` includes the draft. The rule is now the one the card already
+implies — **anything with prior work opens on the map; the intro is for a take nobody has touched** — keyed on
+prior work rather than on the retake FLAG, so a deep link, a resumed session and the card all land in the same
+place. `done` stays tied to retake intent: `hasPriorWork` is true for the whole of every take, so mapping it
+would land someone on the map at the end of the take they just finished.
+
+That change also surfaced a latent defect it made reachable: `start()` assigned `set({ state, … })` where a
+refused or failed `testsAdaptiveStart` resolves to `null` — blanking the state `load` had already fetched and
+leaving the screen on "Loading…" with no error and no route out.
+
+**The rail (§3.6.9), redesigned from an approved mockup.** One card of sections rather than four stacked cards —
+four borders, four paddings and four uppercase headings sat above the list the rail exists for. It gains the
+thing it never had: **"All steps", a way back to the map from every screen**, which keeps its place at phone
+width because the way back must not be what goes. Tally to a 3-up strip, spend to a footer line; the steps rise
+about 120px. Actions stay first — the column is sticky and an area runs to 47 rows.
+
+**Suppression, swept (§5.8a).** A map of all 34 lexicon consumers found the §3.6.29 `chatService` defect
+repeated in six more places, each one suppression made CONDITIONAL on something it can never depend on:
+
+- **`emailSuggestionService`** read the lexicon only for the intimacy family, which disabled the prompt
+  constraint AND both `violatesBoundary` output guards for every other suggestion email — on the one surface
+  whose output reaches a person with nobody reviewing it.
+- **`togetherPromptBuilder`** carried the couples hard-no list inside `if (allAdultAcked)`, so a pair where
+  either partner had not acked — or had revoked — generated prose both of them read with no list at all.
+- **`challengeSuggestService`** computed the list, passed it in, and interpolated it only into the `adultAllowed`
+  branch.
+- **`testNarrative`** spliced it only when `def.sensitive`, so every other instrument's narrative wrote back
+  with no idea what was ruled out.
+- **`storyPromptBuilder`** re-tested `gates.adult` over a value `subjectLexiconBlocks` had already split, which
+  threw away the suppression-only block for exactly the books with no other source of it. Fixed by carrying the
+  split in the TYPE (`LexiconBlocks`) rather than inferring it from a string — the leak guard that stops a full
+  vocabulary reaching a biography is preserved, because a bare string still means "steer".
+- **`goalSuggestService`** had the mirror fault: `buildPracticeGroundBlock` emitted the person's explicit
+  vocabulary with no 18+ re-check. Gated at the call site rather than in the helper, because `steer.ts` is
+  imported BY `generationService`, which `guidanceService` imports — reading the prefs in the helper would close
+  a cycle.
+
 ## 4. Data model
 
 All Zod-backed, encrypted under the master key, in the taker's own folder. Definitions are **code, never vault**.

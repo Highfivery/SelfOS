@@ -181,13 +181,18 @@ export function StepActions({
         </Button>
       ) : null}
       <Button variant="ghost" disabled={busy} onClick={onSkip}>
-        Skip this step
+        {/* ONE child — `Button` is a flex row with a gap, so a two-node label doubles it (74 §3.6.13). */}
+        <span>
+          Skip<span className={adaptive.verbLong}> this step</span>
+        </span>
       </Button>
       {/* On the last step, "Next: your profile" IS the finish — rendering both would be one action wearing two
           labels, which is how a flow starts reading as two different things (the §7 coherence rule). */}
       {next?.step.id === 'profile' ? null : (
         <Button variant="ghost" disabled={busy} onClick={onFinish}>
-          Finish — show me my profile
+          <span>
+            Finish<span className={adaptive.verbLong}> — show me my profile</span>
+          </span>
         </Button>
       )}
     </>

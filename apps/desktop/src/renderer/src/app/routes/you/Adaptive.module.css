@@ -851,6 +851,54 @@
     white-space: nowrap;
   }
 
+  /*
+   * 74 §3.6.33 — the register's own exit gets the SAME treatment as the rail.
+   *
+   * `.railWrap` is the card NamesPhase renders inside an open register, and it was left as `position: sticky`
+   * in a column that stacks here — which the comment above already explains cannot work: a sticky element
+   * only pins while its own area is on screen, and a strip after 132 rows never is. So inside
+   * `names-rough-mild` the only way out sat below every row. It leaves the flow and joins the bar.
+   */
+  .railWrap {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+    background: var(--color-surface-alt);
+    border-top: 1px solid var(--color-border);
+    box-shadow: var(--shadow-overlay);
+  }
+
+  .railWrap .railCard {
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    width: 100%;
+  }
+
+  /*
+   * The long half of a verb. Hidden by CLIP rather than `display: none` so it stays in the accessible name —
+   * "Finish — show me my profile" is what every RTL and Playwright locator matches on, and a label that
+   * changes with the viewport is the §3.6.11 broken-locator trap one level down.
+   */
+  .verbLong {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   /* Admin-only chrome, and the least useful thing in a one-line bar. It is on the desktop rail and the map. */
   .rail .railFoot {
     display: none;
@@ -1917,9 +1965,9 @@
   .stepFrame {
     grid-template-columns: minmax(0, 1fr);
   }
-  .railWrap {
-    position: static;
-  }
+  /* 74 §3.6.33 — `position: static` used to live here, and being LATER in the file it beat the fixed-bar
+     rule above at the same specificity, which is the ordering trap that has bitten this stylesheet before.
+     The register's exit is a fixed bar now, so this must not put it back in the flow. */
   /* The names phase keeps the deck's two-column body, so below 900px its rail must stack too — it was still a
      fixed-width column beside the rows, which is what pushed the rail's cards past the pane at 390px. */
   .deckBody {

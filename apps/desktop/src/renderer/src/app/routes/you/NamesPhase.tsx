@@ -297,7 +297,9 @@ export function NamesPhase({
           <Card className={adaptive.railCard}>
             <div className={adaptive.railActions}>
               <Button variant="primary" onClick={() => store.setOpenRegister(null)}>
-                Done with this one →
+                <span>
+                  Done<span className={adaptive.verbLong}> with this one</span> →
+                </span>
               </Button>
             </div>
           </Card>

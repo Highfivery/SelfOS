@@ -1322,6 +1322,19 @@ inside the ack. Now pinned, together with the de-dup invariant it rides on (the 
 only when the merged block is absent, which is safe only because the merged builder returns `''` when there
 is nothing to suppress either).
 
+**Two phone-width fixes, both owner-approved.** Inside an open register the exit — "Done with this one" —
+sat in `.railWrap`, which §3.6.30 never gave the fixed-bar treatment it gave `.rail`. It was
+`position: sticky` in a column that stacks at 900px, which that section's own comment already explains
+cannot work: a sticky element pins only while its own area is on screen, and a strip after 132 rows never
+is. So in `names-rough-mild` the only way out sat below every row. It now leaves the flow and joins the
+bar. **The trap in fixing it:** a LATER `@media` block set `.railWrap { position: static }`, and at equal
+specificity the later rule wins — the same cascade-ordering trap this stylesheet has hit before — so the
+fix is inert unless that rule goes. And the bar's four-row wrap is fixed at its cause rather than by
+wrapping (§12): the long half of each verb ("Finish **— show me my profile**", "Done **with this one**",
+"Skip **this step**") is hidden by CLIP, not `display: none`, so it stays in the accessible name — a label
+that changes with the viewport is the §3.6.11 broken-locator trap one level down. Each label is kept to
+ONE child, because `Button` is a flex row with a gap and a two-node label doubles it (§3.6.13).
+
 **Deliberately NOT wired, recorded so the next audit does not re-tread it:** classifiers, the semantic
 dedup, the ask-ledger backfill, structural planners, image-prompt distillations, `coverageService` /
 `gapFinderService` (the drafting pass that consumes them carries the list), and `improveQuestion` (its
